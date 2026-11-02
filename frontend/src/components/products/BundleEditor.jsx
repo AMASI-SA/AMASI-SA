@@ -4,6 +4,7 @@ import { getMezanComponentWorkspace } from "../../services/mezanComponentCatalog
 import { loadMezanSuppliersWorkspace } from "../../services/mezanSuppliersV2";
 import { bundleError, bundleLeafCost, bundleMoney, bundleOptionVisible, getProductBundleComponents, getProductBundle, saveProductBundle, previewProductBundle } from "../../services/productBundles";
 import BundleProductPolicy from "./BundleProductPolicy";
+import BundleCostPolicy from "./BundleCostPolicy";
 import BundleComponentPicker from "./BundleComponentPicker";
 import CurrentProductSlots, { resizeCurrentSlots } from "./CurrentProductSlots";
 
@@ -56,6 +57,7 @@ function LinkedProductMappings({ row, parentOptions, childOptions, variants, onC
 
 export default function BundleEditor({ productId, salePrice }) {
     const [definition, setDefinition] = useState(null);
+    const [savedBundle, setSavedBundle] = useState(null);
     const [expansion, setExpansion] = useState(null);
     const [limits, setLimits] = useState({ max_items: 100, max_depth: 5, max_leaves: 500 });
     const [resources, setResources] = useState([]);
@@ -83,22 +85,28 @@ export default function BundleEditor({ productId, salePrice }) {
     const [textAnswers, setTextAnswers] = useState({});
     const [saleQuantity, setSaleQuantity] = useState(1);
     const [scopeResources, setScopeResources] = useState([]);
+    const policyRefreshRequest = useRef(0);
+    const currentDraft = useRef(null);
+    currentDraft.current = { productId, dirty, revision: definition?.revision };
 
     useEffect(() => {
         let live = true;
+        policyRefreshRequest.current += 1;
+        setSavedBundle(null);
         setDefinition(null); setExpansion(null); setError(""); setDirty(false); setNotice("");
         setChoices([]); setChildOptions({}); setRootVariant(""); setTextAnswers({}); setSaleQuantity(1);
         Promise.all([getProductBundle(productId), getMezanComponentWorkspace(), loadMezanSuppliersWorkspace(), getProductV2(productId)])
             .then(([bundle, components, vendors, product]) => {
                 if (!live) return;
                 setDefinition({ ...bundle.definition, items: bundle.definition.items.map((row) => ({ ...row, rule_id: row.rule_id || newRuleId(), repeat_policy: row.repeat_policy || "once" })) }); setExpansion(bundle.expansion); setLimits(bundle.limits);
+                setSavedBundle({ revision: bundle.definition.revision, product_type: bundle.definition.product_type });
                 setProductNames(frozenProductNames(bundle.expansion));
                 setResources(components.components || []); setSuppliers(vendors.suppliers || []);
                 setCustomerOptions(product.options || product.product?.options || []);
                 setRootVariants(product.variants || product.product?.variants || []);
                 setScopeResources(bundle.scope_resources || []);
             }).catch((err) => { if (live) setError(bundleError(err)); });
-        return () => { live = false; };
+        return () => { live = false; policyRefreshRequest.current += 1; };
     }, [productId, reload]);
 
     useEffect(() => {
@@ -161,9 +169,31 @@ export default function BundleEditor({ productId, salePrice }) {
                 ...(definition.component_scopes ? { component_scopes: definition.component_scopes } : {}),
             });
             setDefinition(result.definition); setExpansion(result.expansion); setDirty(false); setScopeResources(result.scope_resources || scopeResources);
+            setSavedBundle({ revision: result.definition.revision, product_type: result.definition.product_type });
             setProductNames((current) => ({ ...current, ...frozenProductNames(result.expansion) }));
             setNotice("حُفظ تركيب البكج. الطلبات السابقة تحتفظ بتركيبها وقت البيع.");
         } catch (err) { setError(bundleError(err)); } finally { setBusy(false); }
+    }
+    async function refreshReportingCost() {
+        const id = productId;
+        const revision = definition?.revision;
+        const token = ++policyRefreshRequest.current;
+        if (currentDraft.current?.dirty) {
+            setNotice("حُفظ إعداد التكلفة. توجد تعديلات غير محفوظة في التركيب؛ أُبقيت مسودتك كما هي.");
+            return;
+        }
+        const bundle = await getProductBundle(id);
+        if (token !== policyRefreshRequest.current || currentDraft.current?.productId !== id) return;
+        if (currentDraft.current.dirty || currentDraft.current.revision !== revision) {
+            setNotice("حُفظ إعداد التكلفة. أُبقيت تعديلات التركيب الأحدث؛ أعد المعاينة بعد مراجعتها.");
+            return;
+        }
+        setDefinition({ ...bundle.definition, items: bundle.definition.items.map((row) => ({ ...row, rule_id: row.rule_id || newRuleId(), repeat_policy: row.repeat_policy || "once" })) });
+        setSavedBundle({ revision: bundle.definition.revision, product_type: bundle.definition.product_type });
+        setExpansion(bundle.expansion);
+        setScopeResources(bundle.scope_resources || []);
+        setProductNames((current) => ({ ...current, ...frozenProductNames(bundle.expansion) }));
+        setNotice("حُفظ إعداد التكلفة المالية. يمكنك معاينة اختيارات العميل من جديد.");
     }
     async function preview() {
         setBusy(true); setError(""); setExpansion(null);
@@ -231,6 +261,11 @@ export default function BundleEditor({ productId, salePrice }) {
     const incompleteMappings = definition?.items.some((row) => (row.variant_rules || []).some((rule) => !rule.variant_id || !rule.conditions?.length || rule.conditions.some((condition) => !condition.option_id || !condition.value_id)) || (row.option_mappings || []).some((mapping) => !mapping.option_id || !mapping.value_id || !mapping.target_option_id || !mapping.target_value_id) || (row.customization_mappings || []).some((mapping) => !mapping.option_id || !mapping.target_option_id));
     const missingScope = definition?.items.some((item) => item.kind === "current_product") && scopeResources.some((resource) => !definition.component_scopes?.[resource.resource_id]);
     const invalid = definition?.product_type === "composite" && (!definition.items.length || definition.items.some((row) => !Number.isFinite(Number(row.quantity)) || Number(row.quantity) <= 0 || !(row.unit || "").trim() || (row.condition && (!row.condition.option_id || !row.condition.value_id)) || (row.sourcing_mode === "supplier" && !row.supplier_id) || (row.kind === "current_product" && (!Number.isInteger(Number(row.quantity)) || Number(row.quantity) > 100 || (row.slots || []).some((slot) => (slot.variant_rules || []).some((rule) => !rule.variant_id || rule.conditions.some((condition) => !condition.option_id || !condition.value_id)))))));
+    const reportingCost = expansion?.reporting_cost;
+    const hasReportingCost = reportingCost != null;
+    const reportingComplete = reportingCost?.complete === true && reportingCost.currency === "SAR" && reportingCost.unit_total_sar != null && Number.isFinite(Number(reportingCost.unit_total_sar));
+    const estimatedUnitCost = hasReportingCost ? (reportingComplete ? Number(reportingCost.unit_total_sar) : null) : expansion?.estimated_cost;
+    const operationalIncomplete = expansion?.unresolved_components?.length > 0 || Boolean(expansion?.operational_blocked);
     return <section dir="rtl" className="space-y-4 rounded-2xl border border-violet-200 bg-white p-4" data-testid="bundle-editor">
         <h2 className="font-black">تركيب المنتج والبكجات الذكية</h2>
         <p className="text-xs text-slate-600">حتى {limits.max_items} مكوّنًا مباشرًا، و{limits.max_depth} مستويات تداخل، و{limits.max_leaves} مكوّنًا نهائيًا. يُفكّ البكج الداخلي تلقائيًا؛ يمنع الخادم الربط الدائري.</p>
@@ -288,11 +323,12 @@ export default function BundleEditor({ productId, salePrice }) {
             </>}
             <button type="button" className="rounded-xl bg-violet-700 px-4 py-2 text-white disabled:opacity-50" disabled={busy || !dirty || invalid || missingScope || unresolvedCatalog || incompleteMappings} onClick={save}>{busy ? "جارٍ الحفظ…" : "حفظ التركيب وحساب التكلفة"}</button>
         </fieldset>}
+        {savedBundle?.product_type === "composite" && savedBundle.revision > 0 && <BundleCostPolicy productId={productId} bundleRevision={savedBundle.revision} disabled={dirty || busy} onSaved={refreshReportingCost} />}
         {notice && <p role="status" className="text-sm text-emerald-800">{notice}</p>}
         {dirty && <p className="text-xs text-amber-800">احفظ التغييرات للتحقق من جميع المستويات وحساب التكلفة من الكتالوج.</p>}
         {definition?.product_type === "composite" && <fieldset disabled={busy} className="space-y-3 rounded-xl border p-3"><legend>معاينة اختيارات العميل</legend><p className="text-sm text-slate-600">اختيارات تجريبية لحساب المكونات والتكلفة فقط؛ لا تغيّر إعدادات المنتج أو طلبات العملاء.</p><div className="flex flex-wrap items-end gap-4"><button type="button" className="shrink-0 text-sm underline" onClick={() => clearPreview()}>مسح جميع اختيارات المعاينة</button><label className="block min-w-48 flex-1">كمية سلة للمعاينة<input aria-label="كمية سلة للمعاينة" className={control} type="number" min="1" max="1000" step="1" value={saleQuantity} onChange={(e) => setSaleQuantity(e.target.value)} /></label></div>{rootVariants.length > 0 && <label>متغير البكج<select className={control} value={rootVariant} onChange={(e) => { setRootVariant(e.target.value); setExpansion(null); }}><option value="">اختر المتغير</option>{rootVariants.map((item) => <option key={item.id} value={item.id}>{item.display_name || item.name || item.sku || item.id}</option>)}</select></label>}<p className="text-xs">المكونات العامة تُضاف دائمًا، والمشروطة عند اختيار قيمتها. النصوص لا تنشئ مخزونًا؛ المقاسات المربوطة بالقطع تُعرض كتخصيص لدى المورد.</p>{customerOptions.filter((option) => (option.values?.length || textOption(option)) && bundleOptionVisible(option, choices)).map((option) => <fieldset key={option.id}><legend>{option.name}{option.required ? " *" : ""}</legend><button type="button" className="mb-2 block text-sm underline" aria-label={`مسح اختيار ${option.name}`} onClick={() => clearPreview(option.id)}>مسح الاختيار</button>{option.values?.length ? option.values.map((value) => <label key={value.id} className="ml-4 inline-flex gap-2"><input type={["checkbox", "multiple", "multi_select"].includes(option.type) ? "checkbox" : "radio"} name={`bundle-option-${productId}-${option.id}`} checked={choices.some((entry) => entry.option_id === String(option.id) && entry.value_id === String(value.id))} onChange={(e) => choose(option, value.id, e.target.checked)} />{value.name}</label>) : <input aria-label={option.name} className={control} placeholder="تخصيص تجريبي للمعاينة" value={textAnswers[option.id] || ""} onChange={(e) => { setTextAnswers((current) => ({ ...current, [option.id]: e.target.value })); setExpansion(null); }} />}</fieldset>)}<button type="button" disabled={dirty || busy} className="rounded-lg border p-2 disabled:opacity-50" onClick={preview}>معاينة المكونات والتكلفة للاختيارات</button></fieldset>}
         {expansion?.needs_selection ? <p role="status">اختر قيم الخيارات والمقاسات المطلوبة لمعاينة التركيب النهائي.</p> : expansion && <div className="space-y-2 rounded-xl bg-slate-50 p-3">
-            {expansion.unresolved_components?.length > 0 && <p role="alert" className="text-amber-800">التكلفة غير مكتملة: توجد مكونات تحتاج تحديد سياسة تكلفتها في المنتج الأصلي.</p>}
+            {operationalIncomplete && <p role="alert" className="text-amber-800">{reportingComplete ? "بيانات التجهيز غير مكتملة: توجد مكونات تحتاج استكمال سياسة تجهيزها في المنتج الأصلي." : "التكلفة غير مكتملة: توجد مكونات تحتاج تحديد سياسة تكلفتها في المنتج الأصلي."}</p>}
             {(expansion.component_decisions || []).length > 0 && <section className="space-y-2"><h3 className="font-bold">قرارات المكونات الموروثة</h3>{expansion.component_decisions.map((decision, index) => <div key={index} className="rounded-lg border bg-white p-2 text-sm"><p>{decision.name || "مكوّن داخلي"} · {decision.use ? "مستخدم" : "مستثنى"} · الكمية لكل اختيار: {decision.quantity}</p><p>التكلفة: {({ independent: "مستقلة", included_in_base: "مشمولة في المنتج" })[decision.cost_treatment] || "غير محددة"} · التجهيز: {({ inhouse: "داخلي", supplier: "عند المورد", purchased_complete: "منتج جاهز" })[decision.assembly_origin] || "غير محدد"}</p>{decision.reason && <p className="text-amber-800">سبب المراجعة: {({ component_provenance_required: "تحديد مصدر التجهيز وسياسة التكلفة مطلوب", supplier_omission_unconfirmed: "استثناء المورد غير مؤكد بدليل", supplier_component_execution_required: "يلزم تحديد تنفيذ المكوّن لدى المورد", included_component_inventory_cost_basis_required: "يلزم تحديد أساس تكلفة المخزون للمكوّن المشمول" })[decision.reason] || "تحتاج سياسة المكوّن مراجعة"}</p>}<p className="break-all">مسار القاعدة: {rulePathLabel(decision.path)}</p></div>)}</section>}
             <h3 className="font-bold">تكلفة المكونات النهائية — الإصدار {definition.revision}</h3>
             {Number.isInteger(Number(saleQuantity)) && Number(saleQuantity) > 0 && <>
@@ -305,10 +341,16 @@ export default function BundleEditor({ productId, salePrice }) {
                     {(leaf.sourcing_segments || []).map((segment, segmentIndex) => <p key={segment.leaf_id || segmentIndex}>التوريد: {segment.sourcing_mode === "stock" ? "من المخزون" : "من المورد"} · الكمية: {segment.quantity} · المحجوز تقديريًا: {segment.reserved_quantity ?? "غير متاح"}{segment.supplier_id ? ` · المورد: ${supplierName(segment.supplier_id)}` : ""}</p>)}
                     {(leaf.state === "needs_source" || Number(leaf.unresolved_quantity) > 0) && <p className="text-amber-800">يحتاج مصدر توريد: {leaf.unresolved_quantity ?? leaf.pending_quantity ?? "غير محدد"} — أكمل سياسة التوريد للمنتج.</p>}
 {Object.keys(leaf.customization || {}).length > 0 && <p>تخصيص القطعة: {Object.entries(leaf.customization).map(([key, value]) => `${customerOptions.find((option) => String(option.id) === key)?.name || key}: ${typeof value === "object" ? JSON.stringify(value) : value}`).join("، ")}</p>}</div>)}
-                {expansion.known_cost != null && <p>التكلفة المعروفة فقط: {bundleMoney(Number(expansion.known_cost) * Number(saleQuantity))}{expansion.cost_complete === false ? " — ليست إجماليًا نهائيًا" : ""}</p>}
-                {(expansion.unresolved_components || []).length > 0 && <ul className="text-sm text-amber-800">{expansion.unresolved_components.map((component, index) => <li key={index}>تكلفة غير محسومة: {component.name || "مكوّن داخلي"} · {component.use ? "مستخدم" : "مستثنى"}</li>)}</ul>}
-                <p>إجمالي التكلفة التقديرية: {bundleMoney(expansion.estimated_cost == null ? null : Number(expansion.estimated_cost) * Number(saleQuantity))}</p>
-                <p>الربح التقديري قبل المصاريف الأخرى: {bundleMoney(salePrice !== null && salePrice !== undefined && Number.isFinite(Number(salePrice)) && expansion.estimated_cost != null ? (Number(salePrice) - Number(expansion.estimated_cost)) * Number(saleQuantity) : null)}</p>
+                {expansion.known_cost != null && <p>{hasReportingCost ? "تكلفة المكونات التشغيلية المعروفة فقط" : "التكلفة المعروفة فقط"}: {bundleMoney(Number(expansion.known_cost) * Number(saleQuantity))}{hasReportingCost ? " — ليست إجمالي التكلفة المالية" : expansion.cost_complete === false ? " — ليست إجماليًا نهائيًا" : ""}</p>}
+                {(expansion.unresolved_components || []).length > 0 && <ul className="text-sm text-amber-800">{expansion.unresolved_components.map((component, index) => <li key={index}>{reportingComplete ? "تجهيز غير محسوم" : "تكلفة غير محسومة"}: {component.name || "مكوّن داخلي"} · {component.use ? "مستخدم" : "مستثنى"}</li>)}</ul>}
+                {hasReportingCost && <div className="space-y-1 rounded-lg border bg-white p-2" aria-label="تفصيل التكلفة المالية للبكج">
+                    <p className="font-bold">التكلفة المالية المتوقعة للبكج</p>
+                    {reportingCost.base_total_sar != null && <p>تكلفة الأساس المالية: {bundleMoney(Number(reportingCost.base_total_sar) * Number(saleQuantity))}</p>}
+                    {reportingCost.components_total_sar != null && <p>تكلفة المكونات والخدمات: {bundleMoney(Number(reportingCost.components_total_sar) * Number(saleQuantity))}</p>}
+                    {!reportingComplete && <p role="alert" className="text-amber-800">التكلفة المالية غير مكتملة؛ يلزم استكمال بيانات تكلفة البكج.</p>}
+                </div>}
+                <p>إجمالي التكلفة التقديرية: {bundleMoney(estimatedUnitCost == null ? null : Number(estimatedUnitCost) * Number(saleQuantity))}</p>
+                <p>الربح التقديري قبل المصاريف الأخرى: {bundleMoney(salePrice !== null && salePrice !== undefined && Number.isFinite(Number(salePrice)) && estimatedUnitCost != null ? (Number(salePrice) - Number(estimatedUnitCost)) * Number(saleQuantity) : null)}</p>
             </>}
         </div>}
     </section>;

@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
+import unicodedata
 
 COVERAGE_MODE_CITY = "city"
 DRIVER_STATUS_ACTIVE = "active"
@@ -101,6 +102,66 @@ def assignment_snapshot(*, driver: dict[str, Any], shipping_city: Any) -> dict[s
     }
 
 
+
+def normalize_shipping_carrier(value: Any) -> str:
+    """Strict shipping-company identity; do not infer coverage from a city.
+
+    Generic local courier names remain distinct from city-specific couriers.
+    """
+    if not isinstance(value, str):
+        return ""
+    cleaned = unicodedata.normalize("NFKC", value)
+    for mark in ("\u200b", "\u200c", "\u200d", "\u200e", "\u200f", "\ufeff",
+                 "\u202a", "\u202b", "\u202c", "\u202d", "\u202e"):
+        cleaned = cleaned.replace(mark, "")
+    name = normalize_text(cleaned.strip().strip(chr(39) + chr(34))).casefold()
+    if name in {"مندوب الرياض", "mandoob riyadh"}:
+        return "مندوب الرياض"
+    return name
+
+
+def is_city_courier_company(name: Any) -> bool:
+    """Select only merchant-configured local city couriers, not generic 'مندوب'."""
+    clean = normalize_shipping_carrier(name)
+    return (
+        (clean.startswith("مندوب ") and clean not in {"مندوب المتجر", "مندوب المحل"})
+        or clean.startswith("مندوبي ")
+        or clean.startswith("mandoob ")
+    ) and len(clean.split()) > 1
+
+
+def assert_driver_can_take_shipping_company(
+    *, driver: dict[str, Any], shipping_company: Any,
+) -> None:
+    if normalize_text(driver.get("status") or DRIVER_STATUS_ACTIVE) != DRIVER_STATUS_ACTIVE:
+        raise StoreDeliveryRuleError("driver_inactive")
+    linked = normalize_shipping_carrier(driver.get("shipping_company"))
+    if not linked:
+        raise StoreDeliveryRuleError("driver_shipping_company_unconfigured")
+    shipment = normalize_shipping_carrier(shipping_company)
+    if not shipment:
+        raise StoreDeliveryRuleError("shipment_shipping_company_required")
+    if linked != shipment:
+        raise StoreDeliveryRuleError("driver_shipping_company_mismatch")
+
+
+def carrier_assignment_snapshot(
+    *, driver: dict[str, Any], shipping_company: Any, shipping_city: Any = "",
+) -> dict[str, Any]:
+    """Only NEW assignments use carrier matching; historical rows are untouched."""
+    assert_driver_can_take_shipping_company(driver=driver, shipping_company=shipping_company)
+    return {
+        "driver_id": normalize_text(driver.get("id")),
+        "driver_name_snapshot": normalize_text(driver.get("name")),
+        "driver_city_snapshot": normalize_text(driver.get("city")),
+        "driver_shipping_company_snapshot": normalize_text(driver.get("shipping_company")),
+        "shipping_company_snapshot": normalize_text(shipping_company),
+        "shipping_city_snapshot": normalize_text(shipping_city),
+        "delivery_fee_snapshot": float(money(driver.get("delivery_fee"))),
+        "coverage_mode_snapshot": "shipping_company",
+    }
+
+
 def collection_requirements(*, outstanding_amount: Any, payment_method: str | None) -> dict[str, Any]:
     """Describe evidence/custody rules when a driver completes delivery."""
     outstanding = money(outstanding_amount)
@@ -161,6 +222,10 @@ __all__ = [
     "PAYMENT_METHOD_BANK_TRANSFER",
     "StoreDeliveryRuleError",
     "assert_driver_can_take_shipment",
+    "assert_driver_can_take_shipping_company",
+    "carrier_assignment_snapshot",
+    "normalize_shipping_carrier",
+    "is_city_courier_company",
     "assignment_snapshot",
     "collection_requirements",
     "driver_earning",

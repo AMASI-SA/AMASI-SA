@@ -10,9 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from store_delivery_customer_instruction_routes import STORE_DELIVERY_INSTRUCTIONS
 from store_courier_domain import ASSIGNED_WAITING_PICKUP, WORKFLOWS
-from store_delivery_domain import StoreDeliveryRuleError, assignment_snapshot, normalize_text
+from store_delivery_domain import StoreDeliveryRuleError, carrier_assignment_snapshot, normalize_text
 from store_delivery_driver_routes import STORE_DRIVERS
-from store_delivery_handover_routes import ASSIGNMENTS, EVENTS, ORDERS, _order_city
+from store_delivery_handover_routes import ASSIGNMENTS, EVENTS, ORDERS, _order_city, _order_shipping_company
 from store_delivery_payment_evidence_routes import authoritative_outstanding_amount
 from payment_methods import normalize_payment_method
 
@@ -312,7 +312,7 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
         if not order:
             raise HTTPException(status_code=409, detail={"code": "canonical_order_not_found"})
         try:
-            snapshot = assignment_snapshot(driver=driver, shipping_city=_order_city(order))
+            snapshot = carrier_assignment_snapshot(driver=driver, shipping_company=_order_shipping_company(order), shipping_city=_order_city(order))
         except StoreDeliveryRuleError as exc:
             raise HTTPException(status_code=409, detail={"code": str(exc)}) from exc
 

@@ -15,14 +15,14 @@ from store_courier_domain import WORKFLOWS
 
 
 ACTOR = {"id": "driver-account", "role": "store_driver", "created_by": "merchant", "_session_client": "amasi_mobile"}
-DRIVER = {"user_id": "merchant", "id": "driver", "account_user_id": "driver-account", "name": "الموصل", "city": "الرياض", "status": "active", "delivery_fee": 20}
+DRIVER = {"user_id": "merchant", "id": "driver", "account_user_id": "driver-account", "name": "الموصل", "city": "الرياض", "shipping_company": "مندوب الرياض", "status": "active", "delivery_fee": 20}
 
 
 async def assignment_count(db):
     return await db[ASSIGNMENTS].count_documents({})
 
 
-def setup(monkeypatch, *, city="الرياض", stage="completed", existing=None, provider_fails=False):
+def setup(monkeypatch, *, city="الرياض", shipping_company="مندوب الرياض", stage="completed", existing=None, provider_fails=False):
     mongo_uri = os.environ.get("MZ2_TEST_MONGO_URI")
     if mongo_uri:
         from motor.motor_asyncio import AsyncIOMotorClient
@@ -46,7 +46,7 @@ def setup(monkeypatch, *, city="الرياض", stage="completed", existing=None,
         monkeypatch.setattr(collection_type, "find_one_and_update", find_and_update)
     async def seed():
         await db[STORE_DRIVERS].insert_one(dict(DRIVER))
-        await db[ORDERS].insert_one({"user_id": "merchant", "order_id": "salla-1", "order_number": "101", "shipping_barcode": "LABEL-1", "shipping_city": city, "outstanding_amount": 0})
+        await db[ORDERS].insert_one({"user_id": "merchant", "order_id": "salla-1", "order_number": "101", "shipping_barcode": "LABEL-1", "shipping_city": city, "shipping_company": shipping_company, "outstanding_amount": 0})
         await db[WORKFLOWS].insert_one({"user_id": "merchant", "order_number": "101", "carrier_label_type": "store_courier", "carrier_label_ready": True, "stage": stage, "assembly_status": stage})
         if existing:
             await db[ASSIGNMENTS].insert_one({"user_id": "merchant", "id": "prior", "order_id": "salla-1", "order_number": "101", "active": True, "assigned_at": "2026-10-25T10:00:00+00:00", **existing})
@@ -109,7 +109,7 @@ def test_other_driver_is_reported_without_transfer_or_customer_data(monkeypatch)
     assert asyncio.run(assignment_count(db)) == 1
 
 
-@pytest.mark.parametrize("kwargs,code", [({"city": "جدة"}, "driver_city_mismatch"), ({"stage": "in_progress"}, "store_courier_order_not_completed")])
+@pytest.mark.parametrize("kwargs,code", [({"shipping_company": "مندوب جدة"}, "driver_shipping_company_mismatch"), ({"stage": "in_progress"}, "store_courier_order_not_completed")])
 def test_not_eligible_has_no_assignment_or_provider_write(monkeypatch, kwargs, code):
     db, scan, calls = setup(monkeypatch, **kwargs)
     body = scan().json()
@@ -117,6 +117,28 @@ def test_not_eligible_has_no_assignment_or_provider_write(monkeypatch, kwargs, c
     assert body["code"] == code
     assert not calls
     assert asyncio.run(assignment_count(db)) == 0
+
+
+def test_jeddah_destination_with_riyadh_carrier_is_eligible(monkeypatch):
+    db, scan, calls = setup(monkeypatch, city="جدة")
+    result = scan()
+    assert result.status_code == 200
+    assert result.json()["accepted"] is True
+    assert result.json()["delivery"]["shipping_company_snapshot"] == "مندوب الرياض"
+
+
+def test_prior_city_mode_assignment_remains_unchanged(monkeypatch):
+    db, scan, calls = setup(monkeypatch, city="جدة", shipping_company="مندوب جدة",
+        existing={"driver_id": "driver", "status": "assigned",
+                  "coverage_mode_snapshot": "city", "shipping_city_snapshot": "جدة"})
+    result = scan()
+    assert result.status_code == 200
+    assert result.json()["accepted"] is True
+    async def check():
+        row = await db[ASSIGNMENTS].find_one({"id": "prior"})
+        assert row["coverage_mode_snapshot"] == "city"
+        assert row["shipping_city_snapshot"] == "جدة"
+    asyncio.run(check())
 
 
 def test_provider_failure_remains_assigned_and_retryable(monkeypatch):

@@ -20,6 +20,11 @@ const items = [1, 2, 3, 4].map((id) => ({ kind: "product", product_id: `p${id}`,
 beforeEach(() => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
     jest.clearAllMocks();
+    api.get.mockImplementation(async () => {
+        const bundle = await bundles.getProductBundle.mock.results.at(-1)?.value;
+        return { data: { revision: 0, bundle_revision: bundle?.definition?.revision || 0, include_parent_base: false, evidence_ref: "" } };
+    });
+    api.put.mockImplementation(async (_url, payload) => ({ data: { revision: payload.expected_revision + 1, bundle_revision: payload.expected_bundle_revision, include_parent_base: payload.include_parent_base, evidence_ref: payload.evidence_ref } }));
     bundles.getProductBundleComponents.mockResolvedValue({ components: [] });
     bundles.getProductBundle.mockResolvedValue({ definition: { revision: 3, product_type: "composite", items }, expansion: null, limits: { max_items: 100, max_depth: 5, max_leaves: 500 } });
     getMezanComponentWorkspace.mockResolvedValue({ components: [] });
@@ -373,4 +378,133 @@ test("saved product identity, quantity and condition survive a fresh mount", asy
     expect(labeledSelect("حقل خيار العميل").value).toBe("size");
     expect(labeledSelect("قيمة خيار العميل").value).toBe("4");
     expect(button("حفظ التركيب وحساب التكلفة").disabled).toBe(true);
+});
+
+const reportingFixture = (embroidery = false, complete = true) => ({
+    definition: { revision: 3, schema_version: 1, product_type: "composite", items: [items[0]] },
+    expansion: {
+        estimated_cost: embroidery ? "50" : "40", known_cost: embroidery ? "50" : "40", cost_complete: true,
+        units_per_selection: "1", leaves: [{ kind: "product", name: "ورد", product_id: "p1", quantity: "1", unit_cost: "40", sourcing_mode: "supplier", supplier_id: "s1" }],
+        reporting_cost: { version: "test-v1", unit_total_sar: complete ? (embroidery ? "65" : "55") : null,
+            base_total_sar: complete ? "15" : null, components_total_sar: embroidery ? "50" : "40",
+            currency: "SAR", cost_stage: "expected", complete, missing_cost_reasons: complete ? [] : ["base_missing"], added_bases: [] },
+    },
+    limits: { max_items: 100, max_depth: 5, max_leaves: 500 },
+});
+const policyPanel = () => node.querySelector('[aria-label="سياسة تكلفة البكج"]');
+async function enableReportingPolicy() {
+    await act(async () => policyPanel().querySelector('input[type="checkbox"]').click());
+    await inputValue(policyPanel().querySelector('input:not([type="checkbox"])'), "Owner confirms base 15 SAR");
+}
+
+test.each([[false, 220, 180], [true, 260, 140]])("financial preview includes parent and selected services once (name=%s)", async (embroidery, total, profit) => {
+    bundles.getProductBundle.mockResolvedValue(reportingFixture(embroidery));
+    await act(async () => root.render(<BundleEditor productId="bundle" salePrice={100} />));
+    await inputValue(node.querySelector('[aria-label="كمية سلة للمعاينة"]'), "4");
+    expect(node.textContent).toContain(`إجمالي التكلفة التقديرية: ${bundles.bundleMoney(total)}`);
+    expect(node.textContent).toContain(`الربح التقديري قبل المصاريف الأخرى: ${bundles.bundleMoney(profit)}`);
+    expect(node.textContent).toContain(`تكلفة الأساس المالية: ${bundles.bundleMoney(60)}`);
+    expect(node.textContent).toContain(`ورد × 4: ${bundles.bundleMoney(160)}`);
+    expect(node.textContent).toContain("كمية سلة 4 × وحدات الاختيار 1 = 4 وحدة فعلية");
+    expect(bundles.saveProductBundle).not.toHaveBeenCalled();
+    expect(api.put).not.toHaveBeenCalled();
+});
+
+test("incomplete financial evidence never falls back to the smaller operational estimate", async () => {
+    bundles.getProductBundle.mockResolvedValue(reportingFixture(false, false));
+    await act(async () => root.render(<BundleEditor productId="bundle" salePrice={100} />));
+    expect(node.textContent).toContain("التكلفة المالية غير مكتملة");
+    expect(node.textContent).toContain("إجمالي التكلفة التقديرية: غير متاح");
+    expect(node.textContent).toContain("الربح التقديري قبل المصاريف الأخرى: غير متاح");
+});
+
+test.each([
+    ["unknown", "component_provenance_required", true],
+    ["supplier", "supplier_component_execution_required", true],
+    ["supplier", "supplier_component_execution_required", false],
+])("schema2 supplier preview separates financial completeness from execution (%s / %s / complete=%s)", async (origin, reason, complete) => {
+    const fixture = reportingFixture(true, complete);
+    fixture.definition.schema_version = 2;
+    const decision = { product_id: "bundle", binding_kind: "option_resource", binding_id: "name-option",
+        resource_id: "embroidery", name: "تطريز الاسم", quantity: "1", use: true, path: [],
+        cost_treatment: "independent", assembly_origin: origin, status: "unresolved", reason, unit_cost: "10" };
+    fixture.expansion = { ...fixture.expansion, estimated_cost: null, known_cost: "40", cost_complete: false,
+        component_decisions: [decision], unresolved_components: [decision],
+        ...(origin === "supplier" ? { operational_blocked: { code: "bundle_component_policy_unresolved" } } : {}) };
+    bundles.getProductBundle.mockResolvedValue(fixture);
+    await act(async () => root.render(<BundleEditor productId="bundle" salePrice={100} />));
+    await inputValue(node.querySelector('[aria-label="كمية سلة للمعاينة"]'), "4");
+    expect(node.textContent).toContain(`تكلفة المكونات التشغيلية المعروفة فقط: ${bundles.bundleMoney(160)} — ليست إجمالي التكلفة المالية`);
+    expect(node.textContent).toContain(`ورد × 4: ${bundles.bundleMoney(160)}`);
+    if (complete) {
+        expect(node.textContent).toContain("بيانات التجهيز غير مكتملة");
+        expect(node.textContent).toContain("تجهيز غير محسوم: تطريز الاسم");
+        expect(node.textContent).not.toContain("التكلفة غير مكتملة");
+        expect(node.textContent).not.toContain("تكلفة غير محسومة");
+        expect(node.textContent).toContain(`إجمالي التكلفة التقديرية: ${bundles.bundleMoney(260)}`);
+        expect(node.textContent).toContain(`الربح التقديري قبل المصاريف الأخرى: ${bundles.bundleMoney(140)}`);
+    } else {
+        expect(node.textContent).toContain("التكلفة المالية غير مكتملة");
+        expect(node.textContent).not.toContain("بيانات التجهيز غير مكتملة");
+        expect(node.textContent).toContain("إجمالي التكلفة التقديرية: غير متاح");
+    }
+    expect(fixture.expansion.leaves).toHaveLength(1);
+    expect(bundles.saveProductBundle).not.toHaveBeenCalled();
+    expect(api.put).not.toHaveBeenCalled();
+});
+
+test("financial policy appears only after a composite definition is persisted", async () => {
+    bundles.getProductBundle.mockResolvedValue({ definition: { revision: 0, product_type: "normal", items: [] }, expansion: null, limits: { max_items: 100, max_depth: 5, max_leaves: 500 } });
+    await act(async () => root.render(<BundleEditor productId="bundle" />));
+    expect(policyPanel()).toBeNull();
+    await selectValue(labeledSelect("نوع التركيب"), "composite");
+    expect(policyPanel()).toBeNull();
+    expect(api.get).not.toHaveBeenCalled();
+});
+
+test("saving only financial policy refreshes the preview without saving or upgrading composition", async () => {
+    const initialBundle = { ...reportingFixture(), expansion: { estimated_cost: "40", leaves: [] } };
+    bundles.getProductBundle.mockResolvedValue(initialBundle);
+    await act(async () => root.render(<BundleEditor productId="bundle" />));
+    await enableReportingPolicy();
+    bundles.getProductBundle.mockResolvedValue(reportingFixture());
+    await act(async () => button("حفظ إعداد تكلفة البكج").click());
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(api.put).toHaveBeenCalledWith("/products-v2/bundle/bundle-reporting-cost-policy", {
+        expected_revision: 0, expected_bundle_revision: 3, include_parent_base: true,
+        evidence_ref: "Owner confirms base 15 SAR",
+    });
+    expect(bundles.getProductBundle).toHaveBeenCalledTimes(2);
+    expect(bundles.saveProductBundle).not.toHaveBeenCalled();
+    expect(initialBundle.definition.schema_version).toBe(1);
+    expect(node.querySelector('[aria-label="كمية المكوّن 1"]').value).toBe("1");
+    expect(node.textContent).toContain(`إجمالي التكلفة التقديرية: ${bundles.bundleMoney(55)}`);
+});
+
+test("unsaved composition disables independent policy save and preserves the draft", async () => {
+    bundles.getProductBundle.mockResolvedValue(reportingFixture());
+    await act(async () => root.render(<BundleEditor productId="bundle" />));
+    await enableReportingPolicy();
+    await inputValue(node.querySelector('[aria-label="كمية المكوّن 1"]'), "2");
+    expect(button("حفظ إعداد تكلفة البكج").disabled).toBe(true);
+    expect(policyPanel().textContent).toContain("تغييرات غير محفوظة في تركيب البكج");
+    await act(async () => button("حفظ إعداد تكلفة البكج").click());
+    expect(api.put).not.toHaveBeenCalled();
+    expect(node.querySelector('[aria-label="كمية المكوّن 1"]').value).toBe("2");
+});
+
+test("policy refresh arriving after a composition edit cannot overwrite that edit", async () => {
+    bundles.getProductBundle.mockResolvedValue(reportingFixture());
+    await act(async () => root.render(<BundleEditor productId="bundle" />));
+    await enableReportingPolicy();
+    let completeRefresh;
+    bundles.getProductBundle.mockImplementationOnce(() => new Promise((resolve) => { completeRefresh = resolve; }));
+    await act(async () => button("حفظ إعداد تكلفة البكج").click());
+    expect(bundles.getProductBundle).toHaveBeenCalledTimes(2);
+    await inputValue(node.querySelector('[aria-label="كمية المكوّن 1"]'), "7");
+    await act(async () => completeRefresh(reportingFixture()));
+    expect(node.querySelector('[aria-label="كمية المكوّن 1"]').value).toBe("7");
+    expect(node.textContent).toContain("أُبقيت تعديلات التركيب الأحدث");
+    expect(button("حفظ التركيب وحساب التكلفة").disabled).toBe(false);
+    expect(bundles.saveProductBundle).not.toHaveBeenCalled();
 });

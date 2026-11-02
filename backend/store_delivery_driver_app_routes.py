@@ -266,7 +266,9 @@ async def _resolve_receive_assignment(db, *, actor, driver, barcode):
             session_id=session["id"], payload=ScanIn(barcode=barcode))
         if not scanned.get("accepted"):
             return None, {"accepted": False, "code": scanned.get("code"),
-                "order_number": order.get("order_number")}
+                "order_number": order.get("order_number"),
+                "shipping_company": scanned.get("shipping_company"),
+                "driver_shipping_company": scanned.get("driver_shipping_company")}
         confirmed = await confirm_session_service(db, actor=actor, user_id=merchant_id,
             session_id=session["id"], physical_label_scanned=False)
         return confirmed["assignments"][0], None
@@ -618,6 +620,66 @@ async def _enrich_assignments_with_order_state(
     return result
 
 
+
+def _safe_session_amount(value: Any) -> float:
+    """Fail closed on invalid historic amount data."""
+    try:
+        amount = float(value)
+        if amount < 0 or amount > 1_000_000_000 or not __import__("math").isfinite(amount):
+            return 0.0
+        return amount
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+
+
+async def driver_receive_session_views(
+    db: Any, *, user_id: str, driver_id: str, sessions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """One driver's scanner sessions, with historical counters verified by assignment ID.
+
+    Never rewrite saved sessions, shipment assignments, fees or payment records.
+    """
+    visible = [session for session in sessions
+               if normalize_text(session.get("driver_id")) == normalize_text(driver_id)]
+    ids = {
+        normalize_text(entry.get("assignment_id"))
+        for session in visible for entry in session.get("accepted") or []
+        if isinstance(entry, dict) and normalize_text(entry.get("assignment_id"))
+    }
+    owned_ids: set[str] = set()
+    if ids:
+        owned = await db[ASSIGNMENTS].find(
+            {"user_id": user_id, "driver_id": driver_id,
+             "id": {"$in": list(ids)}}, {"_id": 0, "id": 1},
+        ).to_list(length=len(ids))
+        owned_ids = {normalize_text(row.get("id")) for row in owned}
+    result = []
+    for session in visible:
+        seen: set[str] = set()
+        accepted = []
+        for entry in session.get("accepted") or []:
+            if not isinstance(entry, dict):
+                continue
+            identity = normalize_text(entry.get("assignment_id"))
+            if not identity or identity in seen or identity not in owned_ids:
+                continue
+            seen.add(identity)
+            accepted.append(entry)
+        row = {key: value for key, value in session.items() if key not in {"_id", "user_id"}}
+        row["accepted"] = accepted
+        row["accepted_count"] = len(accepted)
+        row["collection_count"] = sum(
+            1 for item in accepted if item.get("outstanding_amount_available") is True
+            and _safe_session_amount(item.get("outstanding_amount")) > 0
+        )
+        row["collection_total"] = round(sum(
+            _safe_session_amount(item.get("outstanding_amount"))
+            for item in accepted if item.get("outstanding_amount_available") is True
+        ), 2)
+        result.append(row)
+    return result
+
+
 def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
     router = APIRouter(prefix="/store-delivery/app", tags=["Amasi Delivery Driver App"])
 
@@ -951,6 +1013,20 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         })
         return result
 
+    @router.get("/deliveries/receive-sessions/me")
+    async def my_receive_session_report(user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_store_driver(user)
+        driver = await _driver_for_user(db, actor)
+        merchant_id = _merchant_id(driver)
+        rows = await db[DRIVER_RECEIVE_SESSIONS].find(
+            {"user_id": merchant_id, "driver_id": driver["id"]},
+            {"_id": 0},
+        ).sort("started_at", -1).to_list(length=100)
+        result = await driver_receive_session_views(
+            db, user_id=merchant_id, driver_id=driver["id"], sessions=rows,
+        )
+        return {"items": result, "total": len(result), "driver_id": driver["id"]}
+
     @router.post("/deliveries/receive-sessions", status_code=201)
     async def open_receive_session(user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_store_driver(user)
@@ -967,7 +1043,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             sort=[("started_at", -1)],
         )
         if existing:
-            return existing
+            return (await driver_receive_session_views(
+                db, user_id=merchant_id, driver_id=driver["id"], sessions=[existing],
+            ))[0]
         now = _now()
         row = {
             "id": str(uuid.uuid4()),
@@ -984,9 +1062,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "started_by_account_user_id": normalize_text(actor.get("id")),
         }
         await db[DRIVER_RECEIVE_SESSIONS].insert_one(row)
-        row.pop("_id", None)
-        row.pop("user_id", None)
-        return row
+        return (await driver_receive_session_views(
+            db, user_id=merchant_id, driver_id=driver["id"], sessions=[row],
+        ))[0]
 
     @router.post("/deliveries/receive-sessions/{session_id}/scan")
     async def scan_receive_session(
@@ -1055,6 +1133,7 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             {
                 "user_id": merchant_id,
                 "id": session["id"],
+                "driver_id": driver["id"],
                 "status": "open",
             },
             {
@@ -1070,10 +1149,14 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         if update_result.modified_count != 1:
             raise HTTPException(status_code=409, detail={"code": "driver_receive_session_conflict"})
         refreshed = await db[DRIVER_RECEIVE_SESSIONS].find_one(
-            {"user_id": merchant_id, "id": session["id"]},
-            {"_id": 0, "user_id": 0},
+            {"user_id": merchant_id, "id": session["id"], "driver_id": driver["id"]},
+            {"_id": 0},
         )
-        return {"accepted": True, "delivery": updated, "session": refreshed}
+        session_view = await driver_receive_session_views(
+            db, user_id=merchant_id, driver_id=driver["id"], sessions=[refreshed] if refreshed else [],
+        )
+        return {"accepted": True, "delivery": updated,
+                "session": session_view[0] if session_view else None}
 
     @router.post("/deliveries/receive-sessions/{session_id}/close")
     async def close_receive_session(session_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
@@ -1098,7 +1181,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         )
         if not row:
             raise HTTPException(status_code=404, detail={"code": "driver_receive_session_not_found"})
-        return row
+        return (await driver_receive_session_views(
+            db, user_id=merchant_id, driver_id=driver["id"], sessions=[row],
+        ))[0]
 
     @router.post("/deliveries/exception")
     async def report_delivery_exception(
@@ -1533,7 +1618,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             sort=[("started_at", -1)],
         )
         if existing:
-            return existing
+            return (await driver_receive_session_views(
+                db, user_id=merchant_id, driver_id=driver["id"], sessions=[existing],
+            ))[0]
         now = _now()
         row = {
             "id": str(uuid.uuid4()),
@@ -1550,9 +1637,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "started_by_account_user_id": normalize_text(actor.get("id")),
         }
         await db[DRIVER_RECEIVE_SESSIONS].insert_one(row)
-        row.pop("_id", None)
-        row.pop("user_id", None)
-        return row
+        return (await driver_receive_session_views(
+            db, user_id=merchant_id, driver_id=driver["id"], sessions=[row],
+        ))[0]
 
     @router.post("/deliveries/receive-sessions/{session_id}/scan")
     async def scan_receive_session(
@@ -1621,6 +1708,7 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             {
                 "user_id": merchant_id,
                 "id": session["id"],
+                "driver_id": driver["id"],
                 "status": "open",
             },
             {
@@ -1636,10 +1724,14 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         if update_result.modified_count != 1:
             raise HTTPException(status_code=409, detail={"code": "driver_receive_session_conflict"})
         refreshed = await db[DRIVER_RECEIVE_SESSIONS].find_one(
-            {"user_id": merchant_id, "id": session["id"]},
-            {"_id": 0, "user_id": 0},
+            {"user_id": merchant_id, "id": session["id"], "driver_id": driver["id"]},
+            {"_id": 0},
         )
-        return {"accepted": True, "delivery": updated, "session": refreshed}
+        session_view = await driver_receive_session_views(
+            db, user_id=merchant_id, driver_id=driver["id"], sessions=[refreshed] if refreshed else [],
+        )
+        return {"accepted": True, "delivery": updated,
+                "session": session_view[0] if session_view else None}
 
     @router.post("/deliveries/receive-sessions/{session_id}/close")
     async def close_receive_session(session_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
@@ -1664,7 +1756,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         )
         if not row:
             raise HTTPException(status_code=404, detail={"code": "driver_receive_session_not_found"})
-        return row
+        return (await driver_receive_session_views(
+            db, user_id=merchant_id, driver_id=driver["id"], sessions=[row],
+        ))[0]
 
     @router.post("/deliveries/exception")
     async def report_delivery_exception(

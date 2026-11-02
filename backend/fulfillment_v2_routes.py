@@ -3,6 +3,7 @@ from __future__ import annotations
 from order_tracking_notes import instruction_banner
 
 import io
+from copy import deepcopy
 import hashlib
 import json
 import math
@@ -1577,12 +1578,34 @@ async def reconcile_component_order_lifecycle(
             return {**previous, "snapshot_revision": watermark.get("revision")}
         generation = int(previous.get("generation") or 0) + 1
         from bundle_fulfillment_v2 import capture_intake
-        bundle_intake = await capture_intake(scoped, user_id, lines, previous.get("bundle_intake_snapshots"))
+        from bundle_reporting_cost import canonical_sale_created_at
+        reporting_costs = deepcopy(previous.get("reporting_cost_snapshots") or {})
+        blocked_bundle_intakes = {}
+        bundle_intake = await capture_intake(
+            scoped, user_id, lines, previous.get("bundle_intake_snapshots"),
+            reporting_costs=reporting_costs, blocked_intakes=blocked_bundle_intakes,
+            order_created_at=canonical_sale_created_at(snapshot))
         from order_cost_authority import capture_reporting_costs
         reporting_costs = await capture_reporting_costs(
-            scoped, user_id, lines, previous.get("reporting_cost_snapshots"), bundle_intake)
+            scoped, user_id, lines, reporting_costs, bundle_intake)
         new_bundle_keys = set(bundle_intake) - set(previous.get("bundle_intake_snapshots") or {})
         new_reporting_keys = set(reporting_costs) - set(previous.get("reporting_cost_snapshots") or {})
+        if blocked_bundle_intakes:
+            # This bundle's pre-existing supplier-service execution was never
+            # authorized by a financial proof. Before the opt-in, strict intake
+            # rejected it *inside registration*. Preserve that behavior for
+            # pre-G47 orders: do not overwrite an existing legacy acceptance
+            # marker with a new blocked lifecycle (which would break legacy
+            # ready-piece/consumption and supplier export).
+            try:
+                legacy_blocked_bundle = await legacy_component_cohort(
+                    scoped, user_id=user_id, order_number=order_number)
+            except HTTPException:
+                # Keep the existing source-date/configuration failure path.
+                # It will be assessed again at the established lifecycle gate.
+                legacy_blocked_bundle = False
+            if legacy_blocked_bundle:
+                raise HTTPException(409, detail={"code": "bundle_component_policy_unresolved"})
         if new_bundle_keys or new_reporting_keys:
             # A refresh/import of a legacy sale observes today's catalog, not
             # its original price. Preserve operational intake, but never create
@@ -1606,6 +1629,7 @@ async def reconcile_component_order_lifecycle(
             "updated_at": _now(), "plan_id": previous.get("plan_id"),
             "bundle_intake_snapshots": bundle_intake,
             "reporting_cost_snapshots": reporting_costs,
+            "bundle_financial_blocked": blocked_bundle_intakes,
         }
         await scoped[COMPONENT_LIFECYCLES].replace_one({"_id": identity}, row, upsert=True)
         return {**row, "snapshot_revision": watermark.get("revision")}
@@ -1632,6 +1656,10 @@ async def reconcile_component_order_lifecycle(
                 source_version=current["generation"], actor_id=actor_id,
             )
             state = "reconciliation_required" if result.get("reconciliation_required") else "cancelled"
+        elif current.get("bundle_financial_blocked"):
+            # Financial proof cannot authorize component execution or change
+            # the existing supplier route. Cancellation still releases stock.
+            raise HTTPException(409, detail={"code": "bundle_component_policy_unresolved"})
         elif not eligible:
             result, state = {}, "awaiting_eligibility"
         elif legacy:
