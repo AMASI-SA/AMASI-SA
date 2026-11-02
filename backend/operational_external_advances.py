@@ -1,0 +1,82 @@
+"""Explicit external-person loan intent over existing cash movements.
+
+Old movements/openings are immutable. Unallocated cash already contributes to
+party balances; the virtual identity below only makes that SAME contribution
+settleable. Never net two historical opposite movements by guessing intent.
+"""
+from decimal import Decimal, InvalidOperation
+
+ACTIONS = {
+    'borrow': ('incoming', 'collection', 'استلام سلفة من الجهة'),
+    'lend': ('outgoing', 'payment', 'إعطاء سلفة للجهة'),
+    'repay_borrowing': ('outgoing', 'settlement', 'سداد سلفة أو دين للجهة'),
+    'collect_lending': ('incoming', 'settlement', 'استرجاع سلفة أو دين من الجهة'),
+}
+CREATION = frozenset({'borrow', 'lend'})
+REPAYMENT = frozenset({'repay_borrowing', 'collect_lending'})
+PREFIX = 'external-advance:'
+
+
+def advance_id(movement):
+    identity = movement.get('id')
+    if not isinstance(identity, str) or not identity or len(identity) > 200:
+        raise ValueError('external_advance_identity_invalid')
+    return PREFIX + identity
+
+
+def _money(value):
+    try:
+        amount = Decimal(str(value))
+        if isinstance(value, bool) or not amount.is_finite() or amount < 0 or amount != amount.quantize(Decimal('.01')):
+            raise ValueError()
+        return amount
+    except (InvalidOperation, ValueError, TypeError):
+        raise ValueError('external_advance_amount_invalid') from None
+
+
+def advance_obligations(state):
+    """Return identities for the same unallocated external cash, never new facts.
+
+    Zero residuals, corrections and transfers are not a new loan. Legacy rows
+    retain an explicit generic label; incoming/outgoing alone does not establish
+    that a historical opposite movement settled this one.
+    """
+    result = {}
+    for row in state.get('movements', []):
+        if row.get('party_type') != 'external_person' or row.get('kind') not in {'payment', 'collection', 'refund', 'settlement'}:
+            continue
+        amount = _money(row['amount'])
+        allocated = sum((_money(a['amount']) for a in row.get('allocations', [])), Decimal(0))
+        if allocated > amount:
+            raise ValueError('external_advance_allocation_exceeds_movement')
+        residual = amount - allocated
+        if not residual:
+            continue
+        identity = advance_id(row)
+        if identity in result or identity in state.get('openings', {}) or identity in state.get('engine', {}).get('obligations', {}):
+            raise ValueError('external_advance_identity_duplicate')
+        if row.get('direction') not in {'incoming', 'outgoing'}:
+            raise ValueError('external_advance_direction_invalid')
+        action = row.get('external_operation')
+        result[identity] = {
+            'id': identity, 'kind': 'external_advance', 'party_type': 'external_person',
+            'party_id': row['party_id'], 'currency': row['currency'],
+            'name': row.get('name') or row['party_id'],
+            'label': ACTIONS[action][2] if action in CREATION else 'رصيد غير مخصص من حركة سابقة — لا تُستنتج تسويته تلقائيًا',
+            'direction': 'payable' if row['direction'] == 'incoming' else 'receivable',
+            'expected': '0.00', 'confirmed': format(residual, '.2f'),
+            'source_movement_id': row['id'], 'business_date': row.get('business_date') or str(row.get('occurred_at', ''))[:10],
+            'source': 'saved_operational_cash_movement', 'virtual': True,
+            'explicit_loan': action in CREATION,
+        }
+    return result
+
+
+def balance_snapshot(report, *, party_id, currency, bank_id, bank_kind):
+    party = next((p for p in report['parties'] if p['party_type'] == 'external_person'
+                  and p['party_id'] == party_id and p['currency'] == currency), {})
+    bank = next((p for p in report['parties'] if p['party_type'] == bank_kind
+                 and p['party_id'] == bank_id and p['currency'] == currency), {})
+    return {'receivable_sar': party.get('outstanding_receivable', '0.00'),
+            'payable_sar': party.get('outstanding_payable', '0.00'),
+            'account_balance_sar': bank.get('actual', '0.00')}

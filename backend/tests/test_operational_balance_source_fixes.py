@@ -140,7 +140,9 @@ def test_supplier_tax_confirmed_gross_and_explicit_net_are_exact():
     from decimal import Decimal
     state = reconcile({'status': 'active', 'started_at': START, 'engine': {}}, result, NOW)
     suppliers = [r for r in state['engine']['obligations'].values() if r.get('party_type') == 'supplier']
-    assert sum(Decimal(r['expected']) for r in suppliers) == Decimal('20')
+    # Both native pieces are fully invoiced; the final net price replaces the
+    # estimate, while the exact input VAT remains part of confirmed gross.
+    assert sum(Decimal(r['expected']) for r in suppliers) == Decimal('0')
     assert sum(Decimal(r['confirmed']) for r in suppliers) == Decimal('92')
     data['mezan_supplier_invoices_v2'][0]['purchase_tax']['confirmed'] = False
     result = run(src.collect_sources(HardBoundaryDB(data), 'owner', START, NOW))
