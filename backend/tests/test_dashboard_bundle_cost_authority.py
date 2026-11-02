@@ -98,6 +98,10 @@ class ReadOnlyCollection:
         self.reads[(self.collection.name, "find")] += 1
         return self.collection.find(*args, **kwargs)
 
+    def aggregate(self, *args, **kwargs):
+        self.reads[(self.collection.name, "aggregate")] += 1
+        return self.collection.aggregate(*args, **kwargs)
+
     async def find_one(self, *args, **kwargs):
         self.reads[(self.collection.name, "find_one")] += 1
         return await self.collection.find_one(*args, **kwargs)

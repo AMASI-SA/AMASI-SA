@@ -99,6 +99,8 @@ async def ensure_fulfillment_indexes(db: Any) -> None:
         return  # Indexes are prepared before entering the owner transaction.
     from stock_component_consumption_service import ensure_component_consumption_indexes
     await ensure_component_consumption_indexes(db)
+    from order_cost_authority import ensure_order_cost_indexes
+    await ensure_order_cost_indexes(db)
     await db[WORKFLOWS].create_index(
         [("user_id", ASCENDING), ("order_number", ASCENDING)],
         unique=True,
@@ -1579,6 +1581,22 @@ async def reconcile_component_order_lifecycle(
         from order_cost_authority import capture_reporting_costs
         reporting_costs = await capture_reporting_costs(
             scoped, user_id, lines, previous.get("reporting_cost_snapshots"), bundle_intake)
+        new_bundle_keys = set(bundle_intake) - set(previous.get("bundle_intake_snapshots") or {})
+        new_reporting_keys = set(reporting_costs) - set(previous.get("reporting_cost_snapshots") or {})
+        if new_bundle_keys or new_reporting_keys:
+            # A refresh/import of a legacy sale observes today's catalog, not
+            # its original price. Preserve operational intake, but never create
+            # historical reporting proof from that observation.
+            try:
+                legacy_capture = await legacy_component_cohort(scoped, user_id=user_id, order_number=order_number)
+            except HTTPException:
+                legacy_capture = True  # Missing creation proof is not history.
+            if legacy_capture:
+                for key in new_reporting_keys:
+                    reporting_costs.pop(key)
+                for key in new_bundle_keys:
+                    if bundle_intake[key] is not None:
+                        bundle_intake[key]["historical_cost_verified"] = False
         row = {
             "_id": identity, "user_id": user_id, "order_number": order_number,
             "generation": generation, "source_updated_at": version or previous_version,

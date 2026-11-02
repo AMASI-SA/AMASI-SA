@@ -617,6 +617,10 @@ def _normalise_options(
         # Keep raw option structure for auditing, but expose a normalized
         # customer-visible value to downstream Order Item consumers.
         if value is not None:
+            # The display value must not erase provider selection IDs. Cost
+            # and fulfillment readers use this original object as evidence.
+            if isinstance(raw_value, (dict, list)) and "values" not in option:
+                clean["raw"] = deepcopy(option.get("raw") or option)
             clean["value"] = value
 
     return raw, normalized

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from copy import deepcopy
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import hashlib
 import json
 from typing import Any
@@ -21,6 +21,17 @@ CORRECTIONS = "mezan_order_cost_corrections_v1"
 CHUNK_SIZE = 250
 
 
+async def ensure_order_cost_indexes(db: Any) -> None:
+    """Prepare once during startup; report reads never create indexes."""
+    await db[LIFECYCLES].create_index([("user_id", 1), ("order_number", 1)],
+                                     name="ix_order_cost_lifecycle_owner_order")
+    await db[CORRECTIONS].create_index(
+        [("user_id", 1), ("order_number", 1), ("order_item_id", 1), ("state", 1)],
+        name="ix_order_cost_correction_owner_line")
+    from order_option_cost_snapshot_routes import ensure_indexes
+    await ensure_indexes(db)
+
+
 def decimal(value: Any) -> Decimal | None:
     try:
         result = Decimal(str(value))
@@ -30,7 +41,7 @@ def decimal(value: Any) -> Decimal | None:
 
 
 def _amount(value: Decimal) -> float:
-    return float(value.quantize(Decimal("0.0001")))
+    return float(value.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP))
 
 
 def item_dict(item: Any) -> dict:
@@ -43,23 +54,70 @@ def item_dict(item: Any) -> dict:
 
 def line_id(item: Any) -> str:
     row = item_dict(item)
-    return str(row.get("order_item_id") or row.get("order_line_id") or
+    return str(row.get("canonical_order_item_id") or row.get("order_item_id") or row.get("order_line_id") or
                row.get("source_item_id") or row.get("id") or "").strip()
 
 
+def line_aliases(item: Any) -> set[str]:
+    row = item_dict(item)
+    raw = row.get("raw_item") if isinstance(row.get("raw_item"), dict) else {}
+    # These aliases are recorded by Salla's mapper/projector. Never match SKU.
+    return {str(value).strip() for value in (line_id(row), row.get("order_item_id"),
+            row.get("order_line_id"), row.get("source_item_id"), raw.get("id")) if value not in (None, "")}
+
+
+def economic_item(item: Any) -> dict:
+    """Recover provider option IDs retained by the canonical compatibility view."""
+    row = deepcopy(item_dict(item))
+    raw = row.get("raw_item") if isinstance(row.get("raw_item"), dict) else {}
+    # The canonical/projected lists already include every provider source
+    # (options, customer_options, product.options, etc.). A single raw alias
+    # would silently discard the other selections.
+    options = row.get("options_raw") or row.get("options") or row.get("selected_options") or raw.get("options") or []
+    row["options_raw"] = [deepcopy(option.get("raw") or option) for option in options if isinstance(option, dict)]
+    row["custom_fields"] = [deepcopy(field.get("raw") or field)
+                            for field in row.get("custom_fields") or raw.get("custom_fields") or [] if isinstance(field, dict)]
+    return row
+
+
+def _economic_tokens(item: dict) -> list[list[str]]:
+    from stock_component_consumption_service import selection_tokens
+    tokens = item.get("selected_context")
+    if tokens is None:
+        tokens = selection_tokens(economic_item(item))
+    named_ids = {key[len("option-name:"):] for key, _ in tokens if key.startswith("option-name:")}
+    result = []
+    for key, value in tokens:
+        if key.startswith("option-name:") or key == "option":
+            continue
+        if key.startswith("name:") and key[len("name:"):] in named_ids:
+            continue
+        # Filled is implied by a specific value ID, and display labels are not
+        # identity when a provider ID exists.
+        if key.startswith("id:") and value == "id:filled" and any(k == key and v.startswith("id:") and v != value for k, v in tokens):
+            continue
+        result.append([key, value])
+    return sorted(result)
+
+
 def order_items(order: dict) -> list[dict]:
-    return [item_dict(item) for item in (order.get("products") or order.get("items") or [])]
+    return [item_dict(item) for item in (order.get("products") or order.get("items") or [])
+            if isinstance(item, dict) or hasattr(item, "model_dump") or hasattr(item, "__dict__")]
 
 
 def line_fingerprint(item: Any) -> str:
-    from order_option_cost_snapshot_routes import selected_option_tokens
     row = item_dict(item)
+    quantity = decimal(row.get("quantity", 1))
+    raw = row.get("raw_item") if isinstance(row.get("raw_item"), dict) else {}
+    identity = str(row.get("source_item_id") or raw.get("id") or line_id(row))
+    if identity.startswith("salla:") and identity.count(":") == 2:
+        identity = identity.split(":", 2)[2]
     payload = {
-        "line_id": line_id(row),
+        "line_id": identity,
         "product_id": str(row.get("parent_product_id") or row.get("product_id") or row.get("salla_product_id") or ""),
         "variant_id": str(row.get("variant_id") or ""),
-        "quantity": str(decimal(row.get("quantity", 1))),
-        "options": sorted(selected_option_tokens(row)),
+        "quantity": str(quantity.normalize()) if quantity is not None else None,
+        "options": _economic_tokens(row),
     }
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
@@ -86,7 +144,7 @@ def calculate_catalog_line_cost(
 ) -> dict:
     """Base + selected, independent resources/options, with one quantity pass."""
     from order_option_cost_snapshot_routes import classify_base_unit_cost, binding_matches, selected_option_tokens
-    row = item_dict(item)
+    row = economic_item(item)
     quantity = decimal(row.get("quantity", 1))
     valid_quantity = quantity is not None and quantity > 0
     quantity = quantity if valid_quantity else Decimal(0)
@@ -181,6 +239,8 @@ def _bundle_cost(snapshot: dict, quantity: Any, units: list[dict] | None = None)
     q = decimal(quantity)
     if q is None or q <= 0:
         return _unknown(quantity, "bundle_quantity_unresolved")
+    if snapshot.get("historical_cost_verified") is False:
+        return _unknown(quantity, "historical_bundle_cost_unproven")
     estimate = decimal(snapshot.get("estimated_cost"))
     stage, total = "expected", estimate * q if estimate is not None else None
     if units is not None:
@@ -190,7 +250,8 @@ def _bundle_cost(snapshot: dict, quantity: Any, units: list[dict] | None = None)
         leaves = [leaf for unit in units for leaf in unit.get("bundle_leaves") or []]
         actual = [decimal(leaf.get("actual_cost")) for leaf in leaves]
         # Actual is valid only for a complete consumption of every physical unit.
-        if leaves and all(unit.get("state") == "consumed" for unit in units) and all(value is not None for value in actual):
+        coverage = all(_actual_leaves_cover_snapshot(snapshot, unit) for unit in units)
+        if leaves and coverage and all(unit.get("state") == "consumed" for unit in units) and all(value is not None for value in actual):
             total = sum(actual, Decimal(0))
             stage = "actual"
     if total is None:
@@ -206,10 +267,58 @@ def _bundle_cost(snapshot: dict, quantity: Any, units: list[dict] | None = None)
     return _frozen_cost(result, authority="bundle_snapshot", stage=stage)
 
 
+def _actual_leaves_cover_snapshot(snapshot: dict, unit: dict) -> bool:
+    """A consumed unit must cover the frozen recipe, with no duplicate leaves.
+
+    Sourcing segments already roll into their parent actual_cost. They are not
+    additional recipe leaves and must never be counted a second time.
+    """
+    from bundle_fulfillment_v2 import leaf_key
+    expected = snapshot.get("leaves") or []
+    actual = unit.get("bundle_leaves") or []
+    if not expected:
+        # Old plans stored only the estimate. Keep their existing consumption
+        # authority; new snapshots always retain the expanded recipe.
+        return bool(actual)
+    expected_keys = [leaf_key(leaf) for leaf in expected]
+    actual_keys = [leaf_key(leaf) for leaf in actual]
+    if (len(set(expected_keys)) != len(expected_keys)
+            or len(set(actual_keys)) != len(actual_keys)
+            or set(expected_keys) != set(actual_keys)):
+        return False
+    actual_by_key = dict(zip(actual_keys, actual))
+    identity_fields = ("kind", "product_id", "salla_product_id", "mezan_product_id", "resource_id", "variant_id")
+    for expected_leaf, key in zip(expected, expected_keys):
+        leaf = actual_by_key[key]
+        if any(str(expected_leaf.get(field) or "") != str(leaf.get(field) or "") for field in identity_fields):
+            return False
+        expected_quantity = decimal(expected_leaf.get("quantity"))
+        if expected_quantity is None or decimal(leaf.get("quantity")) != expected_quantity:
+            return False
+        required = expected_leaf.get("required", True)
+        if leaf.get("state") != "consumed":
+            if not required and leaf.get("state") == "skipped" and decimal(leaf.get("actual_cost")) == 0:
+                continue
+            return False
+        cost_only = (expected_leaf.get("cost_only")
+                     or expected_leaf.get("kind") == "resource" and expected_leaf.get("track_inventory") is False)
+        consumed = decimal(leaf.get("consumed_quantity"))
+        if required and not cost_only and consumed != expected_quantity:
+            return False
+        if consumed is not None and consumed > expected_quantity:
+            return False
+    return True
+
+
 def _stored_cost(row: dict) -> dict:
     if isinstance(row.get("cost"), dict):
-        return _frozen_cost(row["cost"], authority=row["cost"].get("cost_authority") or "order_snapshot",
-                            stage=row["cost"].get("cost_stage", "expected"))
+        result = _frozen_cost(row["cost"], authority=row["cost"].get("cost_authority") or "order_snapshot",
+                              stage=row["cost"].get("cost_stage", "expected"))
+        # Persistence makes an estimate immutable, not retroactively historical.
+        # Preserve explicit capture provenance on every subsequent read.
+        if row["cost"].get("historical_cost_verified") is False:
+            result["historical_cost_verified"] = False
+        return result
     q, total = decimal(row.get("quantity")), decimal(row.get("line_cost"))
     if q is None or total is None or str(row.get("currency") or "SAR").upper() != "SAR":
         return _unknown(row.get("quantity"), "stored_cost_invalid")
@@ -243,7 +352,38 @@ async def _read(db: Any, collection: str, query: dict, projection: dict, limit: 
     return rows
 
 
-async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *, budget: Any = None) -> dict:
+def _compact_snapshot_map(field: str) -> dict:
+    # Dynamic line IDs preclude ordinary dotted projections. Remove large
+    # frozen catalog definitions inside Mongo, before transferring the cohort.
+    # Keep every other snapshot field, including leaf identities and evidence.
+    return {"$arrayToObject": {"$map": {
+        "input": {"$objectToArray": {"$ifNull": ["$" + field, {}]}},
+        "as": "entry", "in": {"k": "$$entry.k", "v": {"$cond": [
+            {"$eq": ["$$entry.v", None]}, None,
+            {"$arrayToObject": {"$filter": {
+                "input": {"$objectToArray": "$$entry.v"}, "as": "part",
+                "cond": {"$ne": ["$$part.k", "frozen_definitions"]},
+            }}},
+        ]}},
+    }}}
+
+
+async def _read_snapshots(db: Any, collection: str, query: dict, projection: dict,
+                          field: str, limit: int, *, full: bool) -> list[dict]:
+    if full:
+        return await _read(db, collection, query, projection, limit)
+    rows = await db[collection].aggregate([
+        {"$match": query}, {"$limit": limit + 1},
+        {"$project": {**projection, field: _compact_snapshot_map(field)}},
+    ]).to_list(length=limit + 1)
+    if len(rows) > limit:
+        raise ValueError("order_cost_authority_read_limit:" + collection)
+    return rows
+
+
+async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *, budget: Any = None,
+                                    include_corrections: bool = True,
+                                    include_frozen_metadata: bool = False) -> dict:
     """Bounded, tenant-scoped batches, never one DB query per order/component."""
     from bundle_catalog_v2 import BUNDLES
     from stock_component_consumption_service import PLANS, UNITS
@@ -261,26 +401,54 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
         selected = numbers[offset:offset + CHUNK_SIZE]
         keys = {"user_id": user_id, "order_number": {"$in": selected}}
         limit = max(1, sum(len(order_items(order_map[number])) for number in selected))
-        stored = await _read(db, SNAPSHOTS, keys, {"_id": 0}, limit)
-        lifecycle = await _read(db, LIFECYCLES, keys,
+        aliases = {alias for number in selected for item in order_items(order_map[number]) for alias in line_aliases(item)}
+        stored = await _read(db, SNAPSHOTS, {**keys, "order_item_id": {"$in": sorted(aliases)}}, {"_id": 0}, max(1, limit * 4))
+        lifecycle = await _read_snapshots(db, LIFECYCLES, keys,
             {"_id": 0, "order_number": 1, "bundle_intake_snapshots": 1,
-             "reporting_cost_snapshots": 1, "source_fingerprint": 1}, len(selected))
-        plans = await _read(db, PLANS, {"user_id": user_id, "order_id": {"$in": selected},
+             "reporting_cost_snapshots": 1, "source_fingerprint": 1}, "bundle_intake_snapshots", len(selected), full=include_frozen_metadata)
+        plans = await _read_snapshots(db, PLANS, {"user_id": user_id, "order_id": {"$in": selected},
             "bundle_snapshots": {"$exists": True}},
-            {"_id": 1, "order_id": 1, "bundle_snapshots": 1, "reconciliation_required": 1, "lines": 1}, len(selected))
+            {"_id": 1, "order_id": 1, "bundle_snapshots": 1, "reconciliation_required": 1, "lines": 1},
+            "bundle_snapshots", len(selected), full=include_frozen_metadata)
         units = await _read(db, UNITS, {"user_id": user_id, "plan_id": {"$in": [p["_id"] for p in plans]},
-            "state": {"$ne": "released"}}, {"_id": 0, "plan_id": 1, "order_line_id": 1,
+            "state": {"$ne": "released"}, "order_line_id": {"$in": sorted(aliases)}}, {"_id": 0, "plan_id": 1, "order_line_id": 1,
             "unit_index": 1, "state": 1, "selected_context": 1, "bundle_leaves": 1},
-            max(1, sum(int(decimal(item.get("quantity", 1)) or 0) for number in selected for item in order_items(order_map[number]))) + limit)
-        corrections = await _read(db, CORRECTIONS, {**keys, "state": "applied"}, {"_id": 0}, limit)
-        item_maps = {number: {line_id(item): item for item in order_items(order_map[number]) if line_id(item)} for number in selected}
+            max(10000, sum(int(decimal(item.get("quantity", 1)) or 0) for number in selected for item in order_items(order_map[number]))) + limit)
+        corrections = await _read(db, CORRECTIONS, {**keys, "state": "applied", "order_item_id": {"$in": sorted(aliases)}},
+                                  {"_id": 0}, max(1, limit * 4)) if include_corrections else []
+        item_maps = {}
+        for number in selected:
+            candidates = defaultdict(list)
+            for item in order_items(order_map[number]):
+                for alias in line_aliases(item):
+                    candidates[alias].append(item)
+            item_maps[number] = {alias: values[0] for alias, values in candidates.items() if len(values) == 1}
+        def ambiguous(item: dict) -> dict:
+            return _record(item, _unknown(item.get("quantity"), "ambiguous_historical_line_identity"))
+
+        stored_seen = set()
         for row in stored:
             number, key = str(row.get("order_number")), str(row.get("order_item_id"))
-            result["lines"][(number, key)] = {**row, "cost": _stored_cost(row)}
+            item = item_maps[number].get(key)
+            if item:
+                identity = (number, line_id(item))
+                result["lines"][identity] = ambiguous(item) if identity in stored_seen else {**row, "cost": _stored_cost(row)}
+                stored_seen.add(identity)
         for row in lifecycle:
             number = str(row["order_number"])
+            lifecycle_seen = set()
             for key, snapshot in (row.get("reporting_cost_snapshots") or {}).items():
-                result["lines"][(number, str(key))] = deepcopy(snapshot)
+                item = item_maps[number].get(str(key))
+                # An ordinary manual snapshot may predate lifecycle capture.
+                # First stored proof wins; today's ingestion cannot reprice it.
+                if item and (number, line_id(item)) not in result["lines"]:
+                    result["lines"][(number, line_id(item))] = deepcopy(snapshot)
+                if item:
+                    identity = (number, line_id(item))
+                    if identity in lifecycle_seen:
+                        result["lines"][identity] = ambiguous(item)
+                    lifecycle_seen.add(identity)
+            bundle_seen = set()
             for key, snapshot in (row.get("bundle_intake_snapshots") or {}).items():
                 if snapshot is None:
                     continue
@@ -289,15 +457,18 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
                     continue
                 result["composite_products"].add(str(snapshot.get("product_id")))
                 cost = _bundle_cost(snapshot, snapshot.get("sale_quantity", item.get("quantity")))
-                record = _record(item, cost, selected_options=snapshot.get("selected_options"), bundle_snapshot=snapshot)
-                if snapshot.get("line_fingerprint"):
-                    record["line_fingerprint"] = snapshot["line_fingerprint"]
-                result["lines"][(number, str(key))] = record
+                record = {"quantity": snapshot.get("sale_quantity", item.get("quantity")), "product_id": snapshot.get("product_id"),
+                    "cost": cost, "line_fingerprint": snapshot.get("line_fingerprint"),
+                    "selected_options": snapshot.get("selected_options"), "bundle_snapshot": snapshot}
+                identity = (number, line_id(item))
+                result["lines"][identity] = ambiguous(item) if identity in bundle_seen else record
+                bundle_seen.add(identity)
         grouped: dict[tuple[str, str], list[dict]] = defaultdict(list)
         for unit in units:
             grouped[(str(unit["plan_id"]), str(unit["order_line_id"]))].append(unit)
         for plan in plans:
             number = str(plan["order_id"])
+            plan_seen = set()
             for key, snapshot in (plan.get("bundle_snapshots") or {}).items():
                 item = item_maps[number].get(str(key))
                 if not item:
@@ -305,10 +476,33 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
                 q = item.get("quantity")
                 cost = _unknown(q, "bundle_reconciliation_required") if plan.get("reconciliation_required") else _bundle_cost(snapshot, q, grouped[(str(plan["_id"]), str(key))])
                 result["composite_products"].add(str(snapshot.get("product_id")))
-                record = _record(item, cost, selected_options=snapshot.get("selected_options"), bundle_snapshot=snapshot)
-                result["lines"][(number, str(key))] = record
+                original = next((entry for entry in plan.get("lines") or [] if str(entry.get("order_line_id")) == str(key)), None)
+                record = {"quantity": (original or {}).get("quantity", q), "product_id": snapshot.get("product_id"),
+                    "cost": cost, "line_fingerprint": snapshot.get("line_fingerprint"),
+                    "selected_options": snapshot.get("selected_options"), "bundle_snapshot": snapshot}
+                if original:
+                    record["line_fingerprint"] = line_fingerprint(original)
+                identity = (number, line_id(item))
+                result["lines"][identity] = ambiguous(item) if identity in plan_seen else record
+                plan_seen.add(identity)
+        correction_seen = set()
         for row in corrections:
-            result["lines"][(str(row["order_number"]), str(row["order_item_id"]))] = deepcopy(row)
+            number, key = str(row["order_number"]), str(row["order_item_id"])
+            item = item_maps[number].get(key)
+            if item:
+                from order_cost_reporting_repair import source_authority_evidence_hash
+                identity = (number, line_id(item))
+                if identity in correction_seen:
+                    result["lines"][identity] = ambiguous(item)
+                    continue
+                correction_seen.add(identity)
+                previous = result["lines"].get(identity)
+                if (not row.get("source_authority_evidence_hash") or
+                        row["source_authority_evidence_hash"] != source_authority_evidence_hash(previous)):
+                    result["lines"][identity] = {**deepcopy(row), "cost": _unknown(
+                        item.get("quantity"), "cost_correction_source_changed")}
+                else:
+                    result["lines"][identity] = deepcopy(row)
         result["read_batches"] += 1
         if budget is not None:
             await budget.checkpoint()
@@ -325,17 +519,34 @@ def resolve_order_line_cost(item: dict, *, order_number: str, catalog_cost: dict
             return _unknown(row.get("quantity"), "cost_snapshot_line_changed")
         if decimal(record.get("quantity")) != decimal(row.get("quantity", 1)):
             return _unknown(row.get("quantity"), "cost_snapshot_quantity_mismatch")
+        saved_product = str(record.get("product_id") or record.get("salla_product_id") or "")
+        identities = {str(product_id or ""), str(row.get("parent_product_id") or ""), str(row.get("product_id") or "")}
+        if saved_product and saved_product not in identities:
+            return _unknown(row.get("quantity"), "cost_snapshot_product_mismatch")
         # Historical bundle choices are IDs. Do not attach the cost of another
         # customization merely because SKU or product_id is the same.
         saved_options = record.get("selected_options")
-        if saved_options and isinstance(saved_options[0], dict):
+        if saved_options == [] and not record.get("line_fingerprint") and _economic_tokens(row):
+            return _unknown(row.get("quantity"), "bundle_selected_options_mismatch" if record.get("bundle_snapshot") else "cost_snapshot_selected_options_mismatch")
+        if saved_options is not None and (not saved_options or isinstance(saved_options[0], dict)):
             from bundle_fulfillment_v2 import selected_ids
             saved = {(str(o.get("option_id")), str(o.get("value_id"))) for o in saved_options}
-            current = {(str(o.get("option_id")), str(o.get("value_id"))) for o in selected_ids(row)}
+            current = {(str(o.get("option_id")), str(o.get("value_id"))) for o in selected_ids(economic_item(row))}
             if saved != current:
                 return _unknown(row.get("quantity"), "bundle_selected_options_mismatch")
+        elif saved_options is not None and not record.get("line_fingerprint"):
+            # Legacy manual snapshots stored token pairs rather than bundle
+            # selection objects. Their original empty set is also evidence.
+            from order_option_cost_snapshot_routes import selected_option_tokens
+            saved = {tuple(pair) for pair in saved_options if isinstance(pair, (list, tuple)) and len(pair) == 2}
+            current = selected_option_tokens(row)
+            legacy = lambda tokens: {pair for pair in tokens
+                if pair[0].startswith("id:") and pair[1].startswith("id:") and pair[1] != "id:filled"
+                or pair[0].startswith("name:") and pair[1].startswith("name:")}
+            if legacy(saved) != legacy(current) or not saved and _economic_tokens(row):
+                return _unknown(row.get("quantity"), "cost_snapshot_selected_options_mismatch")
         cost = deepcopy(record.get("cost") or _stored_cost(record))
-        cost["historical_cost_verified"] = bool(cost.get("calculation_cost_available"))
+        cost["historical_cost_verified"] = bool(cost.get("calculation_cost_available")) and cost.get("historical_cost_verified", True)
         return cost
     identities = {str(product_id or ""), str(row.get("parent_product_id") or ""), str(row.get("product_id") or "")}
     if identities & set(authority.get("composite_products") or []):

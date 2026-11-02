@@ -39,78 +39,19 @@ def _item_value(item: Any, key: str, default: Any = None) -> Any:
 
 
 def selected_option_tokens(item: Any) -> set[tuple[str, str]]:
-    """Extract selected (option, value) identities from canonical order item."""
-    tokens: set[tuple[str, str]] = set()
-    raw_rows = (
-        _item_value(item, "options_raw")
-        or _item_value(item, "options")
-        or []
-    )
-    for row in raw_rows:
-        if not isinstance(row, dict):
-            continue
-        option = row.get("option") if isinstance(row.get("option"), dict) else {}
-        raw_value = row.get("value")
-        value = raw_value if isinstance(raw_value, dict) else {}
-        option_id = row.get("option_id") or row.get("id") or option.get("id")
-        value_id = row.get("value_id") or value.get("id")
-        option_name = row.get("option_name") or row.get("name") or option.get("name")
-        value_name = row.get("value_name") or value.get("name") or raw_value
-        if option_id not in (None, "") and value_id not in (None, ""):
-            tokens.add((f"id:{option_id}", f"id:{value_id}"))
-        if option_name in (None, ""):
-            continue
-        # The legacy Salla order projection intentionally preserves plural
-        # ``values`` as a list.  Treat every selected value as its own token;
-        # stringifying the whole list (for example ``['فستان']``) prevents a
-        # binding stored as ``فستان`` from matching and silently drops its
-        # additional cost from both product cards and executive totals.
-        selected_values = (
-            value_name
-            if isinstance(value_name, (list, tuple, set))
-            else [value_name]
-        )
-        for selected_value in selected_values:
-            if isinstance(selected_value, dict):
-                selected_value = (
-                    selected_value.get("name")
-                    or selected_value.get("value")
-                    or selected_value.get("label")
-                    or selected_value.get("text")
-                )
-            if selected_value not in (None, "", {}):
-                tokens.add((
-                    f"name:{_norm(option_name)}",
-                    f"name:{_norm(selected_value)}",
-                ))
+    """Use the same stable selections as bundle and component fulfillment.
 
-    normalized = _item_value(item, "options_normalized") or {}
-    if isinstance(normalized, dict):
-        for key, value in normalized.items():
-            if isinstance(value, list):
-                for entry in value:
-                    tokens.add((f"name:{_norm(key)}", f"name:{_norm(entry)}"))
-            else:
-                tokens.add((f"name:{_norm(key)}", f"name:{_norm(value)}"))
-    return tokens
+    This covers nested/plural values, option-level work and filled fields, while
+    preserving name-only matching for legacy orders without provider IDs.
+    """
+    from order_cost_authority import economic_item
+    from stock_component_consumption_service import selection_tokens
+    return {tuple(pair) for pair in selection_tokens(economic_item(item))}
 
 
 def binding_matches(binding: dict[str, Any], tokens: set[tuple[str, str]]) -> bool:
-    option_id = binding.get("option_id")
-    value_id = binding.get("value_id")
-    option_name = _norm(binding.get("option_name"))
-    value_name = _norm(binding.get("value_name"))
-    id_match = (
-        option_id not in (None, "")
-        and value_id not in (None, "")
-        and (f"id:{option_id}", f"id:{value_id}") in tokens
-    )
-    name_match = (
-        bool(option_name)
-        and bool(value_name)
-        and (f"name:{option_name}", f"name:{value_name}") in tokens
-    )
-    return id_match or name_match
+    from stock_component_consumption_service import binding_selected
+    return binding_selected(binding, [list(pair) for pair in tokens])
 
 
 def resolve_base_unit_cost(
@@ -213,6 +154,26 @@ async def ensure_indexes(db: Any) -> None:
     )
 
 
+def _cost_projection(cost: dict[str, Any]) -> dict[str, Any]:
+    """Stable response fields shared by persisted and read-only snapshots."""
+    from copy import deepcopy
+    q = cost["quantity"]
+    return {
+        "quantity": q, "base_unit_cost": cost["base_total"] / q if q else 0,
+        "product_resource_unit_cost": cost["product_components_total"] / q if q else 0,
+        "option_unit_cost": cost["selected_options_total"] / q if q else 0,
+        "unit_cost": cost["line_total"] / q if q and cost["calculation_cost_available"] else None,
+        "line_cost": cost["line_total"] if cost["calculation_cost_available"] else None,
+        "cost_complete": cost["calculation_cost_available"],
+        "mezan_cost_complete": cost["mezan_cost_complete"], "mezan_cost_missing": cost["mezan_cost_missing"],
+        "calculation_cost_available": cost["calculation_cost_available"],
+        "uses_salla_fallback": cost["uses_salla_fallback"],
+        "base_cost_source": cost["base_cost_source"], "currency": "SAR",
+        "cost_authority": cost["cost_authority"], "cost_stage": cost["cost_stage"],
+        "cost_semantics_version": cost["cost_semantics_version"], "cost": deepcopy(cost),
+    }
+
+
 async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) -> dict[str, Any]:
     """Freeze once; only a proven expected-to-actual transition may supersede it.
 
@@ -220,10 +181,9 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
     Approved receipts may improve a bundle estimate; its previous evidence is
     retained. Historical repairs use the separately audited correction workflow.
     """
-    from copy import deepcopy
     from pymongo.errors import DuplicateKeyError
     from order_cost_authority import (
-        VERSION, capture_reporting_costs, item_dict, line_id, line_fingerprint,
+        VERSION, capture_reporting_costs, item_dict, line_aliases, line_id, line_fingerprint,
         load_order_cost_authority, resolve_order_line_cost, _unknown,
     )
     await ensure_indexes(db)
@@ -246,29 +206,29 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
         catalog = (ordinary.get(key) or {}).get("cost") or _unknown(item.get("quantity"), "missing_historical_cost")
         cost = resolve_order_line_cost(item, order_number=number, catalog_cost=catalog,
             authority=authority, product_id=item.get("parent_product_id") or item.get("product_id"))
-        q = cost["quantity"]
-        previous = existing.get(key)
-        selector = {"user_id": user_id, "order_number": number, "order_item_id": key}
+        matches = [existing[alias] for alias in line_aliases(item) if alias in existing]
+        if len(matches) > 1:
+            raise HTTPException(409, detail={"code": "order_cost_snapshot_identity_ambiguous", "order_item_id": key})
+        previous = matches[0] if matches else None
+        # Retain the first source identity instead of inserting another row
+        # merely because a later projection uses the canonical alias.
+        selector = {"user_id": user_id, "order_number": number,
+                    "order_item_id": previous["order_item_id"] if previous else key}
+        if previous:
+            previous_cost = resolve_order_line_cost(item, order_number=number, catalog_cost=catalog,
+                authority={"lines": {(number, key): previous}},
+                product_id=item.get("parent_product_id") or item.get("product_id"))
+            if previous_cost["cost_authority"] == "unresolved_snapshot":
+                raise HTTPException(409, detail={"code": "order_cost_snapshot_reconciliation_required", "order_item_id": key})
         snapshot = {
             "id": (previous or {}).get("id") or uuid.uuid5(uuid.NAMESPACE_URL, f"mezan-cost:{user_id}:{number}:{key}").hex,
             **selector, "order_id": getattr(order, "order_id", None),
             "source_item_id": item.get("source_item_id"),
             "salla_product_id": item.get("parent_product_id") or item.get("product_id"),
-            "product_name": item.get("name"), "sku": item.get("sku"), "quantity": q,
-            "base_unit_cost": cost["base_total"] / q if q else 0,
-            "product_resource_unit_cost": cost["product_components_total"] / q if q else 0,
-            "option_unit_cost": cost["selected_options_total"] / q if q else 0,
-            "unit_cost": cost["line_total"] / q if q and cost["calculation_cost_available"] else None,
-            "line_cost": cost["line_total"] if cost["calculation_cost_available"] else None,
-            "cost_complete": cost["calculation_cost_available"],
-            "mezan_cost_complete": cost["mezan_cost_complete"], "mezan_cost_missing": cost["mezan_cost_missing"],
-            "calculation_cost_available": cost["calculation_cost_available"],
-            "uses_salla_fallback": cost["uses_salla_fallback"],
-            "base_cost_source": cost["base_cost_source"], "currency": "SAR",
-            "cost_authority": cost["cost_authority"], "cost_stage": cost["cost_stage"],
+            "product_name": item.get("name"), "sku": item.get("sku"), **_cost_projection(cost),
             "selected_options": [list(token) for token in sorted(selected_option_tokens(item))],
             "line_fingerprint": line_fingerprint(item), "cost_semantics_version": VERSION,
-            "cost": deepcopy(cost), "calculated_at": now, "updated_at": now,
+            "calculated_at": now, "updated_at": now,
         }
         if previous:
             if previous.get("line_fingerprint") and previous["line_fingerprint"] != snapshot["line_fingerprint"]:
@@ -287,6 +247,21 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
             except DuplicateKeyError:
                 pass  # A concurrent first capture won the unique identity.
         saved = await db[SNAPSHOTS].find_one(selector, {"_id": 0})
+        # A legacy manual snapshot can predate the frozen bundle authority or
+        # an audited reporting correction. Return the same reporting projection
+        # as every other reader while retaining that original database record.
+        # Missing/reconciled evidence must likewise not expose stale completeness.
+        if (cost["cost_authority"] in {"bundle_snapshot", "unresolved_snapshot"}
+                and (saved.get("line_cost") != snapshot["line_cost"]
+                     or saved.get("cost_complete") != snapshot["cost_complete"]
+                     or saved.get("cost_authority") != snapshot["cost_authority"])):
+            stored_cost = saved.get("line_cost")
+            saved = {**saved, **{field: snapshot[field] for field in (
+                "quantity", "base_unit_cost", "product_resource_unit_cost", "option_unit_cost",
+                "unit_cost", "line_cost", "cost_complete", "mezan_cost_complete", "mezan_cost_missing",
+                "calculation_cost_available", "uses_salla_fallback", "base_cost_source", "currency",
+                "cost_authority", "cost_stage", "cost_semantics_version", "cost",
+            )}, "persisted_snapshot_line_cost": stored_cost, "reporting_projection": True}
         rows.append(saved)
     complete = all(row.get("cost_complete") for row in rows)
     known = round(sum((_number(row.get("line_cost")) or 0.0) for row in rows), 4)
@@ -308,19 +283,44 @@ def make_order_option_cost_snapshot_router(db: Any, current_user: Callable[..., 
 
     @router.get("/{order_number}/cost-snapshot")
     async def get_cost_snapshot(order_number: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+        from order_cost_authority import (
+            item_dict, line_aliases, line_id, load_order_cost_authority,
+            resolve_order_line_cost, _unknown,
+        )
         user_id = str(user["id"])
-        rows = await db[SNAPSHOTS].find(
+        number = str(order_number)
+        try:
+            order = await get_order(MongoOrderRepository(db), user_id=user_id, order_number=number)
+        except OrderNotFoundError as exc:
+            raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
+        items = [item_dict(item) for item in order.items]
+        authority = await load_order_cost_authority(db, user_id, [{"order_number": number, "products": items}])
+        stored_rows = await db[SNAPSHOTS].find(
             {"user_id": user_id, "order_number": str(order_number)}, {"_id": 0}
-        ).sort("order_item_id", 1).to_list(length=1000)
+        ).sort("order_item_id", 1).to_list(length=10001)
+        if len(stored_rows) > 10000:
+            raise HTTPException(409, detail={"code": "order_cost_snapshot_limit"})
+        stored = {str(row["order_item_id"]): row for row in stored_rows}
+        rows = []
+        for item in items:
+            key = line_id(item)
+            cost = resolve_order_line_cost(item, order_number=number,
+                catalog_cost=_unknown(item.get("quantity"), "missing_historical_cost"), authority=authority,
+                product_id=item.get("parent_product_id") or item.get("product_id"))
+            matches = [stored[alias] for alias in line_aliases(item) if alias in stored]
+            original = matches[0] if len(matches) == 1 else {}
+            rows.append({**original, "order_number": number, "order_item_id": key,
+                "salla_product_id": item.get("parent_product_id") or item.get("product_id"),
+                **_cost_projection(cost), "persisted_snapshot_line_cost": original.get("line_cost"),
+                "reporting_projection": True})
         for row in rows:
             for key in ("created_at", "updated_at", "calculated_at"):
                 if hasattr(row.get(key), "isoformat"):
                     row[key] = row[key].isoformat()
-        return {
-            "order_number": str(order_number),
-            "items": rows,
-            "total_cost": round(sum((_number(row.get("line_cost")) or 0.0) for row in rows), 4),
-            "snapshot_exists": bool(rows),
-        }
+        complete = bool(rows) and all(row["cost_complete"] for row in rows)
+        known = round(sum((_number(row.get("line_cost")) or 0.0) for row in rows), 4)
+        return {"order_number": number, "currency": "SAR", "items": rows,
+                "total_cost": known if complete else None, "known_total_cost": known,
+                "cost_complete": complete, "snapshot_exists": bool(authority["lines"])}
 
     return router

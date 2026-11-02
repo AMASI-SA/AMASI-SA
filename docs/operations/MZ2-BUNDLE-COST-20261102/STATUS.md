@@ -1,6 +1,8 @@
 # MZ2-BUNDLE-COST-20261102
 
-Status: WIP, not a release candidate. Production changed: no.
+Status: implementation and 290-case focused acceptance complete; broader G47
+and frozen-runtime verification in progress. Not a release candidate.
+Production changed: no. Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1690.
 
 Repository: AMASI-SA/AMASI-SA. Task branch:
 `codex/mz2-bundle-cost-snapshots-20261102`.
@@ -53,11 +55,35 @@ with repository dependency versions before final verification.
 
 ## Blockers and next safe actions
 
-1. Finish auditable, dry-run-first historical reporting correction and precise
-   configuration repair using existing current_product semantics.
-2. Complete real Mongo transaction/replay/concurrency tests.
-3. Resolve independent review findings and run combined acceptance.
-4. Record benchmark, before/after report and current CI.
+1. Historical reporting repair and prospective definition repair are implemented,
+   with dry-run manifests, immutable evidence, conflict rejection, concurrent
+   replay and rollback tests. No live apply has occurred.
+2. Independent review regressions now pass, including canonical aliases, nested
+   options, stale manual/plan evidence, required leaf coverage, legacy refreshes
+   and read-only GET/POST cost projection parity.
+3. The exact new 24-file CI acceptance command passed 290 cases, zero skips,
+   failures or errors, in 22.33 seconds using isolated real Mongo fixtures.
+   G47's existing broader gate and frozen-runtime harness remain in progress.
+4. Related marketing, cohort and attribution projections now use the same
+   historical authority without modifying the underlying ledgers.
+5. Paired local benchmark: 1/80/250 orders use six logical authority reads;
+   compact context plus resolution medians 6.847/73.145/229.216 ms. Large frozen
+   catalog data stays in Mongo on report reads; 250-order reply bytes fall from
+   13,080,413 to 2,672,413 (79.6%). This is added authority overhead, not an
+   end-to-end production latency guarantee. First ordinary capture median
+   8.307 ms; replay 0.025 ms with zero queries.
+6. Live UI verified Salla shawl70 versus Mezan base15, rose40 and separate
+   embroidery10. The original80 cohort and trustworthy historical database
+   evidence have not been obtained. Available remote preview DB did not match
+   the two target catalog records. Never relabel synthetic before/after as a
+   production backfill result.
+
+The initial checkpoint's CI passed20 workflows and failed2. G47 failed the
+existing multi-quantity fixture because it omitted its actual count option;
+that fixture now supplies the same selection used for reservation and its
+focused real-Mongo rerun passes. Runtime adoption failed on malformed legacy
+line placeholders; the loader now ignores those using the existing report
+contract and has a passing regression. Fresh head CI remains required.
 
 No merge, release intent, Release Guard lease, live recalculation or publish.
 Issue1006 is at GitHub's2500-comment cap; this task document and Draft PR are

@@ -4733,6 +4733,10 @@ async def _global_startup() -> None:
     # Iter-160 — Universal Ledger + Audit Log indexes
     from ledger_core import ensure_indexes as ensure_ledger_indexes
     await ensure_ledger_indexes(db)
+    # Historical cost reads use owner/order indexes; no report request performs
+    # schema work or recalculates orders, inventory or approved journals.
+    from order_cost_authority import ensure_order_cost_indexes
+    await ensure_order_cost_indexes(db)
     # Ads V2 (Phase 0) — create indexes on the 3 new collections.
     await _ads_v2_ensure_indexes(db)
     # Apps & Integrations V2 — isolated metadata, health, activity,

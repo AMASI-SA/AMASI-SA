@@ -157,3 +157,12 @@ async def test_owner_isolation_and_unmatched_composite_never_use_current_cost():
 @pytest.mark.asyncio
 async def test_empty_cohort_requires_no_database():
     assert not (await load_order_cost_authority(object(), "owner", []))["lines"]
+
+
+@pytest.mark.asyncio
+async def test_non_line_placeholders_in_legacy_order_do_not_crash_cohort():
+    db = AsyncMongoMockClient()["cost_legacy_placeholders"]
+    orders = [{"order_number": "order", "products": [None, "bad legacy row", 7, [], line()]}]
+    context = await load_order_cost_authority(db, "owner", orders)
+    result = resolve_order_line_cost(line(), order_number="order", catalog_cost=catalog(line()), authority=context)
+    assert result["line_total"] == 220

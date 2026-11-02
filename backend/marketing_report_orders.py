@@ -104,9 +104,10 @@ async def apply_store_orders(db, user_id, start, end, reports, *, status_scope="
     from snapchat_v2.salla_outcomes import ORDER_PROJECTION, REPORT_COST_PROJECTION, _matches_any
     from snapchat_v2.period_candidates import bounded_period_cursor, period_candidate_query
     from integrations_control_center.snapchat_campaign_profitability import (
-        _load_cost_context, _new_campaign_bucket, _order_cost_and_products, _add_order_to_campaign, _finalize_campaign)
+        _load_cost_context, _new_campaign_bucket, _order_cost_and_products, _add_order_to_campaign, _finalize_campaign,
+        load_order_cost_authority)
     from shipping_cost_ssot import get_company_configs
-    from order_currency import order_total_sar
+    from order_currency import hydrate_order_currency_fields, order_total_sar
     from marketing_report_costs import order_costs, add_order_report_costs, finalize_report_costs
 
     settings = await db.settings.find_one({"user_id": str(user_id)}, {"_id": 0}) or {}
@@ -116,6 +117,7 @@ async def apply_store_orders(db, user_id, start, end, reports, *, status_scope="
         {"source": {"$in": ["salla", "salla_direct"]}}, {"salla_order_id": {"$exists": True}}]}]
     projection = {**ORDER_PROJECTION, **REPORT_COST_PROJECTION,
         "salla_order_id": 1, "raw_by_source.salla_direct.id": 1,
+        "actual_refund_amount": 1, "actual_partial_refund_amount": 1,
         "field_sources.order_date": 1,
         "utm_source": 1, "marketing_source": 1, "ad_platform_source": 1,
         "traffic_source": 1, "source_details": 1}
@@ -123,9 +125,11 @@ async def apply_store_orders(db, user_id, start, end, reports, *, status_scope="
     if len(orders) > MAX_ORDERS:
         raise ValueError("salla_order_report_truncated")
     count_before = len(orders)
-    orders = unique_orders(orders)
+    orders = hydrate_order_currency_fields(unique_orders(orders))
     duplicate_count = count_before - len(orders)
     context = await _load_cost_context(db, user_id)
+    context["order_cost_authority"] = await load_order_cost_authority(
+        db, user_id, [order for order in orders if order.get("products")])
     configs = await get_company_configs(db, user_id)
     report_by_provider = {p["provider"]: p for p in reports}
     residuals, ids, names = {}, defaultdict(list), defaultdict(list)

@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from marketing_report_costs import number, order_costs, add_order_report_costs, finalize_report_costs
-from marketing_report_orders import EXTRA_SOURCES, apply_store_orders
+from marketing_report_orders import EXTRA_SOURCES, apply_store_orders, unique_orders
 
 PROVIDERS = {"snapchat": "سناب شات", "tiktok": "تيك توك", "meta": "ميتا", "google": "إعلانات Google"}
 
@@ -274,9 +274,10 @@ async def attach_commerce(db, user_id, provider, start, end, rows):
     from snapchat_v2.period_candidates import period_candidate_query, bounded_period_cursor
     from salla_marketing_attribution import canonical_ad_platform, campaign_id_candidates, campaign_name_candidates
     from integrations_control_center.snapchat_campaign_profitability import (
-        _load_cost_context, _new_campaign_bucket, _order_cost_and_products, _add_order_to_campaign, _finalize_campaign)
+        _load_cost_context, _new_campaign_bucket, _order_cost_and_products, _add_order_to_campaign, _finalize_campaign,
+        load_order_cost_authority)
     from shipping_cost_ssot import get_company_configs
-    from order_currency import order_total_sar
+    from order_currency import hydrate_order_currency_fields, order_total_sar
     if not rows:
         return
     settings = await db.settings.find_one({"user_id": user_id}, {"_id": 0}) or {}
@@ -287,9 +288,17 @@ async def attach_commerce(db, user_id, provider, start, end, rows):
         lookup[str(row["campaign_id"])].append(row)
         names[str(row["name"]).strip().casefold()].append(row)
     query = period_candidate_query(user_id, start, end, hide_inferred=settings.get("hide_inferred_date_orders"))
-    orders = await bounded_period_cursor(db.unified_orders, query, {**ORDER_PROJECTION, **REPORT_COST_PROJECTION}, 100000).to_list(length=100001)
+    projection = {**ORDER_PROJECTION, **REPORT_COST_PROJECTION,
+                  "salla_order_id": 1, "raw_by_source.salla_direct.id": 1,
+                  "actual_refund_amount": 1, "actual_partial_refund_amount": 1}
+    orders = await bounded_period_cursor(db.unified_orders, query, projection, 100000).to_list(length=100001)
     if len(orders) > 100000:
         raise ValueError("commerce_report_truncated")
+    orders = hydrate_order_currency_fields(unique_orders(orders))
+    # One read-only batch for the distinct cohort; empty product lists have no
+    # historical lines to resolve. The existing refund policy remains below.
+    context["order_cost_authority"] = await load_order_cost_authority(
+        db, user_id, [order for order in orders if order.get("products")])
     buckets, counts = defaultdict(_new_campaign_bucket), defaultdict(int)
     for order in orders:
         platform = canonical_ad_platform(order)

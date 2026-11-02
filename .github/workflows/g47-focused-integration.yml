@@ -9,6 +9,9 @@ on:
     paths:
       - "backend/**"
       - "frontend/**"
+      - "scripts/benchmark_order_cost_authority.py"
+      - "scripts/repair_order_cost_reporting.py"
+      - "scripts/repair_bundle_base_definition.py"
       - ".github/workflows/g47-focused-integration.yml"
   workflow_dispatch:
 
@@ -108,6 +111,77 @@ jobs:
         with:
           name: g47-backend-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ runner.temp }}/g47-backend.xml
+          if-no-files-found: error
+      - name: Run unified bundle cost and historical reporting acceptance
+        shell: bash
+        env:
+          PYTHONPATH: ".:tests"
+        run: |
+          set -euo pipefail
+          python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
+            tests/test_order_cost_authority.py \
+            tests/test_order_cost_identity_projection.py \
+            tests/test_authority_review_regressions.py \
+            tests/test_order_cost_final_review.py \
+            tests/test_order_cost_authority_mongo.py \
+            tests/test_order_option_cost_snapshots.py \
+            tests/test_dashboard_bundle_cost_authority.py \
+            tests/test_dashboard_v2_product_cost.py \
+            tests/test_sold_products_report_v2.py \
+            tests/test_order_currency_accounting.py \
+            tests/test_order_cost_reporting_repair.py \
+            tests/test_order_cost_financial_readers.py \
+            tests/test_customer_cohort_profit_report.py \
+            tests/test_mezan_attribution_profit_bridge.py \
+            tests/test_mezan_attribution_owner_routes.py \
+            tests/test_bundle_base_definition_repair.py \
+            tests/test_snapchat_bundle_cost_authority.py \
+            tests/test_snapchat_campaign_profitability_exact_reuse_v2.py \
+            tests/test_snapchat_campaign_created_order_semantics_v1.py \
+            tests/test_snapchat_campaign_current_catalog_cost_v1.py \
+            tests/test_snapchat_profitability_cache_scope_v1.py \
+            tests/test_marketing_bundle_cost_authority.py \
+            tests/test_marketing_report_orders.py \
+            tests/test_marketing_reports.py \
+            --junitxml="$RUNNER_TEMP/g47-order-cost.xml"
+      - name: Require executed cost acceptance and real Mongo tests without skips
+        if: always()
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          report = Path(os.environ["RUNNER_TEMP"]) / "g47-order-cost.xml"
+          cases = list(ET.parse(report).iter("testcase"))
+          assert cases, "No order cost acceptance tests executed"
+          rejected = [(row.attrib.get("classname"), row.attrib.get("name")) for row in cases
+                      if any(row.find(tag) is not None for tag in ("skipped", "failure", "error"))]
+          assert not rejected, f"Order cost skipped or failed cases: {rejected}"
+          expected = {
+              "test_order_cost_authority", "test_order_cost_identity_projection",
+              "test_authority_review_regressions", "test_order_cost_final_review",
+              "test_order_cost_authority_mongo", "test_order_option_cost_snapshots",
+              "test_dashboard_bundle_cost_authority", "test_dashboard_v2_product_cost",
+              "test_sold_products_report_v2", "test_order_currency_accounting",
+              "test_order_cost_reporting_repair", "test_bundle_base_definition_repair",
+              "test_order_cost_financial_readers", "test_customer_cohort_profit_report",
+              "test_mezan_attribution_profit_bridge",
+              "test_mezan_attribution_owner_routes",
+              "test_snapchat_bundle_cost_authority", "test_snapchat_campaign_profitability_exact_reuse_v2",
+              "test_snapchat_campaign_created_order_semantics_v1", "test_snapchat_campaign_current_catalog_cost_v1",
+              "test_snapchat_profitability_cache_scope_v1", "test_marketing_bundle_cost_authority",
+              "test_marketing_report_orders", "test_marketing_reports",
+          }
+          observed = {part for row in cases for part in row.attrib.get("classname", "").split(".")}
+          assert expected <= observed, f"Cost suites without executed cases: {sorted(expected - observed)}"
+          print(f"Order cost: {len(cases)} executed cases, zero skips/failures/errors")
+          PY
+      - name: Retain unified order cost test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: g47-order-cost-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/g47-order-cost.xml
           if-no-files-found: error
       - name: Remove only this job's ephemeral Mongo fixtures
         if: always()
