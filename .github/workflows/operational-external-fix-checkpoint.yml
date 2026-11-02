@@ -1,0 +1,38 @@
+name: Operational External Loan Reviewed Fix
+on:
+  push:
+    branches: [integration/operational-balances-unified-20261102]
+    paths: [.github/workflows/operational-external-fix-checkpoint.yml]
+permissions:
+  contents: write
+concurrency:
+  group: operational-external-reviewed-fix
+  cancel-in-progress: false
+jobs:
+  checkpoint:
+    if: github.repository == 'AMASI-SA/AMASI-SA' && github.ref == 'refs/heads/integration/operational-balances-unified-20261102'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+      - name: Checkpoint exact reviewed delta on task branch only
+        shell: bash
+        env:
+          STAGED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          branch=integration/operational-balances-unified-20261102
+          test "$(git rev-parse HEAD)" = "$STAGED_SHA"
+          test "$(git rev-parse HEAD^)" = 6cfacc65badcc9da6a167294756adbf4de0c38fe
+          test "$(git ls-remote origin refs/heads/$branch | cut -f1)" = "$STAGED_SHA"
+          python3 -B docs/operations/OP-UNIFIED-BALANCES-20261102/external-fix-stage/apply.py
+          git config user.name 'mezan'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: retain actor-owner scope for loan balance disclosure and correct card test navigation' -m '29 isolated Mongo external cases passed, including a reproduced owner-switch disclosure boundary. Card tests select exact strong label, excluding decorative icon; all monetary/retry assertions retained. Fresh combined backend/frontend acceptance required. No live financial action, production, dashboard, lease or release identity change.'
+          test "$(git ls-remote origin refs/heads/$branch | cut -f1)" = "$STAGED_SHA"
+          git push origin HEAD:refs/heads/$branch
+# Temporary source-only handoff. No application, database, deployment or financial execution.
+# Exact base/result file hashes are enforced. Remove after read-back.
