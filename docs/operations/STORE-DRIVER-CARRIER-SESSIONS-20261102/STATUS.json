@@ -37,11 +37,19 @@
     "other_affected_workflows": "ALL PASS on exact source"
   },
   "mobile": {
-    "repo": "AMASI-SA/amasi-mobile",
-    "pr": 312,
-    "head": "fa750d4e9feaff98310edf5b87e5ff9dd113989b",
-    "dedicated_delivery_ci": "PASS",
-    "generic_mobile_ci": "FAILED on unchanged supplier-service contract"
+    "delivery_app": {
+      "repo": "AMASI-SA/amasi-mobile",
+      "pr": 313,
+      "source_sha": "f9b5a0ad7126a58d31a9081ca2585b0dab40cd3e",
+      "ci_id": 41506868020,
+      "ci_result": "PASS; ready_for_review; not merged; no apk/ota"
+    },
+    "management_ui": {
+      "repo": "AMASI-SA/amasi-mobile",
+      "pr": 312,
+      "source_sha": "cd5f4ea81c50b897ba0a8f676acdce0a27ac9f79",
+      "state": "DRAFT; generic frontend CI includes existing supplier policy gate"
+    }
   },
   "limitations": [
     "read-only Salla shipment spot-check received HTTP 504 upstream",
@@ -51,5 +59,13 @@
   ],
   "production_changed": false,
   "release_guard_lease_status": "not queried; no lease created",
-  "next_safe_action": "independent review, verify real carrier labels and Talal driver binding on an authorized read-only live check; after explicit release authorization prepare the governed v5 source/intent host handoff; backend must be deployed before mobile"
+  "next_safe_action": "independent review, verify real carrier labels and Talal driver binding on an authorized read-only live check; after explicit release authorization prepare the governed v5 source/intent host handoff; backend must be deployed before mobile",
+  "split_reason": "Original mobile PR312 mixed delivery-app and courier-management UI. Split to PR312 UI-only and PR313 app-only so dedicated Android CI is independent of unrelated supplier invoice policies.",
+  "pending": [
+    "Governed v5 A/B host release (not available from GitHub connector)",
+    "Live owner-authenticated Talal profile, shipping-company and per-driver session acceptance",
+    "Backend deploy and 3-probe verify before mobile distribution",
+    "Mobile management generic CI on unchanged supplier-service contract"
+  ],
+  "salla_read_status": "Read-only shipping list returned 504 Gateway Timeout twice; no live shipping sample validated"
 }
