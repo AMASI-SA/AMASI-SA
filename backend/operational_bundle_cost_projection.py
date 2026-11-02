@@ -99,6 +99,12 @@ def project_bundle_costs(*, owner: str, order_number: str, order_item_id: str,
             raise ValueError("bundle_sale_quantity_invalid")
         if not isinstance(snapshot, dict) or str(snapshot.get("product_id") or "") != product_id:
             raise ValueError("bundle_snapshot_product_mismatch")
+        if "reporting_cost" in snapshot:
+            # The newer dashboard policy can add a financial base/service that
+            # is deliberately absent from physical leaves. Counting those leaves
+            # alone would silently understate remaining cost. Never fabricate a
+            # physical unit or supplier debt to make its receipt coverage fit.
+            raise ValueError("bundle_financial_policy_operational_mapping_required")
         if snapshot.get("historical_cost_verified") is False:
             raise ValueError("bundle_historical_cost_unproven")
         if snapshot.get("sale_quantity") is not None and _number(snapshot["sale_quantity"]) != q:
