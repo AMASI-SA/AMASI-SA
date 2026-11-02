@@ -75,6 +75,15 @@ class SourceContract(unittest.TestCase):
                     self.assertEqual(hashlib.sha256(reviewed.encode('utf8')).hexdigest(),
                         'f5cee5a805a89be37057afd1f573b62b7500c884e73f1fa11123dfbcfe1302e3')
                     before = current_function
+                elif name == 'build_mezan_v2_product_cost' and ast.dump(before) != ast.dump(current_function):
+                    # MZ2 bundle-cost correction intentionally reads immutable
+                    # order authority in one batch before the existing reducer.
+                    # Keep exact reviewed source and cooperative scheduling
+                    # parity; behavioral acceptance is in the bundle-cost suite.
+                    reviewed = ast.get_source_segment(current, current_function)
+                    self.assertEqual(hashlib.sha256(reviewed.encode('utf8')).hexdigest(),
+                        'b424fe8e55cf9c9fcbdf3a6c32b5aecc990857a1e4d7192335ee252fc6223248')
+                    before = current_function
                 else:
                     self.assertEqual(ast.dump(before), ast.dump(current_function))
                 adopted = RemoveCheckpoints().visit(copy.deepcopy(function(current, name+'_cooperative')))
@@ -107,7 +116,13 @@ class SourceContract(unittest.TestCase):
                 # bytes; Ready must not change report policy or data access.
                 approved = subprocess.check_output(['git', 'show',
                     '2a7740359451a538be8df373266c4c92ca1a57c8:backend/' + file], cwd=ROOT)
-                self.assertEqual(approved.replace(b'\r\n', b'\n'), current)
+                # The bundle-cost correction unifies this reader with the
+                # dashboard and removes its per-order queries. Retain the
+                # historical bytes plus only this reviewed reporting change.
+                self.assertIn(hashlib.sha256(current).hexdigest(), {
+                    hashlib.sha256(approved.replace(b'\r\n', b'\n')).hexdigest(),
+                    '41e42703643456a7b8164dcf1b9207cb8bfd53cbb15bac24e8f40dea31949d05',
+                })
             else:
                 self.assertEqual(before.replace(b'\r\n', b'\n'), current)
 

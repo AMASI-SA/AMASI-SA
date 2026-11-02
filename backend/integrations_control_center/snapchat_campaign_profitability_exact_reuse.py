@@ -92,6 +92,9 @@ async def calculate_profitability_from_exact_matches(
         return deepcopy(cached[1]), deepcopy(cached[2])
 
     cost_context = await profitability._load_cost_context(db, user_id)
+    cost_context["order_cost_authority"] = await profitability.load_order_cost_authority(
+        db, user_id, [order for orders in matched_orders.values() for order in orders],
+    )
     by_campaign: dict[tuple[str, str], dict[str, Any]] = {}
     for key, orders in matched_orders.items():
         bucket = profitability._new_campaign_bucket()

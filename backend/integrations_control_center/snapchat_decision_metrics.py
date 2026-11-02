@@ -1,7 +1,7 @@
 """Point-in-time evidence for governed Snapchat advertising decisions.
 
 The snapshot is intentionally descriptive.  It records the exact Salla orders,
-current Mezan product cost coverage and Snapchat spend that were available when
+Mezan sale-cost coverage and Snapchat spend that were available when
 the decision was made.  Context such as paydays, seasons or trends belongs in
 the decision ledger as separately verified evidence; it is never inferred here.
 """
@@ -814,6 +814,7 @@ async def capture_decision_baseline(
     from .snapchat_campaign_profitability import (
         _load_cost_context,
         _order_cost_and_products,
+        load_order_cost_authority,
     )
     from .snapchat_campaign_result_source_routes import (
         _campaign_identities,
@@ -945,6 +946,9 @@ async def capture_decision_baseline(
         include_marketing_attribution=True,
     )
     cost_context = await _load_cost_context(db, user_id)
+    cost_context["order_cost_authority"] = await load_order_cost_authority(
+        db, user_id, orders,
+    )
 
     campaign_by_date: dict[str, dict[str, Any]] = defaultdict(_empty_bucket)
     account_by_date: dict[str, dict[str, Any]] = defaultdict(_empty_bucket)

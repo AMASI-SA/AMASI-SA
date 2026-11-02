@@ -1576,6 +1576,9 @@ async def reconcile_component_order_lifecycle(
         generation = int(previous.get("generation") or 0) + 1
         from bundle_fulfillment_v2 import capture_intake
         bundle_intake = await capture_intake(scoped, user_id, lines, previous.get("bundle_intake_snapshots"))
+        from order_cost_authority import capture_reporting_costs
+        reporting_costs = await capture_reporting_costs(
+            scoped, user_id, lines, previous.get("reporting_cost_snapshots"), bundle_intake)
         row = {
             "_id": identity, "user_id": user_id, "order_number": order_number,
             "generation": generation, "source_updated_at": version or previous_version,
@@ -1584,6 +1587,7 @@ async def reconcile_component_order_lifecycle(
             "eligible": eligible, "state": "pending", "retry_required": True,
             "updated_at": _now(), "plan_id": previous.get("plan_id"),
             "bundle_intake_snapshots": bundle_intake,
+            "reporting_cost_snapshots": reporting_costs,
         }
         await scoped[COMPONENT_LIFECYCLES].replace_one({"_id": identity}, row, upsert=True)
         return {**row, "snapshot_revision": watermark.get("revision")}

@@ -1,15 +1,23 @@
 """Read-only sold-products report over canonical orders and Mezan/Salla costs.
 
-Order quantity and date belong to unified_orders. Unit cost is Mezan V2 first,
-then Salla's registered fallback; optional components are excluded.
+Order quantity and date belong to unified_orders. Historical order cost is
+authoritative; ordinary catalog fallback includes selected components. A bundle
+cost replaces the complete parent calculation once.
 """
 from __future__ import annotations
 
+import asyncio
+from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 from typing import Any
 import unicodedata
 
-from order_option_cost_snapshot_routes import classify_base_unit_cost
+from dashboard_cpu_budget import CPUWorkBudget, COST_PROFIT_BUDGET_MS
+from order_cost_authority import (
+    calculate_catalog_line_cost, load_order_cost_authority, resolve_order_line_cost,
+)
+from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
+from product_option_cost_routes import BINDINGS, RESOURCES
 from product_catalog_cost_resolution import (
     index_current_catalog_products, resolve_current_catalog_line_product,
 )
@@ -17,7 +25,7 @@ from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS
 
 CATALOG_FIELDS = {
-    "_id": 0, "salla_product_id": 1, "mezan_product_id": 1,
+    "_id": 0, "id": 1, "salla_product_id": 1, "mezan_product_id": 1,
     "sku": 1, "name": 1, "main_image": 1, "variants": 1,
     "cost_price_from_salla": 1, "cost_price": 1, "cost": 1,
     "raw_salla": 1, "raw_salla_details": 1,
@@ -83,10 +91,14 @@ def summarize(rows: list[dict]) -> dict:
 def aggregate_sold_products(
     orders: list[dict], products: list[dict], profiles: list[dict],
     bundle_costs: dict[tuple[str, str], dict | None] | None = None,
+    *,
+    authority: Any = None,
+    catalog_context: dict[str, Any] | None = None,
 ) -> list[dict]:
     by_id, by_variant, by_sku = index_current_catalog_products(products)
     profile_map = {str(row.get("salla_product_id")): row for row in profiles}
     aggregated: dict[str, dict] = {}
+    context = catalog_context or {}
     for order in orders:
         for item in order.get("products") or []:
             if not isinstance(item, dict):
@@ -107,25 +119,44 @@ def aggregate_sold_products(
             quantity = _decimal(item.get("quantity"))
             if quantity is None or quantity <= 0:
                 continue
-            cost = classify_base_unit_cost(item, profile_map.get(str((product or {}).get("salla_product_id") or "")), product)
-            unit = _decimal(cost["unit_cost"]) if cost["calculation_cost_available"] else None
+            product_id = str((product or {}).get("salla_product_id") or "")
+            cost = calculate_catalog_line_cost(
+                item,
+                product=product,
+                profile=profile_map.get(product_id),
+                product_bindings=context.get("product_binding_map", {}).get(product_id, []),
+                option_bindings=context.get("option_map", {}).get(product_id, []),
+                resources=context.get("resources", {}),
+            )
             order_number = str(order.get("order_number") or "")
-            line_id = str(item.get("order_item_id") or item.get("source_item_id") or item.get("id") or "")
-            bundle_key = (order_number, line_id)
-            bundle_known = bundle_key in (bundle_costs or {}) or (order_number, "product:" + identity) in (bundle_costs or {})
-            bundle = (bundle_costs or {}).get(bundle_key)
-            bundle_source = None
-            if bundle_known:
-                # A frozen sale line replaces parent catalog cost. Never create
-                # component sales, or fall back to a newly edited parent price.
-                amount = None
-                if bundle and _decimal(bundle.get("quantity")) == quantity:
-                    amount = _decimal(bundle.get("actual_cost"))
-                    bundle_source = "bundle_actual"
-                    if amount is None:
-                        amount = _decimal(bundle.get("expected_cost"))
-                        bundle_source = "bundle_expected"
-                unit = amount / quantity if amount is not None else None
+            if authority is not None:
+                cost = resolve_order_line_cost(
+                    item, order_number=order_number, catalog_cost=cost,
+                    authority=authority, product_id=product_id,
+                )
+            amount = _decimal(cost["line_total"]) if cost["calculation_cost_available"] else None
+            unit = amount / quantity if amount is not None else None
+            source = str(cost.get("calculation_cost_source") or cost["base_cost_source"])
+            cost_source = (
+                source if cost["base_cost_source"] in {"bundle_snapshot", "order_snapshot"}
+                else "mezan" if cost["mezan_cost_complete"] else "salla"
+            )
+            # Retain the public pure helper's historical explicit-map API. The
+            # database loader below always uses the shared authority instead.
+            if authority is None and bundle_costs is not None:
+                line_id = str(item.get("order_item_id") or item.get("source_item_id") or item.get("id") or "")
+                bundle_key = (order_number, line_id)
+                bundle_known = bundle_key in bundle_costs or (order_number, "product:" + identity) in bundle_costs
+                bundle = bundle_costs.get(bundle_key)
+                if bundle_known:
+                    amount = None
+                    if bundle and _decimal(bundle.get("quantity")) == quantity:
+                        amount = _decimal(bundle.get("actual_cost"))
+                        cost_source = "bundle_actual"
+                        if amount is None:
+                            amount = _decimal(bundle.get("expected_cost"))
+                            cost_source = "bundle_expected"
+                    unit = amount / quantity if amount is not None else None
             row = aggregated.setdefault(key, {
                 "name": name, "sku": sku, "product_id": identity,
                 "mezan_product_id": str((product or {}).get("mezan_product_id") or ""),
@@ -139,16 +170,14 @@ def aggregate_sold_products(
                 row["cost_status"] = "incomplete"
             else:
                 row["unit_cost"] = round(float(unit), 2)
-                row["cost_source"] = bundle_source or ("mezan" if cost["mezan_cost_complete"] else "salla")
+                row["cost_source"] = cost_source
                 row["_known_cost"] += unit * quantity
-            if bundle_known:
-                row["_bundle_cost"] = True
     rows = list(aggregated.values())
     for row in rows:
         row["units_sold"] = float(row["units_sold"])
         known_cost = row.pop("_known_cost")
         row["total_cost"] = round(float(known_cost), 2) if row["cost_status"] == "complete" else None
-        if row.pop("_bundle_cost", False) and row["cost_status"] == "complete":
+        if row["cost_status"] == "complete":
             row["unit_cost"] = round(float(known_cost / Decimal(str(row["units_sold"]))), 2)
         if row["cost_status"] != "complete":
             row["unit_cost"] = None
@@ -158,56 +187,32 @@ def aggregate_sold_products(
 
 
 async def load_sold_products(db: Any, user_id: str, orders: list[dict]) -> list[dict]:
+    """Read one bounded cohort; never issue per-order bundle lookups or writes."""
     products = await db[PRODUCTS].find({"user_id": user_id}, CATALOG_FIELDS).to_list(length=100000)
     ids = [str(row.get("salla_product_id")) for row in products if row.get("salla_product_id")]
-    profiles = await db[COST_PROFILES].find(
-        {"user_id": user_id, "salla_product_id": {"$in": ids}}, {"_id": 0},
-    ).to_list(length=max(1, len(ids)))
-    from stock_component_consumption_service import PLANS
-    from bundle_fulfillment_v2 import order_view
-    numbers = sorted({str(order.get("order_number")) for order in orders if order.get("order_number")})
-    plans = await db[PLANS].find({"user_id": user_id, "order_id": {"$in": numbers},
-        "bundle_snapshots": {"$exists": True}}, {"_id": 0, "order_id": 1}).to_list(length=len(numbers) + 1)
-    bundle_costs = {}
-    for plan in plans:
-        number = str(plan["order_id"])
-        for bundle in (await order_view(db, user_id, number))["bundles"]:
-            bundle_costs[(number, str(bundle["order_line_id"]))] = bundle
-            # If canonical line identity is missing, mark cost unknown rather
-            # than selecting one of potentially several personalized bundles.
-            bundle_costs[(number, "product:" + str(bundle["product_id"]))] = None
-    # Ingestion freezes composition before payment/review. Such orders have no
-    # reservation plan yet, but their expected cost must not use today's parent.
-    intakes = await db["mezan_component_order_lifecycle_v1"].find({"user_id": user_id,
-        "order_number": {"$in": numbers}, "bundle_intake_snapshots": {"$exists": True}},
-        {"_id": 0, "order_number": 1, "bundle_intake_snapshots": 1}).to_list(length=len(numbers) + 1)
-    order_map = {str(order.get("order_number")): order for order in orders}
-    for intake in intakes:
-        number = str(intake["order_number"])
-        items = order_map.get(number, {}).get("products") or []
-        for line_id, snapshot in intake.get("bundle_intake_snapshots", {}).items():
-            if not snapshot or (number, str(line_id)) in bundle_costs:
-                continue
-            item = next((item for item in items if isinstance(item, dict) and
-                str(item.get("order_item_id") or item.get("source_item_id") or item.get("id") or "") == str(line_id)), {})
-            quantity = _decimal(item.get("quantity"))
-            estimated = _decimal(snapshot.get("estimated_cost"))
-            bundle_costs[(number, str(line_id))] = {"quantity": quantity,
-                "expected_cost": str(estimated * quantity) if estimated is not None and quantity is not None and quantity > 0 else None,
-                "actual_cost": None}
-            bundle_costs[(number, "product:" + str(snapshot["product_id"]))] = None
-    from bundle_catalog_v2 import BUNDLES
-    definitions = await db[BUNDLES].find({"user_id": user_id, "product_type": "composite"},
-        {"_id": 0, "product_id": 1}).to_list(length=100000)
-    composite_ids = {str(definition["product_id"]) for definition in definitions}
-    by_id, by_variant, by_sku = index_current_catalog_products(products)
-    for order in orders:
-        for item in order.get("products") or []:
-            if not isinstance(item, dict):
-                continue
-            product = resolve_current_catalog_line_product(item, products_by_id=by_id,
-                products_by_variant=by_variant, products_by_sku=by_sku)
-            identity = str((product or {}).get("salla_product_id") or item.get("parent_product_id") or item.get("product_id") or "")
-            if identity in composite_ids:
-                bundle_costs.setdefault((str(order.get("order_number") or ""), "product:" + identity), None)
-    return aggregate_sold_products(orders, products, profiles, bundle_costs)
+    query = {"user_id": user_id, "salla_product_id": {"$in": ids}}
+    profiles, option_bindings, product_bindings = await asyncio.gather(
+        db[COST_PROFILES].find(query, {"_id": 0}).to_list(length=max(1, len(ids))),
+        db[BINDINGS].find(query, {"_id": 0}).to_list(length=100000),
+        db[PRODUCT_RESOURCE_BINDINGS].find(query, {"_id": 0}).to_list(length=100000),
+    )
+    resource_ids = sorted({str(row["resource_id"]) for row in option_bindings + product_bindings
+                           if row.get("resource_id")})
+    resource_rows = await db[RESOURCES].find(
+        {"user_id": user_id, "id": {"$in": resource_ids}}, {"_id": 0},
+    ).to_list(length=max(1, len(resource_ids)))
+    option_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    product_binding_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in option_bindings:
+        option_map[str(row.get("salla_product_id"))].append(row)
+    for row in product_bindings:
+        product_binding_map[str(row.get("salla_product_id"))].append(row)
+    context = {
+        "option_map": option_map,
+        "product_binding_map": product_binding_map,
+        "resources": {str(row.get("id")): row for row in resource_rows},
+    }
+    authority = await load_order_cost_authority(
+        db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
+    )
+    return aggregate_sold_products(orders, products, profiles, authority=authority, catalog_context=context)
