@@ -134,6 +134,19 @@ def recover_financial_choices(line, product, original, fingerprint):
         if not isinstance(source, dict):
             _error()
         row = _raw(source)
+        values = _selected_values(row)
+        if not values:
+            continue
+        # Preserve the preexisting ID-authoritative contract. Salla sometimes
+        # translates labels after checkout; their names cannot veto a *real*
+        # ID already recorded by selection_tokens. The opt-in cost resolver
+        # touches only rows whose chosen value IDs are actually absent.
+        missing_ids = any(
+            not (_identity(row.get("value_id"))
+                 or (_identity(value.get("id")) if isinstance(value, dict) else None))
+            for value in values)
+        if not missing_ids:
+            continue
         oid = _option_id(row)
         opt = catalog.get(oid)
         if oid is None or opt is None:
@@ -147,9 +160,6 @@ def recover_financial_choices(line, product, original, fingerprint):
             _error()
         if not available:
             continue  # Text/personalization is handled by existing option_answers.
-        values = _selected_values(row)
-        if not values:
-            continue
         options_by_label = {}
         catalog_ids = set()
         for available_value in available:
