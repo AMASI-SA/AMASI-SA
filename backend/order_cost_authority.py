@@ -479,7 +479,10 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
                         # from executable intake and older base-only snapshots.
                         record = deepcopy(snapshot)
                         frozen = record.get("bundle_snapshot") or {}
+                        from bundle_financial_selection_evidence import verify_selection_recovery
                         valid_identity = ("historical_cost_verified" in frozen and "order_created_at" in frozen
+                            and ("financial_selection_recovery" not in frozen
+                                 or verify_selection_recovery(frozen, record))
                             and bool(record.get("line_fingerprint"))
                             and record.get("line_fingerprint") == frozen.get("line_fingerprint")
                             and record.get("product_id") == frozen.get("product_id")
@@ -597,13 +600,23 @@ def resolve_order_line_cost(item: dict, *, order_number: str, catalog_cost: dict
         # Historical bundle choices are IDs. Do not attach the cost of another
         # customization merely because SKU or product_id is the same.
         saved_options = record.get("selected_options")
+        from bundle_financial_selection_evidence import verify_selection_recovery
+        frozen = record.get("bundle_snapshot") or {}
+        recovered_financial = (record.get("bundle_financial") is True
+                               and "financial_selection_recovery" in frozen
+                               and verify_selection_recovery(frozen, record))
+        if "financial_selection_recovery" in frozen and not recovered_financial:
+            return _unknown(row.get("quantity"), "bundle_financial_selection_evidence_invalid")
         if saved_options == [] and not record.get("line_fingerprint") and _economic_tokens(row):
             return _unknown(row.get("quantity"), "bundle_selected_options_mismatch" if record.get("bundle_snapshot") else "cost_snapshot_selected_options_mismatch")
         if saved_options is not None and (not saved_options or isinstance(saved_options[0], dict)):
             from bundle_fulfillment_v2 import selected_ids
             saved = {(str(o.get("option_id")), str(o.get("value_id"))) for o in saved_options}
             current = {(str(o.get("option_id")), str(o.get("value_id"))) for o in selected_ids(economic_item(row))}
-            if saved != current:
+            if saved != current and not recovered_financial:
+                # The financial-only recovery has a frozen exact-label/ID
+                # proof and the unchanged provider line fingerprint above.
+                # Never grant this exception to stock or ordinary services.
                 return _unknown(row.get("quantity"), "bundle_selected_options_mismatch")
         elif saved_options is not None and not record.get("line_fingerprint"):
             # Legacy manual snapshots stored token pairs rather than bundle

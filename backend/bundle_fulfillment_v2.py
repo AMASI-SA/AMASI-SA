@@ -84,6 +84,7 @@ async def capture_intake(db, owner, lines, previous, *, reporting_costs=None, bl
     from product_fulfillment_routes import _product_key
     from order_cost_authority import _bundle_cost, line_fingerprint
     from bundle_reporting_cost import verified_reporting_cost, policy_applies_to_sale
+    from bundle_financial_selection_evidence import recover_financial_choices, verify_selection_recovery
     snapshots = deepcopy(previous or {})
     financial_capture = reporting_costs is not None and blocked_intakes is not None
     for line in lines:
@@ -94,6 +95,11 @@ async def capture_intake(db, owner, lines, previous, *, reporting_costs=None, bl
         saved_bundle = saved.get("bundle_snapshot") or {}
         frozen_financial = (saved.get("bundle_financial") is True
                             and verified_reporting_cost(saved_bundle) is not None)
+        if frozen_financial and verify_selection_recovery(saved_bundle, saved):
+            # First immutable proof wins. Never re-expand an already priced
+            # supplier service using today's mutable option names or prices.
+            blocked_intakes[line_id] = "bundle_component_policy_unresolved"
+            continue
         product = await db["mezan_products_v2"].find_one({"user_id": owner, "$or": [
             {key: line["product_id"]} for key in ("id", "mezan_product_id", "salla_product_id")]})
         if not product:
@@ -104,9 +110,20 @@ async def capture_intake(db, owner, lines, previous, *, reporting_costs=None, bl
         if not definition and financial_capture and frozen_financial:
             blocked_intakes[line_id] = "bundle_component_policy_unresolved"
             continue
+        original_selected = selected_ids(line)
+        selected = original_selected
+        choice_proof = None
+        if financial_capture and definition:
+            profile = await db["mezan_product_cost_profiles_v2"].find_one(
+                {"user_id": owner, "salla_product_id": _product_key(product)},
+                {"_id": 0, "bundle_reporting_cost_policy": 1}) or {}
+            policy = profile.get("bundle_reporting_cost_policy") or {}
+            if policy.get("include_parent_base") is True:
+                selected, choice_proof = recover_financial_choices(
+                    line, product, original_selected, line_fingerprint(line))
         try:
             snapshot = await expand_bundle(db, owner, line["product_id"],
-                variant_id=line.get("variant_id"), selected_options=selected_ids(line),
+                variant_id=line.get("variant_id"), selected_options=selected,
                 option_answers=option_answers(line), capture_reporting=financial_capture,
                 present_option_ids=present_options(line), filled_option_ids=filled_options(line)) if definition else None
         except HTTPException as exc:
@@ -118,6 +135,15 @@ async def capture_intake(db, owner, lines, previous, *, reporting_costs=None, bl
         if snapshot is not None:
             snapshot["sale_quantity"] = line["quantity"]
             snapshot["line_fingerprint"] = line_fingerprint(line)
+            if choice_proof is not None:
+                # Provider labels must never become executable G47 intake:
+                # matching a catalog label establishes a price, not stock or
+                # supplier-service execution authority.
+                if verified_reporting_cost(snapshot) is None:
+                    raise HTTPException(409, detail={
+                        "code": "bundle_financial_source_choice_unverified"})
+                snapshot["operational_blocked"] = True
+                snapshot["financial_selection_recovery"] = choice_proof
             if "reporting_cost" in snapshot:
                 snapshot["order_created_at"] = order_created_at
                 snapshot["historical_cost_verified"] = policy_applies_to_sale(snapshot["reporting_cost"], order_created_at)

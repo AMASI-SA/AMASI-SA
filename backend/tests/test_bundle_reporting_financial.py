@@ -1073,3 +1073,204 @@ async def test_order_lifecycle_freezes_supplier_financial_cost_but_blocks_stock_
     assert again["reporting_cost_snapshots"] == saved
     assert (await historical_cost(db, item, number))["line_total"] == 260
     assert await db[stock.PLANS].count_documents({"user_id": OWNER}) == 0
+
+
+# Salla order-item choice labels are sometimes returned without value IDs.
+# The financial-only adapter must prove catalog IDs without changing the
+# original provider context or treating the existing supplier service as ready.
+def _salla_name_only_choice_line(*, rose=True, name=True, quantity=1):
+    item = sale_line(quantity, rose=rose, name=name)
+    item["options_raw"] = [
+        {"option_id": "rose-choice", "option_name": ROSE_NAME,
+         "values": [{"name": "نعم" if rose else "لا"}]},
+        {"option_id": "name-choice", "option_name": NAME_NAME,
+         "values": [{"name": "نعم" if name else "لا"}]},
+        {"option_id": "embroidery-text", "option_name": "التطريز على الشال",
+         "values": {"name": "التطريز على الشال", "value": "اختبار"}},
+    ] if name else [
+        {"option_id": "rose-choice", "option_name": ROSE_NAME,
+         "values": [{"name": "نعم" if rose else "لا"}]},
+        {"option_id": "name-choice", "option_name": NAME_NAME,
+         "values": [{"name": "لا"}]},
+    ]
+    item["selected_options"] = []
+    item["options_normalized"] = {
+        ROSE_NAME.lower(): "نعم" if rose else "لا",
+        NAME_NAME.lower(): "نعم" if name else "لا",
+    }
+    return item
+
+
+async def _salla_name_only_fixture(db):
+    await schema2_service_fixture(db, origin="supplier")
+    await db[PRODUCTS].update_one(
+        {"user_id": OWNER, "salla_product_id": ROOT}, {"$push": {"options": {
+            "id": "embroidery-text", "name": "التطريز على الشال",
+            "type": "text", "required": True,
+            "show_if": [{"option_id": "name-choice", "value_id": "yes"}],
+            "values": [],
+        }}})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rose,name,expected", [
+    (True, True, 65), (True, False, 55),
+    (False, True, 25), (False, False, 15),
+])
+async def test_salla_label_only_selection_prices_bundle_financially_once(db, rose, name, expected):
+    from bundle_financial_selection_evidence import verify_selection_recovery
+    from reviewed_products_catalog import bundle_parent_line_ids
+
+    await _salla_name_only_fixture(db)
+    item = _salla_name_only_choice_line(rose=rose, name=name)
+    before = await database_records(db)
+    assert fulfillment.selected_ids(item) == []
+    financial, blocked = {}, {}
+    intake = await fulfillment.capture_intake(db, OWNER, [item], {},
+        reporting_costs=financial, blocked_intakes=blocked,
+        order_created_at=ORDER_CREATED_AT)
+    assert intake == {}
+    assert blocked == {"sale-line": "bundle_component_policy_unresolved"}
+    assert financial["sale-line"]["cost"]["line_total"] == expected
+    record = financial["sale-line"]
+    frozen = record["bundle_snapshot"]
+    assert frozen["operational_blocked"] is True
+    assert verify_selection_recovery(frozen, record)
+    assert frozen["financial_selection_recovery"]["version"] == "bundle-financial-provider-label-v1"
+    assert len(frozen["financial_selection_recovery"]["resolved_pairs"]) == 2
+    assert "اختبار" not in str(frozen["financial_selection_recovery"])
+    assert "frozen_definitions" not in frozen
+    assert await database_records(db) == before  # No supplier or stock mutations.
+    number = "financial-choices-" + str(int(rose)) + str(int(name))
+    await db[LIFECYCLES].insert_one({"user_id": OWNER, "order_number": number,
+        "reporting_cost_snapshots": deepcopy(financial), "bundle_intake_snapshots": intake})
+    assert (await historical_cost(db, item, number))["line_total"] == expected
+    assert (await bundle_parent_line_ids(db, OWNER, [number])).get(number, set()) == set()
+    assert await db[stock.PLANS].count_documents({"user_id": OWNER}) == 0
+    assert await db[stock.UNITS].count_documents({"user_id": OWNER}) == 0
+
+
+@pytest.mark.asyncio
+async def test_salla_real_value_ids_keep_existing_route_despite_changed_display_names(db):
+    """Financial label rescue cannot overrule genuine provider choice IDs."""
+    await _salla_name_only_fixture(db)
+    item = sale_line(1, name=True)
+    # Provider labels are display strings, not proof of a different choice
+    # once stable value IDs are present.
+    item["options_raw"][0]["option_name"] = "Legacy or translated rose field"
+    item["options_raw"][1]["option_name"] = "Legacy or translated embroidery field"
+    # Required personalization remains required, irrespective of which
+    # already-ID-qualified label is displayed by the original provider.
+    item["options_raw"].append({
+        "option_id": "embroidery-text", "option_name": "التطريز على الشال",
+        "values": {"name": "التطريز على الشال", "value": "اختبار"}})
+    before = await database_records(db)
+    financial, blocked = {}, {}
+    intake = await fulfillment.capture_intake(
+        db, OWNER, [item], {}, reporting_costs=financial,
+        blocked_intakes=blocked, order_created_at=ORDER_CREATED_AT)
+    assert intake == {}
+    assert blocked == {"sale-line": "bundle_component_policy_unresolved"}
+    assert financial["sale-line"]["cost"]["line_total"] == 65
+    assert "financial_selection_recovery" not in financial["sale-line"]["bundle_snapshot"]
+    assert await database_records(db) == before
+    assert await db[stock.PLANS].count_documents({"user_id": OWNER}) == 0
+    assert await db[stock.UNITS].count_documents({"user_id": OWNER}) == 0
+
+
+@pytest.mark.asyncio
+async def test_salla_label_only_financial_proof_is_immutable_after_catalog_changes(db):
+    await _salla_name_only_fixture(db)
+    item = _salla_name_only_choice_line()
+    financial, blocked = {}, {}
+    intake = await fulfillment.capture_intake(db, OWNER, [item], {},
+        reporting_costs=financial, blocked_intakes=blocked,
+        order_created_at=ORDER_CREATED_AT)
+    original = deepcopy(financial)
+    number = "immutable-choice-evidence"
+    await db[LIFECYCLES].insert_one({"user_id": OWNER, "order_number": number,
+        "reporting_cost_snapshots": deepcopy(financial), "bundle_intake_snapshots": intake})
+    await db[catalog.RESOURCES].update_one({"user_id": OWNER, "id": SERVICE},
+        {"$set": {"unit_cost": 777}})
+    await db[catalog.COST_PROFILES].update_many({"user_id": OWNER},
+        {"$set": {"base_cost": 999}, "$unset": {"bundle_reporting_cost_policy": ""}})
+    replay = {}
+    assert await fulfillment.capture_intake(db, OWNER, [item], intake,
+        reporting_costs=financial, blocked_intakes=replay,
+        order_created_at=ORDER_CREATED_AT) == {}
+    assert replay == {"sale-line": "bundle_component_policy_unresolved"}
+    assert financial == original
+    assert (await historical_cost(db, item, number))["line_total"] == 65
+    changed = deepcopy(item)
+    changed["options_raw"][1]["values"][0]["name"] = "لا"
+    assert (await historical_cost(db, changed, number))["calculation_cost_available"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid", ["unknown_label", "ambiguous_catalog", "wrong_field_name", "wrong_option_id"])
+async def test_salla_name_only_recovery_refuses_unproved_or_ambiguous_choices(db, invalid):
+    await _salla_name_only_fixture(db)
+    item = _salla_name_only_choice_line()
+    if invalid == "unknown_label":
+        item["options_raw"][0]["values"][0]["name"] = "غير متطابق"
+    elif invalid == "wrong_field_name":
+        item["options_raw"][0]["option_name"] = "حقل مزور"
+    elif invalid == "wrong_option_id":
+        item["options_raw"][0]["option_id"] = "unknown-option"
+    else:
+        await db[PRODUCTS].update_one({"user_id": OWNER, "salla_product_id": ROOT},
+            {"$push": {"options.0.values": {"id": "second-yes", "name": "نعم"}}})
+    financial, blocked = {}, {}
+    before = await database_records(db)
+    with pytest.raises(HTTPException) as caught:
+        await fulfillment.capture_intake(db, OWNER, [item], {},
+            reporting_costs=financial, blocked_intakes=blocked,
+            order_created_at=ORDER_CREATED_AT)
+    assert caught.value.detail["code"] == "bundle_financial_source_choice_unverified"
+    assert financial == {} and blocked == {}
+    assert await database_records(db) == before
+
+
+@pytest.mark.asyncio
+async def test_no_financial_sinks_never_turn_name_only_into_executable_intake(db):
+    await _salla_name_only_fixture(db)
+    item = _salla_name_only_choice_line()
+    before = await database_records(db)
+    with pytest.raises(HTTPException):
+        await fulfillment.capture_intake(db, OWNER, [item], {},
+            order_created_at=ORDER_CREATED_AT)
+    assert await database_records(db) == before
+
+
+@pytest.mark.asyncio
+async def test_unapproved_policy_never_uses_name_only_recovery(db):
+    await _salla_name_only_fixture(db)
+    await set_policy(db, False)
+    item = _salla_name_only_choice_line()
+    before = await database_records(db)
+    financial, blocked = {}, {}
+    with pytest.raises(HTTPException):
+        await fulfillment.capture_intake(db, OWNER, [item], {},
+            reporting_costs=financial, blocked_intakes=blocked,
+            order_created_at=ORDER_CREATED_AT)
+    assert financial == {} and blocked == {}
+    assert await database_records(db) == before
+
+
+@pytest.mark.asyncio
+async def test_forged_recovery_marker_is_not_reporting_authority(db):
+    from bundle_financial_selection_evidence import verify_selection_recovery
+    await _salla_name_only_fixture(db)
+    item = _salla_name_only_choice_line()
+    financial, blocked = {}, {}
+    await fulfillment.capture_intake(db, OWNER, [item], {},
+        reporting_costs=financial, blocked_intakes=blocked,
+        order_created_at=ORDER_CREATED_AT)
+    record = deepcopy(financial["sale-line"])
+    record["bundle_snapshot"]["financial_selection_recovery"]["resolved_pairs"][0]["value_id"] = "other"
+    assert not verify_selection_recovery(record["bundle_snapshot"], record)
+    number = "forged-financial-choice-proof"
+    await db[LIFECYCLES].insert_one({"user_id": OWNER, "order_number": number,
+        "reporting_cost_snapshots": {"sale-line": record}, "bundle_intake_snapshots": {}})
+    result = await historical_cost(db, item, number)
+    assert result["calculation_cost_available"] is False
