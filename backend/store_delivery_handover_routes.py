@@ -18,6 +18,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from store_delivery_domain import StoreDeliveryRuleError, assignment_snapshot, normalize_text
+from store_delivery_destination import (
+    current_destination_city, destination_fence, legacy_destination_city, resolve_assignment_city,
+)
 from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS, active_stage_instructions, enforce_instruction_rows
 from store_courier_domain import (
     ASSIGNED_WAITING_PICKUP,
@@ -75,16 +78,7 @@ def _require_operator(user: Any) -> dict[str, Any]:
 
 
 def _order_city(order: dict[str, Any]) -> str:
-    candidates = [
-        order.get("shipping_city"),
-        order.get("customer_city"),
-        (order.get("shipping_address") or {}).get("city") if isinstance(order.get("shipping_address"), dict) else None,
-    ]
-    for value in candidates:
-        text = normalize_text(value)
-        if text:
-            return text
-    return ""
+    return current_destination_city(order) or legacy_destination_city(order)
 
 
 def _order_number(order: dict[str, Any]) -> str:
@@ -274,8 +268,14 @@ async def scan_shipment_service(db: Any, *, actor: dict, user_id: str, session_i
     if normalize_text(workflow.get("store_courier_assignee_id")):
         return {"accepted": False, "barcode": barcode, "code": "store_courier_already_assigned"}
 
-    city = _order_city(order)
+    city = ""
     try:
+        city = await resolve_assignment_city(db, user_id=user_id, order=order)
+        driver = await db[STORE_DRIVERS].find_one(
+            {"user_id": user_id, "id": session["driver_id"], "status": "active"}, {"_id": 0},
+        )
+        if not driver:
+            raise StoreDeliveryRuleError("driver_inactive")
         snapshot = assignment_snapshot(driver=driver, shipping_city=city)
     except StoreDeliveryRuleError as exc:
         rejected = {"barcode": barcode, "order_id": canonical_order_id, "order_number": _order_number(order), "shipping_city": city, "code": str(exc), "scanned_at": _now()}
@@ -309,13 +309,33 @@ async def confirm_session_service(db: Any, *, actor: dict, user_id: str, session
     if not driver:
         raise HTTPException(status_code=409, detail={"code": "driver_inactive"})
 
+    verified = []
+    order_fences = {}
+    for item in accepted:
+        order = await db[ORDERS].find_one(_assignment_order_filter(user_id, item), {"_id": 0})
+        if not order or _order_id(order) != normalize_text(item.get("order_id")):
+            raise HTTPException(status_code=409, detail={"code": "canonical_order_not_found"})
+        try:
+            city = await resolve_assignment_city(db, user_id=user_id, order=order)
+        except StoreDeliveryRuleError as exc:
+            raise HTTPException(status_code=409, detail={"code": str(exc), "order_id": item.get("order_id")}) from exc
+        verified.append((item, city))
+        order_fences[item["order_id"]] = destination_fence(order)
+
+    # City resolution may wait on the provider. Capture driver eligibility and
+    # fee only after all such reads, never from before the network window.
+    driver = await db[STORE_DRIVERS].find_one(
+        {"user_id": user_id, "id": session.get("driver_id"), "status": "active"}, {"_id": 0},
+    )
+    if not driver:
+        raise HTTPException(status_code=409, detail={"code": "driver_inactive"})
     now = _now()
     rows = []
-    for item in accepted:
+    for item, city in verified:
         try:
             current_snapshot = assignment_snapshot(
                 driver=driver,
-                shipping_city=normalize_text(item.get("shipping_city") or item.get("shipping_city_snapshot")),
+                shipping_city=city,
             )
         except StoreDeliveryRuleError as exc:
             raise HTTPException(status_code=409, detail={"code": str(exc), "order_id": item.get("order_id")}) from exc
@@ -478,9 +498,13 @@ async def confirm_session_service(db: Any, *, actor: dict, user_id: str, session
                 "store_delivery_assigned_at": now,
                 "store_delivery_updated_at": now,
             }
-            order_result = await db[ORDERS].update_one(order_filter, {"$set": order_patch})
+            order_result = await db[ORDERS].update_one(
+                {"user_id": user_id, **order_fences[row["order_id"]]}, {"$set": order_patch},
+            )
             if order_result.matched_count != 1:
-                raise RuntimeError("canonical_order_update_conflict_during_handover_confirm")
+                raise HTTPException(status_code=409, detail={
+                    "code": "shipment_destination_changed", "order_number": row.get("order_number"),
+                })
             updated_orders.append((prior, order_patch))
 
     except Exception:
