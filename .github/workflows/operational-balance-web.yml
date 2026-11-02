@@ -66,6 +66,7 @@ jobs:
           python -B -m pytest --noconftest -q
           backend/tests/test_operational_balance*.py
           backend/tests/test_operational_open_cost_exposure.py
+          backend/tests/test_operational_bundle_cost_projection.py
           backend/tests/test_operational_supplier_invoice_cutover.py
           backend/tests/test_store_delivery_noncash_review.py
           backend/tests/test_operational_driver_review_mongo.py
@@ -79,6 +80,8 @@ jobs:
           cases = ET.parse('operational-backend.xml').findall('.//testcase')
           assert len(cases) >= 1000, 'Operational test collection incomplete'
           assert any('test_operational_open_cost_exposure' in c.get('classname', '') for c in cases), 'Historical open-cost tests were not collected'
+          bundle_cases = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_bundle_cost_projection']
+          assert len(bundle_cases) >= 67, 'Remaining-product bundle projection tests missing or incomplete'
           for suite in ('test_operational_supplier_invoice_cutover',
                         'test_operational_balance_invoice_flow',
                         'test_operational_balance_supplier_final_cost',
