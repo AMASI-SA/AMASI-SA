@@ -38,6 +38,7 @@ export async function listOrders({
     statusGroup = null,
     statusExact = null,
     filters = null,
+    signal,
 } = {}) {
     if (isPreviewDemoEnvironment()) {
         return listPreviewOrders({ limit, cursor, statusExact: statusExact || statusGroup });
@@ -50,7 +51,7 @@ export async function listOrders({
         Object.entries(filters || {}).forEach(([key, value]) => {
             if (value !== null && value !== undefined && String(value).trim()) params[key] = value;
         });
-        const { data } = await api.get("/orders-v2", { params });
+        const { data } = await api.get("/orders-v2", { params, signal });
         return {
             items: Array.isArray(data?.items) ? data.items : [],
             nextCursor: data?.next_cursor || null,

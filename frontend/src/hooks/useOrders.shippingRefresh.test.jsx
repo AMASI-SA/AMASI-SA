@@ -20,6 +20,7 @@ function Detail({ number }) {
     return <span>{latest.order?.shipping?.company || ""}</span>;
 }
 function List() { latest = useOrders(); return null; }
+function AutoList({ filters, status = null }) { latest = useOrders({ autoFilters: filters, statusExact: status }); return null; }
 async function render(component) { await act(async () => { root.render(component); }); }
 async function advance(ms) { await act(async () => { jest.advanceTimersByTime(ms); }); }
 
@@ -103,4 +104,49 @@ test("returning to an order cannot revive its earlier in-flight response", async
     await act(async () => { oldA.resolve({ shipping: { company: "A stale courier" } }); });
     expect(host.textContent).toBe("A current courier");
     expect(getOrder).toHaveBeenCalledTimes(3);
+});
+
+test("typing batches filters into one automatic request with the active status", async () => {
+    listOrders.mockResolvedValue({ items: [], nextCursor: null });
+    await render(<AutoList filters={{ campaign_id: "9" }} status="completed" />);
+    await advance(250);
+    await render(<AutoList filters={{ campaign_id: "912", sku: "A" }} status="completed" />);
+    await advance(499);
+    expect(listOrders).not.toHaveBeenCalled();
+    await advance(1);
+    expect(listOrders).toHaveBeenCalledTimes(1);
+    expect(listOrders).toHaveBeenLastCalledWith(expect.objectContaining({ statusExact: "completed", filters: { campaign_id: "912", sku: "A" } }));
+});
+
+test("combined search preserves every result across polling and focus", async () => {
+    listOrders.mockResolvedValue({ items: [{ order_number: "A" }, { order_number: "B" }], resultSummary: { orders: 2 } });
+    await render(<AutoList filters={{ campaign_id: "campaign" }} />);
+    await advance(500);
+    await advance(30000);
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(latest.orders).toHaveLength(2);
+    expect(listOrders).toHaveBeenCalledTimes(1);
+    expect(getOrder).not.toHaveBeenCalled();
+});
+
+test("changing filters aborts the earlier search and rejects its late response", async () => {
+    const first = deferred();
+    listOrders.mockReturnValueOnce(first.promise).mockResolvedValueOnce({ items: [{ order_number: "new" }] });
+    await render(<AutoList filters={{ q: "old" }} />);
+    await advance(500);
+    const signal = listOrders.mock.calls[0][0].signal;
+    await render(<AutoList filters={{ q: "new" }} />);
+    expect(signal.aborted).toBe(true);
+    await advance(500);
+    await act(async () => { first.resolve({ items: [{ order_number: "old" }] }); });
+    expect(latest.orders.map((item) => item.order_number)).toEqual(["new"]);
+});
+
+test("clearing all filters restores normal listing without a combined request", async () => {
+    listOrders.mockResolvedValue({ items: [], nextCursor: null });
+    await render(<AutoList filters={{ q: "abc" }} />);
+    await advance(500);
+    await render(<AutoList filters={{ q: "" }} />);
+    expect(latest.searchMode).toBe(false);
+    expect(listOrders).toHaveBeenLastCalledWith({ limit: 15, statusGroup: null, statusExact: null });
 });

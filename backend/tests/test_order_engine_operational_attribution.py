@@ -95,3 +95,23 @@ def test_snapchat_and_salla_are_independent_sources_of_truth():
     snapchat_purchases = 0
     salla_orders = len(FIXTURE["orders"])
     assert snapchat_purchases == 0 and salla_orders == 3
+
+
+@pytest.mark.asyncio
+async def test_campaign_search_survives_an_unrelated_order_without_creation_date():
+    rows = [discovery(row) for row in FIXTURE["orders"]]
+    rows.insert(0, OrderDiscoveryRow(order_number="broken", order_date="", salla_raw={"id": "broken"}))
+    result = await search_orders(Repository(rows), user_id="owner", filters={"campaign_id": FIXTURE["campaign"]["id"]})
+    assert len(result.items) == 3
+    assert result.skipped_invalid == 1
+
+
+@pytest.mark.asyncio
+async def test_campaign_id_search_matches_salla_utm_identity():
+    raw = raw_order(FIXTURE["orders"][0])
+    raw.pop("campaign_id")
+    raw.pop("campaign_name")
+    campaign_id = "91247da2-a1d7-444a-9078-a786d23a305b"
+    raw["utm_campaign"] = campaign_id
+    result = await search_orders(Repository([OrderDiscoveryRow(order_number=raw["reference_id"], order_date="2026-08-30", salla_raw=raw)]), user_id="owner", filters={"campaign_id": campaign_id})
+    assert [item.order_number for item in result.items] == [raw["reference_id"]]

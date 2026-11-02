@@ -146,7 +146,7 @@ def make_order_engine_router(
         if advanced:
             result = await search_orders(repository(), user_id=owner_id, filters=combined_filters)
             enriched_items = await enrich_order_campaigns(db, user_id=owner_id, orders=result.items[:limit])
-            return OrderListResponse(items=enriched_items, next_cursor=None, limit=limit, result_summary=result.summary)
+            return OrderListResponse(items=enriched_items, next_cursor=None, limit=limit, result_summary=result.summary, skipped_invalid=result.skipped_invalid)
 
         try:
             page = await list_orders(

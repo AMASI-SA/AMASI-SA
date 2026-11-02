@@ -150,7 +150,7 @@ function CalendarMonth({ monthDate, from, to, onSelect }) {
     );
 }
 
-export default function ArabicDateRangePicker({ valueFrom, valueTo, onApply }) {
+export default function ArabicDateRangePicker({ valueFrom, valueTo, onApply, emitAppliedEvent = true, align = "right" }) {
     const rootRef = useRef(null);
     const nativeFromRef = useRef(null);
     const nativeToRef = useRef(null);
@@ -234,7 +234,7 @@ export default function ArabicDateRangePicker({ valueFrom, valueTo, onApply }) {
             ? { dateFrom: draftFrom, dateTo: draftTo }
             : { dateFrom: draftTo, dateTo: draftFrom };
         onApply?.(normalized);
-        if (typeof window !== "undefined") {
+        if (emitAppliedEvent && typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent(ADS_DATE_RANGE_APPLIED_EVENT, {
                 detail: { ...normalized, source: "arabic_date_range_picker" },
             }));
@@ -277,7 +277,7 @@ export default function ArabicDateRangePicker({ valueFrom, valueTo, onApply }) {
             </button>
 
             {open && (
-                <div className="absolute right-0 top-[calc(100%+0.65rem)] z-[90] w-[min(94vw,900px)] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl" dir="rtl">
+                <div className={`absolute ${align === "left" ? "left-0" : "right-0"} top-[calc(100%+0.65rem)] z-[90] w-[min(94vw,900px)] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl`} dir="rtl">
                     <div className="grid lg:grid-cols-[180px_minmax(0,1fr)]">
                         <aside className="border-b border-slate-200 bg-slate-50 p-3 lg:border-b-0 lg:border-l">
                             <div className="mb-2 px-2 text-xs font-black text-slate-500">فترات جاهزة</div>
