@@ -121,6 +121,16 @@ def test_superseded_shipment_is_not_reactivated_by_a_matching_current_id():
     assert _order_city(order) == "جدة"
 
 
+@pytest.mark.parametrize("changes", [
+    {"archived": True}, {"type": "return"}, {"status": "returned"},
+    {"status": "superseded"}, {"superseded": True}, {"cancelled": True}, {"returned": True},
+])
+def test_inactive_canonical_shipment_cannot_supply_a_raw_destination(changes):
+    order = order_with_shipments(shipment())
+    order[CURRENT_SHIPPING].update(changes)
+    assert _order_city(order) == "جدة"
+
+
 def test_order_carrier_clock_does_not_age_a_current_shipment_destination():
     order = order_with_shipments(shipment())
     order[CURRENT_SHIPPING].update(
@@ -196,6 +206,15 @@ def test_conflicting_current_rows_at_same_time_cannot_supply_stronger_city(rever
         rows.reverse()
 
     assert _order_city(order_with_shipments(*rows)) == "جدة"
+
+
+@pytest.mark.parametrize("clock", [CURRENT_TIME, NEWER_TIME])
+@pytest.mark.parametrize("changes", [{"status": "cancelled"}, {"courier_id": "different-carrier"}])
+def test_latest_ineligible_raw_row_cannot_revive_an_older_webhook_city(clock, changes):
+    order = order_with_shipments(shipment(updated_at=clock, **changes))
+    order["salla_shipment_webhook_snapshot"] = shipment(updated_at=CURRENT_TIME)
+
+    assert _order_city(order) == "جدة"
 
 
 @pytest.mark.parametrize(
@@ -371,3 +390,137 @@ def test_handover_rejects_true_current_other_city_without_assignment(handover, b
         assert session["rejected"][0]["code"] == "driver_city_mismatch"
 
     asyncio.run(verify())
+
+
+def assert_no_new_assignment(db, history, session_id):
+    async def verify():
+        assert await db[ASSIGNMENTS].find({}, {"_id": 0}).to_list(None) == [history]
+        assert await db[EVENTS].count_documents({}) == 0
+        for workflow in await db[WORKFLOWS].find({}).to_list(None):
+            assert "store_delivery_assignment_id" not in workflow
+            assert "store_courier_assignee_id" not in workflow
+        assert (await db[SESSIONS].find_one({"id": session_id}))["status"] == "open"
+    asyncio.run(verify())
+
+
+def test_confirmation_rechecks_stored_destination_instead_of_scanned_city(handover):
+    db, client, start, _, history = handover
+    order = order_with_shipments(shipment())
+    session_id = start(order)
+    base = f"/store-delivery/handover/sessions/{session_id}"
+    assert client.post(f"{base}/scan", json={"barcode": order["order_number"]}).json()["accepted"] is True
+
+    asyncio.run(db[ORDERS].update_one({"order_id": order["order_id"]}, {"$set": {
+        "raw_by_source.salla_direct.shipments": [shipment("جدة", updated_at=NEWER_TIME)],
+    }}))
+    confirmed = client.post(f"{base}/confirm")
+    assert confirmed.status_code == 409, confirmed.text
+    assert confirmed.json()["detail"]["code"] == "driver_city_mismatch"
+    assert_no_new_assignment(db, history, session_id)
+
+
+@pytest.mark.parametrize(("confirm_city", "driver_patch", "error"), [
+    pytest.param("Riyadh", {}, None, id="same-destination"),
+    pytest.param("جدة", {}, "driver_city_mismatch", id="destination-changed"),
+    pytest.param("Riyadh", {"status": "inactive"}, "driver_inactive", id="driver-disabled-during-read"),
+    pytest.param("Riyadh", {"city": "جدة"}, "driver_city_mismatch", id="driver-city-changed-during-read"),
+    pytest.param("Riyadh", {"delivery_fee": 99}, None, id="driver-fee-changed-during-read"),
+])
+def test_sparse_internal_courier_uses_fresh_destination_at_scan_and_confirmation(
+    handover, monkeypatch, confirm_city, driver_patch, error,
+):
+    import order_engine.shipping_label_service as shipping
+    db, client, start, _, history = handover
+    order = order_with_shipments()
+    order["raw_by_source"]["salla_direct"].update(id="synthetic-provider-id", reference_id=order["order_number"])
+    order["salla_shipment_id"] = None
+    order[CURRENT_SHIPPING].update(shipment_id=None, status="pending", superseded_shipment_ids=["shipment-current"])
+    provider_city = "Riyadh"
+    calls = []
+    confirming = False
+
+    async def get_only(database, user_id, method, path, **kwargs):
+        calls.append((method, path))
+        assert database is db and user_id == order["user_id"] and method == "GET"
+        if path == "/orders/synthetic-provider-id":
+            return {"data": {"id": "synthetic-provider-id", "reference_id": order["order_number"], "status": {"slug": "completed"}, "customer": {"city": "جدة"}}}
+        if path == "/shipments":
+            if confirming and driver_patch:
+                await db[STORE_DRIVERS].update_one({"user_id": user_id}, {"$set": driver_patch})
+            return {"data": [shipment(provider_city, updated_at=None, created_at=None)]}
+        raise AssertionError(f"Unexpected provider request: {method} {path}")
+
+    monkeypatch.setattr(shipping, "call_salla", get_only)
+    session_id = start(order)
+    base = f"/store-delivery/handover/sessions/{session_id}"
+    scanned = client.post(f"{base}/scan", json={"barcode": order["order_number"]})
+    assert scanned.json()["accepted"] is True, scanned.text
+    assert scanned.json()["shipment"]["shipping_city_snapshot"] == "Riyadh"
+    provider_city = confirm_city
+    confirming = True
+    confirmed = client.post(f"{base}/confirm")
+    assert len(calls) == 4 and all(method == "GET" for method, _ in calls)
+    if not error:
+        assert confirmed.status_code == 200, confirmed.text
+        assert confirmed.json()["assignments"][0]["shipping_city_snapshot"] == "Riyadh"
+        assert confirmed.json()["assignments"][0]["delivery_fee_snapshot"] == driver_patch.get("delivery_fee", 23.50)
+    else:
+        assert confirmed.status_code == 409, confirmed.text
+        assert confirmed.json()["detail"]["code"] == error
+        assert_no_new_assignment(db, history, session_id)
+    saved = asyncio.run(db[ORDERS].find_one({"order_id": order["order_id"]}))
+    for field in ("shipping_city", "customer_city", "raw_by_source", CURRENT_SHIPPING, "salla_shipment_id"):
+        assert saved[field] == order[field]
+
+
+@pytest.mark.parametrize("batch_size", [1, 2])
+@pytest.mark.parametrize("change", ["destination", "missing-to-null"])
+def test_final_city_fence_conflict_rolls_back_assignments_and_preserves_concurrent_update(
+    handover, monkeypatch, batch_size, change,
+):
+    db, client, start, _, history = handover
+    order = order_with_shipments(shipment())
+    session_id = start(order)
+    orders = [order]
+    if batch_size == 2:
+        other = order_with_shipments(shipment(), order_id="second-order", order_number="9001002")
+        asyncio.run(db[ORDERS].insert_one(deepcopy(other)))
+        workflow = asyncio.run(db[WORKFLOWS].find_one({"order_number": order["order_number"]}, {"_id": 0}))
+        workflow["order_number"] = other["order_number"]
+        asyncio.run(db[WORKFLOWS].insert_one(workflow))
+        orders.append(other)
+    base = f"/store-delivery/handover/sessions/{session_id}"
+    for item in orders:
+        assert client.post(f"{base}/scan", json={"barcode": item["order_number"]}).json()["accepted"] is True
+
+    collection_type = type(db[ORDERS])
+    original_update = collection_type.update_one
+    raced = False
+    target = orders[-1]
+    concurrent_patch = ({"raw_by_source.salla_direct.shipments": [shipment("جدة", updated_at=NEWER_TIME)]}
+                        if change == "destination" else {"raw_by_source.salla_direct.shipment": None})
+
+    async def racing_update(collection, query, update, *args, **kwargs):
+        nonlocal raced
+        if (collection.name == ORDERS and not raced
+                and update.get("$set", {}).get("store_delivery_assignment_id")
+                and query.get("order_number", {}).get("$eq") == target["order_number"]):
+            raced = True
+            await original_update(collection, {"order_id": target["order_id"]}, {"$set": concurrent_patch})
+        return await original_update(collection, query, update, *args, **kwargs)
+
+    monkeypatch.setattr(collection_type, "update_one", racing_update)
+    confirmed = client.post(f"{base}/confirm")
+    assert raced
+    assert confirmed.status_code == 409, confirmed.text
+    assert confirmed.json()["detail"]["code"] == "shipment_destination_changed"
+    assert_no_new_assignment(db, history, session_id)
+    for item in orders:
+        saved = asyncio.run(db[ORDERS].find_one({"order_id": item["order_id"]}, {"_id": 0}))
+        expected = deepcopy(item)
+        if item is target:
+            if change == "destination":
+                expected["raw_by_source"]["salla_direct"]["shipments"] = concurrent_patch["raw_by_source.salla_direct.shipments"]
+            else:
+                expected["raw_by_source"]["salla_direct"]["shipment"] = None
+        assert saved == expected

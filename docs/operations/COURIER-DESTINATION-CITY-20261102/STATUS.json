@@ -3,26 +3,54 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/courier-destination-city-20261102",
   "base_commit": "70576e2a06237eb193b1c927f11ced92e2229589",
-  "state": "WIP: destination-source regression reproduced; provider fallback and confirmation fence pending",
+  "state": "Implemented and independently reviewed; final local focused suite green; remote CI pending",
   "scope": "Use current shipment destination for courier city coverage while preserving city restrictions and historical assignment snapshots.",
   "completed": [
-    "Reproduced a wrong rejection when the stored flat customer city differs from the current shipment destination.",
-    "Added an initial pure selector for stored current destination evidence and synthetic regression tests.",
-    "Verified that an internally normalized courier order can lack stored destination evidence and therefore needs a fresh, request-scoped provider destination read."
+    "Prioritize unambiguous current shipment destination over stale flat/customer city fields; preserve existing city aliases and coverage rules.",
+    "For Salla-backed orders without trusted stored destination, use the existing owner-scoped GET adapters, verify order and carrier identity, and keep the city request-scoped without restoring superseded labels.",
+    "Resolve the current destination again at confirmation; fence concurrent destination/carrier/assignment changes with presence-sensitive predicates and preserve existing batch rollback.",
+    "Add synthetic stored-source, provider-adapter, scan/confirm and concurrent batch rollback regressions to the existing delivery CI workflow."
   ],
   "verification": [
-    {"command": "pytest --noconftest -p no:cacheprovider backend/tests/test_store_delivery_destination.py", "result": "52 tests passed before the final numeric-string regression was added; final numeric-string regression is red and must be fixed."},
-    {"command": "Focused existing domain and handover tests", "result": "31 baseline tests passed."}
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend timeout 180s /tmp/mezan-bundle-cost-venv/bin/python -m pytest --noconftest -p no:cacheprovider -q --durations=5 -o faulthandler_timeout=20 backend/tests/test_courier_label_recovery.py backend/tests/test_store_delivery_self_assignment.py backend/tests/test_store_delivery_accounting.py backend/tests/test_store_delivery_domain.py backend/tests/test_store_delivery_driver_app_v2_contract.py backend/tests/test_store_delivery_driver_security.py backend/tests/test_store_delivery_handover_routes.py backend/tests/test_store_delivery_payment_evidence.py backend/tests/test_store_delivery_reminders.py backend/tests/test_store_delivery_operational_v2_contract.py backend/tests/test_store_delivery_current_status.py backend/tests/test_store_delivery_destination.py backend/tests/test_store_delivery_destination_provider.py",
+      "exit_status": 0,
+      "result": "262 passed, 3 skipped, 1 existing TestClient deprecation warning in 14.80 seconds. Three real-Mongo transaction cases require the disposable CI replica set. An earlier unchanged full run exhausted a 55-second process budget without a failed assertion; the complete rerun exited successfully."
+    },
+    {
+      "command": "git diff --check",
+      "exit_status": 0
+    }
   ],
   "pending": [
-    "Reject numeric-string city identifiers and newest ineligible representations before older stored city evidence.",
-    "Add a narrowly scoped, GET-only provider fallback when a Salla-backed order has no trusted stored destination; do not reactivate locally superseded labels.",
-    "Revalidate current destination at confirmation and fence concurrent destination/carrier changes.",
-    "Run the integrated regressions, independent review, and the focused CI suite."
+    "Focused remote CI including disposable transaction-capable Mongo tests."
   ],
   "production_changed": false,
   "deployment_state": "No merge, release lease, or production deployment for this task.",
   "continuity": "Issue #1006 has reached its comment limit. This task status and the task Draft PR carry the continuation record and exact remote commit SHA.",
-  "next_safe_action": "Finish the provider read fallback and confirmation validation, then run focused tests and update this checkpoint.",
-  "privacy": "Only synthetic fixtures and non-customer technical evidence are included."
+  "next_safe_action": "Inspect remote CI for this exact task head; preserve final evidence and request separate production publication authorization.",
+  "privacy": "Only synthetic fixtures and non-customer technical evidence are included.",
+  "previous_checkpoint": "9765c42672a1bf943ec02128c43e3f8c9c631213",
+  "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1691",
+  "limitations": [
+    "Fresh destination resolution adds provider reads only when stored Salla destination evidence is unavailable; provider failure or ambiguity blocks the attempt instead of trusting stale customer data.",
+    "This change targets handover scan/confirmation, shared by employee handover and courier self-receive. No native application update is required."
+  ],
+  "review": {
+    "state": "No blocker remains in independent bounded code review.",
+    "resolved": [
+      "Canonical inactivity and return/archive/superseded flags.",
+      "Newer stored cancellation, carrier and city evidence cannot be displaced by equal, older or untimed provider evidence.",
+      "Enclosing raw carrier identity is retained during provider comparison.",
+      "Fresh provider order must still be completed for handover.",
+      "Driver status, city and fee are refreshed after all provider reads.",
+      "Presence-sensitive final order CAS uses existing batch rollback without overwriting concurrent source changes."
+    ]
+  },
+  "source_sha256": {
+    "backend/store_delivery_destination.py": "008d415e7973c005971f4d0e1d327960120099da7040f05774ac7092537a37a9",
+    "backend/store_delivery_handover_routes.py": "6cc33070144aac1388e3b405348811bf8ee24cec6b6225db568a46ce8647e625",
+    "backend/tests/test_store_delivery_destination.py": "3ed36ac484d29cffa0dff4e713ceef91d35a97e1747cc38f4ef5121d18a11eb1",
+    "backend/tests/test_store_delivery_destination_provider.py": "bd3d63479e2cba3cf68f73775cffb1ea74a2173c62f44ddb66834ea10b0ebabe"
+  }
 }
