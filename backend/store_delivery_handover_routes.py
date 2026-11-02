@@ -17,7 +17,9 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from store_delivery_domain import StoreDeliveryRuleError, assignment_snapshot, normalize_text
+from store_delivery_domain import (
+    StoreDeliveryRuleError, carrier_assignment_snapshot, normalize_shipping_carrier, normalize_text,
+)
 from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS, active_stage_instructions, enforce_instruction_rows
 from store_courier_domain import (
     ASSIGNED_WAITING_PICKUP,
@@ -85,6 +87,20 @@ def _order_city(order: dict[str, Any]) -> str:
         if text:
             return text
     return ""
+
+
+def _order_shipping_company(order: dict[str, Any]) -> str:
+    """Use the current carrier identity; never infer a company from city.
+
+    If the canonical carrier has a code but no name, no stale fallback is safe.
+    """
+    current = order.get("salla_shipping_current")
+    if isinstance(current, dict) and (current.get("company_name") or current.get("company_code")):
+        return normalize_text(current.get("company_name")) if isinstance(current.get("company_name"), str) else ""
+    value = order.get("shipping_company")
+    if isinstance(value, dict):
+        value = value.get("name") or value.get("name_ar")
+    return normalize_text(value) if isinstance(value, str) else ""
 
 
 def _order_number(order: dict[str, Any]) -> str:
@@ -195,6 +211,7 @@ async def create_session_service(db: Any, *, actor: dict, user_id: str, payload:
     session = {
         "id": str(uuid.uuid4()), "user_id": user_id, "driver_id": driver["id"],
         "driver_name_snapshot": driver.get("name"), "driver_city_snapshot": driver.get("city"),
+        "driver_shipping_company_snapshot": driver.get("shipping_company"),
         "delivery_fee_snapshot": driver.get("delivery_fee"), "status": "open",
         "accepted": [], "rejected": [], "started_at": now,
         "started_by": normalize_text(actor.get("id")), "confirmed_at": None,
@@ -275,14 +292,19 @@ async def scan_shipment_service(db: Any, *, actor: dict, user_id: str, session_i
         return {"accepted": False, "barcode": barcode, "code": "store_courier_already_assigned"}
 
     city = _order_city(order)
+    company = _order_shipping_company(order)
     try:
-        snapshot = assignment_snapshot(driver=driver, shipping_city=city)
+        snapshot = carrier_assignment_snapshot(driver=driver, shipping_company=company, shipping_city=city)
     except StoreDeliveryRuleError as exc:
-        rejected = {"barcode": barcode, "order_id": canonical_order_id, "order_number": _order_number(order), "shipping_city": city, "code": str(exc), "scanned_at": _now()}
+        rejected = {"barcode": barcode, "order_id": canonical_order_id, "order_number": _order_number(order),
+                    "shipping_city": city, "shipping_company": company,
+                    "driver_shipping_company": (driver or {}).get("shipping_company"),
+                    "code": str(exc), "scanned_at": _now()}
         await db[SESSIONS].update_one({"user_id": user_id, "id": session_id}, {"$push": {"rejected": rejected}})
         return {"accepted": False, **rejected}
 
-    accepted = {"barcode": barcode, "order_id": canonical_order_id, "order_number": _order_number(order), "shipping_city": city, **snapshot, "scanned_at": _now()}
+    accepted = {"barcode": barcode, "order_id": canonical_order_id, "order_number": _order_number(order), "shipping_city": city,
+                "shipping_company": company, **snapshot, "scanned_at": _now()}
     await db[SESSIONS].update_one({"user_id": user_id, "id": session_id}, {"$push": {"accepted": accepted}})
     return {"accepted": True, "shipment": accepted}
 
@@ -311,11 +333,24 @@ async def confirm_session_service(db: Any, *, actor: dict, user_id: str, session
 
     now = _now()
     rows = []
+    order_carrier_fences = {}
     for item in accepted:
+        order = await db[ORDERS].find_one(_assignment_order_filter(user_id, item), {"_id": 0})
+        if not order or _order_id(order) != normalize_text(item.get("order_id")):
+            raise HTTPException(status_code=409, detail={"code": "canonical_order_not_found"})
+        company = _order_shipping_company(order)
+        if normalize_shipping_carrier(company) != normalize_shipping_carrier(
+            item.get("shipping_company_snapshot") or item.get("shipping_company")
+        ):
+            raise HTTPException(status_code=409, detail={"code": "shipment_shipping_company_changed",
+                                                         "order_id": item.get("order_id")})
+        order_carrier_fences[item["order_id"]] = {
+            "shipping_company": order.get("shipping_company"),
+            "salla_shipping_current": order.get("salla_shipping_current"),
+        }
         try:
-            current_snapshot = assignment_snapshot(
-                driver=driver,
-                shipping_city=normalize_text(item.get("shipping_city") or item.get("shipping_city_snapshot")),
+            current_snapshot = carrier_assignment_snapshot(
+                driver=driver, shipping_company=company, shipping_city=_order_city(order),
             )
         except StoreDeliveryRuleError as exc:
             raise HTTPException(status_code=409, detail={"code": str(exc), "order_id": item.get("order_id")}) from exc
@@ -478,7 +513,13 @@ async def confirm_session_service(db: Any, *, actor: dict, user_id: str, session
                 "store_delivery_assigned_at": now,
                 "store_delivery_updated_at": now,
             }
-            order_result = await db[ORDERS].update_one(order_filter, {"$set": order_patch})
+            frozen_carrier = order_carrier_fences[row["order_id"]]
+            order_result = await db[ORDERS].update_one(
+                {"$and": [order_filter,
+                          {"shipping_company": {"$eq": frozen_carrier["shipping_company"]}},
+                          {"salla_shipping_current": {"$eq": frozen_carrier["salla_shipping_current"]}}]},
+                {"$set": order_patch},
+            )
             if order_result.matched_count != 1:
                 raise RuntimeError("canonical_order_update_conflict_during_handover_confirm")
             updated_orders.append((prior, order_patch))
