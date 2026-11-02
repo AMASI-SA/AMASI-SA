@@ -95,6 +95,45 @@ class BundleFinancialLifecycleTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(reviewed, "get_orders", AsyncMock(return_value={"order": order})):
             return await reviewed._load_catalog_pairs(self.db, user_id="owner", workflows=[workflow])
 
+    async def test_real_mongo_salla_label_only_values_freeze_cost_without_supplier_change(self):
+        from bundle_financial_selection_evidence import verify_selection_recovery
+
+        order = await self.fixture()
+        order.items[0].options_raw = [
+            {"option_id": "rose-choice", "option_name": "rose-choice",
+             "values": [{"name": "Yes"}]},
+            {"option_id": "name-choice", "option_name": "name-choice",
+             "values": [{"name": "Yes"}]},
+        ]
+        baseline = await self.unrelated_records()
+        supplier_before = await self.supplier_pairs(order)
+        result = await self.reconcile(order)
+        self.assertEqual(result["error_code"], BLOCK)
+        self.assertEqual(result["state"], "blocked")
+        current = await self.intent()
+        self.assertEqual(current["bundle_intake_snapshots"], {})
+        self.assertEqual(current["bundle_financial_blocked"], {"line": BLOCK})
+        record = current["reporting_cost_snapshots"]["line"]
+        self.assertEqual(record["cost"]["line_total"], 260)
+        self.assertTrue(verify_selection_recovery(record["bundle_snapshot"], record))
+        self.assertEqual(record["bundle_snapshot"]["sale_quantity"], 4)
+        self.assertEqual((await self.historical_cost(order))["line_total"], 260)
+        self.assertEqual(await self.supplier_pairs(order), supplier_before)
+        self.assertEqual(await self.unrelated_records(), baseline)
+        self.assertEqual(await self.db[stock.PLANS].count_documents({}), 0)
+        self.assertEqual(await self.db[stock.UNITS].count_documents({}), 0)
+
+        frozen = deepcopy(current["reporting_cost_snapshots"])
+        await self.db[catalog.COST_PROFILES].update_many({}, {"$set": {"base_cost": 999}})
+        await self.db[catalog.RESOURCES].update_one({"id": SERVICE},
+            {"$set": {"unit_cost": 777}})
+        replay = await self.reconcile(order, minute=2)
+        self.assertEqual(replay["error_code"], BLOCK)
+        self.assertEqual((await self.intent())["reporting_cost_snapshots"], frozen)
+        self.assertEqual((await self.historical_cost(order))["line_total"], 260)
+        self.assertEqual(await self.db[stock.PLANS].count_documents({}), 0)
+        self.assertEqual(await self.db[stock.UNITS].count_documents({}), 0)
+
     async def test_strict_block_keeps_260_financial_proof_and_unchanged_supplier_export(self):
         order = await self.fixture()
         before = await self.unrelated_records()
