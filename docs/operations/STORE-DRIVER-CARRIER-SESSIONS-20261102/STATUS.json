@@ -1,0 +1,55 @@
+{
+  "task_id": "STORE-DRIVER-CARRIER-SESSIONS-20261102",
+  "source_repo": "AMASI-SA/AMASI-SA",
+  "source_branch": "codex/store-driver-carrier-sessions-20261102",
+  "source_sha": "d221556175d884e9cebbda091ec62fdf68dde912",
+  "source_base_sha": "2e70e44f69ef7eda8ccdad83a4faf4bdd9538eb0",
+  "source_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1693",
+  "status": "implemented_and_ci_green; pending independent review, live owner acceptance and release handoff",
+  "completed": [
+    "choose exact city-courier company from existing merchant settings dropdown, never type custom carrier",
+    "driver may claim new shipments only when current shipping-company name matches profile; destination city does not authorize assignment",
+    "specific Riyadh-versus-Jeddah mismatch and missing-company errors",
+    "preserve historical city-mode assignments and financial fee/custody snapshots",
+    "separate each authenticated driver's receipt session, recount only assignment-owned rows read-only",
+    "return private receipt-session report and retain driver overview when company selector request is unavailable",
+    "strip legacy quote wrappers from selector display without rewriting settings"
+  ],
+  "verification": {
+    "store_delivery_v1": {
+      "run_id": 41502970942,
+      "result": "PASS",
+      "backend": "171 passed",
+      "frontend": "PASS"
+    },
+    "release_readiness": {
+      "run_id": 41502970983,
+      "result": "PASS"
+    },
+    "security": {
+      "run_id": 41502970955,
+      "result": "PASS"
+    },
+    "codeql": {
+      "run_id": 41502970852,
+      "result": "PASS"
+    },
+    "other_affected_workflows": "ALL PASS on exact source"
+  },
+  "mobile": {
+    "repo": "AMASI-SA/amasi-mobile",
+    "pr": 312,
+    "head": "fa750d4e9feaff98310edf5b87e5ff9dd113989b",
+    "dedicated_delivery_ci": "PASS",
+    "generic_mobile_ci": "FAILED on unchanged supplier-service contract"
+  },
+  "limitations": [
+    "read-only Salla shipment spot-check received HTTP 504 upstream",
+    "live Talal profile and actual order/session data not read from Mezan database",
+    "no Android APK, OTA or production release was created",
+    "separate older PR 1691 retains city-based check; do not merge it over carrier-based policy without reconciliation"
+  ],
+  "production_changed": false,
+  "release_guard_lease_status": "not queried; no lease created",
+  "next_safe_action": "independent review, verify real carrier labels and Talal driver binding on an authorized read-only live check; after explicit release authorization prepare the governed v5 source/intent host handoff; backend must be deployed before mobile"
+}
