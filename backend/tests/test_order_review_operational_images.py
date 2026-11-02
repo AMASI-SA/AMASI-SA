@@ -143,3 +143,72 @@ def test_operational_image_is_in_virtual_assembly_card_without_touching_original
     assert pieces[0]["item_type"] == "internal_operational"
     assert pieces[0]["supplier_export"] is False
     assert pieces[0]["financial_item"] is False
+
+
+@pytest.mark.asyncio
+async def test_create_operational_item_uses_independent_photo_and_next_order_learns(monkeypatch):
+    """Actual review mutation must freeze a photo only in the new internal card."""
+    import order_review_routes as review
+    db = AsyncMongoMockClient()["operational-create-route"]
+    current_order = {"value": SimpleNamespace(order_number="1001", order_id="salla-1001")}
+    original = source()
+    original.name = "هودي شتوي"
+    original.custom_fields = []
+
+    async def get_order(_repository, *, user_id, order_number):
+        assert user_id == "merchant"
+        return current_order["value"]
+
+    async def identities(*_args, **_kwargs):
+        return [original]
+
+    async def allowed(*_args, **_kwargs):
+        return None
+
+    async def detail(_db, tenant, order):
+        row = await _db[review.WORKFLOWS].find_one(
+            {"user_id": tenant, "order_number": order.order_number}, {"_id": 0},
+        )
+        return {"revision": row["revision"], "operational_items": row["operational_items"]}
+
+    monkeypatch.setattr(review, "get_order", get_order)
+    monkeypatch.setattr(review, "_review_item_identities", identities)
+    monkeypatch.setattr(review, "enforce_stage_instructions", allowed)
+    monkeypatch.setattr(review, "_detail", detail)
+    router = review.make_order_review_router(db, lambda: None)
+    endpoint = next(
+        x.endpoint for x in router.routes
+        if x.path.endswith("/{order_number}/operational-items") and "POST" in x.methods
+    )
+
+    first = await endpoint(
+        "1001",
+        review.OperationalItemCreateRequest(
+            expected_revision=0, source_order_item_id="item-1",
+            name="تغليف بوكس", linked_spec_keys=["هل تريد تغليف بوكس؟"],
+            operational_image=image(),
+        ),
+        user={"id": "merchant", "role": "owner"},
+    )
+    first_card = first["operational_items"][0]
+    assert first_card["image_source"] == "operational_upload"
+    assert first_card["image_url"].startswith(IMAGE_PREFIX)
+    assert first_card["supplier_export"] is False
+    assert first_card["financial_item"] is False
+    assert await db[IMAGES].count_documents({"user_id": "merchant"}) == 1
+    assert await db["order_review_mezan_images"].count_documents({}) == 0
+    assert await db["product_option_image_preferences"].count_documents({}) == 0
+
+    current_order["value"] = SimpleNamespace(order_number="1002", order_id="salla-1002")
+    second = await endpoint(
+        "1002",
+        review.OperationalItemCreateRequest(
+            expected_revision=0, source_order_item_id="item-1",
+            name="تغليف بوكس", linked_spec_keys=["هل تريد تغليف بوكس؟"],
+        ),
+        user={"id": "merchant", "role": "owner"},
+    )
+    second_card = second["operational_items"][0]
+    assert second_card["image_url"] == first_card["image_url"]
+    assert second_card["image_source"] == "operational_learned"
+    assert await db[IMAGES].count_documents({"user_id": "merchant"}) == 1
