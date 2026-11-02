@@ -1151,6 +1151,29 @@ async def test_salla_label_only_selection_prices_bundle_financially_once(db, ros
 
 
 @pytest.mark.asyncio
+async def test_salla_real_value_ids_keep_existing_route_despite_changed_display_names(db):
+    """Financial label rescue cannot overrule genuine provider choice IDs."""
+    await _salla_name_only_fixture(db)
+    item = sale_line(1, name=True)
+    # Provider labels are display strings, not proof of a different choice
+    # once stable value IDs are present.
+    item["options_raw"][0]["option_name"] = "Legacy or translated rose field"
+    item["options_raw"][1]["option_name"] = "Legacy or translated embroidery field"
+    before = await database_records(db)
+    financial, blocked = {}, {}
+    intake = await fulfillment.capture_intake(
+        db, OWNER, [item], {}, reporting_costs=financial,
+        blocked_intakes=blocked, order_created_at=ORDER_CREATED_AT)
+    assert intake == {}
+    assert blocked == {"sale-line": "bundle_component_policy_unresolved"}
+    assert financial["sale-line"]["cost"]["line_total"] == 65
+    assert "financial_selection_recovery" not in financial["sale-line"]["bundle_snapshot"]
+    assert await database_records(db) == before
+    assert await db[stock.PLANS].count_documents({"user_id": OWNER}) == 0
+    assert await db[stock.UNITS].count_documents({"user_id": OWNER}) == 0
+
+
+@pytest.mark.asyncio
 async def test_salla_label_only_financial_proof_is_immutable_after_catalog_changes(db):
     await _salla_name_only_fixture(db)
     item = _salla_name_only_choice_line()
