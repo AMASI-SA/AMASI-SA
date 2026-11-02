@@ -222,13 +222,47 @@ async def test_readiness_port_reports_exact_identity_and_unopened_book(native):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mapping", [None, "legacy-employee-id"])
-async def test_employee_missing_or_different_financial_mapping_is_readiness_blocker(native, mapping):
+async def test_native_employee_id_is_reportable_without_historical_financial_alias(native, mapping):
     db, rows = native
     rows.append(leg("employee", "employee", "salary_payable", "credit", 20))
     await db.mezan_employees_v2.insert_one(dict(user_id="owner", id="employee", status="active",
                                                financial_entity_id=mapping))
     result = await reports.mz2_financial_position(db, owner="owner")
-    assert result["totals"] is None
-    assert result["readiness_blockers"][0]["reason"] == "onboarding_employee_financial_identity_dependency"
+    # Employee OS creates a native id without financial_entity_id. Native
+    # writers and reports share that exact id; a historical alias is not an FK.
+    assert result["status"] == "available", result
+    assert result["totals"] == {"total_assets": 100.0, "total_liabilities": 20.0, "net_position": 80.0}
+    assert result["liabilities"]["salaries_unpaid"] == 20.0
+    assert result["legacy_financial_data_included"] is False
+    trial = await reports.mz2_trial_balance(db, owner="owner")
+    assert {(row["entity_type"], row["entity_id"], row["sub_account"]): row["net"] for row in trial["items"]} == {
+        ("bank", "cash", "main"): 100.0, ("equity", "opening_balance_equity", "main"): -100.0,
+        ("employee", "employee", "salary_payable"): -20.0}
     readiness = await reports.mz2_report_readiness(db, owner="owner")
-    assert readiness["blockers"][0]["reason"] == "onboarding_employee_financial_identity_dependency"
+    assert readiness == {"applicable": True, "status": "available", "blockers": []}
+    # NativeOnly rejects every Legacy collection access in all of these calls.
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("record", [None,
+    {"user_id": "other-owner", "id": "employee", "status": "active"},
+    {"user_id": "owner", "id": "employee", "status": "active", "archived": True},
+    {"user_id": "owner", "id": "different-native-id", "status": "active", "financial_entity_id": "employee"},
+])
+async def test_missing_foreign_archived_or_alias_only_employee_blocks_reports(native, record):
+    db, rows = native
+    rows.append(leg("employee", "employee", "salary_payable", "credit", 20))
+    if record:
+        await db.mezan_employees_v2.insert_one(deepcopy(record))
+    blocker = {"entity_type": "employee", "entity_id": "employee", "sub_account": "salary_payable",
+               "status": "UNRESOLVED", "reason": "native_identity_missing"}
+    position = await reports.mz2_financial_position(db, owner="owner")
+    assert position["status"] == "not_ready"
+    assert position["totals"] is None
+    assert position["readiness_blockers"] == [blocker]
+    trial = await reports.mz2_trial_balance(db, owner="owner")
+    assert trial["status"] == "not_ready"
+    assert trial["items"] == []
+    assert trial["readiness_blockers"] == [blocker]
+    assert await reports.mz2_report_readiness(db, owner="owner") == {
+        "applicable": True, "status": "not_ready", "blockers": [blocker]}

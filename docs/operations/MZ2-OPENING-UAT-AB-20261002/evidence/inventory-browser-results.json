@@ -1,0 +1,25 @@
+{
+  "status": "PASS",
+  "checks": [
+    "auto-load",
+    "name/SKU/barcode search",
+    "catalog image",
+    "variant identity separation",
+    "calculation",
+    "optional location",
+    "components",
+    "Next/Previous/Refresh persistence",
+    "RTL desktop/mobile",
+    "no non-session writes"
+  ],
+  "errors": [],
+  "writes": [
+    "/api/accounting-module/onboarding/sessions",
+    "/api/accounting-module/onboarding/sessions/onboarding-34dfb59ed58f47f6f416de44e8a2350926ca329660044edd246395288f6e3812/inventory-draft",
+    "/api/accounting-module/onboarding/sessions/onboarding-34dfb59ed58f47f6f416de44e8a2350926ca329660044edd246395288f6e3812/inventory-draft"
+  ],
+  "proof": {
+    "non_session_collections_unchanged": true,
+    "database": "mz2_1131_d46de023c3534585bcdbf1dc5e0b482a"
+  }
+}

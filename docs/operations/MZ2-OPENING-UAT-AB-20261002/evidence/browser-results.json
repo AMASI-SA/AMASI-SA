@@ -1,0 +1,978 @@
+{
+  "results": [
+    {
+      "name": "UI create persists a new backend session; list/get use same ID",
+      "status": "PASS"
+    },
+    {
+      "name": "UI cutover save persists and reload restores it",
+      "status": "PASS"
+    },
+    {
+      "name": "section save / reload restores explicit zero",
+      "status": "PASS"
+    },
+    {
+      "name": "identical retry is idempotent; stale CAS returns 409",
+      "status": "PASS"
+    },
+    {
+      "name": "N/A requires reason and evidence and round-trips without inferred zero",
+      "status": "PASS"
+    },
+    {
+      "name": "UI provider/bank binding persists exact IDs",
+      "status": "PASS"
+    },
+    {
+      "name": "UI per-account inventory valuation round-trip excludes physical quantities",
+      "status": "PASS"
+    },
+    {
+      "name": "server preview contains bank mapping and per-account inventory reconciliation",
+      "status": "PASS"
+    },
+    {
+      "name": "review locks server session and UI edits",
+      "status": "PASS"
+    },
+    {
+      "name": "readiness exposes Smoke B hold and live-post false, not physical approval",
+      "status": "PASS"
+    },
+    {
+      "name": "all 16 stages navigate in reviewed session; mobile RTL has no horizontal overflow",
+      "status": "PASS"
+    },
+    {
+      "name": "zero unexpected browser errors or external requests; zero financial effects",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 4 HTTP employee salary, advance and custody persist independently",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 5 HTTP supplier payable and advance remain separate",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 6 HTTP external person creation, invalid request and exact identity readback",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 7 real Track F courier, rate and canonical bank binding setup with replay and CAS",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 7 full editor draft is rejected without changing native setup",
+      "status": "PASS"
+    },
+    {
+      "name": "stages 8 and 9 HTTP courier and driver receivable/payable balances persist without netting",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 12 HTTP confirmed advertising wallet and payable preserve exact separate identities",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 13 HTTP prepaid uses paid invoice calendar days, explicit selection and replay",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 14 HTTP typed obligations and taxes remain separate; unknown deposit rejected",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 15 combined domain preview and review preserve independent financial meanings",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 16 live approval remains locked and all non-setup domains unchanged",
+      "status": "PASS"
+    }
+  ],
+  "errors": [],
+  "blocked": [],
+  "writes": [
+    {
+      "url": "/api/accounting-module/onboarding/sessions",
+      "method": "POST",
+      "body": {
+        "cutover_at": "2026-10-01T00:00:00+03:00",
+        "cutover_timezone": "Asia/Riyadh",
+        "idempotency_key": "60d6474e-5284-4497-8c0a-93abb4fd8007"
+      }
+    },
+    {
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-9180adec2bc2eb8cf2ccbc5ae6d5107016afd1a4eb1d1ab4514c348a0b665188/cutover",
+      "method": "PUT",
+      "body": {
+        "cutover_at": "2026-10-01T00:01:00+03:00",
+        "cutover_timezone": "Asia/Riyadh",
+        "cutover_evidence_file_id": null,
+        "version": 1,
+        "idempotency_key": "a64f868d-6683-4ef2-89fa-53a50cecf99f"
+      }
+    },
+    {
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/banks_cash",
+      "method": "PUT",
+      "body": {
+        "status": "complete",
+        "reason": "Owner evidence: no applicable balance",
+        "evidence_file_id": "e9eef45a-8a94-43db-95d1-a9211c5b8423",
+        "data": {
+          "lines": [
+            {
+              "category": "financial_account",
+              "financial_account_id": "3bbe4489-ae81-440b-8777-2b2d5aa1e9a6",
+              "meaning": "zero",
+              "original_amount": "0.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "evidence_file_id": "e9eef45a-8a94-43db-95d1-a9211c5b8423"
+            }
+          ],
+          "provider_bindings": [],
+          "inventory_valuation": null,
+          "fee_policy_ids": [],
+          "prepaid_selection_ids": [],
+          "typed_fact_ids": []
+        },
+        "version": 11,
+        "idempotency_key": "416079cb-c836-4844-bf94-9b0dfccaea79"
+      }
+    },
+    {
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/suppliers",
+      "method": "PUT",
+      "body": {
+        "status": "not_applicable",
+        "reason": "Synthetic evidence confirms no suppliers",
+        "evidence_file_id": "72bcc77f-323d-4473-ad3a-c588d296bf50",
+        "data": {
+          "lines": [],
+          "provider_bindings": [],
+          "fee_policy_ids": [],
+          "prepaid_selection_ids": [],
+          "typed_fact_ids": []
+        },
+        "version": 12,
+        "idempotency_key": "7c5e932b-8a8f-4af6-aa3a-970eb0a5120e"
+      }
+    },
+    {
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/providers",
+      "method": "PUT",
+      "body": {
+        "status": "complete",
+        "reason": "",
+        "evidence_file_id": "6e0a1616-8d03-4f72-aad8-9e9d32d9c900",
+        "data": {
+          "lines": [
+            {
+              "category": "provider_receivable",
+              "entity_id": "tabby",
+              "original_amount": "17.00",
+              "meaning": "available_to_us",
+              "evidence_file_id": "6e0a1616-8d03-4f72-aad8-9e9d32d9c900"
+            }
+          ],
+          "provider_bindings": [
+            {
+              "provider": "tabby",
+              "bank_account_id": "3bbe4489-ae81-440b-8777-2b2d5aa1e9a6",
+              "evidence_file_id": "6e0a1616-8d03-4f72-aad8-9e9d32d9c900"
+            }
+          ],
+          "inventory_valuation": null,
+          "fee_policy_ids": [],
+          "prepaid_selection_ids": [],
+          "typed_fact_ids": []
+        },
+        "version": 13,
+        "idempotency_key": "e31851c3-ea3b-4332-ab51-fef85726a29c"
+      }
+    },
+    {
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/providers",
+      "method": "PUT",
+      "body": {
+        "status": "incomplete",
+        "reason": "",
+        "evidence_file_id": "6e0a1616-8d03-4f72-aad8-9e9d32d9c900",
+        "data": {
+          "lines": [
+            {
+              "category": "provider_receivable",
+              "entity_id": "tabby",
+              "original_amount": "17.00",
+              "meaning": "available_to_us",
+              "evidence_file_id": "6e0a1616-8d03-4f72-aad8-9e9d32d9c900"
+            }
+          ],
+          "provider_bindings": [
+            {
+              "provider": "tabby",
+              "bank_account_id": "3bbe4489-ae81-440b-8777-2b2d5aa1e9a6",
+              "evidence_file_id": "6e0a1616-8d03-4f72-aad8-9e9d32d9c900"
+            }
+          ],
+          "inventory_valuation": null,
+          "fee_policy_ids": [
+            "9a71041e-69d7-4eea-bd24-ab58da6f8c6d"
+          ],
+          "prepaid_selection_ids": [],
+          "typed_fact_ids": []
+        },
+        "version": 14,
+        "idempotency_key": "e0e79189-edda-4723-83df-07bde3554b9f"
+      }
+    },
+    {
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/providers",
+      "method": "PUT",
+      "body": {
+        "status": "complete",
+        "reason": "",
+        "evidence_file_id": "6e0a1616-8d03-4f72-aad8-9e9d32d9c900",
+        "data": {
+          "lines": [
+            {
+              "category": "provider_receivable",
+              "entity_id": "tabby",
+              "original_amount": "17.00",
+              "meaning": "available_to_us",
+              "evidence_file_id": "6e0a1616-8d03-4f72-aad8-9e9d32d9c900"
+            }
+          ],
+          "provider_bindings": [
+            {
+              "provider": "tabby",
+              "bank_account_id": "3bbe4489-ae81-440b-8777-2b2d5aa1e9a6",
+              "evidence_file_id": "6e0a1616-8d03-4f72-aad8-9e9d32d9c900"
+            }
+          ],
+          "inventory_valuation": null,
+          "fee_policy_ids": [
+            "9a71041e-69d7-4eea-bd24-ab58da6f8c6d"
+          ],
+          "prepaid_selection_ids": [],
+          "typed_fact_ids": []
+        },
+        "version": 15,
+        "idempotency_key": "916450e4-c968-44d5-9517-c28538e88082"
+      }
+    },
+    {
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/inventory",
+      "method": "PUT",
+      "body": {
+        "status": "complete",
+        "reason": "",
+        "evidence_file_id": "e994b061-83d8-4419-895d-2071ed822cf2",
+        "data": {
+          "lines": [
+            {
+              "category": "inventory_asset",
+              "entity_id": "inventory-a",
+              "original_amount": "70.00",
+              "meaning": "available_to_us",
+              "evidence_file_id": "e994b061-83d8-4419-895d-2071ed822cf2"
+            },
+            {
+              "category": "inventory_asset",
+              "entity_id": "inventory-b",
+              "original_amount": "30.00",
+              "meaning": "available_to_us",
+              "evidence_file_id": "e994b061-83d8-4419-895d-2071ed822cf2"
+            }
+          ],
+          "provider_bindings": [],
+          "inventory_valuation": {
+            "total_sar": "100.00",
+            "evidence_file_id": "e994b061-83d8-4419-895d-2071ed822cf2",
+            "manifest_hash": "90802c68e5e4cc25b80dc02cb37c266cde0a2b8c80fab6f068935f2aebb0f750",
+            "account_totals": {
+              "inventory-a": "70.00",
+              "inventory-b": "30.00"
+            }
+          },
+          "fee_policy_ids": [],
+          "prepaid_selection_ids": [],
+          "typed_fact_ids": []
+        },
+        "version": 16,
+        "idempotency_key": "57cbd117-e06c-4d0a-ac85-edfaac8fa2f4"
+      }
+    },
+    {
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/preview",
+      "method": "POST",
+      "body": {
+        "note": "Synthetic isolated A+B review",
+        "version": 17,
+        "idempotency_key": "d1c9760a-fd38-4bc3-8834-4e60078d77d1"
+      }
+    },
+    {
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/review",
+      "method": "POST",
+      "body": {
+        "note": "Synthetic isolated A+B review",
+        "version": 18,
+        "idempotency_key": "0f29f468-e706-433e-afea-296f577f0e3a"
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/payroll_obligations",
+      "method": "PUT",
+      "body": {
+        "version": 9,
+        "idempotency_key": "expanded-save-1",
+        "status": "complete",
+        "reason": "Synthetic stage acceptance",
+        "evidence_file_id": "dafc8f5a-b467-497c-9af5-e1e6f58a653c",
+        "data": {
+          "lines": [
+            {
+              "category": "employee_salary_payable",
+              "entity_id": "uat-employee",
+              "original_amount": "30.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "owed_by_us",
+              "evidence_file_id": "dafc8f5a-b467-497c-9af5-e1e6f58a653c"
+            },
+            {
+              "category": "employee_advance",
+              "entity_id": "uat-employee",
+              "original_amount": "10.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "available_to_us",
+              "evidence_file_id": "dafc8f5a-b467-497c-9af5-e1e6f58a653c"
+            },
+            {
+              "category": "employee_custody",
+              "entity_id": "uat-employee",
+              "original_amount": "5.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "available_to_us",
+              "evidence_file_id": "dafc8f5a-b467-497c-9af5-e1e6f58a653c"
+            }
+          ],
+          "provider_bindings": [],
+          "inventory_valuation": null,
+          "fee_policy_ids": [],
+          "prepaid_selection_ids": [],
+          "typed_fact_ids": []
+        }
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/suppliers",
+      "method": "PUT",
+      "body": {
+        "version": 10,
+        "idempotency_key": "expanded-save-2",
+        "status": "complete",
+        "reason": "Synthetic stage acceptance",
+        "evidence_file_id": "7eb18804-0972-498a-9eb9-e35d2af17991",
+        "data": {
+          "lines": [
+            {
+              "category": "supplier_payable",
+              "entity_id": "uat-supplier",
+              "original_amount": "25.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "owed_by_us",
+              "evidence_file_id": "7eb18804-0972-498a-9eb9-e35d2af17991"
+            },
+            {
+              "category": "supplier_advance",
+              "entity_id": "uat-supplier",
+              "original_amount": "10.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "available_to_us",
+              "evidence_file_id": "7eb18804-0972-498a-9eb9-e35d2af17991"
+            }
+          ],
+          "provider_bindings": [],
+          "inventory_valuation": null,
+          "fee_policy_ids": [],
+          "prepaid_selection_ids": [],
+          "typed_fact_ids": []
+        }
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/external-persons",
+      "method": "POST",
+      "body": {
+        "name": "",
+        "reference": "invalid"
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/external-persons",
+      "method": "POST",
+      "body": {
+        "name": "Synthetic UAT person",
+        "reference": "uat-person-proof",
+        "person_type": "person"
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/suppliers",
+      "method": "PUT",
+      "body": {
+        "version": 11,
+        "idempotency_key": "expanded-save-3",
+        "status": "complete",
+        "reason": "Synthetic stage acceptance",
+        "evidence_file_id": "7eb18804-0972-498a-9eb9-e35d2af17991",
+        "data": {
+          "lines": [
+            {
+              "category": "supplier_payable",
+              "entity_id": "uat-supplier",
+              "original_amount": "25.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "owed_by_us",
+              "evidence_file_id": "7eb18804-0972-498a-9eb9-e35d2af17991"
+            },
+            {
+              "category": "supplier_advance",
+              "entity_id": "uat-supplier",
+              "original_amount": "10.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "available_to_us",
+              "evidence_file_id": "7eb18804-0972-498a-9eb9-e35d2af17991"
+            },
+            {
+              "category": "customer_receivable",
+              "entity_id": "441c121b-0a4d-4eaa-b53b-dbd892574945",
+              "original_amount": "12.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "available_to_us",
+              "evidence_file_id": "7eb18804-0972-498a-9eb9-e35d2af17991"
+            }
+          ],
+          "provider_bindings": [],
+          "inventory_valuation": null,
+          "fee_policy_ids": [],
+          "prepaid_selection_ids": [],
+          "typed_fact_ids": []
+        }
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/shipping-v2/couriers",
+      "method": "POST",
+      "body": {
+        "confirmed": true,
+        "reason": "Synthetic signed courier terms",
+        "request_id": "uat-courier-0001",
+        "version": 0,
+        "courier_key": "uat-courier",
+        "name": "Synthetic UAT courier",
+        "salla_carrier_keys": [
+          "uat-source"
+        ]
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/shipping-v2/couriers",
+      "method": "POST",
+      "body": {
+        "confirmed": true,
+        "reason": "Synthetic signed courier terms",
+        "request_id": "uat-courier-0001",
+        "version": 0,
+        "courier_key": "uat-courier",
+        "name": "Synthetic UAT courier",
+        "salla_carrier_keys": [
+          "uat-source"
+        ]
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/shipping-v2/rates",
+      "method": "POST",
+      "body": {
+        "confirmed": true,
+        "reason": "Synthetic signed courier terms",
+        "request_id": "uat-rate-stale",
+        "version": 0,
+        "party_type": "courier",
+        "party_id": "uat-courier",
+        "context": "delivery",
+        "effective_from": "2020-01-01T00:00:00Z",
+        "currency": "SAR",
+        "delivery_fee": "10.00",
+        "cod_fixed_fee": "1.00",
+        "cod_percent": "2",
+        "vat_percent": "15",
+        "vat_included": true,
+        "vat_treatment": "gross_expense_no_input_vat",
+        "contract_reference": "signed-uat"
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/shipping-v2/rates",
+      "method": "POST",
+      "body": {
+        "confirmed": true,
+        "reason": "Synthetic signed courier terms",
+        "request_id": "uat-rate-0001",
+        "version": 1,
+        "party_type": "courier",
+        "party_id": "uat-courier",
+        "context": "delivery",
+        "effective_from": "2020-01-01T00:00:00Z",
+        "currency": "SAR",
+        "delivery_fee": "10.00",
+        "cod_fixed_fee": "1.00",
+        "cod_percent": "2",
+        "vat_percent": "15",
+        "vat_included": true,
+        "vat_treatment": "gross_expense_no_input_vat",
+        "contract_reference": "signed-uat"
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/shipping-v2/bindings",
+      "method": "POST",
+      "body": {
+        "confirmed": true,
+        "reason": "Synthetic signed courier terms",
+        "request_id": "uat-binding-0001",
+        "version": 2,
+        "party_type": "courier",
+        "party_id": "uat-courier",
+        "financial_account_id": "de126762-6104-4232-9e61-e1e02bf21e8b"
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/shipping-v2/rates",
+      "method": "POST",
+      "body": {
+        "confirmed": true,
+        "reason": "Synthetic unsupported editor contract",
+        "request_id": "uat-editor-unsupported",
+        "version": 3,
+        "party_type": "courier",
+        "party_id": "uat-courier",
+        "context": "delivery",
+        "effective_from": "2020-01-01T00:00:00Z",
+        "currency": "SAR",
+        "delivery_fee": "10.00",
+        "cod_fixed_fee": "1.00",
+        "cod_percent": "2",
+        "vat_percent": "15",
+        "vat_included": true,
+        "vat_treatment": "gross_expense_no_input_vat",
+        "contract_reference": "signed-uat",
+        "payment_mode": "prepaid",
+        "cod_fee_tiers": [
+          {
+            "min_amount": "0",
+            "max_amount": "",
+            "min_inclusive": true,
+            "max_inclusive": false,
+            "commission_percent": "0.02",
+            "fixed_fee": "1.00"
+          }
+        ],
+        "shipping_vat_percent": "15",
+        "commission_vat_percent": "5",
+        "shipping_cost_vat_inclusive": true,
+        "commission_vat_inclusive": false
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/couriers_cod",
+      "method": "PUT",
+      "body": {
+        "version": 12,
+        "idempotency_key": "expanded-save-4",
+        "status": "complete",
+        "reason": "Synthetic stage acceptance",
+        "evidence_file_id": "7ba9b895-7142-4add-886e-4e80a77f87c8",
+        "data": {
+          "lines": [
+            {
+              "category": "courier_cod_receivable",
+              "entity_id": "uat-courier",
+              "original_amount": "150.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "available_to_us",
+              "evidence_file_id": "7ba9b895-7142-4add-886e-4e80a77f87c8"
+            },
+            {
+              "category": "courier_payable",
+              "entity_id": "uat-courier",
+              "original_amount": "20.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "owed_by_us",
+              "evidence_file_id": "7ba9b895-7142-4add-886e-4e80a77f87c8"
+            },
+            {
+              "category": "store_driver_cod_receivable",
+              "entity_id": "uat-driver",
+              "original_amount": "100.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "available_to_us",
+              "evidence_file_id": "7ba9b895-7142-4add-886e-4e80a77f87c8"
+            },
+            {
+              "category": "store_driver_fee_payable",
+              "entity_id": "uat-driver",
+              "original_amount": "15.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "owed_by_us",
+              "evidence_file_id": "7ba9b895-7142-4add-886e-4e80a77f87c8"
+            }
+          ],
+          "provider_bindings": [],
+          "inventory_valuation": null,
+          "fee_policy_ids": [],
+          "prepaid_selection_ids": [],
+          "typed_fact_ids": []
+        }
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/providers",
+      "method": "PUT",
+      "body": {
+        "version": 13,
+        "idempotency_key": "expanded-save-5",
+        "status": "complete",
+        "reason": "Synthetic stage acceptance",
+        "evidence_file_id": "edc81720-26d6-441b-b2c1-5cbea8f60347",
+        "data": {
+          "lines": [
+            {
+              "category": "financial_account",
+              "financial_account_id": "uat-wallet",
+              "original_amount": "40.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "available_to_us",
+              "evidence_file_id": "edc81720-26d6-441b-b2c1-5cbea8f60347"
+            },
+            {
+              "category": "financial_account",
+              "financial_account_id": "uat-payable",
+              "original_amount": "15.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "owed_by_us",
+              "evidence_file_id": "edc81720-26d6-441b-b2c1-5cbea8f60347"
+            }
+          ],
+          "provider_bindings": [],
+          "inventory_valuation": null,
+          "fee_policy_ids": [],
+          "prepaid_selection_ids": [],
+          "typed_fact_ids": []
+        }
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/prepaid-selections",
+      "method": "POST",
+      "body": {
+        "obligation_id": "uat-subscription",
+        "invoice_id": "uat-invoice",
+        "cutover_date": "2026-10-01",
+        "currency": "SAR",
+        "evidence": "fd7e183a-89bd-4fb3-98b3-a32004aeee82"
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/prepaid-selections",
+      "method": "POST",
+      "body": {
+        "obligation_id": "uat-subscription",
+        "invoice_id": "uat-invoice",
+        "cutover_date": "2026-10-01",
+        "currency": "SAR",
+        "evidence": "fd7e183a-89bd-4fb3-98b3-a32004aeee82"
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/equity",
+      "method": "PUT",
+      "body": {
+        "version": 14,
+        "idempotency_key": "expanded-save-6",
+        "status": "complete",
+        "reason": "Synthetic stage acceptance",
+        "evidence_file_id": "fd7e183a-89bd-4fb3-98b3-a32004aeee82",
+        "data": {
+          "lines": [
+            {
+              "category": "prepaid_expense",
+              "entity_id": "0a3e6a0226019c1086fc415d133f6788f1815942376723fd0af5b64d20bd6d23",
+              "original_amount": "3250.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "available_to_us",
+              "evidence_file_id": "fd7e183a-89bd-4fb3-98b3-a32004aeee82"
+            }
+          ],
+          "provider_bindings": [],
+          "inventory_valuation": null,
+          "fee_policy_ids": [],
+          "prepaid_selection_ids": [
+            "0a3e6a0226019c1086fc415d133f6788f1815942376723fd0af5b64d20bd6d23"
+          ],
+          "typed_fact_ids": []
+        }
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/typed-facts",
+      "method": "POST",
+      "body": {
+        "category": "accrued_expense",
+        "display_name": "Synthetic accrued_expense",
+        "reference": "uat-accrued_expense",
+        "amount": "10.00",
+        "currency": "SAR",
+        "cutover_date": "2026-10-01",
+        "evidence": "fd7e183a-89bd-4fb3-98b3-a32004aeee82"
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/typed-facts",
+      "method": "POST",
+      "body": {
+        "category": "other_payable",
+        "display_name": "Synthetic other_payable",
+        "reference": "uat-other_payable",
+        "amount": "10.00",
+        "currency": "SAR",
+        "cutover_date": "2026-10-01",
+        "evidence": "fd7e183a-89bd-4fb3-98b3-a32004aeee82"
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/typed-facts",
+      "method": "POST",
+      "body": {
+        "category": "other_receivable",
+        "display_name": "Synthetic other_receivable",
+        "reference": "uat-other_receivable",
+        "amount": "10.00",
+        "currency": "SAR",
+        "cutover_date": "2026-10-01",
+        "evidence": "fd7e183a-89bd-4fb3-98b3-a32004aeee82"
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/typed-facts",
+      "method": "POST",
+      "body": {
+        "category": "sales_vat_payable",
+        "display_name": "Synthetic sales_vat_payable",
+        "reference": "uat-sales_vat_payable",
+        "amount": "10.00",
+        "currency": "SAR",
+        "cutover_date": "2026-10-01",
+        "evidence": "fd7e183a-89bd-4fb3-98b3-a32004aeee82"
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/typed-facts",
+      "method": "POST",
+      "body": {
+        "category": "input_vat",
+        "display_name": "Synthetic input_vat",
+        "reference": "uat-input_vat",
+        "amount": "10.00",
+        "currency": "SAR",
+        "cutover_date": "2026-10-01",
+        "evidence": "fd7e183a-89bd-4fb3-98b3-a32004aeee82"
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/typed-facts",
+      "method": "POST",
+      "body": {
+        "category": "deposit",
+        "display_name": "Unsupported",
+        "reference": "uat-deposit",
+        "amount": "10.00",
+        "currency": "SAR",
+        "cutover_date": "2026-10-01",
+        "evidence": "fd7e183a-89bd-4fb3-98b3-a32004aeee82"
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/equity",
+      "method": "PUT",
+      "body": {
+        "version": 15,
+        "idempotency_key": "expanded-save-7",
+        "status": "complete",
+        "reason": "Synthetic stage acceptance",
+        "evidence_file_id": "fd7e183a-89bd-4fb3-98b3-a32004aeee82",
+        "data": {
+          "lines": [
+            {
+              "category": "prepaid_expense",
+              "entity_id": "0a3e6a0226019c1086fc415d133f6788f1815942376723fd0af5b64d20bd6d23",
+              "original_amount": "3250.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "available_to_us",
+              "evidence_file_id": "fd7e183a-89bd-4fb3-98b3-a32004aeee82"
+            },
+            {
+              "category": "accrued_expense",
+              "entity_id": "f6e3aabe91f5b89a2c94f3a4ba9d1d2bf246e55b7424be372f187920116e8f1a",
+              "original_amount": "10.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "owed_by_us",
+              "evidence_file_id": "fd7e183a-89bd-4fb3-98b3-a32004aeee82"
+            },
+            {
+              "category": "other_payable",
+              "entity_id": "23f252fda1ad2934f59ecdf7c85effad9ce4c6e94d6835a83df93d1cb8bcb44e",
+              "original_amount": "10.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "owed_by_us",
+              "evidence_file_id": "fd7e183a-89bd-4fb3-98b3-a32004aeee82"
+            },
+            {
+              "category": "other_receivable",
+              "entity_id": "a89f98371dd1ad1902eb37e56bb61c6ef58148463beb1dcb86f13a7f0c07b46b",
+              "original_amount": "10.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "available_to_us",
+              "evidence_file_id": "fd7e183a-89bd-4fb3-98b3-a32004aeee82"
+            },
+            {
+              "category": "sales_vat_payable",
+              "entity_id": "34ccb481d8964a2f0dc58036aa6678f00845efa52d410cf9f8e54ae3a12c9299",
+              "original_amount": "10.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "owed_by_us",
+              "evidence_file_id": "fd7e183a-89bd-4fb3-98b3-a32004aeee82"
+            },
+            {
+              "category": "input_vat",
+              "entity_id": "60a0224cfe964878d6d6acfd730a604623b0780a7b2beea373312899fba3a21d",
+              "original_amount": "10.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "meaning": "available_to_us",
+              "evidence_file_id": "fd7e183a-89bd-4fb3-98b3-a32004aeee82"
+            }
+          ],
+          "provider_bindings": [],
+          "inventory_valuation": null,
+          "fee_policy_ids": [],
+          "prepaid_selection_ids": [
+            "0a3e6a0226019c1086fc415d133f6788f1815942376723fd0af5b64d20bd6d23"
+          ],
+          "typed_fact_ids": [
+            "f6e3aabe91f5b89a2c94f3a4ba9d1d2bf246e55b7424be372f187920116e8f1a",
+            "23f252fda1ad2934f59ecdf7c85effad9ce4c6e94d6835a83df93d1cb8bcb44e",
+            "a89f98371dd1ad1902eb37e56bb61c6ef58148463beb1dcb86f13a7f0c07b46b",
+            "34ccb481d8964a2f0dc58036aa6678f00845efa52d410cf9f8e54ae3a12c9299",
+            "60a0224cfe964878d6d6acfd730a604623b0780a7b2beea373312899fba3a21d"
+          ]
+        }
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/preview",
+      "method": "POST",
+      "body": {
+        "version": 16,
+        "idempotency_key": "expanded-preview-8",
+        "note": "Synthetic stage acceptance"
+      }
+    },
+    {
+      "url": "/expanded/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/review",
+      "method": "POST",
+      "body": {
+        "version": 17,
+        "idempotency_key": "expanded-review-9",
+        "note": "Synthetic stage acceptance"
+      }
+    }
+  ],
+  "expected_owner_only_read_denials": [
+    {
+      "status": 403,
+      "body": {
+        "detail": {
+          "code": "owner_required"
+        }
+      }
+    },
+    {
+      "status": 403,
+      "body": {
+        "detail": {
+          "code": "owner_required"
+        }
+      }
+    },
+    {
+      "status": 403,
+      "body": {
+        "detail": {
+          "code": "owner_required"
+        }
+      }
+    },
+    {
+      "status": 403,
+      "body": {
+        "detail": {
+          "code": "owner_required"
+        }
+      }
+    },
+    {
+      "status": 403,
+      "body": {
+        "detail": {
+          "code": "owner_required"
+        }
+      }
+    }
+  ],
+  "passed": 23,
+  "business_uat": "BLOCKED",
+  "acceptance_limits": {
+    "stage_7_full_courier_draft": "C_NEW_SCOPE_REQUIRED",
+    "stage_10_physical_approval": "NOT_PERFORMED",
+    "stage_16_live_approval": "BLOCKED_BY_ENVIRONMENT",
+    "production_smoke_b": "BLOCKED_BY_ENVIRONMENT"
+  }
+}

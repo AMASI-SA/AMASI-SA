@@ -1,0 +1,23 @@
+{
+  "scope": "Actions performed by this task; not an assertion about unrelated production actors",
+  "production_git_ref": "78dcf31af73581ceba3677c464c657a0b9b2c4fc",
+  "production_financial_writes": 0,
+  "production_mutation_requests": 0,
+  "loopback_only": true,
+  "database": "disposable UUID fixture databases on 127.0.0.1:27148",
+  "browser_external_requests": [],
+  "opening": "NO",
+  "initialization": "NO",
+  "activation": "NO",
+  "deploy": "NO",
+  "protected_files_unchanged_from_deployed_base": [
+    "backend/accounting_financial_accounts.py",
+    "backend/accounting_write_control.py",
+    "backend/store_delivery_cash_evidence.py",
+    "release/release-intent-v5.json",
+    "scripts/production_release_guard.py"
+  ],
+  "write_control": "UNCHANGED",
+  "financial_go_live": "BLOCKED",
+  "live_uat": "UNVERIFIED"
+}

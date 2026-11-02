@@ -7,7 +7,7 @@ const origin = process.env.MZ2_AB_ORIGIN;
 if (!origin || new URL(origin).hostname !== '127.0.0.1') throw new Error('Loopback origin required');
 const out = process.env.MZ2_AB_OUTPUT;
 fs.mkdirSync(out, {recursive:true});
-const results = [], errors = [], blocked = [], writes = [];
+const results = [], errors = [], blocked = [], writes = [], permissionErrors = [], permissionResponses = [];
 const base = '/api/accounting-module/onboarding';
 async function api(url, method='GET', body) {
   const response = await fetch(origin + url, {method,headers:{'Content-Type':'application/json'},...(body ? {body:JSON.stringify(body)} : {})});
@@ -18,7 +18,17 @@ async function check(name, fn) { await fn(); results.push({name,status:'PASS'});
   const browser = await chromium.launch({headless:true, ...(process.env.MZ2_BROWSER_CHANNEL ? {channel:process.env.MZ2_BROWSER_CHANNEL} : {})});
   const page = await browser.newPage({viewport:{width:1440,height:1100}});
   page.on('pageerror', error=>errors.push(error.message));
-  page.on('console', message=>{if(message.type()==='error')errors.push(message.text());});
+  // The new recurring-source panel must respect the existing owner-only GET.
+  // Keep the synthetic employee as an employee; verify this exact denial rather
+  // than swapping its actor or relaxing zero-unexpected-errors below.
+  page.on('console', message=>{
+    if(message.type()!=='error')return;
+    if(message.location().url === origin+'/api/recurring-obligations' && /status of 403/.test(message.text())) permissionErrors.push(message.text());
+    else errors.push(message.text());
+  });
+  page.on('response', response=>{
+    if(response.url()===origin+'/api/recurring-obligations') permissionResponses.push(response.json().then(body=>({status:response.status(),body})));
+  });
   page.on('request', request=>{if(!['GET','HEAD'].includes(request.method()))writes.push({url:new URL(request.url()).pathname,method:request.method(),body:request.postDataJSON()});});
   await page.route('**/*', route=>{if(new URL(route.request().url()).origin===origin)return route.continue();blocked.push(route.request().url());return route.abort();});
   const button = name=>page.getByRole('button',{name,exact:true});
@@ -94,11 +104,15 @@ async function check(name, fn) { await fn(); results.push({name,status:'PASS'});
     });
     await check('readiness exposes Smoke B hold and live-post false, not physical approval',async()=>{
       await button('فحص جاهزية المصدر').click();await page.getByTestId('server-readiness').waitFor();
-      const text=await page.getByTestId('server-readiness').innerText();assert(text.includes('Smoke B: BLOCKED_BY_ENVIRONMENT'));assert(text.includes('ready_for_live_post=false'));assert(text.includes('اعتماد الكميات الفعلية: غير مثبت'));
+      const text=await page.getByTestId('server-readiness').innerText();assert(text.includes('Smoke B: إثبات بيئة التشغيل المطلوبة غير مكتمل'));assert(text.includes('جاهزية الترحيل الفعلي: غير متاحة'));assert(!text.includes('BLOCKED_BY_ENVIRONMENT'));assert(text.includes('اعتماد الكميات الفعلية: غير مثبت'));
+      for(const reason of ['التشغيل المالي V2 غير مفعّل','لم يُثبت تنفيذ الافتتاح','إثبات Smoke B لبيئة الإنتاج مطلوب','تفويض المالك الصريح'])assert(text.includes(reason));assert(!text.includes('تعذر إكمال الطلب'));
       const ready=(await api(base+'/sessions/'+session.id+'/readiness')).data;assert.equal(ready.ready_for_live_post,false);assert.equal(ready.p02_activation_allowed,false);assert.equal(ready.g47_activation_allowed,false);
     });
     await check('all 16 stages navigate in reviewed session; mobile RTL has no horizontal overflow',async()=>{
-      for(let index=0;index<16;index++)await stage(index);
+      for(let index=0;index<16;index++) {
+        await stage(index);
+        if ([1,8,11,14].includes(index)) await page.screenshot({path:path.join(out,`stage-${index+1}-desktop.png`),fullPage:true});
+      }
       assert((await page.locator('main').getAttribute('dir'))==='rtl');
       await page.screenshot({path:path.join(out,'connected-reviewed-desktop.png'),fullPage:true});
       await page.setViewportSize({width:390,height:844});
@@ -106,6 +120,11 @@ async function check(name, fn) { await fn(); results.push({name,status:'PASS'});
       await page.screenshot({path:path.join(out,'connected-reviewed-mobile.png'),fullPage:true});
     });
     await check('zero unexpected browser errors or external requests; zero financial effects',async()=>{
+      await stage(12);
+      await page.getByRole('region',{name:'الالتزامات التشغيلية القائمة',exact:true}).getByRole('alert').filter({hasText:'صلاحية قراءة هذا المصدر غير متاحة.'}).waitFor();
+      const denials=await Promise.all(permissionResponses);
+      assert(denials.length>0); assert(permissionErrors.length>0);
+      for(const denial of denials) {assert.equal(denial.status,403);assert.equal(denial.body.detail.code,'owner_required');}
       assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
       assert(!writes.some(w=>/\/(post|transition|activate|approve|opening-draft)(\/|$)/.test(w.url)));
       assert.equal((await api('/__test/proof')).data.non_session_collections_unchanged,true);
@@ -240,7 +259,7 @@ async function check(name, fn) { await fn(); results.push({name,status:'PASS'});
       assert.equal((await api('/expanded/__test/proof')).data.non_setup_collections_unchanged,true);
     });
   } finally {
-    fs.writeFileSync(path.join(out,'browser-results.json'),JSON.stringify({results,errors,blocked,writes,passed:results.length, business_uat:'BLOCKED', acceptance_limits:{stage_7_full_courier_draft:'C_NEW_SCOPE_REQUIRED', stage_10_physical_approval:'NOT_PERFORMED', stage_16_live_approval:'BLOCKED_BY_ENVIRONMENT', production_smoke_b:'BLOCKED_BY_ENVIRONMENT'}},null,2));
+    fs.writeFileSync(path.join(out,'browser-results.json'),JSON.stringify({results,errors,blocked,writes,expected_owner_only_read_denials:await Promise.all(permissionResponses),passed:results.length, business_uat:'BLOCKED', acceptance_limits:{stage_7_full_courier_draft:'C_NEW_SCOPE_REQUIRED', stage_10_physical_approval:'NOT_PERFORMED', stage_16_live_approval:'BLOCKED_BY_ENVIRONMENT', production_smoke_b:'BLOCKED_BY_ENVIRONMENT'}},null,2));
     await browser.close();
   }
 })().catch(error=>{console.error(error);process.exitCode=1;});
