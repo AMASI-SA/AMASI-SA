@@ -47,11 +47,21 @@
     "management_ui": {
       "repo": "AMASI-SA/amasi-mobile",
       "pr": 312,
-      "source_sha": "8251338665c5e23b3fb28f279994c3b94cd92b75",
-      "state": "DRAFT; generic frontend CI includes pre-existing supplier policy check",
+      "source_sha": "f389c591865f9b695d8911d1689baa4521814d41",
+      "state": "READY_FOR_REVIEW, not merged; independent supplemental CI successful, generic CI red",
       "base": "main",
       "base_sha": "f2d7ed60fb569dd226c6b60e16538064c368f822",
-      "ci_run": 41507736354
+      "ci_run": 41507736354,
+      "ci_focused": {
+        "run_id": 41511732507,
+        "status": "PASS",
+        "tests": "project TypeScript, courier selector/paging contract, isolated write permissions, targeted ESLint"
+      },
+      "ci_generic": {
+        "run_id": 41511732277,
+        "status": "FAILED",
+        "cause": "unchanged supplier-invoice-service-policy check; not bypassed"
+      }
     }
   },
   "limitations": [
@@ -62,7 +72,7 @@
   ],
   "production_changed": false,
   "release_guard_lease_status": "not queried; no lease created",
-  "next_safe_action": "independent review, verify real carrier labels and Talal driver binding on an authorized read-only live check; after explicit release authorization prepare the governed v5 source/intent host handoff; backend must be deployed before mobile",
+  "next_safe_action": "Complete independent review and resolve supplier policy in separately scoped task without changing historical services. On authorized Emergent host: verify v5 lease status and make A/B release; deploy and run 3-probe verify; only then link Talal and update native clients. Do not merge source A alone or run app distribution ahead of backend.",
   "split_reason": "Original mobile PR312 mixed delivery-app and courier-management UI. Split to PR312 UI-only and PR313 app-only so dedicated Android CI is independent of unrelated supplier invoice policies.",
   "pending": [
     "Governed v5 A/B host release (not available from GitHub connector)",
@@ -70,5 +80,16 @@
     "Backend deploy and 3-probe verify before mobile distribution",
     "Mobile management generic CI on unchanged supplier-service contract"
   ],
-  "salla_read_status": "Read-only shipping list returned 504 Gateway Timeout twice; no live shipping sample validated"
+  "salla_read_status": "Read-only shipping list returned 504 Gateway Timeout twice; no live shipping sample validated",
+  "release_state": {
+    "backend_pr": 1693,
+    "backend_ci_all_12_pass": true,
+    "mobile_selector_pr": 312,
+    "mobile_selector_ci": 41511732507,
+    "mobile_app_pr": 313,
+    "mobile_app_ci": 41506868020,
+    "production_merged": false,
+    "production_published": false,
+    "salla_live_read": "504"
+  }
 }
