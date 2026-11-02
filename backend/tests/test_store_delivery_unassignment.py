@@ -244,16 +244,36 @@ async def test_in_transit_can_unassign_only_after_confirmed_physical_return_and_
         stored = await db["store_delivery_driver_receive_sessions"].find_one({"id": "session-1"})
         assert stored["accepted_count"] == 1 and stored["collection_total"] == 110
 
-        # A second driver can claim via existing carrier-specific handover after
-        # an operator starts a new session; no new customer order is needed.
+        # Actual handover API must accept the SAME canonical order for a new
+        # driver after the old physical custody is returned, not a synthetic
+        # direct database insertion that would mask a workflow blocker.
         from store_courier_domain import store_courier_assignment_blocker
+        from store_delivery_handover_routes import (
+            SessionCreate, ScanIn, create_session_service, scan_shipment_service,
+            confirm_session_service,
+        )
         assert store_courier_assignment_blocker(workflow) is None
-        await db[ASSIGNMENTS].insert_one({
-            "id": "assignment-B", "user_id": "merchant", "driver_id": "driver-J",
-            "order_id": "salla-101", "order_number": "101", "active": True,
-            "status": "assigned", "delivery_fee_snapshot": 25,
-            "reassigned_from_unassignment_id": "assignment-A",
+        await db[ORDERS].update_one(
+            {"order_number": "101"}, {"$set": {"shipping_company": "مندوب الرياض"}},
+        )
+        await db["store_drivers"].insert_one({
+            "user_id": "merchant", "id": "driver-J", "name": "مندوب جديد",
+            "status": "active", "shipping_company": "مندوب الرياض",
+            "coverage_mode": "shipping_company", "delivery_fee": 25.0,
         })
+        session = await create_session_service(
+            db, actor=ACTOR, user_id="merchant",
+            payload=SessionCreate(driver_id="driver-J"),
+        )
+        scanned = await scan_shipment_service(
+            db, actor=ACTOR, user_id="merchant",
+            session_id=session["id"], payload=ScanIn(barcode="101"),
+        )
+        assert scanned["accepted"] is True, scanned
+        confirmation = await confirm_session_service(
+            db, actor=ACTOR, user_id="merchant", session_id=session["id"],
+        )
+        assert confirmation["assigned_count"] == 1
         assert await db[ASSIGNMENTS].count_documents(
             {"order_id": "salla-101", "active": True, "driver_id": "driver-J"},
         ) == 1
