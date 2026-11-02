@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bank,
   Barcode,
@@ -56,9 +56,10 @@ export default function AmasiDeliveryApp() {
   const [reminders, setReminders] = useState([]);
   const [barcode, setBarcode] = useState("");
   const [selected, setSelected] = useState(null);
-  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [paymentAssignment, setPaymentAssignment] = useState(null);
   const [resubmitOpen, setResubmitOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const refreshRequest = useRef(0);
 
   const instructionByOrder = useMemo(() => {
     const map = new Map();
@@ -70,6 +71,7 @@ export default function AmasiDeliveryApp() {
   }, [instructions]);
 
   const refresh = useCallback(async ({ silent = false } = {}) => {
+    const request = ++refreshRequest.current;
     if (!silent) setBusy(true);
     try {
       const [meRes, deliveryRes, summaryRes, instructionsRes, banksRes] = await Promise.all([
@@ -79,6 +81,7 @@ export default function AmasiDeliveryApp() {
         api.get("/store-delivery/instructions/driver/me"),
         api.get("/store-delivery/app/bank-accounts"),
       ]);
+      if (request !== refreshRequest.current) return;
       setDriver(meRes.data || null);
       setDeliveries(deliveryRes.data?.items || []);
       setSummary(summaryRes.data || {});
@@ -86,10 +89,10 @@ export default function AmasiDeliveryApp() {
       setBanks(banksRes.data?.items || []);
       setSelected((current) => {
         if (!current?.id) return current;
-        return (deliveryRes.data?.items || []).find((row) => row.id === current.id) || current;
+        return (deliveryRes.data?.items || []).find((row) => row.id === current.id) || null;
       });
     } catch (error) {
-      if (!silent) toast.error(error?.response?.data?.detail?.code || "تعذر تحميل تواصيلك");
+      if (!silent && request === refreshRequest.current) toast.error(error?.response?.data?.detail?.code || "تعذر تحميل تواصيلك");
     } finally {
       if (!silent) setBusy(false);
     }
@@ -113,7 +116,7 @@ export default function AmasiDeliveryApp() {
       refresh({ silent: true });
       pollReminders();
     }, 60_000);
-    return () => window.clearInterval(interval);
+    return () => { ++refreshRequest.current; window.clearInterval(interval); };
   }, [refresh, pollReminders]);
 
   const selectByBarcode = useCallback((value) => {
@@ -168,6 +171,7 @@ export default function AmasiDeliveryApp() {
   }
 
   const selectedInstruction = selected ? instructionByOrder.get(selected.order_id) : null;
+  const currentPaymentAssignment = paymentAssignment && deliveries.find(row => row.id === paymentAssignment.id);
 
   return (
     <main className="min-h-screen bg-slate-50 pb-24" dir="rtl">
@@ -203,7 +207,7 @@ export default function AmasiDeliveryApp() {
                 <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm font-bold">الحالة: {deliveryStatusLabel(selected.status)}</div>
                 {selected.status === "delivered" && <LateDeliveryEvidence key={selected.id} assignment={selected} />}
                 {selected.payment_review_status === "rejected" && <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm font-black text-rose-900">الإيصال مرفوض: {selected.payment_review_note || "راجع المحاسب"}<button onClick={() => setResubmitOpen(true)} className="mt-3 block w-full rounded-xl bg-white px-3 py-2">رفع إيصال بديل</button></div>}
-                <div className="mt-4 grid gap-2 sm:grid-cols-2"><button disabled={busy || selected.status !== "assigned"} onClick={setOutForDelivery} className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 font-black text-amber-900 disabled:opacity-40"><Clock className="ml-1 inline" />جاري التوصيل</button><button disabled={busy || selected.status !== "out_for_delivery" || selected.outstanding_amount_available === false} onClick={() => setPaymentOpen(true)} className="rounded-2xl bg-emerald-700 px-4 py-3 font-black text-white disabled:opacity-40"><CheckCircle className="ml-1 inline" />تم التوصيل</button></div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2"><button disabled={busy || selected.status !== "assigned"} onClick={setOutForDelivery} className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 font-black text-amber-900 disabled:opacity-40"><Clock className="ml-1 inline" />جاري التوصيل</button><button disabled={busy || selected.status !== "out_for_delivery" || selected.outstanding_amount_available === false} onClick={() => setPaymentAssignment(selected)} className="rounded-2xl bg-emerald-700 px-4 py-3 font-black text-white disabled:opacity-40"><CheckCircle className="ml-1 inline" />تم التوصيل</button></div>
               </section>
             )}
 
@@ -217,14 +221,13 @@ export default function AmasiDeliveryApp() {
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t bg-white p-3"><div className="mx-auto grid max-w-xl grid-cols-2 gap-2"><button onClick={() => setTab("deliveries")} className={`rounded-2xl px-4 py-3 font-black ${tab === "deliveries" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-700"}`}>تواصيلي</button><button onClick={() => setTab("accounts")} className={`rounded-2xl px-4 py-3 font-black ${tab === "accounts" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-700"}`}>حساباتي</button></div></nav>
 
-      {paymentOpen && selected && <DeliveryPaymentModal assignment={selected} banks={banks} busy={busy} setBusy={setBusy} onClose={() => setPaymentOpen(false)} onSaved={async (result) => { setPaymentOpen(false); setSelected(result); await refresh({ silent: true }); }} />}
+      {paymentAssignment && <DeliveryPaymentModal assignment={currentPaymentAssignment || paymentAssignment} isCurrent={currentPaymentAssignment?.status === "out_for_delivery"} banks={banks} busy={busy} setBusy={setBusy} onClose={() => setPaymentAssignment(null)} onSaved={async (result) => { setPaymentAssignment(null); setSelected(result); await refresh({ silent: true }); }} />}
       {resubmitOpen && selected && <ResubmitModal assignment={selected} banks={banks} busy={busy} setBusy={setBusy} onClose={() => setResubmitOpen(false)} onSaved={async () => { setResubmitOpen(false); await refresh({ silent: true }); }} />}
     </main>
   );
 }
 
-export function DeliveryPaymentModal({ assignment, banks, onClose, onSaved, busy, setBusy }) {
-  const amount = Number(assignment.outstanding_amount || 0);
+export function DeliveryPaymentModal({ assignment, isCurrent = true, banks, onClose, onSaved, busy, setBusy }) {
   const [method, setMethod] = useState("");
   const [receiptFile, setReceiptFile] = useState(null);
   const [proofFile, setProofFile] = useState(null);
@@ -233,7 +236,16 @@ export function DeliveryPaymentModal({ assignment, banks, onClose, onSaved, busy
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(null);
+  const pendingSource = useRef(null);
+  const currentEligibility = useRef(isCurrent);
+  currentEligibility.current = isCurrent;
+  const amount = Number((pending ? pendingSource.current : assignment)?.outstanding_amount || 0);
   const locked = busy || Boolean(pending);
+  useEffect(() => {
+    // An unresolved write keeps its exact payload/proof available for recovery.
+    // An untouched form cannot submit a delivery removed by a current refresh.
+    if (!isCurrent && !pending && !busy) onClose();
+  }, [isCurrent, pending, busy, onClose]);
   useEffect(() => {
     if (!pending) return undefined;
     const warn = event => { event.preventDefault(); event.returnValue = ""; };
@@ -246,6 +258,7 @@ export function DeliveryPaymentModal({ assignment, banks, onClose, onSaved, busy
   async function submit(event) {
     event.preventDefault();
     setError("");
+    if (!currentEligibility.current && !pending) return;
     if (busy) return;
     if (!pending) {
     if (amount > 0 && !method) return setError("حدد طريقة استلام المبلغ");
@@ -269,6 +282,7 @@ export function DeliveryPaymentModal({ assignment, banks, onClose, onSaved, busy
         receiptReference = uploaded.receipt_reference;
         if (!receiptReference) throw new Error("receipt_reference_missing");
       }
+      if (!currentEligibility.current) return;
       payload = {
         barcode: assignment.barcode || assignment.order_number || assignment.order_id,
         target_status: "delivered",
@@ -278,6 +292,7 @@ export function DeliveryPaymentModal({ assignment, banks, onClose, onSaved, busy
         bank_account_id: method === "bank_transfer" ? bankId : null,
         ...(isCash ? { physical_cash_amount: actualCash, physical_cash_confirmed: true } : {}),
       };
+      pendingSource.current = assignment;
       setPending(payload);
       }
       const response = await api.post("/store-delivery/app/deliveries/status", payload);
@@ -285,7 +300,9 @@ export function DeliveryPaymentModal({ assignment, banks, onClose, onSaved, busy
       toast.success("تم تسجيل التوصيل وبيانات التحصيل");
       await onSaved(response.data);
     } catch (failure) {
-      if (failure?.response?.status >= 400 && failure.response.status < 500) setPending(null);
+      const status = failure?.response?.status;
+      // A rejected retry does not establish the earlier uncertain write's result.
+      if (!pending && status >= 400 && status < 500 && status !== 408) setPending(null);
       setError(failure?.response?.data?.detail?.code || "تعذر إكمال التوصيل؛ تحقق من الحالة قبل إعادة المحاولة");
     } finally {
       setBusy(false);
