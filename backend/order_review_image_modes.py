@@ -157,6 +157,8 @@ class MezanImageUploadRequest(BaseModel):
 def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
     router = APIRouter()
     router.include_router(base.make_order_review_router(db, current_user))
+    from order_review_operational_images import make_order_review_operational_image_router
+    router.include_router(make_order_review_operational_image_router(db, current_user))
     repository = MongoOrderRepository(db)
 
     async def resolve_item(order_number: str, order_item_id: str, user: dict) -> tuple[str, str, Any, Any]:

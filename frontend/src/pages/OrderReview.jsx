@@ -9,6 +9,9 @@ import { toast } from "sonner";
 import {
     completeOrderReview,
     createOrderReviewOperationalItem,
+    uploadOrderReviewOperationalItemImage,
+    readOperationalImageFile,
+    fetchOperationalImageBlob,
     getOrderReview,
     listPendingOrderReviews,
     unlinkOrderReviewOperationalItem,
@@ -391,9 +394,49 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
 }
 
 
+
+function OperationalItemImage({ url }) {
+    const [objectUrl, setObjectUrl] = useState("");
+    useEffect(() => {
+        if (!url) { setObjectUrl(""); return; }
+        let active = true;
+        let created = "";
+        fetchOperationalImageBlob(url).then((imageUrl) => {
+            if (active) { created = imageUrl; setObjectUrl(imageUrl); }
+            else URL.revokeObjectURL(imageUrl);
+        }).catch(() => { if (active) setObjectUrl(""); });
+        return () => {
+            active = false;
+            if (created) URL.revokeObjectURL(created);
+        };
+    }, [url]);
+    return objectUrl
+        ? <img src={objectUrl} alt="صورة المنتج التشغيلي" className="h-36 w-full rounded-xl border border-amber-200 bg-white object-contain" />
+        : <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-amber-200 bg-white text-xs text-slate-400">{url ? "تعذّر عرض صورة المنتج التشغيلي" : "لم تُضف صورة للمنتج التشغيلي"}</div>;
+}
+
 function OperationalItemCard({ item, workflowRevision, orderNumber, onChanged }) {
     const [busy, setBusy] = useState(false);
     const statusLabel = "بانتظار التجميع والعنونة";
+    const replaceOperationalImage = async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+        setBusy(true);
+        try {
+            const operationalImage = await readOperationalImageFile(file);
+            const next = await uploadOrderReviewOperationalItemImage(orderNumber, item.operational_item_id, {
+                expected_revision: workflowRevision,
+                operational_image: operationalImage,
+            });
+            onChanged(next);
+            toast.success("حُفظت الصورة التشغيلية بشكل مستقل عن صور المنتج.");
+        } catch (error) {
+            toast.error(error.message || "تعذّر حفظ الصورة التشغيلية.");
+        } finally {
+            setBusy(false);
+        }
+    };
     const rename = async () => {
         const nextName = window.prompt("اسم المنتج التشغيلي", item.name || "");
         if (!nextName || nextName.trim() === item.name) return;
@@ -435,6 +478,9 @@ function OperationalItemCard({ item, workflowRevision, orderNumber, onChanged })
                     </div>
                     <span className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-amber-800">{statusLabel}</span>
                 </div>
+                <div className="mt-4">
+                    <OperationalItemImage url={item.image_url} />
+                </div>
                 <div className="mt-4 grid gap-2">
                     {(item.linked_specs || []).map((spec) => (
                         <div key={`${spec.key}:${spec.value}`} className="rounded-xl bg-white px-3 py-2 text-sm">
@@ -447,6 +493,10 @@ function OperationalItemCard({ item, workflowRevision, orderNumber, onChanged })
                     يظهر داخل ميزان فقط، ولا يُرسل إلى سلة أو قيود أو ملف المورد. تُسجل جاهزيته من صفحة التجميع والعنونة فقط، ويمنع طباعة الشحنة حتى يصبح جاهزًا.
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
+                    <label className={`inline-flex cursor-pointer items-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-extrabold text-amber-800 ${busy ? "pointer-events-none opacity-50" : ""}`}>
+                        {item.image_url ? "تغيير الصورة التشغيلية" : "إضافة صورة المنتج التشغيلي"}
+                        <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={busy} onChange={replaceOperationalImage} />
+                    </label>
                     <button disabled={busy} onClick={rename} className="rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-extrabold text-violet-800 disabled:opacity-50">تعديل الاسم</button>
                     <button disabled={busy} onClick={unlink} data-testid="order-review-operational-item-unlink" className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-extrabold text-rose-700 disabled:opacity-50">إلغاء الربط وإرجاع القيم</button>
                 </div>
@@ -467,6 +517,7 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
     const [operationalDialog, setOperationalDialog] = useState(null);
     const [operationalName, setOperationalName] = useState("كرت إهداء");
     const [linkedSpecKeys, setLinkedSpecKeys] = useState([]);
+    const [operationalImageFile, setOperationalImageFile] = useState(null);
     const [creatingOperational, setCreatingOperational] = useState(false);
 
     const load = useCallback(async ({ localOnly = true } = {}) => {
@@ -507,21 +558,27 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
         setOperationalDialog({ item, specs });
         setOperationalName("كرت إهداء");
         setLinkedSpecKeys(specs.map((spec) => spec.key));
+        setOperationalImageFile(null);
     };
 
     const createOperational = async () => {
         if (!operationalDialog || !operationalName.trim()) return;
         setCreatingOperational(true);
         try {
+            const operationalImage = operationalImageFile
+                ? await readOperationalImageFile(operationalImageFile)
+                : null;
             const next = await createOrderReviewOperationalItem(orderNumber, {
                 expected_revision: detail.revision,
                 source_order_item_id: operationalDialog.item.order_item_id,
                 name: operationalName.trim(),
                 linked_spec_keys: linkedSpecKeys,
+                ...(operationalImage ? { operational_image: operationalImage } : {}),
             });
             setDetail(next);
             setOperationalDialog(null);
-            toast.success("تمت إضافة المنتج التشغيلي وربط بياناته.");
+            setOperationalImageFile(null);
+            toast.success("تمت إضافة المنتج التشغيلي وربط بياناته وصورته المستقلة إن وُجدت.");
         } catch (error) {
             toast.error(error.message);
         } finally {
@@ -667,6 +724,11 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
                             <div className="flex items-center justify-between gap-3"><h3 className="text-xl font-extrabold">إضافة منتج تشغيلي</h3><button type="button" onClick={() => setOperationalDialog(null)} className="rounded-lg border p-2"><X /></button></div>
                             <p className="mt-2 text-sm text-slate-500">أنشئ منتجًا داخليًا واربط به الخيارات أو النصوص المطلوبة من المنتج الأصلي.</p>
                             <label className="mt-4 block"><span className="mb-1 block text-sm font-extrabold">اسم المنتج الداخلي</span><input value={operationalName} onChange={(event) => setOperationalName(event.target.value)} maxLength={120} className="w-full rounded-xl border border-slate-200 p-3 outline-none focus:border-amber-500" /></label>
+                            <label className="mt-4 block rounded-xl border border-amber-300 bg-amber-50 p-3">
+                                <span className="mb-2 block text-sm font-extrabold">صورة خاصة بالمنتج التشغيلي في ميزان</span>
+                                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setOperationalImageFile(event.target.files?.[0] || null)} className="w-full text-sm" />
+                                <span className="mt-2 block text-xs text-amber-900">لا تُضاف هذه الصورة إلى معرض صور المنتج الأصلي أو إلى سلة. يُحفظ اختيارها للطلبات الجديدة عند تطابق المنتج والخيارات واسم المنتج التشغيلي.</span>
+                            </label>
                             <div className="mt-4"><div className="mb-2 text-sm font-extrabold">البيانات التي تنتقل إليه</div><div className="grid gap-2">{operationalDialog.specs.map((spec) => (<label key={spec.key} className="flex items-start gap-3 rounded-xl bg-violet-50 p-3"><input type="checkbox" checked={linkedSpecKeys.includes(spec.key)} onChange={(event) => setLinkedSpecKeys((current) => event.target.checked ? [...new Set([...current, spec.key])] : current.filter((key) => key !== spec.key))} className="mt-1" /><span><b className="text-violet-700">{spec.name}:</b> <span className="whitespace-pre-wrap break-words font-bold">{spec.value}</span></span></label>))}</div></div>
                             <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setOperationalDialog(null)} className="rounded-xl border px-4 py-2 font-bold">إلغاء</button><button type="button" disabled={creatingOperational || !operationalName.trim()} onClick={createOperational} className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 font-extrabold text-white disabled:opacity-50">{creatingOperational ? <SpinnerGap className="animate-spin" /> : <Plus />} إضافة وربط</button></div>
                         </div>
