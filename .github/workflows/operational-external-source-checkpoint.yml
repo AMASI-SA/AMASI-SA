@@ -1,0 +1,38 @@
+name: Operational External Loan Source Checkpoint
+on:
+  push:
+    branches: [integration/operational-balances-unified-20261102]
+    paths: [.github/workflows/operational-external-source-checkpoint.yml]
+permissions:
+  contents: write
+concurrency:
+  group: operational-external-source-checkpoint
+  cancel-in-progress: false
+jobs:
+  checkpoint:
+    if: github.repository == 'AMASI-SA/AMASI-SA' && github.ref == 'refs/heads/integration/operational-balances-unified-20261102'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+      - name: Apply only the reviewed source and checkpoint without force
+        shell: bash
+        env:
+          STAGED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          branch=integration/operational-balances-unified-20261102
+          test "$(git rev-parse HEAD)" = "$STAGED_SHA"
+          test "$(git rev-parse HEAD^)" = 99bd1b96a297cf5aa9dcd71ba6facfbcd6c2f4fd
+          test "$(git ls-remote origin refs/heads/$branch | cut -f1)" = "$STAGED_SHA"
+          python3 -B docs/operations/OP-UNIFIED-BALANCES-20261102/external-source-stage/apply.py
+          git config user.name 'mezan'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'WIP: explicit external loan creation and repayment with unchanged historic balances' -m 'Exact locally tested source: 1636 backend cases passed including 28 real-Mongo loan cases. Frontend tests are authored but pending fresh combined CI. Same existing movement CAS and retry path, no live financial action, no opening mutation, dashboard or release identity change.'
+          test "$(git ls-remote origin refs/heads/$branch | cut -f1)" = "$STAGED_SHA"
+          git push origin HEAD:refs/heads/$branch
+# Temporary source-only handoff; no application, database or deployment commands.
+# Source hashes and all eight paths are frozen in the helper. Remove after readback.

@@ -1,0 +1,52 @@
+--- a/frontend/src/pages/operational/DailyMovements.jsx
++++ b/frontend/src/pages/operational/DailyMovements.jsx
+@@ -6,0 +7 @@
++import ExternalOperationControls, {externalOperations, ExternalBalanceReceipt} from './ExternalOperationControls';
+@@ -26 +27 @@
+-  const empty={direction:'',party_type:'',party_id:'',bank_id:'',source_account_type:'bank_auto',amount:'',currency:'',kind:'payment',order_number:'',note:'',reference:'',actual_fee_amount:''};
++  const empty={external_operation:'',direction:'',party_type:'',party_id:'',bank_id:'',source_account_type:'bank_auto',amount:'',currency:'',kind:'payment',order_number:'',note:'',reference:'',actual_fee_amount:''};
+@@ -33,0 +35 @@
++  const [externalResult,setExternalResult]=useState(null);
+@@ -56 +58 @@
+-  const change=patch=>{if(pendingPayload||recovery.error)return;setForm(f=>({...f,...patch}));pending.current=null;setError('');setMessage('');};
++  const change=patch=>{if(pendingPayload||recovery.error)return;setForm(f=>({...f,...patch}));pending.current=null;setError('');setMessage('');setExternalResult(null);};
+@@ -58,0 +61,3 @@
++  const external=form.party_type==='external_person';
++  const externalIntent=externalOperations.some(row=>row.value===form.external_operation);
++  const externalControls=<ExternalOperationControls value={form.external_operation} disabled={busy||!!pendingPayload||!!recovery.error} onChange={patch=>{change(patch);setAllocations({});}}/>;
+@@ -61 +66 @@
+-    change({party_type:kind,party_id:'',currency:'',bank_id:'',source_account_type:'bank_auto',kind:kind==='employee_custody'&&form.direction==='incoming'?'collection':'payment',direction:['operating_expense','owner_withdrawal'].includes(kind)?'outgoing':form.direction});
++    change({external_operation:'',party_type:kind,party_id:'',currency:'',bank_id:'',source_account_type:'bank_auto',kind:kind==='employee_custody'&&form.direction==='incoming'?'collection':'payment',direction:['operating_expense','owner_withdrawal'].includes(kind)?'outgoing':form.direction});
+@@ -70,0 +76 @@
++      if(external&&!form.external_operation){setError('حدد هل العملية إنشاء سلفة أو سداد مستحق أو حركة أخرى.');return;}
+@@ -88,0 +95 @@
++        if(!external||!externalIntent)delete payload.external_operation;
+@@ -96 +103 @@
+-      await api.movement(payload);
++      const saved=await api.movement(payload);
+@@ -99 +106 @@
+-      setPendingPayload(null);setForm(empty);setAllocations({});setObligations([]);pending.current=null;setMessage('تم حفظ الحركة');if(cards){setStage('home');setEntryMode('normal');}onSaved();
++      setExternalResult(saved?.external_balance_snapshot||null);setPendingPayload(null);setForm(empty);setAllocations({});setObligations([]);pending.current=null;setMessage('تم حفظ الحركة');if(cards){setStage('home');setEntryMode('normal');}onSaved();
+@@ -110 +117 @@
+-  if(cards && !recovery.payload && stage!=='advanced') return <section className="op-card op-movement-cards" dir="rtl"><h2>الحركات المالية اليومية</h2><Notice error={error} message={message}/>
++  if(cards && !recovery.payload && stage!=='advanced') return <section className="op-card op-movement-cards" dir="rtl"><h2>الحركات المالية اليومية</h2><Notice error={error} message={message}/><ExternalBalanceReceipt snapshot={externalResult}/>
+@@ -134 +141,2 @@
+-      {entryMode==='normal'&&['courier','store_driver','external_person'].includes(form.party_type)&&<Field label="اتجاه الحركة"><select value={form.direction} onChange={e=>change({direction:e.target.value,kind:e.target.value==='incoming'?'collection':'payment'})}><option value="outgoing">صادر</option><option value="incoming">وارد</option></select></Field>}
++      {external&&externalControls}
++      {entryMode==='normal'&&['courier','store_driver','external_person'].includes(form.party_type)&&<Field label="اتجاه الحركة"><select disabled={external&&externalIntent} value={form.direction} onChange={e=>change({direction:e.target.value,kind:e.target.value==='incoming'?'collection':'payment'})}><option value="outgoing">صادر</option><option value="incoming">وارد</option></select></Field>}
+@@ -136 +144 @@
+-      {entryMode==='normal'&&form.party_type!=='provider'&&<Field label="السداد من"><select value={form.source_account_type} onChange={e=>change({source_account_type:e.target.value,bank_id:''})}><option value="bank">بنك</option><option value="cash">صندوق</option>{form.party_type==='operating_expense'&&<option value="employee_custody">عهدة</option>}</select></Field>}
++      {entryMode==='normal'&&form.party_type!=='provider'&&<Field label={external?(form.direction==='incoming'?'الاستلام في':'الدفع من'):'السداد من'}><select value={form.source_account_type} onChange={e=>change({source_account_type:e.target.value,bank_id:''})}><option value="bank">بنك</option><option value="cash">صندوق</option>{form.party_type==='operating_expense'&&<option value="employee_custody">عهدة</option>}</select></Field>}
+@@ -147,2 +155,2 @@
+-  return <section className="op-card"><h2>الحركات المالية اليومية</h2><p className="op-muted">سجّل المبلغ والجهة والحساب.</p><Notice error={error} message={message}/>{pendingPayload&&<p role="status" className="op-muted">هناك حركة محفوظة لم تُحسم نتيجتها. المدخلات مقفلة؛ إعادة المحاولة ترسل الحركة نفسها دون تكرار أثرها.</p>}<fieldset disabled={busy||Boolean(pendingPayload)||Boolean(recovery.error)}>
+-    <Field label="اتجاه الحركة"><span className="op-segment">{[['incoming','وارد'],['outgoing','صادر']].map(([value,label])=><button key={value} disabled={(walletFirst||(expenseOrWithdrawal&&form.kind!=='correction'))&&value==='incoming'} aria-pressed={form.direction===value} onClick={()=>{change({direction:value,...(custody&&form.kind!=='correction'?{kind:value==='incoming'?'collection':'payment'}:{})});setAllocations({});}}>{label}</button>)}</span></Field>
++  return <section className="op-card"><h2>الحركات المالية اليومية</h2><p className="op-muted">سجّل المبلغ والجهة والحساب.</p><Notice error={error} message={message}/><ExternalBalanceReceipt snapshot={externalResult}/>{pendingPayload&&<p role="status" className="op-muted">هناك حركة محفوظة لم تُحسم نتيجتها. المدخلات مقفلة؛ إعادة المحاولة ترسل الحركة نفسها دون تكرار أثرها.</p>}<fieldset disabled={busy||Boolean(pendingPayload)||Boolean(recovery.error)}>
++    <Field label="اتجاه الحركة"><span className="op-segment">{[['incoming','وارد'],['outgoing','صادر']].map(([value,label])=><button key={value} disabled={(external&&externalIntent)||((walletFirst||(expenseOrWithdrawal&&form.kind!=='correction'))&&value==='incoming')} aria-pressed={form.direction===value} onClick={()=>{change({direction:value,...(custody&&form.kind!=='correction'?{kind:value==='incoming'?'collection':'payment'}:{})});setAllocations({});}}>{label}</button>)}</span></Field>
+@@ -149,0 +158 @@
++    {external&&externalControls}
+@@ -153 +162 @@
+-    <Field label={form.party_type==='operating_expense'?'مصدر الصرف: بنك أو صندوق أو عهدة':'البنك أو الصندوق'}><select disabled={form.kind==='correction'} value={form.bank_id?`${form.source_account_type}:${form.bank_id}`:''} onChange={e=>{const chosen=availableAccounts.find(a=>`${a.kind}:${a.id}`===e.target.value);change({bank_id:chosen?.id||'',source_account_type:chosen?.kind||'bank_auto'});}}><option value="">اختر الحساب</option>{availableAccounts.map(a=><option key={`${a.kind}:${a.id}`} value={`${a.kind}:${a.id}`}>{a.kind==='employee_custody'?'عهدة · ':''}{a.name}</option>)}</select></Field>
++    <Field label={external?(form.direction==='incoming'?'الاستلام في':'الدفع من'):form.party_type==='operating_expense'?'مصدر الصرف: بنك أو صندوق أو عهدة':'البنك أو الصندوق'}><select disabled={form.kind==='correction'} value={form.bank_id?`${form.source_account_type}:${form.bank_id}`:''} onChange={e=>{const chosen=availableAccounts.find(a=>`${a.kind}:${a.id}`===e.target.value);change({bank_id:chosen?.id||'',source_account_type:chosen?.kind||'bank_auto'});}}><option value="">اختر الحساب</option>{availableAccounts.map(a=><option key={`${a.kind}:${a.id}`} value={`${a.kind}:${a.id}`}>{a.kind==='employee_custody'?'عهدة · ':''}{a.name}</option>)}</select></Field>
+@@ -155 +164 @@
+-    <Field label="نوع الحركة"><select value={form.kind} onChange={e=>{change({kind:e.target.value,...((e.target.value==='correction'||(e.target.value==='settlement'&&form.source_account_type==='employee_custody'))?{bank_id:'',source_account_type:'bank_auto'}:{})});setAllocations({});}}>{movementKinds.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></Field>
++    <Field label="نوع الحركة"><select disabled={external&&externalIntent} value={form.kind} onChange={e=>{change({kind:e.target.value,...((e.target.value==='correction'||(e.target.value==='settlement'&&form.source_account_type==='employee_custody'))?{bank_id:'',source_account_type:'bank_auto'}:{})});setAllocations({});}}>{movementKinds.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></Field>

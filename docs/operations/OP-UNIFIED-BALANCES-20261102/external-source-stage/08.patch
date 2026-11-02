@@ -1,0 +1,5 @@
+--- a/frontend/src/pages/operational/OperationalBalances.test.jsx
++++ b/frontend/src/pages/operational/OperationalBalances.test.jsx
+@@ -308 +308 @@
+- await render(<DailyMovements/>);await click('صادر');await input(host.querySelectorAll('select')[0],'external_person');await input(host.querySelectorAll('select')[1],'external_person1');await input(host.querySelectorAll('select')[2],'bank:bank1');await input(host.querySelectorAll('select')[3],'settlement');
++ await render(<DailyMovements/>);await click('صادر');await input(host.querySelectorAll('select')[0],'external_person');await input(host.querySelector('[aria-label="عملية الجهة الخارجية"]'),'general');await input(host.querySelectorAll('select')[2],'external_person1');await input(host.querySelectorAll('select')[3],'bank:bank1');await input(host.querySelectorAll('select')[4],'settlement');

@@ -1,0 +1,19 @@
+--- a/backend/operational_balance_routes.py
++++ b/backend/operational_balance_routes.py
+@@ -82,0 +83 @@
++    external_operation: Literal["borrow", "lend", "repay_borrowing", "collect_lending"] | None = None
+@@ -698 +699 @@
+-        for field in ("bank_currency", "bank_amount", "bank_fee_amount"):
++        for field in ("bank_currency", "bank_amount", "bank_fee_amount", "external_operation"):
+@@ -704 +705,10 @@
+-        return await create_movement(db, owner, actor["id"], data, source=source)
++        result = await create_movement(db, owner, actor["id"], data, source=source)
++        if source == "employee_app" and result.get("external_balance_snapshot") is not None:
++            # Reporting permission is independent from recording a movement.
++            # Recheck it AFTER the commit; redact only balances on revocation,
++            # while preserving the acknowledgement of the committed operation.
++            try:
++                await scope(db, user, "reports")
++            except HTTPException:
++                result = {key: value for key, value in result.items() if key != "external_balance_snapshot"}
++        return result
