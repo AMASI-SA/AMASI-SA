@@ -24,6 +24,8 @@ from store_delivery_domain import (
     StoreDeliveryRuleError,
     money,
     normalize_text,
+    is_city_courier_company,
+    normalize_shipping_carrier,
 )
 
 STORE_DRIVERS = "store_drivers"
@@ -86,7 +88,8 @@ class DriverCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=120)
     phone: str = Field(min_length=1, max_length=40)
-    city: str = Field(min_length=1, max_length=100)
+    city: str = Field(default="", max_length=100)
+    shipping_company: str = Field(default="", max_length=150)
     region: str = Field(default="", max_length=120)
     district: str = Field(default="", max_length=120)
     street: str = Field(default="", max_length=180)
@@ -120,8 +123,8 @@ class DriverCreate(BaseModel):
     @classmethod
     def valid_coverage_mode(cls, value: str) -> str:
         value = normalize_text(value) or COVERAGE_MODE_CITY
-        if value != COVERAGE_MODE_CITY:
-            raise ValueError("only city coverage is enabled in V1")
+        if value not in {COVERAGE_MODE_CITY, "shipping_company"}:
+            raise ValueError("unknown driver coverage mode")
         return value
 
 
@@ -129,7 +132,8 @@ class DriverUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str | None = Field(default=None, min_length=1, max_length=120)
     phone: str | None = Field(default=None, min_length=1, max_length=40)
-    city: str | None = Field(default=None, min_length=1, max_length=100)
+    city: str | None = Field(default=None, max_length=100)
+    shipping_company: str | None = Field(default=None, max_length=150)
     region: str | None = Field(default=None, max_length=120)
     district: str | None = Field(default=None, max_length=120)
     street: str | None = Field(default=None, max_length=180)
@@ -227,6 +231,36 @@ def _change_history_payload(current: dict[str, Any], patch: dict[str, Any]) -> d
     }
 
 
+async def _city_courier_companies(db: Any, user_id: str) -> list[str]:
+    """Read available merchant shipping companies; no writes or automatic seeding."""
+    settings = await db.settings.find_one(
+        {"user_id": user_id}, {"_id": 0, "shipping_companies": 1},
+    ) or {}
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in settings.get("shipping_companies") or []:
+        name = normalize_text(item.get("name")) if isinstance(item, dict) else ""
+        key = normalize_shipping_carrier(name)
+        if is_city_courier_company(name) and key not in seen:
+            result.append(name)
+            seen.add(key)
+    return result
+
+
+async def _validate_city_courier_company(db: Any, user_id: str, requested: str) -> str:
+    if not requested:
+        return ""
+    options = await _city_courier_companies(db, user_id)
+    found = next(
+        (name for name in options if normalize_shipping_carrier(name) == normalize_shipping_carrier(requested)),
+        None,
+    )
+    if found is None:
+        raise HTTPException(status_code=422, detail={"code": "driver_shipping_company_not_in_settings",
+                                                      "message": "اختر مندوب مدينة من شركات الشحن المسجلة في إعدادات ميزان."})
+    return found
+
+
 async def _driver_or_404(db: Any, user_id: str, driver_id: str) -> dict[str, Any]:
     row = await db[STORE_DRIVERS].find_one({"user_id": user_id, "id": driver_id}, {"_id": 0})
     if not row:
@@ -248,6 +282,7 @@ def make_store_delivery_driver_router(db: Any, current_user: Callable[..., Any])
             _require_account_manager(actor)
             if await db.users.find_one({"email": account_email}, {"_id": 1}):
                 raise HTTPException(status_code=409, detail={"code": "store_driver_account_email_exists"})
+        shipping_company = await _validate_city_courier_company(db, user_id, normalize_text(payload.shipping_company))
         try:
             fee = float(money(payload.delivery_fee))
         except StoreDeliveryRuleError as exc:
@@ -256,9 +291,11 @@ def make_store_delivery_driver_router(db: Any, current_user: Callable[..., Any])
         doc = {
             "id": driver_id, "user_id": user_id, "name": normalize_text(payload.name),
             "phone": normalize_text(payload.phone), "city": normalize_text(payload.city),
+            "shipping_company": shipping_company,
             "city_key": normalize_text(payload.city).casefold(), "region": normalize_text(payload.region),
             "district": normalize_text(payload.district), "street": normalize_text(payload.street),
-            "coverage_mode": COVERAGE_MODE_CITY, "delivery_fee": fee, "status": payload.status,
+            "coverage_mode": ("shipping_company" if shipping_company else "unconfigured"),
+            "delivery_fee": fee, "status": payload.status,
             "notes": normalize_text(payload.notes), "account_user_id": account_id,
             "account_email": account_email or None, "account_role": DRIVER_ACCOUNT_ROLE,
             "version": 1, "created_at": now, "updated_at": now,
@@ -284,7 +321,8 @@ def make_store_delivery_driver_router(db: Any, current_user: Callable[..., Any])
                 await db.users.delete_one({"id": account_id, "role": DRIVER_ACCOUNT_ROLE})
             raise HTTPException(status_code=409, detail={"code": "store_driver_phone_exists"}) from exc
         await _event(db, user_id=user_id, driver_id=driver_id, event_type="store_driver_created",
-                     actor_id=normalize_text(actor.get("id")), payload={"city": doc["city"], "delivery_fee": fee, "account_created": bool(account_id), "email": account_email or None})
+                     actor_id=normalize_text(actor.get("id")), payload={"city": doc["city"], "shipping_company": doc["shipping_company"],
+                             "delivery_fee": fee, "account_created": bool(account_id), "email": account_email or None})
         return _public_driver(doc)
 
     @router.get("")
@@ -313,7 +351,14 @@ def make_store_delivery_driver_router(db: Any, current_user: Callable[..., Any])
         }
         for item in items:
             item["delivery_counts"] = counts.get(normalize_text(item.get("id")), empty_counts.copy())
-        return {"items": items, "total": len(items), "coverage_mode": COVERAGE_MODE_CITY}
+        return {"items": items, "total": len(items), "coverage_mode": "shipping_company"}
+
+    @router.get("/shipping-companies")
+    async def list_city_courier_companies(user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_manager(user)
+        owner_id = _merchant_user_id(actor)
+        options = await _city_courier_companies(db, owner_id)
+        return {"items": [{"name": value} for value in options], "total": len(options)}
 
     @router.get("/{driver_id}")
     async def get_driver(driver_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
@@ -327,9 +372,13 @@ def make_store_delivery_driver_router(db: Any, current_user: Callable[..., Any])
         if int(current.get("version") or 1) != payload.expected_version:
             raise HTTPException(status_code=409, detail={"code": "store_driver_version_conflict"})
         changes = payload.model_dump(exclude_unset=True, exclude={"expected_version"}); patch: dict[str, Any] = {}
-        for key in ("name", "phone", "city", "region", "district", "street", "notes", "status"):
+        for key in ("name", "phone", "city", "shipping_company", "region", "district", "street", "notes", "status"):
             if key in changes and changes[key] is not None: patch[key] = normalize_text(changes[key])
         if "city" in patch: patch["city_key"] = patch["city"].casefold()
+        if "shipping_company" in patch:
+            patch["shipping_company"] = await _validate_city_courier_company(db, user_id, patch["shipping_company"])
+        if "shipping_company" in patch:
+            patch["coverage_mode"] = "shipping_company" if patch["shipping_company"] else "unconfigured"
         if "delivery_fee" in changes and changes["delivery_fee"] is not None:
             patch["delivery_fee"] = float(money(changes["delivery_fee"]))
         patch.update({"updated_at": _now(), "updated_by": normalize_text(actor.get("id")), "version": payload.expected_version + 1})

@@ -4,6 +4,10 @@ export async function listStoreDrivers(params = {}) {
   return (await api.get("/store-delivery/drivers", { params })).data;
 }
 
+export async function listStoreDriverShippingCompanies() {
+  return (await api.get("/store-delivery/drivers/shipping-companies")).data;
+}
+
 export async function createStoreDriver(payload) {
   return (await api.post("/store-delivery/drivers", payload)).data;
 }

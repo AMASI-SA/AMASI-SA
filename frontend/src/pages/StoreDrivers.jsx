@@ -7,15 +7,17 @@ import {
   createStoreDriverAccount,
   disableStoreDriverAccount,
   listStoreDrivers,
+  listStoreDriverShippingCompanies,
   resetStoreDriverPassword,
   updateStoreDriver,
 } from "../services/storeDelivery";
 
-const EMPTY = { name: "", phone: "", city: "", region: "", district: "", street: "", delivery_fee: "20", status: "active", notes: "" };
+const EMPTY = { name: "", phone: "", city: "", shipping_company: "", region: "", district: "", street: "", delivery_fee: "20", status: "active", notes: "" };
 
-function DriverForm({ initial, onClose, onSaved }) {
+function DriverForm({ initial, onClose, onSaved, cityCouriers }) {
   const [form, setForm] = useState(initial ? {
-    name: initial.name || "", phone: initial.phone || "", city: initial.city || "", region: initial.region || "",
+    name: initial.name || "", phone: initial.phone || "", city: initial.city || "",
+    shipping_company: initial.shipping_company || "", region: initial.region || "",
     district: initial.district || "", street: initial.street || "", delivery_fee: String(initial.delivery_fee ?? 20),
     status: initial.status || "active", notes: initial.notes || "",
   } : EMPTY);
@@ -23,10 +25,11 @@ function DriverForm({ initial, onClose, onSaved }) {
   const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   async function submit(event) {
     event.preventDefault();
-    if (!form.name.trim() || !form.phone.trim() || !form.city.trim()) return toast.error("الاسم والجوال والمدينة مطلوبة");
+    if (!form.name.trim() || !form.phone.trim() || !form.shipping_company) return toast.error("اسم الموصل والجوال وشركة شحن المندوب مطلوبة");
+    if (!cityCouriers.some((c) => c.name === form.shipping_company)) return toast.error("اختر شركة مندوبي المدن من القائمة");
     setBusy(true);
     try {
-      const payload = { ...form, delivery_fee: Number(form.delivery_fee || 0), coverage_mode: "city" };
+      const payload = { ...form, delivery_fee: Number(form.delivery_fee || 0), coverage_mode: "shipping_company" };
       if (initial) {
         delete payload.coverage_mode;
         payload.expected_version = initial.version;
@@ -47,7 +50,13 @@ function DriverForm({ initial, onClose, onSaved }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="text-xs font-bold">اسم الموصل *<input value={form.name} onChange={(e) => set("name", e.target.value)} className={input} /></label>
           <label className="text-xs font-bold">رقم الجوال *<input value={form.phone} onChange={(e) => set("phone", e.target.value)} className={input} dir="ltr" /></label>
-          <label className="text-xs font-bold">المدينة *<input value={form.city} onChange={(e) => set("city", e.target.value)} className={input} /></label>
+          <label className="text-xs font-bold">شركة الشحن المرتبطة بالموصل *
+            <select value={form.shipping_company} onChange={(e) => set("shipping_company", e.target.value)} className={input} required>
+              <option value="">اختر مندوب المدينة</option>
+              {cityCouriers.map((row) => <option key={row.name} value={row.name}>{row.name}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-bold">المدينة (للعرض فقط)<input value={form.city} onChange={(e) => set("city", e.target.value)} className={input} /></label>
           <label className="text-xs font-bold">المنطقة — اختياري<input value={form.region} onChange={(e) => set("region", e.target.value)} className={input} /></label>
           <label className="text-xs font-bold">الحي — اختياري<input value={form.district} onChange={(e) => set("district", e.target.value)} className={input} /></label>
           <label className="text-xs font-bold">الشارع — اختياري<input value={form.street} onChange={(e) => set("street", e.target.value)} className={input} /></label>
@@ -55,7 +64,7 @@ function DriverForm({ initial, onClose, onSaved }) {
           <label className="text-xs font-bold">الحالة<select value={form.status} onChange={(e) => set("status", e.target.value)} className={input}><option value="active">نشط</option><option value="inactive">موقوف</option></select></label>
         </div>
         <label className="mt-4 block text-xs font-bold">ملاحظات<textarea rows={3} value={form.notes} onChange={(e) => set("notes", e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3" /></label>
-        <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-3 text-xs font-bold text-sky-900">التحقق في النسخة الحالية يعتمد على المدينة فقط. المنطقة والحي والشارع محفوظة من الآن للتوسع مستقبلًا.</div>
+        <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-3 text-xs font-bold text-sky-900">الإسناد الجديد يعتمد على شركة الشحن المحددة من القائمة، وليس على مدينة العميل. لا تتأثر الشحنات المسندة سابقًا.</div>
         <button disabled={busy} className="mt-5 w-full rounded-xl bg-emerald-700 px-5 py-3 font-black text-white disabled:opacity-50">{busy ? "جارٍ الحفظ…" : "حفظ"}</button>
       </form>
     </div>
@@ -112,13 +121,18 @@ function DriverAccountModal({ driver, onClose, onSaved }) {
 
 export default function StoreDrivers() {
   const [items, setItems] = useState([]);
+  const [cityCouriers, setCityCouriers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [formOpen, setFormOpen] = useState(false);
   const [accountDriver, setAccountDriver] = useState(null);
   async function load() {
     setLoading(true);
-    try { const data = await listStoreDrivers(); setItems(data.items || []); }
+    try {
+      const [data, companies] = await Promise.all([listStoreDrivers(), listStoreDriverShippingCompanies()]);
+      setItems(data.items || []);
+      setCityCouriers(companies.items || []);
+    }
     catch { toast.error("تعذر تحميل موصلي المتجر"); }
     finally { setLoading(false); }
   }
@@ -129,28 +143,28 @@ export default function StoreDrivers() {
   return (
     <main className="p-4 sm:p-6" dir="rtl">
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div><h1 className="text-2xl font-black text-slate-950">موصلو المتجر</h1><p className="mt-1 text-sm font-bold text-slate-500">إدارة موصلي أماسي ونطاق المدينة وسعر التوصيلة وحساب تطبيق التوصيل.</p></div>
+        <div><h1 className="text-2xl font-black text-slate-950">موصلو المتجر</h1><p className="mt-1 text-sm font-bold text-slate-500">إدارة موصلي أماسي وربط كل موصل بشركة شحن مندوب مدينة من الإعدادات.</p></div>
         <button onClick={() => { setEditing(null); setFormOpen(true); }} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-black text-white"><Plus size={20} />إضافة موصل</button>
       </div>
       <div className="mb-5 grid gap-3 sm:grid-cols-4">
         <div className="rounded-2xl border bg-white p-4"><div className="text-xs font-bold text-slate-500">إجمالي الموصلين</div><div className="mt-1 text-3xl font-black" dir="ltr">{items.length}</div></div>
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><div className="text-xs font-bold text-emerald-700">النشطون</div><div className="mt-1 text-3xl font-black text-emerald-950" dir="ltr">{activeCount}</div></div>
         <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4"><div className="text-xs font-bold text-violet-700">حسابات التطبيق</div><div className="mt-1 text-3xl font-black text-violet-950" dir="ltr">{linkedCount}</div></div>
-        <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4"><div className="text-xs font-bold text-sky-700">نطاق V1</div><div className="mt-1 text-lg font-black text-sky-950">مطابقة المدينة</div></div>
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4"><div className="text-xs font-bold text-sky-700">نطاق V1</div><div className="mt-1 text-lg font-black text-sky-950">مطابقة شركة الشحن</div></div>
       </div>
       {loading ? <div className="rounded-2xl border bg-white p-8 text-center font-bold">جارٍ التحميل…</div> : (
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {items.map((driver) => (
             <article key={driver.id} className="rounded-2xl border bg-white p-5 shadow-sm">
               <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2 text-lg font-black"><Truck size={22} weight="duotone" />{driver.name}</div><div className="mt-2 flex flex-wrap gap-2"><span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${driver.status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>{driver.status === "active" ? "نشط" : "موقوف"}</span><span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${driver.account_user_id ? "bg-violet-100 text-violet-800" : "bg-amber-100 text-amber-800"}`}>{driver.account_user_id ? "حساب التطبيق مرتبط" : "بدون حساب تطبيق"}</span></div></div><button onClick={() => { setEditing(driver); setFormOpen(true); }} className="rounded-xl border p-2"><PencilSimple size={18} /></button></div>
-              <div className="mt-4 space-y-2 text-sm font-bold text-slate-700"><div className="flex items-center gap-2"><Phone size={18} /> <span dir="ltr">{driver.phone}</span></div><div className="flex items-center gap-2"><MapPin size={18} />{driver.city}{driver.district ? ` — ${driver.district}` : ""}</div><div className="flex items-center gap-2"><CurrencyCircleDollar size={18} />{Number(driver.delivery_fee || 0).toFixed(2)} ر.س / توصيلة</div></div>
+              <div className="mt-4 space-y-2 text-sm font-bold text-slate-700"><div className="flex items-center gap-2"><Phone size={18} /> <span dir="ltr">{driver.phone}</span></div><div className="flex items-center gap-2"><MapPin size={18} />{driver.shipping_company || "شركة مندوب غير محددة"}{driver.city ? ` — ${driver.city}` : ""}</div><div className="flex items-center gap-2"><CurrencyCircleDollar size={18} />{Number(driver.delivery_fee || 0).toFixed(2)} ر.س / توصيلة</div></div>
               <button onClick={() => setAccountDriver(driver)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-xs font-black text-violet-900"><Key size={18} />{driver.account_user_id ? "إدارة حساب توصيل أماسي" : "إنشاء حساب توصيل أماسي"}</button>
             </article>
           ))}
           {!items.length && <div className="rounded-2xl border border-dashed bg-white p-10 text-center text-sm font-bold text-slate-500 lg:col-span-2 xl:col-span-3">لا يوجد موصلون حتى الآن.</div>}
         </div>
       )}
-      {formOpen && <DriverForm initial={editing} onClose={() => setFormOpen(false)} onSaved={() => { setFormOpen(false); load(); }} />}
+      {formOpen && <DriverForm initial={editing} cityCouriers={cityCouriers} onClose={() => setFormOpen(false)} onSaved={() => { setFormOpen(false); load(); }} />}
       {accountDriver && <DriverAccountModal driver={accountDriver} onClose={() => setAccountDriver(null)} onSaved={() => { setAccountDriver(null); load(); }} />}
     </main>
   );
