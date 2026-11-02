@@ -433,6 +433,10 @@ function OperationalItemCard({ item, workflowRevision, orderNumber, onChanged })
                         <div className="text-xs font-extrabold text-amber-700">منتج تشغيلي داخلي</div>
                         <h3 className="mt-1 text-lg font-extrabold text-slate-900">{item.name}</h3>
                         <div className="mt-1 text-xs text-slate-500">مرتبط بـ: {item.source_product_name || "منتج الطلب"}</div>
+                        {item.selected_image_url ? (
+                            <img src={item.selected_image_url} alt={`صورة ${item.name}`} loading="lazy"
+                                className="mt-2 h-24 w-24 rounded-xl border border-amber-200 object-cover" />
+                        ) : null}
                     </div>
                     <span className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-amber-800">{statusLabel}</span>
                 </div>
