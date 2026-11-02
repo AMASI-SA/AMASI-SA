@@ -1,0 +1,65 @@
+name: Operational 1702 Exact Intent Object
+on:
+  push:
+    branches: [review/operational-ready-1700-evidence-20261103]
+    paths: [.github/workflows/operational-1702-intent-object.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  preserve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Verify pinned A2 evidence and create immutable Git blob only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/review/operational-ready-1700-evidence-20261103
+          gh api repos/AMASI-SA/AMASI-SA/actions/runs/41542992759 > run.json
+          gh api repos/AMASI-SA/AMASI-SA/actions/artifacts/13187313156 > artifact.json
+          gh api repos/AMASI-SA/AMASI-SA/actions/artifacts/13187313156/zip > intent.zip
+          python - <<'PY'
+          import base64, hashlib, json, pathlib, zipfile
+          A = '3a13f952b2909ac8e6eac2d0f7cc3a59f879e767'
+          J = '7d1be020b9559ea294b6ea3f7511f37ee5e6a847'
+          run = json.loads(pathlib.Path('run.json').read_text())
+          artifact = json.loads(pathlib.Path('artifact.json').read_text())
+          assert run['id'] == 41542992759 and run['head_sha'] == A and run['conclusion'] == 'success'
+          assert artifact['id'] == 13187313156 and not artifact['expired']
+          assert artifact['name'] == 'release-v5-reviewed-intent-candidate'
+          assert artifact['workflow_run']['id'] == 41542992759 and artifact['workflow_run']['head_sha'] == A
+          zipped = pathlib.Path('intent.zip').read_bytes()
+          assert hashlib.sha256(zipped).hexdigest() == 'd1cbe39b965e0ed363868ceffaf3e35fe9eea7c68faaaa4e795b77da94c6517c'
+          with zipfile.ZipFile('intent.zip') as archive:
+              assert archive.namelist() == ['release-intent-v5.json']
+              raw = archive.read('release-intent-v5.json')
+          assert len(raw) == 1005636
+          assert hashlib.sha256(raw).hexdigest() == '247b69eecb83ba74549892128265a7988afbbfe0932aa2816f6b922e25041805'
+          assert hashlib.sha1(b'blob ' + str(len(raw)).encode() + b'\0' + raw).hexdigest() == '5011ad276af952897aa990f9dde9ab330eb91095'
+          intent = json.loads(raw)
+          assert intent['schema_version'] == 2 and intent['protocol_version'] == 5
+          assert intent['source_git_sha'] == A and intent['source_base_git_sha'] == J
+          assert intent['runtime_identity']['release_id'] == 'rg5-379d3096ad212f750c8f36d0bf0506a8b37556873f5d75728f3ebff0f92bc50b'
+          pathlib.Path('blob.json').write_text(json.dumps({'content': base64.b64encode(raw).decode(), 'encoding': 'base64'}))
+          PY
+          gh api --method POST repos/AMASI-SA/AMASI-SA/git/blobs --input blob.json > blob-result.json
+          python - <<'PY'
+          import json, pathlib
+          result = json.loads(pathlib.Path('blob-result.json').read_text())
+          assert result['sha'] == '5011ad276af952897aa990f9dde9ab330eb91095'
+          receipt = {'source': '3a13f952b2909ac8e6eac2d0f7cc3a59f879e767', 'base': '7d1be020b9559ea294b6ea3f7511f37ee5e6a847', 'source_run': 41542992759, 'artifact': 13187313156, 'intent_blob': result['sha'], 'raw_sha256': '247b69eecb83ba74549892128265a7988afbbfe0932aa2816f6b922e25041805', 'raw_bytes': 1005636, 'commit_created': False, 'ref_updated': False, 'deployment': False, 'financial_action': False}
+          pathlib.Path('intent-object-receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          print(json.dumps(receipt))
+          PY
+          rm -f blob.json intent.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: operational-1702-intent-object-receipt
+          path: intent-object-receipt.json
+          retention-days: 30
+          if-no-files-found: error
