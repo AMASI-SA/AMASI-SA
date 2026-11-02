@@ -29,6 +29,10 @@ from order_engine.product_identity_enrichment import enrich_order_item_identity
 from order_engine.recipient_enrichment import enrich_order_recipients
 from order_tracking_notes import enforce_stage_instructions, instruction_banner
 from product_inventory_rules import order_item_specifications
+from order_review_operational_images import (
+    OperationalImageInput, upload_operational_image, learned_operational_image,
+    remember_operational_image, forget_unattached_image,
+)
 from salla_integration.auto_sync import schedule_salla_auto_sync
 from salla_integration.service import SallaError, call_salla
 
@@ -326,6 +330,14 @@ class OperationalItemCreateRequest(BaseModel):
     source_order_item_id: str = Field(min_length=1, max_length=300)
     name: str = Field(min_length=1, max_length=120)
     linked_spec_keys: list[str] = Field(default_factory=list, max_length=30)
+    # Independent operational item media; never added to the source gallery.
+    operational_image: Optional[OperationalImageInput] = None
+
+
+class OperationalItemImageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(ge=0)
+    operational_image: OperationalImageInput
 
 
 class OperationalItemStatusRequest(BaseModel):
@@ -1045,8 +1057,27 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
 
         now = _now()
         operational_items = list((workflow or {}).get("operational_items") or [])
+        operational_item_id = f"op:{uuid.uuid4().hex}"
+        uploaded_image = None
+        if payload.operational_image is not None:
+            uploaded_image = await upload_operational_image(
+                db, user_id=user_id, actor_id=actor_id, source_item=source_item,
+                operational_name=payload.name, linked_specs=linked_specs,
+                payload=payload.operational_image, order_number=order.order_number,
+                operational_item_id=operational_item_id,
+            )
+            selected_operational_image = uploaded_image["url"]
+            image_source = "operational_upload"
+        else:
+            selected_operational_image = await learned_operational_image(
+                db, user_id=user_id, source_item=source_item,
+                operational_name=payload.name, linked_specs=linked_specs,
+            )
+            image_source = "operational_learned" if selected_operational_image else None
         operational_item = {
-            "operational_item_id": f"op:{uuid.uuid4().hex}",
+            "operational_item_id": operational_item_id,
+            "image_url": selected_operational_image,
+            "image_source": image_source,
             "item_type": "internal_operational",
             "name": _text(payload.name),
             "quantity": 1,
@@ -1101,19 +1132,26 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "updated_by": actor_id,
         }
         new_doc.pop("_id", None)
-        if workflow:
-            result = await db[WORKFLOWS].replace_one(
-                {"user_id": user_id, "order_number": order.order_number, "revision": revision},
-                new_doc,
-            )
-            if not result.matched_count:
-                raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"})
-        else:
-            new_doc["created_at"] = now
-            try:
-                await db[WORKFLOWS].insert_one(new_doc)
-            except DuplicateKeyError as exc:
-                raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"}) from exc
+        try:
+            if workflow:
+                result = await db[WORKFLOWS].replace_one(
+                    {"user_id": user_id, "order_number": order.order_number, "revision": revision},
+                    new_doc,
+                )
+                if not result.matched_count:
+                    raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"})
+            else:
+                new_doc["created_at"] = now
+                try:
+                    await db[WORKFLOWS].insert_one(new_doc)
+                except DuplicateKeyError as exc:
+                    raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"}) from exc
+        except Exception:
+            if uploaded_image is not None:
+                await forget_unattached_image(db, user_id=user_id, image_id=uploaded_image["id"])
+            raise
+        if uploaded_image is not None:
+            await remember_operational_image(db, user_id=user_id, actor_id=actor_id, image=uploaded_image)
         await db[EVENTS].insert_one({
             "user_id": user_id,
             "order_number": order.order_number,
@@ -1121,6 +1159,83 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "event_type": "operational_item_created",
             "occurred_at": now,
             "actor_id": actor_id,
+        })
+        return await _detail(db, user_id, order)
+
+
+    @router.post("/{order_number}/operational-items/{operational_item_id:path}/image")
+    async def update_operational_item_image(
+        order_number: str, operational_item_id: str,
+        payload: OperationalItemImageRequest,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Add/replace only the selected operational card image in pending review.
+
+        Do not change source product media or already-reviewed snapshots.
+        A failed optimistic CAS removes the newly uploaded, unreferenced blob.
+        """
+        reviewer = _require_reviewer(user)
+        user_id = _merchant_user_id(reviewer)
+        actor_id = _text(reviewer.get("id"))
+        try:
+            order = await get_order(repository, user_id=user_id, order_number=order_number)
+        except OrderNotFoundError as exc:
+            raise HTTPException(404, detail={"code": "order_not_found"}) from exc
+        workflow = await db[WORKFLOWS].find_one(
+            {"user_id": user_id, "order_number": order.order_number}, {"_id": 0},
+        )
+        if not workflow:
+            raise HTTPException(404, detail={"code": "review_workflow_not_found"})
+        if workflow.get("stage") in REVIEW_COMPLETED_STAGES:
+            raise HTTPException(409, detail={"code": "review_already_completed"})
+        revision = int(workflow.get("revision") or 0)
+        if revision != payload.expected_revision:
+            raise HTTPException(409, detail={"code": "review_revision_conflict"})
+        operational_rows = [dict(row) for row in workflow.get("operational_items") or []]
+        target = next((row for row in operational_rows if _text(row.get("operational_item_id")) == operational_item_id), None)
+        if target is None:
+            raise HTTPException(404, detail={"code": "operational_item_not_found"})
+        await enforce_stage_instructions(
+            db, user_id=user_id, order_number=order.order_number,
+            order_item_id=_text(target.get("source_order_item_id")),
+            stage="pending_review", actor_id=actor_id,
+        )
+        identities = await _review_item_identities(db, user_id, order)
+        source_item = next(
+            (item for item in identities if item.order_item_id == _text(target.get("source_order_item_id"))),
+            None,
+        )
+        if source_item is None:
+            raise HTTPException(409, detail={"code": "operational_source_item_not_found"})
+        uploaded = await upload_operational_image(
+            db, user_id=user_id, actor_id=actor_id, source_item=source_item,
+            operational_name=_text(target.get("name")), linked_specs=list(target.get("linked_specs") or []),
+            payload=payload.operational_image, order_number=order.order_number,
+            operational_item_id=operational_item_id,
+        )
+        now = _now()
+        target["image_url"] = uploaded["url"]
+        target["image_source"] = "operational_upload"
+        target["updated_at"] = now
+        target["updated_by"] = actor_id
+        try:
+            updated = await db[WORKFLOWS].update_one(
+                {"user_id": user_id, "order_number": order.order_number,
+                 "revision": revision, "stage": "pending_review",
+                 "operational_items.operational_item_id": operational_item_id},
+                {"$set": {"operational_items": operational_rows, "updated_at": now,
+                          "updated_by": actor_id}, "$inc": {"revision": 1}},
+            )
+            if updated.matched_count != 1:
+                raise HTTPException(409, detail={"code": "review_revision_conflict"})
+        except Exception:
+            await forget_unattached_image(db, user_id=user_id, image_id=uploaded["id"])
+            raise
+        await remember_operational_image(db, user_id=user_id, actor_id=actor_id, image=uploaded)
+        await db[EVENTS].insert_one({
+            "user_id": user_id, "order_number": order.order_number,
+            "operational_item_id": operational_item_id, "event_type": "operational_image_updated",
+            "image_id": uploaded["id"], "actor_id": actor_id, "occurred_at": now,
         })
         return await _detail(db, user_id, order)
 
