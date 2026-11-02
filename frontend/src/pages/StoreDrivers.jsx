@@ -129,9 +129,17 @@ export default function StoreDrivers() {
   async function load() {
     setLoading(true);
     try {
-      const [data, companies] = await Promise.all([listStoreDrivers(), listStoreDriverShippingCompanies()]);
+      // Carrier option service is only needed for new edits; do not hide
+      // the current drivers or their delivery counts if it is unavailable.
+      const [data, companies] = await Promise.all([
+        listStoreDrivers(),
+        listStoreDriverShippingCompanies()
+          .then((result) => ({ items: result.items || [], failed: false }))
+          .catch(() => ({ items: [], failed: true })),
+      ]);
       setItems(data.items || []);
-      setCityCouriers(companies.items || []);
+      setCityCouriers(companies.items);
+      if (companies.failed) toast.error("تعذر تحميل شركات مناديب المدن؛ ما زال عرض الموصلين متاحًا.");
     }
     catch { toast.error("تعذر تحميل موصلي المتجر"); }
     finally { setLoading(false); }

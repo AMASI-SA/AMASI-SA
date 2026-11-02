@@ -43,7 +43,7 @@ def test_dropdown_only_shows_configured_city_couriers_and_rejects_manual_value()
         db = AsyncMongoMockClient().choices
         await db.settings.insert_one({"user_id":"shop","shipping_companies":[
             {"name":"مندوب الرياض"},{"name":"مندوب جدة"},{"name":"سمسا"},
-            {"name":"مندوب"},{"name":"مندوب الرياض"}]})
+            {"name":"مندوب"},{"name":"'مندوب الرياض'"}]})
         assert await _city_courier_companies(db,"shop")==["مندوب الرياض","مندوب جدة"]
         assert await _validate_city_courier_company(db,"shop","مندوب الرياض")=="مندوب الرياض"
         with pytest.raises(HTTPException) as raised:

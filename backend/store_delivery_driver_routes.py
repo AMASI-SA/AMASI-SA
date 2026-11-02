@@ -239,7 +239,10 @@ async def _city_courier_companies(db: Any, user_id: str) -> list[str]:
     result: list[str] = []
     seen: set[str] = set()
     for item in settings.get("shipping_companies") or []:
-        name = normalize_text(item.get("name")) if isinstance(item, dict) else ""
+        raw_name = normalize_text(item.get("name")) if isinstance(item, dict) else ""
+        # Some historical settings store Excel-style wrapped city-courier names.
+        # Clean the selection display without mutating merchant settings.
+        name = raw_name.strip(chr(39) + chr(34) + " ")
         key = normalize_shipping_carrier(name)
         if is_city_courier_company(name) and key not in seen:
             result.append(name)
