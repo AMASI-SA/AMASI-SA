@@ -120,6 +120,8 @@ jobs:
           set -euo pipefail
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
             tests/test_order_cost_authority.py \
+            tests/test_bundle_reporting_financial.py \
+            tests/test_bundle_reporting_cost_policy.py \
             tests/test_order_cost_identity_projection.py \
             tests/test_authority_review_regressions.py \
             tests/test_order_cost_final_review.py \
@@ -158,6 +160,7 @@ jobs:
                       if any(row.find(tag) is not None for tag in ("skipped", "failure", "error"))]
           assert not rejected, f"Order cost skipped or failed cases: {rejected}"
           expected = {
+              "test_bundle_reporting_financial", "test_bundle_reporting_cost_policy",
               "test_order_cost_authority", "test_order_cost_identity_projection",
               "test_authority_review_regressions", "test_order_cost_final_review",
               "test_order_cost_authority_mongo", "test_order_option_cost_snapshots",
@@ -217,6 +220,7 @@ jobs:
           src/pages/PurchaseInvoices.test.jsx src/pages/InventoryReceivingWorkspace.test.jsx
           src/services/productBundles.test.js
           src/components/products/BundleEditor.test.jsx
+          src/components/products/BundleCostPolicy.test.jsx
           src/components/products/BundleProductPolicy.test.jsx
           src/components/products/BundleReportPanel.test.jsx
           src/components/products/ProductCreationPanel.test.jsx
