@@ -2,9 +2,9 @@
 
 The response intentionally preserves the legacy dashboard contract so the same
 UI can be reused. Orders/sales come from ``unified_orders``; product costs are
-recalculated from Mezan V2 products, cost profiles, components and selected
-options; ad spend comes from the native V2 reporting facts (with Google kept as
-an explicitly labelled transitional read). Salaries, shipping configuration and
+resolved from frozen order costs with Mezan V2 catalog fallback; bundle
+recipes replace the parent cost once; ad spend comes from the native V2 reporting
+facts (with Google kept as an explicitly labelled transitional read). Salaries, shipping configuration and
 payment fee formulae stay inherited from the legacy dashboard response.
 """
 from __future__ import annotations
@@ -35,10 +35,10 @@ from dashboard_snapchat_spend import load_snapchat_dashboard_spend
 from integrations_control_center.meta_oauth_security import META_PROVIDER_ID
 from integrations_control_center.snapchat_oauth_security import SNAPCHAT_PROVIDER_ID
 from integrations_control_center.tiktok_oauth_security import TIKTOK_PROVIDER_ID
-from order_option_cost_snapshot_routes import (
-    binding_matches,
-    classify_base_unit_cost,
-    selected_option_tokens,
+from order_cost_authority import (
+    calculate_catalog_line_cost,
+    load_order_cost_authority,
+    resolve_order_line_cost,
 )
 from order_currency import (
     SALLA_RAW_CURRENCY_PROJECTION,
@@ -305,62 +305,15 @@ def calculate_mezan_v2_line_cost(
     option_bindings: list[dict[str, Any]],
     resources: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
-    """Calculate one order line without mutating any operational record."""
-    quantity = _number(item.get("quantity"))
-    quantity = quantity if quantity is not None and quantity > 0 else 1.0
-    base_status = classify_base_unit_cost(item, profile, product)
-    base = base_status["unit_cost"]
-    source = base_status["source"]
-    base_unit = base if base is not None else 0.0
-
-    product_resource_unit = 0.0
-    applied_product_binding_ids: set[str] = set()
-    for binding in product_bindings:
-        binding_id = str(binding.get("id") or "")
-        if binding_id and binding_id in applied_product_binding_ids:
-            continue
-        resource = resources.get(str(binding.get("resource_id") or ""), {})
-        unit_cost = _number(resource.get("unit_cost")) or 0.0
-        multiplier = _number(binding.get("quantity")) or 1.0
-        product_resource_unit += unit_cost * multiplier
-        if binding_id:
-            applied_product_binding_ids.add(binding_id)
-
-    option_resource_unit = 0.0
-    applied_option_binding_ids: set[str] = set()
-    tokens = selected_option_tokens(item)
-    for binding in option_bindings:
-        if not binding_matches(binding, tokens):
-            continue
-        binding_id = str(binding.get("id") or "")
-        if binding_id and binding_id in applied_option_binding_ids:
-            continue
-        amount = _number(binding.get("direct_amount")) or 0.0
-        if binding.get("mode") == "resource":
-            resource = resources.get(str(binding.get("resource_id") or ""), {})
-            unit_cost = _number(resource.get("unit_cost")) or 0.0
-            amount = unit_cost * (_number(binding.get("quantity")) or 1.0)
-        option_resource_unit += amount
-        if binding_id:
-            applied_option_binding_ids.add(binding_id)
-
-    component_unit = product_resource_unit + option_resource_unit
-    return {
-        "quantity": quantity,
-        "base_cost_source": source,
-        "base_complete": base_status["calculation_cost_available"],
-        "calculation_cost_available": base_status["calculation_cost_available"],
-        "calculation_cost_source": base_status["calculation_cost_source"],
-        "mezan_cost_complete": base_status["mezan_cost_complete"],
-        "mezan_cost_missing": base_status["mezan_cost_missing"],
-        "uses_salla_fallback": base_status["uses_salla_fallback"],
-        "cost_semantics_version": base_status["semantics_version"],
-        "base_total": round(base_unit * quantity, 4),
-        "product_components_total": round(product_resource_unit * quantity, 4),
-        "selected_options_total": round(option_resource_unit * quantity, 4),
-        "components_total": round(component_unit * quantity, 4),
-        "line_total": round((base_unit + component_unit) * quantity, 4),
-    }
+    """Compatibility entry point for the shared catalog calculation."""
+    return calculate_catalog_line_cost(
+        item,
+        product=product,
+        profile=profile,
+        product_bindings=product_bindings,
+        option_bindings=option_bindings,
+        resources=resources,
+    )
 
 
 def _line_sales_total(item: dict[str, Any], quantity: float) -> float:
@@ -597,9 +550,13 @@ async def build_mezan_v2_product_cost(
         product_binding_map[str(row.get("salla_product_id"))].append(row)
     resources = {str(row.get("id")): row for row in resource_rows}
     policy = await get_policy_map(db, user_id)
+    authority = await load_order_cost_authority(
+        db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
+    )
 
     totals = defaultdict(float)
     source_lines = defaultdict(int)
+    uses_historical_authority = False
     linked_products: set[str] = set()
     missing_products: dict[str, dict[str, Any]] = {}
     salla_fallback_products: set[str] = set()
@@ -636,6 +593,14 @@ async def build_mezan_v2_product_cost(
                 option_bindings=option_map.get(product_id, []),
                 resources=resources,
             )
+            result = resolve_order_line_cost(
+                item,
+                order_number=str(order.get("order_number") or ""),
+                catalog_cost=result,
+                authority=authority,
+                product_id=product_id,
+            )
+            uses_historical_authority |= result.get("cost_authority") != "catalog_estimate"
             identity = str(
                 product_id
                 or item.get("parent_product_id")
@@ -788,6 +753,14 @@ async def build_mezan_v2_product_cost(
             "salla_variant_fallback": round(totals["salla_variant_fallback"], 2),
             "product_components": round(totals["product_components"], 2),
             "selected_options": round(totals["selected_options"], 2),
+            **{
+                source: round(totals[source], 2)
+                for source in source_lines
+                if source not in {
+                    "mezan_v2_base", "mezan_v2_variant", "salla_product_fallback",
+                    "salla_variant_fallback", "product_components", "selected_options", "missing",
+                }
+            },
         },
         "source_lines": dict(source_lines),
         "linked_products_count": len(linked_products - set(missing_products)),
@@ -808,8 +781,17 @@ async def build_mezan_v2_product_cost(
                 "salla_variant_fallback",
                 "salla_product_fallback",
             ],
-            "always_added": ["product_components", "selected_option_components"],
-            "mezan_completion_sources": ["mezan_v2_variant", "mezan_v2_base"],
+            # Keep the established catalog-only response byte-compatible.
+            # Describe historical rules when this cohort actually uses them.
+            **({
+                "catalog_additions": ["product_components", "selected_option_components"],
+                "historical_cost_authority": "frozen order line; complete bundle replaces parent and catalog additions once",
+                "missing_bundle_authority": "incomplete; never current parent fallback",
+                "cost_currency": "SAR; independent of order sales currency",
+            } if uses_historical_authority else {
+                "always_added": ["product_components", "selected_option_components"],
+            }),
+            "mezan_completion_sources": (["order_snapshot", "bundle_snapshot"] if uses_historical_authority else []) + ["mezan_v2_variant", "mezan_v2_base"],
             "salla_fallback_is_missing_mezan_cost": True,
             "product_sales": "native order lines converted by verified Salla order FX to SAR",
             "product_profit": "product sales minus Mezan V2 product cost; ads/shipping/payment fees are not allocated per product",
@@ -878,9 +860,13 @@ async def build_mezan_v2_product_cost_cooperative(
         product_binding_map[str(row.get("salla_product_id"))].append(row)
     resources = {str(row.get("id")): row for row in resource_rows}
     policy = await get_policy_map(db, user_id)
+    authority = await load_order_cost_authority(
+        db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
+    )
 
     totals = defaultdict(float)
     source_lines = defaultdict(int)
+    uses_historical_authority = False
     linked_products: set[str] = set()
     missing_products: dict[str, dict[str, Any]] = {}
     salla_fallback_products: set[str] = set()
@@ -919,6 +905,14 @@ async def build_mezan_v2_product_cost_cooperative(
                 option_bindings=option_map.get(product_id, []),
                 resources=resources,
             )
+            result = resolve_order_line_cost(
+                item,
+                order_number=str(order.get("order_number") or ""),
+                catalog_cost=result,
+                authority=authority,
+                product_id=product_id,
+            )
+            uses_historical_authority |= result.get("cost_authority") != "catalog_estimate"
             identity = str(
                 product_id
                 or item.get("parent_product_id")
@@ -1071,6 +1065,14 @@ async def build_mezan_v2_product_cost_cooperative(
             "salla_variant_fallback": round(totals["salla_variant_fallback"], 2),
             "product_components": round(totals["product_components"], 2),
             "selected_options": round(totals["selected_options"], 2),
+            **{
+                source: round(totals[source], 2)
+                for source in source_lines
+                if source not in {
+                    "mezan_v2_base", "mezan_v2_variant", "salla_product_fallback",
+                    "salla_variant_fallback", "product_components", "selected_options", "missing",
+                }
+            },
         },
         "source_lines": dict(source_lines),
         "linked_products_count": len(linked_products - set(missing_products)),
@@ -1091,8 +1093,17 @@ async def build_mezan_v2_product_cost_cooperative(
                 "salla_variant_fallback",
                 "salla_product_fallback",
             ],
-            "always_added": ["product_components", "selected_option_components"],
-            "mezan_completion_sources": ["mezan_v2_variant", "mezan_v2_base"],
+            # Keep the established catalog-only response byte-compatible.
+            # Describe historical rules when this cohort actually uses them.
+            **({
+                "catalog_additions": ["product_components", "selected_option_components"],
+                "historical_cost_authority": "frozen order line; complete bundle replaces parent and catalog additions once",
+                "missing_bundle_authority": "incomplete; never current parent fallback",
+                "cost_currency": "SAR; independent of order sales currency",
+            } if uses_historical_authority else {
+                "always_added": ["product_components", "selected_option_components"],
+            }),
+            "mezan_completion_sources": (["order_snapshot", "bundle_snapshot"] if uses_historical_authority else []) + ["mezan_v2_variant", "mezan_v2_base"],
             "salla_fallback_is_missing_mezan_cost": True,
             "product_sales": "native order lines converted by verified Salla order FX to SAR",
             "product_profit": "product sales minus Mezan V2 product cost; ads/shipping/payment fees are not allocated per product",
@@ -2219,7 +2230,7 @@ def make_dashboard_v2_router(
         if settings.get("hide_inferred_date_orders"):
             query["order_date_inferred"] = {"$ne": True}
         orders = await db.unified_orders.find(
-            query, {"_id": 0, "products": 1, "order_status": 1, "order_status_slug": 1},
+            query, {"_id": 0, "order_number": 1, "products": 1, "order_status": 1, "order_status_slug": 1},
         ).to_list(length=100000)
         orders = [order for order in orders if order_matches_status(
             order, selected, settings.get("report_included_statuses") or [],
@@ -2230,7 +2241,7 @@ def make_dashboard_v2_router(
             "items": rows, "count": len(rows),
             "incomplete_count": sum(row["cost_status"] != "complete" for row in rows),
             "totals": summarize(rows),
-            "source": "unified_orders.quantity + mezan_v2_then_salla_registered_base_cost",
+            "source": "unified_orders.quantity + frozen_order_cost_authority_with_catalog_fallback",
         }
 
     @router.get("/dashboard-v2/snapchat-accounts-summary")

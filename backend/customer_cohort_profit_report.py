@@ -468,6 +468,8 @@ async def build_customer_cohort_report(
         "raw_by_source.salla_direct.customer.phone": 1,
         "raw_by_source.salla_direct.customer.email": 1,
     }
+    from mezan_attribution_profit_bridge import COST_ORDER_PROJECTION, project_ledger_historical_costs
+    projection.update(COST_ORDER_PROJECTION)
     orders_cursor = db.unified_orders.find(order_query, projection).sort("order_date", 1).limit(cap + 1)
     orders = await _to_list(orders_cursor, limit=cap + 1)
     truncated = len(orders) > cap
@@ -482,13 +484,19 @@ async def build_customer_cohort_report(
     ).limit(cap + 1)
     ledger_rows = await _to_list(ledger_cursor, limit=cap + 1)
     truncated = truncated or len(ledger_rows) > cap
-    return build_customer_cohort_report_from_rows(
+    ledger_rows, cost_coverage = await project_ledger_historical_costs(
+        db, user_id, ledger_rows[:cap], orders=orders,
+    )
+    result = build_customer_cohort_report_from_rows(
         orders,
-        ledger_rows[:cap],
+        ledger_rows,
         as_of=as_of,
         included_statuses=included_statuses,
         truncated=truncated,
     )
+    result["coverage"]["historical_order_cost"] = cost_coverage
+    result["definitions"]["product_cost"] = "Complete frozen order cost in SAR, adjusted by the existing return policy once per order; unresolved historical evidence remains unknown."
+    return result
 
 
 __all__ = [

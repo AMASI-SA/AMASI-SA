@@ -613,7 +613,8 @@ class BundleMongoTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(Decimal(view["expected_cost"]), 360)
         from sold_products_report_v2 import load_sold_products
         sold = await load_sold_products(self.db, "owner", [{"order_number": "order", "products": [
-            {"product_id": "root", "order_item_id": "line", "quantity": 3}]}])
+            {"product_id": "root", "order_item_id": "line", "quantity": 3,
+             "options_raw": [{"option_id": "count", "value_id": "2"}]}]}])
         self.assertEqual(sold[0]["units_sold"], 3)
         self.assertEqual(sold[0]["total_cost"], 360)
         await self.consume()

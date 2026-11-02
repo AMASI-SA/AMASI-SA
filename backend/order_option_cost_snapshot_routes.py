@@ -39,78 +39,19 @@ def _item_value(item: Any, key: str, default: Any = None) -> Any:
 
 
 def selected_option_tokens(item: Any) -> set[tuple[str, str]]:
-    """Extract selected (option, value) identities from canonical order item."""
-    tokens: set[tuple[str, str]] = set()
-    raw_rows = (
-        _item_value(item, "options_raw")
-        or _item_value(item, "options")
-        or []
-    )
-    for row in raw_rows:
-        if not isinstance(row, dict):
-            continue
-        option = row.get("option") if isinstance(row.get("option"), dict) else {}
-        raw_value = row.get("value")
-        value = raw_value if isinstance(raw_value, dict) else {}
-        option_id = row.get("option_id") or row.get("id") or option.get("id")
-        value_id = row.get("value_id") or value.get("id")
-        option_name = row.get("option_name") or row.get("name") or option.get("name")
-        value_name = row.get("value_name") or value.get("name") or raw_value
-        if option_id not in (None, "") and value_id not in (None, ""):
-            tokens.add((f"id:{option_id}", f"id:{value_id}"))
-        if option_name in (None, ""):
-            continue
-        # The legacy Salla order projection intentionally preserves plural
-        # ``values`` as a list.  Treat every selected value as its own token;
-        # stringifying the whole list (for example ``['فستان']``) prevents a
-        # binding stored as ``فستان`` from matching and silently drops its
-        # additional cost from both product cards and executive totals.
-        selected_values = (
-            value_name
-            if isinstance(value_name, (list, tuple, set))
-            else [value_name]
-        )
-        for selected_value in selected_values:
-            if isinstance(selected_value, dict):
-                selected_value = (
-                    selected_value.get("name")
-                    or selected_value.get("value")
-                    or selected_value.get("label")
-                    or selected_value.get("text")
-                )
-            if selected_value not in (None, "", {}):
-                tokens.add((
-                    f"name:{_norm(option_name)}",
-                    f"name:{_norm(selected_value)}",
-                ))
+    """Use the same stable selections as bundle and component fulfillment.
 
-    normalized = _item_value(item, "options_normalized") or {}
-    if isinstance(normalized, dict):
-        for key, value in normalized.items():
-            if isinstance(value, list):
-                for entry in value:
-                    tokens.add((f"name:{_norm(key)}", f"name:{_norm(entry)}"))
-            else:
-                tokens.add((f"name:{_norm(key)}", f"name:{_norm(value)}"))
-    return tokens
+    This covers nested/plural values, option-level work and filled fields, while
+    preserving name-only matching for legacy orders without provider IDs.
+    """
+    from order_cost_authority import economic_item
+    from stock_component_consumption_service import selection_tokens
+    return {tuple(pair) for pair in selection_tokens(economic_item(item))}
 
 
 def binding_matches(binding: dict[str, Any], tokens: set[tuple[str, str]]) -> bool:
-    option_id = binding.get("option_id")
-    value_id = binding.get("value_id")
-    option_name = _norm(binding.get("option_name"))
-    value_name = _norm(binding.get("value_name"))
-    id_match = (
-        option_id not in (None, "")
-        and value_id not in (None, "")
-        and (f"id:{option_id}", f"id:{value_id}") in tokens
-    )
-    name_match = (
-        bool(option_name)
-        and bool(value_name)
-        and (f"name:{option_name}", f"name:{value_name}") in tokens
-    )
-    return id_match or name_match
+    from stock_component_consumption_service import binding_selected
+    return binding_selected(binding, [list(pair) for pair in tokens])
 
 
 def resolve_base_unit_cost(
@@ -213,206 +154,119 @@ async def ensure_indexes(db: Any) -> None:
     )
 
 
+def _cost_projection(cost: dict[str, Any]) -> dict[str, Any]:
+    """Stable response fields shared by persisted and read-only snapshots."""
+    from copy import deepcopy
+    q = cost["quantity"]
+    return {
+        "quantity": q, "base_unit_cost": cost["base_total"] / q if q else 0,
+        "product_resource_unit_cost": cost["product_components_total"] / q if q else 0,
+        "option_unit_cost": cost["selected_options_total"] / q if q else 0,
+        "unit_cost": cost["line_total"] / q if q and cost["calculation_cost_available"] else None,
+        "line_cost": cost["line_total"] if cost["calculation_cost_available"] else None,
+        "cost_complete": cost["calculation_cost_available"],
+        "mezan_cost_complete": cost["mezan_cost_complete"], "mezan_cost_missing": cost["mezan_cost_missing"],
+        "calculation_cost_available": cost["calculation_cost_available"],
+        "uses_salla_fallback": cost["uses_salla_fallback"],
+        "base_cost_source": cost["base_cost_source"], "currency": "SAR",
+        "cost_authority": cost["cost_authority"], "cost_stage": cost["cost_stage"],
+        "cost_semantics_version": cost["cost_semantics_version"], "cost": deepcopy(cost),
+    }
+
+
 async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) -> dict[str, Any]:
+    """Freeze once; only a proven expected-to-actual transition may supersede it.
+
+    Catalog edits and repeated POSTs cannot change an existing historical cost.
+    Approved receipts may improve a bundle estimate; its previous evidence is
+    retained. Historical repairs use the separately audited correction workflow.
+    """
+    from pymongo.errors import DuplicateKeyError
+    from order_cost_authority import (
+        VERSION, capture_reporting_costs, item_dict, line_aliases, line_id, line_fingerprint,
+        load_order_cost_authority, resolve_order_line_cost, _unknown,
+    )
     await ensure_indexes(db)
-    product_ids = {str(item.parent_product_id or item.product_id or "").strip() for item in order.items}
-    product_ids.discard("")
-    products = await db[PRODUCTS].find(
-        {"user_id": user_id, "salla_product_id": {"$in": list(product_ids)}},
-        {
-            "_id": 0,
-            "salla_product_id": 1,
-            "mezan_product_id": 1,
-            "name": 1,
-            "cost_price_from_salla": 1,
-            "variants": 1,
-        },
-    ).to_list(length=max(1, len(product_ids)))
-    product_map = {str(row.get("salla_product_id")): row for row in products}
-
-    profiles = await db[COST_PROFILES].find(
-        {"user_id": user_id, "salla_product_id": {"$in": list(product_ids)}}, {"_id": 0}
-    ).to_list(length=max(1, len(product_ids)))
-    profile_map = {str(row.get("salla_product_id")): row for row in profiles}
-
-    bindings = await db[BINDINGS].find(
-        {"user_id": user_id, "salla_product_id": {"$in": list(product_ids)}}, {"_id": 0}
-    ).to_list(length=10000)
-    product_bindings = await db[PRODUCT_RESOURCE_BINDINGS].find(
-        {
-            "user_id": user_id,
-            "salla_product_id": {"$in": list(product_ids)},
-        },
-        {"_id": 0},
-    ).to_list(length=10000)
-    bindings_by_product: dict[str, list[dict[str, Any]]] = {}
-    product_bindings_by_product: dict[str, list[dict[str, Any]]] = {}
-    resource_ids = set()
-    for row in bindings:
-        bindings_by_product.setdefault(str(row.get("salla_product_id")), []).append(row)
-        if row.get("mode") == "resource" and row.get("resource_id"):
-            resource_ids.add(str(row.get("resource_id")))
-    for row in product_bindings:
-        product_bindings_by_product.setdefault(
-            str(row.get("salla_product_id")),
-            [],
-        ).append(row)
-        if row.get("resource_id"):
-            resource_ids.add(str(row.get("resource_id")))
-    resources = await db[RESOURCES].find(
-        {"user_id": user_id, "id": {"$in": list(resource_ids)}}, {"_id": 0}
-    ).to_list(length=max(1, len(resource_ids)))
-    resource_map = {str(row.get("id")): row for row in resources}
-
+    number = str(order.order_number)
+    items = [item_dict(item) for item in order.items]
+    source = {"order_number": number, "products": items}
+    authority = await load_order_cost_authority(db, user_id, [source])
+    existing_rows = await db[SNAPSHOTS].find({"user_id": user_id, "order_number": number}, {"_id": 0}).to_list(length=10001)
+    if len(existing_rows) > 10000:
+        raise HTTPException(409, detail={"code": "order_cost_snapshot_limit"})
+    existing = {str(row["order_item_id"]): row for row in existing_rows}
+    ordinary = await capture_reporting_costs(db, user_id,
+        [item for item in items if (number, line_id(item)) not in authority["lines"]], {})
     now = _now()
     rows = []
-    order_total_cost = 0.0
-    from bundle_fulfillment_v2 import order_view as bundle_order_view
-    bundle_view = await bundle_order_view(db, user_id, str(order.order_number))
-    bundle_costs = {str(row["order_line_id"]): row for row in bundle_view["bundles"]}
-    for item in order.items:
-        product_id = str(item.parent_product_id or item.product_id or "").strip()
-        quantity = float(item.quantity or 1)
-        profile = profile_map.get(product_id, {})
-        base_status = classify_base_unit_cost(
-            item,
-            profile,
-            product_map.get(product_id),
-        )
-        resolved_base_cost = base_status["unit_cost"]
-        base_cost_source = base_status["source"]
-        base_unit_cost = resolved_base_cost if resolved_base_cost is not None else 0.0
-        applied_product_resources = []
-        product_resource_unit_cost = 0.0
-        seen_product_binding_ids: set[str] = set()
-        for binding in product_bindings_by_product.get(product_id, []):
-            binding_id = str(binding.get("id") or "")
-            if binding_id and binding_id in seen_product_binding_ids:
-                continue
-            resource = resource_map.get(str(binding.get("resource_id")), {})
-            unit_cost = _number(resource.get("unit_cost")) or 0.0
-            amount = unit_cost * (_number(binding.get("quantity")) or 1.0)
-            product_resource_unit_cost += amount
-            applied_product_resources.append({
-                "binding_id": binding.get("id"),
-                "quantity": binding.get("quantity") or 1,
-                "resolved_amount": round(amount, 4),
-                "resource": {
-                    "id": resource.get("id"),
-                    "code": resource.get("code"),
-                    "name": resource.get("name"),
-                    "kind": resource.get("kind"),
-                    "unit_cost": unit_cost,
-                },
-            })
-            if binding_id:
-                seen_product_binding_ids.add(binding_id)
-        tokens = selected_option_tokens(item)
-        applied = []
-        option_unit_cost = 0.0
-        seen_option_binding_ids: set[str] = set()
-        for binding in bindings_by_product.get(product_id, []):
-            if not binding_matches(binding, tokens):
-                continue
-            binding_id = str(binding.get("id") or "")
-            if binding_id and binding_id in seen_option_binding_ids:
-                continue
-            amount = _number(binding.get("direct_amount")) or 0.0
-            resource_snapshot = None
-            if binding.get("mode") == "resource":
-                resource = resource_map.get(str(binding.get("resource_id")), {})
-                unit_cost = _number(resource.get("unit_cost")) or 0.0
-                amount = unit_cost * (_number(binding.get("quantity")) or 1.0)
-                resource_snapshot = {
-                    "id": resource.get("id"), "code": resource.get("code"),
-                    "name": resource.get("name"), "unit_cost": unit_cost,
-                }
-            option_unit_cost += amount
-            applied.append({
-                "binding_id": binding.get("id"),
-                "option_id": binding.get("option_id"), "option_name": binding.get("option_name"),
-                "value_id": binding.get("value_id"), "value_name": binding.get("value_name"),
-                "mode": binding.get("mode"), "quantity": binding.get("quantity") or 1,
-                "resolved_amount": round(amount, 4), "resource": resource_snapshot,
-            })
-            if binding_id:
-                seen_option_binding_ids.add(binding_id)
-        unit_cost = (
-            base_unit_cost
-            + product_resource_unit_cost
-            + option_unit_cost
-        )
-        line_cost = unit_cost * quantity
-        order_total_cost += line_cost
+    for item in items:
+        key = line_id(item)
+        if not key:
+            raise HTTPException(409, detail={"code": "order_cost_line_identity_required"})
+        catalog = (ordinary.get(key) or {}).get("cost") or _unknown(item.get("quantity"), "missing_historical_cost")
+        cost = resolve_order_line_cost(item, order_number=number, catalog_cost=catalog,
+            authority=authority, product_id=item.get("parent_product_id") or item.get("product_id"))
+        matches = [existing[alias] for alias in line_aliases(item) if alias in existing]
+        if len(matches) > 1:
+            raise HTTPException(409, detail={"code": "order_cost_snapshot_identity_ambiguous", "order_item_id": key})
+        previous = matches[0] if matches else None
+        # Retain the first source identity instead of inserting another row
+        # merely because a later projection uses the canonical alias.
+        selector = {"user_id": user_id, "order_number": number,
+                    "order_item_id": previous["order_item_id"] if previous else key}
+        if previous:
+            previous_cost = resolve_order_line_cost(item, order_number=number, catalog_cost=catalog,
+                authority={"lines": {(number, key): previous}},
+                product_id=item.get("parent_product_id") or item.get("product_id"))
+            if previous_cost["cost_authority"] == "unresolved_snapshot":
+                raise HTTPException(409, detail={"code": "order_cost_snapshot_reconciliation_required", "order_item_id": key})
         snapshot = {
-            "id": uuid.uuid4().hex,
-            "user_id": user_id,
-            "order_number": order.order_number,
-            "order_id": order.order_id,
-            "order_item_id": item.order_item_id,
-            "source_item_id": item.source_item_id,
-            "salla_product_id": product_id or None,
-            "mezan_product_id": (product_map.get(product_id) or {}).get("mezan_product_id"),
-            "product_name": item.name,
-            "sku": item.sku,
-            "quantity": quantity,
-            "base_unit_cost": round(base_unit_cost, 4),
-            "base_cost_source": base_cost_source,
-            "cost_complete": resolved_base_cost is not None,
-            "mezan_cost_complete": base_status["mezan_cost_complete"],
-            "mezan_cost_missing": base_status["mezan_cost_missing"],
-            "calculation_cost_available": base_status["calculation_cost_available"],
-            "uses_salla_fallback": base_status["calculation_uses_salla_fallback"],
-            "cost_semantics_version": base_status["semantics_version"],
-            "product_resource_unit_cost": round(
-                product_resource_unit_cost,
-                4,
-            ),
-            "option_unit_cost": round(option_unit_cost, 4),
-            "unit_cost": round(unit_cost, 4),
-            "line_cost": round(line_cost, 4),
-            "selected_options": [list(token) for token in sorted(tokens)],
-            "applied_product_resources": applied_product_resources,
-            "applied_option_costs": applied,
-            "cost_authority": "mezan_v2_snapshot",
-            "calculated_at": now,
+            "id": (previous or {}).get("id") or uuid.uuid5(uuid.NAMESPACE_URL, f"mezan-cost:{user_id}:{number}:{key}").hex,
+            **selector, "order_id": getattr(order, "order_id", None),
+            "source_item_id": item.get("source_item_id"),
+            "salla_product_id": item.get("parent_product_id") or item.get("product_id"),
+            "product_name": item.get("name"), "sku": item.get("sku"), **_cost_projection(cost),
+            "selected_options": [list(token) for token in sorted(selected_option_tokens(item))],
+            "line_fingerprint": line_fingerprint(item), "cost_semantics_version": VERSION,
+            "calculated_at": now, "updated_at": now,
         }
-        selector = {"user_id": user_id, "order_number": order.order_number, "order_item_id": item.order_item_id}
-        bundle = bundle_costs.get(str(item.order_item_id))
-        if bundle:
-            # A sold bundle is one revenue line. Its frozen leaf costs replace
-            # the parent base/resources/options, never add to them.
-            bundle_amount = bundle.get("actual_cost")
-            if bundle_amount is None:
-                bundle_amount = bundle.get("expected_cost")
-            resolved = float(bundle_amount) if bundle_amount is not None else None
-            uses_fallback = bundle.get("actual_cost") is None and any(
-                str(leaf.get("cost_source", "")).startswith("salla_") for leaf in bundle.get("leaves", []))
-            order_total_cost += (resolved or 0.0) - line_cost
-            snapshot.update({"base_unit_cost": 0.0, "product_resource_unit_cost": 0.0,
-                "option_unit_cost": 0.0, "applied_product_resources": [], "applied_option_costs": [],
-                "unit_cost": resolved / quantity if resolved is not None and quantity else None,
-                "line_cost": resolved, "cost_complete": resolved is not None,
-                "mezan_cost_complete": resolved is not None and not uses_fallback,
-                "mezan_cost_missing": resolved is None or uses_fallback,
-                "calculation_cost_available": resolved is not None, "uses_salla_fallback": uses_fallback,
-                "base_cost_source": "bundle_snapshot", "cost_authority": "bundle_snapshot",
-                "bundle_revision": bundle["revision"], "bundle_actual_cost": bundle.get("actual_cost"),
-                "bundle_expected_cost": bundle.get("expected_cost"),
-                "cost_stage": "actual" if bundle.get("actual_cost") is not None else "expected"})
-        await db[SNAPSHOTS].update_one(
-            selector,
-            {"$set": {**snapshot, "updated_at": now}, "$setOnInsert": {"created_at": now}},
-            upsert=True,
-        )
-        rows.append(snapshot)
-    return {
-        "order_number": order.order_number,
-        "currency": "SAR",
-        "total_cost": round(order_total_cost, 4),
-        "items": rows,
-        "calculated_at": now.isoformat(),
-    }
+        if previous:
+            if previous.get("line_fingerprint") and previous["line_fingerprint"] != snapshot["line_fingerprint"]:
+                raise HTTPException(409, detail={"code": "order_cost_snapshot_reconciliation_required", "order_item_id": key})
+            if cost["cost_authority"] == "bundle_snapshot" and cost["cost_stage"] == "actual" and previous.get("cost_stage") != "actual":
+                await db[SNAPSHOTS].update_one({**selector, "cost_stage": {"$ne": "actual"}},
+                    {"$set": snapshot, "$push": {"history": {"reason": "verified_bundle_consumption",
+                        "line_cost": previous.get("line_cost"), "cost_stage": previous.get("cost_stage", "expected"),
+                        "cost": previous.get("cost"), "superseded_at": now}}})
+            # Otherwise the first written record is authoritative, including ID
+            # and timestamp. Replay is a read, not a fresh catalog valuation.
+        else:
+            try:
+                await db[SNAPSHOTS].update_one(selector,
+                    {"$setOnInsert": {**snapshot, "created_at": now}}, upsert=True)
+            except DuplicateKeyError:
+                pass  # A concurrent first capture won the unique identity.
+        saved = await db[SNAPSHOTS].find_one(selector, {"_id": 0})
+        # A legacy manual snapshot can predate the frozen bundle authority or
+        # an audited reporting correction. Return the same reporting projection
+        # as every other reader while retaining that original database record.
+        # Missing/reconciled evidence must likewise not expose stale completeness.
+        if (cost["cost_authority"] in {"bundle_snapshot", "unresolved_snapshot"}
+                and (saved.get("line_cost") != snapshot["line_cost"]
+                     or saved.get("cost_complete") != snapshot["cost_complete"]
+                     or saved.get("cost_authority") != snapshot["cost_authority"])):
+            stored_cost = saved.get("line_cost")
+            saved = {**saved, **{field: snapshot[field] for field in (
+                "quantity", "base_unit_cost", "product_resource_unit_cost", "option_unit_cost",
+                "unit_cost", "line_cost", "cost_complete", "mezan_cost_complete", "mezan_cost_missing",
+                "calculation_cost_available", "uses_salla_fallback", "base_cost_source", "currency",
+                "cost_authority", "cost_stage", "cost_semantics_version", "cost",
+            )}, "persisted_snapshot_line_cost": stored_cost, "reporting_projection": True}
+        rows.append(saved)
+    complete = all(row.get("cost_complete") for row in rows)
+    known = round(sum((_number(row.get("line_cost")) or 0.0) for row in rows), 4)
+    return {"order_number": number, "currency": "SAR", "total_cost": known if complete else None,
+            "known_total_cost": known, "cost_complete": complete, "items": rows, "calculated_at": now.isoformat()}
 
 
 def make_order_option_cost_snapshot_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
@@ -429,19 +283,44 @@ def make_order_option_cost_snapshot_router(db: Any, current_user: Callable[..., 
 
     @router.get("/{order_number}/cost-snapshot")
     async def get_cost_snapshot(order_number: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+        from order_cost_authority import (
+            item_dict, line_aliases, line_id, load_order_cost_authority,
+            resolve_order_line_cost, _unknown,
+        )
         user_id = str(user["id"])
-        rows = await db[SNAPSHOTS].find(
+        number = str(order_number)
+        try:
+            order = await get_order(MongoOrderRepository(db), user_id=user_id, order_number=number)
+        except OrderNotFoundError as exc:
+            raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
+        items = [item_dict(item) for item in order.items]
+        authority = await load_order_cost_authority(db, user_id, [{"order_number": number, "products": items}])
+        stored_rows = await db[SNAPSHOTS].find(
             {"user_id": user_id, "order_number": str(order_number)}, {"_id": 0}
-        ).sort("order_item_id", 1).to_list(length=1000)
+        ).sort("order_item_id", 1).to_list(length=10001)
+        if len(stored_rows) > 10000:
+            raise HTTPException(409, detail={"code": "order_cost_snapshot_limit"})
+        stored = {str(row["order_item_id"]): row for row in stored_rows}
+        rows = []
+        for item in items:
+            key = line_id(item)
+            cost = resolve_order_line_cost(item, order_number=number,
+                catalog_cost=_unknown(item.get("quantity"), "missing_historical_cost"), authority=authority,
+                product_id=item.get("parent_product_id") or item.get("product_id"))
+            matches = [stored[alias] for alias in line_aliases(item) if alias in stored]
+            original = matches[0] if len(matches) == 1 else {}
+            rows.append({**original, "order_number": number, "order_item_id": key,
+                "salla_product_id": item.get("parent_product_id") or item.get("product_id"),
+                **_cost_projection(cost), "persisted_snapshot_line_cost": original.get("line_cost"),
+                "reporting_projection": True})
         for row in rows:
             for key in ("created_at", "updated_at", "calculated_at"):
                 if hasattr(row.get(key), "isoformat"):
                     row[key] = row[key].isoformat()
-        return {
-            "order_number": str(order_number),
-            "items": rows,
-            "total_cost": round(sum((_number(row.get("line_cost")) or 0.0) for row in rows), 4),
-            "snapshot_exists": bool(rows),
-        }
+        complete = bool(rows) and all(row["cost_complete"] for row in rows)
+        known = round(sum((_number(row.get("line_cost")) or 0.0) for row in rows), 4)
+        return {"order_number": number, "currency": "SAR", "items": rows,
+                "total_cost": known if complete else None, "known_total_cost": known,
+                "cost_complete": complete, "snapshot_exists": bool(authority["lines"])}
 
     return router
