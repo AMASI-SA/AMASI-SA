@@ -14,7 +14,9 @@ jobs:
       matrix:
         include:
           - label: integration
-            source: a7fc467c8a129107d8efb9a4fc64833e827f0b74
+            source: 897237c83e2d504e008d96b0f537ba210bfc167d
+          - label: production
+            source: f8235d57e90f8a1271df6350d7e7919f5621ea11
     steps:
       - uses: actions/checkout@v4
         with:
