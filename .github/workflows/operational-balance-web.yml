@@ -85,6 +85,8 @@ jobs:
           remaining_cases = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_remaining_products']
           assert len(remaining_cases) >= 50, 'Real-Mongo remaining-product source/report cases missing'
           assert any('test_operational_balance_cost_completeness' in c.get('classname', '') for c in cases), 'Scoped cost completeness cases missing'
+          assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_native_purchase_review']) >= 72, 'Native purchase proof cases missing'
+          assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_external_advances']) >= 28, 'External loan Mongo cases missing'
           for suite in ('test_operational_supplier_invoice_cutover',
                         'test_operational_balance_invoice_flow',
                         'test_operational_balance_supplier_final_cost',
@@ -150,7 +152,8 @@ jobs:
               r.numFailedTests || r.numFailedTestSuites || r.numPendingTests ||
               r.numPendingTestSuites || r.numTodoTests) process.exit(1);
           for (const suffix of ['SalaryStart.test.jsx', 'OperationalSupplierAccount.test.jsx',
-                                'OperationalFinancialPosition.test.jsx', 'DriverPaymentReview.test.jsx']) {
+                                'OperationalFinancialPosition.test.jsx', 'DriverPaymentReview.test.jsx',
+                                'ExternalOperationControls.test.jsx']) {
             const suite = r.testResults.find(s => s.name.endsWith('/' + suffix));
             if (!suite || !suite.assertionResults.length || suite.assertionResults.some(t => t.status !== 'passed'))
               throw Error('Combined UI suite missing or incomplete: ' + suffix);

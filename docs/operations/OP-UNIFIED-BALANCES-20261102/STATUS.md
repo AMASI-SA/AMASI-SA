@@ -1,62 +1,80 @@
-# OP-UNIFIED-BALANCES-20261102 — native purchase journal evidence
+# OP-UNIFIED-BALANCES-20261102 — native source proof and explicit external loans
 
-**DRAFT / NOT published / NO live financial correction or activation.**
+**DRAFT / NOT published / NO live financial correction, backfill or activation.**
 
-## Recoverable source and owner clarification
+## Current source and preserved work
 
-Repository AMASI-SA/AMASI-SA; branch integration/operational-balances-unified-20261102; Draft PR1687. This checkpoint descends normally from verified head **9c04572f38487937338ddcd573b0df6dfac1e9fa**, root9b1259511185d33719192b749c2ccbccbe14ed0d. Read the current PR head and exact CI before continuing.
+Repository AMASI-SA/AMASI-SA; branch integration/operational-balances-unified-20261102; Draft PR1687.
 
-- Exact locally tested new Backend tree: **b0ee4e2615dfabd3450b54f62197711263361e03**. Base Backend7dadd09d09caf9f1bde0c39cdcbe187bf82a2064 was independently reconstructed and matched before edits. Frontend2ed74cb8d188606549a3c43ff23a10a835131d06 is unchanged.
-- Published dashboard production **f8235d57e90f8a1271df6350d7e7919f5621ea11** and all prior supplier/payroll/provider/remaining-product work remain preserved. No original branch, dashboard implementation, shared ledger writer, release intent or production source was replaced.
-- Prior canonical STATUS is preserved byte-for-byte as STATUS-PRE-NATIVE-PROOF-20261102.md, original blobd094bef8cd00c5c0d2956f476522c7ba357eb523. Earlier PRE/COMBINED/PAYMENT/SUPPLIER records and their evidence remain.
-- Owner clarification: opening means the saved balance at operational startup, NOT a new opening to enter. A newly approved supplier invoice after saved startup is not excluded merely because its customer order is old, or because an opening might hypothetically contain it. No overlap was established in live merchant data. Preserve the saved opening and existing payments; show any actual duplicate evidence separately. This turn does not change invoice eligibility or existing saved opening amounts.
+- Latest application checkpoint **62fa255b5a1d99952b94c47672b2cc2029c7940b**, root **b1be82803c126db862adbd29debf395deab3960a**. Exact remote Backend **570c47ccbac15544f2d31d7ab6efc86957eb119c** and Frontend **c1102f0324d0cd74cfa1778d2d07b2d2f176b5c9** match the full local trees, not just a selected diff.
+- Normal source progression: verified9c04572f -> native proof **99bd1b96a297cf5aa9dcd71ba6facfbcd6c2f4fd** -> staging8a1076a0 -> exact source62fa255b. This following checkpoint removes the temporary source workflow and changes CI/docs only; application bytes remain62fa.
+- Published production/dashboard1690 **f8235d57e90f8a1271df6350d7e7919f5621ea11** remains incorporated; no dashboard, original task branch, release intent or production source was replaced.
+- Previous canonical STATUS preserved byte-for-byte as STATUS-PRE-EXTERNAL-LOANS-20261102.md, blob **c5dd2261c0ccd4f87df2dfc7df36a86d3478a637**. Earlier PRE-NATIVE/PRE-SUPPLIER/PRE-REMAINING/COMBINED/PAYMENT/SUPPLIER records remain. Issue1006 is capped; use this record and PR1687 comments.
+- Owner clarification remains: opening is the existing saved starter balance, not a new opening to enter. New post-start approved invoices are not excluded merely because customer orders are old or an opening might hypothetically overlap. No such live duplicate was established. Do not rewrite openings or old cash movements.
 
-## New read-only implementation
+## Implemented native purchase proof at99 — read only, not operational matching
 
-The existing GET supplier-invoice-review now includes a nested native_ledger_review for each native purchase invoice. This proves source-journal evidence only; it is NOT an operational payable importer or an opening reconciliation.
+Supplier invoice preview now calls the public sealed V2 ledger reader in its same consistent snapshot. It verifies the approved native purchase's owner/schema/SAR/line totals, inventory/payable/tax journal and evidence, saved liability and exact supplier-debit/bank-credit payment references. Partial/multiple/full payment totals must agree with the saved liability. Missing audit/groups, reversed/duplicate entries, mismatched owner/account/reference/date/amount and scope limits remain explicit unknowns.
 
-1. Uses the public sealed accounting_ledger_v2.read_reporting_entries_v2 reader and its whole-group/audit verification in the SAME Mongo snapshot as saved state/invoices/liabilities. No raw/private ledger access or production writer call.
-2. Validates invoice owner/schema/approval/SAR/supplier identities, line/subtotal/gross equations, tax treatment and deductible-tax evidence, saved liability source and group links, and exact inventory/payable/input-VAT legs and dates. The saved operational start classifies approval period; customer-order creation never supplies eligibility.
-3. Supplier settlements require the matching supplier-debit/bank-credit pair, exact invoice/liability/supplier/operation references, date and amount. Partial/multiple/full payment sums must equal the saved liability projection. Same supplier/amount or an unrelated invoice is not identity proof.
-4. Reversals, duplicate operations/legs, missing whole groups/audits, owner/account/reference mismatches, incomplete payment or tax evidence and reader limits remain explicit failures with unknown monetary fields, never a confirmed zero.
-5. The successful source proof exposes native_invoice_gross_sar, native_settled_sar, native_outstanding_sar, bank/journal references and an evidence digest. **operational_balance_matched=false, opening_coverage_verified=false, difference_sar=null and posting_allowed=false remain unconditional.** The outer verified_native_payable_sar stays null and native_financial_matching_complete stays false when native candidates exist. Source-ledger proof must not be summed into operational balances a second time.
-6. Native ledger proof is included in the preview manifest so changes to bank/evidence alter the review hash. A native verification failure does not erase an independently valid preparation-invoice comparison. Existing route actor/permission/late-revocation restrictions are unchanged.
-7. Ledger entries are loaded once per preview via the existing bounded public API, then indexed by group/invoice/liability rather than scanned once per component. The public API still performs its own per-group checks and enforces its existing bound; no live performance or unlimited coverage is claimed.
+Nested native_ledger_review provides verified SOURCE gross/settled/outstanding and bank/journal evidence digest. It does NOT create or import an operational debt. operational_balance_matched=false, opening_coverage_verified=false, difference_sar=null, posting_allowed=false remain; outer native verified payable stays null. Keep bundle_received_purchase_financial_matching_required. Matching proven source debt/payments to operational identities/opening coverage remains unimplemented. A native proof failure does not erase an independently valid preparation invoice comparison.
 
-Only three application/test files changed:
-- backend/operational_native_purchase_review.py — blobffc0c16032cb0139cad605e4ec332a030b61a289
-- backend/operational_supplier_invoice_preview.py — blob8e12daa235426a1589eba06ee32739de6c628940 (8 additions/1 deletion)
-- backend/tests/test_operational_balance_native_purchase_review.py — bloba84eea4964c7003277da23790a9e0ef093104c90
+## New explicit external-person loan intent in the existing movement flow
 
-## Exact local verification and limitations
+A synthetic reproduction exposed the ambiguity: generic incoming100 then generic outgoing40 retained100 payable plus40 receivable. The software cannot know that the second cash movement was repayment. Do not retrospectively reinterpret those old rows.
 
-Python3.13.5, isolated Mongo8.0.12 replica bound to127.0.0.1:27305. UUID test databases only; no merchant credentials, customer rows or production connection. Test-only native journals were created through the existing public writer to test genuine sealed group/audit proof; the review itself is read-only. Fixtures restored their test mode before operational preview. All test databases were dropped and this task's own Mongo fixture was stopped after testing.
+New explicit operations use the SAME create_movement, owner/actor validation, claim/CAS, audit and exact-retry path:
+- borrow: incoming collection creates an independent amount owed to the external person;
+- lend: outgoing payment creates an independent amount owed to us;
+- repay_borrowing: outgoing settlement reduces existing payable;
+- collect_lending: incoming settlement reduces existing receivable.
 
-Focused command: PYTHONPATH=<isolated-test-deps>:backend:backend/tests python -B -m pytest --noconftest -q backend/tests/test_operational_balance_native_purchase_review.py backend/tests/test_operational_balance_supplier_invoice_preview.py --tb=short --junitxml=native-focused-final.xml. **109 passed,0 failure/error/skip**, including72 new and37 existing cases;19.43seconds.
+Creation never auto-settles an opposite existing debt or accepts settlement allocations. Repayment never becomes an unintended new loan: no-debt/overpayment is rejected. Explicit repayment can allocate existing openings, ordinary obligations and stable virtual identities for the SAME prior unallocated external cash contribution. Virtual identities do not post a second debt or mutate old movement/opening records. No matching by name or amount, no automatic historical opposite-movement netting.
 
-Combined command retains the complete existing operational selection: test_operational_balance*.py, test_operational_open_cost_exposure.py, test_operational_bundle_cost_projection.py, test_operational_supplier_invoice_cutover.py, test_store_delivery_noncash_review.py, test_operational_driver_review_mongo.py, --noconftest -q --tb=short --junitxml=combined-native-review.xml. **1608 passed,0 failures/errors/skips,exit0,263.27seconds.** JUnit independently parsed1608 testcase elements and72 in the new module. The72 new cases include10 real-Mongo cases; all are subsets, NOT added to1608. Existing five Pydantic deprecation warnings remain.
+The report subtracts explicit allocations exactly once from the original advance. Before/after party receivable/payable and bank/cash balances are saved with the explicit new movement inside its existing CAS. Native mobile WRITE does not imply READ: fresh report permission is rechecked after commit; balances are redacted on absence/revocation without losing the committed movement acknowledgement. Existing web active-membership behavior is unchanged.
 
-Combined JUnit SHA256 **faf4193bfa71e86d1321ce18206bf895569ae4c8167b5bd77e1cb0434d48844b**; log SHA256 **e6443c547bcb042ca5bf38ddf2e947face8ae7fcda4212944b8e7d9b30739fc4**. Initial test-fixture attempts failed due to noncanonical zero-opening timestamps and amount precision; fixtures were corrected, no financial guard weakened. Original logs retained in the review archive. Synthetic purchase80 and bank-backed payment25 yields source outstanding55, not a new operational55 or80 debt.
+Daily Movements, both card and advanced views, has a required explicit external-operation choice for new entries; direction/type follow the operation. General/manual movement remains available explicitly. Incoming labels show الاستلام في, outgoing الدفع من. The confirmation table displays server-provided before/after amounts; missing data is not zero. Persisted old pending requests retry unchanged with no added intent/hash change. No new parallel financial writer or API endpoint.
 
-Static ledger-access review: the new/modified production files have zero findings. The repository-wide scripts/check_accounting_ledger_v2_access.py currently fails on five pre-existing private-constant imports in unchanged accounting_advertising_setup.py, store_delivery_cash_evidence.py and accounting_driver_review_history.py. Their bytes match the base. This failure is retained, not labelled a security pass or bypassed; assess it with the applicable full release gates.
+Eight application/test changes: operational_external_advances.py; operational_balance_service.py; operational_balance_routes.py; test_operational_balance_external_advances.py; DailyMovements.jsx; ExternalOperationControls.jsx; ExternalOperationControls.test.jsx; one existing OperationalBalances.test.jsx setup selects general explicitly. Its original monetary/retry assertions remain unchanged.
 
-Fresh exact-head GitHub operational/frontend/security/build acceptance must be read after this checkpoint. Earlier1536/300 on9c and readiness41506311209 are historical: the former succeeded, the latter FAILED at sourceA/intentB classification before final build. This new proof does not resolve that release gate, and no old dashboard intent may be reused. No frontend visual/print/download acceptance is claimed.
+## Exact verification and boundaries
 
-## Full scope and remaining gates
+### Native99 remote acceptance (prior exact source)
+Operational Balance Web **41512254889** completed both jobs successfully. Official ZIPs downloaded, SHA256-checked and independently parsed:
+- Backend artifact13174905072, ZIP **14a7c444d690a5cabcd5b13a57f02cd14fc2b05c9420d580d147c9356fca0444**: **1608 testcase elements**,0fail/error/skip, embedded99 source/root79839046 match. Includes72 native proof cases, of which10 use actual isolated Mongo.
+- Frontend artifact13173746736, ZIP **ede6ca503a6f5d20d1d62942d725d0011a8c3889dfcc0c0874e2f772037f4032**: **300 tests/25 suites**,0failed/pending/todo.
+These are native99 results, NOT acceptance for the newer external-loan UI.
 
-| Scope | Implemented / preserved | Remaining before completion or activation |
+### External62fa local combined acceptance
+Exact Backend570c47cc: **1636 passed,0failures/errors/skips,exit0,311.21seconds**, Python3.13.5. The28 new actual-Mongo external loan cases are INCLUDED, not added to1636; focused28 passed11.88seconds. Existing native, supplier, remaining-product, payroll, noncash, provider suites remain collected. Five existing Pydantic deprecation warnings remain.
+
+Command: PYTHONPATH=<isolated-test-deps>:backend:backend/tests with OPERATIONAL_TEST_MONGO_URI and MZ2_TEST_MONGO_URI set to the dedicated localhost replica, python -B -m pytest --noconftest -q backend/tests/test_operational_balance*.py backend/tests/test_operational_open_cost_exposure.py backend/tests/test_operational_bundle_cost_projection.py backend/tests/test_operational_supplier_invoice_cutover.py backend/tests/test_store_delivery_noncash_review.py backend/tests/test_operational_driver_review_mongo.py --tb=short --junitxml=combined-external-review.xml.
+
+JUnit SHA256 **374d0e0190bf92c05e96db480d3b1543d50c71afab3417a98d90c753b4ef8cc3**; log **9a7c852eda9a2ceca9ddca9916e92e6ef18def8e1557b0a532a9531dcccaed3a**. Actual isolated Mongo8.0.12 bound127.0.0.1 only, synthetic UUID databases, no merchant credentials. The dedicated fixture was stopped; six baseline cached UUID test databases were found and the task-owned fixture directory removed after shutdown. No external database was touched.
+
+Cases include four directions/partial/full payment, independent opposite loans, old saved advances explicitly repaid without rewriting, old opposite generic movements unchanged, opening repayment without editing opening, overpayment and concurrent duplicate protection, owner/HTTP/session checks, native READ/WRITE separation and revocation, exact retry and refresh.
+
+Frontend suite is authored but NOT run locally (no node_modules); fresh exact-head GitHub frontend results are mandatory. No browser/mobile visual/print/download acceptance is claimed. Initial backend fixture failures were a too-short request ID and a mistaken web permission assumption; tests now exercise the existing native permission boundary, not a weakened route guard.
+
+Source transfer uses eight reviewed plaintext patches, combined SHA256 **53d512004cfb1c6c090cdf1d8445d3dda7605065be5c2bcf64bd1c1e38194dc5**, exact before/after Git blobs and a clean local application rehearsal. The branch-only one-shot applied only those eight files by normal non-force push, removed its own payload, and performed no application/runtime/financial operation. Full remote Backend/Frontend trees matched; this checkpoint removes the temporary workflow. No retained transfer execution surface is needed.
+
+CI adds positive collection requirements for28 external cases,72 native proof cases and the new UI suite, preserving every previous no-failure/no-error/no-skip/Mongo/supplier/payroll assertion. Fresh combined CI/security/build remains to be read on the new head; never add overlapping counts or reuse earlier300 as new UI acceptance.
+
+Repository-wide static ledger access check had5 pre-existing findings in unchanged accounting_advertising_setup.py, store_delivery_cash_evidence.py and accounting_driver_review_history.py; new native source files had0. Keep that recorded failure. Earlier Release Readiness41506311209 failed A/B classification before final build; native proof/loans do not imply that gate is fixed. Preserve guards and create a fresh finalA/build/intent-onlyB after business gates close.
+
+## Full remaining scope / activation inventory
+
+| Scope | Implemented and preserved | Remaining |
 |---|---|---|
-| Supplier invoices | Saved cutoff independent of old order creation, final-component estimate replacement, unchanged payments, consistent-snapshot preparation comparison; native journal/payment source proof now added | Match proven native debt and payments to existing operational source identities and opening coverage without duplicating them. Read actual owner data, explain each difference, obtain explicit approval before omitted financial recognition. No new opening or blanket hypothetical-duplicate block. |
-| Remaining ordinary/bundle products | Exact awaiting-review/in-progress states, original SAR, frozen selected/unconditional/nested components, partial receipt source/reducer/report wiring and scoped completeness retained | Native invoice-to-operational matching and supported pre-invoice native receiving; live read-only comparison/performance. Keep bundle_received_purchase_financial_matching_required; stock/assignment is not new debt. |
-| Payroll | Inclusive saved-cutoff day, preview/approval and idempotence retained | Saved opening/missing-day review and approval; no day-one posting performed. |
-| Payment providers | Optional fee components, native aliases/plans and capture/refund protections retained | Actual dated capture/plan/void/refund source, approved merchant policies and gross/net openings; postsettlement actual fee/tax credits, partial/multiorder allocation and bank reconciliation. Keep provider_postsettlement_refund_review_required and statement posting_allowed=false. |
-| Shipping/drivers/COD | Postcutoff delivery on old orders, executor evidence, fee/cash/POS/bank separation retained | Current-carrier/full coverage and actual settlement matching, expected COD. Uncollected COD is not cash. Restricted old forecast archive remains unaccessed. |
-| Customers/external persons/loans | Published compensation and original-platform rules retained | Four loan/repayment directions, before/after balances and receive-in/pay-from labels; exchange/return/shipping cross-path dedup acceptance. |
-| Warnings/financial report | Existing aggregation, scoped product/shipping completeness and tables retained | Resolve actual source/payment/advertising start/FX/salary evidence without hiding gaps; common-period complete expected position/profit; browser/mobile/actual print/download tests. |
-| One operational release | All earlier source preserved, no independent deployment | Close business and financial-activation gates, current exact combined CI/security/UI/build, new finalA/build/intent-onlyB, actual inactive lease before/app, one publication and three identity probes then active=false. |
+| Supplier invoices | Post-start approval on old orders, final-cost replacement, saved payments, snapshot comparison; native source ledger/payment proof | Native-to-operational identity/payment/opening matching and actual owner read-only differences. Explicit financial approval before recognizing omitted amounts, not hypothetical blanket opening exclusion. |
+| Remaining products | Exact statuses, SAR, frozen selected/unconditional/nested components, partial receipt source/reducer/report and scoped gaps | Native payable bridge, unsupported pre-invoice bundle receiving, real owner comparison/performance. Do not fabricate supplier debt from stock/assignment. |
+| External persons/loans | Explicit four actions, same movement CAS, before/after balances, labels, retries/concurrency/native permissions; backend locally tested and UI authored | Fresh combined frontend/CI and visual acceptance; actual old misclassified movements require separate read-only explanation/approval, no automatic historical repair. This does not complete exchanges/returns/shipping dedup. |
+| Customer exchanges/returns | Published compensation/original-platform rules retained | Cross-path replacement/return/shipping monetary and duplicate acceptance remains. |
+| Payroll | Inclusive saved cutoff, preview/approval/idempotence retained | Actual missing-day/opening review and owner activation; no day-one posting. |
+| Providers | Opt-in components, aliases/explicit plans, original capture/refund protection retained | Actual payment/plan/void/refund source, approved terms/gross-net evidence, postsettlement fee/VAT credits/partial-multiorder bank links. Keep provider_postsettlement_refund_review_required and statement posting_allowed=false. |
+| Shipping/drivers/COD | Postcutoff earned old-order fees, executor/cash/POS/bank separation | Current carrier/full coverage, actual matching, expected COD; uncollected COD not cash. Restricted old archive unaccessed. |
+| Warnings/report | Aggregation, scoped product/shipping totals and financial tables | Actual source/ad-start/FX/salary evidence, complete common-period position/profit, browser/mobile/actual print/download. |
+| One operational release | All tasks preserved, dashboard not rewritten | All business gates and activation boundary, new combined source/security/UI/build, fresh A/build/B, inactive guard before/app, one publish, verify3 and active=false. |
 
-## Safety and continuation
+Production changed by this task:NO. No live balance/opening correction, historical replay, invoice/refund/stock/bank/provider operation, payroll/policy activation, /app, lease or publication. Code publication is not financial reconciliation or approval.
 
-Production changed by this task:NO. No live opening/balance correction, financial replay, invoice/refund/stock/bank/provider operation, payroll/policy activation, /app, lease, prepare/prepublish or publication. All approved source facts remain unchanged. Issue1006 is capped; use this canonical status and PR1687 evidence comments.
-
-Next: verify this exact remote Backend tree and fresh CI. Complete the native source-to-operational matching with existing identity/payment evidence, then actual read-only merchant differences and the provider/customer/shipping/report gates. Do not equate source proof with operational correction approval. Before later deployment work, read actual production_release_guard.py status and preserve every newer production change.
+Next: read current head, fresh exact combined tests and repair any new UI failure without dropping assertions; then close native operational matching and provider/customer/shipping/report gates. Compare actual owner data read-only before approving changes. Read actual production_release_guard.py status before any later deployment work, preserving all newer production source.
