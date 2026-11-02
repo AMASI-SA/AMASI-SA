@@ -20,10 +20,20 @@ OWNER=financial.OWNER
 LINE='salla:ORDER:LINE'
 
 
-async def fixture(db, monkeypatch, *, rose=True, name=True, schema=2, created=CREATED):
+async def fixture(db, monkeypatch, *, rose=True, name=True, schema=2, created=CREATED, rose_supplier=False):
     source = await financial.db.__wrapped__(monkeypatch)
     if schema == 2:
         await financial.schema2_service_fixture(source)
+    if rose_supplier:
+        definition = await source[financial.catalog.BUNDLES].find_one({'user_id': OWNER, 'product_id': financial.ROOT})
+        await source.mezan_suppliers_v2.insert_one({'user_id': OWNER, 'id': 'supplier', 'status': 'active'})
+        items = deepcopy(definition['items'])
+        for component in items:
+            if component.get('product_id') == financial.ROSE:
+                component.update(sourcing_mode='supplier', supplier_id='supplier')
+        await financial.catalog.save_bundle(source, OWNER, financial.ROOT,
+            {'expected_revision': definition['revision'], 'schema_version': schema,
+             'product_type': 'composite', 'items': items}, OWNER)
     raw={'id':'order-id','reference_id':'ORDER','created_at':created,'updated_at':created,
          'status':'in_progress','currency':'KWD','amounts':{'total':{'amount':'40','currency':'KWD'}},
          'items':[{'id':'LINE','product_id':financial.ROOT,'quantity':4,'options':[
@@ -38,6 +48,9 @@ async def fixture(db, monkeypatch, *, rose=True, name=True, schema=2, created=CR
         reporting_costs=reporting,blocked_intakes=blocked,order_created_at=created)
     for collection in await source.list_collection_names():
         records=await source[collection].find({}).to_list(None)
+        if collection == 'mezan_suppliers_v2':
+            records = [r for r in records if not await db[collection].find_one(
+                {'user_id': r['user_id'], 'id': r['id']})]
         if records:await db[collection].insert_many(deepcopy(records))
     await db.unified_orders.insert_one({'user_id':OWNER,'order_number':'ORDER','raw_by_source':{'salla_direct':raw}})
     await db.mezan_component_order_lifecycle_v1.insert_one({'user_id':OWNER,'order_number':'ORDER',

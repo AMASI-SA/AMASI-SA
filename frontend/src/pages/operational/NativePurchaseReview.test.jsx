@@ -38,7 +38,7 @@ async function approveNew(){await newPreview();await check('تأكيد هويا�
 
 test('read-only preview shows exact before/after and requires two explicit confirmations',async()=>{
   await render();expect(api.supplierInvoiceReview).not.toHaveBeenCalled();await newPreview();
-  expect(api.approveNativePurchaseLink).not.toHaveBeenCalled();expect(host.textContent).toContain('1000.00');expect(host.textContent).toContain('975.00');
+  expect(api.approveNativePurchaseLink).not.toHaveBeenCalled();expect(host.textContent).toContain('1,000.00');expect(host.textContent).toContain('975.00');
   expect(button('اعتماد الفرق التشغيلي المعروض').disabled).toBe(true);await check('تأكيد هويات المطابقة');
   expect(button('اعتماد الفرق التشغيلي المعروض').disabled).toBe(true);await check('تأكيد المبالغ غير المسجلة');await click('اعتماد الفرق التشغيلي المعروض');
   expect(api.approveNativePurchaseLink).toHaveBeenCalledTimes(1);const body=api.approveNativePurchaseLink.mock.calls[0][0];

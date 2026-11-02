@@ -206,9 +206,16 @@ async def load_remaining_bundles(db, owner, raw_orders, as_of, *, preparation_pi
     if not selected:
         return result
     if preparation_pieces is None:
-        preparation_pieces = await db['mezan_preparation_pieces_v1'].find(
-            {'user_id': owner, 'order_number': {'$in': sorted({k[0] for k in selected})}}, {'_id': 0}
-        ).to_list(length=20001)
+        # Physical-only bundles keep their existing bounded read budget.
+        financial_orders = sorted({key[0] for key, (_, _, record) in selected.items()
+            if 'reporting_cost' in (record.get('bundle_snapshot') or {})})
+        preparation_pieces = []
+        for offset in range(0, len(financial_orders), CHUNK):
+            preparation_pieces.extend(await db['mezan_preparation_pieces_v1'].find(
+                {'user_id': owner, 'order_number': {'$in': financial_orders[offset:offset + CHUNK]}},
+                {'_id': 0}).to_list(length=20001 - len(preparation_pieces)))
+            if len(preparation_pieces) > 20000:
+                raise ValueError('bundle_legacy_piece_read_scope_invalid')
     if len(preparation_pieces) > 20000 or any(p.get('user_id') != owner for p in preparation_pieces):
         raise ValueError('bundle_legacy_piece_read_scope_invalid')
     unit_rows, plan_rows = [], []
