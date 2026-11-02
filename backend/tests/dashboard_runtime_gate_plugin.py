@@ -11,15 +11,199 @@ import os
 import time
 from collections import Counter
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from unittest.mock import patch
 
-ARM = os.environ['DASHBOARD_ADOPTION_ARM']
-GOLDEN = Path(os.environ['DASHBOARD_ADOPTION_GOLDEN'])
+ARM = os.environ.get('DASHBOARD_ADOPTION_ARM', '')
+GOLDEN = Path(os.environ.get('DASHBOARD_ADOPTION_GOLDEN', 'reference-responses.json'))
 records = {}
 calls = Counter()
 current_test = None
 sequence = 0
+active_authority_audit = ContextVar('dashboard_authority_audit', default=None)
+
+# This is an explicit read-contract extension for MZ2 historical cost authority,
+# not a new JSON oracle. The immutable fixtures contain no historical cost rows.
+# Keep these names/shapes independent of production constants so an accidental
+# collection, scope, pipeline or batching change fails the gate.
+AUTHORITY_COLLECTIONS = frozenset({
+    'mezan_bundle_definitions_v2', 'mezan_order_item_cost_snapshots_v2',
+    'mezan_component_order_lifecycle_v1', 'mezan_component_consumption_plans_v1',
+    'mezan_component_consumption_units_v1', 'mezan_order_cost_corrections_v1',
+})
+AUTHORITY_BATCH_SIZE = 250
+
+
+def _cohort_evidence(user_id, orders):
+    selected = {}
+    for order in orders:
+        number = str(order.get('order_number') or '')
+        if not number:
+            continue
+        assert not order.get('user_id') or str(order['user_id']) == str(user_id)
+        assert number not in selected, 'Duplicate order identity in runtime gate cohort'
+        lines = []
+        for item in order.get('products') or order.get('items') or []:
+            if not isinstance(item, dict):
+                if hasattr(item, 'model_dump'):
+                    item = item.model_dump(mode='python')
+                elif hasattr(item, '__dict__'):
+                    item = vars(item)
+                else:
+                    continue
+            raw = item.get('raw_item') if isinstance(item.get('raw_item'), dict) else {}
+            primary = (item.get('canonical_order_item_id') or item.get('order_item_id')
+                       or item.get('order_line_id') or item.get('source_item_id') or item.get('id'))
+            aliases = sorted({str(value).strip() for value in (
+                primary, item.get('order_item_id'), item.get('order_line_id'),
+                item.get('source_item_id'), raw.get('id')) if value not in (None, '')})
+            lines.append({'aliases': aliases})
+        selected[number] = {'order_number': number, 'lines': lines}
+    return {'user_id': str(user_id), 'orders': [selected[key] for key in sorted(selected)]}
+
+
+def _compact_snapshot_projection(field):
+    # Exact reviewed read-only aggregation expression, deliberately independent
+    # of production code. Additional stages/operators are not permitted.
+    return {'$arrayToObject': {'$map': {
+        'input': {'$objectToArray': {'$ifNull': ['$' + field, {}]}},
+        'as': 'entry', 'in': {'k': '$$entry.k', 'v': {'$cond': [
+            {'$eq': ['$$entry.v', None]}, None,
+            {'$arrayToObject': {'$filter': {
+                'input': {'$objectToArray': '$$entry.v'}, 'as': 'part',
+                'cond': {'$ne': ['$$part.k', 'frozen_definitions']},
+            }}},
+        ]}},
+    }}}
+
+
+def _fixture_database_name(db):
+    from motor.motor_asyncio import AsyncIOMotorDatabase
+    visited = set()
+    while not isinstance(db, AsyncIOMotorDatabase):
+        assert id(db) not in visited, 'Cyclic fixture database wrapper'
+        visited.add(id(db))
+        fields = vars(db)
+        # The frozen ReadDB/ReadTraceDB/GatedDB wrappers expose one of these.
+        # Use their actual instance fields, never dynamic collection lookup.
+        if 'db' in fields:
+            db = fields['db']
+        else:
+            assert 'base' in fields, 'Unknown fixture database wrapper'
+            db = fields['base']
+    assert db.name.startswith('dashboard_b_shared_'), 'Unexpected fixture database'
+    return db.name
+
+
+def _authority_command(operation, command, *, database_name):
+    collection = command.get(operation)
+    if not isinstance(collection, str) or collection not in AUTHORITY_COLLECTIONS:
+        return None
+    record = {'operation': operation, 'collection': collection,
+              'database': database_name, 'command_database': command.get('$db')}
+    if operation == 'find':
+        record.update(filter=copy.deepcopy(command.get('filter', {})),
+                      projection=copy.deepcopy(command.get('projection', {})),
+                      limit=command.get('limit'))
+        semantic_fields = {'find', 'filter', 'projection', 'limit'}
+    elif operation == 'aggregate':
+        record['pipeline'] = copy.deepcopy(command.get('pipeline', []))
+        record['cursor'] = copy.deepcopy(command.get('cursor'))
+        semantic_fields = {'aggregate', 'pipeline', 'cursor'}
+    else:
+        semantic_fields = {operation}
+    # Only driver session metadata is outside the semantic contract; $db and
+    # the event namespace are independently bound to the actual fixture DB.
+    # Do not silently discard sort, skip, batchSize, hint, readConcern, explain,
+    # writeConcern or future command options. Their mere presence fails closed.
+    record['unreviewed_fields'] = sorted(set(command) - semantic_fields - {'$db', 'lsid', '$clusterTime'})
+    # Other operations are retained and rejected by the exact expected list.
+    return record
+
+
+def _expected_authority_commands(audit):
+    assert audit.get('version') == 1
+    assert isinstance(audit.get('owner_id'), str) and audit['owner_id']
+    database = audit['database']
+    assert isinstance(database, str) and database.startswith('dashboard_b_shared_')
+    assert len(audit['cohorts']) <= 1, 'Cost authority must load once per request cohort'
+    expected = []
+
+    def find(collection, query, projection):
+        expected.append({'operation': 'find', 'collection': collection,
+                         'database': database, 'command_database': database,
+                         'filter': query, 'projection': projection, 'limit': None,
+                         'unreviewed_fields': []})
+
+    def snapshots(collection, query, projection, field, limit):
+        expected.append({'operation': 'aggregate', 'collection': collection,
+                         'database': database, 'command_database': database, 'pipeline': [
+            {'$match': query}, {'$limit': limit + 1},
+            {'$project': {**projection, field: _compact_snapshot_projection(field)}},
+        ], 'cursor': {}, 'unreviewed_fields': []})
+
+    for cohort in audit['cohorts']:
+        owner = cohort['user_id']
+        assert owner == audit['owner_id'], 'Authority cohort has the wrong owner'
+        orders = cohort['orders']
+        numbers = [row['order_number'] for row in orders]
+        assert numbers == sorted(set(numbers)) and all(numbers)
+        if not orders:
+            continue
+        find('mezan_bundle_definitions_v2', {'user_id': owner, 'product_type': 'composite'},
+             {'_id': 0, 'product_id': 1})
+        for offset in range(0, len(orders), AUTHORITY_BATCH_SIZE):
+            batch = orders[offset:offset + AUTHORITY_BATCH_SIZE]
+            selected = [row['order_number'] for row in batch]
+            aliases = sorted({alias for row in batch for line in row['lines'] for alias in line['aliases']})
+            keys = {'user_id': owner, 'order_number': {'$in': selected}}
+            find('mezan_order_item_cost_snapshots_v2',
+                 {**keys, 'order_item_id': {'$in': aliases}}, {'_id': 0})
+            snapshots('mezan_component_order_lifecycle_v1', keys,
+                      {'_id': 0, 'order_number': 1, 'bundle_intake_snapshots': 1,
+                       'reporting_cost_snapshots': 1, 'source_fingerprint': 1},
+                      'bundle_intake_snapshots', len(batch))
+            snapshots('mezan_component_consumption_plans_v1',
+                      {'user_id': owner, 'order_id': {'$in': selected}, 'bundle_snapshots': {'$exists': True}},
+                      {'_id': 1, 'order_id': 1, 'bundle_snapshots': 1, 'reconciliation_required': 1, 'lines': 1},
+                      'bundle_snapshots', len(batch))
+            # These immutable legacy fixtures contain no plans. Any plan or
+            # other historical row is a hard failure, not ignored evidence.
+            find('mezan_component_consumption_units_v1',
+                 {'user_id': owner, 'plan_id': {'$in': []}, 'state': {'$ne': 'released'},
+                  'order_line_id': {'$in': aliases}},
+                 {'_id': 0, 'plan_id': 1, 'order_line_id': 1, 'unit_index': 1,
+                  'state': 1, 'selected_context': 1, 'bundle_leaves': 1})
+            find('mezan_order_cost_corrections_v1',
+                 {**keys, 'state': 'applied', 'order_item_id': {'$in': aliases}}, {'_id': 0})
+    return expected
+
+
+def assert_runtime_read_contract(runtime, baseline):
+    """Subtract only individually audited empty authority reads from raw data."""
+    assert set(runtime) == set(baseline) | {'cost_authority_audit'}
+    assert runtime['json'] == baseline['json'], 'Immutable JSON response changed'
+    audit = runtime['cost_authority_audit']
+    expected = _expected_authority_commands(audit)
+    assert audit['commands'] == expected, 'Unexpected authority query, scope, operation or batch count'
+    response = json.loads(runtime['json'])
+    assert len(audit['cohorts']) == (0 if 'http_error' in response else 1)
+    assert not (set(baseline['collections']) & AUTHORITY_COLLECTIONS)
+    for collection in AUTHORITY_COLLECTIONS:
+        assert runtime['collections'].get(collection, 0) == 0, 'Legacy fixture unexpectedly read historical cost rows'
+    observed_collections = set(runtime['collections']) & AUTHORITY_COLLECTIONS
+    assert observed_collections == {row['collection'] for row in expected}
+    normalized = {key: copy.deepcopy(value) for key, value in runtime.items()
+                  if key != 'cost_authority_audit'}
+    for operation, count in Counter(row['operation'] for row in expected).items():
+        assert normalized['commands'].get(operation, 0) >= count
+        normalized['commands'][operation] -= count
+        if normalized['commands'][operation] == 0:
+            del normalized['commands'][operation]
+    normalized['collections'] = {key: value for key, value in normalized['collections'].items()
+                                 if key not in AUTHORITY_COLLECTIONS}
+    assert normalized == baseline, 'Existing Mongo commands or document counts changed'
 
 
 def pytest_runtest_setup(item):
@@ -28,6 +212,7 @@ def pytest_runtest_setup(item):
 
 
 def pytest_collection_modifyitems(session, config, items):
+    assert ARM in {'reference', 'baseline', 'runtime'}, 'Explicit dashboard adoption arm required'
     modules = {item.module for item in items}
     assert len(modules) == 1
     cases = modules.pop()
@@ -48,7 +233,29 @@ def pytest_collection_modifyitems(session, config, items):
 
     async def recorded(*args, **kwargs):
         global sequence
-        result, metrics = await original_invoke(*args, **kwargs)
+        audit = None
+        if ARM == 'runtime':
+            user = kwargs.get('user', args[4] if len(args) > 4 else cases.OWNER)
+            audit = {'version': 1, 'owner_id': str(user['id']),
+                     'database': _fixture_database_name(args[0]), 'cohorts': [], 'commands': []}
+            commands = args[1]
+            original_started = commands.started
+
+            def started(event):
+                original_started(event)
+                command = _authority_command(event.command_name, event.command,
+                                             database_name=event.database_name)
+                if command is not None:
+                    audit['commands'].append(command)
+
+            token = active_authority_audit.set(audit)
+            try:
+                with patch.object(commands, 'started', started):
+                    result, metrics = await original_invoke(*args, **kwargs)
+            finally:
+                active_authority_audit.reset(token)
+        else:
+            result, metrics = await original_invoke(*args, **kwargs)
         key = current_test + '::request-' + str(sequence)
         sequence += 1
         value = {
@@ -58,13 +265,15 @@ def pytest_collection_modifyitems(session, config, items):
             'documents': metrics['documents_read'],
             'collections': metrics['docs_by_collection'],
         }
+        if audit is not None:
+            value['cost_authority_audit'] = audit
         records[key] = value
         if expected is not None:
             # Keep the immutable historical JSON contract. Later approved
             # production changes may add reads without changing the response.
             assert value['json'] == expected[key]['json'], key
             if ARM == 'runtime':
-                assert value == (read_baseline or expected)[key], key
+                assert_runtime_read_contract(value, (read_baseline or expected)[key])
         return result, metrics
 
     cases.invoke = recorded
@@ -104,6 +313,11 @@ def pytest_collection_modifyitems(session, config, items):
 
         async def cost(*args, **kwargs):
             calls['cost'] += 1
+            audit = active_authority_audit.get()
+            if audit is not None:
+                user_id = args[1] if len(args) > 1 else kwargs['user_id']
+                orders = args[2] if len(args) > 2 else kwargs['orders']
+                audit['cohorts'].append(_cohort_evidence(user_id, orders))
             return await original_cost(*args, **kwargs)
 
         async def parser(orders):

@@ -1,7 +1,10 @@
 # MZ2-BUNDLE-COST-20261102
 
-Status: implementation and 290-case focused acceptance complete; broader G47
-and frozen-runtime verification in progress. Not a release candidate.
+Status: implementation, 291-case focused acceptance and full 327-case G47 gate
+complete. Strict frozen-runtime gate also passed all164 responses. Local
+acceptance is complete. GitHub checks run on the final branch head and their
+live status is attached to the task PR. No live historical backfill has been
+applied; the original80 cohort remains unverified.
 Production changed: no. Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1690.
 
 Repository: AMASI-SA/AMASI-SA. Task branch:
@@ -61,9 +64,11 @@ with repository dependency versions before final verification.
 2. Independent review regressions now pass, including canonical aliases, nested
    options, stale manual/plan evidence, required leaf coverage, legacy refreshes
    and read-only GET/POST cost projection parity.
-3. The exact new 24-file CI acceptance command passed 290 cases, zero skips,
-   failures or errors, in 22.33 seconds using isolated real Mongo fixtures.
-   G47's existing broader gate and frozen-runtime harness remain in progress.
+3. The exact new 24-file CI acceptance command passed 291 cases, zero skips,
+   failures or errors, in 23.44 seconds using isolated real Mongo fixtures.
+   The existing complete G47 gate passed327 tests plus127 subtests, zero skips,
+   in319.32 seconds. These results include replica and standalone fixtures.
+   Code checkpoint:3e6ea31764b194432e10027c03d82c5ccf502901.
 4. Related marketing, cohort and attribution projections now use the same
    historical authority without modifying the underlying ledgers.
 5. Paired local benchmark: 1/80/250 orders use six logical authority reads;
@@ -83,7 +88,24 @@ existing multi-quantity fixture because it omitted its actual count option;
 that fixture now supplies the same selection used for reservation and its
 focused real-Mongo rerun passes. Runtime adoption failed on malformed legacy
 line placeholders; the loader now ignores those using the existing report
-contract and has a passing regression. Fresh head CI remains required.
+contract and has a passing regression.
+
+On3e6ea317,32 of33 GitHub workflows passed, including the complete G47 workflow
+and its new cost step. The remaining runtime-adoption failure compared the
+intentional new source metadata and six historical reads to a no-history golden
+fixture. An unmodified164-response diagnostic established zero financial,
+business-field, original-collection or document-count differences. This is
+diagnostic evidence, not a gate pass. Catalog-only responses now preserve the
+original JSON contract; a strict audit of the six new read families is being
+added while retaining the immutable response oracle and all prior read checks.
+The reviewed extension now passes the strict full local gate:40 runtime cases,
+164/164 exact JSON responses (including member/array order),132 requests with
+exactly six audited empty historical reads and32 with none. All prior read
+commands and document counts remain exact. The source/regression stage passed
+115 tests plus5 subtests, including35 positive/negative read-contract cases.
+Independent review found no remaining material issue. No reference oracle was
+changed. See evidence/runtime-gate-summary.json for tested-source hashes.
+Final-head GitHub CI remains required.
 
 No merge, release intent, Release Guard lease, live recalculation or publish.
 Issue1006 is at GitHub's2500-comment cap; this task document and Draft PR are

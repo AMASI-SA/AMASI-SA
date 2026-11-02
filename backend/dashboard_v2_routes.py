@@ -556,6 +556,7 @@ async def build_mezan_v2_product_cost(
 
     totals = defaultdict(float)
     source_lines = defaultdict(int)
+    uses_historical_authority = False
     linked_products: set[str] = set()
     missing_products: dict[str, dict[str, Any]] = {}
     salla_fallback_products: set[str] = set()
@@ -599,6 +600,7 @@ async def build_mezan_v2_product_cost(
                 authority=authority,
                 product_id=product_id,
             )
+            uses_historical_authority |= result.get("cost_authority") != "catalog_estimate"
             identity = str(
                 product_id
                 or item.get("parent_product_id")
@@ -779,11 +781,17 @@ async def build_mezan_v2_product_cost(
                 "salla_variant_fallback",
                 "salla_product_fallback",
             ],
-            "catalog_additions": ["product_components", "selected_option_components"],
-            "historical_cost_authority": "frozen order line; complete bundle replaces parent and catalog additions once",
-            "missing_bundle_authority": "incomplete; never current parent fallback",
-            "cost_currency": "SAR; independent of order sales currency",
-            "mezan_completion_sources": ["order_snapshot", "bundle_snapshot", "mezan_v2_variant", "mezan_v2_base"],
+            # Keep the established catalog-only response byte-compatible.
+            # Describe historical rules when this cohort actually uses them.
+            **({
+                "catalog_additions": ["product_components", "selected_option_components"],
+                "historical_cost_authority": "frozen order line; complete bundle replaces parent and catalog additions once",
+                "missing_bundle_authority": "incomplete; never current parent fallback",
+                "cost_currency": "SAR; independent of order sales currency",
+            } if uses_historical_authority else {
+                "always_added": ["product_components", "selected_option_components"],
+            }),
+            "mezan_completion_sources": (["order_snapshot", "bundle_snapshot"] if uses_historical_authority else []) + ["mezan_v2_variant", "mezan_v2_base"],
             "salla_fallback_is_missing_mezan_cost": True,
             "product_sales": "native order lines converted by verified Salla order FX to SAR",
             "product_profit": "product sales minus Mezan V2 product cost; ads/shipping/payment fees are not allocated per product",
@@ -858,6 +866,7 @@ async def build_mezan_v2_product_cost_cooperative(
 
     totals = defaultdict(float)
     source_lines = defaultdict(int)
+    uses_historical_authority = False
     linked_products: set[str] = set()
     missing_products: dict[str, dict[str, Any]] = {}
     salla_fallback_products: set[str] = set()
@@ -903,6 +912,7 @@ async def build_mezan_v2_product_cost_cooperative(
                 authority=authority,
                 product_id=product_id,
             )
+            uses_historical_authority |= result.get("cost_authority") != "catalog_estimate"
             identity = str(
                 product_id
                 or item.get("parent_product_id")
@@ -1083,11 +1093,17 @@ async def build_mezan_v2_product_cost_cooperative(
                 "salla_variant_fallback",
                 "salla_product_fallback",
             ],
-            "catalog_additions": ["product_components", "selected_option_components"],
-            "historical_cost_authority": "frozen order line; complete bundle replaces parent and catalog additions once",
-            "missing_bundle_authority": "incomplete; never current parent fallback",
-            "cost_currency": "SAR; independent of order sales currency",
-            "mezan_completion_sources": ["order_snapshot", "bundle_snapshot", "mezan_v2_variant", "mezan_v2_base"],
+            # Keep the established catalog-only response byte-compatible.
+            # Describe historical rules when this cohort actually uses them.
+            **({
+                "catalog_additions": ["product_components", "selected_option_components"],
+                "historical_cost_authority": "frozen order line; complete bundle replaces parent and catalog additions once",
+                "missing_bundle_authority": "incomplete; never current parent fallback",
+                "cost_currency": "SAR; independent of order sales currency",
+            } if uses_historical_authority else {
+                "always_added": ["product_components", "selected_option_components"],
+            }),
+            "mezan_completion_sources": (["order_snapshot", "bundle_snapshot"] if uses_historical_authority else []) + ["mezan_v2_variant", "mezan_v2_base"],
             "salla_fallback_is_missing_mezan_cost": True,
             "product_sales": "native order lines converted by verified Salla order FX to SAR",
             "product_profit": "product sales minus Mezan V2 product cost; ads/shipping/payment fees are not allocated per product",

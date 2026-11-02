@@ -1,0 +1,74 @@
+{
+  "candidate_git_head": "3e6ea31764b194432e10027c03d82c5ccf502901",
+  "candidate_has_reviewed_uncommitted_runtime_gate_changes": true,
+  "frozen_reference_sha": "05b159dc4183f14adc7c370bfbd8014d8858e6b8",
+  "approved_read_baseline_sha": "2a7740359451a538be8df373266c4c92ca1a57c8",
+  "strict_gate_passed": true,
+  "exact_json_records": 164,
+  "approved_authority_reads_per_request_distribution": {
+    "6": 132,
+    "0": 32
+  },
+  "authority_documents_returned": 0,
+  "legacy_commands_and_documents_exact_after_audit": true,
+  "tests": {
+    "reference": {
+      "cases": 40,
+      "tests_including_subtests": 40,
+      "seconds": 140.837,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "approved_read_baseline": {
+      "cases": 40,
+      "tests_including_subtests": 40,
+      "seconds": 92.826,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "runtime_final": {
+      "cases": 40,
+      "tests_including_subtests": 40,
+      "seconds": 108.853,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "regressions_final": {
+      "cases": 115,
+      "tests_including_subtests": 120,
+      "seconds": 6.043,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "source_sha256": {
+    "backend/dashboard_v2_routes.py": "bfabffd694b1f257cdf4d29e4ca9eb9121e749d11df9cedf91ab66afa094c217",
+    "backend/order_cost_authority.py": "23336cfa05fd2684caeb33ccb80a5ea061031be122b459bd61736ccffeab20d0",
+    "backend/tests/dashboard_runtime_gate_plugin.py": "078fc11834429ddbd985f7f7e838c541c6abe87383e89ddd918ea38446a0af9c",
+    "backend/tests/test_dashboard_runtime_authority_read_contract.py": "bde1b6d78c8daa46d450d2206e6f4b437d9cce5f77b4c6153ebf46d4d8576482",
+    ".github/workflows/dashboard-runtime-adoption.yml": "61c29dfe79f01451d6715d838f27ca6018488752a7605e0148f7241a646dc598"
+  },
+  "evidence_sha256": {
+    "reference-responses.json": "f0196623b89c57b20668dfc15bab5a365bda3a00da816f68da57ede0a0639db0",
+    "production-read-baseline.json": "4645895410015bf1a4ce1f5f0486c1a86312392976a65d45203a724fe5362ce2",
+    "runtime-final-responses.json": "7d402cf2405c43325b40f4aa2c99150850a712f711b683897b0b28edeeb25ec5"
+  },
+  "runtime_calls": {
+    "parser": 220,
+    "cost": 160,
+    "index": 160,
+    "advertising": 160,
+    "forced_index_checkpoints": 72
+  },
+  "production_access": false,
+  "scope_notes": [
+    "Immutable reference sources and JSON oracle unchanged",
+    "Only literal six named cost-authority query families with request owner/order/line/database scope may add empty reads",
+    "Actual runtime legacy JSON member ordering and prior command/document counts remain exact",
+    "Runtime contract rejects writes, unreviewed command fields, getMore, wrong namespace/tenant, extra/missing queries and historical fixture rows"
+  ]
+}

@@ -82,7 +82,7 @@ class SourceContract(unittest.TestCase):
                     # parity; behavioral acceptance is in the bundle-cost suite.
                     reviewed = ast.get_source_segment(current, current_function)
                     self.assertEqual(hashlib.sha256(reviewed.encode('utf8')).hexdigest(),
-                        'b424fe8e55cf9c9fcbdf3a6c32b5aecc990857a1e4d7192335ee252fc6223248')
+                        'da8a829b9d68a1f9dc9f71b74c689ddf52f29c22c1777d7180a17b1d336eed48')
                     before = current_function
                 else:
                     self.assertEqual(ast.dump(before), ast.dump(current_function))
