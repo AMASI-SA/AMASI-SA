@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "task_id": "MZ2-BUNDLE-COST-20261102",
+  "status": "production_code_verified",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pr": 1690,
+  "production_branch": "hotfix/prod-snap-meta-final",
+  "source_git_sha": "dc96a12e72ba3e1e1766c44e37e494ba3b69250f",
+  "source_base_git_sha": "70576e2a06237eb193b1c927f11ced92e2229589",
+  "deployment_git_sha": "f8235d57e90f8a1271df6350d7e7919f5621ea11",
+  "release_id": "rg5-0f3fe5bc5d7da01a5dd3c052cb36637a7a49db1536afe476d7ff862d0fac285a",
+  "protocol_version": 5,
+  "url": "https://mezansalla.com",
+  "rehearsal": {
+    "exit_code": 0,
+    "built": true,
+    "backend_isolated_verified": true,
+    "frontend_isolated_runtime_artifact_verified": true,
+    "frontend_artifact_tree_sha256": "bb9024962a20bc664efec18c689927b1c5218d68fbeeb00f788bd9ecf7a393f1",
+    "frontend_build_meta": {
+      "bytes": 301685,
+      "sha256": "451af30fbaa8fc02bb94db13be972086962de3d9f86aefdbc876730b182a485f"
+    }
+  },
+  "prepare": {
+    "actor": "mz2-bundle-cost-publish-20261102",
+    "prepared_at": "2026-11-02T16:02:09.473045+00:00"
+  },
+  "prepublish": {
+    "exit_code": 0,
+    "ready_to_publish": true
+  },
+  "platform": {
+    "publish_clicks": 1,
+    "observed_completion_label": "Deployment finished Nov 2, 07:12 PM",
+    "event_id": "fe2fe67a-4302-5e1d-8732-2e5efd3bd499",
+    "published_version": "7882d26",
+    "previous_published_version": "5b4a0a6",
+    "cloud_build_transcript_observed": false
+  },
+  "verify": {
+    "exit_code": 0,
+    "verified": true,
+    "checks": 3,
+    "frontend_checked_request_count_per_probe": 42,
+    "boot_started_at": "2026-11-02T16:11:59.769515+00:00",
+    "boot_started_at_observations": [
+      "2026-11-02T16:11:59.769515+00:00",
+      "2026-11-02T16:11:57.412518+00:00"
+    ],
+    "critical_file_hashes_match_checked": true,
+    "backend_runtime_source_verified_checked": true,
+    "release_control_source_bound_checked": true,
+    "frontend_build_verified_checked": true,
+    "build_meta_json_mime_and_exact_bytes_checked": true,
+    "canonical_and_cache_busted_checked": true,
+    "frontend_shell_cache": "no-cache, no-store, must-revalidate",
+    "service_worker_retirement_payloads_verified": [
+      "/service-worker.js",
+      "/sw.js"
+    ]
+  },
+  "final_guard_status": {
+    "active": false
+  },
+  "live_mutations": {
+    "production_code_deployed": true,
+    "live_bundle_definition_saved": false,
+    "historical_cost_repairs_applied": false,
+    "approved_ledger_mutations": false
+  },
+  "definition_save_block": {
+    "source": "automatic_approval_review",
+    "action": "save production bundle definition",
+    "reason": "The reviewer required separate authorization for adding a physical current-product unit and component scope because future order costing, inventory and sourcing can change; sourcing/provenance is unresolved.",
+    "draft": {
+      "product_id": "735616589",
+      "sku": "AMS13281",
+      "preserve_existing_rose_condition": true,
+      "append": {
+        "kind": "current_product",
+        "quantity": "1",
+        "required": true,
+        "sourcing_mode": "auto",
+        "condition": null
+      },
+      "embroidery_resource_scope": "per_unit"
+    },
+    "current_product_policy": {
+      "embroidery_cost_treatment": "unknown",
+      "embroidery_assembly_origin": "unknown",
+      "evidence_ref_present": false,
+      "approved_supplier_at_stock_shortage": "not_selected"
+    },
+    "draft_screenshot": {
+      "path": "evidence/live-bundle-draft-pending-approval.jpg",
+      "git_blob_sha": "fe575612098147608aee5b5e1905eaf40254ebbb"
+    }
+  },
+  "live_preview": {
+    "attempt": "quantity4, roseyes, nameno",
+    "result": "rejected_by_existing_option_visibility_validation",
+    "observed_message": "أحد الخيارات المختارة مخفي بشرط آخر. راجع الاختيارات.",
+    "historical_cost_220_proven_on_live_orders": false
+  },
+  "live_smoke": {
+    "dashboard_loaded": true,
+    "executive_and_top_products_cost_totals_equal": true,
+    "target_product_reported_incomplete_cost": true,
+    "post_deployment_orders_visible": true,
+    "original_80_cohort_identified": false,
+    "production_latency_baseline_comparison_completed": false,
+    "persisted_recipe_items_after_rejected_save": 1,
+    "fresh_read_confirmed_draft_not_persisted": true
+  }
+}
