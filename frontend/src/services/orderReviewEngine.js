@@ -267,3 +267,40 @@ export async function deleteOrderReviewMezanImage(orderNumber, orderItemId, imag
     try { return (await api.delete(`/order-reviews-v1/${encodeURIComponent(orderNumber)}/items/${encodeURIComponent(orderItemId)}/mezan-images/${encodeURIComponent(imageId)}`)).data; }
     catch (error) { throw new Error(message(error, "تعذّر حذف صورة ميزان.")); }
 }
+
+/** Operational images are owned by their own media collection, never product galleries. */
+export async function readOperationalImageFile(file) {
+    const kind = String(file?.type || "").toLowerCase();
+    if (!["image/jpeg", "image/png", "image/webp"].includes(kind)) throw new Error("الصور المسموحة JPG أو PNG أو WEBP فقط.");
+    if (!file.size || file.size > 5 * 1024 * 1024) throw new Error("الحد الأقصى لصورة المنتج التشغيلي 5 MB.");
+    const encoded = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("تعذّر قراءة الصورة التشغيلية."));
+        reader.readAsDataURL(file);
+    });
+    const separator = encoded.indexOf(",");
+    const dataBase64 = separator < 0 ? "" : encoded.slice(separator + 1);
+    if (!dataBase64 || dataBase64.length > 7_000_000) throw new Error("حجم الصورة التشغيلية غير صالح.");
+    return { filename: String(file.name || "operational.jpg").slice(0, 200), content_type: kind, data_base64: dataBase64 };
+}
+
+export async function uploadOrderReviewOperationalItemImage(orderNumber, operationalItemId, payload) {
+    try {
+        return (await api.post(
+            `/order-reviews-v1/${encodeURIComponent(orderNumber)}/operational-items/${encodeURIComponent(operationalItemId)}/image`,
+            payload, { timeout: 45000 },
+        )).data;
+    } catch (error) {
+        throw new Error(message(error, "تعذّر إضافة صورة المنتج التشغيلي."));
+    }
+}
+
+export async function fetchOperationalImageBlob(url) {
+    const raw = String(url || "");
+    if (!/^\/api\/order-reviews-v1\/operational-images\/[a-f0-9]{32}$/.test(raw)) {
+        throw new Error("رابط صورة المنتج التشغيلي غير موثوق.");
+    }
+    const response = await api.get(raw.replace(/^\/api/, ""), { responseType: "blob" });
+    return URL.createObjectURL(response.data);
+}
