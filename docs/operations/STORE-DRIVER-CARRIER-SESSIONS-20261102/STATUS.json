@@ -5,7 +5,7 @@
   "source_sha": "d221556175d884e9cebbda091ec62fdf68dde912",
   "source_base_sha": "2e70e44f69ef7eda8ccdad83a4faf4bdd9538eb0",
   "source_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1693",
-  "status": "A/B release merged to GitHub production branch; awaiting owner Emergent Cloud Build/Publish and 3-probe verification",
+  "status": "GitHub source A and intent-only B merged; owner /app host governed build and package checks PASS after quarantining one Python __pycache__; pending release guard prepare/prepublish and Emergent Cloud Publish",
   "completed": [
     "choose exact city-courier company from existing merchant settings dropdown, never type custom carrier",
     "driver may claim new shipments only when current shipping-company name matches profile; destination city does not authorize assignment",
@@ -71,8 +71,8 @@
     "separate older PR 1691 retains city-based check; do not merge it over carrier-based policy without reconciliation"
   ],
   "production_changed": true,
-  "release_guard_lease_status": "Last host owner check active=false; prepare/prepublish NOT run",
-  "next_safe_action": "Complete independent review and resolve supplier policy in separately scoped task without changing historical services. On authorized Emergent host: verify v5 lease status and make A/B release; deploy and run 3-probe verify; only then link Talal and update native clients. Do not merge source A alone or run app distribution ahead of backend.",
+  "release_guard_lease_status": "active=false before post-merge rehearsal; prepare and prepublish not yet run",
+  "next_safe_action": "Run /app release_guard status, verify exact Git HEAD and origin equals M, ensure no tracked dirty files; run guard prepare, then prepublish; if ready_to_publish=true, execute separately approved Emergent Cloud Publish (never from GitHub merge alone), wait for Deployment Succeeded then run verify --url https://mezansalla.com and confirm 3 probes; then actual Talal user/driver acceptance. Do not publish on any guard error.",
   "split_reason": "Original mobile PR312 mixed delivery-app and courier-management UI. Split to PR312 UI-only and PR313 app-only so dedicated Android CI is independent of unrelated supplier invoice policies.",
   "pending": [
     "On authorized Emergent /app host, fast-forward production branch from J to M without touching other worktrees",
@@ -106,7 +106,11 @@
     "source_a_to_merge_diff": [
       "release/release-intent-v5.json"
     ],
-    "github_pr1694_exact_head_checks": "ALL PASS or applicable skipped incl CodeQL Python & JS"
+    "github_pr1694_exact_head_checks": "ALL PASS or applicable skipped incl CodeQL Python & JS",
+    "host_post_merge_governed_build": "PASS 2026-11-02: governed build, verify-packages, verify_frontend_build --reviewed-intent-v5; identity equals runtime_intent; source M 79187db4b6212993f94338830298e467e3773d68",
+    "cloud_publish": "NOT STARTED",
+    "production_runtime_verification": "NOT VERIFIED",
+    "last_confirmed_release_id": "rg5-75c62eb45f1b074d1494e5d75e049b4b5f65e9f64f042de53fea806b2b5def1d"
   },
-  "production_change_scope": "GitHub production SOURCE BRANCH updated to merge M; no verified Emergent Cloud Publish or live runtime deployment yet"
+  "production_change_scope": "Only GitHub production branch merged; actual Cloud Build Publish not performed"
 }
