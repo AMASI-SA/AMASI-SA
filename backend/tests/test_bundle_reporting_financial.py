@@ -1159,6 +1159,11 @@ async def test_salla_real_value_ids_keep_existing_route_despite_changed_display_
     # once stable value IDs are present.
     item["options_raw"][0]["option_name"] = "Legacy or translated rose field"
     item["options_raw"][1]["option_name"] = "Legacy or translated embroidery field"
+    # Required personalization remains required, irrespective of which
+    # already-ID-qualified label is displayed by the original provider.
+    item["options_raw"].append({
+        "option_id": "embroidery-text", "option_name": "التطريز على الشال",
+        "values": {"name": "التطريز على الشال", "value": "اختبار"}})
     before = await database_records(db)
     financial, blocked = {}, {}
     intake = await fulfillment.capture_intake(
