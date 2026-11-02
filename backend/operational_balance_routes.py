@@ -707,9 +707,13 @@ def make_operational_balance_router(db, current_user):
             # Reporting permission is independent from recording a movement.
             # Recheck it AFTER the commit; redact only balances on revocation,
             # while preserving the acknowledgement of the committed operation.
+            same_scope = False
             try:
-                await scope(db, user, "reports")
+                readable_actor, readable_owner, _ = await scope(db, user, "reports")
+                same_scope = readable_actor["id"] == actor["id"] and readable_owner == owner
             except HTTPException:
+                pass
+            if not same_scope:
                 result = {key: value for key, value in result.items() if key != "external_balance_snapshot"}
         return result
 

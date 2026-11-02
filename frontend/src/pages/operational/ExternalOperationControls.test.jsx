@@ -18,6 +18,11 @@ const set=async(el,value)=>act(async()=>{
   el.dispatchEvent(new Event(el.tagName==='SELECT'?'change':'input',{bubbles:true}));
 });
 const click=async text=>act(async()=>[...host.querySelectorAll('button')].find(b=>b.textContent===text).click());
+const cardClick=async text=>act(async()=>{
+  const matches=[...host.querySelectorAll('button.op-tile')].filter(b=>b.querySelector('strong')?.textContent===text);
+  expect(matches).toHaveLength(1);
+  matches[0].click();
+});
 const choose=()=>host.querySelector('[aria-label="عملية الجهة الخارجية"]');
 const labelSelect=text=>[...host.querySelectorAll('label')].find(l=>l.textContent.startsWith(text))?.querySelector('select');
 const receipt=operation=>({operation,currency:'SAR',account_id:'bank1',account_kind:'bank',
@@ -38,7 +43,7 @@ afterEach(async()=>{await act(async()=>root.unmount());host.remove();});
 
 async function prepare(action, cards=true){
   await render(<DailyMovements cards={cards} storageScope={SCOPE}/>);
-  if(cards){await click('الجهات الخارجية');await click('الجهة التجريبية');}
+  if(cards){await cardClick('الجهات الخارجية');await cardClick('الجهة التجريبية');}
   else {await set(host.querySelector('select'),'external_person');}
   if(action)await set(choose(),action);
   if(!cards)await set(labelSelect('الجهة'),'person');

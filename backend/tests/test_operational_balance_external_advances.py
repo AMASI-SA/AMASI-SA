@@ -262,3 +262,27 @@ def test_refresh_does_not_duplicate_loan_or_recreate_paid_amount():
         assert balances(a)==balances(b)==('1060.00','0.00','60.00')
         assert a['movements']==b['movements']==before['movements'] and state==before
     run(scenario)
+
+
+def test_native_owner_change_after_commit_cannot_disclose_previous_owner_balance(monkeypatch):
+    from test_operational_balance_app_permissions import client,grant,READ,WRITE
+    import operational_balance_routes as routes
+    original=routes.create_movement
+    async def record_then_reassign(db,*a,**kw):
+        result=await original(db,*a,**kw)
+        await db.users.update_one({'id':'staff'},{'$set':{'created_by':'other'}})
+        await db.mezan_mobile_app_access_v1.insert_one({'owner_user_id':'other','user_id':'staff',
+            'enabled':True,'permissions':[WRITE,READ]})
+        return result
+    monkeypatch.setattr(routes,'create_movement',record_then_reassign)
+    async def scenario(db):
+        await seed(db);await grant(db,[WRITE,READ])
+        async with client(db) as c:
+            context=(await c.get('/api/operational-balances/context')).json()
+            p=payload('borrow',key='owner-change-after-commit');p['expected_session_scope']=context['session_scope']
+            r=await c.post('/api/operational-balances/movements',json=p)
+            assert r.status_code==200,r.text
+            assert 'external_balance_snapshot' not in r.json()
+            assert len((await read(db,'owner'))['movements'])==1
+            assert not (await read(db,'other'))['movements']
+    run(scenario)
