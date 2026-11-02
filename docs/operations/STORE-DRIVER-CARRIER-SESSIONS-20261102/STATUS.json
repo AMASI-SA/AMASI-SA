@@ -5,7 +5,7 @@
   "source_sha": "d221556175d884e9cebbda091ec62fdf68dde912",
   "source_base_sha": "2e70e44f69ef7eda8ccdad83a4faf4bdd9538eb0",
   "source_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1693",
-  "status": "implemented_and_ci_green; pending independent review, live owner acceptance and release handoff",
+  "status": "source A CI green; release intent B frozen and host-rehearsed successfully; pending CodeQL final, governed production merge, publish and live acceptance",
   "completed": [
     "choose exact city-courier company from existing merchant settings dropdown, never type custom carrier",
     "driver may claim new shipments only when current shipping-company name matches profile; destination city does not authorize assignment",
@@ -71,14 +71,16 @@
     "separate older PR 1691 retains city-based check; do not merge it over carrier-based policy without reconciliation"
   ],
   "production_changed": false,
-  "release_guard_lease_status": "not queried; no lease created",
+  "release_guard_lease_status": "User terminal confirmed active=false before candidate rehearsal; prepare NOT run",
   "next_safe_action": "Complete independent review and resolve supplier policy in separately scoped task without changing historical services. On authorized Emergent host: verify v5 lease status and make A/B release; deploy and run 3-probe verify; only then link Talal and update native clients. Do not merge source A alone or run app distribution ahead of backend.",
   "split_reason": "Original mobile PR312 mixed delivery-app and courier-management UI. Split to PR312 UI-only and PR313 app-only so dedicated Android CI is independent of unrelated supplier invoice policies.",
   "pending": [
     "Governed v5 A/B host release (not available from GitHub connector)",
     "Live owner-authenticated Talal profile, shipping-company and per-driver session acceptance",
     "Backend deploy and 3-probe verify before mobile distribution",
-    "Mobile management generic CI on unchanged supplier-service contract"
+    "Mobile management generic CI on unchanged supplier-service contract",
+    "CI CodeQL Python PR1694 in progress",
+    "Root ledger Issue #1006 rejects new comments (>2500), status preserved here instead"
   ],
   "salla_read_status": "Read-only shipping list returned 504 Gateway Timeout twice; no live shipping sample validated",
   "release_state": {
@@ -90,6 +92,14 @@
     "mobile_app_ci": 41506868020,
     "production_merged": false,
     "production_published": false,
-    "salla_live_read": "504"
+    "salla_live_read": "504",
+    "release_candidate_pr": 1694,
+    "source_a": "d221556175d884e9cebbda091ec62fdf68dde912",
+    "intent_b": "3d034cfc5796c0b1a56485f81a3b8f2bd65cd4e5",
+    "release_id": "rg5-75c62eb45f1b074d1494e5d75e049b4b5f65e9f64f042de53fea806b2b5def1d",
+    "host_candidate_rehearsal": "PASS: governed build, package-boundary, frontend reviewed-intent and generated backend release identity equality",
+    "release_host_worktree": "/tmp/mezan-carrier-v5-dj4DxD",
+    "production_sha_before_merge": "2e70e44f69ef7eda8ccdad83a4faf4bdd9538eb0",
+    "release_candidate_merged": false
   }
 }
