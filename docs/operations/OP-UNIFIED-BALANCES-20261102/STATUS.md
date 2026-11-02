@@ -1,31 +1,29 @@
-# OP-UNIFIED-BALANCES — PR1700 A/B acceptance complete, no publication
+# OP-UNIFIED-BALANCES — current candidate PR1702, superseding1700
 
-Latest record: **DELIVERY-006.md**, superseding pending B checks in DELIVERY-005.md. Main registry: **PR1687** and DELIVERY-REGISTER.md. Release candidate: **PR1700**, branch `release/operational-ready-r03-r05-20261103`. This documentation is maintained on the integration branch; frozen A/B are unchanged.
+**DRAFT / no production merge or publish / no live financial activation.** Updated 2026-11-03. Main durable registry remains **PR1687**, DELIVERY-REGISTER.md and numbered DELIVERY records. Latest registration comment **6590814851** records milestones005–007.
 
-A=`8cf7aa3ace5392655793fe4d15bc3c4e965362ea`; J=`9c550813afa5314dc498c20644033478aefbf80d`; B=`c0dd5ab1762ecd99716b12d93f4d339bfdcdb8a4`; B tree=`11787597c7f79451829b3bea7e3df337aa097586`; candidate release=`rg5-d8424400c8542d01be52238a8fc1deb29e7b9148cd33fadf4f1b4fd10354286b`.
+## Current source
 
-## Completed and preserved
+Candidate **PR1702**, branch `release/operational-ready-currentbase-20261103`, source A2 **3a13f952b2909ac8e6eac2d0f7cc3a59f879e767**, root **58d5a7a1de998ed9c40d5bb638f29336e6959d45**, sole parent latest production J2 **7d1be020b9559ea294b6ea3f7511f37ee5e6a847** (merged PR1701 operational images/courier unassignment). No new B2 yet in this record.
 
-R03 legacy root-base/service receipt mapping and R05 owner-reviewed native debt/payment-to-operational identity matching are implemented and tested, together with ready supplier cutoff, original SAR/per-piece states, payroll preview, delivery noncash, external loans, scoped warnings and usable report work. Latest production J and original integration work are preserved. The complete included/deferred matrix is READY-RELEASE-20261103.md on A; read DELIVERY-005.md here for scope and evidence. Independent unfinished provider postsettlement and full COD/profit work is deferred, not deleted or enabled. Unknown receipt identities remain explicit, never guessed or zeroed.
+All13 J1→J2 paths were read by exact blob SHA and preserved on the entire accounting A1 tree. Direct tree-equivalence review object d05fb4959aece415c15e503756a46074c64a7468 uses A2's exact tree and A1 parent solely for comparison, no branch update: its diff is exactly13 production paths plus2 documentation files. Normal GitHub compare of divergent A1/A2 is merge-base-relative and MUST NOT be treated as a two-tree diff. No accounting or service file was overwritten. The review object is not a release source.
 
-## Exact acceptance
+Inherited intent is byte-identical to J2 blobf492e99086903fd980472b8597fe6b14499aefe8. This cannot deploy A2; successful fresh A2 build and a new intent-only B2 are required. Do not weaken the classifier or reuse B1. Current A2 Operational41542992673 and Readiness41542992759 are in progress at last read; old counts are not new acceptance.
 
-Source A: operational1733 backend/335 frontend28suites passed; readiness41538979950 passed. Intent-onlyB: operational41540421669 independently verified1733 backend/335 frontend28suites, zero failures/errors/skips; embedded B/root exact. These repeat counts are NOT additive.
+## Previous verified candidate preserved
 
-B readiness41540421598 completed SUCCESS, including BOTH clean-clone Host20.20.2/24.19.0 adapter rehearsals, artifact/proof/identity/package-boundary checks and build-meta JSON route. Prior source classification failure is resolved without modifying the guard. B CodeQL41540421455 completed SUCCESS for both languages. Security/G47/accounting/supplier/shipping and other displayed checks succeeded; observed list23 successes and one conditional unrelated TikTok Creator workflow skip. This is NOT an actual Emergent deployment.
+PR1700 is CLOSED as superseded, not merged; branch and A1/B1 are unchanged. A1=8cf7aa3ace5392655793fe4d15bc3c4e965362ea, B1=c0dd5ab1762ecd99716b12d93f4d339bfdcdb8a4, J1=9c550813afa5314dc498c20644033478aefbf80d. Both passed1733backend/335frontend28suites without failures/errors/skips. B1 readiness41540421598 passed two clean-clone rehearsals; CodeQL41540421455 passed both languages. Details DELIVERY005/006 remain preserved, and their previous status is archived byte-for-byte in STATUS-PRE-PRODUCTION1701-20261103.md. These are historical source-specific results, not J2 live publication proof or A2 acceptance.
 
-## Remaining before publication
+## Owner scope and safety unchanged
 
-Visual desktop/mobile and actual browser print/download acceptance remains unproved: local browser was administratively blocked before rendering, and no bypass was attempted. The synthetic visual harness built successfully; unit tests are not visual proof.
+R03/R05 plus ALL safely ready supplier cutoff/SAR/per-piece receipts/payroll preview/delivery noncash/external-loan/warning/report fixes in one next release. Independent unfinished provider postsettlement/full COD-profit and other backlog are deferred, not deleted or enabled. R03 roots/existing services use unchanged unique legacy receipt identities; unsupported nested financial-only bases remain explicit unknowns. R05 matches existing operational obligations/bank movements or requires separately reviewed owner approval of missing mirrors. No second source GL/stock/bank action, no opening re-entry/reset or automatic history replay. Publishing code is not financial correction approval.
 
-Actual Emergent guard status and host coordination remain unobserved: no authenticated management terminal/browser connection was obtained. Owner received the read-only `cd /app; python3 -B scripts/production_release_guard.py status` command. Never assume active=false from old evidence or clear another task's lease. PR1699 is independent and untouched.
+Read DELIVERY007 and the complete behavior matrix READY-RELEASE-20261103.md on the candidate; old A1/J1 IDs in that matrix are historical and superseded here. No current balances are certified.
 
-After required acceptance/coordination: read latest production, controlled merge with expected B and tree equality, host rehearsal/prepare/prepublish, ONE explicit publication and live verify3/active=false. If production advanced, review/preserve it and prepare a new A/build/B as needed; never append to frozen B or squash/rebase it. Do not merge legacy PR1687 wholesale a second time; it is the durable registry and remaining-work branch, while1700 is the current candidate.
+## Remaining before release
 
-## Financial boundary and resume
+Fresh exact A2 operational/newer fulfillment-delivery/G47/security/CodeQL/readiness acceptance, then new B2 and its immutable-source/clean-clone checks. Visual desktop/mobile/actual print/download acceptance is still unproved after local browser ERR_BLOCKED_BY_ADMINISTRATOR before rendering; no bypass attempted. Actual Emergent /app guard status/host coordination is unobserved; owner was sent the read-only status command. Do not assume inactive lease or cancel another task's release.
 
-No actual balance, opening, past payment, native invoice, stock, refund, bank/provider, payroll missing-day or fee-policy change occurred. R05 corrections and payroll activation require their separate owner preview/approval. Code publication is not approval of missing historical amounts. No migration/reset/replay may be embedded in deployment.
+Re-read latest production before controlled merge. Preserve further changes rather than appending source after B2 freeze. Only after acceptance/coordination: merge with expected B2 and tree equality, governed host rehearsal/prepare/prepublish, ONE explicit Publish, live verify3 and active=false. Never merge old PR1687 or1700 wholesale. Issue1006 is full; use1687 and current candidate1702.
 
-Resume from AGENTS.md, DELIVERY-006.md/005, current PR1700/exact B checks, latest production and actual host status. Do not rebuild completed mappings. Preserve old status byte-for-byte in STATUS-PRE-REVIEWED-B-20261103.md and earlier records. Issue1006 is full; use1687.
-
-Production changed:NO. Merge:NO. Publication:NO. Financial activation:NO. /app/lease touched:NO.
+Production changed by this task:NO. Financial activation:NO. /app/lease touched:NO. Actual merge or publication:NO.
