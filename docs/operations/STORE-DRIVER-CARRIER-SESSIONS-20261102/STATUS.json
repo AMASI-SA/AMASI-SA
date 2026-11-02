@@ -119,5 +119,53 @@
       "release_id": "rg5-75c62eb45f1b074d1494e5d75e049b4b5f65e9f64f042de53fea806b2b5def1d"
     }
   },
-  "production_change_scope": "Only GitHub production branch merged; actual Cloud Build Publish not performed"
+  "production_change_scope": "Only GitHub production branch merged; actual Cloud Build Publish not performed",
+  "followup_scope": "2026-11-02 native courier isolation + 3-dot pre-pickup unassignment + operational-item option-specific photo",
+  "followup_prs": {
+    "backend_unassign": {
+      "pr": 1696,
+      "branch": "codex/store-driver-operator-unassign-20261102",
+      "source_sha": "2449563e935da95188a63b7f459b50beb925fccb",
+      "state": "READY_FOR_REVIEW; Store Delivery and all 13 applicable GitHub workflows PASS; not merged"
+    },
+    "employee_courier": {
+      "pr": 312,
+      "repo": "AMASI-SA/amasi-mobile",
+      "branch": "codex/delivery-carrier-session-isolation-20261102",
+      "source_sha": "aebc3cad9223a061bb199f7b4febefd12e285c99",
+      "state": "READY_FOR_REVIEW; focused courier CI 41523112954 PASS; generic supplier-service and inherited CI FAIL; not merged"
+    },
+    "driver_apk": {
+      "pr": 313,
+      "repo": "AMASI-SA/amasi-mobile",
+      "branch": "codex/delivery-session-isolation-app-20261102",
+      "source_sha": "d31a5ac2aa269b36773f778d69ed518aacf238ef",
+      "version": "1.0.15",
+      "version_code": 16,
+      "ci": "AMASI Delivery Android 41524548050 PASS",
+      "base": "codex/delivery-camera-20261027",
+      "state": "READY_FOR_REVIEW; no EAS build, APK or OTA performed"
+    },
+    "backend_option_photo": {
+      "pr": 1697,
+      "branch": "codex/operational-option-image-20261102",
+      "source_sha": "dd7ba28a90deef096c3ff5408fb906bc0a9864e7",
+      "ci": "Fulfillment V2 and all 17 exact-head GitHub workflows PASS",
+      "state": "READY_FOR_REVIEW; not merged or deployed; ensure no customer-personalized photo reuse"
+    },
+    "employee_option_photo": {
+      "pr": 314,
+      "repo": "AMASI-SA/amasi-mobile",
+      "branch": "codex/operational-option-image-native-20261102",
+      "source_sha": "394de3d8c84845a3bfcf552ac46f3543b4011938",
+      "ci": "Focused operational photo native 41523687690 PASS TypeScript and flow checks; inherited generic mobile CI red",
+      "state": "READY_FOR_REVIEW; no APK, OTA or production write"
+    }
+  },
+  "production_runtime_verification": "UNCONFIRMED since owner's v5 PREPARE/PREPUBLISH PASS; no Deployment Succeeded or verify checks=3, active lease may still be held",
+  "followup_release_guard": "DO NOT merge/publish new backend PRs while v5 lease pending verification. Need owner Cloud Publish Deployment Succeeded and 3 probes returning verified true, checks 3, then lease active false.",
+  "followup_operator_safety": "Unassign only status=assigned and pre-pickup, no driver session, financial, settlement, payment/proof or acknowledged instructions; Mongo transaction; preserve historical assignment and fee snapshot, no customer order cancellation.",
+  "followup_photo_policy": "Internal operational card image frozen and visible to native assembly; exact product+name+nonpersonal options remembered for later orders; separate from source image, no supplier, Salla or accounting write.",
+  "followup_production_changed": false,
+  "followup_next": "Confirm existing live release v5 through owner terminal verify, then governed A/B source/intent for backend PRs #1696 & #1697, publish/verify, resolve generic mobile supplier policy CI separately, build EAS preview APK, test real Talal and sessions."
 }
