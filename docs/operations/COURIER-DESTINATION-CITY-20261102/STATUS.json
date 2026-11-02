@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/courier-destination-city-20261102",
   "base_commit": "70576e2a06237eb193b1c927f11ced92e2229589",
-  "state": "Implemented and independently reviewed; final local focused suite green; remote CI pending",
+  "state": "Source fix ready for separately authorized production publication; all observed exact-source CI runs succeeded",
   "scope": "Use current shipment destination for courier city coverage while preserving city restrictions and historical assignment snapshots.",
   "completed": [
     "Prioritize unambiguous current shipment destination over stale flat/customer city fields; preserve existing city aliases and coverage rules.",
@@ -23,12 +23,12 @@
     }
   ],
   "pending": [
-    "Focused remote CI including disposable transaction-capable Mongo tests."
+    "Separate authorization to publish this new city-source fix using the repository v5 release procedure."
   ],
   "production_changed": false,
-  "deployment_state": "No merge, release lease, or production deployment for this task.",
+  "deployment_state": "Source-only PR; no production merge, lease or publication for this task. The previous production deployment remains unchanged.",
   "continuity": "Issue #1006 has reached its comment limit. This task status and the task Draft PR carry the continuation record and exact remote commit SHA.",
-  "next_safe_action": "Inspect remote CI for this exact task head; preserve final evidence and request separate production publication authorization.",
+  "next_safe_action": "After separate production publication authorization, re-read repository AGENTS, verify current production/source refs and shared guard inactive, then prepare the reviewed v5 source/intent-only A/B handoff from this source. No manual live order or assignment changes.",
   "privacy": "Only synthetic fixtures and non-customer technical evidence are included.",
   "previous_checkpoint": "9765c42672a1bf943ec02128c43e3f8c9c631213",
   "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1691",
@@ -52,5 +52,110 @@
     "backend/store_delivery_handover_routes.py": "6cc33070144aac1388e3b405348811bf8ee24cec6b6225db568a46ce8647e625",
     "backend/tests/test_store_delivery_destination.py": "3ed36ac484d29cffa0dff4e713ceef91d35a97e1747cc38f4ef5121d18a11eb1",
     "backend/tests/test_store_delivery_destination_provider.py": "bd3d63479e2cba3cf68f73775cffb1ea74a2173c62f44ddb66834ea10b0ebabe"
+  },
+  "source_commit": "cd9cf58d61409abb858b43f7d3695d75c847c5d6",
+  "source_tree": "b320bd5c1c48b2cbc45b7970dfde8a9e1b2a0e3f",
+  "evidence_branch": "codex/courier-destination-city-20261102-evidence",
+  "ci": {
+    "store_delivery": {
+      "run_id": 41472144534,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41472144534",
+      "conclusion": "success",
+      "backend_tests_passed": 265,
+      "frontend_tests_passed": 33,
+      "backend_job_id": 125368234783,
+      "frontend_job_id": 125368235187,
+      "frontend_reproducible_build": "success"
+    },
+    "release_readiness": {
+      "run_id": 41472144497,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41472144497",
+      "conclusion": "success",
+      "deployment_rehearsal": "not run; source-only PR"
+    },
+    "repository_runs": [
+      {
+        "id": 41472144301,
+        "name": "Ads Auto Sync 5 Minutes V2",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41472144301"
+      },
+      {
+        "id": 41472144578,
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41472144578"
+      },
+      {
+        "id": 41472144647,
+        "name": "Snapchat Direct Active Publication",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41472144647"
+      },
+      {
+        "id": 41472144472,
+        "name": "Snapchat Settings Management V2",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41472144472"
+      },
+      {
+        "id": 41472144591,
+        "name": "Qoyod Payment Freshness",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41472144591"
+      },
+      {
+        "id": 41472144497,
+        "name": "Mezan Release Readiness",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41472144497"
+      },
+      {
+        "id": 41472144534,
+        "name": "Store Delivery V1",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41472144534"
+      },
+      {
+        "id": 41472144353,
+        "name": "Operational Balance Web",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41472144353"
+      },
+      {
+        "id": 41472144377,
+        "name": "G47 Focused Integration",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41472144377"
+      },
+      {
+        "id": 41472144477,
+        "name": "Security Gate",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41472144477"
+      },
+      {
+        "id": 41472144508,
+        "name": "Operational Stock Eligibility",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41472144508"
+      }
+    ]
+  },
+  "pull_request_state": {
+    "number": 1691,
+    "draft": false,
+    "merged": false
   }
 }
