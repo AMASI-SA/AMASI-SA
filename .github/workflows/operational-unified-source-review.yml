@@ -14,7 +14,7 @@ jobs:
       matrix:
         include:
           - label: integration
-            source: 897237c83e2d504e008d96b0f537ba210bfc167d
+            source: 006df1d4c7a914f386ecd7777971362d5e774402
           - label: production
             source: f8235d57e90f8a1271df6350d7e7919f5621ea11
     steps:
