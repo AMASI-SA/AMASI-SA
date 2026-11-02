@@ -5,7 +5,7 @@
   "source_sha": "d221556175d884e9cebbda091ec62fdf68dde912",
   "source_base_sha": "2e70e44f69ef7eda8ccdad83a4faf4bdd9538eb0",
   "source_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1693",
-  "status": "source A CI green; release intent B frozen and host-rehearsed successfully; pending CodeQL final, governed production merge, publish and live acceptance",
+  "status": "A/B release merged to GitHub production branch; awaiting owner Emergent Cloud Build/Publish and 3-probe verification",
   "completed": [
     "choose exact city-courier company from existing merchant settings dropdown, never type custom carrier",
     "driver may claim new shipments only when current shipping-company name matches profile; destination city does not authorize assignment",
@@ -70,17 +70,16 @@
     "no Android APK, OTA or production release was created",
     "separate older PR 1691 retains city-based check; do not merge it over carrier-based policy without reconciliation"
   ],
-  "production_changed": false,
-  "release_guard_lease_status": "User terminal confirmed active=false before candidate rehearsal; prepare NOT run",
+  "production_changed": true,
+  "release_guard_lease_status": "Last host owner check active=false; prepare/prepublish NOT run",
   "next_safe_action": "Complete independent review and resolve supplier policy in separately scoped task without changing historical services. On authorized Emergent host: verify v5 lease status and make A/B release; deploy and run 3-probe verify; only then link Talal and update native clients. Do not merge source A alone or run app distribution ahead of backend.",
   "split_reason": "Original mobile PR312 mixed delivery-app and courier-management UI. Split to PR312 UI-only and PR313 app-only so dedicated Android CI is independent of unrelated supplier invoice policies.",
   "pending": [
-    "Governed v5 A/B host release (not available from GitHub connector)",
-    "Live owner-authenticated Talal profile, shipping-company and per-driver session acceptance",
-    "Backend deploy and 3-probe verify before mobile distribution",
-    "Mobile management generic CI on unchanged supplier-service contract",
-    "CI CodeQL Python PR1694 in progress",
-    "Root ledger Issue #1006 rejects new comments (>2500), status preserved here instead"
+    "On authorized Emergent /app host, fast-forward production branch from J to M without touching other worktrees",
+    "Run governed adapter on merged M, verify frontend and isolated backend identity, run release_guard prepare + prepublish immediately before explicit cloud publish",
+    "Verify live production with release guard 3 consecutive probes after Deployment Succeeded",
+    "Actual Talal shipping-company profile, own driver sessions and historical assignment acceptance",
+    "Release native mobile PR312/PR313 only after verified backend; generic supplier policy CI blocker remains"
   ],
   "salla_read_status": "Read-only shipping list returned 504 Gateway Timeout twice; no live shipping sample validated",
   "release_state": {
@@ -100,6 +99,14 @@
     "host_candidate_rehearsal": "PASS: governed build, package-boundary, frontend reviewed-intent and generated backend release identity equality",
     "release_host_worktree": "/tmp/mezan-carrier-v5-dj4DxD",
     "production_sha_before_merge": "2e70e44f69ef7eda8ccdad83a4faf4bdd9538eb0",
-    "release_candidate_merged": false
-  }
+    "release_candidate_merged": true,
+    "merge_commit_sha": "79187db4b6212993f94338830298e467e3773d68",
+    "production_branch_sha": "79187db4b6212993f94338830298e467e3773d68",
+    "merge_sha_tree_equals_b_tree": true,
+    "source_a_to_merge_diff": [
+      "release/release-intent-v5.json"
+    ],
+    "github_pr1694_exact_head_checks": "ALL PASS or applicable skipped incl CodeQL Python & JS"
+  },
+  "production_change_scope": "GitHub production SOURCE BRANCH updated to merge M; no verified Emergent Cloud Publish or live runtime deployment yet"
 }
