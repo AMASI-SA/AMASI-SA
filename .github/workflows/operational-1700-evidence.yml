@@ -1,0 +1,68 @@
+name: Operational 1700 Isolated Evidence
+on:
+  push:
+    branches: [review/operational-ready-1700-evidence-20261103]
+    paths: [.github/workflows/operational-1700-evidence.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 8cf7aa3ace5392655793fe4d15bc3c4e965362ea
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install locked synthetic-preview dependencies
+        run: |
+          corepack enable && corepack prepare yarn@1.22.22 --activate
+          yarn --cwd frontend install --frozen-lockfile --non-interactive
+          python -m pip install fastapi==0.142.2 pydantic==2.13.5 pymongo==4.18.2
+      - name: Generate synthetic report through actual pure adapter
+        run: PYTHONPATH=backend python frontend/testing/financial-position-preview/generate_fixture.py
+      - name: Bind real components to synthetic-only memory adapters
+        run: |
+          cat > frontend/testing/financial-position-preview/main.jsx <<'JS'
+          import React from 'react';
+          import {createRoot} from 'react-dom/client';
+          import OperationalFinancialPosition from '../../src/pages/operational/OperationalFinancialPosition';
+          import NativePurchaseReview from '../../src/pages/operational/NativePurchaseReview';
+          import {operationalApi as api} from '../../src/pages/operational/api';
+          import fixture from './fixture.json';
+          const scope='synthetic-preview-only';
+          window.__previewCalls=0;window.__approvalCalls=0;
+          api.financialPosition=async()=>structuredClone(fixture);
+          api.supplierInvoiceReview=async()=>({session_scope:scope,read_only:true,native_purchase_review:[{invoice_id:'TEST-ONLY-80',invoice_number:'فاتورة اختبار 80',supplier_id:'TEST-SUPPLIER',source_declared_gross_sar:'80.00'}]});
+          api.nativePurchaseCandidates=async id=>({session_scope:scope,read_only:true,invoice_id:id,supplier_name:'مورد تجريبي — ليست بيانات المتجر',source:{source_verified:true,native_invoice_gross_sar:'80.00',native_settled_sar:'25.00',native_outstanding_sar:'55.00',payment_journals:[{payment_operation_id:'TEST-PAY-25',amount_sar:'25.00',bank_account_id:'TEST-BANK'}]},existing_obligations:[],existing_movements:[],saved_link:null});
+          api.previewNativePurchaseLink=async body=>{window.__previewCalls++;return {session_scope:scope,read_only:true,invoice_id:body.invoice_id,can_approve:true,preview_hash:'a'.repeat(64),unrecorded_money_confirmation_required:true,before:{supplier_outstanding_sar:'0.00',banks:{'TEST-BANK':'1000.00'}},after:{supplier_outstanding_sar:'55.00',banks:{'TEST-BANK':'975.00'}},bank_differences_sar:{'TEST-BANK':'-25.00'},supplier_difference_sar:'55.00'};};
+          api.approveNativePurchaseLink=async()=>{window.__approvalCalls++;throw new Error('الاعتماد ممنوع في المعاينة المحلية؛ لا توجد قاعدة بيانات أو حركة مالية.');};
+          const native=new URLSearchParams(location.search).get('view')==='native';
+          createRoot(document.getElementById('root')).render(<React.StrictMode><div dir="rtl" style={{padding:16,background:'#fff3cd'}}>معاينة اختبارية محلية فقط — لا بيانات متجر ولا اعتماد مالي</div>{native?<main style={{maxWidth:1100,margin:'auto',padding:16}}><NativePurchaseReview sessionScope={scope} onRefresh={()=>{}}/></main>:<OperationalFinancialPosition/>}</React.StrictMode>);
+          JS
+      - name: Build isolated preview and prove application unchanged
+        run: |
+          test "$(git rev-parse HEAD)" = 8cf7aa3ace5392655793fe4d15bc3c4e965362ea
+          git diff --exit-code -- backend frontend/src
+          node frontend/testing/financial-position-preview/build.mjs
+          git diff --exit-code -- backend frontend/src
+          git rev-parse HEAD > .evidence/financial-preview-site/source-sha.txt
+          git rev-parse HEAD^{tree} > .evidence/financial-preview-site/source-tree.txt
+          git ls-tree -r HEAD backend frontend/src > .evidence/financial-preview-site/application-blobs.txt
+          tar -czf operational-1700-visual.tar.gz -C .evidence financial-preview-site
+          sha256sum operational-1700-visual.tar.gz > operational-1700-visual.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: operational-1700-visual-8cf7aa3a
+          path: |
+            operational-1700-visual.tar.gz
+            operational-1700-visual.sha256
+          retention-days: 7
+          if-no-files-found: error
