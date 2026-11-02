@@ -90,6 +90,10 @@ async def capture_intake(db, owner, lines, previous):
             variant_id=line.get("variant_id"), selected_options=selected_ids(line),
             option_answers=option_answers(line),
             present_option_ids=present_options(line), filled_option_ids=filled_options(line)) if definition else None
+        if snapshots[line_id] is not None:
+            from order_cost_authority import line_fingerprint
+            snapshots[line_id]["sale_quantity"] = line["quantity"]
+            snapshots[line_id]["line_fingerprint"] = line_fingerprint(line)
     if len(json.dumps(snapshots, default=str).encode()) > 8_000_000:
         fail("order_snapshot_size_limit")
     return snapshots

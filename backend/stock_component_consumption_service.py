@@ -157,6 +157,7 @@ def selection_tokens(line: dict[str, Any]) -> list[list[str]]:
     for row in rows:
         if not isinstance(row, dict):
             _fail("selected_context_invalid")
+        row = row.get("raw") or row
         option = row.get("option") if isinstance(row.get("option"), dict) else {}
         oid = row.get("option_id") or row.get("id") or option.get("id")
         name = row.get("option_name") or row.get("name") or option.get("name")

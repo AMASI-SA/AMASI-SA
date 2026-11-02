@@ -12,6 +12,7 @@ on:
       - 'backend/product_catalog_cost_resolution.py'
       - 'backend/orders_db.py'
       - 'backend/order_currency.py'
+      - 'backend/order_cost_authority.py'
       - 'backend/server.py'
       - 'backend/tests/*dashboard_runtime*'
       - '.github/workflows/dashboard-runtime-adoption.yml'
@@ -119,6 +120,7 @@ jobs:
         run: >-
           python -m pytest --noconftest -p no:cacheprovider -q -x
           tests/test_dashboard_runtime_source_contract.py
+          tests/test_dashboard_runtime_authority_read_contract.py
           tests/test_dashboard_runtime_reducers.py
           tests/test_dashboard_v2_product_cost.py
           tests/test_dashboard_v2_arabic_status_normalization.py
@@ -131,8 +133,11 @@ jobs:
         run: |
           python - <<'PY'
           import json
+          import sys
           import xml.etree.ElementTree as ET
           from pathlib import Path
+          sys.path.insert(0, 'backend/tests')
+          from dashboard_runtime_gate_plugin import assert_runtime_read_contract
           for name in ('reference','production-read-baseline','runtime','regression'):
               root=ET.parse(name+'.xml').getroot()
               assert not root.findall('.//skipped')
@@ -144,7 +149,11 @@ jobs:
           assert len(reference) == len(baseline) == len(runtime) == 164
           assert set(reference) == set(baseline) == set(runtime)
           assert {k: v['json'] for k, v in reference.items()} == {k: v['json'] for k, v in runtime.items()}
-          assert baseline == runtime
+          # The immutable JSON oracle and every prior read remain exact. Only
+          # the explicitly audited, tenant-scoped empty authority reads may
+          # differ; raw command/document evidence is retained in the artifact.
+          for key in reference:
+              assert_runtime_read_contract(runtime[key], baseline[key])
           print(Path('runtime-responses.calls.json').read_text())
           PY
       - uses: actions/upload-artifact@v4

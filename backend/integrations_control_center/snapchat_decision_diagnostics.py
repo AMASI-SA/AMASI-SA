@@ -246,6 +246,7 @@ async def _load_comparison_evidence(
         _finalize_campaign,
         _load_cost_context,
         _order_cost_and_products,
+        load_order_cost_authority,
     )
     from .snapchat_campaign_result_source_routes import (
         _campaign_identities,
@@ -305,6 +306,9 @@ async def _load_comparison_evidence(
         include_marketing_attribution=True,
     )
     cost_context = await _load_cost_context(db, user_id)
+    cost_context["order_cost_authority"] = await load_order_cost_authority(
+        db, user_id, orders,
+    )
 
     campaign_raw: dict[str, dict[tuple[str, str], dict[str, Any]]] = {
         "previous": defaultdict(_empty_campaign_raw),

@@ -4,7 +4,7 @@ This module joins three already-authoritative Mezan sources:
 
 * campaign identity and spend from the selected Snapchat accounts;
 * financially included orders from ``unified_orders``;
-* product/variant/component costs from the Mezan V2 cost engine.
+* frozen sale costs, with explicitly qualified legacy catalog estimates.
 
 Profitability is deliberately conservative. A campaign contribution profit is
 reported only when every matched order has a usable product cost. Product-level
@@ -28,6 +28,7 @@ from dashboard_v2_routes import (
     calculate_mezan_v2_line_cost,
 )
 from order_status_policy import effective_product_cost, get_policy_map
+from order_cost_authority import load_order_cost_authority, resolve_order_line_cost
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import BINDINGS, RESOURCES
 from product_cost_revision import get_product_cost_revision
@@ -202,6 +203,15 @@ def _order_cost_and_products(
             product_bindings=context["product_binding_map"].get(product_id, []),
             option_bindings=context["option_map"].get(product_id, []),
             resources=context["resources"],
+        )
+        # The authority returns the original line cost. Apply the existing
+        # order refund/cancellation policy once, after summing those lines.
+        result = resolve_order_line_cost(
+            item,
+            order_number=_text(order.get("order_number")),
+            catalog_cost=result,
+            authority=context.get("order_cost_authority"),
+            product_id=product_id or None,
         )
         identity = _text(
             product_id
@@ -566,6 +576,9 @@ async def build_campaign_profitability(
         include_marketing_attribution=True,
     )
     cost_context = await _load_cost_context(db, user_id)
+    cost_context["order_cost_authority"] = await load_order_cost_authority(
+        db, user_id, orders,
+    )
 
     by_campaign_raw: dict[tuple[str, str], dict[str, Any]] = defaultdict(
         _new_campaign_bucket

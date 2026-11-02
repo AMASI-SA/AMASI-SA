@@ -1,0 +1,348 @@
+{
+  "all_scoped_queries_indexed": true,
+  "authority": [
+    {
+      "compact": {
+        "command_failures": 0,
+        "commands_per_sample": {
+          "aggregate": 2,
+          "find": 4
+        },
+        "logical_reads": [
+          6
+        ],
+        "median_line_resolution_ms": 0.167,
+        "median_load_and_resolution_ms": 6.847,
+        "median_ms": 6.679,
+        "median_reply_bson_bytes": 12408,
+        "p95_line_resolution_ms": 0.329,
+        "p95_load_and_resolution_ms": 8.089,
+        "p95_ms": 7.922,
+        "read_round_trips": [
+          6
+        ],
+        "sample_load_ms": [
+          6.6789,
+          7.5189,
+          7.9219,
+          5.5332,
+          5.1698
+        ],
+        "samples": 5
+      },
+      "cost_sar": 360,
+      "full_metadata": {
+        "command_failures": 0,
+        "commands_per_sample": {
+          "find": 6
+        },
+        "logical_reads": [
+          6
+        ],
+        "median_line_resolution_ms": 0.206,
+        "median_load_and_resolution_ms": 8.215,
+        "median_ms": 7.991,
+        "median_reply_bson_bytes": 54040,
+        "p95_line_resolution_ms": 0.546,
+        "p95_load_and_resolution_ms": 21.011,
+        "p95_ms": 20.841,
+        "read_round_trips": [
+          6
+        ],
+        "sample_load_ms": [
+          9.9138,
+          20.8415,
+          7.9913,
+          4.8827,
+          5.4169
+        ],
+        "samples": 5
+      },
+      "lines": 3,
+      "orders": 1
+    },
+    {
+      "compact": {
+        "command_failures": 0,
+        "commands_per_sample": {
+          "aggregate": 2,
+          "find": 4,
+          "getMore": 1
+        },
+        "logical_reads": [
+          6
+        ],
+        "median_line_resolution_ms": 13.578,
+        "median_load_and_resolution_ms": 73.145,
+        "median_ms": 59.482,
+        "median_reply_bson_bytes": 855944,
+        "p95_line_resolution_ms": 14.066,
+        "p95_load_and_resolution_ms": 83.414,
+        "p95_ms": 70.895,
+        "read_round_trips": [
+          7
+        ],
+        "sample_load_ms": [
+          59.4821,
+          55.3498,
+          70.8954,
+          54.7908,
+          61.1942
+        ],
+        "samples": 5
+      },
+      "cost_sar": 28800,
+      "full_metadata": {
+        "command_failures": 0,
+        "commands_per_sample": {
+          "find": 6,
+          "getMore": 1
+        },
+        "logical_reads": [
+          6
+        ],
+        "median_line_resolution_ms": 14.436,
+        "median_load_and_resolution_ms": 77.548,
+        "median_ms": 61.016,
+        "median_reply_bson_bytes": 4186504,
+        "p95_line_resolution_ms": 18.001,
+        "p95_load_and_resolution_ms": 128.491,
+        "p95_ms": 114.643,
+        "read_round_trips": [
+          7
+        ],
+        "sample_load_ms": [
+          61.0161,
+          59.5466,
+          71.1185,
+          114.6427,
+          55.277
+        ],
+        "samples": 5
+      },
+      "lines": 240,
+      "orders": 80
+    },
+    {
+      "compact": {
+        "command_failures": 0,
+        "commands_per_sample": {
+          "aggregate": 2,
+          "find": 4,
+          "getMore": 4
+        },
+        "logical_reads": [
+          6
+        ],
+        "median_line_resolution_ms": 41.189,
+        "median_load_and_resolution_ms": 229.216,
+        "median_ms": 186.768,
+        "median_reply_bson_bytes": 2672413,
+        "p95_line_resolution_ms": 42.448,
+        "p95_load_and_resolution_ms": 309.637,
+        "p95_ms": 268.448,
+        "read_round_trips": [
+          10
+        ],
+        "sample_load_ms": [
+          163.4425,
+          268.4482,
+          181.0174,
+          186.7682,
+          247.6698
+        ],
+        "samples": 5
+      },
+      "cost_sar": 90000,
+      "full_metadata": {
+        "command_failures": 0,
+        "commands_per_sample": {
+          "find": 6,
+          "getMore": 4
+        },
+        "logical_reads": [
+          6
+        ],
+        "median_line_resolution_ms": 44.232,
+        "median_load_and_resolution_ms": 260.555,
+        "median_ms": 214.698,
+        "median_reply_bson_bytes": 13080413,
+        "p95_line_resolution_ms": 56.713,
+        "p95_load_and_resolution_ms": 272.502,
+        "p95_ms": 228.291,
+        "read_round_trips": [
+          10
+        ],
+        "sample_load_ms": [
+          179.4052,
+          216.3235,
+          207.8488,
+          228.291,
+          214.698
+        ],
+        "samples": 5
+      },
+      "lines": 750,
+      "orders": 250
+    }
+  ],
+  "bson_measurement": "uncompressed Mongo command replies; includes cursor envelope; excludes transport framing",
+  "bundle_units_per_order": 6,
+  "fixture_database_cleaned": true,
+  "fixture_lines_per_order": 3,
+  "fixture_units_per_order": 8,
+  "frozen_metadata_kib_per_order": 40,
+  "ingestion_helpers_one_order": {
+    "first_capture": {
+      "command_failures": 0,
+      "commands_per_sample": {
+        "find": 37
+      },
+      "logical_reads": [
+        37
+      ],
+      "median_ms": 44.233,
+      "median_reply_bson_bytes": 14409,
+      "p95_ms": 55.767,
+      "read_round_trips": [
+        37
+      ],
+      "sample_load_ms": [
+        31.4525,
+        44.2334,
+        39.7226,
+        49.0014,
+        55.7672
+      ],
+      "samples": 5
+    },
+    "replay": {
+      "command_failures": 0,
+      "commands_per_sample": {},
+      "logical_reads": [
+        0
+      ],
+      "median_ms": 0.475,
+      "median_reply_bson_bytes": 0,
+      "p95_ms": 1.019,
+      "read_round_trips": [
+        0
+      ],
+      "sample_load_ms": [
+        0.4527,
+        1.0188,
+        0.4749,
+        0.327,
+        0.7304
+      ],
+      "samples": 5
+    }
+  },
+  "limitations": [
+    "Local fixture replica, warm connections and warmed collections; production latency and load differ.",
+    "Authority timings exclude existing dashboard, HTTP, cache and other report work; add them to a measured baseline.",
+    "Load and line-resolution timings are separate; resolver timing uses catalog costs computed before measurement.",
+    "Ingestion timings cover capture_intake plus capture_reporting_costs; exclude lifecycle writes, stock reservation and provider transport.",
+    "No production orders, journals or live application state were read or changed."
+  ],
+  "mongo_version": "8.0.12",
+  "new_reporting_capture_only_one_order": {
+    "first_capture": {
+      "command_failures": 0,
+      "commands_per_sample": {
+        "find": 5
+      },
+      "logical_reads": [
+        5
+      ],
+      "median_ms": 8.307,
+      "median_reply_bson_bytes": 1681,
+      "p95_ms": 13.475,
+      "read_round_trips": [
+        5
+      ],
+      "sample_load_ms": [
+        7.2055,
+        5.3309,
+        11.6142,
+        8.3071,
+        13.4748
+      ],
+      "samples": 5
+    },
+    "replay": {
+      "command_failures": 0,
+      "commands_per_sample": {},
+      "logical_reads": [
+        0
+      ],
+      "median_ms": 0.025,
+      "median_reply_bson_bytes": 0,
+      "p95_ms": 0.078,
+      "read_round_trips": [
+        0
+      ],
+      "sample_load_ms": [
+        0.0247,
+        0.0266,
+        0.0225,
+        0.0777,
+        0.0217
+      ],
+      "samples": 5
+    }
+  },
+  "p95_method": "nearest-rank; with five samples this is the maximum sample",
+  "production_changed": false,
+  "sampling": "paired compact/full repetitions with alternating order after warming both modes",
+  "scope": "additional_order_cost_authority_and_ingestion_helpers_only",
+  "scoped_query_explain": [
+    {
+      "collection": "mezan_order_item_cost_snapshots_v2",
+      "collection_scan": false,
+      "stages": [
+        "FETCH",
+        "IXSCAN",
+        "PROJECTION_SIMPLE"
+      ]
+    },
+    {
+      "collection": "mezan_component_order_lifecycle_v1",
+      "collection_scan": false,
+      "stages": [
+        "FETCH",
+        "IXSCAN",
+        "LIMIT",
+        "PROJECTION_SIMPLE"
+      ]
+    },
+    {
+      "collection": "mezan_component_consumption_plans_v1",
+      "collection_scan": false,
+      "stages": [
+        "FETCH",
+        "IXSCAN",
+        "LIMIT",
+        "PROJECTION_SIMPLE"
+      ]
+    },
+    {
+      "collection": "mezan_component_consumption_units_v1",
+      "collection_scan": false,
+      "stages": [
+        "FETCH",
+        "IXSCAN",
+        "PROJECTION_SIMPLE"
+      ]
+    },
+    {
+      "collection": "mezan_order_cost_corrections_v1",
+      "collection_scan": false,
+      "stages": [
+        "FETCH",
+        "IXSCAN",
+        "PROJECTION_SIMPLE"
+      ]
+    }
+  ]
+}
