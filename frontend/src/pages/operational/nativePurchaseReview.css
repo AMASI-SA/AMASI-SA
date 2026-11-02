@@ -1,0 +1,10 @@
+.native-purchase-review { margin: 16px 0; padding: 18px; }
+.native-purchase-review p { line-height: 1.8; margin: 12px 0; }
+.native-purchase-review label { display: block; margin: 12px 0; line-height: 1.8; }
+.native-purchase-review select, .native-purchase-review input:not([type=checkbox]) { display: block; width: 100%; max-width: 640px; padding: 9px; margin-top: 5px; font: inherit; }
+.native-purchase-review input[type=checkbox] { margin-inline-end: 8px; }
+.native-purchase-review fieldset { min-width: 0; margin: 14px 0; padding: 12px; }
+.native-purchase-review button { margin: 6px 0; }
+.native-purchase-review th, .native-purchase-review td { padding: 9px 12px; text-align: right; }
+.native-purchase-review caption { text-align: right; padding: 10px 0; }
+@media print { .native-purchase-review { display: none !important; } }

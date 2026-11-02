@@ -82,56 +82,8 @@ def reconcile_credits(state):
     return state
 
 
-def provider_projection(payment, policies, transaction_date):
-    """Expected receivable only. Actual settlement fees belong to the movement.
-
-    Explicit return-fee terms are required whenever cancellation/refund occurs;
-    historical contracts lacking these fields remain visibly incomplete.
-    """
-    gross, cancelled = money(payment["gross"]), money(payment.get("cancelled", "0"))
-    refunds, seen = ZERO, {}
-    for refund in payment.get("refunds", []):
-        if refund.get("status") not in {"executed", "settled", "Refund Executed", "Settled"}:
-            continue
-        key = str(refund["id"])
-        value = money(refund["amount"])
-        if key in seen and seen[key] != value:
-            raise ValueError("refund_identity_conflict")
-        seen[key] = value
-    refunds = sum(seen.values(), ZERO)
-    if cancelled + refunds > gross:
-        raise ValueError("cancellation_refund_overlap")
-    matches = [p for p in policies if p.get("provider") == payment["provider"]
-               and p.get("currency") == payment["currency"] and p.get("status") == "active"
-               and day(p["effective_from"]) <= transaction_date
-               and (not p.get("effective_to") or transaction_date <= day(p["effective_to"]))]
-    if len(matches) != 1:
-        raise ValueError("provider_fee_policy_incomplete_or_ambiguous")
-    policy = matches[0]
-    base = gross
-    for value, field in ((cancelled, "cancellation_fee_treatment"), (refunds, "refund_fee_treatment")):
-        if value:
-            treatment = policy.get(field)
-            if treatment not in {"retain", "recalculate"}:
-                raise ValueError(field + "_incomplete")
-            if treatment == "recalculate":
-                base -= value
-    fees = ZERO if base == 0 else base * money(policy["percentage"]) / 100 + money(policy["fixed_amount"])
-    if base and policy.get("minimum") is not None:
-        fees = max(fees, money(policy["minimum"]))
-    if base and policy.get("maximum") is not None:
-        fees = min(fees, money(policy["maximum"]))
-    vat = policy.get("vat_treatment")
-    if vat == "exclusive":
-        fees *= 1 + money(policy.get("vat_rate")) / 100
-    elif vat not in {"inclusive", "exempt", "not_applicable"}:
-        raise ValueError("fee_tax_policy_incomplete")
-    net = gross - cancelled - refunds
-    # Fees exceeding the receivable are a payable; do not silently clamp debt.
-    expected = net - Decimal(amount(fees))
-    return {"gross": amount(gross), "cancelled": amount(cancelled), "refunded": amount(refunds),
-            "net": amount(net), "estimated_fees": amount(fees), "expected_receivable": amount(expected),
-            "policy_id": policy["id"]}
+from operational_provider_fees import provider_projection
+from operational_product_cost_policy import unreceived_eligible
 
 
 def reconcile(state, sources, as_of):
@@ -179,72 +131,161 @@ def reconcile(state, sources, as_of):
         if existing_name:
             obligations[key]["name"] = existing_name
 
-    for order in sources.get("orders", []):
+    # Supplier invoice approval is independent from the customer's order
+    # lifecycle. In particular, an old order (or unavailable current estimate)
+    # must not suppress a newly issued, validated invoice.
+    order_currencies = {str(order.get("id")): order.get("currency") for order in sources.get("orders", [])}
+    receipt_metadata = {}
+    for receipt in sources.get("supplier_receipts", []):
+        rid = "receipt:" + str(receipt.get("id") or "")
+        try:
+            oid, iid = str(receipt.get("order_id") or ""), str(receipt.get("item_id") or "")
+            if not receipt.get("id") or not oid or not iid or not receipt.get("supplier_id"):
+                raise ValueError("supplier_receipt_identity_incomplete")
+            accepted = instant(receipt["accepted_at"])
+            if not start <= accepted <= now:
+                continue
+            key = "supplier:" + oid + ":" + iid + ":" + rid
+            previous = obligations.get(key, {})
+            # Older normalized callers supplied currency on the order. The
+            # native adapter now always supplies the supplier invoice currency.
+            currency = receipt.get("currency") or order_currencies.get(oid)
+            if not currency:
+                raise ValueError("supplier_invoice_currency_missing")
+            if previous.get("currency") and previous["currency"] != currency:
+                raise ValueError("supplier_invoice_currency_conflict")
+            if (previous.get("source_invoice_id") and receipt.get("invoice_id")
+                    and previous["source_invoice_id"] != receipt["invoice_id"]):
+                raise ValueError("confirmed_evidence_changed")
+            gross = money(receipt.get("gross_amount", receipt["amount"]))
+            net = money(receipt.get("net_amount", receipt["amount"]))
+            tax = money(receipt.get("tax_amount", "0"))
+            if gross != net + tax or gross != money(receipt["amount"]):
+                raise ValueError("supplier_invoice_gross_conflict")
+            # Preserve the exact frozen payload used before this change. New
+            # display provenance belongs on obligations, never on old facts.
+            fact(rid, {"order_id": oid, "item_id": iid,
+                 "supplier_id": receipt["supplier_id"], "amount": amount(gross),
+                 "net_amount": amount(net), "tax_amount": amount(tax), "gross_amount": amount(gross),
+                 "tax_evidence": deepcopy(receipt.get("tax_evidence")),
+                 "accepted_at": accepted.isoformat()})
+            receipt_metadata[rid] = {"currency": currency,
+                "source_invoice_id": receipt.get("invoice_id"),
+                "source_invoice_number": receipt.get("invoice_number"),
+                "source_component_fully_invoiced": (receipt.get("component_fully_invoiced") is True
+                                                    and bool(receipt.get("invoice_id")))}
+        except (ValueError, KeyError, TypeError, InvalidOperation) as error:
+            issue(str(error), rid)
+
+    for rid, receipt in list(facts.items()):
+        if not rid.startswith("receipt:"):
+            continue
+        key = "supplier:" + receipt["order_id"] + ":" + receipt["item_id"] + ":" + rid
+        previous, metadata = obligations.get(key, {}), receipt_metadata.get(rid, {})
+        currency = metadata.get("currency") or previous.get("currency") or order_currencies.get(receipt["order_id"])
+        if not currency:
+            issue("supplier_invoice_currency_missing", rid)
+            continue
+        new_returns = []
+        try:
+            for ret in sources.get("supplier_returns", []):
+                if str(ret.get("receipt_id")) != rid.removeprefix("receipt:") or ret.get("accepted") is not True:
+                    continue
+                if instant(ret["accepted_at"]) > now:
+                    continue
+                return_key = "return:" + str(ret["id"])
+                if return_key not in facts:
+                    new_returns.append(return_key)
+                fact(return_key, {"receipt_id": rid, "amount": amount(money(ret["amount"]))})
+            returned = sum((money(v["amount"]) for k, v in facts.items()
+                            if k.startswith("return:") and v["receipt_id"] == rid), ZERO)
+            if returned > money(receipt["amount"]):
+                raise ValueError("supplier_return_exceeds_receipt")
+        except (ValueError, KeyError, TypeError, InvalidOperation) as error:
+            for return_key in new_returns:
+                facts.pop(return_key, None)
+            issue(str(error), rid)
+            returned = sum((money(v["amount"]) for k, v in facts.items()
+                            if k.startswith("return:") and v["receipt_id"] == rid), ZERO)
+        provenance = {name: metadata.get(name) or previous.get(name)
+                      for name in ("source_invoice_id", "source_invoice_number", "source_component_fully_invoiced")
+                      if metadata.get(name) or previous.get(name)}
+        put(key, "supplier", receipt["supplier_id"], "supplier", currency,
+            confirmed=money(receipt["amount"]) - returned,
+            business_date=instant(receipt["accepted_at"]).astimezone(RIYADH).date(), evidence_ids=[rid],
+            net_amount=receipt.get("net_amount", receipt["amount"]), tax_amount=receipt.get("tax_amount", "0.00"),
+            gross_amount=receipt.get("gross_amount", receipt["amount"]), returned_amount=amount(returned),
+            tax_evidence=deepcopy(receipt.get("tax_evidence")),
+            **provenance, source_invoice_approved_at=receipt["accepted_at"])
+
+    order_inputs = [(order, False) for order in sources.get("orders", [])]
+    order_inputs.extend((order, True) for order in sources.get("delivery_events", []))
+    for order, delivery_only in order_inputs:
         oid = str(order.get("id", ""))
         checkpoint = (deepcopy(obligations), deepcopy(facts), deepcopy(engine["provider_reports"]), deepcopy(engine["cod_reports"]))
         try:
             created = instant(order["created_at"])
-            if not start <= created <= now:
+            if delivery_only:
+                event = order.get("delivery_event") or {}
+                carrier = order.get("carrier") or {}
+                delivered = instant(event.get("delivered_at"))
+                if (not oid or event.get("schema") != "operational_delivery_event_v1"
+                        or not event.get("id") or str(event.get("order_id")) != oid
+                        or event.get("order_number") != order.get("order_number")
+                        or instant(event.get("order_created_at")) != created
+                        or not created <= start < delivered <= now
+                        or instant(order.get("delivered_at")) != delivered
+                        or order.get("status") not in DELIVERED
+                        or order.get("currency") != "SAR" or event.get("currency") != "SAR"
+                        or event.get("party_type") not in {"courier", "store_driver"}
+                        or not event.get("party_id") or event.get("party_id") != carrier.get("id")
+                        or event.get("party_type") != carrier.get("party_type", carrier.get("kind"))):
+                    raise ValueError("operational_delivery_event_contract_invalid")
+                frozen_delivery = facts.get("shipping:" + oid)
+                if frozen_delivery and (frozen_delivery.get("id") != event["party_id"]
+                        or frozen_delivery.get("party_type") != event["party_type"]
+                        or instant(frozen_delivery["delivered_at"]) != delivered):
+                    raise ValueError("operational_delivery_confirmed_evidence_changed")
+                # Separate provenance preserves the payload of existing shipping
+                # facts and the obligation IDs used by recorded settlements.
+                fact("delivery_event:" + oid, deepcopy(event))
+            elif not start <= created <= now:
                 continue
             updated = instant(order.get("updated_at", order["created_at"]))
             if oid in versions and updated < instant(versions[oid]):
                 continue
             currency = order["currency"]
             cancelled = order.get("status") in CANCELLED
-            current_item_keys = {"supplier:" + oid + ":" + str(item["id"]) for item in order.get("items", [])}
-            for old_key, old_row in obligations.items():
-                if (old_key.startswith("supplier:" + oid + ":") and ":receipt:" not in old_key
-                        and old_key not in current_item_keys):
-                    old_row["expected"] = "0.00"
-            for item in order.get("items", []):
-                iid = str(item["id"])
-                key = "supplier:" + oid + ":" + iid
-                total = money(item["cost"]) * money(item.get("quantity", 1))
-                receipts = [r for r in sources.get("supplier_receipts", [])
-                            if str(r.get("order_id")) == oid and str(r.get("item_id")) == iid]
-                for receipt in receipts:
-                    accepted = instant(receipt["accepted_at"])
-                    if accepted > now:
-                        continue
-                    gross = money(receipt.get("gross_amount", receipt["amount"]))
-                    net = money(receipt.get("net_amount", receipt["amount"]))
-                    tax = money(receipt.get("tax_amount", "0"))
-                    if gross != net + tax or gross != money(receipt["amount"]):
-                        raise ValueError("supplier_invoice_gross_conflict")
-                    fact("receipt:" + str(receipt["id"]), {"order_id": oid, "item_id": iid,
-                         "supplier_id": receipt["supplier_id"], "amount": amount(gross),
-                         "net_amount": amount(net), "tax_amount": amount(tax), "gross_amount": amount(gross),
-                         "tax_evidence": deepcopy(receipt.get("tax_evidence")),
-                         "accepted_at": accepted.isoformat()})
-                relevant = {k: v for k, v in facts.items() if k.startswith("receipt:")
-                            and v["order_id"] == oid and v["item_id"] == iid}
-                received = sum((money(v.get("net_amount", v["amount"])) for v in relevant.values()), ZERO)
-                if received > total:
-                    issue("supplier_receipt_exceeds_estimate", key)
-                # Expected moves with the current assignment; confirmed is by actual receiver.
-                # An assignment is not a supplier obligation. The expected amount
-                # remains in the unreceived-product pool until physical receipt
-                # is proven; invoice-backed confirmation stays separately evidenced.
-                expected_party = item.get("supplier_id") if item.get("supplier_receipt_proven") is True else None
-                put(key, "supplier", expected_party, "supplier", currency,
-                    expected=ZERO if cancelled else max(total - received, ZERO), business_date=created.date())
-                for rid, receipt in relevant.items():
-                    returned = ZERO
-                    for ret in sources.get("supplier_returns", []):
-                        if str(ret.get("receipt_id")) != rid.removeprefix("receipt:") or ret.get("accepted") is not True:
-                            continue
-                        if instant(ret["accepted_at"]) > now:
-                            continue
-                        fact("return:" + str(ret["id"]), {"receipt_id": rid, "amount": amount(money(ret["amount"]))})
-                    returned = sum((money(v["amount"]) for k, v in facts.items()
-                                    if k.startswith("return:") and v["receipt_id"] == rid), ZERO)
-                    if returned > money(receipt["amount"]):
-                        raise ValueError("supplier_return_exceeds_receipt")
-                    put(key + ":" + rid, "supplier", receipt["supplier_id"], "supplier", currency,
-                        confirmed=money(receipt["amount"]) - returned, business_date=day(receipt["accepted_at"]), evidence_ids=[rid],
-                        net_amount=receipt.get("net_amount", receipt["amount"]), tax_amount=receipt.get("tax_amount", "0.00"),
-                        gross_amount=receipt.get("gross_amount", receipt["amount"]), returned_amount=amount(returned),
-                        tax_evidence=deepcopy(receipt.get("tax_evidence")))
+            if not delivery_only:
+                current_item_keys = {"supplier:" + oid + ":" + str(item["id"]) for item in order.get("items", [])}
+                for old_key, old_row in obligations.items():
+                    if (old_key.startswith("supplier:" + oid + ":") and ":receipt:" not in old_key
+                            and old_key not in current_item_keys and order.get("items_complete") is not False):
+                        old_row["expected"] = "0.00"
+                for item in order.get("items", []):
+                    iid = str(item["id"])
+                    key = "supplier:" + oid + ":" + iid
+                    total = money(item["cost"]) * money(item.get("quantity", 1))
+                    relevant = {k: v for k, v in facts.items() if k.startswith("receipt:")
+                                and v["order_id"] == oid and v["item_id"] == iid}
+                    received = sum((money(v.get("net_amount", v["amount"])) for v in relevant.values()), ZERO)
+                    # A validated native invoice covers the whole physical component.
+                    # Its actual price replaces the old estimate, even if the price is
+                    # lower. Partial legacy receipts retain the previous remainder rule.
+                    fully_invoiced = any(obligations.get(key + ":" + rid, {}).get(
+                        "source_component_fully_invoiced") is True for rid in relevant)
+                    if received > total and not fully_invoiced:
+                        issue("supplier_receipt_exceeds_estimate", key)
+                    # Expected moves with the current assignment; confirmed is by actual receiver.
+                    expected_party = item.get("supplier_id") if item.get("supplier_receipt_proven") is True else None
+                    cost_currency = item.get("cost_currency") or currency
+                    # Source currency belongs to this component, not the sale.
+                    physically_received = item.get("supplier_receipt_proven") is True
+                    eligible = physically_received or unreceived_eligible(order.get("status"))
+                    put(key, "supplier", expected_party, "supplier", cost_currency,
+                        expected=ZERO if not eligible or fully_invoiced else max(total - received, ZERO),
+                        business_date=created.date(),
+                        **({"source_cost_stage": item["source_cost_stage"]} if item.get("source_cost_stage") else {}))
             carrier = order.get("carrier")
             service_key = "shipping:" + oid
             frozen = facts.get(service_key)
@@ -348,7 +389,7 @@ def reconcile(state, sources, as_of):
                 for key, obligation in obligations.items():
                     if key == service_key or key.startswith(service_key + ":") or key == "cod:" + oid:
                         obligation["expected"] = "0.00"
-            if order.get("payment"):
+            if not delivery_only and order.get("payment"):
                 payment = dict(order["payment"], currency=currency)
                 provider_key = "provider:" + oid
                 provider_facts = deepcopy(facts)
@@ -363,6 +404,14 @@ def reconcile(state, sources, as_of):
                                 current_refunds.append({"id": rid, "amount": fv["amount"], "status": "executed"})
                     payment["refunds"] = current_refunds
                     projection = provider_projection(payment, sources.get("fee_policies", []), created.astimezone(RIYADH).date())
+                    # A paid gross obligation already includes settlement fee deductions.
+                    # A component refund needs the statement's actual fee-credit allocation;
+                    # do not flip that settled obligation or invent a second fee charge.
+                    if projection.get("fee_model_version") == 2 and current_refunds and any(
+                            a.get("obligation_id") == provider_key and money(a.get("amount", "0")) > ZERO
+                            for movement in result.get("movements", [])
+                            for a in movement.get("allocations", [])):
+                        raise ValueError("provider_postsettlement_refund_review_required")
                     projected = Decimal(projection["expected_receivable"])
                     for capture in payment.get("captures", []):
                         if instant(capture["captured_at"]) > now:
@@ -406,10 +455,17 @@ def reconcile(state, sources, as_of):
             issue(str(error), oid)
 
     from operational_salary_projection import candidates as salary_candidates, legacy_salary_day_matches
-    first_salary_day = start.astimezone(RIYADH).date() + timedelta(days=1)
+    from operational_salary_start import select_first_day
+    try:
+        first_salary_day = select_first_day(state, now)
+    except (ValueError, KeyError, TypeError):
+        issue("operational_salary_start_policy_invalid", "salary_start")
+        first_salary_day = None
     today = now.astimezone(RIYADH).date()
+    # An invalid policy never rewrites recorded days or silently accrues using
+    # another cutoff. Other operational sources can still reconcile.
     current_salary = {}
-    for employee in sources.get("employees", []):
+    for employee in (sources.get("employees", []) if first_salary_day is not None else []):
         eid = str(employee.get("id", ""))
         try:
             projected, missing = salary_candidates(employee, first_salary_day, today)
@@ -418,8 +474,8 @@ def reconcile(state, sources, as_of):
                 issue("salary_contract_missing", key)
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             issue(str(error), eid)
-    conflicts = {}
-    for key, previous in engine["salary_days"].items():
+    conflicts = {} if first_salary_day is not None else deepcopy(engine.get("salary_conflicts", {}))
+    for key, previous in (engine["salary_days"].items() if first_salary_day is not None else []):
         proposed = current_salary.get(key)
         previous_currency = previous.get("currency", obligations.get(key, {}).get("currency"))
         if (proposed is None or previous.get("amount") != proposed["amount"]
@@ -541,6 +597,10 @@ def reconcile(state, sources, as_of):
     project_exchanges(result)
     from operational_balance_inventory import project_inventory
     project_inventory(result)
+    coverage = sources.get("delivery_event_coverage") or {}
+    if (coverage.get("version") == 1 and instant(coverage.get("started_at")) == start
+            and instant(coverage.get("as_of")) == now):
+        engine["delivery_event_coverage"] = deepcopy(coverage)
     engine["issues"] = issues
     reconcile_credits(result)
     before = state.get("engine", {}).get("obligations", {})
