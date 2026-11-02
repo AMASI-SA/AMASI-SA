@@ -47,8 +47,11 @@
     "management_ui": {
       "repo": "AMASI-SA/amasi-mobile",
       "pr": 312,
-      "source_sha": "cd5f4ea81c50b897ba0a8f676acdce0a27ac9f79",
-      "state": "DRAFT; generic frontend CI includes existing supplier policy gate"
+      "source_sha": "8251338665c5e23b3fb28f279994c3b94cd92b75",
+      "state": "DRAFT; generic frontend CI includes pre-existing supplier policy check",
+      "base": "main",
+      "base_sha": "f2d7ed60fb569dd226c6b60e16538064c368f822",
+      "ci_run": 41507736354
     }
   },
   "limitations": [
