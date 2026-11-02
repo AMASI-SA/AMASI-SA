@@ -1,19 +1,31 @@
-# OP-UNIFIED-BALANCES — PR1700 frozen A/B candidate
+# OP-UNIFIED-BALANCES — PR1700 A/B acceptance complete, no publication
 
-Latest durable continuation: **DELIVERY-005.md** (2026-11-03), plus READY-RELEASE-20261103.md on sourceA for the complete included/deferred matrix. Main ledger **PR1687**. Candidate **PR1700**, branch release/operational-ready-r03-r05-20261103. Earlier canonical state preserved byte-for-byte in STATUS-PRE-REVIEWED-B-20261103.md (blob061fdfbfdf97d7ac53274af01997743e14b90b56); DELIVERY-REGISTER.md and records001/002 remain intact.
+Latest record: **DELIVERY-006.md**, superseding pending B checks in DELIVERY-005.md. Main registry: **PR1687** and DELIVERY-REGISTER.md. Release candidate: **PR1700**, branch `release/operational-ready-r03-r05-20261103`. This documentation is maintained on the integration branch; frozen A/B are unchanged.
 
-Owner decision6588193710: R03/R05 plus ALL safely ready fixes in one next release. Independent unfinished work is deferred, not deleted and not a reason to hold unrelated safe work. No live financial approvals or silent historical backfill.
+A=`8cf7aa3ace5392655793fe4d15bc3c4e965362ea`; J=`9c550813afa5314dc498c20644033478aefbf80d`; B=`c0dd5ab1762ecd99716b12d93f4d339bfdcdb8a4`; B tree=`11787597c7f79451829b3bea7e3df337aa097586`; candidate release=`rg5-d8424400c8542d01be52238a8fc1deb29e7b9148cd33fadf4f1b4fd10354286b`.
 
-SourceA **8cf7aa3ace5392655793fe4d15bc3c4e965362ea**, root3388d700517d3885d9ed21183aca8e7be1f92349, parentJ **9c550813afa5314dc498c20644033478aefbf80d**. It preserves source411/integration3dd5 and latest production's six additional bundle selection/provenance paths. Original integration branch is not rewritten. The old intent-edit-history classifier failure is fixed by a clean source fromJ, not guard weakening.
+## Completed and preserved
 
-Intent-onlyB **c0dd5ab1762ecd99716b12d93f4d339bfdcdb8a4**, root11787597c7f79451829b3bea7e3df337aa097586. A→B changes only release/release-intent-v5.json, exact reviewed candidate blob1507e4ce97cd29a3016d5bcc4d4cb268eed7ea8f. Release candidate rg5-d8424400c8542d01be52238a8fc1deb29e7b9148cd33fadf4f1b4fd10354286b. Do NOT changeA/B, squash, rebase or append documentation to the frozen release branch. Further documentation belongs here on integration or in PR comments.
+R03 legacy root-base/service receipt mapping and R05 owner-reviewed native debt/payment-to-operational identity matching are implemented and tested, together with ready supplier cutoff, original SAR/per-piece states, payroll preview, delivery noncash, external loans, scoped warnings and usable report work. Latest production J and original integration work are preserved. The complete included/deferred matrix is READY-RELEASE-20261103.md on A; read DELIVERY-005.md here for scope and evidence. Independent unfinished provider postsettlement and full COD/profit work is deferred, not deleted or enabled. Unknown receipt identities remain explicit, never guessed or zeroed.
 
-Exact sourceA CI1733 backend/335 frontend28suites passed; official artifacts independently checked. SourceA readiness41538979950 passed classification, deterministic dual builds, reproducibility, intent generation and clean checkout. All observed A workflows including CodeQL succeeded. Current B Operational41540421669 and Readiness41540421598 require fresh read; this status does not claim them green yet.
+## Exact acceptance
 
-R03 legacy root-base/service receiving and R05 separate owner-reviewed native debt/payment matching are implemented/tested, together with ready supplier cutoff/SAR/states/payroll preview/delivery noncash/external-loan/warning/report work. Unsupported nested financial-only bases without unique old receiving identity, historic unallocated cash, actual provider postsettlement and full COD/profit remain explicit gaps. No payment/fee policy, statement posting, payroll missing-day or financial correction has been activated.
+Source A: operational1733 backend/335 frontend28suites passed; readiness41538979950 passed. Intent-onlyB: operational41540421669 independently verified1733 backend/335 frontend28suites, zero failures/errors/skips; embedded B/root exact. These repeat counts are NOT additive.
 
-Visual harness built successfully from exactA by41539721823 with synthetic memory-only adapters, but local browser navigation was denied ERR_BLOCKED_BY_ADMINISTRATOR before rendering. No bypass attempted. Desktop/mobile/actual print/Excel download visual acceptance is NOT proved; unit tests are not a substitute. See DELIVERY-005.md for exact evidence and limitation.
+B readiness41540421598 completed SUCCESS, including BOTH clean-clone Host20.20.2/24.19.0 adapter rehearsals, artifact/proof/identity/package-boundary checks and build-meta JSON route. Prior source classification failure is resolved without modifying the guard. B CodeQL41540421455 completed SUCCESS for both languages. Security/G47/accounting/supplier/shipping and other displayed checks succeeded; observed list23 successes and one conditional unrelated TikTok Creator workflow skip. This is NOT an actual Emergent deployment.
 
-Next: verify exact B CI and clean-clone rehearsals; complete remaining visual review in an authorized environment; read actual Emergent /app guard status before environment/release work. Never cancel another task's lease. Then controlled merge with tree=B, rehearsal/prepare/prepublish, ONE publication, live three-probe verify and active=false. PR1699 is independent and untouched. Do not infer deployment from source/CI or old PR body. Issue1006 is capped.
+## Remaining before publication
 
-Production changed:NO. Financial activation:NO. /app/lease touched:NO. The frozen candidate is NOT yet merged/published.
+Visual desktop/mobile and actual browser print/download acceptance remains unproved: local browser was administratively blocked before rendering, and no bypass was attempted. The synthetic visual harness built successfully; unit tests are not visual proof.
+
+Actual Emergent guard status and host coordination remain unobserved: no authenticated management terminal/browser connection was obtained. Owner received the read-only `cd /app; python3 -B scripts/production_release_guard.py status` command. Never assume active=false from old evidence or clear another task's lease. PR1699 is independent and untouched.
+
+After required acceptance/coordination: read latest production, controlled merge with expected B and tree equality, host rehearsal/prepare/prepublish, ONE explicit publication and live verify3/active=false. If production advanced, review/preserve it and prepare a new A/build/B as needed; never append to frozen B or squash/rebase it. Do not merge legacy PR1687 wholesale a second time; it is the durable registry and remaining-work branch, while1700 is the current candidate.
+
+## Financial boundary and resume
+
+No actual balance, opening, past payment, native invoice, stock, refund, bank/provider, payroll missing-day or fee-policy change occurred. R05 corrections and payroll activation require their separate owner preview/approval. Code publication is not approval of missing historical amounts. No migration/reset/replay may be embedded in deployment.
+
+Resume from AGENTS.md, DELIVERY-006.md/005, current PR1700/exact B checks, latest production and actual host status. Do not rebuild completed mappings. Preserve old status byte-for-byte in STATUS-PRE-REVIEWED-B-20261103.md and earlier records. Issue1006 is full; use1687.
+
+Production changed:NO. Merge:NO. Publication:NO. Financial activation:NO. /app/lease touched:NO.
