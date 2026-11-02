@@ -736,3 +736,73 @@ async def test_schema2_financial_capture_does_not_claim_operational_intake_or_le
         await fulfillment.capture_intake(db, OWNER, [item], {})
     assert caught.value.detail["code"] == "bundle_component_policy_unresolved"
 
+
+
+ 
+@pytest.mark.asyncio
+async def test_order_lifecycle_freezes_supplier_financial_cost_but_blocks_stock_acceptance(db, monkeypatch):
+    """The real order registration must pass financial sinks to capture_intake.
+
+    Financial readiness must not bypass the existing supplier execution guard.
+    Replaying the provider event must not reprice or duplicate the first proof.
+    """
+    from types import SimpleNamespace
+    import fulfillment_v2_routes as routes
+
+    await schema2_service_fixture(db, origin="supplier")
+    item = sale_line(name=True)
+    number = "financial-lifecycle-order"
+    timestamp = "2026-11-02T16:00:00+00:00"
+    await db.unified_orders.insert_one({
+        "user_id": OWNER, "order_number": number,
+        "g47_salla_snapshot": {"revision": 4, "source_updated_at": timestamp}})
+    monkeypatch.setattr(routes, "order_is_active", lambda _order: True)
+    monkeypatch.setattr(routes, "payment_is_eligible", lambda _payment: True)
+    monkeypatch.setattr(routes, "_component_order_cancelled", lambda _order: False)
+    monkeypatch.setattr(routes, "_component_order_lines", lambda _order, _decision: [deepcopy(item)])
+    monkeypatch.setattr(routes, "component_order_fingerprint", lambda _order: "source-fingerprint")
+    monkeypatch.setattr(routes, "component_source_time", lambda value: value)
+    async def local_owner(database, owner, callback, **_kw):
+        assert owner == OWNER
+        return await callback(database)
+    monkeypatch.setattr(routes, "operational_owner", local_owner)
+    async def not_legacy(_db, **_kw):
+        return False
+    monkeypatch.setattr(routes, "legacy_component_cohort", not_legacy)
+
+    async def forbidden_stock(*_args, **_kw):
+        pytest.fail("A financial-only supplier service cannot authorize stock acceptance")
+    monkeypatch.setattr(stock, "reserve_component_stock", forbidden_stock)
+    order = SimpleNamespace(order_number=number, created_at=timestamp, payment={})
+    async def reconcile():
+        return await routes.reconcile_component_order_lifecycle(
+            db, user_id=OWNER, order=order, source_updated_at=timestamp,
+            source_revision=4, decision={}, strict=False)
+
+    result = await reconcile()
+    assert result["state"] == "blocked" and result["accepted"] is False
+    assert result["error_code"] == "bundle_component_policy_unresolved"
+    lifecycle = await db[LIFECYCLES].find_one({"user_id": OWNER, "order_number": number})
+    assert lifecycle["bundle_intake_snapshots"] == {}
+    assert lifecycle["bundle_financial_blocked"] == {
+        item["order_line_id"]: "bundle_component_policy_unresolved"}
+    saved = deepcopy(lifecycle["reporting_cost_snapshots"])
+    proof = saved[item["order_line_id"]]
+    assert proof["bundle_financial"] is True
+    assert proof["cost"]["line_total"] == 260
+    assert proof["cost"]["cost_stage"] == "expected"
+    assert (await historical_cost(db, item, number))["line_total"] == 260
+    assert await db[stock.PLANS].count_documents({"user_id": OWNER}) == 0
+    assert await db[stock.UNITS].count_documents({"user_id": OWNER}) == 0
+
+    await db[catalog.RESOURCES].update_one({"user_id": OWNER, "id": SERVICE},
+        {"$set": {"unit_cost": 777}})
+    await db[catalog.COST_PROFILES].update_many({"user_id": OWNER},
+        {"$set": {"base_cost": 999}})
+    result2 = await reconcile()
+    again = await db[LIFECYCLES].find_one({"user_id": OWNER, "order_number": number})
+    assert result2["state"] == "blocked"
+    assert again["generation"] == lifecycle["generation"]
+    assert again["reporting_cost_snapshots"] == saved
+    assert (await historical_cost(db, item, number))["line_total"] == 260
+    assert await db[stock.PLANS].count_documents({"user_id": OWNER}) == 0
