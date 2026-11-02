@@ -175,15 +175,22 @@ async def _preview(scoped, owner, as_of):
         '_id': 0, 'user_id': 1, 'id': 1, 'invoice_number': 1, 'state': 1, 'schema_version': 1,
         'supplier_counterparty_id': 1, 'supplier_entity_id': 1, 'supplier_account_id': 1, 'supplier_id': 1,
         'total': 1, 'currency': 1, 'approved_at': 1, 'liability_id': 1, 'txn_group_id': 1,
+        'subtotal': 1, 'tax_amount': 1, 'tax_treatment': 1, 'lines': 1,
+        'inventory_account_id': 1, 'input_vat_account_id': 1, 'tax_evidence_ref': 1, 'tax_evidence_verified': 1,
     }).to_list(length=NATIVE_LIMIT + 1)
     candidates = native_purchase_inventory(state, invoices, native, owner=owner, as_of=stamp)
+    from operational_native_purchase_review import load_native_purchase_reviews
+    native_proof = await load_native_purchase_reviews(scoped.db, owner, native,
+        session=scoped.session, started_at=state['started_at'], as_of=stamp)
+    for candidate in candidates:
+        candidate['native_ledger_review'] = native_proof.get(candidate['invoice_id'])
     result.update(read_only=True, snapshot_consistent=True, state_revision=state.get('revision', 0),
         saved_balance_as_of=state.get('engine', {}).get('as_of'), native_purchase_review=candidates,
         native_financial_matching_complete=not candidates, source_issues=deepcopy(source_issues),
         approval_required=True, proposed_financial_write_allowed=False,
         scope='approved_preparation_invoices; native_purchases_separate_unverified',
         review_manifest_sha256=digest({'owner': owner, 'state': state, 'receipts': sources.get('supplier_receipts', []),
-                                      'invoices': invoices, 'native': native, 'as_of': stamp}))
+                                      'invoices': invoices, 'native': native, 'native_proof': native_proof, 'as_of': stamp}))
     for row in result['rows']:
         row['required_action'] = ACTION if row.get('difference') != '0.00' or row.get('issues') else 'لا تعِد تسجيل الفاتورة؛ راجع السداد عند الحاجة'
     return result
