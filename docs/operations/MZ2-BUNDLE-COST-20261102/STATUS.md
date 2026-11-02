@@ -1,3 +1,7 @@
+# Current deployment state
+
+Publication has been explicitly authorized and is now in progress. See [DEPLOYMENT.md](DEPLOYMENT.md) for the current release/lease checkpoint; the merged handoff below records the earlier, pre-publication state.
+
 # MZ2-BUNDLE-COST-20261102 — merged handoff
 
 Status: merged into `hotfix/prod-snap-meta-final` through [PR1690](https://github.com/AMASI-SA/AMASI-SA/pull/1690) after the user explicitly authorized continuing and merging on 2026-11-02.
