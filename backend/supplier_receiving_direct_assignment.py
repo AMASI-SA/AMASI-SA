@@ -65,7 +65,7 @@ def direct_assignment_patch(
     actor_name: str,
     at: Any,
 ) -> dict[str, Any]:
-    """Apply only a user-confirmed assignment to an open receiving draft."""
+    """Assign supplier on consent; employee transfers only on invoice approval."""
     supplier_id = text(offer.get("current_supplier_id"))
     actor_id = text(actor_id)
     if not supplier_id or not actor_id or not session_id:
@@ -86,25 +86,9 @@ def direct_assignment_patch(
         "sent_to_supplier_by_id": actor_id,
         "sent_to_supplier_by_name": text(actor_name) or "الموظف الحالي",
     }
-    previous_id = text(piece.get("responsible_employee_id"))
-    if previous_id != actor_id:
-        patch.update({
-            "responsible_employee_id": actor_id,
-            "responsible_employee_name": text(actor_name) or "الموظف الحالي",
-            "assignment_status": "assigned",
-            "assigned_at": at,
-            "reassigned_at": at,
-            "reassigned_by": actor_id,
-            "reassigned_by_name": text(actor_name) or "الموظف الحالي",
-            "reassignment_reason": "supplier_receiving_direct_assignment",
-            "reassignment_session_id": session_id,
-            "supplier_receiving_draft_employee_transfer": True,
-            "supplier_receiving_previous_responsible_employee_id": previous_id or None,
-            "supplier_receiving_previous_responsible_employee_name": (
-                text(piece.get("responsible_employee_name")) or None
-            ),
-            "supplier_receiving_previous_assigned_at": piece.get("assigned_at"),
-        })
+    # Employee responsibility intentionally stays with its current owner until
+    # the supplier invoice is approved. The existing invoice-finalization
+    # custody wrapper transfers it and records assignment history atomically.
     return patch
 
 
