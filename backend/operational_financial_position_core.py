@@ -10,6 +10,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from operational_balance_service import report
 from operational_delivery_report_coverage import delivery_coverage_diagnostics
+from operational_profit_payroll import recorded_salary_subtotals
 from operational_provider_report_coverage import provider_evidence_coverage
 
 
@@ -429,7 +430,7 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
     ]}
 
 
-def _profit_rows():
+def _profit_rows(recorded_salary):
     components = (
         ("net_sales", "صافي المبيعات دون ضريبة القيمة المضافة", "مجموعة مبيعات الفترة بعد الخصومات والمرتجعات والضريبة غير مثبتة هنا."),
         ("cost_of_goods", "تكلفة المنتجات المباعة", "فواتير الموردين وتقديرات الطلبات المفتوحة لا تثبت تكلفة مجموعة المبيعات نفسها."),
@@ -443,8 +444,16 @@ def _profit_rows():
         ("tax", "الزكاة والضريبة", "الضريبة الواجبة للفترة غير مثبتة؛ لا تفترض صفرًا."),
         ("net_profit", "صافي الربح المتوقع", "لا يحسب الربح النهائي قبل اكتمال عناصره."),
     )
-    return [_row(identity, label, None, "total" if identity in {"operating_profit", "net_profit"} else None,
+    rows = [_row(identity, label, None, "total" if identity in {"operating_profit", "net_profit"} else None,
                  UNKNOWN + reason) for identity, label, reason in components]
+    if recorded_salary:
+        row = next(row for row in rows if row["id"] == "salaries")
+        row["recorded_subtotal"] = recorded_salary
+        row["reason"] = (f"المجموع الجزئي لأيام الرواتب المسجلة بهذه العملة {recorded_salary['amount']} "
+                         f"{recorded_salary['currency']} عن {recorded_salary['employee_days']} يوم موظف، "
+                         f"بين {recorded_salary['first_day']} و{recorded_salary['last_day']} بتوقيت الرياض. "
+                         "يتطلب إجمالي الرواتب مطابقة جميع الموظفين وأيام الاستحقاق للفترة.")
+    return rows
 
 
 def build_financial_position(state, *, cost_exposure=None, generated_at=None):
@@ -456,6 +465,7 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
               "issues": [_source_issue(row) for row in projection["issues"]], "dependencies": []}
     if projection["status"] != "active":
         return result
+    recorded_salaries = recorded_salary_subtotals(state)
     delivery_coverage = delivery_coverage_diagnostics(state, projection)
     cost_ready = isinstance(cost_exposure, dict) and cost_exposure.get("status") == "preview"
     result["dependencies"] = [
@@ -523,7 +533,7 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         result["currencies"][currency] = {
             "tables": tables, "debt_rows": debt_rows,
             "debt_totals": {"receivable": _money(receivable), "payable": _money(payable)},
-            "current_rows": current_rows, "forecast_rows": forecast_rows, "profit_rows": _profit_rows(),
+            "current_rows": current_rows, "forecast_rows": forecast_rows, "profit_rows": _profit_rows(recorded_salaries.get(currency)),
             "metrics": {"liquidity": _money(liquidity), "debts_receivable": _money(receivable), "debts_payable": _money(payable),
                         "monetary_position": _money(position), "prepaid_ad_credit": _money(prepaid), "employee_custody": _money(custody),
                         "displayed_position": _money(displayed), "forecast_change": None, "forecast_monetary_position": None,

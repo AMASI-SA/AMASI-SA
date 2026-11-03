@@ -11,6 +11,8 @@ jest.mock("../../context/AuthContext", () => ({ useOptionalAuth: jest.fn() }));
 jest.mock("react-to-print", () => ({ useReactToPrint: jest.fn() }));
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
+const payrollNote = "المجموع الجزئي لأيام الرواتب المسجلة 200.00 SAR عن يومين. إجمالي الرواتب غير متاح.";
+
 function fixture() {
     const columns = [{ key: "name", label: "الجهة", type: "text" }, { key: "receivable", label: "لنا", type: "money", role: "receivable" }, { key: "payable", label: "علينا", type: "money", role: "payable" }];
     const data = {
@@ -27,7 +29,8 @@ function fixture() {
         debt_totals: { receivable: "12.34", payable: "56.78" },
         current_rows: [{ id: "current", label: "صافي الأرصدة الحالية من الخادم", amount: "678.90", emphasis: "total" }],
         forecast_rows: [{ id: "forecast", label: "التغير المتوقع من الخادم", amount: null, reason: "المصدر غير مكتمل." }],
-        profit_rows: [{ id: "profit", label: "صافي الربح المتوقع", amount: null, reason: "بيانات الإيراد والضريبة لم تكتمل." }],
+        profit_rows: [{ id: "salaries", label: "الرواتب", amount: null, reason: payrollNote },
+            { id: "profit", label: "صافي الربح المتوقع", amount: null, reason: "بيانات الإيراد والضريبة لم تكتمل." }],
         metrics: { forecast_monetary_position: "-55.05", net_profit: null },
         completeness: { actual: true, forecast: false, profit: false }, notes: ["الأرصدة والتوقعات منفصلة."],
         deliveries: { complete: false, notes: ["بانتظار اعتماد إيصال التحويل البنكي."], rows: [
@@ -155,9 +158,12 @@ test("print targets only the report and export contains the selected currency an
     const options = useReactToPrint.mock.calls.at(-1)[0];
     expect(options.contentRef.current.dataset.testid).toBe("financial-position-content");
     expect(options.contentRef.current.querySelector(".ofp-toolbar")).toBeNull();
+    expect(host.querySelector(".ofp-profit").textContent).toContain(payrollNote);
+    expect(options.contentRef.current.querySelector(".ofp-profit").textContent).toContain(payrollNote);
     await change(field("تصفية طريقة الدفع"), "bank_transfer");
     await click("تصدير Excel");
     const [workbook, filename] = XLSX.writeFile.mock.calls[0];
+    expect(JSON.stringify(workbook.getWorksheet("الإجماليات والمركز").getSheetValues())).toContain(payrollNote);
     expect(filename).toMatch(/^operational-financial-position-SAR-.*\.xlsx$/);
     const rows = JSON.stringify(workbook.getWorksheet("تفاصيل الطلبات").getSheetValues());
     expect(rows).toContain("1002");
