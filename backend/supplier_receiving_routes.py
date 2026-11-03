@@ -22,6 +22,8 @@ from pymongo import ASCENDING, DESCENDING, ReturnDocument, UpdateOne
 from pymongo.errors import DuplicateKeyError
 
 from supplier_scan_attempts import run_scan, read_outcome, install_reconciler, ATTEMPTS, transaction
+from supplier_receiving_direct_assignment import direct_assignment_offer, direct_assignment_patch
+from mobile_operational_flow_policy import FIELD_SUPPLIER, is_optional
 
 from supplier_invoice_recovery import register_recovery, require_close_generation, REQUEST_PATTERN
 from supplier_native_invoice_v2 import PurchaseTax, close_payload_hash, post_native_invoice
@@ -129,6 +131,12 @@ RECEIPT_PIECE_FIELDS = (
     "supplier_assigned_by_name",
     "supplier_assignment_session_id",
     "supplier_receiving_scanned_barcode",
+    # Direct supplier/employee assignments happen inside scan admission and
+    # must be completely reversible on draft-piece removal or session cancel.
+    "supplier_dispatch_status",
+    "sent_to_supplier_at",
+    "sent_to_supplier_by_id",
+    "sent_to_supplier_by_name",
     "receipt_event_id",
     "updated_at",
     "mezan_only",
@@ -221,6 +229,7 @@ class SupplierPieceScanRequest(BaseModel):
     barcode: str = Field(min_length=1, max_length=500)
     quantity: int | None = Field(default=None, ge=1, le=5000)
     confirm_supplier_reassignment: bool = False
+    confirm_direct_receiving_assignment: bool = False
 
 
 class SupplierReceivingInvoiceServiceRequest(BaseModel):
@@ -3079,6 +3088,7 @@ async def supplier_scan_group_candidates(
     session: dict[str, Any],
     allow_service_addition: bool,
     allow_supplier_reassignment: bool = False,
+    allow_direct_assignment: bool = False,
 ) -> list[dict[str, Any]]:
     """Return interchangeable unreserved pieces for one quantity choice.
 
@@ -3125,11 +3135,34 @@ async def supplier_scan_group_candidates(
     for row in rows:
         if piece_scan_blocker(row):
             continue
+        # A quantity choice on a dispatched card is not consent to assign an
+        # unowned sibling, including legacy rows with an empty dispatch state.
+        if not allow_direct_assignment and not (
+            _text(row.get("supplier_id")) or row.get("supplier_receiving_history")
+        ):
+            continue
+        # A one-piece approval cannot silently transfer sibling pieces that
+        # belong to other employees or suppliers when quantity > 1.
+        if allow_direct_assignment and (
+            _text(row.get("supplier_id")) != _text(scanned_piece.get("supplier_id"))
+            or _text(row.get("responsible_employee_id"))
+            != _text(scanned_piece.get("responsible_employee_id"))
+        ):
+            continue
+        direct_offer = direct_assignment_offer(
+            row, session, actor_id=_text(session.get("opened_by")),
+            actor_name=_text(session.get("opened_by_name")),
+        )
         dispatch_blocker = supplier_receiving_dispatch_blocker(row, supplier_id)
+        if allow_direct_assignment and direct_offer is None:
+            continue
         if dispatch_blocker and not (
-            allow_supplier_reassignment
-            and _text(dispatch_blocker.get("code"))
-            == "supplier_piece_dispatched_to_different_supplier"
+            (allow_direct_assignment and direct_offer is not None)
+            or (
+                allow_supplier_reassignment
+                and _text(dispatch_blocker.get("code"))
+                == "supplier_piece_dispatched_to_different_supplier"
+            )
         ):
             continue
         if supplier_piece_service_blocker(
@@ -3362,6 +3395,7 @@ def _scan_request_shape(payload: SupplierPieceScanRequest) -> dict[str, Any]:
         "barcode": _text(payload.barcode),
         "quantity": payload.quantity,
         "confirm_supplier_reassignment": bool(payload.confirm_supplier_reassignment),
+        "confirm_direct_receiving_assignment": bool(payload.confirm_direct_receiving_assignment),
     }
 
 
@@ -3371,6 +3405,9 @@ def _scan_request_event_shape(row: dict[str, Any]) -> dict[str, Any]:
         "quantity": row.get("scan_request_quantity"),
         "confirm_supplier_reassignment": bool(
             row.get("scan_request_confirm_supplier_reassignment")
+        ),
+        "confirm_direct_receiving_assignment": bool(
+            row.get("scan_request_confirm_direct_receiving_assignment")
         ),
     }
 
@@ -4717,6 +4754,37 @@ def make_supplier_receiving_router(
                         ),
                     },
                 )
+            # The manager's CURRENT merchant policy, not an Android boolean,
+            # decides whether employees may assign a previously unsent piece.
+            supplier_assignment_optional = await is_optional(
+                db, context["merchant_id"], FIELD_SUPPLIER,
+            )
+            offered = direct_assignment_offer(
+                scanned_piece,
+                session,
+                actor_id=context["actor_id"],
+                actor_name=_actor_name(user),
+            )
+            if offered and not supplier_assignment_optional:
+                raise HTTPException(status_code=409, detail={
+                    "code": "supplier_piece_not_dispatched",
+                    "message": "إسناد المورد إجباري: يجب أن يرسلها الموظف المسند إليه أولًا.",
+                    "dispatch_status": _text(
+                        scanned_piece.get("supplier_dispatch_status")
+                    ),
+                })
+            direct_offer = offered if supplier_assignment_optional else None
+            if direct_offer and not payload.confirm_direct_receiving_assignment:
+                raise HTTPException(status_code=409, detail=direct_offer)
+            if (
+                not _text(scanned_piece.get("supplier_id"))
+                and not direct_offer
+                and not list(scanned_piece.get("supplier_receiving_history") or [])
+            ):
+                raise HTTPException(status_code=409, detail={
+                    "code": "supplier_receiving_unassigned_dispatch_inconsistent",
+                    "message": "سجل إرسال القطعة بلا هوية مورد؛ أوقف الاستلام وراجع إسنادها.",
+                })
             candidates = await supplier_scan_group_candidates(
                 db,
                 user_id=context["merchant_id"],
@@ -4726,6 +4794,7 @@ def make_supplier_receiving_router(
                     ADD_PRODUCT_SERVICE_PERMISSION in context["permissions"]
                 ),
                 allow_supplier_reassignment=payload.confirm_supplier_reassignment,
+                allow_direct_assignment=bool(direct_offer),
             )
             # The card QR anchors to its first physical piece. If that piece
             # was already completed, the first still-eligible piece on the
@@ -4767,7 +4836,9 @@ def make_supplier_receiving_router(
                 (session.get("supplier_snapshot") or {}).get("id")
                 or session.get("supplier_id"),
             )
-            if dispatch_blocker:
+            if dispatch_blocker and not (
+                direct_offer and payload.confirm_direct_receiving_assignment
+            ):
                 is_supplier_mismatch = (
                     _text(dispatch_blocker.get("code"))
                     == "supplier_piece_dispatched_to_different_supplier"
@@ -4835,6 +4906,9 @@ def make_supplier_receiving_router(
                     "quantity_options": list(range(1, len(candidates) + 1)),
                     "supplier_reassignment_confirmed": (
                         payload.confirm_supplier_reassignment
+                    ),
+                    "direct_receiving_assignment_confirmed": bool(
+                        payload.confirm_direct_receiving_assignment
                     ),
                     "piece": _public_piece(piece),
                     "product": {
@@ -4921,7 +4995,18 @@ def make_supplier_receiving_router(
                     == "supplier_piece_dispatched_to_different_supplier"
                     and payload.confirm_supplier_reassignment
                 )
-                direct_assignment_patch = supplier_partial_receipt_assignment_patch(
+                candidate_direct_offer = (
+                    direct_assignment_offer(
+                        original_piece,
+                        session,
+                        actor_id=context["actor_id"],
+                        actor_name=_actor_name(user),
+                    )
+                    if supplier_assignment_optional else None
+                )
+                if candidate_direct_offer and not payload.confirm_direct_receiving_assignment:
+                    raise HTTPException(status_code=409, detail=candidate_direct_offer)
+                partial_assignment_patch = supplier_partial_receipt_assignment_patch(
                     piece=original_piece,
                     session=session,
                     actor=user,
@@ -4934,8 +5019,17 @@ def make_supplier_receiving_router(
                     barcode=barcode,
                     received_at=now,
                 )
-                if direct_assignment_patch:
-                    patch.update(direct_assignment_patch)
+                if candidate_direct_offer:
+                    patch.update(direct_assignment_patch(
+                        piece=original_piece,
+                        offer=candidate_direct_offer,
+                        session_id=session_id,
+                        actor_id=context["actor_id"],
+                        actor_name=_actor_name(user),
+                        at=now,
+                    ))
+                elif partial_assignment_patch:
+                    patch.update(partial_assignment_patch)
                 elif supplier_reassigned:
                     patch.update({
                         "supplier_id": receiving_supplier_id,
@@ -4957,6 +5051,8 @@ def make_supplier_receiving_router(
                         "piece_id": piece_id,
                         "status": {"$in": sorted(ELIGIBLE_PIECE_STATUSES)},
                         "supplier_id": original_piece.get("supplier_id"),
+                        "supplier_dispatch_status": original_piece.get("supplier_dispatch_status"),
+                        "responsible_employee_id": original_piece.get("responsible_employee_id"),
                         "$or": [
                             {"supplier_receiving_session_id": {"$exists": False}},
                             {"supplier_receiving_session_id": None},
@@ -5064,6 +5160,18 @@ def make_supplier_receiving_router(
                         "received_at": previous_receipt.get("received_at"),
                     } if previous_receipt else None,
                     "supplier_service_link_status": "draft_not_recorded",
+                    "direct_receiving_assignment_confirmed": bool(
+                        candidate_direct_offer
+                        and payload.confirm_direct_receiving_assignment
+                    ),
+                    "previous_responsible_employee_id": (
+                        _text(original_piece.get("responsible_employee_id")) or None
+                    ),
+                    "previous_responsible_employee_name": (
+                        _text(original_piece.get("responsible_employee_name")) or None
+                    ),
+                    # Employee custody stays unchanged until supplier invoice approval.
+                    "responsibility_transferred_in_draft": False,
                     "supplier_assigned_at_receipt": bool(
                         updated_piece.get("supplier_assigned_at_receipt") is True
                         and _text(original_piece.get("supplier_id"))
@@ -5099,6 +5207,9 @@ def make_supplier_receiving_router(
                         "scan_request_quantity": payload.quantity,
                         "scan_request_confirm_supplier_reassignment": bool(
                             payload.confirm_supplier_reassignment
+                        ),
+                        "scan_request_confirm_direct_receiving_assignment": bool(
+                            payload.confirm_direct_receiving_assignment
                         ),
                         "scan_request_index": len(events) + 1,
                         "scan_request_size": selected_quantity,

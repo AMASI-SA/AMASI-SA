@@ -98,6 +98,35 @@ test("a ready product no longer exposes a second ready action", () => {
     expect(markup).not.toContain('data-testid="mark-assembly-piece-ready"');
 });
 
+test("assembly search offers direct preparation handoff, without enabling Ready before receipt", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const prev = globalThis.IS_REACT_ACT_ENVIRONMENT;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const onReceiveFromPreparation = jest.fn();
+    const onReady = jest.fn();
+    const piece = {
+        piece_id: "physical-1", product_name: "شال",
+        preparation_employee_name_for_receipt: "محمد",
+        can_receive_from_preparation: true, can_mark_ready: false,
+        assembly_blocker_code: "assembly_piece_preparation_receipt_required",
+    };
+    try {
+        act(() => root.render(<AssemblyProductCard piece={piece} busy={false}
+            onReady={onReady} onReceiveFromPreparation={onReceiveFromPreparation} />));
+        expect(container.textContent).toContain("هل تريد استلام هذه القطعة مباشرة من موظف التجهيز محمد؟");
+        expect(container.querySelector('[data-testid="mark-assembly-piece-ready-frozen"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="mark-assembly-piece-ready"]')).toBeNull();
+        act(() => container.querySelector('[data-testid="confirm-assembly-preparation-receipt"]').click());
+        expect(onReceiveFromPreparation).toHaveBeenCalledTimes(1);
+        expect(onReceiveFromPreparation).toHaveBeenCalledWith(piece);
+        expect(onReady).not.toHaveBeenCalled();
+    } finally {
+        act(() => root.unmount());
+        globalThis.IS_REACT_ACT_ENVIRONMENT = prev;
+    }
+});
+
 test("an unreceived supplier product remains visible with custody trace and a frozen ready button", () => {
     const markup = renderToStaticMarkup(
         <AssemblyProductCard
