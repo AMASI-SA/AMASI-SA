@@ -85,7 +85,8 @@ async def _enqueue(db, row):
     try:
         from operational_push import enqueue_operational_push
         await enqueue_operational_push(db, recipient_id=row["recipient_id"],
-            event_id=row["id"], order_number=row["order_number"], instruction_id=row["instruction_id"], priority=row.get("priority", "normal"))
+            event_id=row["id"], order_number=row["order_number"], instruction_id=row["instruction_id"],
+            priority=row.get("priority", "normal"), created_at=row.get("created_at"))
     except Exception:
         # The durable inbox survives transport failures; refresh retries enqueue.
         log.warning("Operational notification push enqueue deferred", exc_info=False)
