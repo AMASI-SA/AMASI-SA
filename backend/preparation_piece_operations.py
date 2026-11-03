@@ -26,6 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
 from pymongo.write_concern import WriteConcern
 from operational_atomic import operational_owner
+from mobile_operational_flow_policy import FIELD_PREPARATION, is_optional
 from assembly_status_policy import canonical_status
 
 from fulfillment_v2_routes import (
@@ -2102,6 +2103,23 @@ def assembly_piece_blocker(piece: dict[str, Any]) -> str | None:
     return None
 
 
+def assembly_direct_preparation_receipt_eligible(piece: dict[str, Any]) -> bool:
+    """Permit direct, confirmed custody handoff only for supplier-completed pieces.
+
+    This is a preview for the assembly screen, not a receipt or a Ready action.
+    The write endpoint revalidates tenant, actor, live Salla status, piece
+    identity and supplier/service completion using the canonical receipt flow.
+    """
+    if piece.get("virtual_kind") or piece.get("experiment_archived_at"):
+        return False
+    if piece.get("active_hold_id") or _text(piece.get("status")) == PIECE_STATUS_BLOCKED:
+        return False
+    return bool(
+        assembly_piece_blocker(piece) == "assembly_piece_preparation_receipt_required"
+        and preparation_receipt_blocker(piece) is None
+    )
+
+
 def provable_piece_actor_attribution_repair(
     piece: dict[str, Any],
     events: Iterable[dict[str, Any]],
@@ -2902,6 +2920,7 @@ async def _assembly_search(
     from assembly_status_policy import source_status
     canonical = await source_status(db, user_id, order_number)
     status_allowed = status_allowed and canonical == "in_progress"
+    preparation_shortcut_enabled = await is_optional(db, user_id, FIELD_PREPARATION)
     for row, piece in zip(rows, pieces):
         virtual = bool(row["is_direct_assembly"] or row["is_operational_item"])
         row_eligible = (
@@ -2913,6 +2932,17 @@ async def _assembly_search(
             virtual=virtual,
         )
         row_eligible = row_eligible and status_allowed
+        # Do not promote a piece just because it appears in assembly search:
+        # show a separate consent action for the exact physical custody receipt.
+        row["can_receive_from_preparation"] = bool(
+            preparation_shortcut_enabled
+            and row_eligible and not virtual
+            and assembly_direct_preparation_receipt_eligible(piece)
+        )
+        row["preparation_employee_name_for_receipt"] = (
+            _text(piece.get("responsible_employee_name")) or None
+            if row["can_receive_from_preparation"] else None
+        )
         if not row_eligible:
             row["can_mark_ready"] = False
             row["assembly_blocker_code"] = component_blocker or "assembly_order_not_ready"
@@ -3925,6 +3955,80 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             actor_name=operation_actor["name"],
             authorize=authorize,
         )
+
+    @router.post("/assembly/pieces/{piece_id}/receive-from-preparation")
+    async def receive_preparation_in_assembly(
+        piece_id: str,
+        payload: ReceivePreparationPieceRequest,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Operator-confirmed physical custody handoff; NOT marking Ready.
+
+        The assembly worker uses the existing canonical receipt and audit
+        transaction, without visiting the separate employee-receipt page.
+        Merely calling this route never grants completion/Ready permission.
+        """
+        context = await _actor_context(db, user)
+        _require_permission(
+            context,
+            "fulfillment.pack.confirm",
+            responsibility="packing",
+        )
+        actor = effective_operation_actor(user, context)
+
+        async def authorize() -> None:
+            # Re-read the actual employee (not a previously bridged merchant
+            # principal) inside both canonical receipt validation passes.
+            # Permission or tenant revocation aborts the custody transaction.
+            current_actor = await db["users"].find_one({"id": actor["id"]})
+            if (
+                not current_actor
+                or current_actor.get("disabled") is True
+                or current_actor.get("is_active") is False
+                or current_actor.get("deleted_at")
+            ):
+                raise HTTPException(403, detail={
+                    "code": "assembly_preparation_receipt_actor_changed",
+                })
+            if user.get("_session_client") == "amasi_mobile":
+                from mobile_app_request_context import mobile_app_request_user
+                current_actor = await mobile_app_request_user(
+                    db,
+                    {**current_actor, "_session_client": "amasi_mobile"},
+                    path="/api/preparation-work-v1/assembly/pieces/receive-from-preparation",
+                    method="POST",
+                )
+            fresh = await _actor_context(db, current_actor)
+            _require_permission(
+                fresh, "fulfillment.pack.confirm", responsibility="packing",
+            )
+            if fresh["merchant_id"] != context["merchant_id"] or (
+                effective_operation_actor(current_actor, fresh)["id"] != actor["id"]
+            ):
+                raise HTTPException(403, detail={
+                    "code": "assembly_preparation_receipt_actor_changed",
+                })
+            if not await is_optional(db, context["merchant_id"], FIELD_PREPARATION):
+                raise HTTPException(409, detail={
+                    "code": "assembly_direct_preparation_receipt_required",
+                    "message": "استلام موظف التجهيز إجباري من مرحلة الاستلام المخصصة.",
+                })
+
+        # This canonical flow proves full supplier invoice/receiving state,
+        # validates in-progress Salla status before and after the transaction,
+        # prevents duplicate custody, and preserves preparation actor history.
+        result = await _receive_preparation_piece(
+            db,
+            user_id=context["merchant_id"],
+            piece_id=piece_id,
+            client_request_id=payload.client_request_id,
+            actor_id=actor["id"],
+            actor_name=actor["name"],
+            authorize=authorize,
+        )
+        result["assembly_direct_preparation_receipt_confirmed"] = True
+        result["next_action"] = "assembly_search_then_explicit_ready"
+        return result
 
     @router.get("/assembly/search")
     async def search_assembly_order(

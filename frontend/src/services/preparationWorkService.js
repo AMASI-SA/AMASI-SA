@@ -129,6 +129,22 @@ export async function receivePreparationPiece(pieceId, clientRequestId) {
     }
 }
 
+/** Assembly-only confirmation of preparation custody. It never presses Ready.
+ * On an uncertain POST, callers must re-read exact piece state, not retry. */
+export async function receivePreparationInAssembly(pieceId, clientRequestId) {
+    try {
+        return (await api.post(
+            `/preparation-work-v1/assembly/pieces/${encodeURIComponent(pieceId)}/receive-from-preparation`,
+            { client_request_id: clientRequestId || newPreparationReceiptRequestId() },
+        )).data;
+    } catch (error) {
+        const wrapped = new Error(errorMessage(error, "تعذّر تأكيد الاستلام من موظف التجهيز."));
+        wrapped.code = error?.response?.data?.detail?.code;
+        wrapped.detail = error?.response?.data?.detail;
+        throw wrapped;
+    }
+}
+
 export function newAssemblyReadyRequestId() {
     if (globalThis.crypto?.randomUUID) {
         return `assembly-ready:${globalThis.crypto.randomUUID()}`;

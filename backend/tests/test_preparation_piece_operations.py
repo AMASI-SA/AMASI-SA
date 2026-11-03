@@ -13,6 +13,7 @@ from preparation_piece_operations import (
     PIECE_STATUS_ASSIGNED,
     PIECE_STATUS_IN_PROGRESS,
     PIECE_STATUS_READY_FOR_ASSEMBLY,
+    PIECE_STATUS_RECEIVED,
     WORKFLOWS,
     FileSchedulePatchRequest,
     _assembly_batch_id,
@@ -867,6 +868,66 @@ async def test_received_piece_can_enter_assembly_before_other_order_pieces(monke
     assert result["pieces"][1]["can_mark_ready"] is False
     assert result["summary"]["all_ready"] is False
     assert result["stage"] == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_assembly_search_only_offers_direct_preparation_receipt_in_optional_mode(monkeypatch):
+    from unittest.mock import AsyncMock
+    import preparation_piece_operations as operations
+
+    monkeypatch.setattr(operations, "_current_assembly_order", AsyncMock(
+        return_value=SimpleNamespace(
+            status="in_progress", status_native="in_progress", items=[],
+            created_at=None, shipping=SimpleNamespace(company=None),
+        ),
+    ))
+    number = "288407432"
+    piece_id = "a" * 32
+    piece = {
+        "piece_id": piece_id, "order_number": number,
+        "status": PIECE_STATUS_RECEIVED,
+        "execution_status": "received_from_supplier",
+        "supplier_dispatch_status": "received",
+        "received_at": datetime(2026, 11, 3, tzinfo=timezone.utc),
+        "services": [],
+        "responsible_employee_id": "emp-1",
+        "responsible_employee_name": "محمد",
+    }
+
+    class PolicySettings:
+        def __init__(self, mode):
+            self.mode = mode
+        async def find_one(self, selector, projection=None):
+            assert selector == {"user_id": "merchant-1"}
+            return {"operational_flow": {
+                "preparation_employee_receipt_mode": self.mode,
+                "supplier_assignment_mode": "required",
+            }}
+
+    class DB(dict):
+        def __init__(self, mode):
+            super().__init__({
+                WORKFLOWS: _AssemblySearchCollection(row={
+                    "order_number": number, "stage": "in_progress",
+                }),
+                PIECES: _AssemblySearchCollection(row=piece, rows=[piece]),
+                "unified_orders": _canonical_assembly_source(number),
+            })
+            self.settings = PolicySettings(mode)
+
+    for mode, expected in (("required", False), ("optional", True)):
+        result = await _assembly_search(
+            DB(mode), user_id="merchant-1", query=piece_id.upper(),
+        )
+        card = result["pieces"][0]
+        assert card["can_mark_ready"] is False
+        assert card["assembly_blocker_code"] == (
+            "assembly_piece_preparation_receipt_required"
+        )
+        assert card["can_receive_from_preparation"] is expected
+        assert card["preparation_employee_name_for_receipt"] == (
+            "محمد" if expected else None
+        )
 
 
 @pytest.mark.asyncio
