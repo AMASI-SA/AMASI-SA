@@ -80,6 +80,18 @@ async def sync_verified_shipping_address(db: Any, event_body: dict[str, Any]) ->
     address, source_path = _current_address(payload)
     if not address:
         return {"attempted": True, "synced": False, "reason": "address_not_present"}
+    # The webhook can be a sparse city-only notification. Do not clear a
+    # complete previously stored delivery address based on a partial event.
+    if not any(
+        address.get(field) not in (None, "", [], {})
+        for field in (
+            "address_line", "address_line1", "street", "street_name",
+            "street_number", "short_address", "national_address",
+            "formatted", "formatted_address", "description", "location",
+        )
+    ):
+        return {"attempted": True, "synced": False,
+                "reason": "sparse_address_needs_authoritative_refresh"}
 
     # For a verified webhook, the event timestamp is the observation ordering
     # boundary. Missing clocks may initialize a row, but must not overwrite a
