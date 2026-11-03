@@ -148,6 +148,23 @@ class AmasiCompatibleShippingTests(unittest.IsolatedAsyncioTestCase):
         result = await compat.carrier_label(None, "owner", self.number, issue=False)
         self.assertFalse(result["ready"])
 
+    async def test_store_courier_has_no_repeated_pdf_wait(self):
+        self.api.return_value = {"data": []}
+        def is_store(row):
+            return ("مندوب" in str(row.get("courier_name") or "")
+                    or (row.get("meta") or {}).get("app_id") == 0)
+        with (patch.object(legacy, "extract_shipping", return_value={
+                  "company_name": "مندوب الرياض", "company_code": 0,
+              }),
+              patch.object(legacy, "_is_store_courier", side_effect=is_store),
+              patch.object(legacy, "_store_identity", new_callable=AsyncMock),
+              patch.object(legacy, "_store_courier_print_data",
+                           return_value={"courier_name": "مندوب الرياض", "qr_code": "data:image/svg+xml;base64,QR"})):
+            result = await compat.carrier_label(None, "owner", self.number, issue=True)
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["label_type"], "store_courier")
+        self.assertEqual(len(self.api.call_args_list), 2)
+
     async def test_cancelled_order_does_not_trigger_status_post(self):
         self.resolve.return_value = self.order_id, {
             **self.pending, "status": {"slug": "cancelled"},
