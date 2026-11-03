@@ -11,6 +11,7 @@ Access and preparation permissions remain at the fulfillment route boundary.
 from __future__ import annotations
 
 import asyncio
+import httpx
 from typing import Any
 
 from salla_integration.service import SallaError, call_salla
@@ -64,7 +65,7 @@ async def _get(db: Any, owner: str, path: str, *, params: dict | None = None):
             call_salla(db, owner, "GET", path, params=params),
             timeout=_READ_SECONDS,
         )
-    except (SallaError, TimeoutError, ConnectionError):
+    except (SallaError, TimeoutError, ConnectionError, httpx.HTTPError):
         return None
 
 
@@ -188,7 +189,7 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool) 
             await call_salla(db, owner, "POST", f"/orders/{internal_id}/status",
                              json={"slug": "completed"}, single_post_attempt=True)
             changed = True
-        except (SallaError, TimeoutError, ConnectionError) as exc:
+        except (SallaError, TimeoutError, ConnectionError, httpx.HTTPError) as exc:
             status_error = exc
         latest = await _order(db, owner, internal_id, number)
         if latest is not None:
