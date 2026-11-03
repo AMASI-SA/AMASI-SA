@@ -35,7 +35,7 @@ jobs:
           python -m compileall -q backend
           python -m unittest backend.tests.test_emergent_deployment_adapter_v5 backend.tests.test_frontend_release_toolchain backend.tests.test_frontend_build_identity backend.tests.test_production_release_guard backend.tests.test_release_identity
   connected-source:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       PYTHONPATH: backend:backend/tests
