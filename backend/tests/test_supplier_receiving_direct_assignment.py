@@ -180,3 +180,26 @@ async def test_quantity_confirmation_cannot_transfer_other_employee_siblings():
     assert [p["piece_id"] for p in candidates] == ["piece-1"]
     # A distinct scan of the other employee's barcode can offer a separate consent.
     assert offer(sibling)["previous_responsible_employee_name"] == "موظف آخر"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("legacy_dispatch", [None, "sent"])
+async def test_group_scan_of_dispatched_anchor_cannot_admit_unassigned_sibling(legacy_dispatch):
+    from mongomock_motor import AsyncMongoMockClient
+    from supplier_receiving_routes import PIECES
+
+    db = AsyncMongoMockClient().testdb
+    anchor = {
+        **OTHER, "piece_id": "assigned", "user_id": "merchant-1",
+        "group_key": "product:1", "batch_id": "batch-a", "order_item_id": "line-1",
+        "unit_index": 1, "supplier_id": SESSION["supplier_id"],
+        "supplier_dispatch_status": "sent", "services": [],
+    }
+    sibling = {**anchor, "piece_id": "unassigned", "unit_index": 2, "supplier_id": None,
+               "supplier_dispatch_status": legacy_dispatch}
+    await db[PIECES].insert_many([dict(anchor), sibling])
+    rows = await supplier_scan_group_candidates(
+        db, user_id=anchor["user_id"], scanned_piece=anchor,
+        session={**SESSION, "opened_by": "emp-current"}, allow_service_addition=False,
+    )
+    assert [row["piece_id"] for row in rows] == [anchor["piece_id"]]

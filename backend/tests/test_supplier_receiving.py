@@ -553,6 +553,8 @@ async def test_quantity_candidates_are_limited_to_the_same_exact_card():
             "group_key": "product:1",
             "unit_index": 2,
             "status": PIECE_STATUS_IN_PROGRESS,
+            "supplier_id": "supplier-1",
+            "supplier_dispatch_status": "sent",
             "services": [{"service_id": "engrave", "required_quantity": 1}],
         },
         {
@@ -562,6 +564,8 @@ async def test_quantity_candidates_are_limited_to_the_same_exact_card():
             "group_key": "product:1",
             "unit_index": 3,
             "status": PIECE_STATUS_IN_PROGRESS,
+            "supplier_id": "supplier-1",
+            "supplier_dispatch_status": "sent",
             "services": [{"service_id": "engrave", "required_quantity": 1}],
         },
     ]
@@ -603,6 +607,8 @@ async def test_quantity_candidates_are_limited_to_the_same_exact_card():
             "group_key": "product:1",
             "unit_index": 1,
             "status": PIECE_STATUS_RECEIVED,
+            "supplier_id": "supplier-1",
+            "supplier_dispatch_status": "received",
             "services": [{"service_id": "engrave", "required_quantity": 1}],
         },
         session={"supplier_snapshot": {

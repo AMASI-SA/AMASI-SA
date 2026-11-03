@@ -3135,6 +3135,12 @@ async def supplier_scan_group_candidates(
     for row in rows:
         if piece_scan_blocker(row):
             continue
+        # A quantity choice on a dispatched card is not consent to assign an
+        # unowned sibling, including legacy rows with an empty dispatch state.
+        if not allow_direct_assignment and not (
+            _text(row.get("supplier_id")) or row.get("supplier_receiving_history")
+        ):
+            continue
         # A one-piece approval cannot silently transfer sibling pieces that
         # belong to other employees or suppliers when quantity > 1.
         if allow_direct_assignment and (
