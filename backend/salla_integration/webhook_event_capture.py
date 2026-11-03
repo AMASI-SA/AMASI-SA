@@ -290,7 +290,9 @@ async def capture_unknown_event(
 
     # Provider delivery is never performed inside the webhook.  This call only
     # creates a hashed, idempotent outbox record when CAPI is explicitly enabled.
-    if not is_abandoned_cart_event and order_sync.get("synced"):
+    if (not is_abandoned_cart_event
+            and event_name != "order.shipping.address.updated"
+            and order_sync.get("synced")):
         try:
             from integrations_control_center.snapchat_capi_purchases import (
                 enqueue_snapchat_purchase_from_salla_event,
@@ -350,7 +352,9 @@ async def capture_unknown_event(
         "event_hash": event_hash,
     }
     order_mutation_scope = (
-        "full_order_from_webhook"
+        "shipping_address_only"
+        if event_name == "order.shipping.address.updated" and order_sync.get("synced")
+        else "full_order_from_webhook"
         if order_sync.get("synced")
         else "shipping_fields_only"
         if shipment_sync.get("order_modified")
