@@ -600,6 +600,16 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
         result["read_batches"] += 1
         if budget is not None:
             await budget.checkpoint()
+    # A single order-cost authority powers both the protected Executive
+    # Dashboard reducers and Sold Products readers. Keeping the current-price
+    # fallback here avoids any direct change to their source-pinned functions,
+    # query planners or cooperative scheduling contracts.
+    from current_bundle_reporting_estimate import load_current_bundle_estimates
+    estimates = await load_current_bundle_estimates(
+        db, user_id, orders, result, budget=budget,
+    )
+    if estimates:
+        result["current_bundle_estimates"] = estimates
     return result
 
 
