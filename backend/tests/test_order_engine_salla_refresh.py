@@ -388,3 +388,60 @@ async def test_fresh_details_replace_old_address_but_keep_historical_shipment(lo
     assert captured["doc"]["shipping_city"] == "الرياض"
     assert db.unified_orders.row["shipping_address_raw"] == new_address
     assert db.unified_orders.row["salla_address_verified_at"]
+
+
+@pytest.mark.asyncio
+async def test_light_shipment_only_refresh_does_not_undo_verified_order_address(local_refresh_collaborators):
+    old_awb_address = {"city": "جدة", "address_line": "عنوان الشحنة التاريخية"}
+    latest_order_address = {"city": "الرياض", "address_line": "حي النرجس",
+                            "short_address": "RYYY1234"}
+    old_raw = {
+        "id": "42", "reference_id": "295617138",
+        "date": "2026-11-02T12:00:00+03:00",
+        "status": {"slug": "in_progress"},
+        "customer": {"full_name": "مستلم"},
+        "shipments": [{"id": 99, "ship_to": old_awb_address}],
+    }
+    db = _DB({
+        "user_id": "owner", "order_number": "295617138", "order_id": "42",
+        "salla_address_verified_at": "2026-11-03T15:00:00+00:00",
+        "shipping_address_raw": latest_order_address,
+        "raw_by_source": {"salla_direct": old_raw},
+    })
+    provider_details = {
+        **old_raw,
+        # This deliberately light response has no current order address.
+        "shipments": [{"id": 99, "ship_to": old_awb_address}],
+    }
+    saved = {}
+
+    async def provider(_db, _owner, method, path, **kwargs):
+        if path == "/orders/42":
+            return {"data": provider_details}
+        if path == "/orders/items":
+            return {"data": []}
+        raise AssertionError(path)
+
+    async def persist(_db, _owner, _number, doc, **kwargs):
+        saved["raw"] = kwargs["raw"]
+        return {"created": False, "doc": doc}
+
+    async def bank(_db, _owner, doc):
+        return doc
+
+    with (
+        patch("order_engine.salla_refresh.call_salla", new=provider),
+        patch("order_engine.salla_refresh.upsert_order", new=persist),
+        patch("order_engine.salla_refresh._enrich_order_receiving_bank", new=bank),
+    ):
+        result = await refresh_order_from_salla(
+            db, "owner", "295617138", force=True,
+            allow_auto_fulfillment=False, allow_delivery_observation=False,
+        )
+
+    assert result["ok"] is True
+    assert saved["raw"]["shipping_address"] == latest_order_address
+    assert saved["raw"]["shipping"]["address"] == latest_order_address
+    assert saved["raw"]["shipments"][0]["ship_to"] == old_awb_address
+    assert db.unified_orders.row["shipping_address_raw"] == latest_order_address
+    assert result["address_source"] is None
