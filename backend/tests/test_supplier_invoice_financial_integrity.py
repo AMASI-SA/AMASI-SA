@@ -258,3 +258,113 @@ async def test_read_and_presentation_reject_corrupt_persisted_new_invoice_withou
     for suffix in ['', '/pdf']:
         response=await http.get('/supplier-receiving-v1/invoices/'+iid+suffix);assert response.status_code==409,response.text
     assert (await db.general_ledger.find_one({'side':'credit'}))['amount']==20
+
+
+@pytest.mark.parametrize("first_service,second_component,conflict", [
+    (False, "product", True),
+    (True, "svc", True),
+    (False, "svc", False),
+])
+async def test_two_receipts_of_one_unit_check_saved_invoice_components(
+    env, first_service, second_component, conflict
+):
+    db, http, _ = env
+    first, payload = await seed(db, (1500,), services=True)
+    line = payload["invoice_lines"][0]
+    pid = line["piece_ids"][0]
+    piece = await db[r.PIECES].find_one({"piece_id": pid}, {"_id": 0})
+    scan = await db[r.RECEIVING_EVENTS].find_one({"piece_id": pid}, {"_id": 0})
+    if not first_service:
+        line["services"] = []
+        payload["confirmed_total_halalas"] = 1500
+    approved = await close(http, first, payload)
+    assert approved.status_code == 200, approved.text
+    first_invoice = await db[r.SUPPLIER_INVOICES].find_one({})
+    first_journal = await db.general_ledger.find({}).sort("id", 1).to_list(10)
+
+    # Reproduce a stale piece/scan snapshot in another session. The actual
+    # approved invoice, its scan event and its journal are kept intact.
+    second = {**first, "id": "second-session", "reference": "SR-TEST-second",
+              "client_request_id": "second-request"}
+    await db[r.SESSIONS].insert_one(dict(second))
+    piece.update(supplier_receiving_session_id=second["id"], receipt_event_id="second-scan")
+    await db[r.PIECES].replace_one({"piece_id": pid}, piece)
+    is_product = second_component == "product"
+    scan.update(id="second-scan", session_id=second["id"], receipt_event_id="second-scan",
+                supplier_receiving_session_id=second["id"], product_charge_eligible=is_product)
+    for collection in (r.RECEIVING_EVENTS, r.PIECE_EVENTS):
+        await db[collection].insert_one(dict(scan))
+    line.update(product_unit_price_halalas=1500 if is_product else 0,
+                services=[] if is_product else [{"service_id": "svc", "unit_price_halalas": 325}])
+    payload["confirmed_total_halalas"] = 1500 if is_product else 325
+    response = await close(http, second, payload)
+    if conflict:
+        assert response.status_code == 409, response.text
+        assert response.json()["detail"]["code"] == "supplier_receiving_component_already_invoiced"
+        assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 1
+        assert await db.general_ledger.find({}).sort("id", 1).to_list(10) == first_journal
+        assert (await db[r.SESSIONS].find_one({"id": second["id"]}))["status"] == "open"
+        assert (await db[r.PIECES].find_one({"piece_id": pid}))["receipt_event_id"] == "second-scan"
+    else:
+        assert response.status_code == 200, response.text
+        assert response.json()["supplier_invoice"]["total_halalas"] == 325
+        assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 2
+        assert await db.general_ledger.count_documents({}) == 4
+    assert (await db[r.SUPPLIER_INVOICES].find_one({"id": first_invoice["id"]})) == first_invoice
+
+
+async def test_prior_component_lookup_is_owner_scoped_and_matches_each_invoice_line(env, monkeypatch):
+    db, http, _ = env
+    session, payload = await seed(db)
+    pid = payload["invoice_lines"][0]["piece_ids"][0]
+    previous = {"user_id": "merchant", "approved_at": datetime.now(timezone.utc),
+                "lines": [{"piece_ids": [pid], "product_unit_price_halalas": 2100, "services": []}]}
+    for key, fields in (
+        ("foreign", {"user_id": "another-owner"}),
+        ("experiment", {"experiment_mode": True}),
+        ("run", {"experiment_run_id": "archived-run"}),
+        ("draft", {"approved_at": None, "status": "draft"}),
+        ("grouped", {"lines": [{"piece_ids": [pid], "product_unit_price_halalas": 0,
+                                "services": [{"service_id": "embroidery"}]},
+                               {"piece_ids": ["another-unit"], "product_unit_price_halalas": 2100, "services": []}]}),
+    ):
+        await db[r.SUPPLIER_INVOICES].insert_one({**previous, **fields, "id": key,
+                                                  "invoice_number": key, "session_id": key})
+    queries = []
+    original = AsyncIOMotorCollection.find
+
+    def capture(self, query, *args, **kwargs):
+        if self.name == r.SUPPLIER_INVOICES and "lines.piece_ids" in query:
+            assert kwargs["session"].in_transaction
+            queries.append(query)
+        return original(self, query, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncIOMotorCollection, "find", capture)
+    response = await close(http, session, payload)
+    assert response.status_code == 200, response.text
+    assert len(queries) == 1
+    plan = await original(db[r.SUPPLIER_INVOICES], queries[0]).explain()
+    assert "ix_supplier_invoice_piece_v2" in str(plan["queryPlanner"]["winningPlan"])
+
+
+@pytest.mark.parametrize("fields", [
+    {"status": "archived"},
+    {"status": "reversed"},
+    {"lines": [{"piece_ids": ["target"], "product_unit_price_halalas": 1500}]},
+])
+async def test_ambiguous_historical_receipt_requires_review(env, fields):
+    db, http, _ = env
+    session, payload = await seed(db)
+    pid = payload["invoice_lines"][0]["piece_ids"][0]
+    previous = {"user_id": "merchant", "id": "previous", "session_id": "previous-session",
+                "invoice_number": "previous", "supplier_id": "other-supplier",
+                "approved_at": datetime.now(timezone.utc), "status": "payable_posted",
+                "lines": [{"piece_ids": [pid], "product_unit_price_halalas": 1500, "services": []}],
+                **deepcopy(fields)}
+    previous["lines"][0]["piece_ids"] = [pid]
+    await db[r.SUPPLIER_INVOICES].insert_one(previous)
+    response = await close(http, session, payload)
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "supplier_receiving_prior_invoice_incomplete"
+    assert await db.general_ledger.count_documents({}) == 0
+    assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 1

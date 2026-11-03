@@ -1160,14 +1160,23 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     issue(out, 'supplier_receipt_order_evidence_incomplete', invoice.get('id'))
                     continue
                 try:
-                    components = [('product', piece_id)] if line.get('product_charge_eligible') is not False else []
+                    # A service invoice may predate the eligibility flag. Its
+                    # zero-priced product must not disqualify a proven base charge.
+                    has_product = line.get('product_charge_eligible') is not False and (unit_halalas > 0 or not service_totals)
+                    components = [('product', piece_id)] if has_product else []
                     components.extend((f'service:{service_id}', f'{piece_id}:service:{service_id}')
                                       for service_id in service_totals)
+                    # Historical batches can carry different piece UUIDs for the
+                    # same order line and physical unit. Keep posted receipt IDs,
+                    # but compare claims across the permanent unit identity.
+                    physical_key = (piece_id,)
+                    unit = str(piece.get('unit_index') or '')
+                    order_item_id = piece.get('order_item_id')
+                    if (isinstance(order_item_id, str) and order_item_id.strip() and len(unit) <= 9
+                            and unit.isascii() and unit.isdecimal() and int(unit) > 0):
+                        physical_key = (order_item_id.strip(), int(unit))
                     for component, item_id in components:
-                        # An opening-covered invoice cannot be replayed by a
-                        # second invoice. A genuinely new service has a distinct
-                        # component identity and remains eligible after startup.
-                        coverage.setdefault((order_id, item_id), set()).add(invoice['id'])
+                        coverage.setdefault((order_id, physical_key, component), set()).add((invoice['id'], item_id))
                         if accepted < start:
                             continue
                         out['supplier_receipts'].append({'id': f"{invoice['id']}:{piece_id}:{component}",
@@ -1183,9 +1192,12 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     # their original invoice. Two issued invoices claiming the same component
     # are contradictory evidence, not two independent obligations.
     current_components = {(receipt['order_id'], receipt['item_id']) for receipt in out['supplier_receipts']}
-    ambiguous = {key for key, invoices in coverage.items() if len(invoices) > 1 and key in current_components}
+    ambiguous = {(order_id, item_id) for (order_id, _unit, _component), claims in coverage.items()
+                 if len(claims) > 1 for _, item_id in claims} & current_components
     for key in sorted(ambiguous):
-        issue(out, 'supplier_cross_invoice_component_coverage_ambiguous', ':'.join(key))
+        issue(out, 'supplier_cross_invoice_component_coverage_ambiguous', ':'.join(key),
+              scope='received_products',
+              required_action='طابق سطر القطعة وخدمتها في الفواتير مع الافتتاح والسداد قبل اعتماد أي فرق.')
     if ambiguous:
         out['supplier_receipts'] = [r for r in out['supplier_receipts'] if (r['order_id'], r['item_id']) not in ambiguous]
     for document in data['mz2_provider_fee_policies_v2']:

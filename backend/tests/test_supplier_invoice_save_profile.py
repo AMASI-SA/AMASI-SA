@@ -80,6 +80,7 @@ async def test_save_sequence_profile(env, monkeypatch, installed_live_cost_suppo
         replay = await client.post(f"/supplier-receiving-v1/sessions/{session['id']}/close", json=payload)
         assert replay.status_code == 200 and replay.json()["supplier_invoice"]["id"] == saved["supplier_invoice"]["id"]
         assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 1
-    assert index_calls == (36 if revision == "baseline" else 12)
+    # Current setup adds the indexed prior-piece lookup once per router.
+    assert index_calls == (36 if revision == "baseline" else 13)
     print("SAVE_PROFILE", json.dumps({"revision": revision, "pieces": count, "ms": stages,
           "indexes_by_stage": index_stages, "index_calls_including_replay": index_calls, "index_ms_including_replay": round(index_seconds * 1000, 3)}, sort_keys=True))

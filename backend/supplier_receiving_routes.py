@@ -1785,6 +1785,56 @@ def supplier_service_completion_update(
     return update
 
 
+def _invoice_charge_components(line: dict[str, Any]) -> set[str]:
+    product = line.get("product_unit_price_halalas")
+    services = line.get("services")
+    if (not isinstance(product, int) or isinstance(product, bool) or product < 0
+            or not isinstance(services, list)
+            or any(not isinstance(row, dict) or not _text(row.get("service_id")) for row in services)):
+        raise HTTPException(409, detail={"code": "supplier_receiving_prior_invoice_incomplete",
+            "message": "تعذر التحقق من تفاصيل استلام سابق لهذه القطعة. راجع الفاتورة قبل الاعتماد."})
+    components = {"service:" + _text(row["service_id"]) for row in services}
+    if product > 0:
+        components.add("product")
+    return components
+
+
+async def _check_prior_invoice_components(
+    db: Any, merchant_id: str, lines: list[dict[str, Any]], mongo_session: Any
+) -> None:
+    # A mutable scan or piece snapshot cannot override a posted receipt. Separate
+    # services on one physical unit may legitimately be invoiced independently.
+    requested = {}
+    for line in lines:
+        components = _invoice_charge_components(line)
+        requested.update(dict.fromkeys(line["piece_ids"], components))
+    invoices = db[SUPPLIER_INVOICES].find(
+        {"user_id": merchant_id, "lines.piece_ids": {"$in": list(requested)},
+         "experiment_mode": {"$ne": True}, "experiment_run_id": {"$in": [None, ""]},
+         "status": {"$ne": "experiment_completed"},
+         "$or": [{"approved_at": {"$ne": None}}, {"status": "payable_posted"}]},
+        {"_id": 0, "lines.piece_ids": 1, "lines.product_unit_price_halalas": 1,
+         "lines.services.service_id": 1, "status": 1}, session=mongo_session,
+    )
+    async for invoice in invoices:
+        for line in invoice["lines"]:
+            matched = requested.keys() & line.get("piece_ids", [])
+            if not matched:
+                continue
+            if invoice.get("status") not in (None, "payable_posted"):
+                # Archiving a document is not evidence that its liability was
+                # reversed. An unusual approved state needs reconciliation.
+                raise HTTPException(409, detail={"code": "supplier_receiving_prior_invoice_incomplete",
+                    "message": "راجع حالة فاتورة الاستلام السابقة لهذه القطعة قبل الاعتماد."})
+            previous = _invoice_charge_components(line)
+            for pid in matched:
+                overlap = requested[pid] & previous
+                if overlap:
+                    raise HTTPException(409, detail={"code": "supplier_receiving_component_already_invoiced",
+                        "piece_id": pid, "components": sorted(overlap),
+                        "message": "سبق اعتماد تكلفة هذه القطعة أو الخدمة في فاتورة استلام."})
+
+
 async def _post_supplier_invoice_ledger(
     db: Any,
     *,
@@ -2575,6 +2625,10 @@ async def ensure_supplier_receiving_indexes(db: Any) -> None:
         [("user_id", ASCENDING), ("invoice_number", ASCENDING)],
         unique=True,
         name="uq_supplier_invoice_number_v2",
+    )
+    await db[SUPPLIER_INVOICES].create_index(
+        [("user_id", ASCENDING), ("lines.piece_ids", ASCENDING)],
+        name="ix_supplier_invoice_piece_v2",
     )
     await db[SUPPLIER_INVOICES].create_index(
         [("user_id", ASCENDING), ("supplier_id", ASCENDING), ("approved_at", DESCENDING)],
@@ -5890,6 +5944,8 @@ def make_supplier_receiving_router(
                 require_invoice_integrity(fresh_session["supplier_id"] == payload.expected_supplier_id, "selected_supplier_mismatch")
             if payload.confirmed_total_halalas is not None:
                 require_invoice_integrity(draft["total_halalas"] == payload.confirmed_total_halalas, "confirmed_amount_mismatch")
+            if not is_experiment:
+                await _check_prior_invoice_components(db, merchant_id, draft["lines"], mongo_session)
             invoice_id = f"msiv2_{uuid.uuid5(uuid.NAMESPACE_URL, f'{merchant_id}:{session_id}').hex}"
             invoice_number = _text(fresh_session.get("reference")).replace(
                 "SR-", "SI-TEST-" if is_experiment else "SI-", 1

@@ -26,21 +26,36 @@ except Exception:  # pragma: no cover
 
 
 def _display_pdf_rows(display):
-    """Render the canonical cards; per-piece source details remain in display."""
+    """Keep each canonical card together, showing the base actually charged for its pieces."""
     for card in display["cards"]:
-        summaries = {}
+        charges_by_base = {}
         for piece in card["pieces"]:
+            base = piece["product_cost_halalas"]
+            charge = charges_by_base.setdefault(base, {"quantity": 0, "total_halalas": 0, "services": {}})
+            charge["quantity"] += 1
+            # Preserve the rounded allocation from the original financial line.
+            charge["total_halalas"] += piece["display_total_halalas"]
             for service in piece["services"]:
-                key = (service.get("service_id"), service.get("service_name"),
-                       service.get("unit_price_halalas"), str(service.get("quantity_per_piece")))
-                row = summaries.setdefault(key, {"service_name":service.get("service_name") or service.get("service_id"),
-                    "total_halalas":0, "piece_ids":[]})
-                row["total_halalas"] += service["display_total_halalas"]
-                row["piece_ids"].append(piece["piece_id"])
-        services = list(summaries.values())
-        for offset in range(0, max(1, len(services)), 16):
-            yield {**card, "services":services[offset:offset+16], "continuation":offset > 0,
-                "product_unit_price_halalas":card["effective_cost"]["numerator"] / card["effective_cost"]["denominator"]}
+                key = (service["service_id"], service.get("service_name"),
+                       service["unit_price_halalas"], str(service.get("quantity_per_piece", 1)))
+                summary = charge["services"].setdefault(key, {
+                    "service_name": service.get("service_name") or service["service_id"],
+                    "total_halalas": 0,
+                })
+                summary["total_halalas"] += service["display_total_halalas"]
+
+        for base, charge in charges_by_base.items():
+            services = list(charge["services"].values())
+            for offset in range(0, max(1, len(services)), 16):
+                yield {
+                    "product_name": card["product_name"],
+                    "selected_image_url": card["selected_image_url"],
+                    "product_unit_price_halalas": base,
+                    "quantity": charge["quantity"],
+                    "total_halalas": charge["total_halalas"],
+                    "services": services[offset:offset + 16],
+                    "continuation": offset > 0,
+                }
 
 
 _FONT_REGISTERED = False
@@ -145,7 +160,7 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any], *, images: dict[str, 
     # RTL order from the right edge: image, product, quantity, unit price,
     # services, line total. Widths add up to the full printable width (180 mm).
     column_widths = [18, 42, 18, 32, 42, 28]
-    column_labels = ["صورة", "اسم المنتج", "الكمية", "تكلفة القطعة" if invoice.get("display") is not None else "سعر القطعة", "الخدمات", "الإجمالي"]
+    column_labels = ["صورة", "اسم المنتج", "الكمية", "سعر المنتج", "الخدمات", "الإجمالي"]
     boundaries = [right]
     for column_width in column_widths:
         boundaries.append(boundaries[-1] - column_width * mm)
@@ -270,7 +285,15 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any], *, images: dict[str, 
 
         page.setFont(regular_font, 8.5)
         unit_center_x = (boundaries[3] + boundaries[4]) / 2
-        page.drawCentredString(unit_center_x, center_y - 1.5 * mm, _ar(_money(line.get("product_unit_price_halalas"))))
+        base = line.get("product_unit_price_halalas")
+        if line.get("continuation"):
+            page.drawCentredString(unit_center_x, center_y - 1.5 * mm, "—")
+        elif base == 0 and services and line.get("total_halalas"):
+            page.drawCentredString(unit_center_x, center_y + 1 * mm, _ar(_money(base)))
+            page.setFont(regular_font, 7)
+            page.drawCentredString(unit_center_x, center_y - 3.5 * mm, _ar("خدمة فقط"))
+        else:
+            page.drawCentredString(unit_center_x, center_y - 1.5 * mm, _ar(_money(base)))
 
         services_center_x = (boundaries[4] + boundaries[5]) / 2
         if not services:

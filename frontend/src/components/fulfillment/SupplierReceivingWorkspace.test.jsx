@@ -263,11 +263,15 @@ test("a later supplier invoice charges only the incomplete service", () => {
 });
 
 test("camera invoice shows one compact row with image quantity unit price and total", () => {
+    const pieces = ["a", "b", "c"].map(piece_id => ({
+        piece_id, product_cost_halalas: 500, display_total_halalas: 750,
+        services: [{service_id: "cut", service_name: "قص", unit_price_halalas: 250, display_total_halalas: 250}],
+    }));
     const markup = renderToStaticMarkup(
         <SupplierPieceCameraScanner
             onDetected={() => {}}
             onClose={() => {}}
-            displayProjection={{display:{cards:[{key:"card",product_name:"تعليقة اليوم الوطني",sku:"ND-96",selected_image_url:"https://cdn.example.test/national-day.png",quantity:3,total_halalas:2250,effective_cost:{numerator:750,denominator:1},pieces:[]}]}}}
+            displayProjection={{display:{cards:[{key:"card",product_name:"تعليقة اليوم الوطني",sku:"ND-96",selected_image_url:"https://cdn.example.test/national-day.png",quantity:3,total_halalas:2250,effective_cost:{numerator:750,denominator:1},pieces}]}}}
             invoiceLines={[{
                 key: "product-1",
                 product_name: "تعليقة اليوم الوطني",
@@ -290,7 +294,7 @@ test("camera invoice shows one compact row with image quantity unit price and to
         />,
     );
 
-    expect(markup).toContain("تكلفة الوحدة");
+    expect(markup).toContain("إجمالي الوحدة شامل الخدمات 7.50 ر.س");
     expect(markup).toContain("الإجمالي");
     expect(markup).toContain("تعليقة اليوم الوطني");
     expect(markup).toContain('data-testid="supplier-display-card"');
