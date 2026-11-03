@@ -122,6 +122,7 @@ jobs:
             tests/test_order_cost_authority.py \
             tests/test_bundle_reporting_financial.py \
             tests/test_bundle_historical_reporting_audit.py \
+            tests/test_bundle_historical_reporting_repair.py \
             tests/test_bundle_reporting_cost_policy.py \
             tests/test_bundle_financial_lifecycle.py \
             tests/test_order_cost_identity_projection.py \
@@ -163,7 +164,7 @@ jobs:
           assert not rejected, f"Order cost skipped or failed cases: {rejected}"
           expected = {
               "test_order_cost_authority", "test_order_cost_identity_projection",
-              "test_bundle_reporting_financial", "test_bundle_historical_reporting_audit", "test_bundle_reporting_cost_policy", "test_bundle_financial_lifecycle",
+              "test_bundle_reporting_financial", "test_bundle_historical_reporting_audit", "test_bundle_historical_reporting_repair", "test_bundle_reporting_cost_policy", "test_bundle_financial_lifecycle",
               "test_authority_review_regressions", "test_order_cost_final_review",
               "test_order_cost_authority_mongo", "test_order_option_cost_snapshots",
               "test_dashboard_bundle_cost_authority", "test_dashboard_v2_product_cost",
