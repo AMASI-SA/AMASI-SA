@@ -199,7 +199,6 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
             for row in items:
                 if not isinstance(row, dict):
                     _fail("current_bundle_recipe_invalid")
-                rule_id = _id(row.get("rule_id"))
                 cond = row.get("condition") or {}
                 signature = (row.get("kind"), _id(row.get("product_id")),
                              _id(row.get("resource_id")), _id(row.get("variant_id")),
