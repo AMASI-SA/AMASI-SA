@@ -64,7 +64,7 @@ def test_other_supplier_and_historical_receipts_are_never_automatically_claimed(
     assert offer({**OTHER, "supplier_dispatch_status": "pending"}) is not None
 
 
-def test_confirmed_patch_assigns_current_supplier_and_employee_without_financial_receipt():
+def test_confirmed_patch_assigns_supplier_but_not_employee_until_invoice():
     proposal = offer(OTHER)
     patch = direct_assignment_patch(
         piece=OTHER, offer=proposal, session_id="s1",
@@ -73,9 +73,10 @@ def test_confirmed_patch_assigns_current_supplier_and_employee_without_financial
     assert patch["supplier_id"] == "sup-2"
     assert patch["supplier_assignment_mode"] == "direct_at_receiving_draft"
     assert patch["supplier_dispatch_status"] == "sent"
-    assert patch["responsible_employee_id"] == "emp-current"
-    assert patch["supplier_receiving_previous_responsible_employee_name"] == "محمد"
-    assert patch["supplier_receiving_draft_employee_transfer"] is True
+    assert "responsible_employee_id" not in patch
+    assert "responsible_employee_name" not in patch
+    assert "assignment_status" not in patch
+    assert "supplier_receiving_draft_employee_transfer" not in patch
     assert "supplier_invoice_id" not in patch
     assert "received_at" not in patch
     assert "status" not in patch
@@ -100,7 +101,7 @@ def test_cancel_or_remove_restores_original_employee_and_supplier_exactly():
     assert "supplier_dispatch_status" not in restored
 
 
-def test_approval_audit_preserves_true_previous_employee_then_clears_draft_only_markers():
+def test_employee_custody_transfers_only_at_supplier_invoice_approval():
     patch = direct_assignment_patch(
         piece=OTHER, offer=offer(OTHER), session_id="s1",
         actor_id="emp-current", actor_name="هلال", at=NOW,
@@ -120,8 +121,11 @@ def test_approval_audit_preserves_true_previous_employee_then_clears_draft_only_
         piece=in_draft, session=SESSION, actor=actor, invoice_id="invoice-88",
         completed_at=NOW,
     )
+    assert in_draft["responsible_employee_id"] == "emp-old"
+    assert update["$set"]["responsible_employee_id"] == "emp-current"
+    assert update["$set"]["responsible_employee_name"] == "هلال"
     assert update["$push"]["assignment_history"]["previous_responsible_employee_id"] == "emp-old"
-    assert update["$unset"]["supplier_receiving_draft_employee_transfer"] == ""
+    assert update["$push"]["assignment_history"]["supplier_invoice_id"] == "invoice-88"
 
 
 def test_scan_confirmation_is_explicit_and_affects_attempt_identity():
