@@ -3,7 +3,10 @@ import re
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, StrictBool
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, StrictBool, model_validator
+from mobile_operational_flow_policy import read_modes, FIELD_PREPARATION, FIELD_SUPPLIER
 
 from mobile_app_permissions import mobile_app_access_for_user
 from mobile_app_request_context import _linked_owner_id
@@ -11,7 +14,18 @@ from mobile_app_request_context import _linked_owner_id
 
 class AssemblySettingsPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    show_salla_order_link: StrictBool
+    # Backward compatible: old Android only submits show_salla_order_link.
+    show_salla_order_link: StrictBool | None = None
+    preparation_employee_receipt_mode: Literal["required", "optional"] | None = None
+    supplier_assignment_mode: Literal["required", "optional"] | None = None
+
+    @model_validator(mode="after")
+    def require_changed_valid_field(self):
+        if not self.model_fields_set or any(
+            getattr(self, name) is None for name in self.model_fields_set
+        ):
+            raise ValueError("operational_flow_setting_required")
+        return self
 
 
 async def _scope(db, user):
@@ -59,16 +73,26 @@ def make_assembly_mobile_settings_router(db, current_user, *, router=None):
     @router.get("/assembly/settings")
     async def read_settings(user=Depends(current_user)):
         owner, manager = await _scope(db, user)
-        return {"show_salla_order_link": await _enabled(db, owner), "can_manage": manager}
+        result = {"show_salla_order_link": await _enabled(db, owner), "can_manage": manager}
+        if manager:
+            result.update(await read_modes(db, owner))
+        return result
 
     @router.patch("/assembly/settings")
     async def change_settings(payload: AssemblySettingsPatch, user=Depends(current_user)):
         owner, manager = await _scope(db, user)
         if not manager:
             raise HTTPException(403, detail={"code": "mobile_app_manager_required"})
-        await db.settings.update_one({"user_id": owner}, {"$set": {
-            "assembly_shipping.show_salla_order_link": payload.show_salla_order_link}}, upsert=True)
-        return {"show_salla_order_link": payload.show_salla_order_link, "can_manage": True}
+        updates = {}
+        if "show_salla_order_link" in payload.model_fields_set:
+            updates["assembly_shipping.show_salla_order_link"] = payload.show_salla_order_link
+        if FIELD_PREPARATION in payload.model_fields_set:
+            updates[f"operational_flow.{FIELD_PREPARATION}"] = payload.preparation_employee_receipt_mode
+        if FIELD_SUPPLIER in payload.model_fields_set:
+            updates[f"operational_flow.{FIELD_SUPPLIER}"] = payload.supplier_assignment_mode
+        await db.settings.update_one({"user_id": owner}, {"$set": updates}, upsert=True)
+        return {"show_salla_order_link": await _enabled(db, owner),
+                **await read_modes(db, owner), "can_manage": True}
 
     @router.get("/assembly/orders/{order_number}/salla-link")
     async def read_link(order_number: str, user=Depends(current_user)):
