@@ -518,10 +518,25 @@ async def refresh_order_from_salla(
         merged_raw = settled_payment_snapshot(merged_raw)
 
         shipping_fields, address, address_source = extract_order_details_shipping_fields(details)
-        if address:
-            # This is the latest address from an explicit fresh Order Details
-            # read. Do not keep the old value just because it was nonempty.
-            # Historical shipments remain untouched for carrier-label audit.
+        # The customer fallback can contain only a city/country. It is not an
+        # authoritative replacement for an existing full delivery address.
+        # A sparse new response must never erase saved street/national data.
+        weak_customer_fallback = (
+            address_source == "order.customer"
+            and not any(_present(address.get(key)) for key in (
+                "formatted", "formatted_address", "address_line", "street",
+                "street_name", "street_number", "short_address",
+                "national_address", "description", "location",
+            ))
+        )
+        previous_delivery = _dict(existing_raw.get("shipping_address")) or _dict(_dict(existing_raw.get("shipping")).get("address"))
+        if weak_customer_fallback and previous_delivery:
+            address = {}
+            address_source = None
+            shipping_fields = {key: value for key, value in shipping_fields.items() if key in SHIPPING_FIELDS}
+        if address and not weak_customer_fallback:
+            # This is a fresh, explicit order delivery address. Replace even a
+            # previously populated destination, but never a historical AWB.
             merged_raw["shipping_address"] = deepcopy(address)
             shipping = _dict(merged_raw.get("shipping"))
             shipping["address"] = deepcopy(address)
@@ -540,7 +555,7 @@ async def refresh_order_from_salla(
         now = datetime.now(timezone.utc)
         canonical_updates: dict[str, Any] = {
             **({"salla_address_verified_at": now.isoformat(),
-                "salla_address_provider_updated_at": now.isoformat()} if address else {}),
+                "salla_address_provider_updated_at": now.isoformat()} if address and not weak_customer_fallback else {}),
             REFRESH_TIMESTAMP_FIELD: now.isoformat(),
             REFRESH_MODE_FIELD: "orders_v2_central_refresh",
             REFRESH_ENDPOINT_FIELD: "GET /orders/{id} + GET /orders/items",
