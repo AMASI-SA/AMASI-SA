@@ -389,3 +389,70 @@ def test_absence_of_saved_payment_evidence_is_unavailable():
                                      "movements":[],"openings":{}})
     coverage=next(d for d in report["dependencies"] if d["code"]=="provider_evidence_coverage")
     assert coverage["status"]=="unavailable" and coverage["observed_order_counts"]=={}
+
+
+@pytest.mark.parametrize("priced", [True, False])
+@pytest.mark.parametrize("gap", ["another_reference", "unallocated", "partially_allocated", "same_order_allocation"])
+def test_bound_native_capture_checks_prior_money_before_gross_recognition(priced, gap):
+    from operational_balance_engine import reconcile
+    from test_operational_balance_engine import policy
+    raw = source_order("mada")
+    raw["payment_methods"][0]["amount"] = "20.00"
+    raw["payment_actions"]["remaining_action"]["paid_amount"]["amount"] = "20.00"
+    payment, issues = recognize(raw, [stored(native_txn(total={"amount":"20.00","currency":"SAR"}))])
+    assert not issues and payment["capture_source"] == "salla_transaction_evidence_v1"
+    state = {"status":"active", "started_at":"2026-10-05T00:00:00Z", "movements":[], "openings":{}}
+    if gap == "another_reference":
+        state["engine"] = {"facts":{"capture:previous":{"order_id":ORDER, "provider":"salla", "amount":"10.00"}}}
+        expected = "provider_capture_identity_conflict"
+    else:
+        allocations = {"unallocated":[], "partially_allocated":[{"obligation_id":"provider:other","amount":"18"}],
+                       "same_order_allocation":[{"obligation_id":"provider:"+ORDER,"amount":"20"}]}[gap]
+        state["movements"] = [{"id":"settlement","party_type":"provider","party_id":"salla","currency":"SAR",
+            "kind":"settlement","direction":"incoming","amount":"18.00","actual_fee_amount":"2.00","allocations":allocations}]
+        expected = "provider_settled_capture_review_required"
+    original = deepcopy(state)
+    sources = {"orders":[{"id":ORDER,"order_number":NUMBER,"currency":"SAR","created_at":CREATED,
+                          "updated_at":PAID,"payment":payment}], "fee_policies":[policy(provider="salla")] if priced else []}
+    out = reconcile(state, sources, NOW)
+    assert expected in {i["code"] for i in out["engine"]["issues"]}
+    assert out["engine"]["facts"] == state.get("engine",{}).get("facts",{})
+    assert "provider:"+ORDER not in out["engine"]["obligations"]
+    assert state == original and out["movements"] == state["movements"]
+
+
+def test_canonical_paid_total_cannot_stack_with_a_different_saved_partial_capture():
+    from operational_balance_engine import reconcile
+    from test_operational_balance_engine import policy
+    raw = source_order("mada")
+    raw["payment"] = {"method":"mada","status":"paid","paid_at":PAID,"reference":"capture-A"}
+    raw["payment_methods"][0]["amount"] = "20.00"
+    raw["payment_actions"]["remaining_action"]["paid_amount"]["amount"] = "20.00"
+    for observations in ([], [stored(native_txn(total={"amount":"20.00","currency":"SAR"}))]):
+        payment, issues = recognize(raw, observations)
+        assert not issues and payment["paid_observation"]["amount"] == "20.00"
+        prior = {"capture:previous":{"order_id":ORDER,"provider":"salla","amount":"10.00"}}
+        state = {"status":"active","started_at":"2026-10-05T00:00:00Z","engine":{"facts":prior},"movements":[]}
+        sources = {"orders":[{"id":ORDER,"currency":"SAR","created_at":CREATED,"updated_at":PAID,
+                            "payment":payment}],"fee_policies":[policy(provider="salla")]}
+        out = reconcile(state,sources,NOW)
+        assert out["engine"]["facts"] == prior
+        assert "provider_capture_identity_conflict" in [i["code"] for i in out["engine"]["issues"]]
+
+
+def test_old_immutable_split_facts_cannot_exceed_the_current_authoritative_paid_total_on_replay():
+    from operational_balance_engine import reconcile
+    from test_operational_balance_engine import policy
+    raw = source_order("mada")
+    raw["payment_methods"][0]["amount"] = "20.00"
+    raw["payment_actions"]["remaining_action"]["paid_amount"]["amount"] = "20.00"
+    payment, _ = recognize(raw, [stored(native_txn(total={"amount":"20.00","currency":"SAR"}))])
+    prior = {"capture:capture-A":{"order_id":ORDER,"provider":"salla","amount":"20.00"},
+             "capture:prior":{"order_id":ORDER,"provider":"salla","amount":"10.00"}}
+    state = {"status":"active","started_at":"2026-10-05T00:00:00Z","engine":{"facts":prior},"movements":[]}
+    sources = {"orders":[{"id":ORDER,"currency":"SAR","created_at":CREATED,"updated_at":PAID,
+                         "payment":payment}],"fee_policies":[policy(provider="salla")]}
+    out = reconcile(state, sources, NOW)
+    assert out["engine"]["facts"] == prior
+    assert "provider:"+ORDER not in out["engine"]["obligations"]
+    assert "provider_capture_amount_conflict" in [i["code"] for i in out["engine"]["issues"]]

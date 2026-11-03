@@ -425,8 +425,12 @@ def reconcile(state, sources, as_of):
                     # New evidence adapters may surface old payments already included
                     # in an opening or a separately settled balance. A normal refresh
                     # is not authorization to replay those historic amounts.
-                    recovered = payment.get("capture_source") == CANONICAL_WITH_UNBOUND_ACTIVITY
-                    if projection is None or recovered or payment.get("capture_source") == NATIVE_TRANSACTION_EVIDENCE_VERSION:
+                    recovered = payment.get("capture_source") in {
+                        CANONICAL_WITH_UNBOUND_ACTIVITY, NATIVE_TRANSACTION_EVIDENCE_VERSION}
+                    require_history_check = projection is None or recovered
+                    captures = payment.get("captures", [])
+                    paid_total = (payment.get("paid_observation") or {}).get("amount")
+                    if require_history_check or (captures and paid_total is not None):
                         previous = obligations.get(provider_key, {})
                         if (previous.get("party_id", payment["provider"]) != payment["provider"]
                                 or previous.get("currency", currency) != currency
@@ -434,11 +438,11 @@ def reconcile(state, sources, as_of):
                                        if k.startswith("capture:") and v.get("order_id") == oid)):
                             raise ValueError("provider_capture_identity_conflict")
                         prior_as_of = (state.get("engine") or {}).get("as_of")
-                        if prior_as_of and any("capture:" + str(c["id"]) not in facts and
+                        if require_history_check and prior_as_of and any("capture:" + str(c["id"]) not in facts and
                                 instant(c["captured_at"]) <= instant(prior_as_of)
-                                for c in payment.get("captures", [])):
+                                for c in captures):
                             raise ValueError("provider_historical_capture_review_required")
-                        if recovered and any("capture:" + str(c["id"]) not in facts for c in payment["captures"]):
+                        if any("capture:" + str(c["id"]) not in facts for c in captures):
                             if (money(previous.get("confirmed", "0")) > ZERO or
                                     any(k.startswith("capture:") and v.get("order_id") == oid for k, v in facts.items())):
                                 raise ValueError("provider_capture_identity_conflict")
@@ -472,7 +476,8 @@ def reconcile(state, sources, as_of):
                                  {"order_id": oid, "amount": amount(money(refund["amount"]))})
                     refunded = sum((money(v["amount"]) for k, v in facts.items()
                                     if k.startswith("refund:") and v["order_id"] == oid), ZERO)
-                    if captured > money(payment["gross"]) or (captured and refunded > captured):
+                    if (captured > money(payment["gross"]) or (captured and refunded > captured)
+                            or (captures and paid_total is not None and captured != money(paid_total))):
                         raise ValueError("provider_capture_amount_conflict")
                     confirmed = max(captured - refunded, ZERO)
                     if projection is None:
