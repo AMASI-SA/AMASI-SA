@@ -39,8 +39,15 @@ def supplier_receipt_assignment_history_row(
     invoice_id: str,
     completed_at: Any,
 ) -> dict[str, Any] | None:
-    previous_id = _text(piece.get("responsible_employee_id"))
-    previous_name = _text(piece.get("responsible_employee_name"))
+    draft_transfer = piece.get("supplier_receiving_draft_employee_transfer") is True
+    previous_id = _text(
+        piece.get("supplier_receiving_previous_responsible_employee_id")
+        if draft_transfer else piece.get("responsible_employee_id")
+    )
+    previous_name = _text(
+        piece.get("supplier_receiving_previous_responsible_employee_name")
+        if draft_transfer else piece.get("responsible_employee_name")
+    )
     next_id = _actor_id(actor)
     next_name = _actor_name(actor)
     if not next_id or next_id == previous_id:
@@ -78,7 +85,10 @@ def supplier_receipt_assignment_history_row(
         "previous_supplier_name": _text(piece.get("supplier_name")) or None,
         "previous_sent_to_supplier_by_id": _text(piece.get("sent_to_supplier_by_id")) or None,
         "previous_sent_to_supplier_by_name": _text(piece.get("sent_to_supplier_by_name")) or None,
-        "previous_assigned_at": piece.get("assigned_at"),
+        "previous_assigned_at": (
+            piece.get("supplier_receiving_previous_assigned_at")
+            if draft_transfer else piece.get("assigned_at")
+        ),
         "previous_started_at": piece.get("started_at"),
         "previous_sent_to_supplier_at": piece.get("sent_to_supplier_at"),
     }
@@ -108,6 +118,14 @@ def apply_supplier_receipt_employee_custody(
             supplier_history["received_by_id"] = next_id
             supplier_history["received_by_name"] = next_name
 
+    if piece.get("supplier_receiving_draft_employee_transfer") is True:
+        update.setdefault("$unset", {}).update({
+            "supplier_receiving_draft_employee_transfer": "",
+            "supplier_receiving_previous_responsible_employee_id": "",
+            "supplier_receiving_previous_responsible_employee_name": "",
+            "supplier_receiving_previous_assigned_at": "",
+        })
+
     history = supplier_receipt_assignment_history_row(
         piece=piece,
         session=session,
@@ -118,8 +136,15 @@ def apply_supplier_receipt_employee_custody(
     if not history:
         return update
 
-    previous_id = _text(piece.get("responsible_employee_id"))
-    previous_name = _text(piece.get("responsible_employee_name"))
+    draft_transfer = piece.get("supplier_receiving_draft_employee_transfer") is True
+    previous_id = _text(
+        piece.get("supplier_receiving_previous_responsible_employee_id")
+        if draft_transfer else piece.get("responsible_employee_id")
+    )
+    previous_name = _text(
+        piece.get("supplier_receiving_previous_responsible_employee_name")
+        if draft_transfer else piece.get("responsible_employee_name")
+    )
     set_values = update.setdefault("$set", {})
     set_values.update({
         "responsible_employee_id": next_id,
