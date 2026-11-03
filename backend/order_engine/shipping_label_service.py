@@ -422,12 +422,15 @@ def _store_courier_print_data(
         if isinstance(shipping.get("recipient"), dict) else {}
     )
     order_destination = (
-        explicit_recipient_address
+        # Once Salla's order-update/current-address fact has been verified in
+        # Mezan, it is newer than any old receiver/ship_to embedded in an
+        # already issued shipment. Keep recipient identity separate below.
+        delivery_address(order.get("_mezan_current_shipping_address"))
+        or explicit_recipient_address
         or delivery_address(order.get("ship_to"))
         or delivery_address(shipping.get("ship_to"))
         or delivery_address(shipping.get("address"))
         or delivery_address(order.get("shipping_address"))
-        or delivery_address(order.get("_mezan_current_shipping_address"))
     )
 
     if recipient:
