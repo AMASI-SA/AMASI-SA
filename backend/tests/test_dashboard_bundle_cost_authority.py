@@ -435,3 +435,25 @@ async def test_frozen_bundle_still_wins_over_new_current_cost_policy(db):
     assert report["total"] == 220
     assert report["product_rows"][0]["total_cost"] == 220
     assert report["product_rows"][0]["cost_sources"] == ["bundle_snapshot"]
+
+
+@pytest.mark.asyncio
+async def test_current_bundle_without_original_choice_rows_stays_unpriced(db):
+    order = sale("no-selection-source", sale_line("line", 4))
+    order["products"][0]["options"] = []
+    result = await build_mezan_v2_product_cost(ReadOnlyDB(db), OWNER, [order])
+    assert result["product_rows"][0]["cost_status"] == "missing"
+    assert result["product_rows"][0]["total_cost"] is None
+    assert result["incomplete_orders_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_current_bundle_conflicting_yes_and_no_keeps_cost_missing(db):
+    order = sale("conflicting-source", sale_line("line", 1))
+    order["products"][0]["options"].append({
+        "option_id": "rose", "value_id": "no",
+        "name": "هل تريد تغليف ورد؟", "value": "لا",
+    })
+    result = await build_mezan_v2_product_cost_cooperative(ReadOnlyDB(db), OWNER, [order])
+    assert result["product_rows"][0]["cost_status"] == "missing"
+    assert result["product_rows"][0]["total_cost"] is None
