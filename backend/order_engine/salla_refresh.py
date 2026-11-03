@@ -221,13 +221,15 @@ def extract_order_details_address(order: dict[str, Any]) -> tuple[dict[str, Any]
     first_shipment = _first_shipment(order)
 
     preferred = [
+        # Salla updates the ORDER destination independently of an already
+        # issued courier's historical ship_to. Prefer fresh order facts.
+        ("order.shipping.address", _dict(shipping.get("address"))),
+        ("order.shipping.ship_to", _dict(shipping.get("ship_to"))),
+        ("order.shipping_address", _dict(order.get("shipping_address"))),
+        ("order.ship_to", _dict(order.get("ship_to"))),
         ("order.shipments[0].ship_to", _dict(first_shipment.get("ship_to"))),
         ("order.shipments[0].shipping_address", _dict(first_shipment.get("shipping_address"))),
         ("order.shipments[0].address", _dict(first_shipment.get("address"))),
-        ("order.shipping.ship_to", _dict(shipping.get("ship_to"))),
-        ("order.shipping.address", _dict(shipping.get("address"))),
-        ("order.ship_to", _dict(order.get("ship_to"))),
-        ("order.shipping_address", _dict(order.get("shipping_address"))),
         ("order.address", _dict(order.get("address"))),
         ("order.receiver.address", _dict(receiver.get("address"))),
         ("order.customer.shipping_address", _dict(customer.get("shipping_address"))),
@@ -517,11 +519,12 @@ async def refresh_order_from_salla(
 
         shipping_fields, address, address_source = extract_order_details_shipping_fields(details)
         if address:
-            if not isinstance(merged_raw.get("shipping_address"), dict) or not merged_raw.get("shipping_address"):
-                merged_raw["shipping_address"] = deepcopy(address)
+            # This is the latest address from an explicit fresh Order Details
+            # read. Do not keep the old value just because it was nonempty.
+            # Historical shipments remain untouched for carrier-label audit.
+            merged_raw["shipping_address"] = deepcopy(address)
             shipping = _dict(merged_raw.get("shipping"))
-            if not isinstance(shipping.get("address"), dict) or not shipping.get("address"):
-                shipping["address"] = deepcopy(address)
+            shipping["address"] = deepcopy(address)
             if shipping_fields.get("shipping_company") and not _present(shipping.get("company_name")):
                 shipping["company_name"] = shipping_fields["shipping_company"]
             if shipping_fields.get("shipping_method") and not _present(shipping.get("method")):
@@ -536,6 +539,8 @@ async def refresh_order_from_salla(
 
         now = datetime.now(timezone.utc)
         canonical_updates: dict[str, Any] = {
+            **({"salla_address_verified_at": now.isoformat(),
+                "salla_address_provider_updated_at": now.isoformat()} if address else {}),
             REFRESH_TIMESTAMP_FIELD: now.isoformat(),
             REFRESH_MODE_FIELD: "orders_v2_central_refresh",
             REFRESH_ENDPOINT_FIELD: "GET /orders/{id} + GET /orders/items",
