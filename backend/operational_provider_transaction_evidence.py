@@ -12,13 +12,19 @@ from operational_payment_evidence import (
 
 COLLECTION = "order_payment_transactions_v2"
 VERSION = "salla_transaction_evidence_v1"
+CANONICAL_WITH_UNBOUND_ACTIVITY = "canonical_order_with_unbound_activity"
 
 
 def native_transaction_evidence(row, provider_order_id):
     """Preserve only financial source attributes, never card or customer fields."""
     try:
         refs = row.get("references")
-        if not isinstance(refs, dict) or _identity(refs.get("order_id"), "order") != provider_order_id:
+        if refs is None:
+            refs = {}
+        if not isinstance(refs, dict):
+            return None
+        bound = refs.get("order_id") is not None
+        if bound and _identity(refs["order_id"], "order") != provider_order_id:
             return None
         method, status, total = row.get("payment_method"), row.get("status"), row.get("total")
         provider = provider_for(method.get("slug")) if isinstance(method, dict) else None
@@ -35,9 +41,14 @@ def native_transaction_evidence(row, provider_order_id):
         amount = _amount(total, ccy)
         if row.get("currency") not in (None, ccy) or (row.get("amount") is not None and _amount(row["amount"], ccy) != amount):
             return None
-        return {"schema": VERSION, "provider_order_id": provider_order_id, "provider": provider,
+        # Do not fill the absent order binding from the request URL. An unbound
+        # observation can never supply a capture, its amount, reference or date.
+        binding = {"provider_order_id": provider_order_id} if bound else {"unbound_order": True}
+        reference = (_identity(refs.get("transaction"), "transaction_reference")
+                     if bound or refs.get("transaction") is not None else None)
+        return {"schema": VERSION, **binding, "provider": provider,
                 "transaction_id": _identity(row.get("id"), "transaction_id"),
-                "reference": _identity(refs.get("transaction"), "transaction_reference"),
+                "reference": reference,
                 "status": slug, "paid_at": stamp, "currency": ccy, "amount": format(amount, ".2f")}
     except (ValueError, TypeError):
         return None
@@ -59,7 +70,7 @@ def normalize_transaction_payment(raw, currency, total, created_at, as_of, *, ow
     def withheld(code, **details):
         return None, [{"code": code, "provider": provider, **details}]
 
-    proofs, legacy = [], []
+    proofs, legacy, unbound = [], [], []
     for row in scope:
         group = row.get("native_transaction_evidence")
         if group is None:
@@ -69,12 +80,27 @@ def normalize_transaction_payment(raw, currency, total, created_at, as_of, *, ow
             return withheld("provider_transaction_history_conflict")
         for ev in group:
             if (not isinstance(ev, dict) or ev.get("schema") != VERSION
-                    or ev.get("provider_order_id") != provider_order_id
                     or ev.get("transaction_id") != row.get("transaction_id")
                     or ev.get("provider") != provider or ev.get("currency") != currency):
                 return withheld("provider_transaction_binding_conflict")
-            if ev not in proofs:
+            if ev.get("unbound_order") is True and "provider_order_id" not in ev:
+                if ev not in unbound:
+                    unbound.append(ev)
+            elif ev.get("provider_order_id") != provider_order_id or "unbound_order" in ev:
+                return withheld("provider_transaction_binding_conflict")
+            elif ev not in proofs:
                 proofs.append(ev)
+    if unbound:
+        captures = payment.get("captures", [])
+        if len(unbound) != 1 or proofs or legacy or issues or len(captures) != 1:
+            return withheld("provider_transaction_history_conflict")
+        observed, canonical = unbound[0], captures[0]
+        if (observed.get("status") not in {"paid", "captured"}
+                or observed.get("amount") != format(_amount(canonical["amount"], currency), ".2f")
+                or observed.get("paid_at") not in (None, canonical["captured_at"])
+                or observed.get("reference") not in (None, canonical["id"])):
+            return withheld("provider_transaction_binding_conflict")
+        return {**payment, "capture_source": CANONICAL_WITH_UNBOUND_ACTIVITY}, []
     if not proofs:
         return payment, issues  # display-only legacy records have no native timestamp provenance
     if legacy:
@@ -139,6 +165,7 @@ async def load_transaction_rows(db, owner, orders, start, now, *, to_instant, ma
     if not isinstance(owner, str) or not owner.strip() or owner != owner.strip():
         raise ValueError("operational_source_owner_mismatch")
     keys = set()
+    by_ref = defaultdict(set)
     for raw in orders:
         try:
             if not start < to_instant(raw.get("date") or raw.get("created_at") or raw.get("order_date")) <= now:
@@ -149,6 +176,17 @@ async def load_transaction_rows(db, owner, orders, start, now, *, to_instant, ma
             number = raw.get("reference_id") or raw.get("order_number")
             if number and raw.get("id"):
                 keys.add(str(number))
+                references = [method.get("reference"), method.get("transaction_reference")]
+                methods = raw.get("payment_methods")
+                if isinstance(methods, list) and len(methods) <= 100:
+                    references.extend(row.get("transaction_reference") for row in methods if isinstance(row, dict))
+                for value in references:
+                    if value is not None:
+                        try:
+                            ref = _identity(value, "provider_payment_reference_missing")
+                        except PaymentEvidenceError:
+                            continue
+                        by_ref[ref].add((str(number), str(raw["id"])))
         except (ValueError, TypeError, KeyError):
             continue  # main reader reports malformed canonical orders
     numbers, groups, count = sorted(keys), defaultdict(list), 0
@@ -167,7 +205,6 @@ async def load_transaction_rows(db, owner, orders, start, now, *, to_instant, ma
             groups[r["order_number"]].append(r)
     # Before reducing any orders, quarantine all colliding source references.
     # Otherwise the first order in an unsorted DB cursor could claim the money.
-    by_ref = defaultdict(set)
     for number, records in groups.items():
         for record in records:
             observations = record.get("native_transaction_evidence")

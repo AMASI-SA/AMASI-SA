@@ -268,3 +268,124 @@ def test_cash_normalizer_does_not_synthesize_unpriced_forecast_or_settlement():
     p=next(z for z in summary["parties"] if z["party_type"]=="provider")
     assert p["outstanding_receivable"]=="0.00" and p["settled"]=="57.19"
     assert summary["summary"]["actual_liquidity"]=="55.19" and again["movements"]==new["movements"]
+
+
+def test_legacy_incomplete_optional_observation_does_not_veto_independently_complete_canonical_payment():
+    raw=source_order("mada")
+    raw["payment"]={"method":"mada","status":"paid","paid_at":PAID,"reference":"capture-A"}
+    doc = stored(native_txn(references={}))
+    p,issues=recognize(raw,[doc])
+    assert not issues and p["captures"]==[{"id":"capture-A","amount":"57.19","captured_at":PAID}]
+
+
+@pytest.mark.parametrize("change", [
+    {"status":{"slug":"refunded"}}, {"operation":"refund"}, {"references":"malformed"},
+    {"references":{"order_id":"other","transaction":"capture-A"}},
+    {"total":{"amount":"99","currency":"SAR"}}, {"total":{"amount":"57.19","currency":"QAR"}},
+    {"references":{"transaction":"another"}}, {"paid_at":NOW},
+])
+def test_inconsistent_optional_observation_cannot_release_a_canonical_capture(change):
+    raw=source_order("mada")
+    raw["payment"]={"method":"mada","status":"paid","paid_at":PAID,"reference":"capture-A"}
+    doc=stored(native_txn(**{"references":{},**change}))
+    p,issues=recognize(raw,[doc])
+    assert issues and not (p or {}).get("captures")
+
+
+def test_recovered_canonical_capture_is_held_for_historical_or_settlement_review_with_valid_fee_policy():
+    from operational_balance_engine import reconcile
+    from test_operational_balance_engine import policy
+    raw=source_order("mada")
+    raw["payment"]={"method":"mada","status":"paid","paid_at":PAID,"reference":"capture-A"}
+    payment,issues=recognize(raw,[stored(native_txn(references={}))])
+    assert not issues and payment["captures"] and payment["capture_source"]=="canonical_order_with_unbound_activity"
+    sources={"orders":[{"id":ORDER,"order_number":NUMBER,"currency":"SAR","created_at":CREATED,
+                        "updated_at":PAID,"payment":payment}],"fee_policies":[policy(provider="salla")]}
+    start={"status":"active","started_at":"2026-10-05T00:00:00+00:00","movements":[],"openings":{}}
+    for state,expected in [
+        ({**start,"engine":{"as_of":NOW}}, "provider_historical_capture_review_required"),
+        ({**start,"movements":[{"party_type":"provider","party_id":"salla","currency":"SAR","kind":"collection",
+                                 "direction":"incoming","amount":"12.00","allocations":[]}]},
+         "provider_settled_capture_review_required"),
+    ]:
+        before=deepcopy(state)
+        out=reconcile(state,sources,NOW)
+        assert expected in [i["code"] for i in out["engine"]["issues"]]
+        assert out["engine"]["facts"]==before.get("engine",{}).get("facts",{})
+        assert out["movements"]==before["movements"] and state==before
+    first=reconcile(start,sources,NOW)
+    assert first["engine"]["obligations"]["provider:"+ORDER]["confirmed"]=="57.19"
+    assert reconcile(first,sources,NOW)==first
+
+
+def test_recovered_partial_capture_does_not_stack_on_a_different_reference_for_same_order():
+    from operational_balance_engine import reconcile
+    from test_operational_balance_engine import policy
+    raw = source_order("mada")
+    raw["payment_methods"][0]["amount"] = "20.00"
+    raw["payment_actions"]["remaining_action"]["paid_amount"]["amount"] = "20.00"
+    raw["payment"] = {"method":"mada","status":"paid","paid_at":PAID,"reference":"capture-A"}
+    payment, issues = recognize(raw,[stored(native_txn(total={"amount":"20.00","currency":"SAR"},references={}))])
+    assert not issues
+    prior = {"capture:other":{"order_id":ORDER,"provider":"salla","amount":"10.00"}}
+    state = {"status":"active","started_at":"2026-10-05T00:00:00Z","engine":{"facts":prior}}
+    sources = {"orders":[{"id":ORDER,"currency":"SAR","created_at":CREATED,"updated_at":PAID,
+                           "payment":payment}],"fee_policies":[policy(provider="salla")]}
+    out = reconcile(state,sources,NOW)
+    assert out["engine"]["facts"] == prior
+    assert "provider_capture_identity_conflict" in [i["code"] for i in out["engine"]["issues"]]
+
+
+def test_cross_order_canonical_reference_cannot_win_against_a_native_capture_in_either_order():
+    from operational_provider_transaction_evidence import load_transaction_rows, normalize_transaction_payment
+    from operational_payment_evidence import _instant
+    from test_operational_balance_sources import HardBoundaryDB, run
+    a={**source_order("mada"),"created_at":CREATED}
+    b={**a,"id":"1002","reference_id":"98002","payment":{"method":"mada","status":"paid","paid_at":PAID,"reference":"capture-A"}}
+    db=HardBoundaryDB({"order_payment_transactions_v2":[stored(user_id="owner")]})
+    for source in ([a,b],[b,a]):
+        groups=run(load_transaction_rows(db,"owner",source,_instant("2026-10-05T00:00:00Z"),_instant(NOW),
+                                         to_instant=_instant,max_rows=50))
+        for raw in source:
+            p,issues=normalize_transaction_payment(raw,"SAR","57.19",CREATED,NOW,owner="owner",
+                    order_number=raw["reference_id"],provider_order_id=raw["id"],rows=groups.get(raw["reference_id"],[]))
+            assert not (p or {}).get("captures") and issues
+
+
+def test_financial_position_previews_only_known_provider_evidence_without_summing_money_or_orders_twice():
+    from operational_financial_position_core import build_financial_position
+    from operational_balance_engine import reconcile
+    from test_operational_balance_engine import policy
+    payment,_=recognize(source_order("mada"),[stored()])
+    before={"status":"active","started_at":"2026-10-05T00:00:00Z","movements":[],"openings":{}}
+    input_data={"orders":[{"id":ORDER,"currency":"SAR","created_at":CREATED,"updated_at":PAID,
+                            "payment":payment}],"fee_policies":[policy(provider="salla")]}
+    state=reconcile(before,input_data,NOW)
+    state["engine"]["issues"]=[
+        {"scope":"provider_payment","code":"provider_capture_evidence_incomplete","source_id":"two",
+         "provider":"salla","missing_fields":["capture_timestamp"]},
+        {"scope":"provider_payment","code":"provider_capture_evidence_incomplete","source_id":"two",
+         "provider":"salla","missing_fields":["capture_timestamp"]},
+        {"source_id":"provider:"+ORDER,"code":"provider_fee_estimate_unavailable"},
+        {"scope":"provider_payment","code":"provider_payment_method_conflict","source_id":"three"},
+    ]
+    state["movements"]=[{"id":"partial","amount":"15.00","actual_fee_amount":"1.00","currency":"SAR",
+        "bank_id":"synthetic","bank_kind":"bank","party_type":"provider","party_id":"salla","direction":"incoming",
+        "kind":"collection","allocations":[{"obligation_id":"provider:"+ORDER,"amount":"16.00"}]}]
+    original=deepcopy(state)
+    report=build_financial_position(state)
+    salla=next(d for d in report["dependencies"] if d["code"]=="provider_evidence_coverage_salla")
+    assert salla["observed_order_counts"]=={"capture":1,"settlement_allocation":1,"missing_time":1,"fee_review":1}
+    assert salla["status"]=="incomplete" and "لقطة" in salla["message"] and "سلة" in salla["message"]
+    unknown=next(d for d in report["dependencies"] if d["code"]=="provider_evidence_coverage_unassigned")
+    assert unknown["observed_order_counts"]=={"capture_review":1}
+    assert report["currencies"]["SAR"]["metrics"]["liquidity"]=="15.00"
+    assert state==original
+
+
+def test_absence_of_saved_payment_evidence_is_unavailable():
+    from operational_financial_position_core import build_financial_position
+    report=build_financial_position({"status":"active","started_at":CREATED,"engine":{"as_of":NOW},
+                                     "movements":[],"openings":{}})
+    coverage=next(d for d in report["dependencies"] if d["code"]=="provider_evidence_coverage")
+    assert coverage["status"]=="unavailable" and coverage["observed_order_counts"]=={}

@@ -10,6 +10,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from operational_balance_service import report
 from operational_delivery_report_coverage import delivery_coverage_diagnostics
+from operational_provider_report_coverage import provider_evidence_coverage
 
 
 ZERO = Decimal("0")
@@ -446,6 +447,7 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         {"code": "complete_collection_forecast", "status": "incomplete", "message": UNKNOWN + COD_SCOPE},
         {"code": "profit_period_coverage", "status": "unavailable", "message": UNKNOWN + "مصادر الربح الكامل لنفس فترة المبيعات لم تكتمل."},
         *delivery_coverage["dependencies"],
+        *provider_evidence_coverage(projection),
     ]
     if cost_ready:
         result["issues"].extend(_source_issue(row) for row in cost_exposure.get("issues", []))

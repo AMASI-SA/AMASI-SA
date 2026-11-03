@@ -83,7 +83,7 @@ def reconcile_credits(state):
 
 
 from operational_provider_fees import provider_projection, independent_capture_without_fee_policy
-from operational_provider_transaction_evidence import VERSION as NATIVE_TRANSACTION_EVIDENCE_VERSION
+from operational_provider_transaction_evidence import VERSION as NATIVE_TRANSACTION_EVIDENCE_VERSION, CANONICAL_WITH_UNBOUND_ACTIVITY
 from operational_product_cost_policy import unreceived_eligible
 
 
@@ -425,7 +425,8 @@ def reconcile(state, sources, as_of):
                     # New evidence adapters may surface old payments already included
                     # in an opening or a separately settled balance. A normal refresh
                     # is not authorization to replay those historic amounts.
-                    if projection is None or payment.get("capture_source") == NATIVE_TRANSACTION_EVIDENCE_VERSION:
+                    recovered = payment.get("capture_source") == CANONICAL_WITH_UNBOUND_ACTIVITY
+                    if projection is None or recovered or payment.get("capture_source") == NATIVE_TRANSACTION_EVIDENCE_VERSION:
                         previous = obligations.get(provider_key, {})
                         if (previous.get("party_id", payment["provider"]) != payment["provider"]
                                 or previous.get("currency", currency) != currency
@@ -437,6 +438,19 @@ def reconcile(state, sources, as_of):
                                 instant(c["captured_at"]) <= instant(prior_as_of)
                                 for c in payment.get("captures", [])):
                             raise ValueError("provider_historical_capture_review_required")
+                        if recovered and any("capture:" + str(c["id"]) not in facts for c in payment["captures"]):
+                            if (money(previous.get("confirmed", "0")) > ZERO or
+                                    any(k.startswith("capture:") and v.get("order_id") == oid for k, v in facts.items())):
+                                raise ValueError("provider_capture_identity_conflict")
+                            for m in result.get("movements", []):
+                                if (m.get("party_type") != "provider" or m.get("party_id") != payment["provider"]
+                                        or m.get("currency") != currency):
+                                    continue
+                                allocations = m.get("allocations", [])
+                                if (any(a.get("obligation_id") in {provider_key, "credit:" + provider_key} for a in allocations)
+                                        or sum((money(a["amount"]) for a in allocations), ZERO)
+                                        < money(m["amount"]) + money(m.get("actual_fee_amount", "0"))):
+                                    raise ValueError("provider_settled_capture_review_required")
                     # A paid gross obligation already includes settlement fee deductions.
                     # A component refund needs the statement's actual fee-credit allocation;
                     # do not flip that settled obligation or invent a second fee charge.
