@@ -1,0 +1,41 @@
+{
+  "task_id": "SHIPPING-ORDER-DETAILS-ONLY-20261017",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/shipping-order-only-20261016",
+  "implementation_commit": "3e44b255d36ba1fdd880ddb57f7b4d345a6188e4",
+  "source_base": "97aa64777a9bbd7b10bd6b0b8001aba26297b926",
+  "scope": "Print and refresh read shipment PDF from fresh order details only; no shipment list, detail, tracking or order-shipment API probes.",
+  "files": [
+    "backend/order_engine/shipping_label_service.py",
+    "backend/tests/test_shipping_print_legacy_path.py",
+    "backend/tests/test_store_courier_unified_print.py"
+  ],
+  "verification": {
+    "command": "PYTHONPATH=backend:backend/tests python -m pytest backend/tests/test_shipping_print_legacy_path.py backend/tests/test_shipping_label_current_guard.py backend/tests/test_shipping_print_boundary.py backend/tests/test_store_courier_unified_print.py backend/tests/test_store_courier_dispatch.py -q -o asyncio_mode=auto",
+    "exit_code": 0,
+    "passed": 140,
+    "skipped": 106,
+    "skip_reason": "Optional real Mongo replica-set fixture variants not configured",
+    "regression": "Valid order-embedded PDF with all shipment APIs denied failed before patch and passes after patch.",
+    "live_salla_and_device": "not tested",
+    "diff_check": "passed"
+  },
+  "authorization": "User explicitly authorized upload and deployment with rollback on failure.",
+  "production_changed": false,
+  "release_lease": "Not inspected or acquired; do not touch another owner's lease.",
+  "deployment_blocker": "Both browser and native UI tool kernels fail before initialization: failed to write kernel assets / path not found. Retried after kernel reset. Shared /app and visible Emergent deployment are inaccessible in this session.",
+  "next_action": "Create PR, complete exact-head CI and independent review. Once Emergent access is restored, inspect /app guard status before any workspace change; coordinate with active releases. Rebase/merge latest production as needed, freeze exact source A and intent-only B under v5, build and prepare/prepublish/verify per AGENTS.md.",
+  "rollback": {
+    "strategy": "Revert the scoped implementation and order-permission error correction commits on top of then-current production, preserving other releases; rebuild with a NEW v5 intent. Never reset production or reuse old lease/intent.",
+    "command_template": "git revert <order-permission-correction-commit> 3e44b255d36ba1fdd880ddb57f7b4d345a6188e4",
+    "trigger": "Post-deployment guarded identity verification failure or reproducible loss of printing from a valid order-details label attributable to this patch.",
+    "record_before_publish": "Capture the actually deployed source SHA, deployment SHA and runtime release identity immediately before release; the source base above is not a claim about the live release."
+  },
+  "limits": [
+    "Order resolution still uses GET /orders then GET /orders/{id}; store courier may read /store/info.",
+    "No removal of separate shipment issuance machinery, no Ready backend change, no supplier or Android release changes.",
+    "No live latency promise; absent embedded label returns unavailable without alternate shipping requests."
+  ],
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1404",
+  "independent_review": "One P2 found and corrected: order-read 403 now reports order_scope_required instead of shipping_scope_required; denied-read regression assertions passed."
+}

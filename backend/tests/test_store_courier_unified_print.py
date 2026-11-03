@@ -25,6 +25,7 @@ async def test_current_shipment_can_prove_courier_for_completion(setup, monkeypa
     state["order"].update(status="in_progress", shipping={})
     state["rows"] = [{"id": "200", "order_id": "salla-order",
                       "courier_name": "مندوب الرياض", "meta": {"app_id": 0}}]
+    state["order"]["shipments"] = state["rows"]
     await db.order_review_workflows.update_one({"user_id": OWNER}, {"$set": {"assembly_status": "completed"}})
     # Isolate carrier discovery from the separately covered execution policy.
     from types import SimpleNamespace
@@ -43,7 +44,7 @@ async def test_current_shipment_can_prove_courier_for_completion(setup, monkeypa
     result, changed = await shipping._ensure_internal_order_completed(
         db, OWNER, ORDER, "salla-order", state["order"])
     assert changed and result["status"] == "completed"
-    assert "/shipments" in state["calls"]
+    assert state["calls"] == [], "carrier discovery uses the supplied fresh order details"
 
 
 @pytest.mark.asyncio
