@@ -221,7 +221,7 @@ async def test_in_transit_can_unassign_without_return_attestation_and_reassign_l
         assert previous["status"] == "unassigned" and previous["active"] is False
         assert previous["prior_assignment_status"] == "out_for_delivery"
         assert previous["delivery_fee_snapshot"] == 20.0
-        assert previous["physical_return_confirmed"] is False
+        assert previous.get("physical_return_confirmed") is None
         assert previous.get("physical_return_confirmed_at") is None
         assert previous.get("physical_return_confirmed_by") is None
         order = await db[ORDERS].find_one({"order_number": "101"})
@@ -308,7 +308,7 @@ async def test_legacy_apk_return_true_is_ignored_and_never_creates_false_return_
         assert result["ok"] and result["physical_return_confirmed"] is False
         previous = await db[ASSIGNMENTS].find_one({"id": "assignment-A"})
         assert previous["active"] is False and previous["prior_assignment_status"] == "out_for_delivery"
-        assert previous["physical_return_confirmed"] is False
+        assert previous.get("physical_return_confirmed") is None
         assert previous.get("physical_return_confirmed_at") is None
         assert previous.get("physical_return_confirmed_by") is None
         workflow = await db[WORKFLOWS].find_one({"order_number": "101"})
