@@ -267,5 +267,116 @@ class AmasiCompatibleShippingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sum(call.args[2] == "POST" for call in self.api.call_args_list), 1)
 
 
+class MobileShippingV1Tests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        import httpx
+        from fastapi import FastAPI
+        from mongomock_motor import AsyncMongoMockClient
+        from fulfillment_v2_routes import make_fulfillment_v2_router
+
+        self.db = AsyncMongoMockClient().mezan
+        self.key = {"user_id": "merchant", "order_number": "12345"}
+        self.workflows = self.db.order_review_workflows
+        await self.workflows.insert_one({**self.key, "assembly_status": "completed"})
+        self.actor = {"id": "merchant", "role": "owner"}
+
+        async def current_user():
+            return self.actor
+
+        app = FastAPI()
+        app.include_router(make_fulfillment_v2_router(self.db, current_user))
+        self.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+        self.addAsyncCleanup(self.client.aclose)
+        self.path = "/fulfillment-v2/completed/12345/carrier-label/v1"
+        self.pdf = {"ok": True, "ready": True, "source": "salla", "shipment_id": "42",
+                    "label_url": "https://carrier.example/official.pdf", "tracking_number": None,
+                    "order_status_completed": True}
+
+    async def test_issue_and_refresh_expose_versioned_print_states(self):
+        with patch.object(compat, "carrier_label", new_callable=AsyncMock) as engine:
+            engine.return_value = self.pdf
+            response = await self.client.post(self.path)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), {**self.pdf, "order_number": "12345",
+                             "assembly_completion_confirmed": True, "contract_version": 1, "print_state": "ready"})
+            engine.assert_awaited_once_with(self.db, "merchant", "12345", issue=True)
+            engine.return_value = {**self.pdf, "ready": False, "label_url": None}
+            response = await self.client.post(self.path + "/refresh")
+            self.assertEqual(response.json()["print_state"], "pending")
+            engine.assert_awaited_with(self.db, "merchant", "12345", issue=False)
+
+    async def test_incomplete_and_foreign_orders_fail_before_carrier_access(self):
+        with patch.object(compat, "carrier_label", new_callable=AsyncMock) as engine:
+            for actor, status in [("other", "completed"), ("merchant", "in_progress")]:
+                self.actor.update(id=actor)
+                await self.workflows.update_one(self.key, {"$set": {"assembly_status": status}})
+                response = await self.client.post(self.path + "/refresh")
+                self.assertEqual(response.status_code, 409)
+                detail = response.json()["detail"]
+                self.assertEqual((detail["code"], detail["contract_version"], detail["print_state"]),
+                                 ("assembly_completion_required", 1, "failed"))
+            engine.assert_not_awaited()
+
+    async def test_employee_requires_print_permission_and_responsibility(self):
+        self.actor = {"id": "employee", "created_by": "merchant"}
+        with patch("fulfillment_v2_routes.find_role_assignment", new_callable=AsyncMock, return_value=None), \
+             patch.object(compat, "carrier_label", new_callable=AsyncMock) as engine:
+            response = await self.client.post(self.path)
+            self.assertEqual(response.status_code, 403)
+            self.assertEqual(response.json()["detail"]["print_state"], "failed")
+            engine.assert_not_awaited()
+
+    async def test_authorized_employee_gets_own_merchants_label_and_revocation_blocks_a_write(self):
+        from ai_store_access_contract import ROLE_ASSIGNMENTS, ROLE_ASSIGNMENT_OWNER_FIELD
+
+        self.actor = {"id": "employee", "created_by": "merchant"}
+        role = {ROLE_ASSIGNMENT_OWNER_FIELD: "merchant", "user_id": "employee"}
+        permissions = self.db[ROLE_ASSIGNMENTS]
+        await permissions.insert_one({**role, "extra_permissions": ["fulfillment.labels.print"],
+                                      "fulfillment_responsibilities": ["shipping_labeling"]})
+
+        async def revoke(db, owner, number, *, issue):
+            await permissions.update_one(role, {"$set": {"enabled": False}})
+            return {**self.pdf, "shipment_id": "unexpected"}
+
+        with patch.object(compat, "carrier_label", new_callable=AsyncMock) as engine:
+            engine.return_value = self.pdf
+            first = await self.client.post(self.path + "/refresh")
+            self.assertEqual(first.status_code, 200)
+            engine.assert_awaited_once_with(self.db, "merchant", "12345", issue=False)
+            engine.side_effect = revoke
+            blocked = await self.client.post(self.path + "/refresh")
+            self.assertEqual(blocked.status_code, 403)
+            self.assertEqual(blocked.json()["detail"]["print_state"], "failed")
+            self.assertEqual((await self.workflows.find_one(self.key))["carrier_shipment_id"], "42")
+
+    async def test_slow_web_refresh_cannot_overwrite_newer_mobile_refresh(self):
+        import asyncio
+
+        started, resume = asyncio.Event(), asyncio.Event()
+        async def provider(db, owner, number, *, issue):
+            self.assertFalse(issue)
+            if not started.is_set():
+                started.set()
+                await resume.wait()
+                return {**self.pdf, "shipment_id": "41", "label_url": "https://carrier.example/old.pdf"}
+            return self.pdf
+
+        with patch.object(compat, "carrier_label", side_effect=provider):
+            slow = asyncio.create_task(self.client.post(self.path.replace("/v1", "/amasi") + "/refresh"))
+            try:
+                await asyncio.wait_for(started.wait(), 2)
+                fast = await self.client.post(self.path + "/refresh")
+            finally:
+                resume.set()
+                old = await slow
+        self.assertEqual(fast.status_code, 200)
+        self.assertEqual(old.status_code, 409)
+        self.assertEqual(old.json()["detail"]["code"], "shipping_snapshot_changed")
+        saved = await self.workflows.find_one(self.key)
+        self.assertEqual((saved["carrier_shipment_id"], saved["carrier_label_url"]),
+                         ("42", self.pdf["label_url"]))
+
+
 if __name__ == "__main__":
     unittest.main()
