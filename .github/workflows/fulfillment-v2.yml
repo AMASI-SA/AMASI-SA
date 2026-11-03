@@ -35,6 +35,9 @@ on:
       - "backend/order_engine/repository.py"
       - "backend/order_engine/routes.py"
       - "backend/order_engine/salla_refresh.py"
+      - "backend/salla_integration/address_webhook_sync.py"
+      - "backend/salla_integration/webhook_event_capture.py"
+      - "backend/salla_integration/webhook_monitor_routes.py"
       - "backend/tests/test_order_review_stage_one.py"
       - "backend/tests/test_order_review_export_controls.py"
       - "backend/tests/test_order_review_spec_replacements.py"
@@ -51,6 +54,7 @@ on:
       - "backend/tests/test_order_engine_mapper.py"
       - "backend/tests/test_order_engine_repository.py"
       - "backend/tests/test_order_engine_salla_refresh.py"
+      - "backend/tests/test_salla_address_webhook_sync.py"
       - "backend/tests/test_customer_history.py"
       - "backend/tests/test_customer_history_complete_lookup.py"
       - "backend/tests/test_customer_history_route.py"
@@ -160,6 +164,9 @@ on:
       - "backend/order_engine/repository.py"
       - "backend/order_engine/routes.py"
       - "backend/order_engine/salla_refresh.py"
+      - "backend/salla_integration/address_webhook_sync.py"
+      - "backend/salla_integration/webhook_event_capture.py"
+      - "backend/salla_integration/webhook_monitor_routes.py"
       - "backend/tests/test_order_review_stage_one.py"
       - "backend/tests/test_order_review_export_controls.py"
       - "backend/tests/test_order_review_spec_replacements.py"
@@ -176,6 +183,7 @@ on:
       - "backend/tests/test_order_engine_mapper.py"
       - "backend/tests/test_order_engine_repository.py"
       - "backend/tests/test_order_engine_salla_refresh.py"
+      - "backend/tests/test_salla_address_webhook_sync.py"
       - "backend/tests/test_customer_history.py"
       - "backend/tests/test_customer_history_complete_lookup.py"
       - "backend/tests/test_customer_history_route.py"
@@ -302,6 +310,7 @@ jobs:
           tests/test_order_engine_mapper.py
           tests/test_order_engine_repository.py
           tests/test_order_engine_salla_refresh.py
+          tests/test_salla_address_webhook_sync.py
           tests/test_customer_history.py
           tests/test_customer_history_complete_lookup.py
           tests/test_customer_history_route.py

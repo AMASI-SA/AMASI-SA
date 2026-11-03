@@ -221,13 +221,15 @@ def extract_order_details_address(order: dict[str, Any]) -> tuple[dict[str, Any]
     first_shipment = _first_shipment(order)
 
     preferred = [
+        # Salla updates the ORDER destination independently of an already
+        # issued courier's historical ship_to. Prefer fresh order facts.
+        ("order.shipping.address", _dict(shipping.get("address"))),
+        ("order.shipping.ship_to", _dict(shipping.get("ship_to"))),
+        ("order.shipping_address", _dict(order.get("shipping_address"))),
+        ("order.ship_to", _dict(order.get("ship_to"))),
         ("order.shipments[0].ship_to", _dict(first_shipment.get("ship_to"))),
         ("order.shipments[0].shipping_address", _dict(first_shipment.get("shipping_address"))),
         ("order.shipments[0].address", _dict(first_shipment.get("address"))),
-        ("order.shipping.ship_to", _dict(shipping.get("ship_to"))),
-        ("order.shipping.address", _dict(shipping.get("address"))),
-        ("order.ship_to", _dict(order.get("ship_to"))),
-        ("order.shipping_address", _dict(order.get("shipping_address"))),
         ("order.address", _dict(order.get("address"))),
         ("order.receiver.address", _dict(receiver.get("address"))),
         ("order.customer.shipping_address", _dict(customer.get("shipping_address"))),
@@ -422,6 +424,8 @@ async def refresh_order_from_salla(
             "_id": 0,
             "order_id": 1,
             "raw_by_source.salla_direct": 1,
+            "shipping_address_raw": 1,
+            "salla_address_verified_at": 1,
             REFRESH_TIMESTAMP_FIELD: 1,
         },
     ) or {}
@@ -516,12 +520,52 @@ async def refresh_order_from_salla(
         merged_raw = settled_payment_snapshot(merged_raw)
 
         shipping_fields, address, address_source = extract_order_details_shipping_fields(details)
+        # The shipment's ship_to is a historical AWB destination, not proof
+        # of a newer order address. A light response containing only a city or
+        # an old shipment must never undo an address already in Mezan.
+        verified_delivery = (
+            _dict(existing.get("shipping_address_raw"))
+            if existing.get("salla_address_verified_at") else {}
+        )
+        previous_delivery = (
+            verified_delivery
+            or _dict(existing_raw.get("shipping_address"))
+            or _dict(_dict(existing_raw.get("shipping")).get("address"))
+        )
+        has_detailed_address = any(
+            _present(address.get(key))
+            for key in (
+                "formatted", "formatted_address", "address_line", "street",
+                "street_name", "street_number", "short_address",
+                "national_address", "description", "location",
+            )
+        )
+        historical_shipment_only = bool(
+            address_source and address_source.startswith("order.shipment")
+        )
+        preserve_existing = bool(
+            previous_delivery and (not has_detailed_address or historical_shipment_only)
+        )
+        if preserve_existing:
+            address = {}
+            address_source = None
+            shipping_fields = {
+                key: value for key, value in shipping_fields.items()
+                if key in SHIPPING_FIELDS
+            }
+            if verified_delivery:
+                # A full current address already received through order.updated
+                # wins over an old AWB embedded by a light Order Details read.
+                merged_raw["shipping_address"] = deepcopy(verified_delivery)
+                shipping = _dict(merged_raw.get("shipping"))
+                shipping["address"] = deepcopy(verified_delivery)
+                merged_raw["shipping"] = shipping
         if address:
-            if not isinstance(merged_raw.get("shipping_address"), dict) or not merged_raw.get("shipping_address"):
-                merged_raw["shipping_address"] = deepcopy(address)
+            # Explicit full current order address replaces an old destination;
+            # the original issued shipment and official PDF remain untouched.
+            merged_raw["shipping_address"] = deepcopy(address)
             shipping = _dict(merged_raw.get("shipping"))
-            if not isinstance(shipping.get("address"), dict) or not shipping.get("address"):
-                shipping["address"] = deepcopy(address)
+            shipping["address"] = deepcopy(address)
             if shipping_fields.get("shipping_company") and not _present(shipping.get("company_name")):
                 shipping["company_name"] = shipping_fields["shipping_company"]
             if shipping_fields.get("shipping_method") and not _present(shipping.get("method")):
@@ -536,6 +580,9 @@ async def refresh_order_from_salla(
 
         now = datetime.now(timezone.utc)
         canonical_updates: dict[str, Any] = {
+            **({"salla_address_verified_at": now.isoformat(),
+                "salla_address_provider_updated_at": now.isoformat()}
+               if address and not historical_shipment_only else {}),
             REFRESH_TIMESTAMP_FIELD: now.isoformat(),
             REFRESH_MODE_FIELD: "orders_v2_central_refresh",
             REFRESH_ENDPOINT_FIELD: "GET /orders/{id} + GET /orders/items",

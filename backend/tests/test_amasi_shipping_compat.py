@@ -179,6 +179,67 @@ class AmasiCompatibleShippingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["label_type"], "store_courier")
         self.assertEqual(len(self.api.call_args_list), 2)
 
+    async def test_verified_destination_fallback_is_owner_and_order_scoped(self):
+        class Collection:
+            def __init__(self):
+                self.query = None
+
+            async def find_one(self, query, projection=None):
+                self.query = query
+                return {
+                    "order_id": "42",
+                    "salla_address_verified_at": "2026-11-03T16:05:00+00:00",
+                    "shipping_address_raw": {
+                        "city": "الرياض", "address_line": "عنوان المستلم الجديد"
+                    },
+                }
+
+        class Db:
+            unified_orders = Collection()
+
+        db = Db()
+        original = {"id": 42, "reference_id": self.number}
+        result = await compat._with_verified_destination(
+            db, "owner", self.number, "42", original,
+        )
+        self.assertEqual(
+            result["_mezan_current_shipping_address"]["address_line"],
+            "عنوان المستلم الجديد",
+        )
+        self.assertEqual(db.unified_orders.query, {
+            "user_id": "owner", "order_number": self.number,
+        })
+        self.assertNotIn("_mezan_current_shipping_address", original)
+        mismatched = await compat._with_verified_destination(
+            db, "owner", self.number, "other-order-id", original,
+        )
+        self.assertNotIn("_mezan_current_shipping_address", mismatched)
+
+    async def test_unverified_local_address_never_overrides_fresh_order(self):
+        class Collection:
+            async def find_one(self, query, projection=None):
+                return {
+                    "order_id": "42",
+                    "shipping_address_raw": {
+                        "city": "جدة", "address_line": "عنوان قديم"
+                    },
+                }
+
+        class Db:
+            unified_orders = Collection()
+
+        order = {
+            "id": 42,
+            "shipping": {"address": {
+                "city": "الرياض", "address_line": "عنوان المستلم الحالي"
+            }},
+        }
+        result = await compat._with_verified_destination(
+            Db(), "owner", self.number, "42", order,
+        )
+        self.assertNotIn("_mezan_current_shipping_address", result)
+
+
     async def test_cancelled_order_does_not_trigger_status_post(self):
         self.resolve.return_value = self.order_id, {
             **self.pending, "status": {"slug": "cancelled"},
