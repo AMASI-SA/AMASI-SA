@@ -22,6 +22,7 @@ from pymongo import ASCENDING, DESCENDING, ReturnDocument, UpdateOne
 from pymongo.errors import DuplicateKeyError
 
 from supplier_scan_attempts import run_scan, read_outcome, install_reconciler, ATTEMPTS, transaction
+from supplier_receiving_direct_assignment import direct_assignment_offer, direct_assignment_patch
 
 from supplier_invoice_recovery import register_recovery, require_close_generation, REQUEST_PATTERN
 from supplier_native_invoice_v2 import PurchaseTax, close_payload_hash, post_native_invoice
@@ -129,6 +130,25 @@ RECEIPT_PIECE_FIELDS = (
     "supplier_assigned_by_name",
     "supplier_assignment_session_id",
     "supplier_receiving_scanned_barcode",
+    # Direct supplier/employee assignments happen inside scan admission and
+    # must be completely reversible on draft-piece removal or session cancel.
+    "supplier_dispatch_status",
+    "sent_to_supplier_at",
+    "sent_to_supplier_by_id",
+    "sent_to_supplier_by_name",
+    "responsible_employee_id",
+    "responsible_employee_name",
+    "assignment_status",
+    "assigned_at",
+    "reassigned_at",
+    "reassigned_by",
+    "reassigned_by_name",
+    "reassignment_reason",
+    "reassignment_session_id",
+    "supplier_receiving_draft_employee_transfer",
+    "supplier_receiving_previous_responsible_employee_id",
+    "supplier_receiving_previous_responsible_employee_name",
+    "supplier_receiving_previous_assigned_at",
     "receipt_event_id",
     "updated_at",
     "mezan_only",
@@ -221,6 +241,7 @@ class SupplierPieceScanRequest(BaseModel):
     barcode: str = Field(min_length=1, max_length=500)
     quantity: int | None = Field(default=None, ge=1, le=5000)
     confirm_supplier_reassignment: bool = False
+    confirm_direct_receiving_assignment: bool = False
 
 
 class SupplierReceivingInvoiceServiceRequest(BaseModel):
@@ -3362,6 +3383,7 @@ def _scan_request_shape(payload: SupplierPieceScanRequest) -> dict[str, Any]:
         "barcode": _text(payload.barcode),
         "quantity": payload.quantity,
         "confirm_supplier_reassignment": bool(payload.confirm_supplier_reassignment),
+        "confirm_direct_receiving_assignment": bool(payload.confirm_direct_receiving_assignment),
     }
 
 
@@ -3371,6 +3393,9 @@ def _scan_request_event_shape(row: dict[str, Any]) -> dict[str, Any]:
         "quantity": row.get("scan_request_quantity"),
         "confirm_supplier_reassignment": bool(
             row.get("scan_request_confirm_supplier_reassignment")
+        ),
+        "confirm_direct_receiving_assignment": bool(
+            row.get("scan_request_confirm_direct_receiving_assignment")
         ),
     }
 
@@ -5099,6 +5124,9 @@ def make_supplier_receiving_router(
                         "scan_request_quantity": payload.quantity,
                         "scan_request_confirm_supplier_reassignment": bool(
                             payload.confirm_supplier_reassignment
+                        ),
+                        "scan_request_confirm_direct_receiving_assignment": bool(
+                            payload.confirm_direct_receiving_assignment
                         ),
                         "scan_request_index": len(events) + 1,
                         "scan_request_size": selected_quantity,
