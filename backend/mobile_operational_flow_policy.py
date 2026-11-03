@@ -27,7 +27,12 @@ async def read_modes(db: Any, merchant_id: str, *, mongo_session: Any = None) ->
         "operational_flow.supplier_assignment_mode": 1,
     }
     kwargs = {"session": mongo_session} if mongo_session is not None else {}
-    row = await db.settings.find_one(options, projection, **kwargs) or {}
+    collection = getattr(db, "settings", None)
+    if collection is None:
+        # Some legacy read-only projections do not expose a settings
+        # collection. They may display results but must not allow shortcuts.
+        return {FIELD_PREPARATION: REQUIRED, FIELD_SUPPLIER: REQUIRED}
+    row = await collection.find_one(options, projection, **kwargs) or {}
     flow = row.get("operational_flow") if isinstance(row.get("operational_flow"), dict) else {}
     return {
         FIELD_PREPARATION: safe_mode(flow.get(FIELD_PREPARATION)),
