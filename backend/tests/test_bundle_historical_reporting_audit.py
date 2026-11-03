@@ -118,7 +118,9 @@ def test_snapshot_digest_changes_on_original_choice_change_only_when_both_sides_
     line["options_raw"][0]["values"][0]["name"] = "الشال فقط"
     after = inspect(source, line)
     assert before["source_choice_evidence_hash"] != after["source_choice_evidence_hash"]
-    assert before["line_fingerprint"] != after["line_fingerprint"]
+    # A real selected value ID remains authoritative; a different display
+    # label must not silently rebind the stock/service identity.
+    assert before["line_fingerprint"] == after["line_fingerprint"]
 
 
 def test_no_cost_or_execution_is_inferred_from_a_verified_source():
