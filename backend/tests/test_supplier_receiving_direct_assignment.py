@@ -3,12 +3,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from supplier_receiving_direct_assignment import direct_assignment_offer, direct_assignment_patch
 from supplier_receipt_employee_custody import (
     apply_supplier_receipt_employee_custody, supplier_receipt_assignment_history_row,
 )
 from supplier_receiving_routes import (
-    SupplierPieceScanRequest, _scan_request_shape,
+    SupplierPieceScanRequest, _scan_request_shape, supplier_scan_group_candidates,
     supplier_receipt_previous_piece_state, supplier_receipt_piece_rollback_update,
 )
 
@@ -130,3 +132,47 @@ def test_scan_confirmation_is_explicit_and_affects_attempt_identity():
     assert _scan_request_shape(plain)["confirm_direct_receiving_assignment"] is False
     assert _scan_request_shape(approved)["confirm_direct_receiving_assignment"] is True
     assert _scan_request_shape(plain) != _scan_request_shape(approved)
+
+
+@pytest.mark.asyncio
+async def test_quantity_confirmation_cannot_transfer_other_employee_siblings():
+    """Consent for one scanned physical piece is never a batch-wide takeover."""
+    anchor = {
+        **OTHER, "piece_id": "piece-1", "batch_id": "batch-a",
+        "order_item_id": "line-1", "group_key": "product:1", "unit_index": 1,
+        "supplier_dispatch_status": "pending", "services": [],
+    }
+    sibling = {
+        **anchor, "piece_id": "piece-2", "unit_index": 2,
+        "responsible_employee_id": "other-worker",
+        "responsible_employee_name": "موظف آخر",
+    }
+    different_supplier = {
+        **anchor, "piece_id": "piece-3", "unit_index": 3,
+        "supplier_id": "sup-different", "supplier_dispatch_status": "sent",
+    }
+
+    class Cursor:
+        def sort(self, *_args):
+            return self
+        def limit(self, *_args):
+            return self
+        async def to_list(self, _count):
+            return [anchor, sibling, different_supplier]
+
+    class Collection:
+        def find(self, *_args):
+            return Cursor()
+
+    class DB:
+        def __getitem__(self, _name):
+            return Collection()
+
+    candidates = await supplier_scan_group_candidates(
+        DB(), user_id="merchant-1", scanned_piece=anchor,
+        session={**SESSION, "opened_by": "emp-current", "opened_by_name": "هلال"},
+        allow_service_addition=False, allow_direct_assignment=True,
+    )
+    assert [p["piece_id"] for p in candidates] == ["piece-1"]
+    # A distinct scan of the other employee's barcode can offer a separate consent.
+    assert offer(sibling)["previous_responsible_employee_name"] == "موظف آخر"
