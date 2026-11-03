@@ -27,7 +27,6 @@ APPROVED_EVENTS: tuple[tuple[str, str, str], ...] = (
     ),
     ("order.created", "إنشاء الطلب", "orders"),
     ("order.updated", "تحديث بيانات الطلب", "orders"),
-    ("order.shipping.address.updated", "تحديث عنوان شحن الطلب", "orders"),
     ("order.payment.updated", "تحديث سداد الطلب", "orders"),
     ("order.status.updated", "تحديث حالة الطلب", "orders"),
     ("order.products.updated", "تحديث منتجات الطلب", "orders"),
