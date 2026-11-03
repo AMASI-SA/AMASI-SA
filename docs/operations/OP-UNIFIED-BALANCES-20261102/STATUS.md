@@ -1,6 +1,6 @@
 # OP-UNIFIED-BALANCES — PR1702 exact A2/B2 checks passed, NOT deployed
 
-Main registry: **PR1687**. Current release candidate: **PR1702**, branch `release/operational-ready-currentbase-20261103`. Latest continuation **DELIVERY-010.md**; exact technical acceptance **DELIVERY-008.md**, superseding pending-check wording in comment6590950351 and DELIVERY007. Read the latest evidence comment as well. Prior status preserved byte-for-byte in STATUS-PRE-B2-ACCEPTANCE-20261103.md; all previous numbered records and DELIVERY-REGISTER.md remain intact. Issue1006 is full.
+Main registry: **PR1687**. Current release candidate: **PR1702**, branch `release/operational-ready-currentbase-20261103`. Latest continuation **DELIVERY-011.md**; exact technical acceptance **DELIVERY-008.md**, superseding pending-check wording in comment6590950351 and DELIVERY007. Read the latest evidence comment as well. Prior status preserved byte-for-byte in STATUS-PRE-B2-ACCEPTANCE-20261103.md; all previous numbered records and DELIVERY-REGISTER.md remain intact. Issue1006 is full.
 
 ## Frozen current candidate
 
@@ -26,7 +26,7 @@ Owner decision6588193710: R03/R05 plus ALL safe ready supplier cutoff/SAR/per-pi
 
 R03 supports frozen root financial base and existing service mapped to unchanged unique legacy partial/independent/pre-invoice receiving; unsupported nested financial-only bases remain explicit unknowns. R05 matches verified source debt/payments with existing operational identities or requires fresh hash-bound separate owner approval of missing mirrors. No second bank debit or original GL/stock/bank operation. No opening reset/re-entry, historical replay or automatic fee/payroll activation. Merchant balances have NOT been certified from synthetic tests.
 
-## Remaining acceptance and actual host coordination
+## Historical acceptance/host state at record 008 (superseded by record 011)
 
 Desktop/mobile visual and actual print/Excel acceptance are unproved: the local browser refused navigation before rendering (ERR_BLOCKED_BY_ADMINISTRATOR); no bypass attempted. A synthetic harness was built, but unit tests are not visual proof.
 
@@ -45,3 +45,7 @@ Management sign-in subsequently succeeded. No listed application explicitly iden
 ## 3 November continuation — record 010
 
 Owner confirmed the Emergent management application is the Mezan project. Its official Code → Open in VS Code → Open in Browser path reached the original host's separate code-server sign-in. Project identity is resolved. The editor's secure sign-in form was submitted and the editor returned `Incorrect password`; management remains signed in. No authenticated terminal or guard status was obtained. Use the official secure manual handoff for editor authentication. The actual lease and desktop/mobile/print/download acceptance are still unverified. The frozen #1702 B2 remains draft/unmerged; no candidate change, publication, lease mutation, or financial action. See [DELIVERY-010.md](DELIVERY-010.md) for what supersedes record 009 and the next read-only host command.
+
+## Current acceptance — record 011
+
+Authenticated production host: read-only guard status returned `{"active": false}`; host HEAD J2, no tracked changes, untracked files preserved. Exact B2 was built separately in a temporary synthetic checkout with Node 22.23.2. Actual desktop and 390px responsive layout were inspected (not a physical phone); bank-transfer-filtered XLSX was downloaded and reopened, not merely unit tested. The real print click created its print frame, but native Save as PDF and page inspection are not proven. See [DELIVERY-011.md](DELIVERY-011.md) for concrete amounts, workbook hash, and the one remaining visual acceptance action. After actual PDF review re-read host guard and production head before a controlled merge. #1702 remains draft/open/unmerged. No candidate or production write, publication, lease change or financial activation.
