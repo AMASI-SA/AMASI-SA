@@ -145,6 +145,7 @@ _V2_CANONICAL_ROOT_FIELDS = tuple(dict.fromkeys((
     "shipping_label_url",
     "shipping_address",
     "shipping_address_raw",
+    "salla_address_verified_at",
     "shipping_city",
     "customer_city",
     "shipping_district",
@@ -222,6 +223,19 @@ def _apply_v2_root_fallbacks(raw: dict[str, Any], row: dict[str, Any]) -> dict[s
         hydrated["customer"] = customer
 
     shipping = deepcopy(hydrated.get("shipping")) if isinstance(hydrated.get("shipping"), dict) else {}
+    # An explicitly verified current delivery address takes precedence over
+    # an older shipment's immutable ship_to. Keep issued AWB snapshots intact.
+    current_address = (
+        _v2_address_fallback(hydrated, row)
+        if row.get("salla_address_verified_at") and
+           isinstance(row.get("shipping_address_raw"), dict) and
+           row.get("shipping_address_raw")
+        else None
+    )
+    if current_address:
+        hydrated["_mezan_current_shipping_address"] = deepcopy(current_address)
+        hydrated["shipping_address"] = deepcopy(current_address)
+        shipping["address"] = deepcopy(current_address)
     provider_address = None
     if isinstance(shipping.get("address"), dict) and shipping.get("address"):
         provider_address = deepcopy(shipping["address"])

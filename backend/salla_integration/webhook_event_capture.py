@@ -221,6 +221,22 @@ async def capture_unknown_event(
                 "no_salla_api_calls": True,
                 "no_qoyod_calls": True,
             }
+        # The existing order.updated feed is sufficient. Address projection
+        # must not depend on a removed shipping event, or on component
+        # acceptance of this same update. Independent owner/version fence.
+        if event_name == "order.updated":
+            try:
+                from .address_webhook_sync import sync_verified_shipping_address
+                address_result = await sync_verified_shipping_address(db, event_body)
+                order_sync["address_sync"] = {
+                    key: address_result.get(key)
+                    for key in ("synced", "reason", "source")
+                }
+            except Exception:
+                log.exception("order_address_webhook.retry_required")
+                order_sync["address_sync"] = {
+                    "synced": False, "reason": "address_projection_failed"
+                }
 
     # Order notifications carry no independent refund identity. Resolve only
     # confirmed financial sources belonging to the original payment provider.
@@ -336,6 +352,8 @@ async def capture_unknown_event(
     order_mutation_scope = (
         "full_order_from_webhook"
         if order_sync.get("synced")
+        else "shipping_address_only"
+        if (order_sync.get("address_sync") or {}).get("synced")
         else "shipping_fields_only"
         if shipment_sync.get("order_modified")
         else "none"

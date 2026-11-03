@@ -1225,6 +1225,9 @@ def map_salla_order(raw_order: dict[str, Any], *, native_payment_source: Optiona
     )
 
     shipping_address_raw = _first(
+        # Fresh order address is a separate identity from immutable carrier AWB.
+        # Only the verified Salla-order/address-webhook read model provides it.
+        raw_order.get("_mezan_current_shipping_address"),
         first_shipment.get("ship_to"),
         first_shipment.get("shipping_address"),
         first_shipment.get("address"),

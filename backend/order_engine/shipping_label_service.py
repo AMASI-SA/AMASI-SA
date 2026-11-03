@@ -392,10 +392,51 @@ def _store_courier_print_data(
         else {}
     )
 
+    def delivery_address(value: Any) -> dict[str, Any]:
+        """Normalize the destination only; never choose a sender/ship_from."""
+        from .recipient_enrichment import _address
+        value = value if isinstance(value, dict) else {}
+        if not value:
+            return {}
+        inner = value.get("address")
+        if isinstance(inner, dict) and inner:
+            value = inner
+        candidate = _address(value) or {}
+        # A name/mobile-only receiver is not evidence of their address.
+        return candidate if any(candidate.get(key) not in (None, "", [], {}) for key in (
+            "address_line", "address_line_two", "formatted", "street", "block",
+            "district", "short_address", "national_address", "city",
+        )) else {}
+
+    # Always print the *delivery* destination. In particular, historical
+    # shipment ship_to and customer/buyer addresses must never supersede the
+    # order's receiver/current destination after a Salla address edit.
+    explicit_recipient_address = (
+        delivery_address((order.get("recipient") or {}).get("address"))
+        if isinstance(order.get("recipient"), dict) else {}
+    ) or (
+        delivery_address((order.get("receiver") or {}).get("address"))
+        if isinstance(order.get("receiver"), dict) else {}
+    ) or (
+        delivery_address((shipping.get("recipient") or {}).get("address"))
+        if isinstance(shipping.get("recipient"), dict) else {}
+    )
+    order_destination = (
+        # Once Salla's order-update/current-address fact has been verified in
+        # Mezan, it is newer than any old receiver/ship_to embedded in an
+        # already issued shipment. Keep recipient identity separate below.
+        delivery_address(order.get("_mezan_current_shipping_address"))
+        or explicit_recipient_address
+        or delivery_address(order.get("ship_to"))
+        or delivery_address(shipping.get("ship_to"))
+        or delivery_address(shipping.get("address"))
+        or delivery_address(order.get("shipping_address"))
+    )
+
     if recipient:
         delivery_name = _text(recipient.get("name"))
         delivery_phone = _text(recipient.get("mobile") or recipient.get("phone"))
-        address_source = recipient_address
+        address_source = order_destination or recipient_address
     else:
         delivery_name = (
             _text(ship_to.get("name"))
@@ -407,15 +448,13 @@ def _store_courier_print_data(
             or _text(customer.get("mobile"))
             or _text(customer.get("phone"))
         )
-        shipping_address = shipping.get("address")
-        shipping_address = (
-            shipping_address if isinstance(shipping_address, dict) else {}
-        )
         customer_shipping = customer.get("shipping_address")
         customer_shipping = (
             customer_shipping if isinstance(customer_shipping, dict) else {}
         )
-        address_source = ship_to or shipping_address or customer_shipping
+        # Buyer fallback is allowed only if there is no explicit independent
+        # receiver. Under no circumstances use shipping.ship_from / sender.
+        address_source = order_destination or delivery_address(ship_to) or delivery_address(customer_shipping)
 
     address_keys = (
         "country",
@@ -445,6 +484,8 @@ def _store_courier_print_data(
         for key in address_keys
         if address_source.get(key) not in (None, "", [], {})
     }
+    if not address.get("address_line") and address_source.get("formatted"):
+        address["address_line"] = address_source["formatted"]
 
     amounts = order.get("amounts")
     amounts = amounts if isinstance(amounts, dict) else {}

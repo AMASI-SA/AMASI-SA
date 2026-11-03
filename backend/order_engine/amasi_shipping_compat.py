@@ -165,6 +165,34 @@ def _completed(order: dict[str, Any]) -> bool:
     return legacy._status(slug) in _DONE
 
 
+async def _with_verified_destination(
+    db: Any, owner: str, number: str, internal_id: str, order: dict[str, Any],
+) -> dict[str, Any]:
+    """Read the last verified *order* destination, not an archived AWB.
+
+    Only the merchant's own validated order identity can supply this fallback.
+    Never change a shipment or make an additional request to Salla.
+    """
+    collection = getattr(db, "unified_orders", None) if db is not None else None
+    if collection is None:
+        return order
+    row = await collection.find_one(
+        {"user_id": str(owner), "order_number": str(number)},
+        {"_id": 0, "order_id": 1, "raw_by_source.salla_direct.id": 1,
+         "salla_address_verified_at": 1, "shipping_address_raw": 1},
+    )
+    saved = row if isinstance(row, dict) else {}
+    raw = saved.get("raw_by_source") or {}
+    raw = raw.get("salla_direct") if isinstance(raw, dict) else {}
+    raw = raw if isinstance(raw, dict) else {}
+    saved_id = legacy._text(raw.get("id") or saved.get("order_id"))
+    address = saved.get("shipping_address_raw")
+    if (not saved.get("salla_address_verified_at") or not isinstance(address, dict)
+            or not address or (saved_id and saved_id != internal_id)):
+        return order
+    return {**order, "_mezan_current_shipping_address": dict(address)}
+
+
 async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool) -> dict[str, Any]:
     """One Salla order-status POST when needed; read the original carrier AWB.
 
@@ -239,7 +267,8 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool) 
         })
         if merchant_courier:
             store = await legacy._store_identity(db, owner)
-            print_data = legacy._store_courier_print_data(number, order, {}, store)
+            print_order = await _with_verified_destination(db, owner, number, internal_id, order)
+            print_data = legacy._store_courier_print_data(number, print_order, {}, store)
             print_data["courier_name"] = carrier.get("company_name") or "مندوب المتجر"
             return {"ok": True, "source": "mezan", "ready": True,
                     "label_type": "store_courier", "order_status_completed": True,
@@ -251,7 +280,8 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool) 
 
     if result and legacy._is_store_courier(result):
         store = await legacy._store_identity(db, owner)
-        print_data = legacy._store_courier_print_data(number, order, result, store)
+        print_order = await _with_verified_destination(db, owner, number, internal_id, order)
+        print_data = legacy._store_courier_print_data(number, print_order, result, store)
         return {"ok": True, "source": "mezan", "ready": True,
                 "label_type": "store_courier", "order_status_completed": True,
                 "order_status_changed": changed, "shipment_id": legacy._text(result.get("id")),

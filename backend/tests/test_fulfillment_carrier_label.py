@@ -72,6 +72,117 @@ def test_store_courier_qr_contains_order_number_only(monkeypatch):
     assert result["order_number"] == "276628330"
 
 
+def test_store_courier_prints_receiver_not_sender_when_both_exist(monkeypatch):
+    monkeypatch.setattr(shipping, "_qr_data_uri", lambda _: "qr")
+    sender_address = {"city": "جدة", "address_line": "عنوان المرسل"}
+    receiver_address = {"city": "الرياض", "address_line": "حي النرجس",
+                        "short_address": "RYYY1234"}
+    result = shipping._store_courier_print_data(
+        "295617138",
+        {
+            "customer": {"full_name": "المرسل", "mobile": "0500000001",
+                         "shipping_address": sender_address},
+            "sender": {"name": "المرسل", "address": sender_address},
+            "receiver": {"name": "المستلم", "mobile": "0500000002",
+                         "address": receiver_address},
+            "shipping": {"ship_from": sender_address},
+        },
+        {"ship_to": {"name": "مستلم سابق", "city": "الدمام",
+                     "address_line": "عنوان قديم"}},
+        {"name": "متجر أماسي"},
+    )
+    assert result["customer_name"] == "المستلم"
+    assert result["customer_phone"] == "0500000002"
+    assert result["buyer_name"] == "المرسل"
+    assert result["address"]["city"] == "الرياض"
+    assert result["address"]["address_line"] == "حي النرجس"
+    assert result["address"]["short_address"] == "RYYY1234"
+    assert result["recipient_independent"] is True
+
+
+def test_store_courier_receiver_name_with_current_order_destination(monkeypatch):
+    monkeypatch.setattr(shipping, "_qr_data_uri", lambda _: "qr")
+    data = shipping._store_courier_print_data(
+        "295617138",
+        {
+            "customer": {"full_name": "مرسل", "mobile": "0500000001"},
+            "receiver": {"name": "مستلم", "mobile": "0500000002"},
+            "shipping": {
+                "ship_from": {"city": "مكة", "address_line": "عنوان المرسل"},
+                "address": {"city": "الرياض", "address_line": "العنوان الجديد"},
+            },
+        },
+        {"ship_to": {"city": "جدة", "address_line": "العنوان التاريخي"}},
+        {"name": "أماسي"},
+    )
+    assert data["customer_name"] == "مستلم"
+    assert data["customer_phone"] == "0500000002"
+    assert data["address"]["address_line"] == "العنوان الجديد"
+
+
+def test_store_courier_verified_new_destination_wins_over_stale_receiver(monkeypatch):
+    monkeypatch.setattr(shipping, "_qr_data_uri", lambda _: "qr")
+    label = shipping._store_courier_print_data(
+        "295617138",
+        {
+            "customer": {"full_name": "المرسل", "mobile": "0500000001"},
+            "receiver": {"name": "المستلم", "mobile": "0500000002",
+                         "address": {"city": "جدة", "address_line": "القديم"}},
+            "shipping": {"address": {
+                "city": "جدة", "address_line": "عنوان سابق"
+            }},
+            "_mezan_current_shipping_address": {
+                "city": "الرياض", "address_line": "عنوان المستلم المعدل",
+                "short_address": "RYYY1234",
+            },
+        },
+        {"ship_to": {"city": "مكة", "address_line": "شحنة سابقة"}},
+        {"name": "أماسي"},
+    )
+    assert label["customer_name"] == "المستلم"
+    assert label["customer_phone"] == "0500000002"
+    assert label["address"]["city"] == "الرياض"
+    assert label["address"]["address_line"] == "عنوان المستلم المعدل"
+    assert label["address"]["short_address"] == "RYYY1234"
+
+
+def test_store_courier_never_fills_missing_receiver_address_from_sender(monkeypatch):
+    monkeypatch.setattr(shipping, "_qr_data_uri", lambda _: "qr")
+    data = shipping._store_courier_print_data(
+        "295617138",
+        {
+            "customer": {"full_name": "المرسل", "mobile": "0500000001",
+                         "shipping_address": {"city": "جدة", "address_line": "عنوان المرسل"}},
+            "sender": {"name": "المرسل", "address": {"city": "جدة", "address_line": "عنوان المرسل"}},
+            "receiver": {"name": "المستلم", "mobile": "0500000002"},
+        },
+        {},
+        {"name": "أماسي"},
+    )
+    assert data["customer_name"] == "المستلم"
+    assert data["address"] == {}
+
+
+def test_store_courier_uses_verified_current_address_if_salla_order_is_sparse(monkeypatch):
+    monkeypatch.setattr(shipping, "_qr_data_uri", lambda _: "qr")
+    data = shipping._store_courier_print_data(
+        "295617138",
+        {
+            "customer": {"full_name": "المرسل"},
+            "receiver": {"name": "المستلم", "mobile": "0500000002"},
+            "_mezan_current_shipping_address": {
+                "city": "الرياض", "address_line": "حي الندى",
+                "national_address": "RYYY5678",
+            },
+        },
+        {"ship_to": {"city": "جدة", "address_line": "العنوان القديم"}},
+        {"name": "أماسي"},
+    )
+    assert data["customer_name"] == "المستلم"
+    assert data["address"]["address_line"] == "حي الندى"
+    assert data["address"]["short_address"] == "RYYY5678"
+
+
 def test_store_courier_label_collects_unpaid_cod_when_salla_balance_is_null(monkeypatch):
     monkeypatch.setattr(shipping, "_qr_data_uri", lambda _: "data:image/svg+xml;base64,QR")
 
