@@ -4888,6 +4888,9 @@ def make_supplier_receiving_router(
                     "supplier_reassignment_confirmed": (
                         payload.confirm_supplier_reassignment
                     ),
+                    "direct_receiving_assignment_confirmed": bool(
+                        payload.confirm_direct_receiving_assignment
+                    ),
                     "piece": _public_piece(piece),
                     "product": {
                         "product_id": piece.get("product_id"),
@@ -4973,7 +4976,15 @@ def make_supplier_receiving_router(
                     == "supplier_piece_dispatched_to_different_supplier"
                     and payload.confirm_supplier_reassignment
                 )
-                direct_assignment_patch = supplier_partial_receipt_assignment_patch(
+                candidate_direct_offer = direct_assignment_offer(
+                    original_piece,
+                    session,
+                    actor_id=context["actor_id"],
+                    actor_name=_actor_name(user),
+                )
+                if candidate_direct_offer and not payload.confirm_direct_receiving_assignment:
+                    raise HTTPException(status_code=409, detail=candidate_direct_offer)
+                partial_assignment_patch = supplier_partial_receipt_assignment_patch(
                     piece=original_piece,
                     session=session,
                     actor=user,
@@ -4986,8 +4997,17 @@ def make_supplier_receiving_router(
                     barcode=barcode,
                     received_at=now,
                 )
-                if direct_assignment_patch:
-                    patch.update(direct_assignment_patch)
+                if candidate_direct_offer:
+                    patch.update(direct_assignment_patch(
+                        piece=original_piece,
+                        offer=candidate_direct_offer,
+                        session_id=session_id,
+                        actor_id=context["actor_id"],
+                        actor_name=_actor_name(user),
+                        at=now,
+                    ))
+                elif partial_assignment_patch:
+                    patch.update(partial_assignment_patch)
                 elif supplier_reassigned:
                     patch.update({
                         "supplier_id": receiving_supplier_id,
@@ -5009,6 +5029,8 @@ def make_supplier_receiving_router(
                         "piece_id": piece_id,
                         "status": {"$in": sorted(ELIGIBLE_PIECE_STATUSES)},
                         "supplier_id": original_piece.get("supplier_id"),
+                        "supplier_dispatch_status": original_piece.get("supplier_dispatch_status"),
+                        "responsible_employee_id": original_piece.get("responsible_employee_id"),
                         "$or": [
                             {"supplier_receiving_session_id": {"$exists": False}},
                             {"supplier_receiving_session_id": None},
@@ -5116,6 +5138,21 @@ def make_supplier_receiving_router(
                         "received_at": previous_receipt.get("received_at"),
                     } if previous_receipt else None,
                     "supplier_service_link_status": "draft_not_recorded",
+                    "direct_receiving_assignment_confirmed": bool(
+                        candidate_direct_offer
+                        and payload.confirm_direct_receiving_assignment
+                    ),
+                    "previous_responsible_employee_id": (
+                        _text(original_piece.get("responsible_employee_id")) or None
+                    ),
+                    "previous_responsible_employee_name": (
+                        _text(original_piece.get("responsible_employee_name")) or None
+                    ),
+                    "responsibility_transferred_in_draft": bool(
+                        candidate_direct_offer
+                        and _text(original_piece.get("responsible_employee_id"))
+                        != context["actor_id"]
+                    ),
                     "supplier_assigned_at_receipt": bool(
                         updated_piece.get("supplier_assigned_at_receipt") is True
                         and _text(original_piece.get("supplier_id"))
