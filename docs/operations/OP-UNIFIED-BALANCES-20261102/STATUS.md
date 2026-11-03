@@ -1,6 +1,6 @@
 # OP-UNIFIED-BALANCES — PR1702 exact A2/B2 checks passed, NOT deployed
 
-Main registry: **PR1687**. Current release candidate: **PR1702**, branch `release/operational-ready-currentbase-20261103`. Latest continuation **DELIVERY-012.md**; exact technical acceptance **DELIVERY-008.md**, superseding pending-check wording in comment6590950351 and DELIVERY007. Read the latest evidence comment as well. Prior status preserved byte-for-byte in STATUS-PRE-B2-ACCEPTANCE-20261103.md; all previous numbered records and DELIVERY-REGISTER.md remain intact. Issue1006 is full.
+Main registry: **PR1687**. Current release candidate: **PR1702**, branch `release/operational-ready-currentbase-20261103`. Latest continuation **DELIVERY-013.md**; exact technical acceptance **DELIVERY-008.md**, superseding pending-check wording in comment6590950351 and DELIVERY007. Read the latest evidence comment as well. Prior status preserved byte-for-byte in STATUS-PRE-B2-ACCEPTANCE-20261103.md; all previous numbered records and DELIVERY-REGISTER.md remain intact. Issue1006 is full.
 
 ## Frozen current candidate
 
@@ -50,6 +50,10 @@ Owner confirmed the Emergent management application is the Mezan project. Its of
 
 Authenticated production host: read-only guard status returned `{"active": false}`; host HEAD J2, no tracked changes, untracked files preserved. Exact B2 was built separately in a temporary synthetic checkout with Node 22.23.2. Actual desktop and 390px responsive layout were inspected (not a physical phone); bank-transfer-filtered XLSX was downloaded and reopened, not merely unit tested. The real print click created its print frame, but native Save as PDF and page inspection are not proven. See [DELIVERY-011.md](DELIVERY-011.md) for concrete amounts, workbook hash, and the one remaining visual acceptance action. After actual PDF review re-read host guard and production head before a controlled merge. #1702 remains draft/open/unmerged. No candidate or production write, publication, lease change or financial activation.
 
-## Current print evidence — record 012
+## Print evidence at record 012 (accepted by owner in record 013)
 
 A user-supplied native **unfiltered** SAR PDF was rendered and inspected: seven A4 landscape pages, four of four order cards, legible Arabic and amounts, report only with browser headers/footers. In a separate observation on B2, the real transfer filter and print button produced a real browser print frame with exactly one print-order card, TEST-900002 (fee 20, collection 200 pending), one of four, liquidity 110000 unchanged. See [DELIVERY-012.md](DELIVERY-012.md) for artifact hash, amounts, and evidence boundaries. Actual full-report native PDF layout passed; filtered print handoff passed. The separate **saved filtered native PDF** requested in item 1 of record 011 is not evidenced, not a demonstrated defect. Owner may provide that artifact for exact acceptance or expressly accept the split observations. Recheck the host guard and production head after acceptance. No candidate/production merge, lease mutation, publication or financial activation.
+
+## Current authorization and pre-merge status — record 013
+
+The owner expressly accepted the complementary full native PDF and separately observed filtered native print handoff; the print acceptance gate is closed by that decision, without claiming a saved filtered PDF. The actual host guard was inactive, tracked workspace clean at J2, no target path collisions; GitHub production ref matched J2. PR1702 was marked ready for review and re-read as open, non-draft, unmerged with its frozen B2 unchanged. Additional checks were triggered; their time-scoped statuses are recorded in [DELIVERY-013.md](DELIVERY-013.md). At 15:09 UTC there was no production merge, new lease, publication or financial action. Recheck the gates and expected heads, then record controlled merge and later live verification only after they actually occur.
