@@ -61,7 +61,7 @@ export async function issueCompletedOrderCarrierLabel(orderNumber) {
     if (!normalized) throw new Error("رقم الطلب مطلوب.");
     try {
         return (await api.post(
-            `/fulfillment-v2/completed/${encodeURIComponent(normalized)}/carrier-label`,
+            `/fulfillment-v2/completed/${encodeURIComponent(normalized)}/carrier-label/amasi`,
         )).data;
     } catch (error) {
         throw new Error(detailMessage(error, "تعذر تحويل الطلب في سلة وإصدار البوليصة."));
@@ -73,7 +73,7 @@ export async function refreshCompletedOrderCarrierLabel(orderNumber) {
     if (!normalized) throw new Error("رقم الطلب مطلوب.");
     try {
         return (await api.post(
-            `/fulfillment-v2/completed/${encodeURIComponent(normalized)}/carrier-label/refresh`,
+            `/fulfillment-v2/completed/${encodeURIComponent(normalized)}/carrier-label/amasi/refresh`,
         )).data;
     } catch (error) {
         throw new Error(detailMessage(error, "تعذر التحقق من رابط البوليصة في سلة."));
