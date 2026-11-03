@@ -215,4 +215,9 @@ async def load_sold_products(db: Any, user_id: str, orders: list[dict]) -> list[
     authority = await load_order_cost_authority(
         db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
     )
+    from current_bundle_reporting_estimate import load_current_bundle_estimates
+    authority["current_bundle_estimates"] = await load_current_bundle_estimates(
+        db, user_id, orders, authority, products, profiles,
+        option_map, product_binding_map, context["resources"],
+    )
     return aggregate_sold_products(orders, products, profiles, authority=authority, catalog_context=context)
