@@ -26,6 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
 from pymongo.write_concern import WriteConcern
 from operational_atomic import operational_owner
+from mobile_operational_flow_policy import FIELD_PREPARATION, is_optional
 from assembly_status_policy import canonical_status
 
 from fulfillment_v2_routes import (
@@ -2919,6 +2920,7 @@ async def _assembly_search(
     from assembly_status_policy import source_status
     canonical = await source_status(db, user_id, order_number)
     status_allowed = status_allowed and canonical == "in_progress"
+    preparation_shortcut_enabled = await is_optional(db, user_id, FIELD_PREPARATION)
     for row, piece in zip(rows, pieces):
         virtual = bool(row["is_direct_assembly"] or row["is_operational_item"])
         row_eligible = (
@@ -2933,7 +2935,8 @@ async def _assembly_search(
         # Do not promote a piece just because it appears in assembly search:
         # show a separate consent action for the exact physical custody receipt.
         row["can_receive_from_preparation"] = bool(
-            row_eligible and not virtual
+            preparation_shortcut_enabled
+            and row_eligible and not virtual
             and assembly_direct_preparation_receipt_eligible(piece)
         )
         row["preparation_employee_name_for_receipt"] = (
@@ -3978,6 +3981,11 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             _require_permission(
                 fresh, "fulfillment.pack.confirm", responsibility="packing",
             )
+            if not await is_optional(db, context["merchant_id"], FIELD_PREPARATION):
+                raise HTTPException(409, detail={
+                    "code": "assembly_direct_preparation_receipt_required",
+                    "message": "استلام موظف التجهيز إجباري من مرحلة الاستلام المخصصة.",
+                })
             if fresh["merchant_id"] != context["merchant_id"] or (
                 effective_operation_actor(user, fresh)["id"] != actor["id"]
             ):
