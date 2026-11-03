@@ -210,7 +210,23 @@ async def capture_unknown_event(
 
     if not is_abandoned_cart_event and not payment_job:
         try:
-            order_sync = await sync_order_from_verified_webhook(db, event_body)
+            if event_name == "order.shipping.address.updated":
+                # The dedicated address event may be sparse; never feed it
+                # through full order/status/product/financial persistence.
+                from .address_webhook_sync import sync_verified_shipping_address
+                order_sync = await sync_verified_shipping_address(db, event_body)
+            else:
+                order_sync = await sync_order_from_verified_webhook(db, event_body)
+                if event_name == "order.updated" and order_sync.get("synced"):
+                    # A complete order.updated can also carry a changed
+                    # delivery address; update the delivery projection only
+                    # after the order snapshot passed its source-version fence.
+                    from .address_webhook_sync import sync_verified_shipping_address
+                    address_result = await sync_verified_shipping_address(db, event_body)
+                    order_sync["address_sync"] = {
+                        key: address_result.get(key)
+                        for key in ("synced", "reason", "source")
+                    }
         except Exception as exc:  # webhook must still return HTTP 200
             log.exception("order_webhook.unhandled event=%s", event_name or "<none>")
             order_sync = {
