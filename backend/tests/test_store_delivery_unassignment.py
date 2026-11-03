@@ -115,8 +115,8 @@ async def test_reject_different_driver_without_modifying_old_assignment():
 
 
 @pytest.mark.asyncio
-async def test_reject_received_or_delivered_assignments_and_keep_financials():
-    for status in ("out_for_delivery", "delivered"):
+async def test_reject_delivered_assignments_and_keep_financials():
+    for status in ("delivered",):
         client, db = await _fixture()
         try:
             await db[ASSIGNMENTS].update_one(
@@ -188,8 +188,8 @@ def test_pure_gate_rejects_completed_and_inconsistent_workflows():
 
 
 @pytest.mark.asyncio
-async def test_in_transit_can_unassign_only_after_confirmed_physical_return_and_reassign_later():
-    """Out-for-delivery case: physical return -> inactive former driver -> ready queue."""
+async def test_in_transit_can_unassign_without_return_attestation_and_reassign_later():
+    """Out-for-delivery revocation is not evidence that the parcel was returned."""
     client, db = await _fixture()
     try:
         await db[ASSIGNMENTS].update_one(
@@ -212,25 +212,24 @@ async def test_in_transit_can_unassign_only_after_confirmed_physical_return_and_
                 "outstanding_amount": 110, "outstanding_amount_available": True,
             }], "accepted_count": 1, "collection_total": 110,
         })
-        with pytest.raises(HTTPException) as error:
-            await _route(db)("assignment-A", UnassignPayload(expected_driver_id="driver-R"), user=ACTOR)
-        assert error.value.status_code == 409
-        assert error.value.detail["code"] == "assignment_physical_return_confirmation_required"
-        assert (await db[ASSIGNMENTS].find_one({"id": "assignment-A"}))["active"] is True
-
         result = await _route(db)(
-            "assignment-A", UnassignPayload(expected_driver_id="driver-R", physical_return_confirmed=True),
-            user=ACTOR,
+            "assignment-A", UnassignPayload(expected_driver_id="driver-R"), user=ACTOR,
         )
-        assert result["ok"] and result["reassignment_eligible"] and result["physical_return_confirmed"]
+        assert result["ok"] and result["reassignment_eligible"]
+        assert result["physical_return_confirmed"] is False
         previous = await db[ASSIGNMENTS].find_one({"id": "assignment-A"})
         assert previous["status"] == "unassigned" and previous["active"] is False
         assert previous["prior_assignment_status"] == "out_for_delivery"
         assert previous["delivery_fee_snapshot"] == 20.0
+        assert previous.get("physical_return_confirmed") is None
+        assert previous.get("physical_return_confirmed_at") is None
+        assert previous.get("physical_return_confirmed_by") is None
         order = await db[ORDERS].find_one({"order_number": "101"})
         workflow = await db[WORKFLOWS].find_one({"order_number": "101"})
         assert order["store_delivery_status"] == "unassigned"
         assert workflow["stage"] == "completed"
+        assert workflow.get("store_courier_physical_return_verified_at") is None
+        assert workflow.get("store_courier_physical_return_verified_by") is None
         assert workflow["store_courier_assignment_state"] is None if "store_courier_assignment_state" in workflow else True
         assert workflow.get("store_courier_assignee_id") is None
         assert workflow.get("carrier_label_print_confirmed") is True
@@ -245,7 +244,8 @@ async def test_in_transit_can_unassign_only_after_confirmed_physical_return_and_
         assert stored["accepted_count"] == 1 and stored["collection_total"] == 110
 
         # Actual handover API must accept the SAME canonical order for a new
-        # driver after the old physical custody is returned, not a synthetic
+        # driver after revocation, without claiming prior physical return.
+        # Not a synthetic
         # direct database insertion that would mask a workflow blocker.
         from store_courier_domain import store_courier_assignment_blocker
         from store_delivery_handover_routes import (
@@ -283,7 +283,45 @@ async def test_in_transit_can_unassign_only_after_confirmed_physical_return_and_
 
 
 @pytest.mark.asyncio
-async def test_out_for_delivery_rejects_money_and_completed_workflows_even_with_return_confirmed():
+async def test_legacy_apk_return_true_is_ignored_and_never_creates_false_return_evidence():
+    """An older APK may send true; unassignment must never claim a return."""
+    client, db = await _fixture()
+    try:
+        await db[ASSIGNMENTS].update_one(
+            {"id": "assignment-A"},
+            {"$set": {"status": "out_for_delivery", "out_for_delivery_at": "2026-11-02T12:00:00Z"}},
+        )
+        await db[ORDERS].update_one(
+            {"order_number": "101"}, {"$set": {"store_delivery_status": "out_for_delivery"}},
+        )
+        await db[WORKFLOWS].update_one(
+            {"order_number": "101"}, {"$set": {
+                "stage": "delivering", "store_courier_assignment_state": "delivering",
+                "store_courier_picked_up_at": "2026-11-02T12:00:00Z",
+            }},
+        )
+        result = await _route(db)(
+            "assignment-A",
+            UnassignPayload(expected_driver_id="driver-R", physical_return_confirmed=True),
+            user=ACTOR,
+        )
+        assert result["ok"] and result["physical_return_confirmed"] is False
+        previous = await db[ASSIGNMENTS].find_one({"id": "assignment-A"})
+        assert previous["active"] is False and previous["prior_assignment_status"] == "out_for_delivery"
+        assert previous.get("physical_return_confirmed") is None
+        assert previous.get("physical_return_confirmed_at") is None
+        assert previous.get("physical_return_confirmed_by") is None
+        workflow = await db[WORKFLOWS].find_one({"order_number": "101"})
+        assert workflow.get("store_courier_physical_return_verified_at") is None
+        assert workflow.get("store_courier_physical_return_verified_by") is None
+        event = await db[EVENTS].find_one({"event_type": "store_delivery_unassigned"})
+        assert event["physical_return_confirmed"] is False
+    finally:
+        await _shutdown(client, db)
+
+
+@pytest.mark.asyncio
+async def test_out_for_delivery_still_rejects_money_even_without_return_confirmation():
     client, db = await _fixture()
     try:
         await db[ASSIGNMENTS].update_one(
@@ -304,7 +342,7 @@ async def test_out_for_delivery_rejects_money_and_completed_workflows_even_with_
         with pytest.raises(HTTPException) as e:
             await _route(db)(
                 "assignment-A",
-                UnassignPayload(expected_driver_id="driver-R", physical_return_confirmed=True),
+                UnassignPayload(expected_driver_id="driver-R"),
                 user=ACTOR,
             )
         assert e.value.status_code == 409
