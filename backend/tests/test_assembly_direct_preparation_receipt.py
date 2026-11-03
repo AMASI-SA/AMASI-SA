@@ -192,3 +192,66 @@ async def test_assembly_direct_receipt_mandatory_mode_fails_closed_even_for_pack
     # The canonical receipt operation is invoked, but its transaction rejects
     # before any piece mutation, Ready or custody event could be committed.
     assert calls == ["canonical"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("block", ["held", "stopped", "workflow", "instruction", None])
+async def test_direct_post_rechecks_current_piece_order_and_instructions(monkeypatch, block):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from mongomock_motor import AsyncMongoMockClient
+    from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS
+
+    db = AsyncMongoMockClient().testdb
+    owner = {"id": "merchant-1", "role": "owner"}
+    number, piece_id = PIECE["order_number"], PIECE["piece_id"]
+    scope = {"user_id": owner["id"], "order_number": number}
+    piece = {**PIECE, **scope}
+    if block == "held":
+        piece["active_hold_id"] = "hold-1"
+    if block == "stopped":
+        piece["status"] = ops.PIECE_STATUS_BLOCKED
+    await db.users.insert_one(dict(owner))
+    await db.settings.insert_one({"user_id": owner["id"], "operational_flow": {
+        "preparation_employee_receipt_mode": "optional",
+    }})
+    await db[ops.PIECES].insert_one(piece)
+    await db[ops.WORKFLOWS].insert_one({
+        **scope, "stage": "reviewed" if block == "workflow" else "in_progress",
+    })
+    await db.unified_orders.insert_one({**scope, "order_status": "in_progress",
+        "raw_by_source": {"salla_direct": {"status": {"slug": "in_progress"}}}})
+    if block == "instruction":
+        await db[ORDER_TRACKING_INSTRUCTIONS].insert_one({
+            **scope, "id": "stop-1", "status": "active", "scope": "piece",
+            "target_id": piece_id, "target_stages": ["assembly_labeling"],
+            "action_type": "edit_product", "enforcement": "completion_required",
+        })
+
+    async def transaction(database, merchant, work):
+        assert merchant == owner["id"]
+        return await work(database)
+
+    monkeypatch.setattr(ops, "operational_owner", transaction)
+    monkeypatch.setattr(ops, "_assert_preparation_receipt_salla_status", AsyncMock())
+    monkeypatch.setattr(ops, "_current_assembly_order", AsyncMock(return_value=SimpleNamespace(
+        status="in_progress", status_native="in_progress",
+    )))
+    router = ops.make_preparation_piece_operations_router(db, lambda: None)
+    route = next(r for r in router.routes if r.path.endswith("/receive-from-preparation"))
+    request = ops.ReceivePreparationPieceRequest(client_request_id="direct-guard-retry")
+    if block:
+        with pytest.raises(HTTPException) as error:
+            await route.endpoint(piece_id, request, owner)
+        assert error.value.status_code == 409
+        assert not (await db[ops.PIECES].find_one(scope)).get("preparation_receipt_status")
+        assert await db[ops.PIECE_EVENTS].count_documents(scope) == 0
+    else:
+        assert not (await route.endpoint(piece_id, request, owner))["idempotent"]
+        assert (await route.endpoint(piece_id, request, owner))["idempotent"]
+        assert await db[ops.PIECE_EVENTS].count_documents(scope) == 1
+        received = await db[ops.PIECES].find_one(scope)
+        assert received["preparation_received_by"] == owner["id"]
+        assert received["preparation_received_from_employee_id"] == "prep-1"
+        assert not received.get("assembly_ready_at")

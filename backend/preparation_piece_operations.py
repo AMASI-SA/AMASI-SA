@@ -1761,7 +1761,7 @@ async def _assert_preparation_receipt_salla_status(db: Any, *, user_id: str, ord
 async def _receive_preparation_piece(
     db: Any, *, user_id: str, piece_id: str, client_request_id: str,
     actor_id: str, actor_name: str,
-    authorize: Callable | None = None,
+    authorize: Callable | None = None, from_assembly: bool = False,
 ) -> dict[str, Any]:
     args = dict(user_id=user_id, piece_id=piece_id, client_request_id=client_request_id,
                 actor_id=actor_id, actor_name=actor_name)
@@ -1779,6 +1779,22 @@ async def _receive_preparation_piece(
         current_piece = await scoped[PIECES].find_one({"user_id": user_id, "piece_id": _text(piece_id).lower()})
         if not current_piece or _text(current_piece.get("order_number")) != number:
             raise HTTPException(409, detail={"code": "preparation_piece_identity_changed"})
+        if from_assembly and not _piece_has_completed_preparation_receipt(current_piece):
+            if not assembly_direct_preparation_receipt_eligible(current_piece):
+                raise HTTPException(409, detail={"code": "assembly_direct_receipt_piece_ineligible"})
+            scope = {"user_id": user_id, "order_number": number}
+            workflow = await scoped[WORKFLOWS].find_one(scope)
+            order = await _current_assembly_order(scoped, **scope)
+            await _ensure_assembly_order_eligible(
+                scoped, user_id=user_id, workflow=workflow or {}, current_order=order,
+                piece=current_piece,
+            )
+            # Custody can be blocked by an assembly instruction. Its activation
+            # and component consumption belong to the separate Ready operation.
+            target = {"stage": "assembly_labeling", "piece_id": current_piece["piece_id"],
+                      "order_item_id": _text(current_piece.get("order_item_id"))}
+            instructions = await active_stage_instructions(scoped, **scope, **target)
+            enforce_instruction_rows(instructions, actor_id=actor_id, **target)
         result = await _receive_preparation_piece_impl(scoped, **args, update_file=False)
         # Recheck after work, before commit. A provider status change or access
         # revocation aborts the receipt and its progress/event writes together.
@@ -2951,16 +2967,15 @@ async def _assembly_search(
             # were already assembled. The write path verifies consumed units.
             row["can_mark_ready"] = True
             row["assembly_blocker_code"] = None
-    if actor_id and any(row["can_mark_ready"] for row in rows):
+    actionable = [row for row in rows if row["can_mark_ready"] or row["can_receive_from_preparation"]]
+    if actor_id and actionable:
         # Each eligible piece previously repeated this identical order-stage read.
         # Scope/actor filtering remains per piece; save performs its own fresh read.
         instructions = await active_stage_instructions(
             db, user_id=user_id, order_number=order_number,
             stage="assembly_labeling", order_wide=True,
         )
-        for row in rows:
-            if not row["can_mark_ready"]:
-                continue
+        for row in actionable:
             try:
                 row["instructions"] = enforce_instruction_rows(
                     instructions,
@@ -2969,6 +2984,8 @@ async def _assembly_search(
                 )
             except HTTPException as exc:
                 row["can_mark_ready"] = False
+                row["can_receive_from_preparation"] = False
+                row["preparation_employee_name_for_receipt"] = None
                 row["assembly_blocker_code"] = (exc.detail or {}).get("code")
                 row["instructions"] = (exc.detail or {}).get("instructions") or []
     rows.sort(key=lambda row: (
@@ -4025,6 +4042,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             actor_id=actor["id"],
             actor_name=actor["name"],
             authorize=authorize,
+            from_assembly=True,
         )
         result["assembly_direct_preparation_receipt_confirmed"] = True
         result["next_action"] = "assembly_search_then_explicit_ready"
