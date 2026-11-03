@@ -571,6 +571,18 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
                     continue
                 correction_seen.add(identity)
                 previous = result["lines"].get(identity)
+                if row.get("repair_version") == "missing-bundle-owner-reporting-v1":
+                    from order_cost_reporting_repair import _immutable_correction, _hash
+                    proof = row.get("base_provenance") or {}
+                    if (row.get("correction_fingerprint") != _hash(_immutable_correction(row))
+                            or proof.get("provenance_version") != row["repair_version"]
+                            or proof.get("owner_sale_time_attested") is not True
+                            or proof.get("provider_invoice_verified") is not False
+                            or proof.get("immutable_first_ingestion_proven") is not False
+                            or row.get("cost", {}).get("cost_authority") != "historical_owner_attested_bundle"):
+                        result["lines"][identity] = {**deepcopy(row), "cost": _unknown(
+                            item.get("quantity"), "historical_reporting_correction_evidence_invalid")}
+                        continue
                 if (not row.get("source_authority_evidence_hash") or
                         row["source_authority_evidence_hash"] != source_authority_evidence_hash(previous)):
                     result["lines"][identity] = {**deepcopy(row), "cost": _unknown(
