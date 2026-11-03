@@ -1,78 +1,41 @@
-# MZ2-BUNDLE-REPORTING-HISTORY-1706 — 2026-11-03 checkpoint
+# MZ2-CURRENT-BUNDLE-COST-REPORTING-1706 — checkpoint (2026-11-03)
 
-Issue: #1706. Repo: AMASI-SA/AMASI-SA. Branch: `codex/mz2-bundle-historical-reporting-1706-20261103`.
-Baseline: production `e01d4d3920fc5bf4a7280757ca2030c30b4be9c8` (checked before branch creation).
+Issue: #1706. Draft PR: #1708.
+Repository: AMASI-SA/AMASI-SA.
+Task branch: `codex/mz2-bundle-historical-reporting-1706-20261103`.
+Source Production base J: `e01d4d3920fc5bf4a7280757ca2030c30b4be9c8`.
 
-## User's acceptance
-- Bundle cost reporting (top-selling products **and** executive profit) must use selected customer choices and historical evidence.
-- Shawl base SAR15, optional rose SAR40, independent external-supplier embroidery SAR10 only on name=Yes.
-- No mutation of original supplier preparation, stock, service bindings, invoices, cash ledger, Qoyod, old orders or historical price without approved proof.
-- Owner supplied Production API evidence: order 297657209, quantity1, missing bundle snapshot; 15 units of AMS13281 in the Nov2–3 report cost-null; executive total=product-report total 18,353 SAR with 46 incomplete orders.
-- Exact provider order-line option row IDs differ from current catalog IDs. Raw private custom fields must not appear in logs or PR.
+## Final owner policy for this task
 
-## Completed — source-only, safe milestone 1
-- Added `backend/bundle_historical_reporting_audit.py`: tenant-caller-bound persisted provider line matching, source creation validation, duplicate refusal, strict source-versus-canonical option fingerprints; returns only hashed evidence and sanitized metadata, **never price**. A stored Salla/canonical match is **not** an immutable first-ingestion proof.
-- Added owner-only `GET /api/orders-v2/{order_number}/bundle-financial-source-audit` (optional exact order_item_id). Read-only, source tenant-scoped, composite product check, no mutation.
-- Added owner-only `POST /api/orders-v2/{order_number}/bundle-financial-cost-dry-run`: explicit sale-time cost attestation, immutable source digest, valid effective date, exact selected value ID coverage, nonnegative two-decimal SAR prices, strict external supplier/service class. Returns reviewed **proposal only**, including per-unit and per-line totals and SHA manifest; `ready_for_apply=false`, zero writes.
-- Added tests for source selection ID mismatch, text privacy, attestation tampering, future price timing, missing/duplicate selections, 65 SAR one-unit proposal, redacted text never billed, and manifest identity.
-- Added `backend/tests/test_bundle_historical_reporting_audit.py` to test two distinct option/row ID semantics, private text absence, changed values, invalid timestamp, duplicates, missing original, no historic pricing.
-- Registered the suite as mandatory in `.github/workflows/g47-focused-integration.yml` (exact-head; skipped/failed tests blocked).
-- Does not install dependencies, access live Production Mongo, create order-cost corrections, or expose a cost-application endpoint. Dry-run POST accepts owner attestation but never calls an accounting/fulfillment write.
+Any **currently configured Mezan unit/component/service cost** is counted on **all sold product units in profitability reports**, including pre-existing sales, conditional on each order's selected options. The owner confirmed for SKU AMS13281: base shawl 15 SAR + rose 40 SAR if selected + external supplier embroidery 10 SAR if name is selected. One unit with both selected =65; four units with both=260. Later current prices (16+45+11)=72 each and four units=288. Do not assume every sale has rose+name choices.
 
-## Important limitations and next stages
-- This is **NOT** the final cost correction; the proposal endpoint requires an independently reviewed sale-time cost-basis reference. The next gate is authoritative confirmation of source compatibility, **then** a separate idempotent reporting-only transaction gated by an approved manifest.
-- Current Mezan catalog or a product option display label is not automatically historic supplier-cost proof. A refreshed Salla snapshot can be newer than original sale. The audit explicitly returns `immutable_first_ingestion_proven=false`. Never backfill from current catalog or an unsealed source match.
-- Only the specific order can be attested; the other 14 observed AMS13281 units require their own sale evidence.
-- G47 CI must be read after Draft PR created. No claim of passing tests or Production deploy until verified.
-- Remain isolated from concurrent shipping/operational financial branches.
+This is *reporting only*: no posting invoices, suppliers, receipts, stock reservations, journal entries, Qoyod or mutation of orders. The product card, Executive Profit and Sold Products reports use the same shared cost authority, so same filters/period/return policy apply without double counting. Fully recorded frozen/actual/approved costs stay authoritative; the current-cost estimate is only for a composite order line with **no stored cost authority**, and is explicitly labeled `current_bundle_catalog_estimate`, `historical_cost_verified=false`, `cost_stage=expected`.
 
-## Safe next action
-1. Draft PR #1708 open to hotfix/prod-snap-meta-final; inspect exact-head G47 and security CI for the newest commit.
-2. Fix any audit failures on this task branch only.
-3. Implement evidence-based dry-run (before/after cost) and transaction-safe existing correction collection, after establishing original sale time cost proof. Re-run cost tests and dashboard reconciliation.
-4. Explicit separate approval for Production data correction and v5 A/B release. No production merge or publish at this checkpoint.
+## Verified user observation from Production
 
-Production changed by this task: **NO**.
+- On 2026-11-03, order 297657209 SKU AMS13281 had quantity=1, `snapshot_exists=false`, `cost_authority=unresolved_snapshot`, `missing_reasons=["bundle_snapshot_missing"]`, cost null.
+- Nov 2-3 dashboard: AMS13281 15 sold units shown with missing cost, 46 orders with incomplete costs; Executive and Product V2 currently both show 18,353 SAR known cost but exclude unpriced bundle sales. This is the unrepaired Production baseline.
+- Source Salla option row IDs do not necessarily match their catalog option IDs. The financial estimator checks actual order option/value IDs or unique exact labels, never rewrites the provider selection or supplier execution context. All ambiguous/missing/stale recipe choices fail closed.
 
-## Milestone 2 — implemented and acceptance-tested, Production unchanged
+## Current code milestone (not a deployable v5 release yet)
 
-- **Reviewed code commit (source A checkpoint):** `3a08b70d785a1444644fe3f8734b052071e6fbea`.
-- New `backend/bundle_historical_reporting_repair.py` supports a bounded, tenant-scoped owner-attested expected-cost repair of **one explicit order line at a time**, not an auto-backfill.
-- The owner-only authenticated plan endpoint `POST /api/orders-v2/{order_number}/bundle-financial-cost-repair-plan` produces a manifest SHA and stripped public summary without touching production data. Existing previous missing cost is `null`, **never** silently treated as zero.
-- The owner-only apply endpoint `POST /api/orders-v2/{order_number}/bundle-financial-cost-repair-apply` requires a fresh exact manifest SHA and explicit approval phrase, AND `MZ2_HISTORICAL_BUNDLE_REPORTING_APPLY_ENABLED=1`; that flag remains **disabled by default**. Do not enable without independently reviewed owner authorization.
-- Only the existing immutable `mezan_order_cost_corrections_v1` and shared `mezan_product_cost_revisions_v2` may be written, atomically, via `_RepairDB`. No supplier, inventory, invoice, journal, Qoyod, order status or original Salla raw modifications.
-- Report loader checks correction fingerprint with reconstructed canonical `_id` (the bounded Mongo projection omits it), original authority hash, quantity, product identity, and line fingerprint. The same authority feeds `product_cost_v2.total`, product rows, and the executive profit calculation. Refunds/cancellations are applied once by existing policy.
-- The correction source is labeled `historical_owner_attested_bundle` (expected only), explicitly `owner_attested_not_provider_invoice=true`. Persisted Salla/canonical source match is not proof of immutable first ingestion; this remains `immutable_first_ingestion_proven=false`.
-- New `backend/tests/test_bundle_historical_reporting_repair.py` contains disposable real-Mongo transaction, SHA re-approval, replay/no double-count, rejection of conflicting snapshots/operational plans, foreign-tenant denial, tamper detection, and dashboard total/product-row equality. New suite is mandatory in G47.
+- `backend/current_bundle_reporting_estimate.py` (NEW): read-only per-selected-line current bundle cost projections. Tenant-scoped batch collection reads, original order quantities, typed base/product/physical components/independent external service SAR costs. No per-order Mongo queries, limited to missing composite lines; honors immutable cost authority precedence.
+- `backend/order_cost_authority.py` (MODIFIED): computes those estimates only after reading original snapshots, shares one result with existing Dashboard standard/cooperative and Sold Products readers. Existing correction and frozen cost logic unchanged.
+- `backend/tests/test_dashboard_bundle_cost_authority.py` (MODIFIED): selected rose/name service matrix, current cost revision for all sold units, privacy-safe real-shaped Salla per-order row IDs + text, no cost on missing/conflicting IDs/conditions/duplicate line IDs, exact snapshot precedence, batched read budget, no operational writes.
+- `backend/dashboard_v2_routes.py`, `backend/sold_products_report_v2.py`, `backend/order_option_cost_snapshot_routes.py`, `.github/workflows/g47-focused-integration.yml` are restored **byte-identical** to protected Production source. This prevents bypassing immutable source/response/CPU budget acceptance.
+- An earlier owner-attested historical per-order correction/write path in this Draft PR was **removed** after policy clarification; no historical cost apply endpoint or DB mutation is proposed by this task. The current-cost read path is sufficient.
 
-### Exact-source CI results for code commit `3a08b70d...`
-- All **11/11** GitHub workflow runs SUCCESS on that exact SHA, including CodeQL, Security Gate, Dashboard runtime adoption, Operational Stock Eligibility, Products V2, Mezan Release Readiness, Operational Balance Web, G47 and supporting workflows.
-- G47 integration: **327 cases PASSED plus 127 subtests**, zero skips/failures/errors.
-- G47 historical cost/report acceptance: **457 cases PASSED**, zero skips/failures/errors, including new real-Mongo tests and first-ingestion regressions.
-- Frontend G47 run SUCCESS.
-- This status-file checkpoint commit is documentation only; final release readiness must validate its exact head separately if proposed for merge or publish.
+## CI and gates
 
-### What remains / safeguards
-1. Obtain independently reviewed **sale-time cost basis** for the exact order and each selected option; an editable provider/catalog label or newer refreshed snapshot alone cannot certify a historical price.
-2. Inspect and approve an exact owner-scoped **dry run** against actual Production via authenticated owner tools. Order `297657209` is one unit; the 15-period AMS13281 total is **not** 15 × SAR65 unless each original sale proves identical selections.
-3. If explicitly authorized later, perform v5 source A / reviewed intent-only B, merge and publish with the guard; validate 3/3 before enabling a separately approved reporting-only data correction. No production write is justified by a code CI pass alone.
+- Source `d45637ad8880e58dc9a695131e6087d61d04ced2`: G47 327 tests +127 subtests PASS and 466 cost/report tests PASS, but Dashboard runtime adoption FAILED because protected report source files had changed. **DO NOT DEPLOY THAT SOURCE**.
+- The source-pinned report functions were then restored and cost logic centralized in the authority, avoiding changes to the protected Dashboard reducer and Sold Products files.
+- Current implementation checkpoint before this doc commit: `b50afe2b7fc785157fb915eb0243f48dfb8bc71b` (code changes relative to J only). Exact-head G47, Dashboard runtime adoption, security, CodeQL, stock and release checks **must be confirmed SUCCESS** on a stable final source head after all reviews. No current-HEAD PASS claim until verification.
 
-**Current task Production writes: NO. New deployment: NO. Existing PR #1695 deployment unchanged.**
+## Exact next action
 
-## Milestone 3 — owner-approved current costs for all unpriced sold units (2026-11-03)
+1. Inspect newly triggered CI for this documentation checkpoint; fix only the task branch if any failing gate, and repeat exact-head checks.
+2. Require G47 real Mongo tests (unpriced bundles, mixed choices, no supplier/GL writes) plus Dashboard runtime adoption's immutable 164-response oracle and read/CPU budgets; CodeQL, Release Readiness, Operational Stock Eligibility, Security.
+3. When all green, prepare v5 reviewed A/B intent via sanctioned Emergent local host and review candidate B. A clean merge into Production and actual Emergent publish remain separate approval-gated steps; no source-only merge into Production.
+4. Post-publish compare authentic Production current cost on exact order 297657209, one selected unit expected 65 SAR if current configured choice matching is verified; verify SKU AMS13281 all 15 selected units individually, executive cost vs product card parity, and no accounting/stock change.
 
-**Owner policy decision:** Costs currently configured in Mezan apply to **every sold unit of the product in profitability reports**, including orders created before cost setup. In this product the owner confirms that the original SAR15 shawl + optional SAR40 rose + optional SAR10 independent external-supplier embroidery were already valid at sale time. Each option is charged **only on order lines where the buyer chose it**, quantity multiplies once.
-
-Implementation checkpoint source (before this documentation-only commit): `6bfff5c111a8e169d75ed174e7cdf98611b33d0c`. This supersedes the earlier requirement to manually attest a historical price for each older **unpriced** unit, for **reporting estimates** only. It does not rewrite any persisted accounting, actual or frozen cost.
-
-- `backend/current_bundle_reporting_estimate.py`: bounded tenant-scoped read-only current-catalog projection for **only** composite order lines with missing authority. Current configuration for physical parent, selected recipe products/resources, option-linked external supplier services and SAR costs. Original Salla option-row IDs may differ from catalog IDs; recover a price choice only via an exact ID or uniquely matching catalog name/value, never transfer the inferred choice to stock/supplier execution. Do not guess unknown, missing or conflicting choices; fail closed.
-- `backend/order_cost_authority.py`: exact, existing persisted frozen/actual/corrected authority still wins. Current-cost fallback is separately labeled `current_bundle_catalog_estimate`, `cost_stage=expected`, `historical_cost_verified=false`; never counted twice.
-- `backend/dashboard_v2_routes.py`: both standard and cooperative product-cost builders use the same estimated fallback. `totals.total_product_cost`, `product_cost_v2.total`, product rows and executive profit therefore share one cost per selected order line and the existing refund/cancellation scale once.
-- `backend/sold_products_report_v2.py`: same estimate in sold-products report.
-- `backend/tests/test_dashboard_bundle_cost_authority.py`: unpriced four rose units = 220; rose+name four units = 260; change to current SAR16+45+11 = 288 for same four units, while original frozen costs remain unchanged; mixed choices, conflicting yes/no, missing selections, order-row/catalog ID differences, report read bounds and zero operational writes.
-- Explicitly unsupported advanced or ambiguous recipes stay incomplete rather than fabricate a complete profit.
-- Former owner-attested single-order correction plan/apply APIs remain disabled by default; they are **not required** to display a current-cost estimate. No Production DB writes, financial posting or backfill.
-
-**Current checks:** Exact-HEAD GitHub CI for source `6bfff5c1...` is queued (G47, Dashboard runtime adoption, Security, CodeQL, etc.). Do not claim green acceptance until results are inspected. Existing earlier green source-A checks apply to the previous historic-correction scope only.
-
-**Next safe action:** Review exact SHA GitHub runs, repair any regressions and validate Product Card versus Executive Profit and Sold Products report, then prepare reviewed v5 A/B intent. Keep Production deployment and all data writes separate, explicit actions. No Production change in this milestone.
+**Production code changed by PR #1708: NO. Production data written by this task: NO.**
