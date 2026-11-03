@@ -11,6 +11,7 @@ with no per-order Mongo queries or writes.
 """
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from decimal import Decimal
 from typing import Any
@@ -400,15 +401,17 @@ async def load_current_bundle_estimates(
             return {}
         product_map[key] = product
     scope = {"user_id": owner, "salla_product_id": {"$in": wanted}}
-    profile_rows = await db["mezan_product_cost_profiles_v2"].find(
-        scope, {"_id": 0},
-    ).to_list(length=10001)
-    option_rows = await db["mezan_product_option_cost_bindings_v2"].find(
-        scope, {"_id": 0},
-    ).to_list(length=10001)
-    product_bindings = await db["mezan_product_resource_bindings_v2"].find(
-        scope, {"_id": 0},
-    ).to_list(length=10001)
+    profile_rows, option_rows, product_bindings = await asyncio.gather(
+        db["mezan_product_cost_profiles_v2"].find(
+            scope, {"_id": 0},
+        ).to_list(length=10001),
+        db["mezan_product_option_cost_bindings_v2"].find(
+            scope, {"_id": 0},
+        ).to_list(length=10001),
+        db["mezan_product_resource_bindings_v2"].find(
+            scope, {"_id": 0},
+        ).to_list(length=10001),
+    )
     if any(len(rows) > 10000 for rows in (
             profile_rows, option_rows, product_bindings)):
         return {}
