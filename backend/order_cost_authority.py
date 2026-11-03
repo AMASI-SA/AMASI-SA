@@ -571,26 +571,6 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
                     continue
                 correction_seen.add(identity)
                 previous = result["lines"].get(identity)
-                if row.get("repair_version") == "missing-bundle-owner-reporting-v1":
-                    from order_cost_reporting_repair import (
-                        _immutable_correction, _correction_line_identity, _hash,
-                    )
-                    # The bounded authority read deliberately projects _id out.
-                    # Reconstruct the canonical first-write identity for the
-                    # fingerprint instead of treating an omitted _id as tampering.
-                    expected_id = "cost-correction:" + _hash(
-                        [user_id, number, _correction_line_identity(item)])
-                    proof = row.get("base_provenance") or {}
-                    if (row.get("correction_fingerprint") != _hash(
-                            _immutable_correction({**row, "_id": expected_id}))
-                            or proof.get("provenance_version") != row["repair_version"]
-                            or proof.get("owner_sale_time_attested") is not True
-                            or proof.get("provider_invoice_verified") is not False
-                            or proof.get("immutable_first_ingestion_proven") is not False
-                            or row.get("cost", {}).get("cost_authority") != "historical_owner_attested_bundle"):
-                        result["lines"][identity] = {**deepcopy(row), "cost": _unknown(
-                            item.get("quantity"), "historical_reporting_correction_evidence_invalid")}
-                        continue
                 if (not row.get("source_authority_evidence_hash") or
                         row["source_authority_evidence_hash"] != source_authority_evidence_hash(previous)):
                     result["lines"][identity] = {**deepcopy(row), "cost": _unknown(
@@ -600,10 +580,9 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
         result["read_batches"] += 1
         if budget is not None:
             await budget.checkpoint()
-    # A single order-cost authority powers both the protected Executive
-    # Dashboard reducers and Sold Products readers. Keeping the current-price
-    # fallback here avoids any direct change to their source-pinned functions,
-    # query planners or cooperative scheduling contracts.
+    # The owner-approved current-cost reporting estimate belongs solely in
+    # the shared read-only authority, not in the source-pinned dashboard or
+    # operational supplier/inventory processing paths.
     from current_bundle_reporting_estimate import load_current_bundle_estimates
     estimates = await load_current_bundle_estimates(
         db, user_id, orders, result, budget=budget,
@@ -664,11 +643,11 @@ def resolve_order_line_cost(item: dict, *, order_number: str, catalog_cost: dict
         return cost
     identities = {str(product_id or ""), str(row.get("parent_product_id") or ""), str(row.get("product_id") or "")}
     if identities & set(authority.get("composite_products") or []):
-        # Read-only current configured-cost policy for unpriced bundle sales.
-        # The caller must have preloaded a tenant-scoped, choice-specific
-        # estimate. A frozen, actual, or corrected record above always wins.
         estimate = (authority.get("current_bundle_estimates") or {}).get(
             (str(order_number), line_id(row)))
+        # A verified frozen/actual/approved line always wins above; missing
+        # composite lines may use today's selected, owner-configured cost
+        # as an explicitly labeled expected estimate, never a supplier write.
         if estimate is not None:
             return deepcopy(estimate)
         return _unknown(row.get("quantity"), "bundle_snapshot_missing")
