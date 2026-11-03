@@ -299,7 +299,10 @@ def normalize_transaction_row(
         "occurred_at": occurred_at,
     }
 
+    from operational_provider_transaction_evidence import VERSION, native_transaction_evidence
+    evidence = native_transaction_evidence(row, provider_order_id)
     return {
+        "native_transaction_evidence": evidence or {"schema": VERSION, "unverified": True},
         "order_number": order_number,
         "provider_order_id": provider_order_id,
         "source": "salla_transactions",
@@ -554,6 +557,9 @@ async def refresh_order_activity_from_salla(
             provider_order_id=provider_order_id,
         )
         for row in payment_rows
+        if not (isinstance(row.get("references"), dict)
+                and row["references"].get("order_id") is not None
+                and str(row["references"]["order_id"]) != provider_order_id)
     ]
 
     now = _now_iso()
@@ -578,7 +584,13 @@ async def refresh_order_activity_from_salla(
             upsert=True,
         )
 
-    for payment in payments:
+    for normalized in payments:
+        payment = dict(normalized)
+        proof = payment.pop("native_transaction_evidence", None)
+        # Store observations append-only, including on a legacy row with the
+        # same display fingerprint. A conflicting newer observation must not
+        # overwrite the earlier one or silently double an order's claim.
+        evidence_update = {"$addToSet": {"native_transaction_evidence": proof}} if proof is not None else {}
         await db.order_payment_transactions_v2.update_one(
             {
                 "user_id": str(user_id),
@@ -591,6 +603,7 @@ async def refresh_order_activity_from_salla(
                     "user_id": str(user_id),
                     "created_at": now,
                 },
+                **evidence_update,
                 "$set": {
                     "last_seen_at": now,
                 },

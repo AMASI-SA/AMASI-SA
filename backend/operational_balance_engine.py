@@ -82,7 +82,8 @@ def reconcile_credits(state):
     return state
 
 
-from operational_provider_fees import provider_projection
+from operational_provider_fees import provider_projection, independent_capture_without_fee_policy
+from operational_provider_transaction_evidence import VERSION as NATIVE_TRANSACTION_EVIDENCE_VERSION
 from operational_product_cost_policy import unreceived_eligible
 
 
@@ -403,16 +404,40 @@ def reconcile(state, sources, as_of):
                             if not any(str(r["id"]) == rid for r in current_refunds):
                                 current_refunds.append({"id": rid, "amount": fv["amount"], "status": "executed"})
                     payment["refunds"] = current_refunds
-                    projection = provider_projection(payment, sources.get("fee_policies", []), created.astimezone(RIYADH).date())
+                    policy_day = created.astimezone(RIYADH).date()
+                    try:
+                        projection = provider_projection(payment, sources.get("fee_policies", []), policy_day)
+                    except ValueError as exc:
+                        if not independent_capture_without_fee_policy(payment, sources.get("fee_policies", []),
+                                policy_day, exc, created=created, as_of=now):
+                            raise
+                        if any(a.get("obligation_id") in {provider_key, "credit:" + provider_key}
+                               for m in result.get("movements", []) for a in m.get("allocations", [])):
+                            raise ValueError("provider_settled_capture_review_required") from exc
+                        projection = None
+                    # New evidence adapters may surface old payments already included
+                    # in an opening or a separately settled balance. A normal refresh
+                    # is not authorization to replay those historic amounts.
+                    if projection is None or payment.get("capture_source") == NATIVE_TRANSACTION_EVIDENCE_VERSION:
+                        previous = obligations.get(provider_key, {})
+                        if (previous.get("party_id", payment["provider"]) != payment["provider"]
+                                or previous.get("currency", currency) != currency
+                                or any(v.get("provider") != payment["provider"] for k, v in facts.items()
+                                       if k.startswith("capture:") and v.get("order_id") == oid)):
+                            raise ValueError("provider_capture_identity_conflict")
+                        prior_as_of = (state.get("engine") or {}).get("as_of")
+                        if prior_as_of and any("capture:" + str(c["id"]) not in facts and
+                                instant(c["captured_at"]) <= instant(prior_as_of)
+                                for c in payment.get("captures", [])):
+                            raise ValueError("provider_historical_capture_review_required")
                     # A paid gross obligation already includes settlement fee deductions.
                     # A component refund needs the statement's actual fee-credit allocation;
                     # do not flip that settled obligation or invent a second fee charge.
-                    if projection.get("fee_model_version") == 2 and current_refunds and any(
+                    if projection is not None and projection.get("fee_model_version") == 2 and current_refunds and any(
                             a.get("obligation_id") == provider_key and money(a.get("amount", "0")) > ZERO
                             for movement in result.get("movements", [])
                             for a in movement.get("allocations", [])):
                         raise ValueError("provider_postsettlement_refund_review_required")
-                    projected = Decimal(projection["expected_receivable"])
                     for capture in payment.get("captures", []):
                         if instant(capture["captured_at"]) > now:
                             continue
@@ -429,6 +454,17 @@ def reconcile(state, sources, as_of):
                     if captured > money(payment["gross"]) or (captured and refunded > captured):
                         raise ValueError("provider_capture_amount_conflict")
                     confirmed = max(captured - refunded, ZERO)
+                    if projection is None:
+                        # Store only the proved gross claim. The absence of a fee
+                        # projection keeps fee/net forecasts explicitly unavailable.
+                        engine["provider_reports"].pop(provider_key, None)
+                        put(provider_key, "provider", payment["provider"], "provider", currency,
+                            confirmed=confirmed, direction="receivable", business_date=created.date(),
+                            fee_estimate_complete=False)
+                        issue("provider_fee_estimate_unavailable", provider_key)
+                        versions[oid] = updated.isoformat()
+                        continue
+                    projected = Decimal(projection["expected_receivable"])
                     projection["confirmed_receivable"] = amount(confirmed)
                     engine["provider_reports"][provider_key] = projection
                     if not captured:

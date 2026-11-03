@@ -57,7 +57,10 @@ from operational_remaining_bundle_sources import READ_COLLECTIONS as BUNDLE_READ
 ALLOWED_COLLECTIONS = ALLOWED_COLLECTIONS | BUNDLE_READ_COLLECTIONS
 
 PROVIDERS = ('salla', 'tabby', 'tamara', 'emkan')
-from operational_payment_evidence import PAYMENT_METHODS, normalize_payment, DIAGNOSTICS
+from operational_payment_evidence import PAYMENT_METHODS, DIAGNOSTICS
+from operational_provider_transaction_evidence import (COLLECTION as TXN_COLLECTION,
+    load_transaction_rows, normalize_transaction_payment)
+ALLOWED_COLLECTIONS = ALLOWED_COLLECTIONS | {TXN_COLLECTION}
 
 MAX_ROWS = 20000
 # Existing MZ2 daily-movement codes plus explicitly requested operational types.
@@ -295,7 +298,7 @@ def usable(row):
 
 
 async def rows(db, owner, collection):
-    if not owner or collection not in ALLOWED_COLLECTIONS or collection in {'users', 'settings', 'accounts', 'mz2_operational_bank_accounts'}:
+    if not owner or collection not in ALLOWED_COLLECTIONS or collection in {TXN_COLLECTION, 'users', 'settings', 'accounts', 'mz2_operational_bank_accounts'}:
         raise ValueError('operational_source_rejected')
     result = await db[collection].find({'user_id': owner}).to_list(MAX_ROWS + 1)
     if len(result) > MAX_ROWS:
@@ -777,7 +780,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     out['delivery_event_coverage'] = {'version': 1, 'started_at': start.isoformat(), 'as_of': now.isoformat()}
     # No service with side effects is called: collection access is allowlisted.
     # The inventory catalogue is read on demand, not on each financial sync.
-    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - {'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})}
+    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - {TXN_COLLECTION, 'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})}
     from operational_ad_funding import bindings as funding_bindings
     data['mz2_ad_account_bindings_v2'], conflicts = funding_bindings(
         operational_state, owner, data['mz2_ad_account_bindings_v2'])
@@ -793,6 +796,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     order_numbers = {}
     raw_orders = [(r.get('raw_by_source') or {}).get('salla_direct') for r in data['unified_orders']]
     raw_orders = [r for r in raw_orders if isinstance(r, dict)]
+    txn_by_order = await load_transaction_rows(db, owner, raw_orders, start, now, to_instant=instant, max_rows=MAX_ROWS)
     from operational_remaining_bundle_sources import load_remaining_bundles
     from operational_native_purchase_link_service import verified_saved_links
     native_matches = await verified_saved_links(db, owner, operational_state, as_of=as_of)
@@ -921,8 +925,9 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             method = str(payment.get('method') or raw.get('payment_method') or '').lower()
             total_value = (raw.get('amounts') or {}).get('total', raw.get('total'))
             total = number(total_value)
-            normalized_payment, payment_issues = normalize_payment(
-                raw, order['currency'], total, created, now)
+            normalized_payment, payment_issues = normalize_transaction_payment(
+                raw, order['currency'], total, created, now, owner=owner, order_number=order_number,
+                provider_order_id=identity, rows=txn_by_order.get(order_number, ()))
             payment_identity_conflict = any(row['code'] in {
                 'provider_payment_method_conflict', 'provider_payment_shape_invalid',
                 'provider_split_payment_review_required'} for row in payment_issues)

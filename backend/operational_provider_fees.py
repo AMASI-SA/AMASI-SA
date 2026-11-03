@@ -198,6 +198,28 @@ def _components_projection(payment, policy):
         'fee_components': sorted(details, key=lambda r: r['id'])}
 
 
+def independent_capture_without_fee_policy(payment, policies, transaction_date, error, *, created, as_of):
+    """Only an independently verified positive capture; never guess a fee or refund."""
+    if str(error) != 'provider_fee_policy_incomplete_or_ambiguous':
+        return False
+    # Ambiguous active contracts and plan selection errors require their own review.
+    if any(p.get('provider') == payment['provider'] and p.get('currency') == payment['currency']
+           and p.get('status') == 'active' and day(p['effective_from']) <= transaction_date
+           and (not p.get('effective_to') or transaction_date <= day(p['effective_to'])) for p in policies):
+        return False
+    captures = payment.get('captures')
+    if not isinstance(captures, list) or len(captures) != 1 or payment.get('refunds') or payment.get('cancellations'):
+        return False
+    if _cash(payment.get('cancelled', '0')) != ZERO:
+        return False
+    c = captures[0]
+    if not isinstance(c, dict) or not isinstance(c.get('id'), str) or not c['id'].strip():
+        return False
+    from operational_payment_evidence import _instant
+    return (created <= _instant(c.get('captured_at')) <= as_of
+            and ZERO < _cash(c.get('amount')) <= _cash(payment.get('gross')))
+
+
 def provider_projection(payment, policies, transaction_date):
     policy = _select(payment, policies, transaction_date)
     version = policy.get('fee_model_version', 1)
