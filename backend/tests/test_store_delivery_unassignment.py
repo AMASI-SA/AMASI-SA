@@ -283,6 +283,44 @@ async def test_in_transit_can_unassign_without_return_attestation_and_reassign_l
 
 
 @pytest.mark.asyncio
+async def test_legacy_apk_return_true_is_ignored_and_never_creates_false_return_evidence():
+    """An older APK may send true; unassignment must never claim a return."""
+    client, db = await _fixture()
+    try:
+        await db[ASSIGNMENTS].update_one(
+            {"id": "assignment-A"},
+            {"$set": {"status": "out_for_delivery", "out_for_delivery_at": "2026-11-02T12:00:00Z"}},
+        )
+        await db[ORDERS].update_one(
+            {"order_number": "101"}, {"$set": {"store_delivery_status": "out_for_delivery"}},
+        )
+        await db[WORKFLOWS].update_one(
+            {"order_number": "101"}, {"$set": {
+                "stage": "delivering", "store_courier_assignment_state": "delivering",
+                "store_courier_picked_up_at": "2026-11-02T12:00:00Z",
+            }},
+        )
+        result = await _route(db)(
+            "assignment-A",
+            UnassignPayload(expected_driver_id="driver-R", physical_return_confirmed=True),
+            user=ACTOR,
+        )
+        assert result["ok"] and result["physical_return_confirmed"] is False
+        previous = await db[ASSIGNMENTS].find_one({"id": "assignment-A"})
+        assert previous["active"] is False and previous["prior_assignment_status"] == "out_for_delivery"
+        assert previous["physical_return_confirmed"] is False
+        assert previous.get("physical_return_confirmed_at") is None
+        assert previous.get("physical_return_confirmed_by") is None
+        workflow = await db[WORKFLOWS].find_one({"order_number": "101"})
+        assert workflow.get("store_courier_physical_return_verified_at") is None
+        assert workflow.get("store_courier_physical_return_verified_by") is None
+        event = await db[EVENTS].find_one({"event_type": "store_delivery_unassigned"})
+        assert event["physical_return_confirmed"] is False
+    finally:
+        await _shutdown(client, db)
+
+
+@pytest.mark.asyncio
 async def test_out_for_delivery_still_rejects_money_even_without_return_confirmation():
     client, db = await _fixture()
     try:
