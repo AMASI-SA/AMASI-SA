@@ -9,9 +9,9 @@ function escapePrintHtml(value) {
 
 export function storeCourierLabelHtml(data = {}) {
     const address = data.address || {};
-    const addressLine = address.address_line_two || address.address_line || [
-        address.street_number,
-        address.block,
+    const addressLine = address.address_line || address.formatted || address.address_line_two || [
+        address.street_number || address.street,
+        address.block || address.district || address.neighborhood,
         address.city,
         address.country,
     ].filter(Boolean).join("، ");
@@ -66,7 +66,7 @@ export function storeCourierLabelHtml(data = {}) {
             </div>
         </section>
         <div class="divider"></div>
-        <h1>معلومات العميل</h1>
+        <h1>معلومات المستلم</h1>
         <section class="customer">
             <div class="row"><b>الاسم:</b> ${escapePrintHtml(data.customer_name || "—")}</div>
             <div class="row"><b>الهاتف:</b> <span dir="ltr">${escapePrintHtml(data.customer_phone || "—")}</span></div>
