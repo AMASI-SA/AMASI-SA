@@ -210,23 +210,7 @@ async def capture_unknown_event(
 
     if not is_abandoned_cart_event and not payment_job:
         try:
-            if event_name == "order.shipping.address.updated":
-                # The dedicated address event may be sparse; never feed it
-                # through full order/status/product/financial persistence.
-                from .address_webhook_sync import sync_verified_shipping_address
-                order_sync = await sync_verified_shipping_address(db, event_body)
-            else:
-                order_sync = await sync_order_from_verified_webhook(db, event_body)
-                if event_name == "order.updated" and order_sync.get("synced"):
-                    # A complete order.updated can also carry a changed
-                    # delivery address; update the delivery projection only
-                    # after the order snapshot passed its source-version fence.
-                    from .address_webhook_sync import sync_verified_shipping_address
-                    address_result = await sync_verified_shipping_address(db, event_body)
-                    order_sync["address_sync"] = {
-                        key: address_result.get(key)
-                        for key in ("synced", "reason", "source")
-                    }
+            order_sync = await sync_order_from_verified_webhook(db, event_body)
         except Exception as exc:  # webhook must still return HTTP 200
             log.exception("order_webhook.unhandled event=%s", event_name or "<none>")
             order_sync = {
@@ -237,6 +221,22 @@ async def capture_unknown_event(
                 "no_salla_api_calls": True,
                 "no_qoyod_calls": True,
             }
+        # The existing order.updated feed is sufficient. Address projection
+        # must not depend on a removed shipping event, or on component
+        # acceptance of this same update. Independent owner/version fence.
+        if event_name == "order.updated":
+            try:
+                from .address_webhook_sync import sync_verified_shipping_address
+                address_result = await sync_verified_shipping_address(db, event_body)
+                order_sync["address_sync"] = {
+                    key: address_result.get(key)
+                    for key in ("synced", "reason", "source")
+                }
+            except Exception:
+                log.exception("order_address_webhook.retry_required")
+                order_sync["address_sync"] = {
+                    "synced": False, "reason": "address_projection_failed"
+                }
 
     # Order notifications carry no independent refund identity. Resolve only
     # confirmed financial sources belonging to the original payment provider.
@@ -290,9 +290,7 @@ async def capture_unknown_event(
 
     # Provider delivery is never performed inside the webhook.  This call only
     # creates a hashed, idempotent outbox record when CAPI is explicitly enabled.
-    if (not is_abandoned_cart_event
-            and event_name != "order.shipping.address.updated"
-            and order_sync.get("synced")):
+    if not is_abandoned_cart_event and order_sync.get("synced"):
         try:
             from integrations_control_center.snapchat_capi_purchases import (
                 enqueue_snapchat_purchase_from_salla_event,
@@ -352,10 +350,10 @@ async def capture_unknown_event(
         "event_hash": event_hash,
     }
     order_mutation_scope = (
-        "shipping_address_only"
-        if event_name == "order.shipping.address.updated" and order_sync.get("synced")
-        else "full_order_from_webhook"
+        "full_order_from_webhook"
         if order_sync.get("synced")
+        else "shipping_address_only"
+        if (order_sync.get("address_sync") or {}).get("synced")
         else "shipping_fields_only"
         if shipment_sync.get("order_modified")
         else "none"
