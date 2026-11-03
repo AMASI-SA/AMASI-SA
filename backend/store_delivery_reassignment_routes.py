@@ -431,14 +431,10 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
                         {"user_id": user_id, "accepted.assignment_id": identifier},
                         {"_id": 1}, session=tx,
                     )
-                    # Scanning a parcel into the driver's session proves pickup,
-                    # not a completed delivery. Only explicit physical return
-                    # confirmation can release that custody; never erase the
-                    # historical scanner session or its original receipt values.
-                    if session_receipt and not (
-                        prior_status == "out_for_delivery"
-                        and payload.physical_return_confirmed
-                    ):
+                    # Scanning a parcel proves historical pickup, not a delivery
+                    # or a financial settlement. In-transit unassignment is
+                    # allowed without changing the preserved scanner session.
+                    if session_receipt and prior_status == "assigned":
                         raise HTTPException(status_code=409, detail={"code": "assignment_in_custody_cannot_unassign"})
                     acknowledged = await db[STORE_DELIVERY_INSTRUCTIONS].find_one(
                         {"user_id": user_id, "order_id": assignment.get("order_id"),
@@ -458,10 +454,9 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
                         {"$set": {"active": False, "status": "unassigned",
                                   "unassigned_at": now, "unassigned_by": normalize_text(actor.get("id")),
                                   "unassignment_reason": normalize_text(payload.reason), "updated_at": now,
-                                  "physical_return_confirmed": prior_status == "out_for_delivery",
-                                  "physical_return_confirmed_at": now if prior_status == "out_for_delivery" else None,
-                                  "physical_return_confirmed_by": normalize_text(actor.get("id"))
-                                      if prior_status == "out_for_delivery" else None,
+                                  "physical_return_confirmed": False,
+                                  "physical_return_confirmed_at": None,
+                                  "physical_return_confirmed_by": None,
                                   "prior_assignment_status": prior_status}},
                         session=tx,
                     )
@@ -497,13 +492,8 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
                             "store_courier_picked_up_by_id",
                         )},
                          "$set": {"stage": "completed", "updated_at": now,
-                                  "store_courier_physical_return_verified_at": (
-                                      now if prior_status == "out_for_delivery" else None
-                                  ),
-                                  "store_courier_physical_return_verified_by": (
-                                      normalize_text(actor.get("id"))
-                                      if prior_status == "out_for_delivery" else None
-                                  )}},
+                                  "store_courier_physical_return_verified_at": None,
+                                  "store_courier_physical_return_verified_by": None}},
                         session=tx,
                     )
                     if updated_workflow.modified_count != 1:
@@ -526,7 +516,7 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
                         "driver_id": expected_driver,
                         "reason": normalize_text(payload.reason),
                         "prior_status": prior_status,
-                        "physical_return_confirmed": prior_status == "out_for_delivery",
+                        "physical_return_confirmed": False,
                         "actor_id": normalize_text(actor.get("id")), "occurred_at": now,
                     }, session=tx)
         except HTTPException:
@@ -538,7 +528,7 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
             ) from exc
         return {"ok": True, "assignment_id": identifier,
                 "driver_id": expected_driver, "order_number": assignment.get("order_number"),
-                "physical_return_confirmed": prior_status == "out_for_delivery",
+                "physical_return_confirmed": False,
                 "reassignment_eligible": True}
 
     @router.post("/{assignment_id}/reassign")
