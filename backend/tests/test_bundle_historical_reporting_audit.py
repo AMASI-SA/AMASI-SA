@@ -54,7 +54,8 @@ def inspect(source, line):
 def test_exact_original_provider_choices_proven_without_borrowing_current_catalog():
     source, item = fixtures()
     result = inspect(source, item)
-    assert result["original_source_verified"] is True
+    assert result["stored_source_crosschecked"] is True
+    assert result["immutable_first_ingestion_proven"] is False
     assert result["historical_cost_verified"] is False
     assert result["ready_to_apply_cost"] is False
     assert result["source_choice_evidence_hash"]
