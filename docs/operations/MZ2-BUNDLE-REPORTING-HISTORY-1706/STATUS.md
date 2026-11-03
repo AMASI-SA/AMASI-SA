@@ -11,7 +11,7 @@ Baseline: production `e01d4d3920fc5bf4a7280757ca2030c30b4be9c8` (checked before 
 - Exact provider order-line option row IDs differ from current catalog IDs. Raw private custom fields must not appear in logs or PR.
 
 ## Completed — source-only, safe milestone 1
-- Added `backend/bundle_historical_reporting_audit.py`: tenant-caller-bound original provider line matching, original creation validation, duplicate refusal, strict source-versus-canonical option fingerprints; returns only hashed proof and sanitized metadata, **never price**.
+- Added `backend/bundle_historical_reporting_audit.py`: tenant-caller-bound persisted provider line matching, source creation validation, duplicate refusal, strict source-versus-canonical option fingerprints; returns only hashed evidence and sanitized metadata, **never price**. A stored Salla/canonical match is **not** an immutable first-ingestion proof.
 - Added owner-only `GET /api/orders-v2/{order_number}/bundle-financial-source-audit` (optional exact order_item_id). Read-only, source tenant-scoped, composite product check, no mutation.
 - Added owner-only `POST /api/orders-v2/{order_number}/bundle-financial-cost-dry-run`: explicit sale-time cost attestation, immutable source digest, valid effective date, exact selected value ID coverage, nonnegative two-decimal SAR prices, strict external supplier/service class. Returns reviewed **proposal only**, including per-unit and per-line totals and SHA manifest; `ready_for_apply=false`, zero writes.
 - Added tests for source selection ID mismatch, text privacy, attestation tampering, future price timing, missing/duplicate selections, 65 SAR one-unit proposal, redacted text never billed, and manifest identity.
@@ -21,7 +21,7 @@ Baseline: production `e01d4d3920fc5bf4a7280757ca2030c30b4be9c8` (checked before 
 
 ## Important limitations and next stages
 - This is **NOT** the final cost correction; the proposal endpoint requires an independently reviewed sale-time cost-basis reference. The next gate is authoritative confirmation of source compatibility, **then** a separate idempotent reporting-only transaction gated by an approved manifest.
-- Current Mezan catalog or a product option display label is not automatically historic supplier-cost proof. Never backfill from current catalog.
+- Current Mezan catalog or a product option display label is not automatically historic supplier-cost proof. A refreshed Salla snapshot can be newer than original sale. The audit explicitly returns `immutable_first_ingestion_proven=false`. Never backfill from current catalog or an unsealed source match.
 - Only the specific order can be attested; the other 14 observed AMS13281 units require their own sale evidence.
 - G47 CI must be read after Draft PR created. No claim of passing tests or Production deploy until verified.
 - Remain isolated from concurrent shipping/operational financial branches.
