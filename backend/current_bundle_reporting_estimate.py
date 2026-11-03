@@ -129,15 +129,25 @@ def _choice_pairs(item: dict, product: dict) -> set[tuple[str, str]]:
                 vid = found[0]
             pairs.add((candidate, vid))
     for oid, option in by_id.items():
+        matching_count = sum(1 for chosen, _ in pairs if chosen == oid)
+        if matching_count > 1 and option.get("type") not in {
+                "checkbox", "multiple", "multi_select"}:
+            _fail("current_order_multiple_conflicting_values")
         if not (option.get("required") or option.get("is_required")):
             continue
         dependencies = option.get("show_if") or option.get("conditions") or []
-        visible = all((_id(c.get("option_id")), _id(c.get("value_id"))) in pairs
-                      for c in dependencies if isinstance(c, dict))
+        if not isinstance(dependencies, list) or any(not isinstance(c, dict)
+                or set(c) != {"option_id", "value_id"} for c in dependencies):
+            _fail("current_catalog_option_condition_invalid")
+        visible = all((_id(c["option_id"]), _id(c["value_id"])) in pairs
+                      for c in dependencies)
         if option.get("visibility") == "on_condition":
             key = (_id(option.get("visibility_condition_option")),
                    _id(option.get("visibility_condition_value")))
-            visible = key in pairs if option.get("visibility_condition_type") == "=" else (
+            op = option.get("visibility_condition_type")
+            if op not in {"=", "!="} or not key[0] or not key[1]:
+                _fail("current_catalog_option_condition_invalid")
+            visible = key in pairs if op == "=" else (
                 any(p[0] == key[0] for p in pairs) and key not in pairs)
         if visible and (values[oid] and not any(p[0] == oid for p in pairs) or
                         not values[oid] and oid not in filled):
@@ -160,6 +170,13 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
     if quantity != quantity.to_integral_value():
         _fail("current_bundle_quantity_fractional")
     selected = _choice_pairs(item, products[root])
+    # Missing provider answers cannot prove that a formerly optional,
+    # potentially priced rose/embroidery choice was not selected.
+    raw_choices = item.get("options_raw") or item.get("selected_options") or item.get("options")
+    if not raw_choices and (any(row.get("condition") for row in
+                               (definitions.get(root) or {}).get("items") or [])
+                            or options.get(root)):
+        _fail("current_bundle_sale_selection_unavailable")
     used_resources = set()
     mezan_complete = True
 
@@ -217,7 +234,10 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
                     unit = _sar(source.get("unit_cost"), source)
                     if unit is None:
                         _fail("current_bundle_resource_cost_missing")
-                    physical += count * unit
+                    if source.get("kind") == "service" and not source.get("track_inventory"):
+                        services += count * unit
+                    else:
+                        physical += count * unit
                 else:
                     _fail("current_bundle_recipe_kind_unresolved")
         current_option_bindings = [
