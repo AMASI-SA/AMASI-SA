@@ -148,6 +148,15 @@ class AmasiCompatibleShippingTests(unittest.IsolatedAsyncioTestCase):
         result = await compat.carrier_label(None, "owner", self.number, issue=False)
         self.assertFalse(result["ready"])
 
+    async def test_cancelled_order_does_not_trigger_status_post(self):
+        self.resolve.return_value = self.order_id, {
+            **self.pending, "status": {"slug": "cancelled"},
+        }
+        with self.assertRaises(legacy.ShippingLabelError) as caught:
+            await compat.carrier_label(None, "owner", self.number, issue=True)
+        self.assertEqual(caught.exception.code, "order_cancelled")
+        self.api.assert_not_called()
+
     async def test_uncertain_status_ack_reconciles_without_second_post(self):
         self.resolve.return_value = self.order_id, self.pending
 
