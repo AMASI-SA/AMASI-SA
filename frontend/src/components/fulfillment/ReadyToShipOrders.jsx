@@ -31,6 +31,8 @@ import {
     getAssemblyCompletion,
     markAssemblyPieceReady,
     newAssemblyReadyRequestId,
+    newPreparationReceiptRequestId,
+    receivePreparationInAssembly,
     searchAssemblyOrder,
 } from "../../services/preparationWorkService";
 import { CameraScanner } from "./PreparationEmployeeReceivingWorkspace";
@@ -81,7 +83,7 @@ function ProductImage({ piece }) {
     );
 }
 
-export function AssemblyProductCard({ piece, busy, onReady, onBlocked, onUpdated }) {
+export function AssemblyProductCard({ piece, busy, onReady, onReceiveFromPreparation, onBlocked, onUpdated }) {
     const [blockedNotice, setBlockedNotice] = useState(false);
     const blockerMessage = ASSEMBLY_BLOCKERS[piece.assembly_blocker_code] || "المنتج غير جاهز";
     return (
@@ -164,6 +166,22 @@ export function AssemblyProductCard({ piece, busy, onReady, onBlocked, onUpdated
                     </details></div>
 
                 )}
+
+                {piece.can_receive_from_preparation && !piece.assembly_ready ? (
+                    <div className="mt-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-3 text-right" role="status" data-testid="assembly-direct-preparation-receipt-offer">
+                        <p className="text-sm font-black text-amber-950">
+                            هل تريد استلام هذه القطعة مباشرة من موظف التجهيز {piece.preparation_employee_name_for_receipt || piece.responsible_employee_name || "المسؤول"}؟
+                        </p>
+                        <button type="button"
+                            disabled={busy}
+                            onClick={() => onReceiveFromPreparation?.(piece)}
+                            className="mt-2 min-h-12 w-full rounded-xl bg-amber-700 px-3 text-sm font-black text-white disabled:opacity-50"
+                            data-testid="confirm-assembly-preparation-receipt">
+                            {busy ? "جارٍ الاستلام..." : "نعم، استلام من موظف التجهيز"}
+                        </button>
+                        <p className="mt-2 text-xs font-bold text-amber-900">بعد تأكيد الاستلام يصبح زر «جاهز» متاحًا، ولا يعتمد تلقائيًا.</p>
+                    </div>
+                ) : null}
 
                 {piece.can_mark_ready ? (
                     <button
@@ -373,6 +391,8 @@ export default function ReadyToShipOrders() {
     const [labelScannerFeedback, setLabelScannerFeedback] = useState(null);
     const labelScannerLock = useRef(false);
     const readyLock = useRef(false);
+    const receivingLock = useRef(false);
+    const uncertainReceipts = useRef(new Set());
     const uncertainPieces = useRef(new Set());
     const requestEpoch = useRef(0);
     useEffect(() => () => { requestEpoch.current += 1; }, []);
@@ -384,8 +404,17 @@ export default function ReadyToShipOrders() {
         ...data,
         pieces: data.pieces?.map((piece) => {
             if (piece.assembly_ready) uncertainPieces.current.delete(piece.piece_id);
-            return uncertainPieces.current.has(piece.piece_id)
-                ? { ...piece, can_mark_ready: false } : piece;
+            if (piece.preparation_receipt_status === "received"
+                || piece.status === "ready_for_assembly") {
+                uncertainReceipts.current.delete(piece.piece_id);
+            }
+            const frozen = uncertainPieces.current.has(piece.piece_id);
+            const receiptUncertain = uncertainReceipts.current.has(piece.piece_id);
+            return {
+                ...piece,
+                can_mark_ready: frozen ? false : piece.can_mark_ready,
+                can_receive_from_preparation: receiptUncertain ? false : piece.can_receive_from_preparation,
+            };
         }),
     });
 
@@ -438,8 +467,66 @@ export default function ReadyToShipOrders() {
         await openOrder(value);
     }, [openOrder]);
 
+    const handleReceiveFromPreparation = async (piece) => {
+        if (readyLock.current || receivingLock.current || busy
+            || !piece?.can_receive_from_preparation || !result?.order_number
+            || uncertainReceipts.current.has(piece.piece_id)) return;
+        receivingLock.current = true;
+        const orderNumber = result.order_number;
+        const epoch = requestEpoch.current;
+        setBusy(`receipt:${piece.piece_id}`);
+        setError("");
+        setSuccess("");
+        let acknowledged = false;
+        try {
+            const receipt = await receivePreparationInAssembly(
+                piece.piece_id, newPreparationReceiptRequestId(),
+            );
+            if (receipt?.ok !== true || receipt?.piece?.piece_id !== piece.piece_id
+                || receipt?.assembly_direct_preparation_receipt_confirmed !== true) {
+                throw new Error("استجابة الاستلام لا تطابق القطعة المحددة.");
+            }
+            acknowledged = true;
+            // The same exact piece must be re-read; never enable Ready based on
+            // a transport acknowledgement or fabricated local state alone.
+            const fresh = await searchAssemblyOrder(orderNumber);
+            const latestPiece = fresh?.pieces?.find((row) => row.piece_id === piece.piece_id);
+            if (fresh?.order_number !== orderNumber
+                || latestPiece?.preparation_receipt_status !== "received") {
+                throw new Error("تعذّر إثبات تسجيل الاستلام من القراءة الحالية.");
+            }
+            uncertainReceipts.current.delete(piece.piece_id);
+            if (epoch !== requestEpoch.current) return;
+            setResult(reconcileRead(fresh));
+            setSuccess("تم تأكيد الاستلام من موظف التجهيز. يمكنك الآن الضغط على «جاهز» بصورة مستقلة.");
+        } catch (receiptError) {
+            // An uncertain POST must never be repeated automatically.
+            uncertainReceipts.current.add(piece.piece_id);
+            if (epoch !== requestEpoch.current) return;
+            try {
+                const fresh = await searchAssemblyOrder(orderNumber);
+                const latestPiece = fresh?.pieces?.find((row) => row.piece_id === piece.piece_id);
+                if (fresh?.order_number === orderNumber
+                    && latestPiece?.preparation_receipt_status === "received") {
+                    uncertainReceipts.current.delete(piece.piece_id);
+                    setResult(reconcileRead(fresh));
+                    setSuccess("تم التحقق من استلام القطعة. زر «جاهز» متاح بعد تحديث المتطلبات.");
+                    return;
+                }
+                if (fresh?.order_number === orderNumber) setResult(reconcileRead(fresh));
+            } catch { /* preserve current receipt decision; never auto-repeat POST */ }
+            setError(acknowledged
+                ? "تم تأكيد الاستلام، لكن تعذر تحديث حالة القطعة. أعد البحث للتحقق قبل الضغط على «جاهز»."
+                : "نتيجة الاستلام غير مؤكدة؛ تحقق من حالة القطعة بالبحث دون إعادة استلام تلقائي.");
+        } finally {
+            receivingLock.current = false;
+            if (epoch === requestEpoch.current) setBusy("");
+        }
+    };
+
     const handleReady = async (piece) => {
-        if (readyLock.current || uncertainPieces.current.has(piece.piece_id)) return;
+        if (readyLock.current || receivingLock.current
+            || uncertainPieces.current.has(piece.piece_id)) return;
         readyLock.current = true;
         const orderNumber = result.order_number;
         const epoch = requestEpoch.current;
@@ -684,7 +771,7 @@ export default function ReadyToShipOrders() {
 
                     <div className="assembly-mobile-order-status">حالة الطلب في سلة: {result.order_status_native || result.order_status || "غير مؤكدة"}</div>
                     <div className="assembly-mobile-products">{result.pieces?.map((piece) => (
-                        <AssemblyProductCard key={piece.piece_id} piece={piece} busy={Boolean(busy)} onReady={handleReady} onBlocked={(blocked) => setError(`المنتج لم يجهز بعد. ${ASSEMBLY_BLOCKERS[blocked.assembly_blocker_code] || "راجع مرحلة المنتج الحالية."}`)} onUpdated={() => openOrder(result.order_number)} />
+                        <AssemblyProductCard key={piece.piece_id} piece={piece} busy={Boolean(busy)} onReady={handleReady} onReceiveFromPreparation={handleReceiveFromPreparation} onBlocked={(blocked) => setError(`المنتج لم يجهز بعد. ${ASSEMBLY_BLOCKERS[blocked.assembly_blocker_code] || "راجع مرحلة المنتج الحالية."}`)} onUpdated={() => openOrder(result.order_number)} />
                     ))}</div>
                     {result.salla_admin_url && <a className="assembly-salla-link" href={sallaOrderHref(result.salla_admin_url)} target="_blank" rel="noopener noreferrer"><ArrowSquareOut size={20} /> الانتقال إلى صفحة الطلب في سلة</a>}
                 </div>
