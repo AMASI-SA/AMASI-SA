@@ -1,5 +1,6 @@
 """Outbox/account tests with real Mongo query semantics and no provider writes."""
 import os
+import hashlib
 import base64
 import unittest
 from datetime import timedelta
@@ -218,6 +219,42 @@ class PushTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.db.raw[OUTBOX].count_documents({}), 2)
         await deliver_one(self.db, self.sender)
         self.assertEqual(len(self.sent), 2)
+
+    def insert_legacy_job(self, event, status="pending"):
+        moment = now()
+        self.db.raw[OUTBOX].insert_one({
+            "_id": hashlib.sha256(f"{event}:device:g1".encode()).hexdigest(),
+            "device_id": "device", "generation": "g1", "actor_id": "staff",
+            "event_id": event, "instruction_id": "instruction", "priority": "normal",
+            "status": status, "attempts": 0, "created_at": moment,
+            "next_at": moment, "expires_at": moment + timedelta(days=2),
+        })
+
+    async def test_migration_refresh_does_not_duplicate_queued_or_claimed_legacy_delivery(self):
+        for status in ("pending", "retry"):
+            self.insert_legacy_job(status, status)
+            await enqueue_operational_push(self.db, recipient_id="staff", event_id=status)
+
+            async def refresh_during_send(device, payload, **kwargs):
+                # A second refresh happens after the worker claims the old row
+                # but before the provider ticket exists.
+                await enqueue_operational_push(self.db, recipient_id="staff", event_id=payload["event_id"])
+                return await self.sender(device, payload, **kwargs)
+
+            self.assertTrue(await deliver_one(self.db, refresh_during_send))
+            self.assertFalse(await deliver_one(self.db, self.sender))
+            self.assertEqual(self.db.raw[OUTBOX].count_documents({"event_id": status}), 1)
+        self.assertEqual([payload["event_id"] for _, payload in self.sent], ["pending", "retry"])
+
+    async def test_unsent_legacy_job_from_revoked_generation_does_not_block_current_session(self):
+        self.insert_legacy_job("rotated")
+        self.relogin_same_phone()
+        await enqueue_operational_push(self.db, recipient_id="staff", event_id="rotated")
+        self.assertTrue(await deliver_one(self.db, self.sender))
+        self.assertTrue(await deliver_one(self.db, self.sender))
+        self.assertFalse(await deliver_one(self.db, self.sender))
+        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(self.sent[0][0]["generation"], "g2")
 
     async def test_legacy_generation_key_provider_acceptance_is_respected(self):
         self.db.raw[OUTBOX].insert_one({

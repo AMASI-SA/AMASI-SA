@@ -181,17 +181,21 @@ async def enqueue_operational_push(db, *, recipient_id, event_id, order_number=N
         addresses = [{"device_id": device["_id"]}]
         if installation:
             addresses.append({"installation_id": installation})
-        # Migration compatibility: the earlier outbox key included the session
-        # generation. Respect any already accepted Expo ticket (or web push
-        # acceptance), even when the token/session has since changed.
-        prior_submitted = await db[OUTBOX].find_one({
+        # A pre-upgrade row may still be queued or already claimed. Let it finish
+        # on its active generation; accepted tickets suppress replay across sessions.
+        prior_delivery = await db[OUTBOX].find_one({
             "actor_id": recipient_id, "event_id": str(event_id),
             "$and": [
                 {"$or": addresses},
-                {"$or": [{"status": "provider_accepted"}, {"ticket": {"$exists": True}}]},
+                {"$or": [
+                    {"status": "provider_accepted"}, {"ticket": {"$exists": True}},
+                    {"device_id": device["_id"], "generation": device["generation"],
+                     "status": {"$in": ["pending", "retry", "sending"]},
+                     "expires_at": {"$gt": now()}},
+                ]},
             ],
         }, {"_id": 1})
-        if prior_submitted:
+        if prior_delivery:
             continue
         existing = await db[OUTBOX].find_one({"_id": key},
                                              {"generation": 1, "status": 1, "ticket": 1})
@@ -309,6 +313,7 @@ async def deliver_one(db, sender=send_to_provider):
 
 async def run(db):
     await db[DEVICES].create_index([("actor_id", 1), ("active", 1)])
+    await db[OUTBOX].create_index([("actor_id", 1), ("event_id", 1)])
     await db[OUTBOX].create_index([("status", 1), ("next_at", 1)])
     await db[OUTBOX].create_index("expires_at", expireAfterSeconds=604800)
     await db["operational_instruction_comments_v1"].create_index([("notification_pending", 1), ("created_at", 1)])

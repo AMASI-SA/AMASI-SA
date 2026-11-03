@@ -107,6 +107,10 @@ async def guard_effect(db, operation, *, effect=None, patch=None):
                 await assert_component_execution(scoped, user_id=owner, order_number=number, plan=plan)
             elif not await allow_legacy_component_execution(scoped, user_id=owner, order_number=number):
                 raise shipping.ShippingLabelError("component_reservation_missing", "تعذر إثبات حجز المكونات.")
+        if effect == "status" and operation.get("_authorize_first_issue"):
+            if current.get("stage") != "completed" or outbox.get("status_attempted") is not False:
+                raise shipping.ShippingLabelError("completion_readback_pending", "يلزم التحقق من حالة التنفيذ.")
+            await operation["_authorize_first_issue"]()
         if effect == "status" and current_status == "completed":
             # A webhook won the race after the provider GET. Never dispatch a
             # second status POST; require a fresh read of this completion.
@@ -264,7 +268,7 @@ async def _deliver(db, operation):
     return result
 
 
-async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manual=False):
+async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manual=False, authorize_first_issue=None):
     if manual:
         async def enroll(scoped):
             workflow = await shipping_workflow(scoped, user_id, order_number)
@@ -285,15 +289,27 @@ async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manua
     if not manual:
         query.update({f"{FIELD}.state": "pending", f"{FIELD}.due_at": {"$lte": instant.isoformat()},
                       f"{FIELD}.attempts": {"$lt": MAX_ATTEMPTS}})
+    if authorize_first_issue:
+        query.update({"stage": "completed", f"{FIELD}.version": 2, f"{FIELD}.status_attempted": False,
+                      f"{FIELD}.legacy_readback_only": {"$ne": True}})
     token = uuid.uuid4().hex
     operation = await db[WORKFLOWS].find_one_and_update(query, {"$set": {
         f"{FIELD}.claim": token, f"{FIELD}.lease_until": (instant + timedelta(seconds=LEASE_SECONDS)).isoformat()},
         "$inc": {f"{FIELD}.attempts": 1}}, return_document=ReturnDocument.AFTER)
     result = {}
     if operation:
+        if authorize_first_issue:
+            operation["_authorize_first_issue"] = authorize_first_issue
         try:
             result = await asyncio.wait_for(_deliver(db, operation), TIMEOUT_SECONDS)
         except Exception as exc:
+            if authorize_first_issue and getattr(exc, "status_code", None) == 403:
+                # Revoking the employee must not poison the worker's own outbox.
+                await db[WORKFLOWS].update_one(
+                    {"user_id": user_id, "order_number": order_number, f"{FIELD}.claim": token},
+                    {"$set": {f"{FIELD}.claim": None, f"{FIELD}.lease_until": ""},
+                     "$inc": {f"{FIELD}.attempts": -1}})
+                raise
             # No provider messages, identifiers or customer data in diagnostics.
             code = getattr(exc, "code", type(exc).__name__)
             status = getattr(exc, "status_code", 0) or 0
