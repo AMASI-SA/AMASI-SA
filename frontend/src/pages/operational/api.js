@@ -2,6 +2,7 @@ import api from '../../lib/api';
 const base = '/operational-balances';
 const data = promise => promise.then(response => response.data);
 export const operationalApi = {
+  receivingInvoiceCoverage: () => data(api.get(`${base}/supplier-invoice-review`, {params: {receiving_only: true}})),
   supplierInvoiceReview: () => data(api.get(`${base}/supplier-invoice-review`)),
   nativePurchaseCandidates: id => data(api.get(`${base}/native-purchase-links/${encodeURIComponent(id)}/candidates`)),
   previewNativePurchaseLink: body => data(api.post(`${base}/native-purchase-links/preview`, body)),

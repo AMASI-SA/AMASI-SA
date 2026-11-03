@@ -209,7 +209,33 @@ async def _preview(scoped, owner, as_of):
     return result
 
 
-async def supplier_invoice_preview(db, owner, *, as_of=None):
+async def _receiving_only(scoped, owner, observed_at):
+    """Two tenant reads plus the accounting-mode guard inside a snapshot, no order scan or ledger."""
+    from operational_balance_service import accounting_inactive
+    from operational_receiving_coverage import compare_receiving
+    await accounting_inactive(scoped, owner)
+    state = await scoped[STATES].find_one({"_id": owner, "owner_id": owner},
+        {"_id": 0, "owner_id": 1, "status": 1, "started_at": 1, "revision": 1,
+         "engine.as_of": 1, "engine.obligations": 1, "engine.facts": 1})
+    if not state or state.get("status") != "active" or not state.get("engine", {}).get("as_of"):
+        fail("supplier_review_no_saved_snapshot", "لا توجد لقطة تشغيلية نشطة يمكن مطابقتها.")
+    fields = ("id user_id supplier_id invoice_number approved_at currency status experiment_mode experiment_run_id "
+              "total_halalas subtotal_halalas purchase_tax tax vat tax_halalas vat_halalas tax_amount vat_amount "
+              "lines.product_price_authority lines.quantity lines.product_charge_eligible lines.piece_ids "
+              "lines.product_unit_price_halalas lines.services.service_id lines.services.unit_price_halalas "
+              "lines.services.quantity_per_piece lines.product_total_halalas lines.services.total_halalas lines.total_halalas").split()
+    # Approval timestamps may be BSON dates or ISO strings with offsets. Compare in UTC
+    # in the reducer rather than silently losing older schemas in a typed date query.
+    invoices = await scoped["mezan_supplier_invoices_v2"].find(
+        {"user_id": owner, "status": {"$in": [None, "payable_posted"]}, "approved_at": {"$ne": None},
+         "experiment_mode": {"$ne": True}},
+        {"_id": 0, **dict.fromkeys(fields, 1)}).to_list(length=NATIVE_LIMIT + 1)
+    result = compare_receiving(state, invoices, owner=owner, observed_at=observed_at)
+    result.update(snapshot_consistent=True, state_revision=state.get("revision"))
+    return result
+
+
+async def supplier_invoice_preview(db, owner, *, as_of=None, receiving_only=False):
     """No refresh, no compare-and-swap, no journal call and no standalone fallback."""
     if not isinstance(owner, str) or not owner or owner != owner.strip():
         raise ValueError('supplier_preview_owner_scope_required')
@@ -217,7 +243,10 @@ async def supplier_invoice_preview(db, owner, *, as_of=None):
     try:
         async with await db.client.start_session() as session:
             async with session.start_transaction(read_concern=ReadConcern('snapshot')):
-                return await _preview(SnapshotReads(db, owner, session), owner, stamp)
+                scoped = SnapshotReads(db, owner, session)
+                if receiving_only:
+                    return await _receiving_only(scoped, owner, stamp)
+                return await _preview(scoped, owner, stamp)
     except ValueError as exc:
         code = str(exc)
         if not code.startswith(('supplier_', 'source_', 'operational_')):

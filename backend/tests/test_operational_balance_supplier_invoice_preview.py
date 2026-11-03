@@ -324,3 +324,24 @@ def test_full_accounting_activation_during_snapshot_blocks_current_preview(monke
             r=await request(db)
             assert r.status_code==409 and r.json()['detail']['code']=='operational_accounting_active'
     run(test())
+
+
+def test_receiving_only_compares_source_pieces_for_saved_window_and_cannot_post():
+    async def test():
+        async with database() as db:
+            await seed(db, partial=True)
+            await db.mezan_supplier_invoices_v2.insert_one({**native_invoice(), "user_id": "another", "id": "foreign"})
+            before=await contents(db)
+            response=await request(db,suffix="?receiving_only=true&owner_id=another")
+            assert response.status_code==200,response.text
+            result=response.json()
+            assert result["read_only"] and result["snapshot_consistent"] and not result["posting_allowed"]
+            assert result["invoice_count"]==1 and result["review_count"]==1
+            row=result["rows"][0]
+            assert row["invoice_id"]=="invoice" and row["invoice_gross_sar"]=="80.00"
+            assert row["matched_components"]==1 and row["component_count"]==2
+            assert [(d["status"],d["source_amount_sar"]) for d in row["differences"]]==[("missing","40.00")]
+            assert "native_purchase_review" not in result and "review_manifest_sha256" not in result
+            assert before==await contents(db)
+            assert (await request(db,{},suffix="?receiving_only=true")).status_code==401
+    run(test())

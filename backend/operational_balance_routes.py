@@ -884,7 +884,7 @@ def make_operational_balance_router(db, current_user):
         return await approve(db, owner, actor['id'], payload.model_dump())
 
     @router.get("/supplier-invoice-review")
-    async def supplier_invoice_review(user=Depends(current_user)):
+    async def supplier_invoice_review(user=Depends(current_user), receiving_only: bool = False):
         actor, owner, _ = await scope(db, user, "reports")
         from fulfillment_v2_routes import _actor_context, _require_permission
         from operational_supplier_invoice_preview import supplier_invoice_preview
@@ -892,7 +892,8 @@ def make_operational_balance_router(db, current_user):
         _require_permission(context, "suppliers.read")
         if context["merchant_id"] != owner:
             fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
-        result = await supplier_invoice_preview(db, owner)
+        result = (await supplier_invoice_preview(db, owner, receiving_only=True) if receiving_only
+                  else await supplier_invoice_preview(db, owner))
         # A report may not disclose the previous owner's snapshot after an actor
         # was disabled, reassigned or lost its read grant while sources loaded.
         fresh, current_owner, _ = await scope(db, user, "reports")

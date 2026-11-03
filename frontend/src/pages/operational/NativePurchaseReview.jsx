@@ -1,3 +1,4 @@
+import ReceivingInvoiceCoverage from './ReceivingInvoiceCoverage';
 import {useEffect, useRef, useState} from 'react';
 import {operationalApi as api, requestId, messageFor} from './api';
 import {formatPositionMoney} from './financialPositionPresentation';
@@ -129,6 +130,7 @@ export default function NativePurchaseReview({sessionScope, onRefresh}) {
     });
   }
   return <section className="ofp-table-card ofp-no-print native-purchase-review" dir="rtl" aria-label="مطابقة فواتير الشراء والسداد">
+    <ReceivingInvoiceCoverage key={sessionScope} sessionScope={sessionScope} />
     <button className="ofp-button" type="button" disabled={busy} onClick={open}>مطابقة فواتير الشراء والسداد</button>
     {opened && <>
       <p>المعاينة لا تغيّر الأرصدة. الاعتماد يسجل الفرق التشغيلي المحدد فقط؛ لا ينشئ تحويلًا بنكيًا أو فاتورة شراء أخرى، ولا يغيّر رصيد البداية.</p>
