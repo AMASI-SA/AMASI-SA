@@ -170,13 +170,13 @@ export function buildFinancialPositionWorkbook(report, currency, filters = {}) {
             columns.map(column => column.label),
             ...(table.rows || []).map(row => columns.map(column => exportValue(row[column.key], column.type))),
         ];
-        if (table.totals && Object.keys(table.totals).length) rows.push(columns.map((column, columnIndex) =>
+        if (table.show_totals !== false && table.totals && Object.keys(table.totals).length) rows.push(columns.map((column, columnIndex) =>
             columnIndex === 0 && column.type === "text" ? "الإجمالي" : exportValue(table.totals[column.key], column.type)));
         const title = `${index + 1} ${table.title || "قسم"}`.replace(/[\\/*?:[\]]/g, " ").slice(0, 31);
         appendSheet(workbook, title, rows, columns.map(column => column.type === "text" ? 38 : 24));
     });
 
-    const summaries = [["الإجماليات والمركز والربح", currency], [], ["إجمالي الديون والمستحقات"], ["الجهة", "لنا", "علينا"],
+    const summaries = [["الإجماليات والمركز والربح", currency], [], ["إجمالي الديون والمستحقات", data.completeness?.actual === true ? "مكتملة" : "الأرصدة المسجّلة فقط"], ["الجهة", "لنا", "علينا"],
         ...(data.debt_rows || []).map(row => [positionText(row.name), exportValue(row.receivable, "money"), exportValue(row.payable, "money")]),
         ["الإجمالي", exportValue(data.debt_totals?.receivable, "money"), exportValue(data.debt_totals?.payable, "money")]];
     [["صافي الأرصدة الحالية", data.current_rows], ["التغير المتوقع من الطلبات المفتوحة", data.forecast_rows], ["حساب الربح المتوقع", data.profit_rows]].forEach(([title, rows]) => {

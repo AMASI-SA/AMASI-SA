@@ -51,7 +51,7 @@ function ReportTable({ table }) {
                 <td key={column.key} className={column.type === "text" ? "ofp-label-cell" : "ofp-value-cell"}><DataCell value={row[column.key]} column={column} /></td>)}</tr>)}
                 {!table.rows?.length && <tr><td className="ofp-empty-cell" colSpan={Math.max(columns.length, 1)}>{table.complete === true ? "لا توجد أرصدة مسجلة لهذا القسم." : "لم تتوفر بيانات مكتملة لهذا القسم."}</td></tr>}
             </tbody>
-            {table.totals && Object.keys(table.totals).length > 0 && <tfoot><tr>{columns.map((column, index) => <td key={column.key}>
+            {table.show_totals !== false && table.totals && Object.keys(table.totals).length > 0 && <tfoot><tr>{columns.map((column, index) => <td key={column.key}>
                 {index === 0 && column.type === "text" ? "الإجمالي" : <DataCell value={table.totals[column.key]} column={column} />}
             </td>)}</tr></tfoot>}
         </table></div>
@@ -60,7 +60,7 @@ function ReportTable({ table }) {
 }
 
 function DebtTable({ data }) {
-    return <article className="ofp-table-card ofp-debts" data-testid="financial-debt-summary"><div className="ofp-table-title"><h3>إجمالي الديون والمستحقات</h3></div>
+    return <article className="ofp-table-card ofp-debts" data-testid="financial-debt-summary"><div className="ofp-table-title"><h3>إجمالي الديون والمستحقات</h3>{data.completeness?.actual !== true && <span className="ofp-status">الأرصدة المسجّلة فقط</span>}</div>
         <table><thead><tr><th scope="col">الجهة</th><th scope="col">لنا</th><th scope="col">علينا</th></tr></thead>
             <tbody>{(data.debt_rows || []).map(row => <tr key={row.id}><td className="ofp-label-cell">{row.name}</td><td><Money value={row.receivable} role="receivable" /></td><td><Money value={row.payable} role="payable" /></td></tr>)}</tbody>
             <tfoot><tr><td>الإجمالي</td><td><Money value={data.debt_totals?.receivable} role="receivable" /></td><td><Money value={data.debt_totals?.payable} role="payable" /></td></tr></tfoot>

@@ -93,6 +93,38 @@ def _source_issue(row):
             "message": row.get("message") or UNKNOWN + "يوجد مصدر تشغيلي يحتاج إلى استكمال أو مراجعة."}
 
 
+def _balance_origin(parties, obligations, complete):
+    """Explain saved balances. Never feed this breakdown into debt totals."""
+    kinds = {"provider", "courier", "store_driver"}
+    index = {}
+    for item in obligations:
+        if item.get("party_type") in kinds and item.get("direction") in {"receivable", "payable"}:
+            index.setdefault((item["party_type"], item.get("party_id"), item["direction"]), []).append(item)
+    rows = []
+    for party in parties:
+        kind = party["party_type"]
+        if kind not in kinds:
+            continue
+        for direction, label in (("receivable", "لنا"), ("payable", "علينا")):
+            items = index.get((kind, party["party_id"], direction), [])
+            remaining = party["outstanding_" + direction]
+            if not items and _number(remaining) == ZERO:
+                continue
+            rows.append({"id": _party_id(party) + ":" + direction, "name": _name(party), "side": label,
+                         "opening": _money(_sum(r.get("confirmed") for r in items if r["kind"] == "baseline")),
+                         "posted": _money(_sum(r.get("confirmed") for r in items if r["kind"] != "baseline")),
+                         "allocated": _money(_sum(r.get("settled") for r in items)), "remaining": remaining})
+    cols = [_column("name", "الجهة", "text"), _column("side", "الاتجاه", "text"),
+            _column("opening", "الافتتاحي"), _column("posted", "المؤكد المسجّل بعد الافتتاح"),
+            _column("allocated", "السداد المخصّص"), _column("remaining", "الرصيد المسجّل")]
+    breakdown = _table("balance_origin", "تفصيل أرصدة المنصات والشحن", "fulfillment", cols, rows, complete=complete,
+                       notes=["تفصيل للأرصدة السابقة؛ لا يُضاف إلى إجمالي الديون. الصفر في المؤكد المسجّل لا ينفي وجود مبيعات أو شحنات تنتظر إثباتها.",
+                              "السداد المخصّص يشمل الافتتاحي والقيود اللاحقة. قد يتضمن الرصيد المسجّل أيضًا تسويات أو دفعات غير مخصّصة."])
+    breakdown["show_totals"] = False  # Opposite directions must not be added together.
+    breakdown["totals"] = {column["key"]: None if column["type"] == "money" else "" for column in cols}
+    return breakdown
+
+
 def _actual_tables(parties, complete):
     tables = []
     columns = [_column("name", "الحساب", "text"), _column("available", "المتاح", role="neutral"),
@@ -153,8 +185,9 @@ def _cost_table(exposure, currency, identity, title, buckets, match):
     rows = []
     for group in groups:
         period = "قبل بدء التشغيل" if group.get("period") == "prestart" else "بعد بدء التشغيل"
+        stage = {"awaiting_review": "انتظار المراجعة", "under_fulfillment": "قيد التنفيذ"}.get(group.get("stage"))
         rows.append({"id": ":".join(str(group.get(key) or "") for key in ("period", "kind", "stage", "party_id", "currency")),
-                     "name": _name(group) + " — " + period, "orders": group.get("orders"),
+                     "name": " — ".join(filter(None, (_name(group), stage, period))), "orders": group.get("orders"),
                      "quantity": None, "amount": _money(group.get("amount")),
                      "period": group.get("period"), "stage": group.get("stage")})
     if rows and _sum(row["amount"] for row in rows) != total:
@@ -308,6 +341,9 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
             shipping.setdefault(order, []).append(row)
     order_ids = set(shipping) | {str(value.get("order_id") or key.removeprefix("cod:")) for key, value in metrics.items()}
     rows, complete = [], True
+    missing_fee_orders = {str(issue.get("source_id", "")).removeprefix("shipping:") for issue in source_issues
+                          if str(issue.get("code", "")).startswith("shipping_")
+                          or issue.get("component") in {"shipping_fee", "base_shipping", "cod_commission"}}
     for order in sorted(order_ids):
         key = "cod:" + order
         source = metrics.get(key)
@@ -352,13 +388,8 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
         fees = {field: _money(_sum(row.get(key) for row in fee_rows)) if fee_rows else None
                 for field, key in (("shipping_confirmed", "confirmed"), ("shipping_settled", "settled"),
                                    ("shipping_outstanding", "outstanding"))}
-        fee_issue = any(str(issue.get("source_id")) in {order, "shipping:" + order}
-                        and (str(issue.get("code", "")).startswith("shipping_")
-                             or issue.get("component") in {"shipping_fee", "base_shipping", "cod_commission"}) for issue in source_issues)
-        if fee_issue:
+        if order in missing_fee_orders:
             fees = {key: None for key in fees}
-        if not frozen and source is not None and not fee_rows:
-            fees = {key: "0.00" for key in fees}
         if any(value is None for value in fees.values()) or status in {"unavailable", "not_confirmed", "pending_review"}:
             complete = False
         rows.append({"id": "delivery:" + order, "order_id": order, "order_number": None,
@@ -427,6 +458,7 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         obligations = [row for row in projection["obligations"] if row.get("currency") == currency]
         actual_complete = bool(projection["as_of"]) and not any(row.get("currency") in {None, currency} for row in projection["issues"])
         tables = _actual_tables(parties, actual_complete)
+        tables.append(_balance_origin(parties, obligations, actual_complete))
         names = {(row["party_type"], row["party_id"]): _name(row) for row in parties}
         debt_rows = []
         categories = [("pos_receivable", "banks_network", "تسويات أجهزة الشبكة"),
