@@ -55,8 +55,8 @@ def native_transaction_evidence(row, provider_order_id):
 
 
 def normalize_transaction_payment(raw, currency, total, created_at, as_of, *, owner,
-                                  order_number, provider_order_id, rows):
-    payment, issues = normalize_payment(raw, currency, total, created_at, as_of)
+                                  order_number, provider_order_id, rows, page_balance=None):
+    payment, issues = normalize_payment(raw, currency, total, created_at, as_of, page_balance=page_balance is not None)
     if not rows or payment is None:
         return payment, issues
     if not owner or str(raw.get("id", "")) != provider_order_id or str(raw.get("reference_id") or raw.get("order_number") or "") != order_number:
@@ -92,9 +92,26 @@ def normalize_transaction_payment(raw, currency, total, created_at, as_of, *, ow
                 proofs.append(ev)
     if unbound:
         captures = payment.get("captures", [])
-        if len(unbound) != 1 or proofs or legacy or issues or len(captures) != 1:
+        if len(unbound) != 1 or proofs or legacy:
             return withheld("provider_transaction_history_conflict")
-        observed, canonical = unbound[0], captures[0]
+        observed = unbound[0]
+        if page_balance is not None and not captures:
+            native = _method_rows(raw, provider, currency, page_balance=True)
+            refs = [n[0] for n in native if n[0] is not None]
+            refs.extend((raw.get("payment") or {})[k] for k in ("reference", "transaction_reference")
+                        if (raw.get("payment") or {}).get(k) is not None)
+            try:
+                stamp = _instant(observed["paid_at"]) if observed.get("paid_at") is not None else None
+            except ValueError:
+                return withheld("provider_capture_timestamp_conflict")
+            if (observed.get("status") not in {"paid", "captured"} or observed.get("amount") != page_balance["paid"]
+                    or (observed.get("reference") is not None and any(r != observed["reference"] for r in refs))
+                    or (stamp and not _instant(created_at) <= stamp <= _instant(as_of))):
+                return withheld("provider_transaction_binding_conflict")
+            return payment, issues
+        if issues or len(captures) != 1:
+            return withheld("provider_transaction_history_conflict")
+        canonical = captures[0]
         if (observed.get("status") not in {"paid", "captured"}
                 or observed.get("amount") != format(_amount(canonical["amount"], currency), ".2f")
                 or observed.get("paid_at") not in (None, canonical["captured_at"])
@@ -129,13 +146,13 @@ def normalize_transaction_payment(raw, currency, total, created_at, as_of, *, ow
         if paid <= 0 or paid > _amount(total, currency):
             return withheld("provider_transaction_amount_conflict")
         observed = payment.get("paid_observation")
-        native = _method_rows(raw, provider, currency)
+        native = _method_rows(raw, provider, currency, page_balance=page_balance is not None)
         canonical = raw.get("payment") or {}
         if canonical.get("status") not in (None, "", "paid", "captured") or raw.get("is_pending_payment") is True:
             return withheld("provider_capture_status_conflict")
         refs = [_identity(canonical[k], "provider_payment_reference_missing")
                 for k in ("reference", "transaction_reference") if canonical.get(k) is not None]
-        refs += [n[0] for n in native]
+        refs += [n[0] for n in native if n[0] is not None]
         if any(r != ref for r in refs):
             return withheld("provider_payment_reference_conflict")
         if (native and native[0][1] != paid) or (observed and _amount(observed["amount"], currency) != paid):
@@ -158,6 +175,48 @@ def normalize_transaction_payment(raw, currency, total, created_at, as_of, *, ow
         return {**payment, "captures":[capture], "capture_source":VERSION}, []
     except (PaymentEvidenceError, KeyError):
         return withheld("provider_transaction_binding_conflict")
+
+
+def normalize_operational_payment(raw, currency, total, created_at, as_of, *, owner, order_number,
+                                  provider_order_id, rows, source):
+    """Use the order detail's final documented amounts, retaining transaction conflicts."""
+    from salla_payment_collection import order_page_source_current, provider_order_page_balance, settled_payment_snapshot
+
+    payment_raw = raw.get("payment") or {}
+    provider = provider_for(raw.get("payment_method") or (payment_raw.get("method") if isinstance(payment_raw, dict) else None))
+    if not provider:
+        return normalize_transaction_payment(raw, currency, total, created_at, as_of, owner=owner,
+            order_number=order_number, provider_order_id=provider_order_id, rows=rows)
+    try:
+        amounts = provider_order_page_balance(raw, currency, total)
+    except ValueError as exc:
+        return None, [{"code": str(exc), "provider": provider}]
+    canonical = settled_payment_snapshot(raw) if amounts else raw
+    if amounts and (canonical.get("payment") or {}).get("paid_amount") is None:
+        # Bind a root-only paid amount to any available transaction for this order.
+        canonical = {**canonical, "payment": {**(canonical.get("payment") or {}), "paid_amount": amounts["paid"]}}
+    payment, issues = normalize_transaction_payment(canonical, currency, total, created_at, as_of, owner=owner,
+        order_number=order_number, provider_order_id=provider_order_id, rows=rows, page_balance=amounts)
+    if not amounts or payment is None or any(i["code"] != "provider_capture_evidence_incomplete" for i in issues):
+        return payment, issues
+    if (not owner or source.get("user_id") != owner or not order_number or not provider_order_id
+            or str(raw.get("id")) != provider_order_id or str(raw.get("reference_id") or raw.get("order_number")) != order_number
+            or not order_page_source_current(source, raw)):
+        return None, [{"code": "provider_order_page_identity_conflict", "provider": provider}]
+    source_stamp = raw.get("updated_at") or raw.get("date_updated")
+    try:
+        if source_stamp is not None:
+            source_stamp = _instant(source_stamp).isoformat()
+    except ValueError:
+        return None, [{"code": "provider_order_page_version_conflict", "provider": provider}]
+    paid = _amount(amounts["paid"], currency)
+    if (payment.get("paid_observation") and _amount(payment["paid_observation"]["amount"], currency) != paid
+            or any(_amount(c["amount"], currency) != paid for c in payment.get("captures", []))):
+        return None, [{"code": "provider_payment_amount_conflict", "provider": provider}]
+    payment["order_page_balance"] = {**amounts, "source": "canonical_salla_order_page", "owner_id": owner,
+        "order_id": provider_order_id, "order_number": order_number, "provider": provider, "currency": currency,
+        "gross": format(_amount(total, currency), ".2f"), "source_updated_at": source_stamp}
+    return payment, []
 
 
 async def load_transaction_rows(db, owner, orders, start, now, *, to_instant, max_rows):

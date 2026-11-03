@@ -169,6 +169,7 @@ def test_scoped_native_transaction_source_to_gross_claim_does_not_touch_order_or
     from operational_balance_engine import reconcile
     from test_operational_balance_sources import HardBoundaryDB, row, order, run
     canonical = order(**{**source_order("mada"), "created_at":CREATED, "total":{"amount":"57.19","currency":"SAR"}})
+    canonical["order_number"] = NUMBER
     ledger = stored(user_id="owner")
     db=HardBoundaryDB({"unified_orders":[canonical],"order_payment_transactions_v2":[
         ledger, {**ledger,"user_id":"other"}, {**ledger,"order_number":"998877"}],

@@ -60,7 +60,7 @@ ALLOWED_COLLECTIONS = ALLOWED_COLLECTIONS | BUNDLE_READ_COLLECTIONS
 PROVIDERS = ('salla', 'tabby', 'tamara', 'emkan')
 from operational_payment_evidence import PAYMENT_METHODS, DIAGNOSTICS
 from operational_provider_transaction_evidence import (COLLECTION as TXN_COLLECTION,
-    load_transaction_rows, normalize_transaction_payment)
+    load_transaction_rows, normalize_operational_payment)
 ALLOWED_COLLECTIONS = ALLOWED_COLLECTIONS | {TXN_COLLECTION}
 
 MAX_ROWS = 20000
@@ -967,9 +967,9 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             method = str(payment.get('method') or raw.get('payment_method') or '').lower()
             total_value = (raw.get('amounts') or {}).get('total', raw.get('total'))
             total = number(total_value)
-            normalized_payment, payment_issues = normalize_transaction_payment(
+            normalized_payment, payment_issues = normalize_operational_payment(
                 raw, order['currency'], total, created, now, owner=owner, order_number=order_number,
-                provider_order_id=identity, rows=txn_by_order.get(order_number, ()))
+                provider_order_id=identity, rows=txn_by_order.get(order_number, ()), source=source)
             payment_identity_conflict = any(row['code'] in {
                 'provider_payment_method_conflict', 'provider_payment_shape_invalid',
                 'provider_split_payment_review_required'} for row in payment_issues)

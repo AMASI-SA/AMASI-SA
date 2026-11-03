@@ -292,7 +292,7 @@ def test_capture_requires_native_reference_amount_and_timestamp():
     del db.data['unified_orders'][0]['raw_by_source']['salla_direct']['payment']['reference']
     output = run(src.collect_sources(db, 'owner', START, NOW))
     assert 'captures' not in output['orders'][0]['payment']
-    assert any(i['code'] == 'provider_capture_evidence_incomplete' for i in output['issues'])
+    assert output['orders'][0]['payment']['order_page_balance']['paid'] == '300.00'
 
 
 def test_ad_snapshot_keeps_cumulative_value_and_checks_close_proof():

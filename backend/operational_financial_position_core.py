@@ -12,7 +12,7 @@ from operational_balance_service import report
 from operational_prestart_cod_forecast import snapshot_cod_preview
 from operational_delivery_report_coverage import delivery_coverage_diagnostics
 from operational_profit_payroll import recorded_salary_subtotals
-from operational_provider_report_coverage import provider_evidence_coverage
+from operational_provider_report_coverage import order_page_payment_rows, provider_evidence_coverage
 
 
 ZERO = Decimal("0")
@@ -488,6 +488,8 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     currencies = {row["currency"] for row in projection["parties"]}
     prestart_cod = snapshot_cod_preview(cost_exposure, projection["started_at"], projection["as_of"])
     currencies.update(prestart_cod)
+    page_payments = order_page_payment_rows(projection)
+    currencies.update(page_payments)
     if cost_ready:
         currencies.update((cost_exposure.get("currencies") or {}).keys())
     result["currency_order"] = sorted(currencies, key=lambda currency: (currency != "SAR", currency))
@@ -497,6 +499,14 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         actual_complete = bool(projection["as_of"]) and not any(row.get("currency") in {None, currency} for row in projection["issues"])
         tables = _actual_tables(parties, actual_complete)
         tables.append(_balance_origin(parties, obligations, actual_complete))
+        if currency in page_payments:
+            page_table = _table("provider_order_balances", "المدفوع والمتبقي حسب صفحة الطلب", "fulfillment", [
+                _column("name", "المنصة", "text"), _column("status", "حالة الإثبات", "text"),
+                _column("orders", "عدد الطلبات", "count"), _column("paid", "دفعه العميل"),
+                _column("remaining", "متبقٍ على العميل")], page_payments[currency], complete=False,
+                notes=["يعرض هذا التفصيل مبالغ الطلبات قبل رسوم المنصة وتسويات البنك. قد يظهر طلب محفوظ مرة أخرى للمراجعة عند تغير دليله."])
+            page_table.update(show_totals=False, totals={})
+            tables.append(page_table)
         names = {(row["party_type"], row["party_id"]): _name(row) for row in parties}
         debt_rows = []
         categories = [("pos_receivable", "banks_network", "تسويات أجهزة الشبكة"),

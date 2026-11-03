@@ -24,6 +24,16 @@ class OrderDiscoveryRow:
     order_date: str
     salla_raw: dict[str, Any]
     current_status: Optional[str] = None
+    native_payment_source: Optional[dict[str, Any]] = None
+
+
+# Only inputs consumed by resolve_provider, the native paid/due reader and tender
+# validation. The hydrated read model already owns the order items and all other data.
+_NATIVE_PAYMENT_FIELDS = (
+    "payment", "payment_actions", "payment_method", "payment_methods", "payment_status",
+    "payment_collection_status", "paid_amount", "remaining_amount", "has_remaining_amount",
+    "refunded_amount", "total", "amounts", "total_amount", "currency", "status", "is_pending_payment",
+)
 
 
 class OrderRepository(Protocol):
@@ -110,6 +120,8 @@ _ATTRIBUTION_FIELDS = (
 # pages or mutating storage.
 _V2_CANONICAL_ROOT_FIELDS = tuple(dict.fromkeys((
     *_ATTRIBUTION_FIELDS,
+    "g47_salla_snapshot",
+    "salla_order_id",
     CURRENT_SHIPPING,
     "customer_name",
     "customer_mobile",
@@ -696,10 +708,14 @@ class MongoOrderRepository:
         # light Salla response cannot erase address, courier or payment evidence.
         salla_raw = _apply_v2_root_fallbacks(raw_provider, row)
 
+        from salla_payment_collection import order_page_source_current
+        payment_ready = order_page_source_current(row, raw_provider)
         current_status = str(row.get("order_status") or "").strip() or None
         return OrderDiscoveryRow(
             order_number=order_number,
             order_date=order_date,
             salla_raw=salla_raw,
             current_status=current_status,
+            native_payment_source={k: raw_provider[k] for k in _NATIVE_PAYMENT_FIELDS if k in raw_provider}
+            if payment_ready else {},
         )

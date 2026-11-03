@@ -193,14 +193,11 @@ function formatCollectionMoney(value, currency = "SAR") {
     }).format(Number(value || 0));
 }
 
-function PaymentSummary({ order }) {
+export function PaymentSummary({ order }) {
     const payment = order?.payment || {};
     const methodRaw = readable(firstPresent(payment.method_native, payment.method, order?.payment_method));
-    const methodKey = methodRaw.toLowerCase();
+    const methodKey = String(payment.method || methodRaw).trim().toLowerCase();
     const methodLabel = PAYMENT_LABELS[methodKey] || methodRaw || "طريقة الدفع غير محددة";
-    const statusRaw = readable(firstPresent(payment.status_native, payment.status));
-    const statusKey = statusRaw.toLowerCase();
-    const isPaid = payment.is_paid === true || ["paid", "completed", "تم الدفع", "مدفوع"].some((token) => statusKey.includes(token));
     const isCod = ["cod", "cash_on_delivery"].includes(methodKey);
     const isBank = ["bank", "bank_transfer", "transfer"].includes(methodKey);
     const bankName = normalizeBankName(payment);
@@ -211,32 +208,33 @@ function PaymentSummary({ order }) {
         .replace(/[إأآٱ]/g, "ا")
         .replace(/[\u200B-\u200D\uFEFF]/g, "");
     const waitingForPayment = normalizedOrderStatus === "بانتظار الدفع";
-    const paidAmount = Number(firstPresent(payment.paid_amount, order?.paid_amount, 0) || 0);
-    const remainingAmount = Number(firstPresent(payment.remaining_amount, order?.remaining_amount, 0) || 0);
-    const hasRemainingAmount = payment.has_remaining_amount === true
-        || order?.has_remaining_amount === true
-        || remainingAmount > 0;
+    const useLegacyAmounts = isCod || isBank;
+    const balance = useLegacyAmounts ? null : payment.source_balance;
+    const paidAmount = balance ? Number(balance.paid) : useLegacyAmounts ? Number(payment.paid_amount || 0) : null;
+    const remainingAmount = balance ? Number(balance.remaining) : useLegacyAmounts ? Number(payment.remaining_amount || 0) : null;
+    const isPaid = balance != null && paidAmount > 0 && remainingAmount === 0;
+    const isPartial = paidAmount > 0 && remainingAmount > 0;
     const checkoutUrl = String(firstPresent(payment.checkout_url, order?.payment_checkout_url, "") || "").trim();
     const collectionCurrency = order?.totals?.currency || order?.currency || "SAR";
 
     if (waitingForPayment) {
         return (
-            <div className="flex h-full min-h-[240px] flex-col justify-center" data-testid="order-v2-payment-summary" data-order-status="بانتظار الدفع" data-collection-status="unpaid">
+            <div className="flex h-full min-h-[240px] flex-col justify-center" data-testid="order-v2-payment-summary" data-order-status="بانتظار الدفع" data-collection-status={isPartial ? "partial" : "unpaid"}>
                 <div className="mb-4 flex items-center gap-4">
                     <WarningCircle size={48} className="shrink-0 text-rose-500" weight="fill" />
                     <div>
-                        <div className="text-2xl font-bold text-rose-600">بانتظار الدفع</div>
+                        <div className="text-2xl font-bold text-rose-600">{isPartial ? "بانتظار سداد المتبقي" : "بانتظار الدفع"}</div>
                         <div className="mt-2 text-sm font-medium text-rose-500">{methodLabel}</div>
                     </div>
                 </div>
                 <div className="space-y-3 border-y border-rose-100 py-4 text-base">
                     <div className="flex items-center justify-between gap-4">
                         <span className="font-bold text-slate-500">المبلغ المدفوع</span>
-                        <span className="num font-extrabold text-slate-800">{formatCollectionMoney(paidAmount, collectionCurrency)}</span>
+                        <span className="num font-extrabold text-slate-800">{paidAmount == null ? "غير متاح" : formatCollectionMoney(paidAmount, collectionCurrency)}</span>
                     </div>
                     <div className="flex items-center justify-between gap-4">
                         <span className="font-bold text-slate-500">المبلغ المطلوب</span>
-                        <span className="num text-xl font-extrabold text-rose-600">{formatCollectionMoney(remainingAmount, collectionCurrency)}</span>
+                        <span className="num text-xl font-extrabold text-rose-600">{remainingAmount == null ? "غير متاح" : formatCollectionMoney(remainingAmount, collectionCurrency)}</span>
                     </div>
                 </div>
                 {checkoutUrl ? (
@@ -255,7 +253,7 @@ function PaymentSummary({ order }) {
         );
     }
 
-    if (hasRemainingAmount && remainingAmount > 0) {
+    if (remainingAmount > 0) {
         return (
             <div className="flex h-full min-h-[240px] flex-col justify-center" data-testid="order-v2-payment-summary" data-collection-status={paidAmount > 0 ? "partial" : "unpaid"}>
                 <div className="mb-4 flex items-center gap-3">
@@ -322,12 +320,13 @@ function PaymentSummary({ order }) {
     }
 
     return (
-        <div className="flex h-full min-h-[240px] flex-col justify-center" data-testid="order-v2-payment-summary" data-payment-method={methodKey}>
+        <div className="flex h-full min-h-[240px] flex-col justify-center" data-testid="order-v2-payment-summary" data-payment-method={methodKey} data-collection-status={isPaid ? "paid" : "unknown"}>
             <div className="flex items-center gap-4">
-                {(isPaid || statusRaw === "—") && <CheckCircle size={48} className="shrink-0 text-teal-300" weight="regular" />}
+                {isPaid ? <CheckCircle size={48} className="shrink-0 text-teal-300" weight="regular" />
+                    : <WarningCircle size={42} className="shrink-0 text-amber-600" />}
                 <div>
-                    <div className="text-2xl font-medium text-slate-700">تم الدفع بواسطة {methodLabel}</div>
-                    {isPaid && <div className="mt-2 text-sm text-slate-400">تمت إضافة مبلغ الطلب إلى رصيد المدفوعات الإلكترونية</div>}
+                    <div className="text-2xl font-medium text-slate-700">{isPaid ? `تم الدفع بواسطة ${methodLabel}` : "لم يثبت مبلغ الدفع من سلة"}</div>
+                    <div className="mt-2 text-sm text-slate-500">{isPaid ? formatCollectionMoney(paidAmount, collectionCurrency) : methodLabel}</div>
                 </div>
             </div>
         </div>

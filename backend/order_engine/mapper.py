@@ -964,13 +964,15 @@ def _map_item(
     )
 
 
-def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
+def map_salla_order(raw_order: dict[str, Any], *, native_payment_source: Optional[dict[str, Any]] = None) -> OrderDTO:
     """Convert one raw Salla order payload into the canonical OrderDTO."""
 
     if not isinstance(raw_order, dict):
         raise OrderMappingError("Salla order payload must be an object")
 
-    from salla_payment_collection import settled_payment_snapshot
+    from salla_payment_collection import provider_order_page_balance, settled_payment_snapshot
+    from operational_payment_evidence import _method_rows, resolve_provider
+    original = raw_order if native_payment_source is None else native_payment_source
     raw_order = settled_payment_snapshot(raw_order)
     source_order_id = _text(raw_order.get("id"))
     order_number = _text(
@@ -1146,6 +1148,24 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
         fallback_currency=currency,
     )
 
+    # Financial proof comes from the native order. Legacy display fields can have
+    # zero defaults or originate in older, flattened snapshots.
+    source_balance = None
+    if original and total_obj is not None and (
+        _dict(total_obj).get("currency") or amounts.get("currency") or original.get("currency")
+    ):
+        try:
+            provider = resolve_provider(original)
+            if provider:
+                currency_code = currency_fields["original_currency"]
+                balance = provider_order_page_balance(original, currency_code, total_obj)
+                if balance:
+                    tender = _method_rows(original, provider, currency_code, page_balance=True)
+                    if not tender or format(tender[0][1], ".2f") == balance["paid"]:
+                        source_balance = balance
+        except ValueError:
+            pass
+
     # Salla reports ``remaining_action.remaining_amount: null`` and
     # ``has_remaining_amount: false`` for an uncollected COD order.  A root
     # snapshot may also carry a synthesized zero from that null value.  For
@@ -1307,6 +1327,7 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             ),
         ),
         payment=PaymentDTO(
+            source_balance=source_balance,
             method=method,
             method_native=method_native,
             status=_text(payment_raw.get("status")),
