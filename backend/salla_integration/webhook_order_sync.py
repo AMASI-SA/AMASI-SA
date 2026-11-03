@@ -423,9 +423,16 @@ async def sync_order_from_verified_webhook(
         doc["salla_webhook_received_at"] = datetime.now(timezone.utc)
 
         from fulfillment_v2_routes import persist_component_source_snapshot
+        shipping_snapshot = extract_shipping(payload, event_name=event_name, event_time=event_body.get("created_at")) or {}
+        if event_name == "order.status.updated":
+            from operational_courier_transitions import WEBHOOK_PROOF, verified_webhook_transition
+            proof = verified_webhook_transition(event_body, payload, shipping_snapshot, user_id)
+            if proof:
+                shipping_snapshot[WEBHOOK_PROOF] = proof
+
         async def persist_snapshot(scoped):
             return await upsert_order(scoped, user_id, order_number, doc, source="salla_direct", raw=payload,
-                                      shipping_snapshot=extract_shipping(payload, event_name=event_name, event_time=event_body.get("created_at")) or {})
+                                      shipping_snapshot=shipping_snapshot)
         result = await persist_component_source_snapshot(
             db, user_id=user_id, order_number=order_number, payload=payload,
             persist=persist_snapshot, created_event=event_name == "order.created",

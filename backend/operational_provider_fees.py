@@ -4,7 +4,7 @@ Version 1 preserves the existing aggregate-policy contract. Version 2 is opt-in
 and splits refundable/nonrefundable/fixed components with independent VAT.
 No merchant rates are hardcoded; statement fees still supersede estimates.
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 CENT = Decimal('0.01')
@@ -74,12 +74,19 @@ def _select(payment, policies, transaction_date):
         and p.get('currency') == payment['currency'] and p.get('status') == 'active'
         and day(p['effective_from']) <= transaction_date
         and (not p.get('effective_to') or transaction_date <= day(p['effective_to']))]
-    plan = payment.get('plan_id')
-    if plan not in (None, ''):
-        specific = [p for p in candidates if str(p.get('plan_id') or '') == str(plan)]
-        candidates = specific or [p for p in candidates if p.get('plan_id') in (None, '')]
-    elif any(p.get('plan_id') not in (None, '') for p in candidates):
-        raise ValueError('provider_payment_plan_required')
+    qualifiers = ('payment_method', 'plan_id')
+    for key in qualifiers:
+        value = payment.get(key)
+        if value not in (None, ''):
+            candidates = [p for p in candidates if p.get(key) in (None, '') or str(p[key]) == str(value)]
+    for key, error in zip(qualifiers, ('provider_payment_method_required_for_fee', 'provider_payment_plan_required')):
+        if payment.get(key) in (None, '') and any(p.get(key) not in (None, '') for p in candidates):
+            raise ValueError(error)
+    if candidates:
+        def specificity(policy):
+            return sum(policy.get(k) not in (None, '') for k in qualifiers)
+        best = max(map(specificity, candidates))
+        candidates = [p for p in candidates if specificity(p) == best]
     if len(candidates) != 1:
         raise ValueError('provider_fee_policy_incomplete_or_ambiguous')
     return candidates[0]
@@ -198,8 +205,49 @@ def _components_projection(payment, policy):
         'fee_components': sorted(details, key=lambda r: r['id'])}
 
 
-def provider_projection(payment, policies, transaction_date):
+def independent_capture_without_fee_policy(payment, policies, transaction_date, error, *, created, as_of):
+    """Only an independently verified positive capture; never guess a fee or refund."""
+    reason = str(error)
+    if reason not in {'provider_fee_policy_incomplete_or_ambiguous', 'provider_payment_method_required_for_fee',
+                      'provider_fee_transaction_date_required'}:
+        return False
+    # Ambiguous active contracts and plan selection errors require their own review.
+    if reason == 'provider_fee_policy_incomplete_or_ambiguous' and any(
+           p.get('provider') == payment['provider'] and p.get('currency') == payment['currency']
+           and (not p.get('payment_method') or p.get('payment_method') == payment.get('payment_method'))
+           and p.get('status') == 'active' and day(p['effective_from']) <= transaction_date
+           and (not p.get('effective_to') or transaction_date <= day(p['effective_to'])) for p in policies):
+        return False
+    captures = payment.get('captures')
+    if not isinstance(captures, list) or len(captures) != 1 or payment.get('refunds') or payment.get('cancellations'):
+        return False
+    if _cash(payment.get('cancelled', '0')) != ZERO:
+        return False
+    c = captures[0]
+    if not isinstance(c, dict) or not isinstance(c.get('id'), str) or not c['id'].strip():
+        return False
+    from operational_payment_evidence import _instant
+    return (created <= _instant(c.get('captured_at')) <= as_of
+            and ZERO < _cash(c.get('amount')) <= _cash(payment.get('gross')))
+
+
+def provider_projection(payment, policies, transaction_date, *, earliest_date=None):
+    """An undated cumulative proof needs the same applicable contract throughout its window."""
     policy = _select(payment, policies, transaction_date)
+    if earliest_date and earliest_date < transaction_date:
+        boundaries = {earliest_date}
+        for row in policies:
+            if row.get("provider") != payment["provider"] or row.get("currency") != payment["currency"] or row.get("status") != "active":
+                continue
+            since = day(row["effective_from"])
+            if earliest_date < since < transaction_date:
+                boundaries.add(since)
+            if row.get("effective_to"):
+                until = day(row["effective_to"])
+                if earliest_date <= until < transaction_date:
+                    boundaries.add(until + timedelta(days=1))
+        if any(_select(payment, policies, point) != policy for point in boundaries):
+            raise ValueError("provider_fee_transaction_date_required")
     version = policy.get('fee_model_version', 1)
     if type(version) is not int or version not in (1, 2):
         raise ValueError('provider_fee_model_version_unsupported')
@@ -275,6 +323,13 @@ def with_recorded_refund(payment, snapshot, reference, value):
         equal = (_cash(result[key]) == _cash(snapshot[key])) if key == 'gross' else result[key] == snapshot[key]
         if not equal:
             raise ValueError('provider_refund_payment_snapshot_conflict')
+    rail = snapshot.get('payment_method')
+    if rail and result.get('payment_method') not in (None, '', rail):
+        raise ValueError('provider_refund_payment_method_conflict')
+    if rail:
+        result['payment_method'] = rail
+    else:
+        result.pop('payment_method', None)  # The original snapshot did not prove a fee rail.
     plan = snapshot.get('plan_id')
     if plan not in (None, ''):
         if result.get('plan_id') not in (None, '', plan):

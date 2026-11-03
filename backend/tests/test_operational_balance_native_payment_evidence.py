@@ -45,7 +45,7 @@ def source(raw, **extra):
 
 
 def state():
-    return {'status':'active','started_at':START,'openings':{},'movements':[]}
+    return {'owner_id':'owner','status':'active','started_at':START,'openings':{},'movements':[]}
 
 
 @pytest.mark.parametrize('method,provider', [('tamara_installment','tamara'),('tabby_installment','tabby'),
@@ -60,13 +60,13 @@ def test_native_alias_is_known_but_observation_is_not_a_dated_capture(method,pro
 
 
 @pytest.mark.parametrize('method', ['tamara_installment','tabby_installment','credit_card'])
-def test_real_native_shape_reaches_expected_balance_without_invented_cash(method):
+def test_real_native_page_amount_reaches_confirmed_balance_without_invented_transaction(method):
     s=source(native(method));assert s['orders'][0]['payment']['provider']==provider_for(method)
-    issue=next(i for i in s['issues'] if i['code']=='provider_capture_evidence_incomplete')
-    assert issue['order_number']=='10' and issue['scope']=='provider_payment' and issue['required_action'] and issue['message']
+    assert not any(i['code']=='provider_capture_evidence_incomplete' for i in s['issues'])
+    assert s['orders'][0]['payment']['order_page_balance']['paid']=='300.00'
     result=reconcile(state(),s,NOW)
     obligation=result['engine']['obligations']['provider:100']
-    assert obligation['expected']=='294.00' and obligation['confirmed']=='0.00'
+    assert obligation['expected']=='0.00' and obligation['confirmed']=='300.00'
     assert not any(k.startswith('capture:') for k in result['engine']['facts'])
     assert result['openings']=={} and result['movements']==[]
     assert reconcile(result,s,NOW)['engine']['obligations']==result['engine']['obligations']

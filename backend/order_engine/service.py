@@ -247,8 +247,8 @@ def _provider_marketing_source(raw: dict[str, Any]) -> dict[str, Optional[str]]:
     return canonical_order_source(raw)
 
 
-def _map_row(raw: dict[str, Any], *, current_status: Optional[str] = None) -> OrderDTO:
-    dto = map_salla_order(raw)
+def _map_row(raw: dict[str, Any], *, current_status: Optional[str] = None, native_payment_source=None) -> OrderDTO:
+    dto = map_salla_order(raw, native_payment_source=native_payment_source)
     customer = dto.customer.model_copy(update={"avatar_url": _customer_avatar(raw), "gender": _customer_gender(raw)})
     marketing = _provider_marketing_source(raw)
     marketing.update(build_attribution_projection(
@@ -305,7 +305,7 @@ async def list_orders(
     last_valid_order_number: Optional[str] = None
     for row in rows:
         try:
-            dto = _map_row(row.salla_raw, current_status=row.current_status)
+            dto = _map_row(row.salla_raw, current_status=row.current_status, native_payment_source=row.native_payment_source)
         except OrderMappingError:
             skipped_invalid += 1
             continue
@@ -329,7 +329,7 @@ async def get_order(repository: OrderRepository, *, user_id: str, order_number: 
     if row is None:
         raise OrderNotFoundError(f"order not found: {normalized_order_number}")
     try:
-        return _map_row(row.salla_raw, current_status=row.current_status)
+        return _map_row(row.salla_raw, current_status=row.current_status, native_payment_source=row.native_payment_source)
     except OrderMappingError as exc:
         raise OrderNotFoundError(f"order payload invalid: {normalized_order_number}") from exc
 
@@ -358,6 +358,7 @@ async def get_orders(
             result[row.order_number] = _map_row(
                 row.salla_raw,
                 current_status=row.current_status,
+                native_payment_source=row.native_payment_source,
             )
         except OrderMappingError:
             continue

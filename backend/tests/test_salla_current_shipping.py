@@ -525,3 +525,24 @@ async def test_capture_result_log_projects_opaque_results_without_mutating_them(
     assert "synthetic-private-value" not in repr(record.args)
     assert "shipment_synced=False" in record.getMessage()
     assert "reason=unrecognized" in record.getMessage()
+
+
+@pytest.mark.asyncio
+async def test_verified_delivered_transition_preserved_on_matching_order_waybill(db, monkeypatch):
+    monkeypatch.setattr("fulfillment_v2_routes.persist_component_source_snapshot", local_source_persist)
+    monkeypatch.setattr("fulfillment_v2_routes.auto_route_instant_order", AsyncMock(return_value={}))
+    monkeypatch.setattr("first_party_attribution.link_order_attribution", AsyncMock(return_value={}))
+    monkeypatch.setattr("mezan_attribution_ledger_sync.safe_sync_order_to_attribution_ledger", AsyncMock(return_value={}))
+    timestamp = "2026-10-02T00:00:01+03:00"
+    raw = order_payload(version=timestamp, status={"slug":"delivered","name":"تم التوصيل"},
+                        shipments=[{"id":"ship-1", "courier_name":"iMile","courier_id":"old",
+                                    "tracking_number":"single-waybill","status":"delivered"}])
+    event = {"event":"order.status.updated", "merchant":"merchant", "created_at":timestamp,
+             "data":{"status":"تم التوصيل","order":raw}}
+    for _ in range(2):
+        assert (await sync_order_from_verified_webhook(db,event))["synced"]
+    row = await db.unified_orders.find_one({"user_id":"u1","order_number":"3001"})
+    assert row[CURRENT_SHIPPING]["verified_order_delivery_transition"] == {
+        "source":"verified_order_status_update","owner":"u1","order_id":"9001","order_number":"3001",
+        "shipment_id":"ship-1","waybill":"single-waybill","at":"2026-10-01T21:00:01+00:00",
+    }

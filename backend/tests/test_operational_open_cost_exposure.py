@@ -300,3 +300,22 @@ def test_invalid_or_future_engine_snapshot_is_incomplete_not_presented_as_curren
     result = preview(seeded_db(), state)
     assert group(result, period="poststart") == []
     assert "current_cost_snapshot_time_incomplete" in codes(result)
+
+
+def test_received_order_split_between_suppliers_counts_once_in_the_report():
+    from operational_financial_position import build_financial_position
+
+    db = seeded_db(order_row=native_order(qty=2), physical=piece(received=True))
+    db.data["mezan_suppliers_v2"].append(row(id="supplier2", name="مورد آخر"))
+    db.data["mezan_preparation_pieces_v1"].append(dict(piece(received=True), id="physical2", supplier_id="supplier2", unit_index=2))
+    from operational_balance_store import initial
+    snapshot = {**initial("owner"), **operating_state()}
+    exposure = preview(db, snapshot)
+    data = build_financial_position(snapshot, cost_exposure=exposure)["currencies"]["SAR"]
+    table = next(t for t in data["tables"] if t["id"] == "products_received_uninvoiced")
+    assert [r["orders"] for r in table["rows"]] == [1, 1]
+    assert table["totals"]["amount"] == "80.00"
+    assert table["totals"]["orders"] == 1
+    exposure["bucket_completeness"]["products_received_uninvoiced"] = False
+    partial = build_financial_position(snapshot, cost_exposure=exposure)["currencies"]["SAR"]
+    assert next(t for t in partial["tables"] if t["id"] == table["id"])["totals"]["orders"] is None

@@ -11,3 +11,13 @@ test('preview and approval are distinct and preserve exact review proof/request'
   await api.previewNativePurchaseLink(selection);await api.approveNativePurchaseLink(approval);
   expect(http.post.mock.calls).toEqual([['/operational-balances/native-purchase-links/preview',selection],['/operational-balances/native-purchase-links/approve',approval]]);
 });
+
+test('historical receiving preview reads just the chosen invoice and its snapshot', async () => {
+  const asOf = '2026-05-06T00:00:00+00:00';
+  await api.receivingCorrectionPreview('invoice test', asOf, 7);
+  expect(http.get.mock.calls).toEqual([[
+    '/operational-balances/supplier-invoice-review/receiving/invoice%20test/correction-preview',
+    {params: {expected_as_of: asOf, expected_revision: 7}},
+  ]]);
+  expect(http.post).not.toHaveBeenCalled();
+});

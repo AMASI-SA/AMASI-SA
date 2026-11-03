@@ -120,6 +120,8 @@ async def test_native_close_profile(env, monkeypatch, installed_live_cost_suppor
             for row in rows:
                 row.pop('_id', None)
                 row['piece_id'] += '-peer'
+                # The peer receives the next units of the same order line.
+                row['unit_index'] += count
                 row['receipt_event_id'] += '-peer'
                 row['supplier_receiving_session_id'] = 'peer-session'
                 if 'id' in row: row['id'] += '-peer'
