@@ -26,6 +26,7 @@ on:
       - "backend/carrier_handoff.py"
       - "backend/fulfillment_carrier_label.py"
       - "backend/fulfillment_v2_routes.py"
+      - "backend/order_engine/amasi_shipping_compat.py"
       - "backend/salla_integration/sync.py"
       - "backend/order_engine/__init__.py"
       - "backend/order_engine/mapper.py"
@@ -56,6 +57,7 @@ on:
       - "backend/tests/test_fulfillment_v2_contract.py"
       - "backend/tests/test_carrier_handoff.py"
       - "backend/tests/test_fulfillment_carrier_label.py"
+      - "backend/tests/test_amasi_shipping_compat.py"
       - "tests/test_order_review_image_modes_contract.py"
       - "tests/test_order_review_mezan_image_upload_contract.py"
       - "frontend/src/App.js"
@@ -149,6 +151,7 @@ on:
       - "backend/carrier_handoff.py"
       - "backend/fulfillment_carrier_label.py"
       - "backend/fulfillment_v2_routes.py"
+      - "backend/order_engine/amasi_shipping_compat.py"
       - "backend/salla_integration/sync.py"
       - "backend/order_engine/__init__.py"
       - "backend/order_engine/mapper.py"
@@ -179,6 +182,7 @@ on:
       - "backend/tests/test_fulfillment_v2_contract.py"
       - "backend/tests/test_carrier_handoff.py"
       - "backend/tests/test_fulfillment_carrier_label.py"
+      - "backend/tests/test_amasi_shipping_compat.py"
       - "tests/test_order_review_image_modes_contract.py"
       - "tests/test_order_review_mezan_image_upload_contract.py"
       - "frontend/src/App.js"
@@ -304,6 +308,7 @@ jobs:
           tests/test_fulfillment_v2_contract.py
           tests/test_carrier_handoff.py
           tests/test_fulfillment_carrier_label.py
+          tests/test_amasi_shipping_compat.py
           -q --tb=short
       - name: Run production preparation tracking regression
         env:

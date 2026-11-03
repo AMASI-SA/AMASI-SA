@@ -2502,6 +2502,78 @@ def make_fulfillment_v2_router(
         """Opt-in Android candidate; the legacy refresh route stays unchanged."""
         return await _carrier_label_action(order_number=order_number, user=user, action="refresh_saved")
 
+    async def _amasi_compatible_label_action(
+        *, order_number: str, user: dict[str, Any], issue: bool,
+    ) -> dict[str, Any]:
+        """Isolated order-first label pilot; no shipment creation or stock write.
+
+        The old completion/refresh endpoints are deliberately left available
+        for rollback until preview, device and live-carrier checks pass.
+        """
+        from order_engine.amasi_shipping_compat import carrier_label
+        from fulfillment_carrier_label import _workflow_patch, _now
+        from salla_integration.service import SallaError
+
+        context = await _actor_context(db, user)
+        _require_permission(context, "fulfillment.labels.print")
+        if not _can_operate_completed_carrier_label(context):
+            raise HTTPException(403, detail={
+                "code": "fulfillment_responsibility_required",
+                "responsibility": "shipping_labeling",
+            })
+        number = _text(order_number)
+        owner = context["merchant_id"]
+        await _require_print_completed_workflow(db, user_id=owner, order_number=number)
+        try:
+            result = await carrier_label(db, owner, number, issue=issue)
+        except ShippingLabelError as exc:
+            raise HTTPException(exc.status_code, detail={
+                "code": exc.code, "message": str(exc), "order_number": number,
+            }) from exc
+        except SallaError as exc:
+            raise HTTPException(502, detail={
+                "code": "salla_order_unavailable",
+                "message": "تعذّر جلب الطلب من سلة؛ لم تُنشأ شحنة بديلة.",
+                "order_number": number,
+            }) from exc
+
+        # Keep the existing employee-permission boundary, including revocation
+        # during external IO. Carrier content comes from the current Salla read.
+        latest = await _actor_context(db, user)
+        _require_permission(latest, "fulfillment.labels.print")
+        if (latest["merchant_id"] != owner
+                or not _can_operate_completed_carrier_label(latest)):
+            raise HTTPException(403, detail={"code": "completion_owner_changed"})
+        patch = _workflow_patch(result, now=_now())
+        saved = await db.order_review_workflows.update_one(
+            {"user_id": owner, "order_number": number, "assembly_status": "completed"},
+            {"$set": patch},
+        )
+        if saved.matched_count != 1:
+            raise HTTPException(409, detail={"code": "assembly_completion_required"})
+        return {
+            **result, "order_number": number,
+            "assembly_completion_confirmed": True,
+        }
+
+    @router.post("/completed/{order_number}/carrier-label/amasi")
+    async def issue_amasi_compatible_carrier_label(
+        order_number: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        return await _amasi_compatible_label_action(
+            order_number=order_number, user=user, issue=True,
+        )
+
+    @router.post("/completed/{order_number}/carrier-label/amasi/refresh")
+    async def refresh_amasi_compatible_carrier_label(
+        order_number: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        return await _amasi_compatible_label_action(
+            order_number=order_number, user=user, issue=False,
+        )
+
     @router.post("/completed/{order_number}/carrier-label/confirm-print")
     async def confirm_completed_order_carrier_label_print(
         order_number: str,
