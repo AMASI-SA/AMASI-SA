@@ -541,3 +541,34 @@ async def test_unpriced_current_bundle_reads_are_constant_across_order_count(db)
     assert many_cost["total"] == 1650
     assert first_db.reads == many_db.reads
     assert sum(many_db.reads.values()) <= 20
+
+
+@pytest.mark.asyncio
+async def test_current_estimate_is_opt_in_to_profitability_not_marketing_or_historical_authority(db):
+    from dashboard_cpu_budget import CPUWorkBudget
+    from order_cost_authority import (
+        _unknown, load_order_cost_authority, resolve_order_line_cost,
+    )
+
+    order = sale("scope-isolation", sale_line("scope-line", 1))
+    line = order["products"][0]
+
+    async def read(budget=None, **kwargs):
+        a = await load_order_cost_authority(
+            ReadOnlyDB(db), OWNER, [order], budget=budget, **kwargs)
+        return resolve_order_line_cost(
+            line, order_number=order["order_number"],
+            authority=a, catalog_cost=_unknown(1, "missing"),
+            product_id="shawl",
+        )
+
+    historical = await read()
+    assert historical["calculation_cost_available"] is False
+    assert "bundle_snapshot_missing" in historical["missing_cost_reasons"]
+    dashboard = await read(CPUWorkBudget(5))
+    assert dashboard["calculation_cost_available"] is True
+    assert dashboard["line_total"] == 55
+    assert dashboard["historical_cost_verified"] is False
+    disabled = await read(CPUWorkBudget(5), current_profitability_estimate=False)
+    assert disabled["calculation_cost_available"] is False
+    assert disabled["cost_authority"] == "unresolved_snapshot"
