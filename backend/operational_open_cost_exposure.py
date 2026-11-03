@@ -167,6 +167,7 @@ async def project(db, owner, state, *, as_of=None):
     bundle_costs = await load_remaining_bundles(db, owner, [raw for _, raw in raw_orders], stamp,
         preparation_pieces=pieces, operational_state=state)
     current_stages, current_statuses = {}, {}
+    identified_orders = set()
     for record, raw in raw_orders:
         oid = str(raw.get("id") or "")
         num = str(raw.get("reference_id") or raw.get("order_number") or "")
@@ -181,6 +182,7 @@ async def project(db, owner, state, *, as_of=None):
         if not oid or not num or ids[oid] != 1 or nums[num] != 1:
             issues["historical_order_identity_ambiguous"] += 1
             continue
+        identified_orders.add(oid)
         if created > started:
             current_stages[oid] = _cutover_group(status)
             current_statuses[oid] = status
@@ -464,6 +466,17 @@ async def project(db, owner, state, *, as_of=None):
         if confirmed:
             add("poststart", kind, "confirmed_in_financial_balances", str(obligation.get("party_id") or ""),
                 str(obligation.get("name") or "جهة غير مكتملة"), currency, confirmed, 1, oid)
+    # Two suppliers can receive different items from one order. Keep IDs inside this
+    # projection and return only the distinct count per report table and currency.
+    stages = {"received_without_approved_invoice": "products_received_uninvoiced",
+              "awaiting_review": "products_unreceived", "under_fulfillment": "products_unreceived",
+              "unreceived": "products_unreceived", "not_delivered": "shipping_expected"}
+    table_orders = defaultdict(lambda: defaultdict(set))
+    for (_, _, stage, _, _, currency), group in values.items():
+        if stage in stages:
+            table_orders[currency][stages[stage]].update(group["orders"])
+    counts = {currency: {table: len(ids) if ids <= identified_orders else None for table, ids in tables.items()}
+              for currency, tables in table_orders.items()}
     groups = [{"period": period, "kind": kind, "stage": stage, "party_id": party,
         "party_name": name, "party_type": kind, "currency": currency,
         "amount": _fmt(v["amount"]), "units": v["units"], "orders": len(v["orders"])}
@@ -472,6 +485,7 @@ async def project(db, owner, state, *, as_of=None):
     return {"status": "preview", "as_of": stamp.isoformat(),
         "engine_as_of": engine_at.isoformat() if engine_at else None, "started_at": started.isoformat(),
         "currencies": {c: {k: _fmt(v) for k, v in sorted(details.items())} for c, details in sorted(currencies.items())},
+        "distinct_order_counts": counts,
         "bucket_completeness": cost_completeness(issues, declared_scopes),
         "groups": groups, "issues": [{"code": c, "count": n} for c, n in sorted(issues.items())],
         "complete": not any(c != "historical_current_catalog_estimate_used" for c in issues),

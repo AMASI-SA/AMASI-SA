@@ -206,11 +206,17 @@ def _cost_table(exposure, currency, identity, title, buckets, match):
         notes.insert(0, UNKNOWN + "مصدر تكاليف الطلبات المفتوحة غير جاهز أو غير مكتمل؛ المبالغ الظاهرة أجزاء موثقة فقط.")
     if total is not None and not complete:
         notes.append("مجموع التقديرات المتاحة من المصدر: " + _money(total) + " " + currency + ".")
+    order_count = None
+    if complete:
+        if "distinct_order_counts" in exposure:
+            order_count = exposure["distinct_order_counts"].get(currency, {}).get(identity, 0 if not rows else None)
+        elif len(rows) == 1:
+            order_count = rows[0]["orders"]
     return _table(identity, title, "forecast", [_column("name", "الجهة والفترة", "text"),
                   _column("orders", "طلبات المجموعة", "count"), _column("quantity", "الكمية", "count"),
                   _column("amount", "التكلفة المتوقعة", role="payable")], rows, complete=complete, notes=notes,
                   totals={"amount": _money(total) if complete else None,
-                          "orders": rows[0]["orders"] if len(rows) == 1 else None, "quantity": None})
+                          "orders": order_count, "quantity": None})
 
 
 def _cost_tables(exposure, currency, obligations):
