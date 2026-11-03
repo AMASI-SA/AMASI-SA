@@ -1,6 +1,6 @@
 # OP-UNIFIED-BALANCES — PR1705 LIVE VERIFIED on Mezan; lease closed
 
-Main registry: **PR1687**. Published release: **PR1705**, branch `release/operational-ready-shippingbase-20261103`; PR1702 is closed unmerged and preserved. Latest continuation **DELIVERY-020.md**; final release attestation **DELIVERY-018.md**; exact technical acceptance **DELIVERY-008.md**, superseding pending-check wording in comment6590950351 and DELIVERY007. Read the latest evidence comment as well. Prior status preserved byte-for-byte in STATUS-PRE-B2-ACCEPTANCE-20261103.md; all previous numbered records and DELIVERY-REGISTER.md remain intact. Issue1006 is full.
+Main registry: **PR1687**. Published release: **PR1705**, branch `release/operational-ready-shippingbase-20261103`; PR1702 is closed unmerged and preserved. Latest continuation **DELIVERY-021.md**; final release attestation **DELIVERY-018.md**; exact technical acceptance **DELIVERY-008.md**, superseding pending-check wording in comment6590950351 and DELIVERY007. Read the latest evidence comment as well. Prior status preserved byte-for-byte in STATUS-PRE-B2-ACCEPTANCE-20261103.md; all previous numbered records and DELIVERY-REGISTER.md remain intact. Issue1006 is full.
 
 ## Historical frozen candidate PR1702 (superseded)
 
@@ -87,3 +87,7 @@ The scoped SAR row sums reconcile with the displayed totals, but aggregate arith
 ## Scoped post-release provider audit — record 020
 
 The reviewed live provider ledger showed opening/settlement claims and no new order-linked increase in the audited scope despite paid-labelled orders. On the same flagged orders, provider capture state/time evidence was missing and fee-policy warnings were visible. A gross order value or paid label alone does not establish a net collectible claim. [DELIVERY-020.md](DELIVERY-020.md) records this limited observation only. No code, production, financial, approval or repost action; the completed release remains attested by record 018.
+
+## Scoped post-release external courier audit — record 021
+
+The external courier balances reviewed in the period contained opening obligations only, without confirmed post-start delivery fees, recognized collections, or settlement movements. The scoped operational setup lacked a confirmed external carrier-to-source identity mapping (stage 7 not ready). Sampled current source waybills marked delivered lacked a dated delivery event in the applicable operational reader; an independent sample also showed order/shipment status divergence. Checked against the published source and event readers. Absence from the operational ledger is not evidence that no deliveries took place or a particular amount is due. [DELIVERY-021.md](DELIVERY-021.md) records this bounded, sanitized observation. Only registry documentation changed; no source, setup, operational business records, financial approvals, or production changes.
