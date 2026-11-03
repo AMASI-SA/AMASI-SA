@@ -102,6 +102,20 @@ class AmasiCompatibleShippingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["shipment_id"], "99")
         self.assertTrue(result["ready"])
 
+    async def test_transport_error_uses_independent_salla_fallback(self):
+        import httpx
+
+        async def reply(db, owner, method, path, **kwargs):
+            if path == "/orders/42/shipments":
+                raise httpx.ConnectError("network temporarily down")
+            if path == "/shipments":
+                return {"data": [self.pdf]}
+            raise AssertionError(path)
+
+        self.api.side_effect = reply
+        result = await compat.carrier_label(None, "owner", self.number, issue=False)
+        self.assertTrue(result["ready"])
+
     async def test_existing_known_salla_id_skips_keyword_search(self):
         class Collection:
             async def find_one(self, *args, **kwargs):
