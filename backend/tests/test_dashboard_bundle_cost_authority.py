@@ -219,15 +219,26 @@ async def test_catalog_components_and_options_are_shared_for_ordinary_products(d
 
 
 @pytest.mark.asyncio
-async def test_unresolved_bundle_cost_is_not_replaced_with_current_parent_70(db):
+async def test_current_configured_bundle_cost_applies_to_all_unpriced_sold_units(db):
+    # Owner rule: every sold unit uses configured current selected costs when
+    # no immutable order-line cost exists; never blindly use Salla parent 70.
     order = sale("no-history", sale_line("line", 4))
-    result = await build_mezan_v2_product_cost(ReadOnlyDB(db), OWNER, [order])
+    readonly = ReadOnlyDB(db)
+    result = await build_mezan_v2_product_cost(readonly, OWNER, [order])
+    cooperative = await build_mezan_v2_product_cost_cooperative(ReadOnlyDB(db), OWNER, [order])
     sold = await load_sold_products(ReadOnlyDB(db), OWNER, [order])
-    assert result["incomplete_orders_count"] == 1
-    assert result["product_rows"][0]["cost_status"] == "missing"
-    assert result["product_rows"][0]["total_cost"] is None
-    assert result["product_rows"][0]["net_profit"] is None
-    assert sold[0]["total_cost"] is None
+    assert result == cooperative
+    assert result["incomplete_orders_count"] == 0
+    assert result["product_rows"][0]["cost_status"] == "complete"
+    assert result["product_rows"][0]["total_cost"] == 220
+    assert result["total"] == result["product_profit_summary"]["total_cost"] == 220
+    assert result["product_rows"][0]["units_sold"] == 4
+    assert result["product_rows"][0]["average_unit_cost"] == 55
+    assert sold[0]["total_cost"] == 220
+    assert sum(readonly.reads.values()) <= 15
+    # No snapshot/revision/journal is written by a profitability report.
+    assert await db["mezan_order_cost_corrections_v1"].count_documents({}) == 0
+    assert await db["mezan_order_item_cost_snapshots_v2"].count_documents({}) == 0
 
 
 @pytest.mark.asyncio
