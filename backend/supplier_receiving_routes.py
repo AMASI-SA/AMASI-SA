@@ -4761,8 +4761,11 @@ def make_supplier_receiving_router(
             )
             if offered and not supplier_assignment_optional:
                 raise HTTPException(status_code=409, detail={
-                    "code": "supplier_piece_supplier_required",
+                    "code": "supplier_piece_not_dispatched",
                     "message": "إسناد المورد إجباري: يجب أن يرسلها الموظف المسند إليه أولًا.",
+                    "dispatch_status": _text(
+                        scanned_piece.get("supplier_dispatch_status")
+                    ),
                 })
             direct_offer = offered if supplier_assignment_optional else None
             if direct_offer and not payload.confirm_direct_receiving_assignment:
