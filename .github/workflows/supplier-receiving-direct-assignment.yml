@@ -4,9 +4,12 @@ on:
   pull_request:
     paths:
       - "backend/supplier_receiving_routes.py"
+      - "backend/assembly_mobile_settings.py"
+      - "backend/mobile_operational_flow_policy.py"
       - "backend/supplier_receiving_direct_assignment.py"
       - "backend/supplier_receipt_employee_custody.py"
       - "backend/tests/test_supplier_receiving_direct_assignment.py"
+      - "backend/tests/test_mobile_operational_flow_policy.py"
       - ".github/workflows/supplier-receiving-direct-assignment.yml"
   workflow_dispatch:
 
@@ -50,7 +53,7 @@ jobs:
           PyJWT
           python-dotenv
       - name: Python syntax and import gate
-        run: python -m py_compile supplier_receiving_direct_assignment.py supplier_receiving_routes.py supplier_receipt_employee_custody.py tests/test_supplier_receiving_direct_assignment.py
+        run: python -m py_compile supplier_receiving_direct_assignment.py supplier_receiving_routes.py supplier_receipt_employee_custody.py mobile_operational_flow_policy.py assembly_mobile_settings.py tests/test_supplier_receiving_direct_assignment.py tests/test_mobile_operational_flow_policy.py
       - name: Direct assignment and core receiving regression
         env:
           PYTHONPATH: .
@@ -58,4 +61,5 @@ jobs:
         run: >-
           python -m pytest -q --tb=short
           tests/test_supplier_receiving_direct_assignment.py
+          tests/test_mobile_operational_flow_policy.py
           tests/test_supplier_receiving.py
