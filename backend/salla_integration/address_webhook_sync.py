@@ -1,12 +1,8 @@
-"""Read-only-to-Salla reconciliation of an edited order delivery address.
+"""Project the latest order delivery address from an existing verified order.updated.
 
-Salla emits order.shipping.address.updated separately from order.updated.
-This handler consumes the verified event and updates only the order's current
-delivery-address projection. It never changes an order/shipment status,
-carrier AWB, product choices, preparation, stock or financial figures.
-
-The historical shipment ship_to is deliberately not modified: an already
-issued carrier label might still contain the earlier destination.
+Uses the currently available order.updated feed. No shipping-event subscription
+or shipping API is needed. Changes only the current delivery-address projection;
+never a shipment's original AWB, order status, costs, stock or payment figures.
 """
 from __future__ import annotations
 
@@ -63,7 +59,7 @@ def _current_address(payload: dict[str, Any]) -> tuple[dict[str, Any], str]:
 
 async def sync_verified_shipping_address(db: Any, event_body: dict[str, Any]) -> dict[str, Any]:
     event = str(event_body.get("event") or "").strip()
-    if event not in {"order.shipping.address.updated", "order.updated"}:
+    if event != "order.updated":
         return {"attempted": False, "reason": "not_address_event"}
     owner = await _resolve_user_id(db, str(event_body.get("merchant") or "").strip())
     if not owner:
@@ -103,7 +99,8 @@ async def sync_verified_shipping_address(db: Any, event_body: dict[str, Any]) ->
         existing = await scoped.unified_orders.find_one(
             selector,
             {"_id": 0, "order_id": 1, "raw_by_source.salla_direct.id": 1,
-             "salla_address_provider_updated_at": 1},
+             "salla_address_provider_updated_at": 1,
+             "salla_address_verified_at": 1, "shipping_address_raw": 1},
         )
         if not existing:
             # A partial address webhook must never invent a new order.
@@ -117,6 +114,10 @@ async def sync_verified_shipping_address(db: Any, event_body: dict[str, Any]) ->
         previous = provider_time(existing.get("salla_address_provider_updated_at"))
         if previous and (not version or version < previous):
             return {"attempted": True, "synced": False, "reason": "older_address_event"}
+        if existing.get("salla_address_verified_at") and existing.get("shipping_address_raw") == address:
+            # Repeated order.updated events are very common. Do not add
+            # another write or trigger downstream work when nothing changed.
+            return {"attempted": True, "synced": False, "reason": "address_unchanged"}
 
         patch = {
             **values, "salla_address_verified_at": now,
