@@ -58,3 +58,21 @@ Production changed by this task: **NO**.
 3. If explicitly authorized later, perform v5 source A / reviewed intent-only B, merge and publish with the guard; validate 3/3 before enabling a separately approved reporting-only data correction. No production write is justified by a code CI pass alone.
 
 **Current task Production writes: NO. New deployment: NO. Existing PR #1695 deployment unchanged.**
+
+## Milestone 3 — owner-approved current costs for all unpriced sold units (2026-11-03)
+
+**Owner policy decision:** Costs currently configured in Mezan apply to **every sold unit of the product in profitability reports**, including orders created before cost setup. In this product the owner confirms that the original SAR15 shawl + optional SAR40 rose + optional SAR10 independent external-supplier embroidery were already valid at sale time. Each option is charged **only on order lines where the buyer chose it**, quantity multiplies once.
+
+Implementation checkpoint source (before this documentation-only commit): `6bfff5c111a8e169d75ed174e7cdf98611b33d0c`. This supersedes the earlier requirement to manually attest a historical price for each older **unpriced** unit, for **reporting estimates** only. It does not rewrite any persisted accounting, actual or frozen cost.
+
+- `backend/current_bundle_reporting_estimate.py`: bounded tenant-scoped read-only current-catalog projection for **only** composite order lines with missing authority. Current configuration for physical parent, selected recipe products/resources, option-linked external supplier services and SAR costs. Original Salla option-row IDs may differ from catalog IDs; recover a price choice only via an exact ID or uniquely matching catalog name/value, never transfer the inferred choice to stock/supplier execution. Do not guess unknown, missing or conflicting choices; fail closed.
+- `backend/order_cost_authority.py`: exact, existing persisted frozen/actual/corrected authority still wins. Current-cost fallback is separately labeled `current_bundle_catalog_estimate`, `cost_stage=expected`, `historical_cost_verified=false`; never counted twice.
+- `backend/dashboard_v2_routes.py`: both standard and cooperative product-cost builders use the same estimated fallback. `totals.total_product_cost`, `product_cost_v2.total`, product rows and executive profit therefore share one cost per selected order line and the existing refund/cancellation scale once.
+- `backend/sold_products_report_v2.py`: same estimate in sold-products report.
+- `backend/tests/test_dashboard_bundle_cost_authority.py`: unpriced four rose units = 220; rose+name four units = 260; change to current SAR16+45+11 = 288 for same four units, while original frozen costs remain unchanged; mixed choices, conflicting yes/no, missing selections, order-row/catalog ID differences, report read bounds and zero operational writes.
+- Explicitly unsupported advanced or ambiguous recipes stay incomplete rather than fabricate a complete profit.
+- Former owner-attested single-order correction plan/apply APIs remain disabled by default; they are **not required** to display a current-cost estimate. No Production DB writes, financial posting or backfill.
+
+**Current checks:** Exact-HEAD GitHub CI for source `6bfff5c1...` is queued (G47, Dashboard runtime adoption, Security, CodeQL, etc.). Do not claim green acceptance until results are inspected. Existing earlier green source-A checks apply to the previous historic-correction scope only.
+
+**Next safe action:** Review exact SHA GitHub runs, repair any regressions and validate Product Card versus Executive Profit and Sold Products report, then prepare reviewed v5 A/B intent. Keep Production deployment and all data writes separate, explicit actions. No Production change in this milestone.
