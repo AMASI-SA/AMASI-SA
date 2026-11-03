@@ -4,7 +4,7 @@ from fastapi import Depends
 from accounting_onboarding_domains import ExternalPersonIn, create_external_person
 from accounting_onboarding_ssot import (
     FeePolicyCreate, PrepaidSelection, TypedFactCreate, create_fee_policy,
-    list_fee_policies, list_prepaid_candidates, save_prepaid_selection,
+    list_fee_candidates, list_fee_policies, list_prepaid_candidates, save_prepaid_selection,
     create_typed_fact, list_typed_facts,
 )
 
@@ -19,6 +19,11 @@ def install_setup_contract_routes(router, raw, current_user, actor_for, base):
     async def policies(user: dict = Depends(current_user)):
         _, owner = await actor_for(user)
         return {"items": await list_fee_policies(raw, owner)}
+
+    @router.get(base + "/fee-policy-candidates")
+    async def fee_candidates(user: dict = Depends(current_user)):
+        _, owner = await actor_for(user, "drafts_manage")
+        return {"items": await list_fee_candidates(raw, owner)}
 
     @router.post(base + "/fee-policies")
     async def policy(payload: FeePolicyCreate, user: dict = Depends(current_user)):

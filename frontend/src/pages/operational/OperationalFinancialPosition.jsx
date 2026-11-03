@@ -12,6 +12,7 @@ import {
 } from "./financialPositionPresentation";
 import "./financialPosition.css";
 import NativePurchaseReview from "./NativePurchaseReview";
+import HistoricalShippingFeeReview from "./HistoricalShippingFeeReview";
 
 const emptyFilters = () => ({ order: "", party: "", payment: "" });
 const inactiveMessages = {
@@ -205,6 +206,7 @@ export default function OperationalFinancialPosition() {
 
     return <main className="ofp-page" dir="rtl" aria-label="تقرير المركز المالي التشغيلي" data-testid="operational-financial-position">
         <div className="ofp-toolbar ofp-no-print"><div><span className="ofp-eyebrow">الأرصدة التشغيلية / التقارير</span><h1>المركز المالي التشغيلي</h1></div><div className="ofp-actions">
+            {data && user?.role === "owner" && <a className="ofp-button" href="/operational-balances/provider-fees">مراجعة تعرفات منصات الدفع</a>}
             <button type="button" className="ofp-button" onClick={refresh} disabled={loading || authMissing}><ArrowClockwise size={19} aria-hidden="true" />تحديث التقرير</button>
             <button type="button" className="ofp-button" onClick={() => handlePrint()} disabled={!data}><Printer size={20} aria-hidden="true" />طباعة التقرير</button>
             <button type="button" className="ofp-button ofp-export" onClick={exportReport} disabled={!data || exporting}><MicrosoftExcelLogo size={20} aria-hidden="true" />{exporting ? "جارٍ التصدير…" : "تصدير Excel"}</button>
@@ -215,6 +217,10 @@ export default function OperationalFinancialPosition() {
         {report && report.status !== "active" && <div className="ofp-page-notice" role="status"><Info size={24} aria-hidden="true" /><p>{inactiveMessages[report.status] || "التقرير التشغيلي الحالي غير متاح في هذه المرحلة."}</p></div>}
         {report?.status === "active" && !data && <div className="ofp-page-notice" role="status">لا توجد بيانات عملة جاهزة للعرض حتى آخر احتساب.</div>}
         {data && user?.role === "owner" && <NativePurchaseReview key={scope + report.session_scope} sessionScope={report.session_scope} onRefresh={refresh} />}
+        {data && user?.role === "owner" && <div className="ofp-no-print">
+            <a className="ofp-button" href="/shipping-settings-v2">مراجعة تعرفة شركات الشحن</a>
+            <HistoricalShippingFeeReview key={scope + report.session_scope + activeCurrency} orders={data.shipping_fee_review_orders} />
+        </div>}
         {data && <article className="ofp-report" dir="rtl" ref={printRef} data-testid="financial-position-content">
             <header className="ofp-report-header"><div className="ofp-brand">ميزان<span>التقرير التشغيلي</span></div><div><h2>تقرير المركز المالي التشغيلي</h2><p>الأرصدة والذمم كما في {formatRiyadhArabicLong(report.as_of)}</p></div><span className="ofp-report-kind">الأرصدة والتوقعات</span></header>
             <div className="ofp-scope-bar"><div><CalendarBlank size={19} aria-hidden="true" /><span>آخر احتساب: <bdi>{formatRiyadhDateTime(report.as_of)}</bdi></span></div>

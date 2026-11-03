@@ -237,7 +237,10 @@ def normalize_history_row(
         "actor_name": actor_name,
     }
 
+    from operational_courier_transitions import native_status_transition
+    transition = native_status_transition(row, title, base["event_type"], provider_order_id)
     return {
+        **({"native_status_transition": transition} if transition else {}),
         "order_number": order_number,
         "provider_order_id": provider_order_id,
         "source": "salla_history",
@@ -565,6 +568,8 @@ async def refresh_order_activity_from_salla(
     now = _now_iso()
 
     for event in events:
+        proof = event.pop("native_status_transition", None)
+        observation = {"$addToSet": {"native_status_transition": proof}} if proof is not None else {}
         await db.order_activity_events_v2.update_one(
             {
                 "user_id": str(user_id),
@@ -572,6 +577,7 @@ async def refresh_order_activity_from_salla(
                 "fingerprint": event["fingerprint"],
             },
             {
+                **observation,
                 "$setOnInsert": {
                     **event,
                     "user_id": str(user_id),

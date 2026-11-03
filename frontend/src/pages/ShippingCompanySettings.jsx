@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import api from "../lib/api";
+import CourierTariffApproval from "./operational/CourierTariffApproval";
 
 
 const fmt = (v) => Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -170,6 +171,7 @@ export default function ShippingCompanySettings({ mezan2 = false }) {
                 </div>
             </div>
 
+            {mezan2 && <CourierTariffApproval />}
             <div className="bg-white border-2 border-slate-200 rounded-xl overflow-hidden">
                 <table className="w-full text-xs" data-testid="settings-table">
                     <thead className="bg-slate-50 text-slate-700">

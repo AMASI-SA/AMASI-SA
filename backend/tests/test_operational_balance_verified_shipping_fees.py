@@ -120,14 +120,38 @@ def test_conflicting_rate_duplicate_and_existing_allocation_hold_without_reprici
     assert review(calculated(d))[0]['candidate_amount'] is None
 
 
-def test_native_only_candidate_is_in_report_table_never_in_debt_or_cash():
-    state=calculated(fixture())
+def test_ambiguous_tariff_candidates_held_in_report_table_without_debt():
+    d = fixture(with_rate=True)
+    rates = d['mz2_shipping_setup_v2'][0]['contracts']
+    rates.append(dict(rates[0], id='second'))
+    state = calculated(d)
     data=build_financial_position(state)['currencies']['SAR']
     table=next(t for t in data['tables'] if t['id']=='driver_fee_review')
     assert table['section']=='fulfillment' and table['totals']=={}
     assert table['rows'][0]['candidate_amount']=='10.00'
     assert table['rows'][0]['reason']=='driver_fee_policy_review_required'
     assert fee_total(state)==0
+
+
+def test_native_driver_price_without_shipping_contract_recognized_once():
+    d = fixture()
+    state = calculated(d)
+    assert fee_total(state) == 10
+    assert state["engine"]["obligations"]["shipping:100:base_shipping"]["confirmed"] == "10.00"
+    assert "shipping:100:cod_commission" not in state["engine"]["obligations"]
+    assert state["engine"]["obligations"]["cod:100"]["confirmed"] == "200.00"
+    assert state["engine"]["facts"]["native_driver_earning:100"]["earning_id"] == "earned-one"
+    assert not review(state) and not state["movements"]
+    assert state["openings"] == active()["openings"]
+    assert calculated(d, state) == state
+
+
+def test_multiple_shipping_setups_cannot_silently_hide_a_conflicting_driver_rate():
+    d = fixture(with_rate=True)
+    d["mz2_shipping_setup_v2"].append(deepcopy(d["mz2_shipping_setup_v2"][0]))
+    state = calculated(d)
+    assert fee_total(state) == 0
+    assert review(state)[0]["reason"] == "driver_fee_policy_review_required"
 
 
 @pytest.mark.parametrize('old',[True,False])
@@ -227,3 +251,32 @@ def test_wrong_order_native_assignment_cannot_supply_cash_when_earning_is_missin
     result=calculated(d)
     assert 'cod:100' not in result['engine']['obligations']
     assert 'shipping:100' not in result['engine']['facts']
+
+
+@pytest.mark.parametrize("posted,patch,expected_fee", [
+    (START, {}, 10), (DELIVERED, {}, 0), (NOW, {}, 0),
+    (START, {"driver_decision_by": "different-driver"}, 0),
+    (START, {"financial_source": "legacy"}, 0),
+    (START, {"status": "pending_driver_confirmation"}, 0),
+    (START, {"delivery_fee_settled_amount": "20"}, 0),
+    (START, {"driver_decision_at": NOW}, 0),
+    (START, {"created_at": NOW}, 0),
+    (START, {"settlement_type": "net_settlement", "earning_offset": "15"}, 10),
+    (START, {"settlement_type": "cod_remittance"}, 0),
+    (START, {"status": "rejected"}, 0),
+])
+def test_closed_payout_only_affects_deliveries_that_existed_at_posting(posted, patch, expected_fee):
+    d = fixture()
+    payout = row(id="unique-payout", driver_id="driver", status="posted", posting_scope="operational_balance",
+                 settlement_type="earning_payment", accounting_status="operational_only",
+                 financial_source="store_delivery_operational", financial_handoff_status="pending_mz2_driver_balance_link",
+                 driver_decision_by="driver", driver_decision="approved", amount="15",
+                 delivery_fee_settled_amount="15", posted_at=posted, driver_decision_at=posted, created_at=START)
+    payout.update(patch)
+    d["store_delivery_driver_settlements"] = [payout]
+    result = calculated(d)
+    assert fee_total(result) == expected_fee
+    assert result["engine"]["obligations"]["cod:100"]["confirmed"] == "200.00"
+    assert result["movements"] == []
+    if not expected_fee:
+        assert review(result)[0]["reason"] == "driver_fee_payout_review_required"

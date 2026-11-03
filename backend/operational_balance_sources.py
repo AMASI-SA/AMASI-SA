@@ -12,6 +12,7 @@ import calendar
 import hashlib
 import json
 from shipping_companies import normalize_shipping_company
+from operational_courier_tariffs import matches as matches_courier_key
 
 
 def external_courier(row):
@@ -61,7 +62,8 @@ PROVIDERS = ('salla', 'tabby', 'tamara', 'emkan')
 from operational_payment_evidence import PAYMENT_METHODS, DIAGNOSTICS
 from operational_provider_transaction_evidence import (COLLECTION as TXN_COLLECTION,
     load_transaction_rows, normalize_operational_payment)
-ALLOWED_COLLECTIONS = ALLOWED_COLLECTIONS | {TXN_COLLECTION}
+from operational_courier_transitions import COLLECTION as DELIVERY_HISTORY, load_delivery_history
+ALLOWED_COLLECTIONS = ALLOWED_COLLECTIONS | {TXN_COLLECTION, DELIVERY_HISTORY}
 
 MAX_ROWS = 20000
 # Existing MZ2 daily-movement codes plus explicitly requested operational types.
@@ -170,6 +172,9 @@ def _event_collection_valid(collection, event, total, now):
 def shipping_charge(rate, owner, party, at, cod_amount, setup=None, *, cod_incomplete=False):
     if not rate.get('confirmed_by') or not rate.get('confirmed_at'):
         raise ValueError('shipping_contract_approval_missing')
+    if rate.get('kind') == 'operational_courier_tariff':
+        from operational_courier_tariffs import charge
+        return charge(rate, cod_amount, cod_incomplete)
     parts, problems = [], []
     if rate.get('kind') == 'rich':
         # Pure Pydantic/Decimal calculators, no database or financial writers.
@@ -299,7 +304,7 @@ def usable(row):
 
 
 async def rows(db, owner, collection):
-    if not owner or collection not in ALLOWED_COLLECTIONS or collection in {TXN_COLLECTION, 'users', 'settings', 'accounts', 'mz2_operational_bank_accounts'}:
+    if not owner or collection not in ALLOWED_COLLECTIONS or collection in {TXN_COLLECTION, DELIVERY_HISTORY, 'users', 'settings', 'accounts', 'mz2_operational_bank_accounts'}:
         raise ValueError('operational_source_rejected')
     # Only native fee proof and payout state belong in the financial reader.
     # In particular never load receipt URLs, bank identifiers or note text here.
@@ -682,15 +687,15 @@ def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, co
         shipping = raw.get('salla_shipping_current') or raw.get('shipping') or {}
         carrier_key = shipping.get('company_code') or shipping.get('company')
         parties = [c for c in setup.get('couriers', []) if usable(c) and c.get('confirmed_by')
-                   and c.get('confirmed_at') and carrier_key in c.get('salla_carrier_keys', [])]
+                   and c.get('confirmed_at') and matches_courier_key(c, carrier_key)]
         assignments = [a for a in data['store_delivery_assignments'] if str(a.get('order_number')) == order_number
                        and a.get('active') is not False and a.get('status') in {'assigned', 'out_for_delivery', 'delivered'}]
         party_kind, party_id = 'courier', parties[0]['courier_key'] if len(parties) == 1 else None
         if delivery_event:
             party_kind, party_id = delivery_event['party_type'], delivery_event['party_id']
             if party_kind == 'courier' and cod:
-                from operational_delivery_evidence import delivery_only_from_nested_shipment
-                if delivery_only_from_nested_shipment(raw, delivery_event):
+                from operational_delivery_evidence import delivery_requires_cod_proof
+                if delivery_requires_cod_proof(raw, delivery_event):
                     order.pop('cod', None)
                     order.pop('cod_amount', None)
                     issue(out, 'courier_cod_collection_proof_required', identity, component='customer_collection',
@@ -782,19 +787,35 @@ def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, co
                 number(order['cod'].get('collection_amount', order['cod']['outstanding'])) if cod and not cod_incomplete else None,
                 setup, cod_incomplete=cod_incomplete)
         if completed_assignment and data.get('_driver_fee_review'):
-            checked = data['_driver_fee_review'].check(completed_assignment, order, quote, len(rates))
+            checked = data['_driver_fee_review'].check(completed_assignment, order, quote, len(rates),
+                ambiguous_setup=len(data['mz2_shipping_setup_v2']) > 1)
             if checked is not None:
                 evidence, reason = checked
                 if reason:
+                    if reason == 'driver_fee_history_review_required':
+                        from operational_historical_shipping_fee import register_candidate
+                        register_candidate(out, data['_fee_review_numbers'], delivery_event,
+                                           rate=rate, quote=quote, earning=evidence)
                     from operational_shipping_fee_review import REASONS
                     issue(out, reason, identity, component='shipping_fee', recognition_state='confirmed',
                           driver_fee_review=evidence, required_action=REASONS[reason])
                     return
                 order['native_driver_earning'] = evidence
                 order['delivered_at'] = evidence['delivered_at']
+                if quote is None:
+                    # The mobile delivery writer freezes the owner's driver price
+                    # and earns it on delivery. It doesn't earn a separate COD fee.
+                    base = evidence['candidate_amount']
+                    quote = {'cost': base, 'fee_complete': True, 'component_issues': [],
+                             'fee_components': [{'id': 'base_shipping', 'amount': base, 'complete': True}]}
         if party_id and quote:
+            if party_kind == 'courier' and delivery_event and order_number in data['_fee_review_numbers']:
+                from operational_historical_shipping_fee import register_candidate
+                from operational_shipping_fee_review import hold_prior_courier_event
+                if hold_prior_courier_event(data['_review_fee_state'], delivery_event, quote):
+                    register_candidate(out, data['_fee_review_numbers'], delivery_event, rate=rate, quote=quote)
             problems = quote.pop('component_issues')
-            order['carrier'] = {'id': party_id, 'kind': party_kind, 'contract_id': rate.get('id'), **quote}
+            order['carrier'] = {'id': party_id, 'kind': party_kind, **({'contract_id': rate['id']} if rate and rate.get('id') else {}), **quote}
             for problem in problems:
                 issue(out, problem['code'], identity, component=problem['component'],
                       recognition_state='confirmed' if order.get('status') in {'delivered', 'تم التوصيل'} else 'expected')
@@ -807,7 +828,7 @@ def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, co
               reason=reason, recognition_state='confirmed' if order.get('status') in {'delivered', 'تم التوصيل'} else 'expected')
 
 
-async def collect_sources(db, owner, started_at, as_of, baselines=None, operational_state=None):
+async def collect_sources(db, owner, started_at, as_of, baselines=None, operational_state=None, historical_fee_order=None):
     start, now = instant(started_at), instant(as_of)
     if now < start:
         raise ValueError('operational_source_time_range_invalid')
@@ -816,8 +837,13 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     out['delivery_event_coverage'] = {'version': 1, 'started_at': start.isoformat(), 'as_of': now.isoformat()}
     # No service with side effects is called: collection access is allowlisted.
     # The inventory catalogue is read on demand, not on each financial sync.
-    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - {TXN_COLLECTION, 'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})}
+    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - {TXN_COLLECTION, DELIVERY_HISTORY, 'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})}
     from operational_shipping_fee_review import DriverEarnings, courier_issue, hold_prior_courier_event
+    from operational_historical_shipping_fee import APPROVALS
+    data['_review_fee_state'] = operational_state
+    data['_fee_review_numbers'] = {r['candidate']['order_number'] for r in (operational_state or {}).get(APPROVALS, {}).values()}
+    if historical_fee_order:
+        data['_fee_review_numbers'].add(historical_fee_order)
     data['_driver_fee_review'] = DriverEarnings(data, owner, operational_state, start, now)
     from operational_ad_funding import bindings as funding_bindings
     data['mz2_ad_account_bindings_v2'], conflicts = funding_bindings(
@@ -828,12 +854,18 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     setup = setup_rows[0] if len(setup_rows) == 1 else {}
     if len(setup_rows) > 1:
         issue(out, 'shipping_setup_ambiguous')
+    else:
+        from operational_courier_tariffs import with_tariffs
+        setup, tariff_conflicts = with_tariffs(setup, owner, operational_state)
+        for party in tariff_conflicts:
+            issue(out, 'operational_courier_tariff_authority_conflict', party, component='shipping_fee')
     profiles = unique_index(data['mezan_product_cost_profiles_v2'], 'salla_product_id')
     suppliers = unique_index(data['mezan_suppliers_v2'], 'id')
     pieces = [r for r in data['mezan_preparation_pieces_v1'] if not r.get('experiment_mode') and not r.get('experiment_run_id')]
     order_numbers = {}
     raw_orders = [(r.get('raw_by_source') or {}).get('salla_direct') for r in data['unified_orders']]
     raw_orders = [r for r in raw_orders if isinstance(r, dict)]
+    delivery_history = await load_delivery_history(db, owner, data['unified_orders'], max_rows=MAX_ROWS)
     txn_by_order = await load_transaction_rows(db, owner, raw_orders, start, now, to_instant=instant, max_rows=MAX_ROWS)
     from operational_remaining_bundle_sources import load_remaining_bundles
     from operational_native_purchase_link_service import verified_saved_links
@@ -872,7 +904,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 from operational_delivery_evidence import resolve_delivery_event
                 event = resolve_delivery_event(raw, source=source, owner=owner,
                     assignments=data['store_delivery_assignments'], setup=setup,
-                    started_at=started_at, as_of=as_of)
+                    started_at=started_at, as_of=as_of, history=delivery_history.get(order_number, ()))
                 if event is None:
                     continue
                 order = {'id': identity, 'order_number': order_number, 'created_at': created.isoformat(),
@@ -1016,7 +1048,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         if not native_driver and status not in DELIVERED:
                             raise ValueError('operational_delivery_order_shipment_status_conflict')
                         event = resolve_delivery_event(raw, source=source, owner=owner,
-                            assignments=data['store_delivery_assignments'], setup=setup, started_at=started_at, as_of=as_of)
+                            assignments=data['store_delivery_assignments'], setup=setup, started_at=started_at, as_of=as_of, history=delivery_history.get(order_number, ()))
                         if event is None:
                             raise ValueError('operational_delivery_timestamp_missing')
                         saved = (operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity)

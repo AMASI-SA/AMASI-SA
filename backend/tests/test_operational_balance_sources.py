@@ -38,6 +38,17 @@ class Cursor:
 class Collection:
     def __init__(self, db, name): self.db, self.name = db, name
     def find(self, query, projection=None):
+        if self.name == "order_activity_events_v2":
+            numbers = query["order_number"]["$in"]
+            assert query == {"user_id":"owner", "source":"salla_history", "event_type":"status_changed",
+                             "order_number":{"$in":numbers}, "native_status_transition":{"$exists": True}}
+            assert 0 < len(numbers) <= 250
+            assert projection == {"_id":0, **{k:1 for k in ("user_id","order_number","provider_order_id","source",
+                "event_type","source_event_id","native_status_transition")}}
+            self.db.reads.append(self.name)
+            return Cursor([r for r in self.db.data.get(self.name, []) if r.get("user_id") == "owner"
+                           and r.get("source") == "salla_history" and r.get("order_number") in numbers
+                           and r.get("event_type") == "status_changed" and "native_status_transition" in r])
         if self.name == "order_payment_transactions_v2":
             assert set(query) == {"user_id", "order_number", "source"}
             assert query["user_id"] == "owner" and query["source"] == "salla_transactions"
@@ -403,7 +414,7 @@ HARD_SOURCE_ALLOWLIST = frozenset({'mz2_bank_transfer_bindings',
     'mezan_tiktok_performance_daily_v2', 'mezan_google_ads_performance_daily_v2',
 })
 
-HARD_SCOPED_TXN_READS = {"order_payment_transactions_v2"}
+HARD_SCOPED_TXN_READS = {"order_payment_transactions_v2", "order_activity_events_v2"}
 
 class HardBoundaryDB(DB):
     def __getitem__(self, name):

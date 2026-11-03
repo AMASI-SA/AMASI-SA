@@ -33,6 +33,14 @@ PartyType = Literal["employee", "provider", "courier", "store_driver", "ad_accou
                     "operating_expense", "owner_withdrawal"]
 
 
+class CourierTariffApproval(Request):
+    party_id: str = Field(min_length=1, max_length=200)
+    source_hash: str = Field(pattern=r'^[0-9a-f]{64}$')
+    effective_from: str = Field(min_length=16, max_length=40)
+    reason: str = Field(min_length=3, max_length=400)
+    confirmed: Literal[True]
+
+
 class Opening(Request):
     party_type: PartyType
     party_id: str = Field(min_length=1, max_length=200)
@@ -54,6 +62,18 @@ class SalaryStartApproval(Request):
     expected_preview_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
     expected_session_scope: str = Field(pattern=r"^[a-f0-9]{64}$")
     opening_salaries_excluded: bool = Field(strict=True)
+
+
+class HistoricalShippingPreview(Input):
+    order_number: str = Field(min_length=1, max_length=160)
+
+
+class HistoricalShippingApproval(Request):
+    order_number: str = Field(min_length=1, max_length=160)
+    expected_preview_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    expected_session_scope: str = Field(pattern=r"^[a-f0-9]{64}$")
+    evidence_ref: str = Field(min_length=3, max_length=300)
+    confirm_opening_and_payouts: bool = Field(strict=True)
 
 
 class NativePaymentLink(Input):
@@ -308,6 +328,8 @@ async def scope(db, principal, permission):
             or owner_account.get("is_active") is False or owner_account.get("deleted_at")):
         fail("operational_owner_inactive", "حساب المالك غير متاح", 403)
     mobile = principal.get("_session_client") == "amasi_mobile"
+    if permission == "courier_tariff_manage" and actor.get("role") != "owner":
+        fail("courier_tariff_owner_required", "اعتماد تعرفة الشحن متاح للمالك فقط", 403)
     if permission == "bank_manage" and actor.get("role") != "owner":
         fail("operational_bank_owner_required", "إضافة حساب بنك أو شبكة متاحة للمالك فقط", 403)
     if permission == "ad_selection_manage" and actor.get("role") != "owner":
@@ -400,6 +422,18 @@ def make_operational_balance_router(db, current_user):
 
     manage_guard = guarded("manage")
     move_guard = guarded("move")
+
+    @router.get('/courier-tariffs')
+    async def courier_tariffs(user=Depends(current_user)):
+        _, owner, _ = await scope(db, user, 'courier_tariff_manage')
+        from operational_courier_tariffs import catalog
+        return await catalog(db, owner)
+
+    @router.post('/courier-tariffs')
+    async def approve_courier_tariff(payload: CourierTariffApproval, user=Depends(guarded('courier_tariff_manage'))):
+        actor, owner, _ = await scope(db, user, 'courier_tariff_manage')
+        from operational_courier_tariffs import approve
+        return await approve(db, owner, actor['id'], payload.model_dump())
 
     @router.get('/ad-account-selection')
     async def ad_selection(user=Depends(current_user)):
@@ -864,6 +898,18 @@ def make_operational_balance_router(db, current_user):
         result.update(session_scope=digest([owner, actor["id"]]),
                       permissions={"record_movements": can_record})
         return result
+
+    @router.post("/historical-shipping-fees/preview")
+    async def historical_shipping_preview(payload: HistoricalShippingPreview, user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, "bank_manage")
+        from operational_historical_shipping_service import preview
+        return await preview(db, owner, actor["id"], payload.order_number)
+
+    @router.post("/historical-shipping-fees/approve")
+    async def historical_shipping_approve(payload: HistoricalShippingApproval, user=Depends(guarded("bank_manage"))):
+        actor, owner, _ = await scope(db, user, "bank_manage")
+        from operational_historical_shipping_service import approve
+        return await approve(db, owner, actor["id"], payload.model_dump())
 
     @router.get('/native-purchase-links/{invoice_id}/candidates')
     async def native_purchase_candidates(invoice_id: str, user=Depends(current_user)):

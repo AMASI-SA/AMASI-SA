@@ -421,7 +421,16 @@ def reconcile(state, sources, as_of):
                     recognition_day = instant(page_fact["observed_at"]).astimezone(RIYADH).date() if page_mode else created.date()
                     policy_day = created.astimezone(RIYADH).date()
                     try:
-                        projection = provider_projection(payment, sources.get("fee_policies", []), policy_day)
+                        earliest_date = None
+                        capture_days = [instant(c["captured_at"]).astimezone(RIYADH).date()
+                                        for c in payment.get("captures", []) if created <= instant(c["captured_at"]) <= now]
+                        if capture_days:
+                            earliest_date, policy_day = min(capture_days), max(capture_days)
+                        elif page_mode and money(page_fact["paid"]) > ZERO:
+                            earliest_date = policy_day
+                            policy_day = instant(page_fact["observed_at"]).astimezone(RIYADH).date()
+                        projection = provider_projection(payment, sources.get("fee_policies", []), policy_day,
+                                                         earliest_date=earliest_date)
                     except (KeyError, TypeError, ValueError, InvalidOperation, OverflowError) as exc:
                         if not page_mode and (not isinstance(exc, ValueError) or not independent_capture_without_fee_policy(
                                 payment, sources.get("fee_policies", []), policy_day, exc, created=created, as_of=now)):
@@ -673,6 +682,10 @@ def reconcile(state, sources, as_of):
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             issue(str(error), key)
 
+    from operational_historical_shipping_fee import apply_reviewed_fees
+    resolved_fees = apply_reviewed_fees(result, sources, put, fact, issue)
+    if resolved_fees:
+        issues = [i for i in issues if (i.get("code"), i.get("source_id")) not in resolved_fees]
     from operational_customer_returns import shipping_obligations
     shipping_obligations(result)
     from operational_balance_exchanges import project_exchanges

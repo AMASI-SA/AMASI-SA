@@ -14,6 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pymongo.errors import DuplicateKeyError
 
 from accounting_settlement_service import PROVIDERS
+from operational_fee_methods import SALLA_RAILS, fee_rail
+from operational_payment_evidence import provider_for
 
 POLICIES = "mz2_provider_fee_policies_v2"
 PREPAIDS = "mz2_prepaid_selections_v2"
@@ -47,10 +49,32 @@ class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
+class FeeComponent(Contract):
+    id: str = Field(min_length=1, max_length=80)
+    percentage: Decimal = Field(ge=0, le=100, allow_inf_nan=False)
+    fixed_amount: Decimal = Field(ge=0, le=999999999999, decimal_places=2, allow_inf_nan=False)
+    vat_treatment: Literal["inclusive", "exclusive", "exempt", "not_applicable"]
+    vat_rate: Decimal | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
+    refund_fee_treatment: Literal["retain", "recalculate", "full_only"]
+    cancellation_fee_treatment: Literal["retain", "recalculate"]
+
+    @model_validator(mode="after")
+    def known_tax(self):
+        if self.vat_treatment in {"inclusive", "exclusive"} and self.vat_rate is None:
+            raise ValueError("provider_fee_tax_rate_required")
+        return self
+
+
 class FeePolicyCreate(Contract):
     provider: Literal["salla", "tamara", "tabby", "emkan"]
     percentage: Decimal = Field(ge=0, le=100, allow_inf_nan=False)
     fixed_amount: Decimal = Field(ge=0, allow_inf_nan=False)
+    payment_method: str | None = Field(default=None, min_length=1, max_length=80)
+    plan_id: str | None = Field(default=None, min_length=1, max_length=256)
+    components: list[FeeComponent] | None = Field(default=None, min_length=1, max_length=20)
+    refund_fee_treatment: Literal["retain", "recalculate"] | None = None
+    cancellation_fee_treatment: Literal["retain", "recalculate"] | None = None
+    vat_rate: Decimal | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
     minimum: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
     maximum: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
     vat_treatment: Literal["inclusive", "exclusive", "exempt", "not_applicable"]
@@ -61,6 +85,16 @@ class FeePolicyCreate(Contract):
 
     @model_validator(mode="after")
     def valid_range(self):
+        if self.payment_method and (self.provider != "salla" or self.payment_method not in SALLA_RAILS.values()):
+            raise ValueError("provider_fee_method_invalid")
+        if self.components:
+            if self.minimum is not None or self.maximum is not None or len({c.id for c in self.components}) != len(self.components):
+                raise ValueError("provider_fee_components_invalid")
+            if (self.percentage != sum(c.percentage for c in self.components)
+                    or self.fixed_amount != sum(c.fixed_amount for c in self.components)):
+                raise ValueError("provider_fee_components_total_mismatch")
+        elif self.vat_treatment == "exclusive" and self.vat_rate is None:
+            raise ValueError("provider_fee_tax_rate_required")
         if self.effective_to and self.effective_to < self.effective_from:
             raise ValueError("fee_policy_date_range_invalid")
         if self.minimum is not None and self.maximum is not None and self.maximum < self.minimum:
@@ -73,16 +107,27 @@ def _overlap(a, b):
     return a["effective_from"] <= (b.get("effective_to") or "9999-12-31") and b["effective_from"] <= (a.get("effective_to") or "9999-12-31")
 
 
+def _conflicting_scope(left, right):
+    keys = ("payment_method", "plan_id")
+    # Equally specific overlapping scopes (e.g. rail-only and plan-only) would
+    # give the same payment two different rates. A more specific override is safe.
+    return (sum(bool(left.get(k)) for k in keys) == sum(bool(right.get(k)) for k in keys)
+            and all(not left.get(k) or not right.get(k) or left[k] == right[k] for k in keys))
+
+
 async def create_fee_policy(db, owner, actor_id, payload: FeePolicyCreate):
     key = _key(owner, payload.provider, payload.currency)
-    candidate = payload.model_dump(mode="json")
+    candidate = payload.model_dump(mode="json", exclude_none=True)
+    if payload.components:
+        candidate["fee_model_version"] = 2
     candidate.update(id=str(uuid4()), user_id=owner, status="active", version=1,
                      confirmed_by=actor_id, confirmed_at=_now())
     # Atomic append with a CAS revision prevents cross-worker overlap races.
     for _ in range(8):
         old = await db[POLICIES].find_one({"_id": key, "user_id": owner})
         policies = (old or {}).get("policies", [])
-        if any(_overlap(row, candidate) for row in policies if row.get("status") == "active"):
+        if any(_overlap(row, candidate) for row in policies if row.get("status") == "active"
+               and _conflicting_scope(row, candidate)):
             _fail("provider_fee_policy_overlap", provider=payload.provider)
         audit = {"action": "policy_confirmed", "actor_id": actor_id, "at": candidate["confirmed_at"], "policy_id": candidate["id"]}
         if old is None:
@@ -106,12 +151,52 @@ async def list_fee_policies(db, owner):
     return [policy for row in rows for policy in row.get("policies", [])]
 
 
+async def list_fee_candidates(db, owner):
+    """Show only persisted merchant settings as editable suggestions, never as active contracts."""
+    docs = await db["settings"].find({"user_id": owner}, {"_id": 0, "user_id": 1,
+        "payment_methods.name": 1, "payment_methods.commission_percent": 1,
+        "payment_methods.fixed_fee": 1, "payment_methods.vat_percent": 1}).to_list(2)
+    if len(docs) > 1 or any(row.get("user_id") != owner for row in docs):
+        _fail("provider_fee_settings_owner_ambiguous")
+    methods = docs[0].get("payment_methods", []) if docs else []
+    if not isinstance(methods, list) or len(methods) > 250:
+        _fail("provider_fee_settings_invalid")
+    candidates, duplicate = {}, set()
+    for row in methods:
+        if not isinstance(row, dict):
+            continue
+        label = row.get("name")
+        provider = "salla" if fee_rail(label) else provider_for(label)
+        if not isinstance(label, str) or provider not in PROVIDERS:
+            continue
+        rail = fee_rail(label) if provider == "salla" else None
+        if provider == "salla" and not rail:
+            continue
+        key = (provider, rail)
+        if key in candidates:
+            duplicate.add(key)
+            continue
+        # Mark the key seen even if its first settings row is incomplete.
+        candidates[key] = None
+        try:
+            percent, fixed, tax = [Decimal(str(row[k])) for k in ("commission_percent", "fixed_fee", "vat_percent")]
+            if (not all(v.is_finite() for v in (percent, fixed, tax)) or not 0 <= percent <= 100
+                    or not 0 <= tax <= 100 or not 0 <= fixed <= 999999999999 or fixed != fixed.quantize(Decimal(".01"))):
+                continue
+        except (KeyError, ArithmeticError, ValueError):
+            continue
+        candidates[key] = {"provider": provider, "payment_method": rail, "label": label[:100],
+            "percentage": str(percent), "fixed_amount": str(fixed), "vat_rate": str(tax)}
+    return [row for key, row in candidates.items() if key not in duplicate and row]
+
+
 async def resolve_fee_policy(db, owner, provider, transaction_date, currency="SAR"):
     if provider not in PROVIDERS:
         _fail("provider_identifier_not_canonical")
     day = date.fromisoformat(str(transaction_date)).isoformat()
     matches = [row for row in await list_fee_policies(db, owner)
                if row.get("provider") == provider and row.get("currency") == currency
+               and not row.get("payment_method") and not row.get("plan_id")
                and row.get("status") == "active" and row["effective_from"] <= day
                and day <= (row.get("effective_to") or "9999-12-31")]
     if len(matches) != 1:

@@ -2,8 +2,8 @@
 
 The driver producer denominates the assignment snapshot and earning in SAR.
 Its payouts are pooled per driver; they are never allocated to individual
-orders by this reader. The output is either corroboration of an existing
-delivery policy or a nonposting, operational-review row.
+orders by this reader. An owner-priced assignment and matching earned fee
+support the base delivery cost. Any applicable delivery policy must agree.
 """
 from collections import Counter, defaultdict
 from decimal import Decimal, InvalidOperation
@@ -16,14 +16,17 @@ FIELDS = {
     "store_delivery_driver_earnings": ("user_id", "id", "driver_id", "assignment_id", "order_id", "order_number",
         "amount", "earned_at", "status", "currency", "accounting_status", "financial_source",
         "financial_handoff_status", "ledger_txn_group_id", "accounting_operation_id"),
-    "store_delivery_driver_settlements": ("user_id", "driver_id", "settlement_type", "status"),
+    "store_delivery_driver_settlements": ("id", "user_id", "driver_id", "settlement_type", "status", "currency",
+        "posting_scope", "financial_source", "financial_handoff_status", "accounting_status", "posted_at",
+        "created_at", "driver_decision", "driver_decision_by", "driver_decision_at", "amount",
+        "delivery_fee_settled_amount", "earning_offset", "ledger_txn_group_id", "accounting_operation_id"),
 }
 REASONS = {
     "driver_fee_history_review_required": "أجرة مثبتة في التطبيق تخص فترة سبق احتسابها؛ طابق الافتتاح والتسديد قبل اعتمادها.",
-    "driver_fee_policy_review_required": "أجرة مثبتة في التطبيق؛ لا يوجد عقد توصيل واحد معتمد وساري يطابقها.",
+    "driver_fee_policy_review_required": "تعذرت مطابقة أجرة التطبيق مع إعدادات عقود التوصيل السارية.",
     "driver_fee_payout_review_required": "توجد تسوية أجور مجمعة أو معلّقة لهذا المندوب؛ لا يمكن تخصيصها لهذا الطلب تلقائيًا.",
     "driver_fee_evidence_conflict": "تعذر إثبات تطابق الإسناد والاستحقاق أو الجهة أو العملة أو وقت التسليم.",
-    "driver_fee_amount_conflict": "مبلغ الإسناد أو الأجرة المثبتة لا يطابق قيمة العقد؛ راجع المصادر.",
+    "driver_fee_amount_conflict": "تختلف أجرة الإسناد عن مبلغ الاستحقاق أو عن التعرفة السارية.",
     "driver_fee_saved_conflict": "الأجرة أو المستفيد يختلف عن قيد أو تخصيص سابق؛ حُفظ القيد السابق دون تعديل.",
 }
 
@@ -40,6 +43,28 @@ def amount(value):
         raise ValueError("driver_fee_evidence_conflict") from None
 
 
+def _closed_payout_at(p):
+    # The native writer caps payouts at earnings already due. A fully approved
+    # payout cannot include a delivery that had not happened by its posting time.
+    if (p.get("status") != "posted" or p.get("posting_scope") != "operational_balance"
+            or p.get("financial_source") != NATIVE or p.get("financial_handoff_status") != PENDING
+            or p.get("accounting_status") != "operational_only" or p.get("currency", "SAR") != "SAR"
+            or p.get("ledger_txn_group_id") or p.get("accounting_operation_id")
+            or p.get("driver_decision") != "approved" or p.get("driver_decision_by") != p.get("driver_id")
+            or p.get("settlement_type") not in {"earning_payment", "net_settlement"}):
+        return None
+    try:
+        fee = amount(p.get("delivery_fee_settled_amount"))
+        source = p.get("amount") if p["settlement_type"] == "earning_payment" else p.get("earning_offset")
+        posted = _instant(p["posted_at"])
+        if (fee > 0 and fee == amount(source) and _instant(p["created_at"]) <= posted
+                and _instant(p["driver_decision_at"]) == posted):
+            return posted
+    except (ValueError, ArithmeticError, TypeError, KeyError):
+        pass
+    return None
+
+
 class DriverEarnings:
     def __init__(self, data, owner, state, start, as_of):
         self.owner, self.start, self.as_of = owner, start, as_of
@@ -50,8 +75,10 @@ class DriverEarnings:
         self.assignments_by_number = defaultdict(set)
         self.assignment_ids = Counter()
         self.payout_drivers = set()
+        self.latest_closed_payout = {}
         self.allocation_keys = set()
-        self.state = (state or {}).get("engine", {})
+        self.aggregate = state or {}
+        self.state = self.aggregate.get("engine", {})
         for a in data["store_delivery_assignments"]:
             self.assignment_ids[a.get("id")] += 1
             if a.get("status") == "delivered" and (a.get("financial_source") == NATIVE or a.get("delivery_fee_snapshot") is not None):
@@ -62,11 +89,26 @@ class DriverEarnings:
             self.earning_ids[e.get("id")] += 1
             self.assignments_by_order[_text(e.get("order_id"))].add(e.get("assignment_id"))
             self.assignments_by_number[_text(e.get("order_number"))].add(e.get("assignment_id"))
-        for p in data["store_delivery_driver_settlements"]:
-            if (p.get("status") != "rejected" and
-                    p.get("settlement_type") != "cod_remittance"):
-                # Unknown settlement states or malformed amounts cannot prove unpaid.
-                self.payout_drivers.add(p.get("driver_id"))
+        payouts = data["store_delivery_driver_settlements"]
+        payout_ids = Counter(p.get("id") for p in payouts)
+        for p in payouts:
+            driver = p.get("driver_id")
+            if p.get("status") == "rejected":
+                if p.get("posted_at") or p.get("ledger_txn_group_id") or p.get("accounting_operation_id"):
+                    self.payout_drivers.add(driver)
+                continue
+            if p.get("settlement_type") == "cod_remittance":
+                try:
+                    if amount(p.get("delivery_fee_settled_amount", 0)) or amount(p.get("earning_offset", 0)):
+                        self.payout_drivers.add(driver)
+                except ValueError:
+                    self.payout_drivers.add(driver)
+                continue
+            closed = _closed_payout_at(p) if p.get("id") and payout_ids[p["id"]] == 1 else None
+            if closed is None:
+                self.payout_drivers.add(driver)
+            else:
+                self.latest_closed_payout[driver] = max(self.latest_closed_payout.get(driver, closed), closed)
         for m in (state or {}).get("movements", []):
             if m.get("party_type") == "store_driver" and m.get("kind") == "payment":
                 allocations = m.get("allocations") or []
@@ -82,7 +124,7 @@ class DriverEarnings:
         claims = self.assignments_by_order.get(order["id"], set()) | self.assignments_by_number.get(order["order_number"], set())
         return bool(claims) if assignment_id is None else bool(claims - {assignment_id})
 
-    def check(self, a, order, quote, matching_rates):
+    def check(self, a, order, quote, matching_rates, *, ambiguous_setup=False):
         """None for original contract-only producers. No collection method input."""
         earning_rows = self.by_assignment.get(a.get("id"), [])
         if not self.has_other_assignment(order, a.get('id')) and not earning_rows and not (a.get("financial_source") == NATIVE or a.get("delivery_fee_snapshot") is not None):
@@ -132,15 +174,20 @@ class DriverEarnings:
             stored = self.state.get("facts", {}).get("native_driver_earning:" + oid)
             if stored and stored != {k:v for k,v in info.items() if k != "party_name"}:
                 raise ValueError("driver_fee_saved_conflict")
-            if a["driver_id"] in self.payout_drivers:
+            if ambiguous_setup or matching_rates > 1 or (matching_rates and not quote):
+                raise ValueError("driver_fee_policy_review_required")
+            if quote:
+                base = [p for p in quote.get("fee_components", []) if p.get("id") == "base_shipping"]
+                if len(base) != 1 or not base[0].get("complete") or amount(base[0].get("amount")) != n:
+                    raise ValueError("driver_fee_amount_conflict")
+            last_payout = self.latest_closed_payout.get(a["driver_id"])
+            if a["driver_id"] in self.payout_drivers or (last_payout and delivered <= last_payout):
                 raise ValueError("driver_fee_payout_review_required")
+            from operational_historical_shipping_fee import saved_for
+            if saved_for(self.aggregate, num):
+                raise ValueError("driver_fee_history_review_required")
             if not previous and not stored and self.state.get("as_of") and delivered <= _instant(self.state["as_of"]):
                 raise ValueError("driver_fee_history_review_required")
-            if matching_rates != 1 or not quote:
-                raise ValueError("driver_fee_policy_review_required")
-            base = [p for p in quote.get("fee_components", []) if p.get("id") == "base_shipping"]
-            if len(base) != 1 or not base[0].get("complete") or amount(base[0].get("amount")) != n:
-                raise ValueError("driver_fee_amount_conflict")
             return info, None
         except (ValueError, ArithmeticError, TypeError, KeyError) as exc:
             code = str(exc) if str(exc) in REASONS else "driver_fee_evidence_conflict"
@@ -161,7 +208,9 @@ def courier_issue(out, code, raw, source, *, candidate=None, event=None):
             "delivered_at":(event or {}).get("delivered_at"), "candidate_amount":candidate,
             "currency":(event or {}).get("currency") or ("SAR" if raw.get("currency") == "SAR" else None)}
     actions = {
-        "operational_delivery_timestamp_missing":"يلزم تاريخ تسليم مؤرّخ للبوليصة الحالية؛ حالة الطلب أو تاريخ تعديله لا يثبتان التسليم بعد البداية.",
+        "operational_delivery_timestamp_missing":"طابق تاريخ تسليم البوليصة الحالية أو حدّث سجل حركة الطلب من سلة لإثبات وقت انتقاله إلى تم التوصيل.",
+        "operational_delivery_order_waybill_unproven":"حركة التسليم بتاريخ الطلب تتطلب بوليصة واحدة مطابقة؛ طابق تاريخ البوليصة الفعلية عند الاستبدال أو تعدد الشحنات.",
+        "operational_delivery_timestamp_ambiguous":"تختلف تواريخ التسليم أو توجد حركة حالة لاحقة؛ راجع سجل الطلب والبوليصة.",
         "operational_delivery_confirmed_evidence_changed":"بيانات البوليصة الحالية تختلف عن التسليم المثبت؛ راجع البوليصتين قبل أي تصحيح.",
         "operational_delivery_order_shipment_status_conflict":"حالة الطلب وحالة البوليصة الحالية مختلفتان؛ طابق دليل التسليم قبل الاحتساب.",
         "operational_delivery_shipment_source_missing":"يلزم مستند الشحنة الأصلية المطابق للبوليصة الحالية.",
@@ -182,6 +231,9 @@ def courier_issue(out, code, raw, source, *, candidate=None, event=None):
 def hold_prior_courier_event(state, event, carrier):
     if not state or not event or event["party_type"] != "courier":
         return False
+    from operational_historical_shipping_fee import saved_for
+    if saved_for(state, event["order_number"]):
+        return True
     engine = state.get("engine", {})
     saved_at = engine.get("as_of")
     if not saved_at or _instant(event["delivered_at"]) > _instant(saved_at):

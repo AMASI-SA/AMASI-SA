@@ -72,7 +72,7 @@ def run(value):
 
 
 def policy(**changes):
-    values = dict(provider="salla", percentage="2.5", fixed_amount="1", vat_treatment="exclusive",
+    values = dict(provider="salla", percentage="2.5", fixed_amount="1", vat_treatment="exclusive", vat_rate="15",
                   effective_from="2026-01-01", effective_to="2026-09-30", currency="SAR", evidence="contract-file")
     return FeePolicyCreate(**{**values, **changes})
 

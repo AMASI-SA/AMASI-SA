@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 from operational_balance_bank_orders import transfer_bank
+from operational_fee_methods import order_fee_rail
 
 # Exact aliases only: fuzzy substring matching is unsafe for financial routing.
 PAYMENT_METHODS = {
@@ -238,6 +239,9 @@ def normalize_payment(raw, currency, total, created_at, as_of, *, page_balance=F
             raise PaymentEvidenceError('provider_payment_amount_conflict')
         result = {'provider': provider, 'gross': str(gross), 'currency': currency,
                   'cancelled': '0', 'refunds': []}
+        rail = order_fee_rail(raw) if provider == 'salla' else None
+        if rail:
+            result['payment_method'] = rail
         if plan is not None:
             result['plan_id'] = plan
         if observed is not None:

@@ -15,16 +15,23 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         # An undated shipment may precede startup; never assign an amount/date.
         # Group these potentially historical warnings to avoid giant order tables.
         groups = {}
+        candidates = {}
         for issue in state.get("engine", {}).get("issues", []):
             cand = issue.get("courier_fee_review") or {}
             if not cand or cand.get("currency") not in (None, "SAR"):
                 continue
+            n = str(cand["order_number"])
+            candidates.setdefault(n, {"order_number": n, "name": cand["party_name"]})
             k = (cand["party_name"], issue["code"])
             group = groups.setdefault(k, {"name": cand["party_name"], "orders": 0, "examples": [],
                 "required_action": issue["required_action"]})
             group["orders"] += 1
             if len(group["examples"]) < 3:
                 group["examples"].append(cand["order_number"])
+        for row in data["driver_fee_review"]:
+            n = str(row["order_number"])
+            candidates.setdefault(n, {"order_number": n, "name": row.get("driver_id") or "مندوب المتجر"})
+        data["shipping_fee_review_orders"] = sorted(candidates.values(), key=lambda r: r["order_number"])
         if groups:
             data["tables"].append({"id": "courier_fee_review", "title": "شحنات شركات التوصيل قيد المطابقة",
                 "section": "fulfillment", "kind": "review", "complete": False, "totals": {},
