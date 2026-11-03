@@ -106,9 +106,14 @@ def _selection(row: dict) -> dict:
             _refuse("historical_value_empty_or_oversized")
         entries.append({"value_id": selected_id or nested_value_id,
                         "value_hash": _hash(text)})
+    option_kind = str(row.get("type") or nested.get("type") or "").strip().lower()
+    # Only an explicit provider input type makes no-value-ID text safe to
+    # exclude from pricing. Unknown types remain unresolved.
     return {
         "order_row_id": order_row_id,
         "option_id": option_id,
+        "option_kind": "text" if option_kind in {"text", "textarea"} else "choice"
+            if option_kind in {"radio", "select", "checkbox", "dropdown"} else "unknown",
         "name_hash": _hash(name.strip()),
         "values": sorted(entries, key=lambda v: (v["value_id"] or "", v["value_hash"])),
     }
@@ -204,9 +209,11 @@ def inspect_historical_bundle_order(
         # review exactly which alternative had a sale-time cost.
         "selected_value_ids": [v["value_id"] for v in row["values"] if v["value_id"]],
         "value_count": len(row["values"]),
+        "option_kind": row["option_kind"],
     } for row in original_evidence]
     return {
         "order_number": number,
+        "quantity": str(line.get("quantity")),
         "source_created_at": created_at,
         "line_fingerprint": fp,
         "source_choice_evidence_hash": _hash({
@@ -242,8 +249,7 @@ def dry_run_attested_bundle_cost(evidence: dict, attestation: dict) -> dict:
     of the price that applied at checkout. Option coverage must be exact; no
     partial price can become a report-ready cost.
     """
-    from datetime import timezone
-    from decimal import Decimal, ROUND_HALF_UP
+    from decimal import Decimal
     if not isinstance(evidence, dict) or evidence.get("original_source_verified") is not True:
         _refuse("historical_attestation_source_unverified")
     if not isinstance(attestation, dict) or set(attestation) != {
@@ -275,9 +281,10 @@ def dry_run_attested_bundle_cost(evidence: dict, attestation: dict) -> dict:
     for row in evidence["option_rows"]:
         ids = row.get("selected_value_ids", [])
         if row.get("value_count") and len(ids) != row["value_count"]:
-            # A missing value ID could represent a priced Yes choice.
-            # A later manual price assertion cannot certify it as text.
-            ambiguous = True
+            # Only explicitly typed provider text/textarea can omit an
+            # ID without claiming a monetary selection.
+            if row.get("option_kind") != "text" or ids:
+                ambiguous = True
         available.update((row["source_option_id"], identity) for identity in ids)
     if ambiguous:
         _refuse("historical_attestation_missing_selection_ids")
@@ -301,6 +308,9 @@ def dry_run_attested_bundle_cost(evidence: dict, attestation: dict) -> dict:
     if claimed != available:
         _refuse("historical_attestation_incomplete_selection_coverage")
     unit = base + amount_by_kind["component"] + amount_by_kind["external_service"]
+    quantity = _price(evidence.get("quantity"))
+    if quantity <= 0 or quantity != quantity.to_integral_value() or quantity > 10000:
+        _refuse("historical_attestation_quantity_invalid")
     result = {
         "mode": "dry_run", "order_number": evidence["order_number"],
         "source_choice_evidence_hash": evidence["source_choice_evidence_hash"],
@@ -310,7 +320,8 @@ def dry_run_attested_bundle_cost(evidence: dict, attestation: dict) -> dict:
         "cost_provenance": "owner_sale_time_attestation_not_provider_invoice",
         "base_unit_cost_sar": str(base), "component_unit_cost_sar": str(amount_by_kind["component"]),
         "external_service_unit_cost_sar": str(amount_by_kind["external_service"]),
-        "unit_total_sar": str(unit),
+        "unit_total_sar": str(unit), "quantity": str(quantity),
+        "line_total_sar": str(unit * quantity),
         "attestation_hash": _hash(attestation),
         "ready_for_apply": False,
         "requires_separate_reviewed_transactional_correction": True,
