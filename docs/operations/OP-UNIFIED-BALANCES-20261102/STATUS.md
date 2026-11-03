@@ -1,6 +1,6 @@
 # OP-UNIFIED-BALANCES — PR1702 exact A2/B2 checks passed, NOT deployed
 
-Main registry: **PR1687**. Current release candidate: **PR1702**, branch `release/operational-ready-currentbase-20261103`. Latest continuation **DELIVERY-009.md**; exact technical acceptance **DELIVERY-008.md**, superseding pending-check wording in comment6590950351 and DELIVERY007. Read the latest evidence comment as well. Prior status preserved byte-for-byte in STATUS-PRE-B2-ACCEPTANCE-20261103.md; all previous numbered records and DELIVERY-REGISTER.md remain intact. Issue1006 is full.
+Main registry: **PR1687**. Current release candidate: **PR1702**, branch `release/operational-ready-currentbase-20261103`. Latest continuation **DELIVERY-010.md**; exact technical acceptance **DELIVERY-008.md**, superseding pending-check wording in comment6590950351 and DELIVERY007. Read the latest evidence comment as well. Prior status preserved byte-for-byte in STATUS-PRE-B2-ACCEPTANCE-20261103.md; all previous numbered records and DELIVERY-REGISTER.md remain intact. Issue1006 is full.
 
 ## Frozen current candidate
 
@@ -41,3 +41,7 @@ Production changed by this task:NO. Production merge:NO. Publication:NO. Financi
 Fresh GitHub and host-access evidence plus exact synthetic visual acceptance steps: **DELIVERY-009.md**. B2 is still current and technically green; the documented Emergent terminal displayed Preview Unavailable (workspace resting), and its management page requires sign-in. Actual guard state is unknown; the other task's previously prepared release is not ours to clear. No candidate, production or financial state change.
 
 Management sign-in subsequently succeeded. No listed application explicitly identified itself as Mezan. Automated approval review rejected opening the differently named published project due to uncertain identity; confirm the exact project with the owner before opening its content or terminal. See the access update in DELIVERY-009.md and registration comment 6605472816. No host status, merge, publication or financial write.
+
+## 3 November continuation — record 010
+
+Owner confirmed the Emergent management application is the Mezan project. Its official Code → Open in VS Code → Open in Browser path reached the original host's separate code-server sign-in. Project identity is resolved; no authenticated terminal or guard status was obtained. The actual lease and desktop/mobile/print/download acceptance are still unverified. The frozen #1702 B2 remains draft/unmerged; no candidate change, publication, lease mutation, or financial action. See [DELIVERY-010.md](DELIVERY-010.md) for what supersedes record 009 and the next read-only host command.
