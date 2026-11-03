@@ -100,7 +100,14 @@ async def test_assembly_handoff_uses_canonical_receipt_and_not_ready(monkeypatch
     async def allowed(_db, _merchant_id, _field):
         return True
     monkeypatch.setattr(ops, "is_optional", allowed)
-    router = ops.make_preparation_piece_operations_router(object(), lambda: None)
+    class DB:
+        def __getitem__(self, name):
+            assert name == "users"
+            return self
+        async def find_one(self, selector):
+            assert selector == {"id": actor["id"]}
+            return {"id": actor["id"], "name": actor["name"], "role": "staff"}
+    router = ops.make_preparation_piece_operations_router(DB(), lambda: None)
     route = next(r for r in router.routes
                  if r.path.endswith("/assembly/pieces/{piece_id}/receive-from-preparation"))
     assert "POST" in route.methods
@@ -164,7 +171,14 @@ async def test_assembly_direct_receipt_mandatory_mode_fails_closed_even_for_pack
     monkeypatch.setattr(ops, "effective_operation_actor", lambda *_: actor)
     monkeypatch.setattr(ops, "_receive_preparation_piece", canonical)
     monkeypatch.setattr(ops, "is_optional", mandatory)
-    router = ops.make_preparation_piece_operations_router(object(), lambda: None)
+    class DB:
+        def __getitem__(self, name):
+            assert name == "users"
+            return self
+        async def find_one(self, selector):
+            assert selector == {"id": actor["id"]}
+            return {"id": actor["id"], "name": actor["name"], "role": "staff"}
+    router = ops.make_preparation_piece_operations_router(DB(), lambda: None)
     route = next(r for r in router.routes
                  if r.path.endswith("/assembly/pieces/{piece_id}/receive-from-preparation"))
     with pytest.raises(HTTPException) as error:
