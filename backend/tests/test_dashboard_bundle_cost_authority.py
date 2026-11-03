@@ -486,3 +486,40 @@ async def test_unpriced_bundle_stale_current_recipe_option_condition_fails_close
     result = await build_mezan_v2_product_cost_cooperative(ReadOnlyDB(db), OWNER, [order])
     assert result["product_rows"][0]["total_cost"] is None
     assert result["product_rows"][0]["cost_status"] == "missing"
+
+
+@pytest.mark.asyncio
+async def test_salla_distinct_order_row_ids_with_rose_name_and_private_text_cost_65(db):
+    """Order row id differs from catalog option id; private text has no price."""
+    await db[PRODUCTS].update_one({"user_id": OWNER, "salla_product_id": "shawl"},
+        {"$push": {"options": {"$each": [
+            {"id": "name-choice", "name": "هل تريد اضافة اسم على الشال ؟",
+             "type": "radio", "values": [{"id": "yes", "name": "نعم"}, {"id": "no", "name": "لا"}]},
+            {"id": "embroidery-text", "name": "التطريز على الشال", "type": "text", "values": []},
+            {"id": "gift-message", "name": "كرت اهداء", "type": "text", "values": []},
+        ]}}})
+    await db[RESOURCES].insert_one({"user_id": OWNER, "id": "name-external",
+        "kind": "service", "unit_cost": 10, "track_inventory": False})
+    await db[BINDINGS].insert_one({"user_id": OWNER, "id": "name-external-binding",
+        "salla_product_id": "shawl", "option_id": "name-choice",
+        "value_id": "yes", "mode": "resource", "resource_id": "name-external", "quantity": 1})
+    line = sale_line("salla-row", 1)
+    line["options"] = [
+        {"id": "928241773", "option": {"id": "rose", "name": "هل تريد تغليف ورد؟",
+         "type": "radio"}, "values": [{"id": "yes", "name": "نعم"}]},
+        {"id": "1952424308", "option": {"id": "name-choice", "name": "هل تريد اضافة اسم على الشال ؟",
+         "type": "radio"}, "values": [{"id": "yes", "name": "نعم"}]},
+        {"id": "1176813685", "option": {"id": "embroidery-text", "name": "التطريز على الشال",
+         "type": "text"}, "value": {"text": "PRIVATE_NAME"}},
+        {"id": "268562294", "option": {"id": "gift-message", "name": "كرت اهداء",
+         "type": "text"}, "value": {"text": "PRIVATE_GIFT"}},
+    ]
+    order = sale("salla-real-row-ids", line)
+    executive = await build_mezan_v2_product_cost_cooperative(ReadOnlyDB(db), OWNER, [order])
+    products = await load_sold_products(ReadOnlyDB(db), OWNER, [order])
+    assert executive["total"] == executive["product_profit_summary"]["total_cost"] == 65
+    assert executive["product_rows"][0]["average_unit_cost"] == 65
+    assert executive["product_rows"][0]["cost_sources"] == ["current_bundle_catalog_estimate"]
+    assert products[0]["total_cost"] == 65
+    assert await db["general_ledger"].count_documents({}) == 0
+    assert await db["mezan_component_consumption_units_v1"].count_documents({}) == 0
