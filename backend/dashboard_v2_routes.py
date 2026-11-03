@@ -553,14 +553,6 @@ async def build_mezan_v2_product_cost(
     authority = await load_order_cost_authority(
         db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
     )
-    # Owner policy: today's configured composite costs estimate all unpriced
-    # sold units, regardless of supplier fulfillment. Exact frozen prices
-    # remain authoritative; only missing bundle snapshots use this view.
-    from current_bundle_reporting_estimate import load_current_bundle_estimates
-    authority["current_bundle_estimates"] = await load_current_bundle_estimates(
-        db, user_id, orders, authority, products, profiles,
-        option_map, product_binding_map, resources,
-    )
 
     totals = defaultdict(float)
     source_lines = defaultdict(int)
@@ -870,14 +862,6 @@ async def build_mezan_v2_product_cost_cooperative(
     policy = await get_policy_map(db, user_id)
     authority = await load_order_cost_authority(
         db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
-    )
-    # Owner policy: today's configured composite costs estimate all unpriced
-    # sold units, regardless of supplier fulfillment. Exact frozen prices
-    # remain authoritative; only missing bundle snapshots use this view.
-    from current_bundle_reporting_estimate import load_current_bundle_estimates
-    authority["current_bundle_estimates"] = await load_current_bundle_estimates(
-        db, user_id, orders, authority, products, profiles,
-        option_map, product_binding_map, resources,
     )
 
     totals = defaultdict(float)
