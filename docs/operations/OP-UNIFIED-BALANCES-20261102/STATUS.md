@@ -1,8 +1,8 @@
-# OP-UNIFIED-BALANCES — PR1702 exact A2/B2 checks passed, NOT deployed
+# OP-UNIFIED-BALANCES — superseding PR1705 on current shipping base, NOT deployed
 
-Main registry: **PR1687**. Current release candidate: **PR1702**, branch `release/operational-ready-currentbase-20261103`. Latest continuation **DELIVERY-013.md**; exact technical acceptance **DELIVERY-008.md**, superseding pending-check wording in comment6590950351 and DELIVERY007. Read the latest evidence comment as well. Prior status preserved byte-for-byte in STATUS-PRE-B2-ACCEPTANCE-20261103.md; all previous numbered records and DELIVERY-REGISTER.md remain intact. Issue1006 is full.
+Main registry: **PR1687**. Current release candidate: **PR1705**, branch `release/operational-ready-shippingbase-20261103`; PR1702 is closed unmerged and preserved. Latest continuation **DELIVERY-014.md**; exact technical acceptance **DELIVERY-008.md**, superseding pending-check wording in comment6590950351 and DELIVERY007. Read the latest evidence comment as well. Prior status preserved byte-for-byte in STATUS-PRE-B2-ACCEPTANCE-20261103.md; all previous numbered records and DELIVERY-REGISTER.md remain intact. Issue1006 is full.
 
-## Frozen current candidate
+## Historical frozen candidate PR1702 (superseded)
 
 - A2: **3a13f952b2909ac8e6eac2d0f7cc3a59f879e767**, tree58d5a7a1de998ed9c40d5bb638f29336e6959d45.
 - J2: **7d1be020b9559ea294b6ea3f7511f37ee5e6a847**; latest production ref was re-read after final checks and still equalsJ2.
@@ -54,6 +54,12 @@ Authenticated production host: read-only guard status returned `{"active": false
 
 A user-supplied native **unfiltered** SAR PDF was rendered and inspected: seven A4 landscape pages, four of four order cards, legible Arabic and amounts, report only with browser headers/footers. In a separate observation on B2, the real transfer filter and print button produced a real browser print frame with exactly one print-order card, TEST-900002 (fee 20, collection 200 pending), one of four, liquidity 110000 unchanged. See [DELIVERY-012.md](DELIVERY-012.md) for artifact hash, amounts, and evidence boundaries. Actual full-report native PDF layout passed; filtered print handoff passed. The separate **saved filtered native PDF** requested in item 1 of record 011 is not evidenced, not a demonstrated defect. Owner may provide that artifact for exact acceptance or expressly accept the split observations. Recheck the host guard and production head after acceptance. No candidate/production merge, lease mutation, publication or financial activation.
 
-## Current authorization and pre-merge status — record 013
+## Owner authorization and historical pre-merge status — record 013
 
 The owner expressly accepted the complementary full native PDF and separately observed filtered native print handoff; the print acceptance gate is closed by that decision, without claiming a saved filtered PDF. The actual host guard was inactive, tracked workspace clean at J2, no target path collisions; GitHub production ref matched J2. PR1702 was marked ready for review and re-read as open, non-draft, unmerged with its frozen B2 unchanged. Additional checks were triggered; their time-scoped statuses are recorded in [DELIVERY-013.md](DELIVERY-013.md). At 15:09 UTC there was no production merge, new lease, publication or financial action. Recheck the gates and expected heads, then record controlled merge and later live verification only after they actually occur.
+
+## Current source and release candidate — record 014
+
+Independent PR1704 advanced the production branch from sealed reference J2 to H/J3 `28f7875f1dade085c6a2ec5eb1b159ca8305c338` before our conditional merge. PR1702 was closed unmerged and its B2 branch preserved. Its host scripts and release identity are archival and MUST NOT be used against the new base. The owner's complementary print evidence acceptance remains valid.
+
+PR1705 source A3 `0275986594f8759a0a7b6810b9e5c2c6f8aed9c6`, tree `2bba8e3bdea3215266ec419be7f1fb237b47a37a`, has H as its sole parent. A direct tree comparison shows the five shipping paths are the only differences from A2; each blob matches H, with zero overlap with the 136 accounting paths. An isolated governed dual build of A3 using documented preceding sealed reference J2 began; H is the actual parent, not a new sealed-intent anchor. Current CI and exact boundaries are in [DELIVERY-014.md](DELIVERY-014.md). B3 and fresh reviewed-intent gates are still required at this point. No merge, deployment, lease operation or monetary write by this work.
