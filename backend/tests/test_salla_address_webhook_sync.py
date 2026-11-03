@@ -185,7 +185,7 @@ async def test_repeated_order_updated_with_same_address_has_no_extra_write():
     db = _DB({"user_id": "owner", "order_number": "295617138", "order_id": "42",
               "shipping_address_raw": address,
               "salla_address_verified_at": "2026-11-03T15:00:00+00:00",
-              "salla_address_provider_updated_at": "2026-11-03T14:00:00+00:00"})
+              "salla_address_provider_updated_at": "2026-11-03T12:00:00+00:00"})
     with (
         patch("salla_integration.address_webhook_sync._resolve_user_id", new=AsyncMock(return_value="owner")),
         patch("salla_integration.address_webhook_sync.operational_owner", side_effect=_scoped),
