@@ -3977,19 +3977,42 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
         actor = effective_operation_actor(user, context)
 
         async def authorize() -> None:
-            fresh = await _actor_context(db, user)
+            # Re-read the actual employee (not a previously bridged merchant
+            # principal) inside both canonical receipt validation passes.
+            # Permission or tenant revocation aborts the custody transaction.
+            current_actor = await db["users"].find_one({"id": actor["id"]})
+            if (
+                not current_actor
+                or current_actor.get("disabled") is True
+                or current_actor.get("is_active") is False
+                or current_actor.get("deleted_at")
+            ):
+                raise HTTPException(403, detail={
+                    "code": "assembly_preparation_receipt_actor_changed",
+                })
+            if user.get("_session_client") == "amasi_mobile":
+                from mobile_app_request_context import mobile_app_request_user
+                current_actor = await mobile_app_request_user(
+                    db,
+                    {**current_actor, "_session_client": "amasi_mobile"},
+                    path="/api/preparation-work-v1/assembly/pieces/receive-from-preparation",
+                    method="POST",
+                )
+            fresh = await _actor_context(db, current_actor)
             _require_permission(
                 fresh, "fulfillment.pack.confirm", responsibility="packing",
             )
+            if fresh["merchant_id"] != context["merchant_id"] or (
+                effective_operation_actor(current_actor, fresh)["id"] != actor["id"]
+            ):
+                raise HTTPException(403, detail={
+                    "code": "assembly_preparation_receipt_actor_changed",
+                })
             if not await is_optional(db, context["merchant_id"], FIELD_PREPARATION):
                 raise HTTPException(409, detail={
                     "code": "assembly_direct_preparation_receipt_required",
                     "message": "استلام موظف التجهيز إجباري من مرحلة الاستلام المخصصة.",
                 })
-            if fresh["merchant_id"] != context["merchant_id"] or (
-                effective_operation_actor(user, fresh)["id"] != actor["id"]
-            ):
-                raise HTTPException(403, detail={"code": "assembly_preparation_receipt_actor_changed"})
 
         # This canonical flow proves full supplier invoice/receiving state,
         # validates in-progress Salla status before and after the transaction,
