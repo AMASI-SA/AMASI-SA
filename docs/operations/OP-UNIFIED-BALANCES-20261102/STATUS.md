@@ -1,6 +1,6 @@
 # OP-UNIFIED-BALANCES — PR1702 exact A2/B2 checks passed, NOT deployed
 
-Main registry: **PR1687**. Current release candidate: **PR1702**, branch `release/operational-ready-currentbase-20261103`. Latest canonical record **DELIVERY-008.md**, superseding pending-check wording in comment6590950351 and DELIVERY007. Read the latest evidence comment as well. Prior status preserved byte-for-byte in STATUS-PRE-B2-ACCEPTANCE-20261103.md; all previous numbered records and DELIVERY-REGISTER.md remain intact. Issue1006 is full.
+Main registry: **PR1687**. Current release candidate: **PR1702**, branch `release/operational-ready-currentbase-20261103`. Latest continuation **DELIVERY-009.md**; exact technical acceptance **DELIVERY-008.md**, superseding pending-check wording in comment6590950351 and DELIVERY007. Read the latest evidence comment as well. Prior status preserved byte-for-byte in STATUS-PRE-B2-ACCEPTANCE-20261103.md; all previous numbered records and DELIVERY-REGISTER.md remain intact. Issue1006 is full.
 
 ## Frozen current candidate
 
@@ -35,3 +35,7 @@ Actual Emergent guard status is unobserved; no authenticated management/terminal
 Only after acceptance/coordination: merge1702 with expectedB2 and exact tree equality, actual host rehearsal/prepare/prepublish, ONE explicit publication, live three-probe verify and active=false. Publishing code is not approval of actual missing supplier money or day-one payroll; those need the separate preview/approval path. No hidden financial mutation in deployment.
 
 Production changed by this task:NO. Production merge:NO. Publication:NO. Financial activation:NO. /app/lease touched:NO.
+
+## 3 November continuation — record 009
+
+Fresh GitHub and host-access evidence plus exact synthetic visual acceptance steps: **DELIVERY-009.md**. B2 is still current and technically green; the documented Emergent terminal displayed Preview Unavailable (workspace resting), and its management page requires sign-in. Actual guard state is unknown; the other task's previously prepared release is not ours to clear. No candidate, production or financial state change.
