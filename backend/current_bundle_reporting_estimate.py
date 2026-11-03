@@ -214,7 +214,14 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
                 if conditions is not None:
                     if not isinstance(conditions, dict) or set(conditions) != {"option_id", "value_id"}:
                         _fail("current_bundle_condition_invalid")
-                    if (_id(conditions["option_id"]), _id(conditions["value_id"])) not in pairs:
+                    oid, vid = _id(conditions["option_id"]), _id(conditions["value_id"])
+                    catalog_option = next((o for o in _options(product)
+                                           if _id(o.get("id")) == oid), None)
+                    if not catalog_option or vid not in {
+                            _id(v.get("id")) for v in catalog_option.get("values") or []
+                            if isinstance(v, dict)}:
+                        _fail("current_bundle_condition_not_in_current_catalog")
+                    if (oid, vid) not in pairs:
                         continue
                 count = _number(row.get("quantity", 1))
                 if row.get("component_scope", "per_bundle") != "per_bundle":
@@ -315,10 +322,20 @@ async def load_current_bundle_estimates(db: Any, owner: str, orders: list[dict],
     """One scoped batch for missing composite lines; zero writes/N+1 queries."""
     composite = set(authority.get("composite_products") or [])
     pending: list[tuple[str, dict, str]] = []
+    aliases = defaultdict(int)
     for order in orders:
         number = str(order.get("order_number") or "")
         for item in order.get("products") or []:
-            if not isinstance(item, dict) or (number, line_id(item)) in authority.get("lines", {}):
+            if isinstance(item, dict):
+                aliases[(number, line_id(item))] += 1
+    for order in orders:
+        number = str(order.get("order_number") or "")
+        for item in order.get("products") or []:
+            if not isinstance(item, dict):
+                continue
+            key = line_id(item)
+            if not number or not key or aliases[(number, key)] != 1 or (
+                    number, key) in authority.get("lines", {}):
                 continue
             pid = _id(item.get("parent_product_id") or item.get("product_id"))
             if pid in composite:
