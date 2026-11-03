@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from pymongo import ASCENDING
 
 from order_engine.repository import MongoOrderRepository
@@ -323,17 +323,9 @@ def make_order_option_cost_snapshot_router(db: Any, current_user: Callable[..., 
                 "total_cost": known if complete else None, "known_total_cost": known,
                 "cost_complete": complete, "snapshot_exists": bool(authority["lines"])}
 
-    @router.get("/{order_number}/bundle-financial-source-audit")
-    async def bundle_financial_source_audit(
-        order_number: str, order_item_id: str | None = None,
-        user: dict = Depends(current_user),
+    async def _bundle_source_evidence(
+        *, order_number: str, order_item_id: str | None, user: dict,
     ) -> dict[str, Any]:
-        """Read-only historical Salla evidence. No pricing or backfill.
-
-        This endpoint intentionally does not accept a cost or produce an
-        apply-ready correction; that requires separately attested sale-time
-        costs and an approved transactional manifest.
-        """
         from bundle_historical_reporting_audit import (
             BundleHistoricalEvidenceUnavailable, inspect_historical_bundle_order,
         )
@@ -375,6 +367,33 @@ def make_order_option_cost_snapshot_router(db: Any, current_user: Callable[..., 
                 order_number=number, raw_order=original,
                 canonical_items=list(order.items), target_line_id=order_item_id,
             )
+        except BundleHistoricalEvidenceUnavailable as exc:
+            raise HTTPException(status_code=409, detail={"code": exc.code}) from exc
+
+    @router.get("/{order_number}/bundle-financial-source-audit")
+    async def bundle_financial_source_audit(
+        order_number: str, order_item_id: str | None = None,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Owner-only original source audit; no pricing or database writes."""
+        return await _bundle_source_evidence(
+            order_number=order_number, order_item_id=order_item_id, user=user,
+        )
+
+    @router.post("/{order_number}/bundle-financial-cost-dry-run")
+    async def bundle_financial_cost_dry_run(
+        order_number: str, attestation: dict = Body(...),
+        order_item_id: str | None = None, user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Review-only proposal: never applies a correction or touches stock."""
+        from bundle_historical_reporting_audit import (
+            BundleHistoricalEvidenceUnavailable, dry_run_attested_bundle_cost,
+        )
+        evidence = await _bundle_source_evidence(
+            order_number=order_number, order_item_id=order_item_id, user=user,
+        )
+        try:
+            return dry_run_attested_bundle_cost(evidence, attestation)
         except BundleHistoricalEvidenceUnavailable as exc:
             raise HTTPException(status_code=409, detail={"code": exc.code}) from exc
 
