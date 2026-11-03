@@ -205,8 +205,19 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool) 
         if not _completed(order):
             continue
         result = await _shipment(db, owner, internal_id, order)
-        if result and _printable(result)["ready"]:
+        if result and (legacy._is_store_courier(result) or _printable(result)["ready"]):
             break
+        if not result:
+            carrier = legacy.extract_shipping({
+                "shipping": order.get("shipping"),
+                "shipping_company": order.get("shipping_company"),
+                "shipping_company_code": order.get("shipping_company_code"),
+            }) or {}
+            if legacy._is_store_courier({
+                "courier_name": carrier.get("company_name"),
+                "meta": {"app_id": carrier.get("company_code")},
+            }):
+                break
 
     if not _completed(order):
         raise legacy.ShippingLabelError(
