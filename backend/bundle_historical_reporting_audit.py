@@ -1,4 +1,4 @@
-"""Read-only, fail-closed evidence for historical bundle reporting corrections.
+"""Read-only, fail-closed source cross-check for bundle reporting costs.
 
 This does NOT price an order, backfill a lifecycle, or authorize fulfillment.
 The original Salla sale-line payload must be independently present and agree
@@ -221,7 +221,10 @@ def inspect_historical_bundle_order(
             "fingerprint": fp, "options": original_evidence,
         }),
         "option_rows": public_rows,
-        "original_source_verified": True,
+        "stored_source_crosschecked": True,
+        # The saved Salla payload could have been refreshed later; without an
+        # immutable first-ingestion snapshot it is not sale-time cost evidence.
+        "immutable_first_ingestion_proven": False,
         "historical_cost_verified": False,
         "ready_to_apply_cost": False,
         "next_gate": "sale_time_unit_cost_attestation_and_reviewed_manifest",
@@ -250,7 +253,7 @@ def dry_run_attested_bundle_cost(evidence: dict, attestation: dict) -> dict:
     partial price can become a report-ready cost.
     """
     from decimal import Decimal
-    if not isinstance(evidence, dict) or evidence.get("original_source_verified") is not True:
+    if not isinstance(evidence, dict) or evidence.get("stored_source_crosschecked") is not True:
         _refuse("historical_attestation_source_unverified")
     if not isinstance(attestation, dict) or set(attestation) != {
         "version", "source_choice_evidence_hash", "effective_from",
