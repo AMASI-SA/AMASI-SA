@@ -424,6 +424,8 @@ async def refresh_order_from_salla(
             "_id": 0,
             "order_id": 1,
             "raw_by_source.salla_direct": 1,
+            "shipping_address_raw": 1,
+            "salla_address_verified_at": 1,
             REFRESH_TIMESTAMP_FIELD: 1,
         },
     ) or {}
@@ -521,8 +523,13 @@ async def refresh_order_from_salla(
         # The shipment's ship_to is a historical AWB destination, not proof
         # of a newer order address. A light response containing only a city or
         # an old shipment must never undo an address already in Mezan.
+        verified_delivery = (
+            _dict(existing.get("shipping_address_raw"))
+            if existing.get("salla_address_verified_at") else {}
+        )
         previous_delivery = (
-            _dict(existing_raw.get("shipping_address"))
+            verified_delivery
+            or _dict(existing_raw.get("shipping_address"))
             or _dict(_dict(existing_raw.get("shipping")).get("address"))
         )
         has_detailed_address = any(
@@ -546,6 +553,13 @@ async def refresh_order_from_salla(
                 key: value for key, value in shipping_fields.items()
                 if key in SHIPPING_FIELDS
             }
+            if verified_delivery:
+                # A full current address already received through order.updated
+                # wins over an old AWB embedded by a light Order Details read.
+                merged_raw["shipping_address"] = deepcopy(verified_delivery)
+                shipping = _dict(merged_raw.get("shipping"))
+                shipping["address"] = deepcopy(verified_delivery)
+                merged_raw["shipping"] = shipping
         if address:
             # Explicit full current order address replaces an old destination;
             # the original issued shipment and official PDF remain untouched.
