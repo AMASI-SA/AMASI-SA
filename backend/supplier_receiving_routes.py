@@ -3100,6 +3100,7 @@ async def supplier_scan_group_candidates(
     session: dict[str, Any],
     allow_service_addition: bool,
     allow_supplier_reassignment: bool = False,
+    allow_direct_assignment: bool = False,
 ) -> list[dict[str, Any]]:
     """Return interchangeable unreserved pieces for one quantity choice.
 
@@ -3146,11 +3147,26 @@ async def supplier_scan_group_candidates(
     for row in rows:
         if piece_scan_blocker(row):
             continue
+        # A one-piece approval cannot silently transfer sibling pieces that
+        # belong to other employees or suppliers when quantity > 1.
+        if allow_direct_assignment and (
+            _text(row.get("supplier_id")) != _text(scanned_piece.get("supplier_id"))
+            or _text(row.get("responsible_employee_id"))
+            != _text(scanned_piece.get("responsible_employee_id"))
+        ):
+            continue
+        direct_offer = direct_assignment_offer(
+            row, session, actor_id=_text(session.get("opened_by")),
+            actor_name=_text(session.get("opened_by_name")),
+        )
         dispatch_blocker = supplier_receiving_dispatch_blocker(row, supplier_id)
         if dispatch_blocker and not (
-            allow_supplier_reassignment
-            and _text(dispatch_blocker.get("code"))
-            == "supplier_piece_dispatched_to_different_supplier"
+            (allow_direct_assignment and direct_offer is not None)
+            or (
+                allow_supplier_reassignment
+                and _text(dispatch_blocker.get("code"))
+                == "supplier_piece_dispatched_to_different_supplier"
+            )
         ):
             continue
         if supplier_piece_service_blocker(
@@ -4742,6 +4758,14 @@ def make_supplier_receiving_router(
                         ),
                     },
                 )
+            direct_offer = direct_assignment_offer(
+                scanned_piece,
+                session,
+                actor_id=context["actor_id"],
+                actor_name=_actor_name(user),
+            )
+            if direct_offer and not payload.confirm_direct_receiving_assignment:
+                raise HTTPException(status_code=409, detail=direct_offer)
             candidates = await supplier_scan_group_candidates(
                 db,
                 user_id=context["merchant_id"],
@@ -4751,6 +4775,7 @@ def make_supplier_receiving_router(
                     ADD_PRODUCT_SERVICE_PERMISSION in context["permissions"]
                 ),
                 allow_supplier_reassignment=payload.confirm_supplier_reassignment,
+                allow_direct_assignment=bool(direct_offer),
             )
             # The card QR anchors to its first physical piece. If that piece
             # was already completed, the first still-eligible piece on the
@@ -4792,7 +4817,9 @@ def make_supplier_receiving_router(
                 (session.get("supplier_snapshot") or {}).get("id")
                 or session.get("supplier_id"),
             )
-            if dispatch_blocker:
+            if dispatch_blocker and not (
+                direct_offer and payload.confirm_direct_receiving_assignment
+            ):
                 is_supplier_mismatch = (
                     _text(dispatch_blocker.get("code"))
                     == "supplier_piece_dispatched_to_different_supplier"
