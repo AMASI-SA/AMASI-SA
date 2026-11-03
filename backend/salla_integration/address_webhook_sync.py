@@ -39,13 +39,11 @@ _DELIVERY_FIELDS = frozenset({
 def _current_address(payload: dict[str, Any]) -> tuple[dict[str, Any], str]:
     """Prefer the edited order address to an older shipment label's ship_to."""
     shipping = _dict(payload.get("shipping"))
-    shipment = _dict(payload.get("shipment"))
     receiver = _dict(payload.get("receiver"))
     customer = _dict(payload.get("customer"))
-    shipments = payload.get("shipments")
-    first_shipment = next(
-        (row for row in shipments if isinstance(row, dict)), {}
-    ) if isinstance(shipments, list) else _dict(shipments)
+    # The issued shipment's ship_to is historical AWB data, NOT evidence of
+    # today's delivery-address edit. Only the ORDER's address fields can
+    # update Mezan's current destination on order.updated.
     candidates = (
         ("shipping.address", shipping.get("address")),
         ("shipping.ship_to", shipping.get("ship_to")),
@@ -53,8 +51,6 @@ def _current_address(payload: dict[str, Any]) -> tuple[dict[str, Any], str]:
         ("ship_to", payload.get("ship_to")),
         ("address", payload.get("address")),
         ("receiver.address", receiver.get("address")),
-        ("shipment.ship_to", shipment.get("ship_to")),
-        ("shipments[0].ship_to", first_shipment.get("ship_to")),
         ("customer.shipping_address", customer.get("shipping_address")),
         ("customer.address", customer.get("address")),
     )
