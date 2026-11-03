@@ -2102,6 +2102,23 @@ def assembly_piece_blocker(piece: dict[str, Any]) -> str | None:
     return None
 
 
+def assembly_direct_preparation_receipt_eligible(piece: dict[str, Any]) -> bool:
+    """Permit direct, confirmed custody handoff only for supplier-completed pieces.
+
+    This is a preview for the assembly screen, not a receipt or a Ready action.
+    The write endpoint revalidates tenant, actor, live Salla status, piece
+    identity and supplier/service completion using the canonical receipt flow.
+    """
+    if piece.get("virtual_kind") or piece.get("experiment_archived_at"):
+        return False
+    if piece.get("active_hold_id") or _text(piece.get("status")) == PIECE_STATUS_BLOCKED:
+        return False
+    return bool(
+        assembly_piece_blocker(piece) == "assembly_piece_preparation_receipt_required"
+        and preparation_receipt_blocker(piece) is None
+    )
+
+
 def provable_piece_actor_attribution_repair(
     piece: dict[str, Any],
     events: Iterable[dict[str, Any]],
@@ -2913,6 +2930,16 @@ async def _assembly_search(
             virtual=virtual,
         )
         row_eligible = row_eligible and status_allowed
+        # Do not promote a piece just because it appears in assembly search:
+        # show a separate consent action for the exact physical custody receipt.
+        row["can_receive_from_preparation"] = bool(
+            row_eligible and not virtual
+            and assembly_direct_preparation_receipt_eligible(piece)
+        )
+        row["preparation_employee_name_for_receipt"] = (
+            _text(piece.get("responsible_employee_name")) or None
+            if row["can_receive_from_preparation"] else None
+        )
         if not row_eligible:
             row["can_mark_ready"] = False
             row["assembly_blocker_code"] = component_blocker or "assembly_order_not_ready"
@@ -3925,6 +3952,52 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             actor_name=operation_actor["name"],
             authorize=authorize,
         )
+
+    @router.post("/assembly/pieces/{piece_id}/receive-from-preparation")
+    async def receive_preparation_in_assembly(
+        piece_id: str,
+        payload: ReceivePreparationPieceRequest,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Operator-confirmed physical custody handoff; NOT marking Ready.
+
+        The assembly worker uses the existing canonical receipt and audit
+        transaction, without visiting the separate employee-receipt page.
+        Merely calling this route never grants completion/Ready permission.
+        """
+        context = await _actor_context(db, user)
+        _require_permission(
+            context,
+            "fulfillment.pack.confirm",
+            responsibility="packing",
+        )
+        actor = effective_operation_actor(user, context)
+
+        async def authorize() -> None:
+            fresh = await _actor_context(db, user)
+            _require_permission(
+                fresh, "fulfillment.pack.confirm", responsibility="packing",
+            )
+            if fresh["merchant_id"] != context["merchant_id"] or (
+                effective_operation_actor(user, fresh)["id"] != actor["id"]
+            ):
+                raise HTTPException(403, detail={"code": "assembly_preparation_receipt_actor_changed"})
+
+        # This canonical flow proves full supplier invoice/receiving state,
+        # validates in-progress Salla status before and after the transaction,
+        # prevents duplicate custody, and preserves preparation actor history.
+        result = await _receive_preparation_piece(
+            db,
+            user_id=context["merchant_id"],
+            piece_id=piece_id,
+            client_request_id=payload.client_request_id,
+            actor_id=actor["id"],
+            actor_name=actor["name"],
+            authorize=authorize,
+        )
+        result["assembly_direct_preparation_receipt_confirmed"] = True
+        result["next_action"] = "assembly_search_then_explicit_ready"
+        return result
 
     @router.get("/assembly/search")
     async def search_assembly_order(
