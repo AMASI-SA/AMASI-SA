@@ -33,3 +33,28 @@ Baseline: production `e01d4d3920fc5bf4a7280757ca2030c30b4be9c8` (checked before 
 4. Explicit separate approval for Production data correction and v5 A/B release. No production merge or publish at this checkpoint.
 
 Production changed by this task: **NO**.
+
+## Milestone 2 — implemented and acceptance-tested, Production unchanged
+
+- **Reviewed code commit (source A checkpoint):** `3a08b70d785a1444644fe3f8734b052071e6fbea`.
+- New `backend/bundle_historical_reporting_repair.py` supports a bounded, tenant-scoped owner-attested expected-cost repair of **one explicit order line at a time**, not an auto-backfill.
+- The owner-only authenticated plan endpoint `POST /api/orders-v2/{order_number}/bundle-financial-cost-repair-plan` produces a manifest SHA and stripped public summary without touching production data. Existing previous missing cost is `null`, **never** silently treated as zero.
+- The owner-only apply endpoint `POST /api/orders-v2/{order_number}/bundle-financial-cost-repair-apply` requires a fresh exact manifest SHA and explicit approval phrase, AND `MZ2_HISTORICAL_BUNDLE_REPORTING_APPLY_ENABLED=1`; that flag remains **disabled by default**. Do not enable without independently reviewed owner authorization.
+- Only the existing immutable `mezan_order_cost_corrections_v1` and shared `mezan_product_cost_revisions_v2` may be written, atomically, via `_RepairDB`. No supplier, inventory, invoice, journal, Qoyod, order status or original Salla raw modifications.
+- Report loader checks correction fingerprint with reconstructed canonical `_id` (the bounded Mongo projection omits it), original authority hash, quantity, product identity, and line fingerprint. The same authority feeds `product_cost_v2.total`, product rows, and the executive profit calculation. Refunds/cancellations are applied once by existing policy.
+- The correction source is labeled `historical_owner_attested_bundle` (expected only), explicitly `owner_attested_not_provider_invoice=true`. Persisted Salla/canonical source match is not proof of immutable first ingestion; this remains `immutable_first_ingestion_proven=false`.
+- New `backend/tests/test_bundle_historical_reporting_repair.py` contains disposable real-Mongo transaction, SHA re-approval, replay/no double-count, rejection of conflicting snapshots/operational plans, foreign-tenant denial, tamper detection, and dashboard total/product-row equality. New suite is mandatory in G47.
+
+### Exact-source CI results for code commit `3a08b70d...`
+- All **11/11** GitHub workflow runs SUCCESS on that exact SHA, including CodeQL, Security Gate, Dashboard runtime adoption, Operational Stock Eligibility, Products V2, Mezan Release Readiness, Operational Balance Web, G47 and supporting workflows.
+- G47 integration: **327 cases PASSED plus 127 subtests**, zero skips/failures/errors.
+- G47 historical cost/report acceptance: **457 cases PASSED**, zero skips/failures/errors, including new real-Mongo tests and first-ingestion regressions.
+- Frontend G47 run SUCCESS.
+- This status-file checkpoint commit is documentation only; final release readiness must validate its exact head separately if proposed for merge or publish.
+
+### What remains / safeguards
+1. Obtain independently reviewed **sale-time cost basis** for the exact order and each selected option; an editable provider/catalog label or newer refreshed snapshot alone cannot certify a historical price.
+2. Inspect and approve an exact owner-scoped **dry run** against actual Production via authenticated owner tools. Order `297657209` is one unit; the 15-period AMS13281 total is **not** 15 × SAR65 unless each original sale proves identical selections.
+3. If explicitly authorized later, perform v5 source A / reviewed intent-only B, merge and publish with the guard; validate 3/3 before enabling a separately approved reporting-only data correction. No production write is justified by a code CI pass alone.
+
+**Current task Production writes: NO. New deployment: NO. Existing PR #1695 deployment unchanged.**
