@@ -145,3 +145,66 @@ def test_aggregate_provider_estimate_and_actual_settlement_fee_are_distinct():
                 'tamara': {'known_subtotal':'2.00','settlements_without_fee_amount':0}}
             assert result['provider_fees_expected']['known_by_platform']['tamara'] == '1.90'
     run(scenario())
+
+
+def test_supplier_snapshot_compares_booked_debt_with_separate_service_and_same_payment():
+    from operational_balance_engine import reconcile
+    from operational_balance_sources import collect_sources
+    from test_operational_supplier_invoice_cutover import active, native_data, native_invoice, START, APPROVED, NOW
+
+    async def scenario():
+        async with database() as db:
+            base = native_invoice(identity='private-base', piece_ids=('p1',))
+            data = native_data()
+            data['mezan_supplier_invoices_v2'] = [base]
+            for collection, rows in data.items():
+                if rows:
+                    await db[collection].insert_many(rows)
+            sources = await collect_sources(db, 'owner', START, APPROVED)
+            saved = reconcile({**initial('owner'), **active(), 'revision': 1}, sources, APPROVED)
+            saved['engine']['as_of'] = APPROVED
+            saved['openings']['bank'] = dict(id='bank', party_type='bank', party_id='private-bank',
+                currency='SAR', direction='for_us', name='Private bank', amount='100.00')
+            booked = next(key for key in saved['engine']['obligations'] if ':receipt:' in key)
+            saved['movements'] = [dict(id='private-payment', party_type='supplier', party_id='supplier',
+                currency='SAR', direction='outgoing', kind='payment', amount='10.00', bank_kind='bank',
+                bank_id='private-bank', actual_fee_amount='0.00', allocations=[dict(obligation_id=booked, amount='10.00')])]
+            await db[STATES].insert_one(saved)
+            service = native_invoice(identity='private-service', piece_ids=('p1',), unit=0, approved=NOW)
+            service.update(subtotal_halalas=500, total_halalas=500)
+            service['lines'][0].update(product_charge_eligible=False, total_halalas=500,
+                services=[dict(service_id='private-stitch', quantity_per_piece=1, unit_price_halalas=500, total_halalas=500)])
+            await db.mezan_supplier_invoices_v2.insert_one(service)
+            before = await contents(db)
+            preview = await snapshot(db, 'owner', NOW)
+            assert await contents(db) == before
+            assert preview['openings_and_recorded_movements_equal']
+            old, new = [preview[side]['SAR']['suppliers'] for side in ('saved','proposed')]
+            assert old['parties'].keys() == new['parties'].keys()
+            assert list(old['parties'].values()) == [dict(receivable='0.00', payable='130.00')]
+            assert list(new['parties'].values()) == [dict(receivable='0.00', payable='135.00')]
+            assert 'private-' not in json.dumps(preview)
+    run(scenario())
+
+
+def test_supplier_forecasts_preserve_partial_amounts_and_distinct_order_counts():
+    from test_operational_supplier_invoice_cutover import active, NOW
+
+    state = {**initial('owner'), **active(), 'revision': 1, 'engine': {'as_of': NOW}}
+    def group(stage, amount):
+        return dict(period='poststart', kind='supplier', stage=stage, party_id='private-supplier',
+                    currency='SAR', name='private-name', amount=amount, orders=1)
+
+    exposure = dict(status='preview', complete=False,
+        bucket_completeness=dict(version=1, products_unreceived=True, products_received_uninvoiced=False),
+        currencies={'SAR': dict(poststart_supplier_unreceived='45.00', poststart_supplier_received_uninvoiced='7.00')},
+        groups=[group('awaiting_review','40.00'), group('under_fulfillment','5.00')],
+        distinct_order_counts={'SAR': {'products_unreceived': 1}})
+    visible = cli['summary']('owner', state, exposure)['SAR']
+    assert visible['products_unreceived'] == dict(
+        complete=True, reported_total='45.00', known_subtotal='45.00', distinct_orders=1)
+    assert visible['products_received_uninvoiced'] == dict(
+        complete=False, reported_total=None, known_subtotal='7.00', distinct_orders=None)
+    hidden = cli['summary']('owner', state, None)['SAR']['products_unreceived']
+    assert hidden == dict(complete=False, reported_total=None, known_subtotal=None, distinct_orders=None)
+    assert 'private-' not in json.dumps(visible)

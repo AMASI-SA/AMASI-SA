@@ -30,7 +30,7 @@ from operational_supplier_invoice_preview import SnapshotReads
 
 SECONDS = 40
 PUBLIC_PARTIES = {'smsa', 'imile', 'salla', 'tamara', 'tabby', 'emkan'}
-BALANCE_TABLES = ('couriers', 'drivers', 'providers')
+BALANCE_TABLES = ('couriers', 'drivers', 'providers', 'suppliers')
 
 
 def party_label(owner, key):
@@ -55,7 +55,9 @@ def summary(owner, state, exposure):
             parties = {}
             for row in table['rows']:
                 key = row['id'].split(':', 1)[1].rsplit(':', 1)[0]
-                parties[party_label(owner, key)] = {k: row[k] for k in ('receivable', 'payable')}
+                # Supplier IDs are private even when a shop uses a carrier name as its key.
+                label = party_label(owner, 'supplier:' + key if table_id == 'suppliers' else key)
+                parties[label] = {k: row[k] for k in ('receivable', 'payable')}
             balances[table_id] = {'complete': table['complete'], 'parties': parties}
         forecast = {}
         for table_id in ('cod_expected', 'provider_fees_expected'):
@@ -65,6 +67,14 @@ def summary(owner, state, exposure):
                 'known_subtotal': known_amount(table['rows']),
                 'orders_with_amount': sum(r['orders'] for r in table['rows'] if r['amount'] is not None),
                 'rows_without_amount': sum(r['amount'] is None for r in table['rows']),
+            }
+        for table_id in ('products_unreceived', 'products_received_uninvoiced'):
+            table = tables[table_id]
+            # A single order can contribute to multiple supplier/stage groups.
+            # Use the report's distinct count or leave it unknown.
+            forecast[table_id] = {
+                'complete': table['complete'], 'reported_total': table['totals']['amount'],
+                'known_subtotal': known_amount(table['rows']), 'distinct_orders': table['totals']['orders'],
             }
         # Fee rows refer to source obligations; aggregate per platform without
         # exporting those order keys or duplicating the receivable.
