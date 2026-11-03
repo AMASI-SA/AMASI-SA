@@ -120,8 +120,30 @@ def _merge_rows(current: dict, incoming: list[dict[str, Any]], internal_id: str)
         return candidate
 
 
-async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]) -> dict:
-    embedded = _rows(order.get("shipments", []))
+async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any], *,
+                    strict=False, baseline=None) -> dict:
+    metadata = legacy._label_metadata(baseline)
+    current_id = legacy._text(metadata.get("shipment_id") or (baseline or {}).get("salla_shipment_id"))
+    superseded = {str(value) for value in metadata.get("superseded_shipment_ids") or []}
+
+    def candidates(response, *, standalone=False):
+        rows = _rows(response)
+        if not strict:
+            return rows
+        result = []
+        for row in rows:
+            shipment_id = legacy._text(row.get("id"))
+            if shipment_id in superseded or (current_id and current_id != shipment_id):
+                continue
+            # Embedded/order-scoped lists prove their parent by construction.
+            # A global list can only return a positively identified child.
+            nested = row.get("order") if isinstance(row.get("order"), dict) else {}
+            if standalone and legacy._text(row.get("order_id") or nested.get("id")) != internal_id:
+                continue
+            result.append(row)
+        return result
+
+    embedded = candidates(order.get("shipments", []))
     selected = _current(embedded, internal_id)
     if selected and _printable(selected)["ready"]:
         return selected
@@ -135,7 +157,7 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
     ):
         response = await _get(db, owner, path, params=params)
         if response is not None:
-            selected = _merge_rows(selected, _rows(response), internal_id)
+            selected = _merge_rows(selected, candidates(response, standalone=(path == "/shipments")), internal_id)
         if selected and _printable(selected)["ready"]:
             return selected
 
@@ -157,12 +179,13 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
     return selected or {}
 
 
-def _completed(order: dict[str, Any]) -> bool:
-    if legacy._order_is_completed(order):
-        return True
-    status = order.get("status")
-    slug = (status.get("original") or status) if isinstance(status, dict) else status
-    return legacy._status(slug) in _DONE
+def _order_status(order: dict[str, Any]) -> str | None:
+    from assembly_status_policy import status_values
+    from preparation_receipt_status_message import ALIASES
+
+    values = status_values(order.get("status")) | status_values(order.get("status_slug"))
+    values = {ALIASES.get(value.replace("_", " "), value) for value in values}
+    return next(iter(values)) if len(values) == 1 else None
 
 
 async def _with_verified_destination(
@@ -193,7 +216,7 @@ async def _with_verified_destination(
     return {**order, "_mezan_current_shipping_address": dict(address)}
 
 
-async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool) -> dict[str, Any]:
+async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, completed_only: bool = False) -> dict[str, Any]:
     """One Salla order-status POST when needed; read the original carrier AWB.
 
     A rejected or ambiguous status acknowledgement is reconciled by GET,
@@ -202,17 +225,22 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool) 
     number = legacy._text(order_number)
     if not number:
         raise legacy.ShippingLabelError("order_number_required", "رقم الطلب مطلوب.", status_code=400)
+    baseline = await legacy._label_baseline(db, owner, number) if completed_only else None
     internal_id, order = await _resolve(db, owner, number)
-    # A cancelled/refunded order must never be moved back to completed.
-    original = (order.get("status") or {}).get("original") if isinstance(order.get("status"), dict) else None
-    if (legacy._status(order.get("status")) in _CANCELLED
-            or legacy._status(original) in _CANCELLED):
-        raise legacy.ShippingLabelError(
-            "order_cancelled", "الطلب ملغى في سلة؛ لم تتغير حالته ولم تُطبع شحنته.",
-        )
+    status = _order_status(order)
+    if completed_only and (legacy._text(order.get("id")) != internal_id
+                           or legacy._text(order.get("reference_id")) != number):
+        raise legacy.ShippingLabelError("salla_order_reference_mismatch", "تعذّر تأكيد هوية الطلب في سلة.")
+    if status in _CANCELLED | {"refunded"}:
+        raise legacy.ShippingLabelError("order_cancelled", "الطلب ملغى أو مسترجع في سلة.")
+    if completed_only and status == "in_progress":
+        raise legacy.ShippingLabelError("carrier_order_in_progress", "لم تؤكد سلة تنفيذ الطلب بعد.")
+    printable = {"completed"} if completed_only else {"completed", *_DONE}
+    if status not in printable and not (issue and not completed_only and status == "in_progress"):
+        raise legacy.ShippingLabelError("order_status_not_completed", "حالة الطلب الحالية لا تسمح بالطباعة.")
     changed = False
     status_error = None
-    if issue and not _completed(order):
+    if issue and not completed_only and status == "in_progress":
         try:
             await call_salla(db, owner, "POST", f"/orders/{internal_id}/status",
                              json={"slug": "completed"}, single_post_attempt=True)
@@ -231,9 +259,9 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool) 
             latest = await _order(db, owner, internal_id, number)
             if latest is not None:
                 order = latest
-        if not _completed(order):
+        if _order_status(order) not in printable:
             continue
-        result = await _shipment(db, owner, internal_id, order)
+        result = await _shipment(db, owner, internal_id, order, strict=completed_only, baseline=baseline)
         if result and (legacy._is_store_courier(result) or _printable(result)["ready"]):
             break
         if not result:
@@ -248,13 +276,46 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool) 
             }):
                 break
 
-    if not _completed(order):
+    if _order_status(order) not in printable:
         raise legacy.ShippingLabelError(
             "order_status_not_completed",
             "لم تؤكد سلة حالة «تم التنفيذ»؛ لم تتم الطباعة أو إنشاء بوليصة بديلة.",
             status_code=502 if status_error else 409,
         )
 
+    if completed_only:
+        order_carrier = legacy.extract_shipping({key: order.get(key) for key in (
+            "shipping", "shipping_company", "shipping_company_code",
+        )}) or {}
+        provider_carrier = {"name": legacy._text(order_carrier.get("company_name")),
+                            "code": legacy._text(order_carrier.get("company_code"))}
+        order_internal = legacy._is_store_courier({"courier_name": provider_carrier["name"],
+                                                   "meta": {"app_id": provider_carrier["code"]}})
+        row_internal = bool(result and legacy._is_store_courier(result))
+        local_carrier = legacy._label_carrier(baseline or {})
+        local_internal = legacy._internal_carrier(baseline)
+        if any(local_carrier.values()) and any(provider_carrier.values()):
+            if legacy._label_carriers_match(local_carrier, provider_carrier) is False:
+                raise legacy._stale_label()
+        if local_internal:
+            # Canonical store courier beats old embedded external shipments
+            # only when the provider still independently confirms this carrier.
+            if not order_internal and not (row_internal and not any(provider_carrier.values())):
+                raise legacy._stale_label()
+            document_order = await _with_verified_destination(db, owner, number, internal_id, order)
+            return await legacy._internal_delivery_document(db, owner, number, document_order, baseline)
+        if (row_internal or order_internal) and any(local_carrier.values()):
+            raise legacy._stale_label()
+        if result and any(provider_carrier.values()):
+            snap = _printable(result)
+            row_carrier = {"name": legacy._text(snap.get("courier_name")), "code": legacy._text(snap.get("courier_code"))}
+            if order_internal != row_internal or legacy._label_carriers_match(provider_carrier, row_carrier) is False:
+                raise legacy._stale_label()
+        if result and db is not None:
+            await legacy._persist_verified_snapshot(
+                db, owner, number, _printable(result), baseline=baseline, persist=False,
+            )
+    observed = {"observed_order_status": _order_status(order)} if _order_status(order) in _DONE else {}
     if not result:
         carrier = legacy.extract_shipping({
             "shipping": order.get("shipping"),
@@ -270,7 +331,7 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool) 
             print_order = await _with_verified_destination(db, owner, number, internal_id, order)
             print_data = legacy._store_courier_print_data(number, print_order, {}, store)
             print_data["courier_name"] = carrier.get("company_name") or "مندوب المتجر"
-            return {"ok": True, "source": "mezan", "ready": True,
+            return {**observed, "ok": True, "source": "mezan", "ready": True,
                     "label_type": "store_courier", "order_status_completed": True,
                     "order_status_changed": changed, "shipment_id": None,
                     "courier_name": print_data["courier_name"], "label_url": None,
@@ -282,7 +343,7 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool) 
         store = await legacy._store_identity(db, owner)
         print_order = await _with_verified_destination(db, owner, number, internal_id, order)
         print_data = legacy._store_courier_print_data(number, print_order, result, store)
-        return {"ok": True, "source": "mezan", "ready": True,
+        return {**observed, "ok": True, "source": "mezan", "ready": True,
                 "label_type": "store_courier", "order_status_completed": True,
                 "order_status_changed": changed, "shipment_id": legacy._text(result.get("id")),
                 "courier_name": print_data["courier_name"], "label_url": None,
@@ -291,7 +352,7 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool) 
                 "message": "تم تجهيز بوليصة مندوب المتجر."}
 
     snap = _printable(result)
-    return {"ok": True, "source": "salla", "order_status_completed": True,
+    return {**observed, "ok": True, "source": "salla", "order_status_completed": True,
             "order_status_changed": changed, **snap,
             "message": (
                 "بوليصة شركة الشحن الرسمية جاهزة للطباعة." if snap["ready"]

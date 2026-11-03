@@ -2503,7 +2503,7 @@ def make_fulfillment_v2_router(
         return await _carrier_label_action(order_number=order_number, user=user, action="refresh_saved")
 
     async def _amasi_compatible_label_action(
-        *, order_number: str, user: dict[str, Any], issue: bool,
+        *, order_number: str, user: dict[str, Any], issue: bool, mobile_v1: bool = False,
     ) -> dict[str, Any]:
         """Isolated order-first label pilot; no shipment creation or stock write.
 
@@ -2514,18 +2514,53 @@ def make_fulfillment_v2_router(
         from fulfillment_carrier_label import _workflow_patch, _now
         from salla_integration.service import SallaError
 
-        context = await _actor_context(db, user)
-        _require_permission(context, "fulfillment.labels.print")
-        if not _can_operate_completed_carrier_label(context):
-            raise HTTPException(403, detail={
-                "code": "fulfillment_responsibility_required",
-                "responsibility": "shipping_labeling",
-            })
+        async def authorized_owner():
+            if user.get("_session_client") == "amasi_mobile":
+                # The completed-orders list also serves handoff staff. Its
+                # merchant-shaped native principal is not a print grant.
+                from assembly_mobile_settings import _scope as assembly_app_scope
+                owner, _ = await assembly_app_scope(db, user)
+                return owner
+            context = await _actor_context(db, user)
+            _require_permission(context, "fulfillment.labels.print", responsibility="shipping_labeling")
+            return context["merchant_id"]
+
         number = _text(order_number)
-        owner = context["merchant_id"]
-        await _require_print_completed_workflow(db, user_id=owner, order_number=number)
+        owner = await authorized_owner()
+        if mobile_v1:
+            from order_engine.shipping_label_service import _label_baseline
+            source_before = await _label_baseline(db, owner, number)
         try:
-            result = await carrier_label(db, owner, number, issue=issue)
+            workflow = await _require_print_completed_workflow(db, user_id=owner, order_number=number)
+            if mobile_v1 and issue and workflow.get("stage") != "completed":
+                raise HTTPException(409, detail={"code": "assembly_completion_required"})
+            if mobile_v1:
+                try:
+                    result = await carrier_label(db, owner, number, issue=False, completed_only=True)
+                except ShippingLabelError as exc:
+                    if exc.code != "carrier_order_in_progress":
+                        raise
+                    if issue:
+                        from assembly_completion_delivery import resume
+                        journal = workflow.get("assembly_delivery") or {}
+                        if journal.get("version") != 2 or journal.get("legacy_readback_only"):
+                            raise HTTPException(409, detail={"code": "completion_status_unconfirmed"})
+                        async def reauthorize():
+                            if await authorized_owner() != owner:
+                                raise HTTPException(403, detail={"code": "completion_owner_changed"})
+                        await reauthorize()
+                        state = await resume(db, user_id=owner, order_number=number,
+                                             authorize_first_issue=reauthorize)
+                        await reauthorize()
+                        if state.get("requires_attention"):
+                            raise HTTPException(409, detail={"code": state.get("error_code") or "completion_status_unconfirmed"})
+                    # Only a new order-first GET confirming completion may
+                    # expose a printable label. Never revive a saved PDF here.
+                    return {"ok": True, "ready": False, "order_number": number,
+                            "order_status_completed": False, "assembly_completion_confirmed": True,
+                            "message": "بانتظار تأكيد تنفيذ الطلب في سلة."}
+            else:
+                result = await carrier_label(db, owner, number, issue=issue)
         except ShippingLabelError as exc:
             raise HTTPException(exc.status_code, detail={
                 "code": exc.code, "message": str(exc), "order_number": number,
@@ -2539,18 +2574,33 @@ def make_fulfillment_v2_router(
 
         # Keep the existing employee-permission boundary, including revocation
         # during external IO. Carrier content comes from the current Salla read.
-        latest = await _actor_context(db, user)
-        _require_permission(latest, "fulfillment.labels.print")
-        if (latest["merchant_id"] != owner
-                or not _can_operate_completed_carrier_label(latest)):
+        if await authorized_owner() != owner:
             raise HTTPException(403, detail={"code": "completion_owner_changed"})
         patch = _workflow_patch(result, now=_now())
-        saved = await db.order_review_workflows.update_one(
-            {"user_id": owner, "order_number": number, "assembly_status": "completed"},
-            {"$set": patch},
-        )
+        if result.get("observed_order_status"):
+            patch["salla_order_status"] = result["observed_order_status"]
+        # Web and mobile share this snapshot. A delayed provider response must
+        # never replace a newer observation or cross a handoff/status change.
+        fence = {"user_id": owner, "order_number": number, "assembly_status": "completed"}
+        for field in ("stage", "shipping_status_epoch", "carrier_label_verified_at",
+                      "carrier_shipment_id", "carrier_label_print_confirmed",
+                      "store_courier_assignee_id", "store_courier_assignee_name", "store_delivery_assignment_id"):
+            fence[field] = workflow.get(field)
+        async def persist(scoped):
+            if mobile_v1 and await _label_baseline(scoped, owner, number) != source_before:
+                raise HTTPException(409, detail={"code": "shipping_snapshot_changed"})
+            return await scoped.order_review_workflows.update_one(fence, {"$set": patch})
+
+        if mobile_v1:
+            from operational_atomic import operational_owner
+            saved = await operational_owner(db, owner, persist)
+        else:
+            saved = await persist(db)
         if saved.matched_count != 1:
-            raise HTTPException(409, detail={"code": "assembly_completion_required"})
+            raise HTTPException(409, detail={
+                "code": "shipping_snapshot_changed",
+                "message": "تغيّرت بيانات الشحنة أثناء التحقق. أعد قراءة البوليصة الحالية.",
+            })
         return {
             **result, "order_number": number,
             "assembly_completion_confirmed": True,
@@ -2573,6 +2623,27 @@ def make_fulfillment_v2_router(
         return await _amasi_compatible_label_action(
             order_number=order_number, user=user, issue=False,
         )
+
+    async def _mobile_carrier_label_v1(order_number: str, user: dict, *, issue: bool):
+        try:
+            result = await _amasi_compatible_label_action(
+                order_number=order_number, user=user, issue=issue, mobile_v1=True,
+            )
+        except HTTPException as exc:
+            detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
+            raise HTTPException(exc.status_code, headers=exc.headers, detail={
+                **detail, "contract_version": 1, "print_state": "failed",
+            }) from exc
+        return {**result, "contract_version": 1,
+                "print_state": "ready" if result["ready"] else "pending"}
+
+    @router.post("/completed/{order_number}/carrier-label/v1")
+    async def issue_mobile_carrier_label_v1(order_number: str, user: dict = Depends(current_user)):
+        return await _mobile_carrier_label_v1(order_number, user, issue=True)
+
+    @router.post("/completed/{order_number}/carrier-label/v1/refresh")
+    async def refresh_mobile_carrier_label_v1(order_number: str, user: dict = Depends(current_user)):
+        return await _mobile_carrier_label_v1(order_number, user, issue=False)
 
     @router.post("/completed/{order_number}/carrier-label/confirm-print")
     async def confirm_completed_order_carrier_label_print(

@@ -1,5 +1,6 @@
 """Outbox/account tests with real Mongo query semantics and no provider writes."""
 import os
+import hashlib
 import base64
 import unittest
 from datetime import timedelta
@@ -39,7 +40,7 @@ class PushTests(unittest.IsolatedAsyncioTestCase):
         self.env.start(); self.addCleanup(self.env.stop)
         self.db.raw.users.insert_one({"id": "staff"})
         self.db.raw.order_review_auth_sessions_v2.insert_one({"_id": "session", "actor_id": "staff", "user_id": "owner", "state": "active", "expires_at": now() + timedelta(days=1)})
-        self.db.raw[DEVICES].insert_one({"_id": "device", "kind": "expo", "actor_id": "staff", "merchant_id": "owner", "session_id": "session", "generation": "g1", "active": True, "token": "ExpoPushToken[example]"})
+        self.db.raw[DEVICES].insert_one({"_id": "device", "kind": "expo", "actor_id": "staff", "merchant_id": "owner", "session_id": "session", "generation": "g1", "installation_id": "android_installation_12345678", "active": True, "token": "ExpoPushToken[example]"})
         self.sent = []
 
     async def sender(self, device, payload, **kwargs):
@@ -135,6 +136,178 @@ class PushTests(unittest.IsolatedAsyncioTestCase):
         with patch("requests.Session.request") as transport:
             PushSession().post("https://fcm.googleapis.com/test", allow_redirects=True)
             self.assertIs(transport.call_args.kwargs["allow_redirects"], False)
+
+    def relogin_same_phone(self, generation="g2"):
+        session_id = "session_" + generation
+        self.db.raw.order_review_auth_sessions_v2.insert_one({
+            "_id": session_id, "actor_id": "staff", "user_id": "owner",
+            "state": "active", "expires_at": now() + timedelta(days=1),
+        })
+        self.db.raw[DEVICES].update_one({"_id": "device"}, {"$set": {
+            "generation": generation, "session_id": session_id,
+            "installation_id": "android_installation_12345678",
+        }})
+
+    async def test_same_unread_event_not_resent_on_each_relogin(self):
+        self.db.raw[DEVICES].update_one({"_id": "device"}, {"$set": {
+            "installation_id": "android_installation_12345678",
+        }})
+        await enqueue_operational_push(self.db, recipient_id="staff", event_id="instruction_event_1")
+        await deliver_one(self.db, self.sender)
+        for generation in ("g2", "g3", "g4"):
+            self.relogin_same_phone(generation)
+            await enqueue_operational_push(self.db, recipient_id="staff", event_id="instruction_event_1")
+            await enqueue_operational_push(self.db, recipient_id="staff", event_id="instruction_event_1")
+        self.assertEqual(self.db.raw[OUTBOX].count_documents({}), 1)
+        self.assertEqual(len(self.sent), 1)
+        self.assertFalse(await deliver_one(self.db, self.sender))
+        # A genuinely new update still reaches the same phone exactly once.
+        await enqueue_operational_push(self.db, recipient_id="staff", event_id="instruction_event_2")
+        await deliver_one(self.db, self.sender)
+        self.assertEqual(len(self.sent), 2)
+
+    async def test_receipt_pending_ticket_does_not_trigger_replay_on_relogin(self):
+        await enqueue_operational_push(self.db, recipient_id="staff", event_id="event")
+        async def ticket(*args, **kwargs):
+            return {"status": "receipt_pending", "ticket": "expo-provider-accepted"}
+        await deliver_one(self.db, ticket)
+        self.relogin_same_phone()
+        await enqueue_operational_push(self.db, recipient_id="staff", event_id="event")
+        self.assertEqual(self.db.raw[OUTBOX].count_documents({}), 1)
+        self.assertTrue(self.db.raw[OUTBOX].find_one().get("ticket"))
+
+    async def test_unsubmitted_pending_event_rebinds_to_new_session(self):
+        await enqueue_operational_push(self.db, recipient_id="staff", event_id="event")
+        self.relogin_same_phone()
+        await enqueue_operational_push(self.db, recipient_id="staff", event_id="event")
+        jobs = list(self.db.raw[OUTBOX].find())
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0]["generation"], "g2")
+        await deliver_one(self.db, self.sender)
+        self.assertEqual(len(self.sent), 1)
+
+    async def test_transient_unsent_retry_can_rebind_without_duplicates(self):
+        await enqueue_operational_push(self.db, recipient_id="staff", event_id="event")
+        async def fail(*args, **kwargs):
+            raise TimeoutError("network")
+        await deliver_one(self.db, fail)
+        self.assertEqual(self.db.raw[OUTBOX].find_one()["status"], "retry")
+        self.relogin_same_phone()
+        await enqueue_operational_push(self.db, recipient_id="staff", event_id="event")
+        await deliver_one(self.db, self.sender)
+        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(self.db.raw[OUTBOX].count_documents({}), 1)
+
+    async def test_rotated_expo_token_with_same_installation_does_not_replay(self):
+        installation = "android_installation_12345678"
+        self.db.raw[DEVICES].update_one({"_id": "device"}, {"$set": {
+            "installation_id": installation,
+        }})
+        await enqueue_operational_push(self.db, recipient_id="staff", event_id="event")
+        await deliver_one(self.db, self.sender)
+        self.db.raw[DEVICES].update_one({"_id": "device"}, {"$set": {"active": False}})
+        self.db.raw[DEVICES].insert_one({
+            "_id": "rotated_token", "kind": "expo",
+            "actor_id": "staff", "merchant_id": "owner",
+            "session_id": "session", "generation": "g2",
+            "installation_id": installation, "active": True,
+            "token": "ExpoPushToken[rotated]",
+        })
+        await enqueue_operational_push(self.db, recipient_id="staff", event_id="event")
+        self.assertEqual(self.db.raw[OUTBOX].count_documents({}), 1)
+        await enqueue_operational_push(self.db, recipient_id="staff", event_id="new_event")
+        self.assertEqual(self.db.raw[OUTBOX].count_documents({}), 2)
+        await deliver_one(self.db, self.sender)
+        self.assertEqual(len(self.sent), 2)
+
+    def insert_legacy_job(self, event, status="pending"):
+        moment = now()
+        self.db.raw[OUTBOX].insert_one({
+            "_id": hashlib.sha256(f"{event}:device:g1".encode()).hexdigest(),
+            "device_id": "device", "generation": "g1", "actor_id": "staff",
+            "event_id": event, "instruction_id": "instruction", "priority": "normal",
+            "status": status, "attempts": 0, "created_at": moment,
+            "next_at": moment, "expires_at": moment + timedelta(days=2),
+        })
+
+    async def test_migration_refresh_does_not_duplicate_queued_or_claimed_legacy_delivery(self):
+        for status in ("pending", "retry"):
+            self.insert_legacy_job(status, status)
+            await enqueue_operational_push(self.db, recipient_id="staff", event_id=status)
+
+            async def refresh_during_send(device, payload, **kwargs):
+                # A second refresh happens after the worker claims the old row
+                # but before the provider ticket exists.
+                await enqueue_operational_push(self.db, recipient_id="staff", event_id=payload["event_id"])
+                return await self.sender(device, payload, **kwargs)
+
+            self.assertTrue(await deliver_one(self.db, refresh_during_send))
+            self.assertFalse(await deliver_one(self.db, self.sender))
+            self.assertEqual(self.db.raw[OUTBOX].count_documents({"event_id": status}), 1)
+        self.assertEqual([payload["event_id"] for _, payload in self.sent], ["pending", "retry"])
+
+    async def test_unsent_legacy_job_from_revoked_generation_does_not_block_current_session(self):
+        self.insert_legacy_job("rotated")
+        self.relogin_same_phone()
+        await enqueue_operational_push(self.db, recipient_id="staff", event_id="rotated")
+        self.assertTrue(await deliver_one(self.db, self.sender))
+        self.assertTrue(await deliver_one(self.db, self.sender))
+        self.assertFalse(await deliver_one(self.db, self.sender))
+        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(self.sent[0][0]["generation"], "g2")
+
+    async def test_legacy_generation_key_provider_acceptance_is_respected(self):
+        self.db.raw[OUTBOX].insert_one({
+            "_id": "old_generation_hash", "device_id": "device",
+            "generation": "g1", "actor_id": "staff", "event_id": "event",
+            "status": "provider_accepted",
+            "expires_at": now() + timedelta(days=2),
+        })
+        self.relogin_same_phone()
+        await enqueue_operational_push(self.db, recipient_id="staff", event_id="event")
+        self.assertEqual(self.db.raw[OUTBOX].count_documents({}), 1)
+
+    async def test_other_physical_installation_receives_same_event(self):
+        self.db.raw[DEVICES].update_one({"_id": "device"}, {"$set": {
+            "installation_id": "android_installation_one",
+        }})
+        self.db.raw[DEVICES].insert_one({
+            "_id": "second_phone", "kind": "expo",
+            "actor_id": "staff", "merchant_id": "owner",
+            "session_id": "session", "generation": "g1",
+            "installation_id": "android_installation_two",
+            "active": True, "token": "ExpoPushToken[second]",
+        })
+        await enqueue_operational_push(self.db, recipient_id="staff", event_id="event")
+        self.assertEqual(self.db.raw[OUTBOX].count_documents({}), 2)
+        await deliver_one(self.db, self.sender)
+        await deliver_one(self.db, self.sender)
+        self.assertEqual(len(self.sent), 2)
+
+    async def test_old_unread_inbox_event_does_not_become_new_phone_alert(self):
+        await enqueue_operational_push(
+            self.db, recipient_id="staff", event_id="old_event",
+            created_at=now() - timedelta(days=3))
+        self.assertEqual(self.db.raw[OUTBOX].count_documents({}), 0)
+
+    async def test_new_user_on_same_phone_can_receive_separate_event(self):
+        self.db.raw[DEVICES].update_one({"_id": "device"}, {"$set": {
+            "installation_id": "android_installation_shared",
+        }})
+        await enqueue_operational_push(self.db, recipient_id="staff", event_id="event")
+        await deliver_one(self.db, self.sender)
+        self.db.raw.users.insert_one({"id": "other"})
+        self.db.raw.order_review_auth_sessions_v2.insert_one({
+            "_id": "other_session", "actor_id": "other", "user_id": "owner",
+            "state": "active", "expires_at": now() + timedelta(days=1),
+        })
+        self.db.raw[DEVICES].update_one({"_id": "device"}, {"$set": {
+            "actor_id": "other", "session_id": "other_session", "generation": "other_g1",
+        }})
+        await enqueue_operational_push(self.db, recipient_id="other", event_id="event")
+        await deliver_one(self.db, self.sender)
+        self.assertEqual(len(self.sent), 2)
+        self.assertEqual(self.db.raw[OUTBOX].count_documents({}), 2)
 
 
 if __name__ == "__main__": unittest.main()

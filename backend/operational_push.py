@@ -147,14 +147,79 @@ def make_operational_push_router(db, current_user):
     return router
 
 
-async def enqueue_operational_push(db, *, recipient_id, event_id, order_number=None, instruction_id=None, priority="normal"):
+def _logical_push_key(device, recipient_id, event_id):
+    """One logical event per account and physical app installation, not login generation.
+
+    The Expo token and review-session generation can rotate on every app start.
+    Neither rotation is a new operational event or a new phone installation.
+    """
+    installation = str(device.get("installation_id") or "").strip()
+    identity = installation if installation else f"device:{device['_id']}"
+    scope = [
+        str(device.get("merchant_id") or ""),
+        str(recipient_id),
+        identity,
+        str(event_id),
+    ]
+    return hashlib.sha256(json.dumps(scope, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+
+
+async def enqueue_operational_push(db, *, recipient_id, event_id, order_number=None,
+                                   instruction_id=None, priority="normal", created_at=None):
     if not enabled():
         return
+    # Unread instructions remain visible in the authenticated inbox indefinitely,
+    # but opening an old inbox must not produce a fresh phone banner for a stale event.
+    if isinstance(created_at, datetime):
+        created = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+        if created < now() - timedelta(days=2):
+            return
     devices = await db[DEVICES].find({"actor_id": recipient_id, "active": True}).to_list(100)
     for device in devices:
-        key = hashlib.sha256(f"{event_id}:{device['_id']}:{device['generation']}".encode()).hexdigest()
+        key = _logical_push_key(device, recipient_id, event_id)
+        installation = str(device.get("installation_id") or "").strip()
+        addresses = [{"device_id": device["_id"]}]
+        if installation:
+            addresses.append({"installation_id": installation})
+        # A pre-upgrade row may still be queued or already claimed. Let it finish
+        # on its active generation; accepted tickets suppress replay across sessions.
+        prior_delivery = await db[OUTBOX].find_one({
+            "actor_id": recipient_id, "event_id": str(event_id),
+            "$and": [
+                {"$or": addresses},
+                {"$or": [
+                    {"status": "provider_accepted"}, {"ticket": {"$exists": True}},
+                    {"device_id": device["_id"], "generation": device["generation"],
+                     "status": {"$in": ["pending", "retry", "sending"]},
+                     "expires_at": {"$gt": now()}},
+                ]},
+            ],
+        }, {"_id": 1})
+        if prior_delivery:
+            continue
+        existing = await db[OUTBOX].find_one({"_id": key},
+                                             {"generation": 1, "status": 1, "ticket": 1})
+        if existing:
+            # An unsent job from an old/revoked session can be safely rebound to
+            # the current generation. Never rebind a submitted ticket, a running
+            # claim or an already accepted provider event.
+            if (existing.get("generation") != device["generation"]
+                    and existing.get("status") in {"pending", "retry", "discarded"}
+                    and not existing.get("ticket")):
+                await db[OUTBOX].update_one({
+                    "_id": key, "generation": existing.get("generation"),
+                    "status": {"$in": ["pending", "retry", "discarded"]},
+                    "ticket": {"$exists": False},
+                }, {"$set": {
+                    "device_id": device["_id"], "generation": device["generation"],
+                    "status": "pending", "attempts": 0,
+                    "next_at": now(), "expires_at": now() + timedelta(days=2),
+                }})
+            continue
         await db[OUTBOX].update_one({"_id": key}, {"$setOnInsert": {
             "device_id": device["_id"], "generation": device["generation"],
+            "merchant_id": device.get("merchant_id"),
+            "installation_id": installation,
             "actor_id": recipient_id, "event_id": str(event_id),
             "instruction_id": str(instruction_id or ""), "status": "pending", "attempts": 0,
             "priority": priority,
@@ -248,6 +313,7 @@ async def deliver_one(db, sender=send_to_provider):
 
 async def run(db):
     await db[DEVICES].create_index([("actor_id", 1), ("active", 1)])
+    await db[OUTBOX].create_index([("actor_id", 1), ("event_id", 1)])
     await db[OUTBOX].create_index([("status", 1), ("next_at", 1)])
     await db[OUTBOX].create_index("expires_at", expireAfterSeconds=604800)
     await db["operational_instruction_comments_v1"].create_index([("notification_pending", 1), ("created_at", 1)])
