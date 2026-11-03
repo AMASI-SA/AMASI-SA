@@ -315,22 +315,29 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
     }
 
 
-async def load_current_bundle_estimates(db: Any, owner: str, orders: list[dict],
-                                        authority: dict, products: list[dict],
-                                        profiles: list[dict], option_map: dict,
-                                        product_binding_map: dict, resources: dict) -> dict:
-    """One scoped batch for missing composite lines; zero writes/N+1 queries."""
+async def load_current_bundle_estimates(
+    db: Any, owner: str, orders: list[dict], authority: dict,
+    *, budget: Any = None,
+) -> dict:
+    """One tenant-scoped batch for missing bundle lines, without report writes.
+
+    This is called from the existing order-cost authority, not from any
+    protected Dashboard V2 / Sold Products reducer. In the absence of missing
+    composite lines, it performs zero additional MongoDB reads.
+    """
     composite = set(authority.get("composite_products") or [])
+    if not composite:
+        return {}
     pending: list[tuple[str, dict, str]] = []
     aliases = defaultdict(int)
     for order in orders:
         number = str(order.get("order_number") or "")
-        for item in order.get("products") or []:
+        for item in order.get("products") or order.get("items") or []:
             if isinstance(item, dict):
                 aliases[(number, line_id(item))] += 1
     for order in orders:
         number = str(order.get("order_number") or "")
-        for item in order.get("products") or []:
+        for item in order.get("products") or order.get("items") or []:
             if not isinstance(item, dict):
                 continue
             key = line_id(item)
@@ -340,54 +347,117 @@ async def load_current_bundle_estimates(db: Any, owner: str, orders: list[dict],
             pid = _id(item.get("parent_product_id") or item.get("product_id"))
             if pid in composite:
                 pending.append((number, item, pid))
-    if not pending:
+    if not pending or len(pending) > 5000:
         return {}
-    if len(pending) > 5000:
-        return {}
-    defs = await db["mezan_bundle_definitions_v2"].find(
+    if budget is not None:
+        await budget.checkpoint()
+
+    definitions_rows = await db["mezan_bundle_definitions_v2"].find(
         {"user_id": owner, "product_type": "composite"},
-        {"_id": 0, "product_id": 1, "items": 1, "schema_version": 1, "revision": 1},
+        {"_id": 0, "product_id": 1, "items": 1,
+         "schema_version": 1, "revision": 1},
     ).to_list(length=10001)
-    if len(defs) > 10000:
+    if len(definitions_rows) > 10000:
         return {}
-    definitions = {str(row["product_id"]): row for row in defs}
+    definitions = {str(row["product_id"]): row for row in definitions_rows}
+    if len(definitions) != len(definitions_rows):
+        return {}
     wanted = {pid for _, _, pid in pending}
-    for doc in defs:
-        for row in doc.get("items") or []:
-            if isinstance(row, dict) and row.get("kind") == "product" and row.get("product_id"):
-                wanted.add(str(row["product_id"]))
+    # Traverse only product IDs; do not dereference arbitrary order option
+    # values, which could be customer-provided text or private information.
+    for _ in range(5):
+        extra = {
+            str(item["product_id"])
+            for pid in wanted for item in (definitions.get(pid) or {}).get("items") or []
+            if isinstance(item, dict) and item.get("kind") == "product"
+            and item.get("product_id")
+        }
+        if extra.issubset(wanted):
+            break
+        wanted.update(extra)
+        if len(wanted) > 10000:
+            return {}
     wanted = sorted(wanted)
+    if budget is not None:
+        await budget.checkpoint()
     catalog = await db["mezan_products_v2"].find(
         {"user_id": owner, "$or": [
             {"salla_product_id": {"$in": wanted}},
             {"mezan_product_id": {"$in": wanted}},
             {"id": {"$in": wanted}},
         ]},
-        {"_id": 0, "id": 1, "salla_product_id": 1, "mezan_product_id": 1,
-         "options": 1, "raw_salla": 1, "raw_salla_details": 1},
+        {"_id": 0, "id": 1, "salla_product_id": 1,
+         "mezan_product_id": 1, "options": 1,
+         "raw_salla": 1, "raw_salla_details": 1, "variants": 1,
+         "cost_price_from_salla": 1, "cost_price": 1, "cost": 1},
     ).to_list(length=10001)
-    product_map = {str(p.get("salla_product_id")): dict(p) for p in products if p.get("salla_product_id")}
-    for detail in catalog:
-        pid = _id(detail.get("salla_product_id"))
-        if pid:
-            product_map[pid] = {**product_map.get(pid, {}), **detail}
-    profile_map = {str(p.get("salla_product_id")): p for p in profiles}
-    extra = {str(row["resource_id"]) for doc in defs for row in doc.get("items") or []
-             if isinstance(row, dict) and row.get("kind") == "resource" and row.get("resource_id")}
-    missing = sorted(extra - set(resources))
-    if missing:
-        extra_rows = await db["mezan_cost_resources_v2"].find(
-            {"user_id": owner, "id": {"$in": missing}},
-            {"_id": 0},
-        ).to_list(length=len(missing) + 1)
-        resources = {**resources, **{str(row["id"]): row for row in extra_rows}}
+    if len(catalog) > 10000:
+        return {}
+    product_map = {}
+    for product in catalog:
+        key = _id(product.get("salla_product_id") or product.get("mezan_product_id") or product.get("id"))
+        if key in product_map:
+            return {}
+        product_map[key] = product
+    scope = {"user_id": owner, "salla_product_id": {"$in": wanted}}
+    profile_rows = await db["mezan_product_cost_profiles_v2"].find(
+        scope, {"_id": 0},
+    ).to_list(length=10001)
+    option_rows = await db["mezan_product_option_cost_bindings_v2"].find(
+        scope, {"_id": 0},
+    ).to_list(length=10001)
+    product_bindings = await db["mezan_product_resource_bindings_v2"].find(
+        scope, {"_id": 0},
+    ).to_list(length=10001)
+    if any(len(rows) > 10000 for rows in (
+            profile_rows, option_rows, product_bindings)):
+        return {}
+    profile_map = {}
+    for profile in profile_rows:
+        pid = _id(profile.get("salla_product_id"))
+        if pid in profile_map:
+            return {}
+        profile_map[pid] = profile
+    option_map = defaultdict(list)
+    product_binding_map = defaultdict(list)
+    for row in option_rows:
+        option_map[_id(row.get("salla_product_id"))].append(row)
+    for row in product_bindings:
+        product_binding_map[_id(row.get("salla_product_id"))].append(row)
+    resource_ids = {
+        str(row["resource_id"])
+        for row in option_rows + product_bindings
+        if row.get("resource_id")
+    }
+    for definition in definitions_rows:
+        for row in definition.get("items") or []:
+            if isinstance(row, dict) and row.get("kind") == "resource" and row.get("resource_id"):
+                resource_ids.add(str(row["resource_id"]))
+    if budget is not None:
+        await budget.checkpoint()
+    resource_rows = await db["mezan_cost_resources_v2"].find(
+        {"user_id": owner, "id": {"$in": sorted(resource_ids)}},
+        {"_id": 0},
+    ).to_list(length=10001) if resource_ids else []
+    if len(resource_rows) > 10000:
+        return {}
+    resources = {}
+    for resource in resource_rows:
+        rid = _id(resource.get("id"))
+        if rid in resources:
+            return {}
+        resources[rid] = resource
+
     result = {}
     for number, item, pid in pending:
+        if budget is not None:
+            await budget.checkpoint()
         try:
-            estimated = _build_line_cost(
+            estimate = _build_line_cost(
                 item, pid, definitions, product_map, profile_map,
-                option_map, product_binding_map, resources)
+                option_map, product_binding_map, resources,
+            )
         except (ValueError, TypeError, KeyError, OverflowError):
             continue
-        result[(number, line_id(item))] = estimated
+        result[(number, line_id(item))] = estimate
     return result
