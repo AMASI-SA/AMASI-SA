@@ -12,6 +12,8 @@ let root;
 let container;
 
 beforeEach(() => {
+  // Each scenario owns its mock calls, implementations and queued responses.
+  jest.resetAllMocks();
     global.IS_REACT_ACT_ENVIRONMENT = true;
     Object.defineProperty(global, "crypto", { configurable: true, value: { randomUUID: jest.fn(() => "7a31ca85-5f91-4d39-81f1-3e975c2304a1") } });
     container = document.createElement("div");

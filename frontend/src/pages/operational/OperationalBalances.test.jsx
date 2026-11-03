@@ -305,7 +305,7 @@ test('recurring estimate is explicitly allocatable while other estimates stay ex
   {id:'unconfirmed-other',kind:'supplier',party_type:'external_person',party_id:'external_person1',currency:'SAR',direction:'payable',outstanding:'0.00',expected:'500.00',label:'تقدير غير دوري'},
  ]});
  api.movement.mockRejectedValueOnce(new Error('network'));
- await render(<DailyMovements/>);await click('صادر');await input(host.querySelectorAll('select')[0],'external_person');await input(host.querySelectorAll('select')[1],'external_person1');await input(host.querySelectorAll('select')[2],'bank:bank1');await input(host.querySelectorAll('select')[3],'settlement');
+ await render(<DailyMovements/>);await click('صادر');await input(host.querySelectorAll('select')[0],'external_person');await input(host.querySelector('[aria-label="عملية الجهة الخارجية"]'),'general');await input(host.querySelectorAll('select')[2],'external_person1');await input(host.querySelectorAll('select')[3],'bank:bank1');await input(host.querySelectorAll('select')[4],'settlement');
  expect(host.textContent).toContain('التزام دوري تقديري — يؤكد الجزء المدفوع عند الحفظ');expect(host.textContent).toContain('المتاح 120.30 SAR');expect(host.textContent).not.toContain('تقدير غير دوري');expect(host.textContent).not.toContain('التزام مستنفد');
  await input(host.querySelectorAll('input')[0],'75.25');await input(host.querySelectorAll('input')[1],'75.25');await click('حفظ الحركة');
  const first=api.movement.mock.calls[0][0];expect(first.allocations).toEqual([{obligation_id:'recurring-rent',amount:'75.25'}]);expect(first.kind).toBe('settlement');await click('إعادة محاولة الحركة');expect(api.movement.mock.calls[1][0]).toEqual(first);
