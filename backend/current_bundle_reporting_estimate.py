@@ -44,9 +44,11 @@ def _number(value: Any) -> Decimal:
 
 def _options(product: dict) -> list[dict]:
     raw = product.get("options")
-    if not isinstance(raw, list):
+    if not raw:
         provider = product.get("raw_salla_details") or product.get("raw_salla") or {}
-        raw = provider.get("options") if isinstance(provider, dict) else None
+        provider_options = provider.get("options") if isinstance(provider, dict) else None
+        if isinstance(provider_options, list) and provider_options:
+            raw = provider_options
     if not isinstance(raw, list) or len(raw) > 100:
         _fail("current_product_options_missing")
     return [o for o in raw if isinstance(o, dict)]
@@ -193,9 +195,19 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
             items = doc.get("items")
             if not isinstance(items, list) or not 1 <= len(items) <= 100:
                 _fail("current_bundle_recipe_invalid")
+            seen_recipe_items = set()
             for row in items:
                 if not isinstance(row, dict):
                     _fail("current_bundle_recipe_invalid")
+                rule_id = _id(row.get("rule_id"))
+                cond = row.get("condition") or {}
+                signature = (row.get("kind"), _id(row.get("product_id")),
+                             _id(row.get("resource_id")), _id(row.get("variant_id")),
+                             _id(cond.get("option_id")) if isinstance(cond, dict) else "",
+                             _id(cond.get("value_id")) if isinstance(cond, dict) else "")
+                if signature in seen_recipe_items and row.get("repeat_policy", "once") != "sum":
+                    _fail("current_bundle_duplicate_once_unresolved")
+                seen_recipe_items.add(signature)
                 if any(k in row for k in ("slots", "variant_rules", "option_mappings",
                                           "customization_mappings", "component_overrides")):
                     _fail("current_bundle_advanced_recipe_unresolved")
