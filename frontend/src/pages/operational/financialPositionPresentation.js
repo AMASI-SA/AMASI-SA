@@ -44,6 +44,7 @@ export const PAYMENT_LABELS = {
 
 export const COLLECTION_LABELS = {
     confirmed: "تحصيل مؤكد",
+    courier_collection_unverified: "لم يُوثّق تحصيل الشركة من العميل",
     pending_review: "بانتظار اعتماد التحصيل",
     not_confirmed: "التحصيل غير مؤكد",
     not_applicable: "لا يوجد تحصيل عند التسليم",
@@ -54,7 +55,7 @@ export const DESTINATION_LABELS = {
     store_bank_account: "بنك المتجر · تحصيل مثبت",
     store_pos_receivable: "ذمة شبكة المتجر · بانتظار التسوية",
     driver_custody: "عهدة نقدية لدى المندوب",
-    courier_receivable: "تحصيل مستحق لدى شركة الشحن",
+    courier_receivable: "ذمة الدفع عند الاستلام لدى شركة الشحن",
     store_bank_account_unknown: "تحويل للمتجر · الحساب البنكي غير متاح",
     store_pos_account_unknown: "شبكة المتجر · حساب التسوية غير متاح",
     not_applicable: "لا توجد جهة تحصيل عند التسليم",
@@ -73,10 +74,11 @@ export const DELIVERY_MONEY_COLUMNS = [
     { key: "shipping_outstanding", label: "المتبقي من الأجرة", role: "payable" },
     { key: "collection_amount", label: "مبلغ التحصيل", role: "neutral" },
     { key: "driver_custody", label: "عهدة المندوب", role: "neutral" },
-    { key: "collection_settled", label: "التحصيل المورّد", role: "neutral" },
+    { key: "collection_settled", label: "السداد المخصص للتحصيل", role: "neutral" },
     { key: "collection_outstanding", label: "المتبقي لدى المنفذ", role: "receivable" },
     { key: "store_collection", label: "تحصيل المتجر", role: "neutral" },
     { key: "customer_outstanding", label: "المتبقي وفق مصدر الطلب", role: "neutral" },
+    { key: "courier_responsibility", label: "ذمة الشركة الأصلية", role: "receivable" },
 ];
 
 export function deliveryPartyKey(row) {
@@ -99,7 +101,11 @@ export function filterDeliveries(rows = [], filters = {}) {
     const order = String(filters.order || "").trim().toLocaleLowerCase();
     return rows.filter(row => (!order || [row.order_number, row.order_id].some(value => typeof value === "string" && value.toLocaleLowerCase().includes(order)))
         && (!filters.party || deliveryPartyKey(row) === filters.party)
-        && (!filters.payment || (row.payment_method || "unavailable") === filters.payment));
+        && (!filters.payment || (row.payment_method || "unavailable") === filters.payment))
+        // Older reports used "confirmed" for the courier's booked responsibility.
+        // This field did not attest customer collection.
+        .map(row => row.party_type === "courier" && row.collection_status === "confirmed"
+            ? { ...row, collection_status: "courier_collection_unverified", collection_amount: null } : row);
 }
 
 export function readableMessages(items = []) {

@@ -151,7 +151,9 @@ def _actual_tables(parties, complete):
                  "receivable": row["outstanding_receivable"], "payable": row["outstanding_payable"]}
                 for row in parties if row["party_type"] == kind]
         notes = []
-        if kind in {"courier", "store_driver"}:
+        if kind == "courier":
+            notes = ["لنا هو رصيد ذمة الشركة بعد السداد المخصص، وعلينا أجرة الشحن المتبقية. يلزم كشف الشركة لإثبات تحصيلها من العميل."]
+        if kind == "store_driver":
             notes = ["التحصيل المتبقي لنا والرسوم المتبقية علينا منفصلان؛ لا يضاف التحصيل مرة ثانية إلى النقد."]
         if kind == "provider":
             notes = ["المطالبات المثبتة ظاهرة قبل الرسوم التقديرية المتبقية؛ تخصم الرسوم المستقبلية مرة واحدة في التوقعات."]
@@ -365,7 +367,7 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
         proof_valid = bool(original) and original.get("party_id") == party_id and evidence.get("evidence_complete") is True
         method = (source or {}).get("payment_method")
         destination, status = "unavailable", "unavailable"
-        store_collection = custody = settled = outstanding = None
+        store_collection = custody = settled = outstanding = courier_responsibility = None
         if source is None:
             destination = status = "not_applicable"
         elif party_type == "store_driver":
@@ -386,8 +388,15 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
             if proof_valid:
                 custody = _money(source.get("confirmed_custody"))
         elif party_type == "courier":
-            destination = "courier_receivable"
-            status = "confirmed" if proof_valid else "not_confirmed"
+            # The order balance and delivered waybill establish responsibility. Neither
+            # independently attests cash received from the customer, including after a remittance.
+            destination, status = "courier_receivable", "courier_collection_unverified"
+            cod = cod_obligations.get(key) or {}
+            if (cod.get("direction") == "receivable" and cod.get("party_type") == "courier"
+                    and cod.get("party_id") == party_id and cod.get("currency") == currency
+                    and (_number(cod.get("confirmed")) or ZERO) > ZERO):
+                courier_responsibility = _money(cod["confirmed"])
+            complete = False
         if source is not None and proof_valid:
             settled, outstanding = _money(source.get("settled")), _money(source.get("outstanding"))
         elif source is not None and source.get("legacy_obligation_only"):
@@ -404,12 +413,14 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
                      "party_name": names.get((party_type, party_id), party_id),
                      "delivered_at": frozen.get("delivered_at"), "payment_method": method,
                      "collection_destination": destination, "collection_status": status, **fees,
-                     "collection_amount": _money((source or {}).get("collection_amount")),
+                     "courier_responsibility": courier_responsibility,
+                     "collection_amount": None if party_type == "courier" else _money((source or {}).get("collection_amount")),
                      "driver_custody": custody, "collection_settled": settled,
                      "collection_outstanding": outstanding, "store_collection": store_collection,
                      "customer_outstanding": _money((source or {}).get("customer_outstanding"))})
     return {"complete": complete, "rows": rows, "notes": [
         "الرسوم من التزامات الشحن التشغيلية فقط؛ لا تضاف أرباح تطبيق المندوب مرة أخرى.",
+        "ذمة شركة الشحن تتبع مبلغ الدفع عند الاستلام المسجل عليها. السداد المخصص يخفّض المتبقي، وإثبات تحصيل الشركة من العميل يحتاج مستندًا مستقلًا.",
         "عهدة المندوب هي المسؤولية المثبتة في المصدر وليست إثباتًا لمقدار النقد الفعلي في يده.",
         "التحويل البنكي والشبكة لا ينشئان عهدة نقدية للمندوب. لا يثبت اعتماد التحصيل من حالة تسليم الطلب وحدها.",
         "غير متاح: هوية البنك أو جهاز الشبكة المستقبل غير مثبتة في هذه اللقطة؛ اعتماد المستند لا يثبت قيدًا في رصيد البنك التشغيلي.",
