@@ -278,6 +278,8 @@ jobs:
           pydantic==2.13.4
           pymongo==4.5.0
           mongomock-motor==0.0.36
+          bcrypt==4.1.3
+          PyJWT==2.15.0
           httpx
           pytest
           pytest-asyncio
