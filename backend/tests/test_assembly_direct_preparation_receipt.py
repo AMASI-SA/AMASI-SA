@@ -97,6 +97,9 @@ async def test_assembly_handoff_uses_canonical_receipt_and_not_ready(monkeypatch
     monkeypatch.setattr(ops, "_require_permission", require)
     monkeypatch.setattr(ops, "effective_operation_actor", lambda *_: actor)
     monkeypatch.setattr(ops, "_receive_preparation_piece", canonical)
+    async def allowed(_db, _merchant_id, _field):
+        return True
+    monkeypatch.setattr(ops, "is_optional", allowed)
     router = ops.make_preparation_piece_operations_router(object(), lambda: None)
     route = next(r for r in router.routes
                  if r.path.endswith("/assembly/pieces/{piece_id}/receive-from-preparation"))
@@ -131,3 +134,47 @@ async def test_assembly_handoff_has_no_permission_bypass(monkeypatch):
             {"id": "viewer-1"},
         )
     assert denied.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_assembly_direct_receipt_mandatory_mode_fails_closed_even_for_packer(monkeypatch):
+    actor = {"id": "packer-1", "name": "هلال"}
+    context = {"merchant_id": "merchant-1", "actor_id": actor["id"],
+               "permissions": ["fulfillment.pack.confirm"], "responsibilities": {"packing"}}
+    calls = []
+
+    async def fake_context(_db, _user):
+        return context
+
+    def require(*_args, **_kwargs):
+        return None
+
+    async def mandatory(_db, _merchant_id, field):
+        from mobile_operational_flow_policy import FIELD_PREPARATION
+        assert field == FIELD_PREPARATION
+        return False
+
+    async def canonical(_db, **kwargs):
+        calls.append("canonical")
+        await kwargs["authorize"]()
+        return {"ok": True}
+
+    monkeypatch.setattr(ops, "_actor_context", fake_context)
+    monkeypatch.setattr(ops, "_require_permission", require)
+    monkeypatch.setattr(ops, "effective_operation_actor", lambda *_: actor)
+    monkeypatch.setattr(ops, "_receive_preparation_piece", canonical)
+    monkeypatch.setattr(ops, "is_optional", mandatory)
+    router = ops.make_preparation_piece_operations_router(object(), lambda: None)
+    route = next(r for r in router.routes
+                 if r.path.endswith("/assembly/pieces/{piece_id}/receive-from-preparation"))
+    with pytest.raises(HTTPException) as error:
+        await route.endpoint(
+            PIECE["piece_id"],
+            ops.ReceivePreparationPieceRequest(client_request_id="mandatory-test-unique"),
+            {"id": "packer-1"},
+        )
+    assert error.value.status_code == 409
+    assert error.value.detail["code"] == "assembly_direct_preparation_receipt_required"
+    # The canonical receipt operation is invoked, but its transaction rejects
+    # before any piece mutation, Ready or custody event could be committed.
+    assert calls == ["canonical"]
