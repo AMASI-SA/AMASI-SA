@@ -410,7 +410,8 @@ async def _read_snapshots(db: Any, collection: str, query: dict, projection: dic
 
 async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *, budget: Any = None,
                                     include_corrections: bool = True,
-                                    include_frozen_metadata: bool = False) -> dict:
+                                    include_frozen_metadata: bool = False,
+                                    current_profitability_estimate: bool | None = None) -> dict:
     """Bounded, tenant-scoped batches, never one DB query per order/component."""
     from bundle_catalog_v2 import BUNDLES
     from stock_component_consumption_service import PLANS, UNITS
@@ -580,15 +581,21 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
         result["read_batches"] += 1
         if budget is not None:
             await budget.checkpoint()
-    # The owner-approved current-cost reporting estimate belongs solely in
-    # the shared read-only authority, not in the source-pinned dashboard or
-    # operational supplier/inventory processing paths.
-    from current_bundle_reporting_estimate import load_current_bundle_estimates
-    estimates = await load_current_bundle_estimates(
-        db, user_id, orders, result, budget=budget,
-    )
-    if estimates:
-        result["current_bundle_estimates"] = estimates
+    # This reporting-only estimate must NOT redefine historical evidence
+    # or completed/provisional marketing outcomes. The protected Dashboard
+    # V2 / Sold Products readers already supply CPUWorkBudget; bare historical
+    # and marketing callers do not. Support an explicit opt-out for future
+    # callers without editing those source-pinned reducer functions.
+    if current_profitability_estimate is None:
+        from dashboard_cpu_budget import CPUWorkBudget
+        current_profitability_estimate = isinstance(budget, CPUWorkBudget)
+    if current_profitability_estimate:
+        from current_bundle_reporting_estimate import load_current_bundle_estimates
+        estimates = await load_current_bundle_estimates(
+            db, user_id, orders, result, budget=budget,
+        )
+        if estimates:
+            result["current_bundle_estimates"] = estimates
     return result
 
 
