@@ -44,7 +44,7 @@ async def database(request, monkeypatch):
 async def providers(monkeypatch, *, rows=None, order=None, resync=None, number=ORDER):
     async def resolve(*args):
         return "salla-synthetic", {"id": "salla-synthetic", "reference_id": number, **deepcopy(order or {"status": "completed", "shipments": []})}
-    async def shipments(*args):
+    async def shipments(*args, **kwargs):
         if rows is None:
             pytest.fail("internal delivery must not request external shipments")
         return deepcopy(rows)
