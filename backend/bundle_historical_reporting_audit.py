@@ -200,6 +200,9 @@ def inspect_historical_bundle_order(
         "row_id_differs_from_option_id": bool(
             row["order_row_id"] and row["order_row_id"] != row["option_id"]),
         "selected_value_id_present": all(v["value_id"] is not None for v in row["values"]),
+        # Provider selection IDs are not customer text and let an owner
+        # review exactly which alternative had a sale-time cost.
+        "selected_value_ids": [v["value_id"] for v in row["values"] if v["value_id"]],
         "value_count": len(row["values"]),
     } for row in original_evidence]
     return {
@@ -216,3 +219,101 @@ def inspect_historical_bundle_order(
         "ready_to_apply_cost": False,
         "next_gate": "sale_time_unit_cost_attestation_and_reviewed_manifest",
     }
+
+
+def _price(value: Any) -> "Decimal":
+    from decimal import Decimal, InvalidOperation
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        _refuse("historical_attestation_cost_invalid")
+    try:
+        number = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        _refuse("historical_attestation_cost_invalid")
+    if (not number.is_finite() or number < 0 or number > 1000000 or
+            number.as_tuple().exponent < -2):
+        _refuse("historical_attestation_cost_invalid")
+    return number
+
+
+def dry_run_attested_bundle_cost(evidence: dict, attestation: dict) -> dict:
+    """A *non-persisted* costing proposal; never a ledger/supplier instruction.
+
+    Owner attestation is required because a current product price is not proof
+    of the price that applied at checkout. Option coverage must be exact; no
+    partial price can become a report-ready cost.
+    """
+    from datetime import timezone
+    from decimal import Decimal, ROUND_HALF_UP
+    if not isinstance(evidence, dict) or evidence.get("original_source_verified") is not True:
+        _refuse("historical_attestation_source_unverified")
+    if not isinstance(attestation, dict) or set(attestation) != {
+        "version", "source_choice_evidence_hash", "effective_from",
+        "basis_reference", "base_unit_cost_sar", "selected_costs",
+    } or attestation.get("version") != 1:
+        _refuse("historical_attestation_schema_invalid")
+    if attestation["source_choice_evidence_hash"] != evidence["source_choice_evidence_hash"]:
+        _refuse("historical_attestation_source_changed")
+    basis = attestation["basis_reference"]
+    if not isinstance(basis, str) or not 12 <= len(basis.strip()) <= 256:
+        _refuse("historical_attestation_basis_required")
+    valid_at = attestation["effective_from"]
+    try:
+        start = datetime.fromisoformat(valid_at.replace("Z", "+00:00"))
+        sale = datetime.fromisoformat(evidence["source_created_at"])
+    except (ValueError, AttributeError, TypeError):
+        _refuse("historical_attestation_effective_date_invalid")
+    if start.tzinfo is None or sale.tzinfo is None or start > sale:
+        _refuse("historical_attestation_after_sale")
+    base = _price(attestation["base_unit_cost_sar"])
+    if base <= 0:
+        _refuse("historical_attestation_base_missing")
+    selected = attestation["selected_costs"]
+    if not isinstance(selected, list) or len(selected) > 50:
+        _refuse("historical_attestation_selected_invalid")
+    available: set[tuple[str, str]] = set()
+    ambiguous = False
+    for row in evidence["option_rows"]:
+        ids = row.get("selected_value_ids", [])
+        if row.get("value_count") and len(ids) != row["value_count"]:
+            # A missing value ID could represent a priced Yes choice.
+            # A later manual price assertion cannot certify it as text.
+            ambiguous = True
+        available.update((row["source_option_id"], identity) for identity in ids)
+    if ambiguous:
+        _refuse("historical_attestation_missing_selection_ids")
+    claimed: set[tuple[str, str]] = set()
+    amount_by_kind: dict[str, Decimal] = {
+        "component": Decimal(0), "external_service": Decimal(0), "none": Decimal(0)}
+    for claim in selected:
+        if not isinstance(claim, dict) or set(claim) != {
+            "source_option_id", "value_id", "cost_kind", "unit_cost_sar",
+        }:
+            _refuse("historical_attestation_selected_invalid")
+        key = (_identity(claim.get("source_option_id")), _identity(claim.get("value_id")))
+        kind = claim["cost_kind"]
+        if None in key or key in claimed or key not in available or kind not in amount_by_kind:
+            _refuse("historical_attestation_selection_conflict")
+        cost = _price(claim["unit_cost_sar"])
+        if (kind == "none" and cost != 0) or (kind != "none" and cost == 0):
+            _refuse("historical_attestation_kind_cost_conflict")
+        amount_by_kind[kind] += cost
+        claimed.add(key)
+    if claimed != available:
+        _refuse("historical_attestation_incomplete_selection_coverage")
+    unit = base + amount_by_kind["component"] + amount_by_kind["external_service"]
+    result = {
+        "mode": "dry_run", "order_number": evidence["order_number"],
+        "source_choice_evidence_hash": evidence["source_choice_evidence_hash"],
+        "line_fingerprint": evidence["line_fingerprint"],
+        "source_created_at": evidence["source_created_at"],
+        "currency": "SAR", "cost_stage": "expected",
+        "cost_provenance": "owner_sale_time_attestation_not_provider_invoice",
+        "base_unit_cost_sar": str(base), "component_unit_cost_sar": str(amount_by_kind["component"]),
+        "external_service_unit_cost_sar": str(amount_by_kind["external_service"]),
+        "unit_total_sar": str(unit),
+        "attestation_hash": _hash(attestation),
+        "ready_for_apply": False,
+        "requires_separate_reviewed_transactional_correction": True,
+    }
+    result["proposal_manifest_sha"] = _hash(result)
+    return result
