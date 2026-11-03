@@ -136,19 +136,6 @@ RECEIPT_PIECE_FIELDS = (
     "sent_to_supplier_at",
     "sent_to_supplier_by_id",
     "sent_to_supplier_by_name",
-    "responsible_employee_id",
-    "responsible_employee_name",
-    "assignment_status",
-    "assigned_at",
-    "reassigned_at",
-    "reassigned_by",
-    "reassigned_by_name",
-    "reassignment_reason",
-    "reassignment_session_id",
-    "supplier_receiving_draft_employee_transfer",
-    "supplier_receiving_previous_responsible_employee_id",
-    "supplier_receiving_previous_responsible_employee_name",
-    "supplier_receiving_previous_assigned_at",
     "receipt_event_id",
     "updated_at",
     "mezan_only",
@@ -5159,11 +5146,8 @@ def make_supplier_receiving_router(
                     "previous_responsible_employee_name": (
                         _text(original_piece.get("responsible_employee_name")) or None
                     ),
-                    "responsibility_transferred_in_draft": bool(
-                        candidate_direct_offer
-                        and _text(original_piece.get("responsible_employee_id"))
-                        != context["actor_id"]
-                    ),
+                    # Employee custody stays unchanged until supplier invoice approval.
+                    "responsibility_transferred_in_draft": False,
                     "supplier_assigned_at_receipt": bool(
                         updated_piece.get("supplier_assigned_at_receipt") is True
                         and _text(original_piece.get("supplier_id"))
