@@ -99,7 +99,7 @@ async def test_older_address_event_must_not_restore_old_destination():
         patch("salla_integration.address_webhook_sync.operational_owner", side_effect=_scoped),
     ):
         result = await sync_verified_shipping_address(db, _event(
-            {"city": "جدة"}, created="2026-11-03T14:00:00+00:00"))
+            {"city": "جدة", "address_line": "قديم"}, created="2026-11-03T14:00:00+00:00"))
     assert result["synced"] is False
     assert result["reason"] == "older_address_event"
     assert not db.unified_orders.writes
@@ -112,8 +112,23 @@ async def test_wrong_order_identity_rejected_without_write():
         patch("salla_integration.address_webhook_sync._resolve_user_id", new=AsyncMock(return_value="owner")),
         patch("salla_integration.address_webhook_sync.operational_owner", side_effect=_scoped),
     ):
-        result = await sync_verified_shipping_address(db, _event({"city": "الرياض"}))
+        result = await sync_verified_shipping_address(db, _event({"city": "الرياض", "address_line": "جديد"}))
     assert result["reason"] == "order_identity_mismatch"
+    assert not db.unified_orders.writes
+
+
+@pytest.mark.asyncio
+async def test_sparse_city_only_address_event_does_not_erase_full_address():
+    db = _DB({"user_id": "owner", "order_number": "295617138", "order_id": "42",
+              "shipping_city": "جدة",
+              "shipping_address_raw": {"city": "جدة", "address_line": "عنوان مفصل", "postal_code": "11111"}})
+    with (
+        patch("salla_integration.address_webhook_sync._resolve_user_id", new=AsyncMock(return_value="owner")),
+        patch("salla_integration.address_webhook_sync.operational_owner", side_effect=_scoped),
+    ):
+        result = await sync_verified_shipping_address(db, _event({"city": "الرياض"}))
+    assert result["reason"] == "sparse_address_needs_authoritative_refresh"
+    assert db.unified_orders.row["shipping_city"] == "جدة"
     assert not db.unified_orders.writes
 
 
