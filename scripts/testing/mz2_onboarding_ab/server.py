@@ -81,7 +81,7 @@ async def lifespan(app):
             # selected provider. Seed synthetic setup before freezing side effects.
             await create_fee_policy(db, OWNER, "full", FeePolicyCreate(
                 provider="tabby", percentage="2.5", fixed_amount="1.00",
-                vat_treatment="exclusive", effective_from="2026-01-01",
+                vat_treatment="exclusive", vat_rate="15", effective_from="2026-01-01",
                 effective_to=None, currency="SAR",
                 evidence=evidence["providers"]["source_file_id"],
             ))

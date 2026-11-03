@@ -82,8 +82,11 @@ def reconcile_credits(state):
     return state
 
 
-from operational_provider_fees import provider_projection
+from operational_provider_fees import provider_projection, independent_capture_without_fee_policy
+from operational_provider_history import approved_context, proof_hash
+from operational_provider_transaction_evidence import VERSION as NATIVE_TRANSACTION_EVIDENCE_VERSION, CANONICAL_WITH_UNBOUND_ACTIVITY
 from operational_product_cost_policy import unreceived_eligible
+from operational_order_page_payment import corroborated_refund_basis, observed_balance
 
 
 def reconcile(state, sources, as_of):
@@ -225,7 +228,7 @@ def reconcile(state, sources, as_of):
         checkpoint = (deepcopy(obligations), deepcopy(facts), deepcopy(engine["provider_reports"]), deepcopy(engine["cod_reports"]))
         try:
             created = instant(order["created_at"])
-            if delivery_only:
+            if delivery_only or order.get("delivery_event"):
                 event = order.get("delivery_event") or {}
                 carrier = order.get("carrier") or {}
                 delivered = instant(event.get("delivered_at"))
@@ -233,7 +236,8 @@ def reconcile(state, sources, as_of):
                         or not event.get("id") or str(event.get("order_id")) != oid
                         or event.get("order_number") != order.get("order_number")
                         or instant(event.get("order_created_at")) != created
-                        or not created <= start < delivered <= now
+                        or not (start < delivered <= now and created <= delivered)
+                        or (created > start if delivery_only else created < start)
                         or instant(order.get("delivered_at")) != delivered
                         or order.get("status") not in DELIVERED
                         or order.get("currency") != "SAR" or event.get("currency") != "SAR"
@@ -333,6 +337,12 @@ def reconcile(state, sources, as_of):
                     "party_id": frozen["id"] if frozen else (carrier or {}).get("id"),
                     "confirmed_custody": amount(confirmed_cod)}
             if frozen:
+                if order.get("native_driver_earning"):
+                    earning = order["native_driver_earning"]
+                    if (earning["party_id"] != frozen["id"] or frozen["party_type"] != "store_driver"
+                            or instant(earning["delivered_at"]) != instant(frozen["delivered_at"])):
+                        raise ValueError("driver_fee_saved_conflict")
+                    fact("native_driver_earning:" + oid, {k: v for k, v in earning.items() if k != "party_name"})
                 # Identity/COD can be proven while the fee contract is incomplete.
                 # A later verified fee attaches to the already frozen actual executor.
                 fee = facts.get("shipping_fee:" + oid)
@@ -393,6 +403,9 @@ def reconcile(state, sources, as_of):
                 payment = dict(order["payment"], currency=currency)
                 provider_key = "provider:" + oid
                 provider_facts = deepcopy(facts)
+                page = payment.get("order_page_balance")
+                page_key = "provider_order_balance:" + oid
+                page_mode = (page is not None and not payment.get("captures")) or page_key in facts
                 try:
                     current_refunds = [r for r in payment.get("refunds", [])
                                        if r.get("status") in {"executed", "settled", "Refund Executed", "Settled"}]
@@ -403,16 +416,76 @@ def reconcile(state, sources, as_of):
                             if not any(str(r["id"]) == rid for r in current_refunds):
                                 current_refunds.append({"id": rid, "amount": fv["amount"], "status": "executed"})
                     payment["refunds"] = current_refunds
-                    projection = provider_projection(payment, sources.get("fee_policies", []), created.astimezone(RIYADH).date())
+                    if page_mode and current_refunds and corroborated_refund_basis(facts.get(page_key), payment, facts, oid):
+                        page_mode = False
+                    reviewed = approved_context(state, order, payment) if page else False
+                    page_fact = observed_balance(page, payment, order, result, now=now, start=start, historical_reviewed=reviewed) if page_mode else None
+                    recognition_day = instant(page_fact["observed_at"]).astimezone(RIYADH).date() if page_mode else created.date()
+                    policy_day = created.astimezone(RIYADH).date()
+                    try:
+                        earliest_date = None
+                        capture_days = [instant(c["captured_at"]).astimezone(RIYADH).date()
+                                        for c in payment.get("captures", []) if created <= instant(c["captured_at"]) <= now]
+                        if capture_days:
+                            earliest_date, policy_day = min(capture_days), max(capture_days)
+                        elif page_mode and money(page_fact["paid"]) > ZERO:
+                            earliest_date = policy_day
+                            policy_day = instant(page_fact["observed_at"]).astimezone(RIYADH).date()
+                        projection = provider_projection(payment, sources.get("fee_policies", []), policy_day,
+                                                         earliest_date=earliest_date)
+                    except (KeyError, TypeError, ValueError, InvalidOperation, OverflowError) as exc:
+                        if not page_mode and (not isinstance(exc, ValueError) or not independent_capture_without_fee_policy(
+                                payment, sources.get("fee_policies", []), policy_day, exc, created=created, as_of=now)):
+                            if not page or current_refunds:
+                                raise
+                            # A corroborating transaction cannot invalidate the independently
+                            # proved page balance just because the fee schedule is damaged.
+                            observed_balance(page, payment, order, result, now=now, start=start, historical_reviewed=reviewed)
+                        if not page_mode and any(a.get("obligation_id") in {provider_key, "credit:" + provider_key}
+                               for m in result.get("movements", []) for a in m.get("allocations", [])):
+                            raise ValueError("provider_settled_capture_review_required") from exc
+                        projection = None
+                    # New evidence adapters may surface old payments already included
+                    # in an opening or a separately settled balance. A normal refresh
+                    # is not authorization to replay those historic amounts.
+                    recovered = payment.get("capture_source") in {
+                        CANONICAL_WITH_UNBOUND_ACTIVITY, NATIVE_TRANSACTION_EVIDENCE_VERSION}
+                    require_history_check = projection is None or recovered
+                    captures = payment.get("captures", [])
+                    paid_total = (payment.get("paid_observation") or {}).get("amount")
+                    if not page_mode and (require_history_check or (captures and paid_total is not None)):
+                        previous = obligations.get(provider_key, {})
+                        if (previous.get("party_id", payment["provider"]) != payment["provider"]
+                                or previous.get("currency", currency) != currency
+                                or any(v.get("provider") != payment["provider"] for k, v in facts.items()
+                                       if k.startswith("capture:") and v.get("order_id") == oid)):
+                            raise ValueError("provider_capture_identity_conflict")
+                        prior_as_of = (state.get("engine") or {}).get("as_of")
+                        if not reviewed and require_history_check and prior_as_of and any("capture:" + str(c["id"]) not in facts and
+                                instant(c["captured_at"]) <= instant(prior_as_of)
+                                for c in captures):
+                            raise ValueError("provider_historical_capture_review_required")
+                        if any("capture:" + str(c["id"]) not in facts for c in captures):
+                            if (money(previous.get("confirmed", "0")) > ZERO or
+                                    any(k.startswith("capture:") and v.get("order_id") == oid for k, v in facts.items())):
+                                raise ValueError("provider_capture_identity_conflict")
+                            for m in result.get("movements", []):
+                                if (m.get("party_type") != "provider" or m.get("party_id") != payment["provider"]
+                                        or m.get("currency") != currency):
+                                    continue
+                                allocations = m.get("allocations", [])
+                                if (any(a.get("obligation_id") in {provider_key, "credit:" + provider_key} for a in allocations)
+                                        or sum((money(a["amount"]) for a in allocations), ZERO)
+                                        < money(m["amount"]) + money(m.get("actual_fee_amount", "0"))):
+                                    raise ValueError("provider_settled_capture_review_required")
                     # A paid gross obligation already includes settlement fee deductions.
                     # A component refund needs the statement's actual fee-credit allocation;
                     # do not flip that settled obligation or invent a second fee charge.
-                    if projection.get("fee_model_version") == 2 and current_refunds and any(
+                    if projection is not None and projection.get("fee_model_version") == 2 and current_refunds and any(
                             a.get("obligation_id") == provider_key and money(a.get("amount", "0")) > ZERO
                             for movement in result.get("movements", [])
                             for a in movement.get("allocations", [])):
                         raise ValueError("provider_postsettlement_refund_review_required")
-                    projected = Decimal(projection["expected_receivable"])
                     for capture in payment.get("captures", []):
                         if instant(capture["captured_at"]) > now:
                             continue
@@ -420,30 +493,51 @@ def reconcile(state, sources, as_of):
                              "amount": amount(money(capture["amount"]))})
                     captured = sum((money(v["amount"]) for k, v in facts.items()
                                     if k.startswith("capture:") and v["order_id"] == oid), ZERO)
+                    if page_mode:
+                        facts[page_key] = page_fact
+                        captured = money(page_fact["paid"])
                     for refund in payment.get("refunds", []):
                         if refund.get("status") in {"executed", "settled", "Refund Executed", "Settled"}:
                             fact("refund:" + payment["provider"] + ":" + str(refund["id"]),
                                  {"order_id": oid, "amount": amount(money(refund["amount"]))})
                     refunded = sum((money(v["amount"]) for k, v in facts.items()
                                     if k.startswith("refund:") and v["order_id"] == oid), ZERO)
-                    if captured > money(payment["gross"]) or (captured and refunded > captured):
+                    if (captured > money(payment["gross"]) or (captured and refunded > captured)
+                            or (captures and paid_total is not None and captured != money(paid_total))):
                         raise ValueError("provider_capture_amount_conflict")
                     confirmed = max(captured - refunded, ZERO)
+                    if projection is None:
+                        # Store only the proved gross claim. The absence of a fee
+                        # projection keeps fee/net forecasts explicitly unavailable.
+                        engine["provider_reports"].pop(provider_key, None)
+                        put(provider_key, "provider", payment["provider"], "provider", currency,
+                            confirmed=confirmed, direction="receivable", business_date=recognition_day,
+                            fee_estimate_complete=False)
+                        issue("provider_fee_estimate_unavailable", provider_key)
+                        versions[oid] = updated.isoformat()
+                        continue
+                    projected = Decimal(projection["expected_receivable"])
                     projection["confirmed_receivable"] = amount(confirmed)
                     engine["provider_reports"][provider_key] = projection
-                    if not captured:
+                    if not captured and not page_mode:
                         issue("provider_capture_evidence_missing", provider_key)
                     put(provider_key, "provider", payment["provider"], "provider", currency,
                         expected=max(projected - confirmed, ZERO) if projected >= 0 else abs(projected),
                         confirmed=confirmed, direction="receivable" if projected >= 0 or confirmed else "payable",
-                        business_date=created.date(), projection=projection)
+                        business_date=recognition_day, projection=projection)
                 except (ValueError, KeyError) as error:
                     facts.clear()
                     facts.update(provider_facts)
                     if provider_key in obligations:
                         obligations[provider_key]["expected"] = "0.00"
                         obligations[provider_key]["incomplete"] = True
-                    issue(str(error), provider_key)
+                    if page and str(error) in {"provider_historical_capture_review_required", "provider_settled_capture_review_required"}:
+                        issues.append({"code": str(error), "source_id": provider_key, "provider": payment["provider"],
+                                       "history_proof_hash": proof_hash(order, payment), "history_created_at": order["created_at"],
+                                       "order_page_balance_review": {k: page[k] for k in
+                                           ("order_id", "order_number", "provider", "currency", "gross", "paid", "remaining")}})
+                    else:
+                        issue(str(error), provider_key)
             versions[oid] = updated.isoformat()
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             obligations.clear()
@@ -591,6 +685,10 @@ def reconcile(state, sources, as_of):
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             issue(str(error), key)
 
+    from operational_historical_shipping_fee import apply_reviewed_fees
+    resolved_fees = apply_reviewed_fees(result, sources, put, fact, issue)
+    if resolved_fees:
+        issues = [i for i in issues if (i.get("code"), i.get("source_id")) not in resolved_fees]
     from operational_customer_returns import shipping_obligations
     shipping_obligations(result)
     from operational_balance_exchanges import project_exchanges

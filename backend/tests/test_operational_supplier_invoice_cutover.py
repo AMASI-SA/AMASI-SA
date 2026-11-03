@@ -281,3 +281,125 @@ def test_foreign_owner_invoice_is_never_read_even_with_same_identity():
     data['mezan_supplier_invoices_v2'].append(foreign)
     state = reconcile(active(), collect(data), NOW)
     assert sum(Decimal(row['confirmed']) for row in confirmed_rows(state).values()) == Decimal('80')
+
+
+def aliased_unit():
+    data = native_data()
+    piece = {**data['mezan_preparation_pieces_v1'][0], 'id': 'old-id', 'piece_id': 'old-id', 'unit_index': '1'}
+    data['mezan_preparation_pieces_v1'].append(piece)
+    data['mezan_supplier_invoices_v2'] = [
+        native_invoice(identity='first', piece_ids=('p1',)),
+        native_invoice(identity='second', piece_ids=('old-id', 'p2')),
+    ]
+    return data
+
+
+@pytest.mark.parametrize('first_approval', [OLD, APPROVED])
+def test_reinvoiced_product_with_a_legacy_piece_id_is_held_independently(first_approval):
+    data = aliased_unit()
+    data['mezan_supplier_invoices_v2'][0]['approved_at'] = first_approval
+    sources = collect(data)
+    assert [r['item_id'] for r in sources['supplier_receipts']] == ['p2']
+    assert any(i['code'] == 'supplier_cross_invoice_component_coverage_ambiguous' for i in sources['issues'])
+
+
+@pytest.mark.parametrize('new_service', [True, False])
+def test_services_on_aliased_piece_require_their_own_component_proof(new_service):
+    data = aliased_unit()
+    second = native_invoice(identity='second', piece_ids=('old-id',), unit=0)
+    second.update(subtotal_halalas=500, total_halalas=500)
+    second['lines'][0].update(product_charge_eligible=False, total_halalas=500,
+        services=[dict(service_id='service', unit_price_halalas=500, quantity_per_piece=1, total_halalas=500)])
+    if not new_service:
+        first = data['mezan_supplier_invoices_v2'][0]
+        first.update(subtotal_halalas=4500, total_halalas=4500)
+        first['lines'][0].update(services=deepcopy(second['lines'][0]['services']), total_halalas=4500)
+    data['mezan_supplier_invoices_v2'][1] = second
+    sources = collect(data)
+    keys = {r['item_id'] for r in sources['supplier_receipts']}
+    assert keys == ({'p1', 'old-id:service:service'} if new_service else {'p1'})
+
+
+@pytest.mark.parametrize('explicit_eligible', [False, True])
+def test_service_only_price_does_not_quarantine_another_invoices_product(explicit_eligible):
+    data = native_data()
+    base = native_invoice(identity='base', piece_ids=('p1',))
+    service = native_invoice(identity='service', piece_ids=('p1',), unit=0)
+    service.update(subtotal_halalas=500, total_halalas=500)
+    line = service['lines'][0]
+    if explicit_eligible:
+        line['product_charge_eligible'] = True
+    line.update(total_halalas=500, services=[dict(service_id='embroidery',
+        unit_price_halalas=500, quantity_per_piece=1, total_halalas=500)])
+    data['mezan_supplier_invoices_v2'] = [base, service]
+    sources = collect(data)
+    assert {r['item_id']: r['amount'] for r in sources['supplier_receipts']} == {
+        'p1': '40', 'p1:service:embroidery': '5'}
+    assert not any(i['code'] == 'supplier_cross_invoice_component_coverage_ambiguous' for i in sources['issues'])
+
+
+@pytest.mark.parametrize('bad_unit', ['01', None, True, 2.0, '2.0', '٠٢', 0, 3, '99999999999'])
+def test_ambiguous_unit_coverage_cannot_double_the_received_supplier_estimate(bad_unit):
+    data = native_data(created=NEW)
+    data['mezan_supplier_invoices_v2'] = []
+    pieces = data['mezan_preparation_pieces_v1']
+    # The second technical receipt must prove coverage of ordered unit 2.
+    pieces[1]['unit_index'] = bad_unit
+    for piece in pieces:
+        piece.update(execution_status='received_from_supplier', received_at=APPROVED)
+    sources = collect(data)
+    assert any(i['code'] == 'preparation_piece_coverage_ambiguous' for i in sources['issues'])
+    assert not sources['orders'][0]['items']
+    assert not reconcile(active(), sources, NOW)['engine']['obligations']
+
+
+def test_separate_received_sibling_units_preserve_both_proven_estimates():
+    data = native_data(created=NEW)
+    data['mezan_supplier_invoices_v2'] = []
+    pieces = data['mezan_preparation_pieces_v1']
+    pieces[1].update(unit_index='02', order_item_id=' salla:10:line ', order_number=10)
+    for piece in pieces:
+        piece.update(execution_status='received_from_supplier', received_at=APPROVED)
+    sources = collect(data)
+    rows = reconcile(active(), sources, NOW)['engine']['obligations']
+    assert {key: row['expected'] for key, row in rows.items()} == {
+        'supplier:order-10:p1': '50.00', 'supplier:order-10:p2': '50.00'}
+
+
+def test_frozen_product_and_its_allocated_payment_survive_later_alias_collision():
+    data = aliased_unit()
+    later = data['mezan_supplier_invoices_v2'].pop()
+    state = reconcile(active(), collect(data), NOW)
+    key = next(iter(confirmed_rows(state)))
+    state['movements'] = [dict(id='paid', party_type='supplier', party_id='supplier', currency='SAR',
+        direction='outgoing', kind='payment', amount='12.00', bank_kind='bank', bank_id='bank',
+        actual_fee_amount='0.00', allocations=[dict(obligation_id=key, amount='12.00')])]
+    before = deepcopy(state)
+    data['mezan_supplier_invoices_v2'].append(later)
+    after = reconcile(state, collect(data), NOW)
+    assert after['movements'] == before['movements'] and after['openings'] == before['openings']
+    assert after['engine']['facts']['receipt:first:p1:product'] == before['engine']['facts']['receipt:first:p1:product']
+    assert {r['source_invoice_id'] for r in confirmed_rows(after).values()} == {'first', 'second'}
+    assert sorted(Decimal(r['confirmed']) for r in confirmed_rows(after).values()) == [Decimal(40), Decimal(40)]
+
+
+def test_previously_booked_duplicate_is_reported_without_deleting_frozen_liabilities():
+    data = aliased_unit()
+    # Simulate the previously accepted state before evidence identified the alias.
+    data['mezan_preparation_pieces_v1'][-1]['order_item_id'] = 'distinct-item'
+    prior = reconcile(active(), collect(data), NOW)
+    assert len(confirmed_rows(prior)) == 3
+    data['mezan_preparation_pieces_v1'][-1]['order_item_id'] = 'salla:10:line'
+    result = reconcile(prior, collect(data), NOW)
+    assert result['engine']['facts'] == prior['engine']['facts']
+    assert confirmed_rows(result) == confirmed_rows(prior)
+    assert any(i['code'] == 'supplier_cross_invoice_component_coverage_ambiguous'
+               for i in result['engine']['issues'])
+
+
+def test_one_invoice_with_two_aliases_of_the_same_unit_is_quarantined():
+    data = aliased_unit()
+    data['mezan_supplier_invoices_v2'] = [native_invoice(piece_ids=('p1', 'old-id'))]
+    sources = collect(data)
+    assert not sources['supplier_receipts']
+    assert any(i['code'] == 'supplier_cross_invoice_component_coverage_ambiguous' for i in sources['issues'])

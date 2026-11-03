@@ -454,3 +454,81 @@ def test_missing_collection_flag_does_not_clear_balance(salla_order_payload):
     order = map_salla_order(salla_order_payload)
     assert order.payment.remaining_amount == 20
     assert order.payment.collection_status == "partial"
+
+
+@pytest.mark.parametrize("payment_fields, expected", [
+    ({"payment_actions": {"remaining_action": {"paid_amount": 135, "has_remaining_amount": False,
+             "remaining_amount": None}}, "remaining_amount": 85}, ("135.00", "0.00")),
+    ({"payment_actions": {"remaining_action": {"paid_amount": 135, "has_remaining_amount": False,
+             "remaining_amount": 44, "checkout_url":"https://example.test/stale"}}}, ("135.00", "0.00")),
+    ({"payment_actions": {"remaining_action": {"paid_amount": 135, "has_remaining_amount": False,
+             "remaining_amount": 44}}, "payment":{"remaining_amount":44}}, None),
+    ({"payment_actions": {"refund_action": {"paid_amount": {"currency": "SAR", "amount": 35}},
+                         "remaining_action": {"remaining_amount": 100, "has_remaining_amount": True}}}, ("35.00", "100.00")),
+    ({"remaining_amount": 135}, ("0.00", "135.00")),
+    ({"payment": {"status": "paid"}}, None),
+    ({"paid_amount":135, "payment_methods":[{"payment_method":"mada","amount":135,"currency":"QAR"}]}, None),
+    ({"paid_amount":135, "payment_methods":[{"payment_method":"mada","amount":135,"currency":"SAR"}]}, ("135.00", "0.00")),
+    ({"payment": {"status": "paid"}, "remaining_amount": {"currency": "SAR", "amount": 0}}, ("135.00", "0.00")),
+    ({"payment": {"status": "captured"}, "payment_actions":{"remaining_action":{"remaining_amount":0}}}, ("135.00", "0.00")),
+    ({"payment_collection_status":"paid", "remaining_amount":0, "has_remaining_amount":False}, ("135.00", "0.00")),
+    ({"payment": {"status": "paid"}, "remaining_amount":0, "refunded_amount":5}, None),
+    ({"payment": {"status": "authorized"}, "remaining_amount":0}, None),
+    ({"payment": {"status": "paid"}, "remaining_amount":0, "is_pending_payment":True}, None),
+    ({"remaining_amount":0}, None),
+    ({"payment_status":"paid", "paid_amount":0, "remaining_amount":0}, None),
+    ({"payment": {"status": "unpaid"}, "paid_amount": 135}, None),
+    ({"paid_amount": 35, "remaining_amount": 95}, None),
+    ({"paid_amount": 135, "payment": {"paid_amount": 110}, "remaining_amount": 0}, None),
+    ({"paid_amount": {"currency":"QAR","amount":135}}, None),
+    ({"payment":{"paid_amount":135, "currency":"QAR"}}, None),
+    ({"payment_actions":{"remaining_action":{"paid_amount":135,"currency":"QAR","has_remaining_amount":False}}}, None),
+    ({"payment_actions":{"refund_action":{"paid_amount":135,"currency":"QAR"}}}, None),
+    ({"paid_amount": 135, "total": {"currency": "QAR", "amount": 135}}, None),
+    ({"paid_amount": 135, "total_amount": 130}, None),
+    ({"paid_amount": 135, "status": {"slug": "awaiting_payment"}}, None),
+    ({"paid_amount": 135, "payment_status": "pending_payment"}, None),
+    ({"paid_amount": 135, "payment_methods": [{"payment_method":"tabby","amount":135}]}, None),
+    ({"paid_amount": 135, "payment_methods": [{"payment_method":"mada","amount":70}]}, None),
+    ({"paid_amount": 135, "payment_method":{"code":"mada","name":"مدى"}}, ("135.00", "0.00")),
+    ({"paid_amount": 135, "payment_method":"cod"}, None),
+    ({"paid_amount": 135, "payment_method":"bank"}, None),
+    ({"paid_amount": 135, "refunded_amount": 3}, None),
+    ({"paid_amount": 135, "remaining_amount": False}, None),
+])
+def test_page_uses_original_reconciled_paid_and_due(salla_order_payload, payment_fields, expected):
+    salla_order_payload.update(payment_method="mada", payment={})
+    salla_order_payload.update(payment_fields)
+    balance = map_salla_order(salla_order_payload).payment.source_balance
+    assert ((balance.paid, balance.remaining) if balance else None) == expected
+
+
+@pytest.mark.parametrize("watermark", [{}, {"requires_authoritative_refresh":True}, {"component_pending":True}, {"source_updated_at":"2026-08-10T00:00:00Z"}])
+def test_promoted_stale_display_fields_do_not_prove_collection(salla_order_payload, watermark):
+    from order_engine.repository import MongoOrderRepository
+    from order_engine.service import _map_row
+
+    raw = dict(salla_order_payload, payment_method="mada", payment={})
+    doc = {"order_number":str(raw["reference_id"]), "order_date":str(raw["date"]), "paid_amount":135,
+           "remaining_amount":0, "raw_by_source":{"salla_direct":raw}, "g47_salla_snapshot":watermark}
+    if watermark:
+        raw["paid_amount"] = 135
+    row = MongoOrderRepository._to_discovery_row(doc)
+    dto = _map_row(row.salla_raw, native_payment_source=row.native_payment_source)
+    assert dto.payment.paid_amount == 135 and dto.payment.source_balance is None
+
+
+def test_native_zero_due_is_required_when_paid_amount_is_absent(salla_order_payload):
+    from order_engine.repository import MongoOrderRepository
+    from order_engine.service import _map_row
+
+    raw = dict(salla_order_payload, payment_method="mada", payment={"status": "paid"})
+    doc = {"order_number": str(raw["reference_id"]), "order_date": str(raw["date"]), "remaining_amount": 0,
+           "raw_by_source": {"salla_direct": raw}}
+    row = MongoOrderRepository._to_discovery_row(doc)
+    assert "items" not in row.native_payment_source and "customer" not in row.native_payment_source
+    assert _map_row(row.salla_raw, native_payment_source=row.native_payment_source).payment.source_balance is None
+    raw["remaining_amount"] = {"amount": 0, "currency": "SAR"}
+    row = MongoOrderRepository._to_discovery_row(doc)
+    result = _map_row(row.salla_raw, native_payment_source=row.native_payment_source)
+    assert result.payment.source_balance.paid == "135.00"

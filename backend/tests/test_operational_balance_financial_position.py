@@ -331,8 +331,14 @@ def test_carrier_customer_source_remaining_is_not_counted_twice_and_settlement_r
                            "party_type": "courier", "party_id": "carrier", "currency": "SAR",
                            "bank_kind": "bank", "bank_id": "bank", "amount": "80.00",
                            "allocations": [{"obligation_id": "cod:order-one", "amount": "80.00"}]}]
+    before = deepcopy(state)
     result = build_financial_position(state)
     row = delivery(result)
+    assert state == before
+    assert row["collection_status"] == "courier_collection_unverified"
+    assert row["courier_responsibility"] == "200.00"
+    assert row["collection_amount"] is row["driver_custody"] is row["store_collection"] is None
+    assert result["currencies"]["SAR"]["deliveries"]["complete"] is False
     assert row["collection_outstanding"] == "120.00" and row["collection_settled"] == "80.00"
     assert row["customer_outstanding"] == "200.00" and row["driver_custody"] is None
     assert row["collection_destination"] == "courier_receivable"
@@ -448,3 +454,11 @@ def test_public_table_contract_keeps_exact_nullable_money_and_stable_rows():
                         assert isinstance(value, int) and not isinstance(value, bool)
     assert len(fixture["currencies"]["SAR"]["deliveries"]["rows"]) == 8
     assert fixture == synthetic_report_fixture()
+
+
+def test_uncollected_courier_forecast_never_has_booked_responsibility_or_collectors_cash():
+    state, _ = delivery_state(courier=True, delivered=False)
+    row = delivery(build_financial_position(state))
+    assert row["courier_responsibility"] is None
+    assert row["collection_amount"] is None and row["store_collection"] is None
+    assert row["collection_status"] != "confirmed"

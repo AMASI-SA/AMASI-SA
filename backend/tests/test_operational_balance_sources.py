@@ -38,6 +38,27 @@ class Cursor:
 class Collection:
     def __init__(self, db, name): self.db, self.name = db, name
     def find(self, query, projection=None):
+        if self.name == "order_activity_events_v2":
+            numbers = query["order_number"]["$in"]
+            assert query == {"user_id":"owner", "source":"salla_history",
+                             "order_number":{"$in":numbers}, "native_status_transition":{"$exists": True}}
+            assert 0 < len(numbers) <= 250
+            assert projection == {"_id":0, **{k:1 for k in ("user_id","order_number","provider_order_id","source",
+                "event_type","source_event_id","native_status_transition")}}
+            self.db.reads.append(self.name)
+            return Cursor([r for r in self.db.data.get(self.name, []) if r.get("user_id") == "owner"
+                           and r.get("source") == "salla_history" and r.get("order_number") in numbers
+                           and "native_status_transition" in r])
+        if self.name == "order_payment_transactions_v2":
+            assert set(query) == {"user_id", "order_number", "source"}
+            assert query["user_id"] == "owner" and query["source"] == "salla_transactions"
+            numbers = query["order_number"]["$in"]
+            assert 0 < len(numbers) <= 250
+            assert projection and set(projection) == {"_id","user_id","source","order_number",
+                "provider_order_id","transaction_id","native_transaction_evidence"} and projection["_id"] == 0
+            self.db.reads.append(self.name)
+            return Cursor([r for r in self.db.data.get(self.name, []) if r.get("user_id") == query["user_id"]
+                           and r.get("source") == query["source"] and r.get("order_number") in numbers])
         if self.name in HARD_BUNDLE_READ_ALLOWLIST:
             check_bundle_query(self.name, query)
             assert not self.db.data.get(self.name), 'Use a real Mongo fixture for populated native bundle sources'
@@ -282,7 +303,7 @@ def test_capture_requires_native_reference_amount_and_timestamp():
     del db.data['unified_orders'][0]['raw_by_source']['salla_direct']['payment']['reference']
     output = run(src.collect_sources(db, 'owner', START, NOW))
     assert 'captures' not in output['orders'][0]['payment']
-    assert any(i['code'] == 'provider_capture_evidence_incomplete' for i in output['issues'])
+    assert output['orders'][0]['payment']['order_page_balance']['paid'] == '300.00'
 
 
 def test_ad_snapshot_keeps_cumulative_value_and_checks_close_proof():
@@ -386,15 +407,18 @@ HARD_SOURCE_ALLOWLIST = frozenset({'mz2_bank_transfer_bindings',
     'unified_orders', 'mezan_products_v2', 'mezan_product_cost_profiles_v2', 'mezan_product_resource_bindings_v2',
     'mezan_product_option_cost_bindings_v2', 'mezan_cost_resources_v2', 'mezan_preparation_pieces_v1',
     'mezan_supplier_invoices_v2', 'store_delivery_assignments', 'store_delivery_collections',
+    'store_delivery_driver_earnings', 'store_delivery_driver_settlements',
     'mezan_employee_salary_contracts_v2', 'operating_recurring_obligations_v2', 'operating_recurring_invoices_v2',
     'mz2_operational_owner_beneficiaries_v2',  # Explicit non-auth operational withdrawal registry.
     'mezan_snapchat_daily_projections_v2', 'mezan_meta_performance_daily_v2',
     'mezan_tiktok_performance_daily_v2', 'mezan_google_ads_performance_daily_v2',
 })
 
+HARD_SCOPED_TXN_READS = {"order_payment_transactions_v2", "order_activity_events_v2"}
+
 class HardBoundaryDB(DB):
     def __getitem__(self, name):
-        assert name in HARD_SOURCE_ALLOWLIST | HARD_BUNDLE_READ_ALLOWLIST, f'Forbidden runtime source access: {name}'
+        assert name in HARD_SOURCE_ALLOWLIST | HARD_BUNDLE_READ_ALLOWLIST | HARD_SCOPED_TXN_READS, f'Forbidden runtime source access: {name}'
         return Collection(self, name)
 
 

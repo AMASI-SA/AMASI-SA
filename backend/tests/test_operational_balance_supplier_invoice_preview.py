@@ -324,3 +324,59 @@ def test_full_accounting_activation_during_snapshot_blocks_current_preview(monke
             r=await request(db)
             assert r.status_code==409 and r.json()['detail']['code']=='operational_accounting_active'
     run(test())
+
+
+def test_receiving_only_compares_source_pieces_for_saved_window_and_cannot_post():
+    async def test():
+        async with database() as db:
+            await seed(db, partial=True)
+            await db.mezan_supplier_invoices_v2.insert_one({**native_invoice(), "user_id": "another", "id": "foreign"})
+            before=await contents(db)
+            response=await request(db,suffix="?receiving_only=true&owner_id=another")
+            assert response.status_code==200,response.text
+            result=response.json()
+            assert result["read_only"] and result["snapshot_consistent"] and not result["posting_allowed"]
+            assert result["invoice_count"]==1 and result["review_count"]==1
+            row=result["rows"][0]
+            assert row["invoice_id"]=="invoice" and row["invoice_gross_sar"]=="80.00"
+            assert row["matched_components"]==1 and row["component_count"]==2
+            assert [(d["status"],d["source_amount_sar"]) for d in row["differences"]]==[("missing","40.00")]
+            assert "native_purchase_review" not in result and "review_manifest_sha256" not in result
+            assert before==await contents(db)
+            assert (await request(db,{},suffix="?receiving_only=true")).status_code==401
+    run(test())
+
+
+def test_receiving_correction_http_is_bound_to_owner_invoice_and_current_snapshot():
+    from urllib.parse import urlencode
+
+    async def test():
+        async with database() as db:
+            await seed(db, partial=True)
+            listing = (await request(db, suffix='?receiving_only=true')).json()
+            params = {'expected_as_of': listing['saved_balance_as_of'], 'expected_revision': listing['state_revision']}
+            route = '/receiving/invoice/correction-preview'
+            suffix = route + '?' + urlencode(params)
+            other = {**native_invoice(), 'user_id': 'another', 'id': 'other-invoice'}
+            await db.mezan_supplier_invoices_v2.insert_one(other)
+            before = await contents(db)
+            response = await request(db, suffix=suffix + '&owner_id=another')
+            assert response.status_code == 200, response.text
+            result = response.json()
+            assert result['schema'] == 'receiving_correction_preview_v1'
+            assert result['session_scope'] == listing['session_scope'] and result['invoice_id'] == 'invoice'
+            assert result['saved_balance_as_of'] == params['expected_as_of'] and result['state_revision'] == params['expected_revision']
+            assert result['read_only'] and result['snapshot_consistent'] and not result['posting_allowed']
+            assert result['status'] == 'blocked' and result['legs'] == []
+            assert 'supplier_opening_requires_allocation_review' in result['reasons']
+            assert 'prior_movement_or_unallocated_payment' in result['reasons']
+            assert (await request(db, suffix=suffix)).json() == result
+            assert (await request(db, suffix=suffix.replace('/invoice/', '/other-invoice/'))).status_code == 404
+            assert (await request(db, suffix=route + '?' + urlencode({**params, 'expected_revision': 6}))).status_code == 409
+            assert (await request(db, suffix=route + '?' + urlencode({**params, 'expected_as_of': OLD}))).status_code == 409
+            assert (await request(db, suffix=route)).status_code == 422
+            assert (await request(db, method='POST', suffix=suffix)).status_code == 405
+            assert (await request(db, {}, suffix=suffix)).status_code == 401
+            assert (await request(db, {'id': 'staff'}, suffix=suffix)).status_code == 403
+            assert await contents(db) == before
+    run(test())

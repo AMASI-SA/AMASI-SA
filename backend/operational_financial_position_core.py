@@ -9,7 +9,10 @@ from copy import deepcopy
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from operational_balance_service import report
+from operational_prestart_cod_forecast import snapshot_cod_preview
 from operational_delivery_report_coverage import delivery_coverage_diagnostics
+from operational_profit_payroll import recorded_salary_subtotals
+from operational_provider_report_coverage import order_page_payment_rows, provider_evidence_coverage
 
 
 ZERO = Decimal("0")
@@ -93,6 +96,38 @@ def _source_issue(row):
             "message": row.get("message") or UNKNOWN + "يوجد مصدر تشغيلي يحتاج إلى استكمال أو مراجعة."}
 
 
+def _balance_origin(parties, obligations, complete):
+    """Explain saved balances. Never feed this breakdown into debt totals."""
+    kinds = {"provider", "courier", "store_driver"}
+    index = {}
+    for item in obligations:
+        if item.get("party_type") in kinds and item.get("direction") in {"receivable", "payable"}:
+            index.setdefault((item["party_type"], item.get("party_id"), item["direction"]), []).append(item)
+    rows = []
+    for party in parties:
+        kind = party["party_type"]
+        if kind not in kinds:
+            continue
+        for direction, label in (("receivable", "لنا"), ("payable", "علينا")):
+            items = index.get((kind, party["party_id"], direction), [])
+            remaining = party["outstanding_" + direction]
+            if not items and _number(remaining) == ZERO:
+                continue
+            rows.append({"id": _party_id(party) + ":" + direction, "name": _name(party), "side": label,
+                         "opening": _money(_sum(r.get("confirmed") for r in items if r["kind"] == "baseline")),
+                         "posted": _money(_sum(r.get("confirmed") for r in items if r["kind"] != "baseline")),
+                         "allocated": _money(_sum(r.get("settled") for r in items)), "remaining": remaining})
+    cols = [_column("name", "الجهة", "text"), _column("side", "الاتجاه", "text"),
+            _column("opening", "الافتتاحي"), _column("posted", "المؤكد المسجّل بعد الافتتاح"),
+            _column("allocated", "السداد المخصّص"), _column("remaining", "الرصيد المسجّل")]
+    breakdown = _table("balance_origin", "تفصيل أرصدة المنصات والشحن", "fulfillment", cols, rows, complete=complete,
+                       notes=["تفصيل للأرصدة السابقة؛ لا يُضاف إلى إجمالي الديون. الصفر في المؤكد المسجّل لا ينفي وجود مبيعات أو شحنات تنتظر إثباتها.",
+                              "السداد المخصّص يشمل الافتتاحي والقيود اللاحقة. قد يتضمن الرصيد المسجّل أيضًا تسويات أو دفعات غير مخصّصة."])
+    breakdown["show_totals"] = False  # Opposite directions must not be added together.
+    breakdown["totals"] = {column["key"]: None if column["type"] == "money" else "" for column in cols}
+    return breakdown
+
+
 def _actual_tables(parties, complete):
     tables = []
     columns = [_column("name", "الحساب", "text"), _column("available", "المتاح", role="neutral"),
@@ -118,7 +153,9 @@ def _actual_tables(parties, complete):
                  "receivable": row["outstanding_receivable"], "payable": row["outstanding_payable"]}
                 for row in parties if row["party_type"] == kind]
         notes = []
-        if kind in {"courier", "store_driver"}:
+        if kind == "courier":
+            notes = ["لنا هو رصيد ذمة الشركة بعد السداد المخصص، وعلينا أجرة الشحن المتبقية. يلزم كشف الشركة لإثبات تحصيلها من العميل."]
+        if kind == "store_driver":
             notes = ["التحصيل المتبقي لنا والرسوم المتبقية علينا منفصلان؛ لا يضاف التحصيل مرة ثانية إلى النقد."]
         if kind == "provider":
             notes = ["المطالبات المثبتة ظاهرة قبل الرسوم التقديرية المتبقية؛ تخصم الرسوم المستقبلية مرة واحدة في التوقعات."]
@@ -153,8 +190,9 @@ def _cost_table(exposure, currency, identity, title, buckets, match):
     rows = []
     for group in groups:
         period = "قبل بدء التشغيل" if group.get("period") == "prestart" else "بعد بدء التشغيل"
+        stage = {"awaiting_review": "انتظار المراجعة", "under_fulfillment": "قيد التنفيذ"}.get(group.get("stage"))
         rows.append({"id": ":".join(str(group.get(key) or "") for key in ("period", "kind", "stage", "party_id", "currency")),
-                     "name": _name(group) + " — " + period, "orders": group.get("orders"),
+                     "name": " — ".join(filter(None, (_name(group), stage, period))), "orders": group.get("orders"),
                      "quantity": None, "amount": _money(group.get("amount")),
                      "period": group.get("period"), "stage": group.get("stage")})
     if rows and _sum(row["amount"] for row in rows) != total:
@@ -172,11 +210,17 @@ def _cost_table(exposure, currency, identity, title, buckets, match):
         notes.insert(0, UNKNOWN + "مصدر تكاليف الطلبات المفتوحة غير جاهز أو غير مكتمل؛ المبالغ الظاهرة أجزاء موثقة فقط.")
     if total is not None and not complete:
         notes.append("مجموع التقديرات المتاحة من المصدر: " + _money(total) + " " + currency + ".")
+    order_count = None
+    if complete:
+        if "distinct_order_counts" in exposure:
+            order_count = exposure["distinct_order_counts"].get(currency, {}).get(identity, 0 if not rows else None)
+        elif len(rows) == 1:
+            order_count = rows[0]["orders"]
     return _table(identity, title, "forecast", [_column("name", "الجهة والفترة", "text"),
                   _column("orders", "طلبات المجموعة", "count"), _column("quantity", "الكمية", "count"),
                   _column("amount", "التكلفة المتوقعة", role="payable")], rows, complete=complete, notes=notes,
                   totals={"amount": _money(total) if complete else None,
-                          "orders": rows[0]["orders"] if len(rows) == 1 else None, "quantity": None})
+                          "orders": order_count, "quantity": None})
 
 
 def _cost_tables(exposure, currency, obligations):
@@ -248,16 +292,18 @@ def _provider_tables(obligations, details, issues):
     return fee_table, collection_table
 
 
-def _cod_table(obligations, details):
+def _cod_table(obligations, details, prestart=None, customer=None):
     facts = details.get("facts") or {}
     metrics = details.get("cod_reports") or {}
+    customer = customer or {}
+    replaced = set(customer.get("replaced", []))
     rows = []
     for obligation in obligations:
         if obligation.get("kind") != "cod" or not str(obligation.get("id", "")).startswith("cod:"):
             continue
         identity = obligation["id"]
         order = identity[len("cod:"):]
-        if facts.get("shipping:" + order):
+        if identity in replaced or facts.get("shipping:" + order):
             continue
         source = metrics.get(identity, {})
         due, gross, collected = (_number(source.get(key)) for key in ("customer_outstanding", "gross", "collected"))
@@ -280,13 +326,20 @@ def _cod_table(obligations, details):
         rows.append({"id": identity, "name": _name(obligation), "orders": 1, "amount": _money(value),
                      "order_id": order, "known_due": _money(due),
                      **({"reason": UNKNOWN + "لا يكفي الرصيد المتبقي وحده لإثبات طلب نشط غير مسلم."} if value is None else {})})
-    known = _sum(row["amount"] for row in rows if row["amount"] is not None)
+    if prestart:
+        rows.append({"id":"prestart_customer_cod", "name":"طلبات سابقة لبدء التشغيل ببوليصة خارجية جارية",
+                     "orders":prestart["orders"], "amount":prestart["amount"]})
+    rows.extend(customer.get("rows", []))
+    known = [row["amount"] for row in rows if row["amount"] is not None]
     return _table("cod_expected", "تحصيل متوقع من العملاء للطلبات غير المسلمة", "forecast",
                   [_column("name", "مسار التحصيل / المطالبة", "text"), _column("orders", "الطلبات", "count"),
                    _column("amount", "تحصيل متوقع من العميل", role="receivable")], rows, complete=False,
-                  totals={"amount": None, "orders": len(rows)},
-                  notes=[UNKNOWN + COD_SCOPE, "المبالغ المتوقعة ليست عهدة نقدية لدى المندوب ولا تضاف إلى رصيد شركة الشحن المثبت.",
-                         "مجموع التحصيل المتوقع المثبت في الصفوف المتاحة: " + _money(known) + "."])
+                  totals={"amount": None, "orders": None},
+                  notes=[UNKNOWN + COD_SCOPE,
+                         "تظهر مبالغ الطلبات المفتوحة المؤيدة بصفحة الطلب قبل الإسناد وبعده. تتطلب الطلبات السابقة دليلًا مؤرخًا بعد بداية التشغيل.",
+                         "المبالغ المتوقعة ليست عهدة نقدية لدى المندوب ولا تضاف إلى رصيد شركة الشحن المثبت.",
+                         ("مجموع التحصيل المتوقع في الصفوف المتاحة " + _money(_sum(known)) + ".") if known
+                         else "لم يثبت مبلغ تحصيل متوقع في الصفوف المتاحة."])
 
 
 def _deliveries(obligations, details, currency, names, source_issues, *, coverage_note=None):
@@ -308,6 +361,9 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
             shipping.setdefault(order, []).append(row)
     order_ids = set(shipping) | {str(value.get("order_id") or key.removeprefix("cod:")) for key, value in metrics.items()}
     rows, complete = [], True
+    missing_fee_orders = {str(issue.get("source_id", "")).removeprefix("shipping:") for issue in source_issues
+                          if str(issue.get("code", "")).startswith("shipping_")
+                          or issue.get("component") in {"shipping_fee", "base_shipping", "cod_commission"}}
     for order in sorted(order_ids):
         key = "cod:" + order
         source = metrics.get(key)
@@ -322,7 +378,7 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
         proof_valid = bool(original) and original.get("party_id") == party_id and evidence.get("evidence_complete") is True
         method = (source or {}).get("payment_method")
         destination, status = "unavailable", "unavailable"
-        store_collection = custody = settled = outstanding = None
+        store_collection = custody = settled = outstanding = courier_responsibility = None
         if source is None:
             destination = status = "not_applicable"
         elif party_type == "store_driver":
@@ -343,8 +399,15 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
             if proof_valid:
                 custody = _money(source.get("confirmed_custody"))
         elif party_type == "courier":
-            destination = "courier_receivable"
-            status = "confirmed" if proof_valid else "not_confirmed"
+            # The order balance and delivered waybill establish responsibility. Neither
+            # independently attests cash received from the customer, including after a remittance.
+            destination, status = "courier_receivable", "courier_collection_unverified"
+            cod = cod_obligations.get(key) or {}
+            if (cod.get("direction") == "receivable" and cod.get("party_type") == "courier"
+                    and cod.get("party_id") == party_id and cod.get("currency") == currency
+                    and (_number(cod.get("confirmed")) or ZERO) > ZERO):
+                courier_responsibility = _money(cod["confirmed"])
+            complete = False
         if source is not None and proof_valid:
             settled, outstanding = _money(source.get("settled")), _money(source.get("outstanding"))
         elif source is not None and source.get("legacy_obligation_only"):
@@ -352,13 +415,8 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
         fees = {field: _money(_sum(row.get(key) for row in fee_rows)) if fee_rows else None
                 for field, key in (("shipping_confirmed", "confirmed"), ("shipping_settled", "settled"),
                                    ("shipping_outstanding", "outstanding"))}
-        fee_issue = any(str(issue.get("source_id")) in {order, "shipping:" + order}
-                        and (str(issue.get("code", "")).startswith("shipping_")
-                             or issue.get("component") in {"shipping_fee", "base_shipping", "cod_commission"}) for issue in source_issues)
-        if fee_issue:
+        if order in missing_fee_orders:
             fees = {key: None for key in fees}
-        if not frozen and source is not None and not fee_rows:
-            fees = {key: "0.00" for key in fees}
         if any(value is None for value in fees.values()) or status in {"unavailable", "not_confirmed", "pending_review"}:
             complete = False
         rows.append({"id": "delivery:" + order, "order_id": order, "order_number": None,
@@ -366,12 +424,14 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
                      "party_name": names.get((party_type, party_id), party_id),
                      "delivered_at": frozen.get("delivered_at"), "payment_method": method,
                      "collection_destination": destination, "collection_status": status, **fees,
-                     "collection_amount": _money((source or {}).get("collection_amount")),
+                     "courier_responsibility": courier_responsibility,
+                     "collection_amount": None if party_type == "courier" else _money((source or {}).get("collection_amount")),
                      "driver_custody": custody, "collection_settled": settled,
                      "collection_outstanding": outstanding, "store_collection": store_collection,
                      "customer_outstanding": _money((source or {}).get("customer_outstanding"))})
     return {"complete": complete, "rows": rows, "notes": [
         "الرسوم من التزامات الشحن التشغيلية فقط؛ لا تضاف أرباح تطبيق المندوب مرة أخرى.",
+        "ذمة شركة الشحن تتبع مبلغ الدفع عند الاستلام المسجل عليها. السداد المخصص يخفّض المتبقي، وإثبات تحصيل الشركة من العميل يحتاج مستندًا مستقلًا.",
         "عهدة المندوب هي المسؤولية المثبتة في المصدر وليست إثباتًا لمقدار النقد الفعلي في يده.",
         "التحويل البنكي والشبكة لا ينشئان عهدة نقدية للمندوب. لا يثبت اعتماد التحصيل من حالة تسليم الطلب وحدها.",
         "غير متاح: هوية البنك أو جهاز الشبكة المستقبل غير مثبتة في هذه اللقطة؛ اعتماد المستند لا يثبت قيدًا في رصيد البنك التشغيلي.",
@@ -380,7 +440,7 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
     ]}
 
 
-def _profit_rows():
+def _profit_rows(recorded_salary):
     components = (
         ("net_sales", "صافي المبيعات دون ضريبة القيمة المضافة", "مجموعة مبيعات الفترة بعد الخصومات والمرتجعات والضريبة غير مثبتة هنا."),
         ("cost_of_goods", "تكلفة المنتجات المباعة", "فواتير الموردين وتقديرات الطلبات المفتوحة لا تثبت تكلفة مجموعة المبيعات نفسها."),
@@ -394,8 +454,16 @@ def _profit_rows():
         ("tax", "الزكاة والضريبة", "الضريبة الواجبة للفترة غير مثبتة؛ لا تفترض صفرًا."),
         ("net_profit", "صافي الربح المتوقع", "لا يحسب الربح النهائي قبل اكتمال عناصره."),
     )
-    return [_row(identity, label, None, "total" if identity in {"operating_profit", "net_profit"} else None,
+    rows = [_row(identity, label, None, "total" if identity in {"operating_profit", "net_profit"} else None,
                  UNKNOWN + reason) for identity, label, reason in components]
+    if recorded_salary:
+        row = next(row for row in rows if row["id"] == "salaries")
+        row["recorded_subtotal"] = recorded_salary
+        row["reason"] = (f"المجموع الجزئي لأيام الرواتب المسجلة بهذه العملة {recorded_salary['amount']} "
+                         f"{recorded_salary['currency']} عن {recorded_salary['employee_days']} يوم موظف، "
+                         f"بين {recorded_salary['first_day']} و{recorded_salary['last_day']} بتوقيت الرياض. "
+                         "يتطلب إجمالي الرواتب مطابقة جميع الموظفين وأيام الاستحقاق للفترة.")
+    return rows
 
 
 def build_financial_position(state, *, cost_exposure=None, generated_at=None):
@@ -407,6 +475,7 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
               "issues": [_source_issue(row) for row in projection["issues"]], "dependencies": []}
     if projection["status"] != "active":
         return result
+    recorded_salaries = recorded_salary_subtotals(state)
     delivery_coverage = delivery_coverage_diagnostics(state, projection)
     cost_ready = isinstance(cost_exposure, dict) and cost_exposure.get("status") == "preview"
     result["dependencies"] = [
@@ -415,10 +484,17 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         {"code": "complete_collection_forecast", "status": "incomplete", "message": UNKNOWN + COD_SCOPE},
         {"code": "profit_period_coverage", "status": "unavailable", "message": UNKNOWN + "مصادر الربح الكامل لنفس فترة المبيعات لم تكتمل."},
         *delivery_coverage["dependencies"],
+        *provider_evidence_coverage(projection),
     ]
     if cost_ready:
         result["issues"].extend(_source_issue(row) for row in cost_exposure.get("issues", []))
     currencies = {row["currency"] for row in projection["parties"]}
+    prestart_cod = snapshot_cod_preview(cost_exposure, projection["started_at"], projection["as_of"])
+    currencies.update(prestart_cod)
+    customer_cod = snapshot_cod_preview(cost_exposure, projection["started_at"], projection["as_of"], "open_customer_cod")
+    currencies.update(customer_cod)
+    page_payments = order_page_payment_rows(projection)
+    currencies.update(page_payments)
     if cost_ready:
         currencies.update((cost_exposure.get("currencies") or {}).keys())
     result["currency_order"] = sorted(currencies, key=lambda currency: (currency != "SAR", currency))
@@ -427,6 +503,15 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         obligations = [row for row in projection["obligations"] if row.get("currency") == currency]
         actual_complete = bool(projection["as_of"]) and not any(row.get("currency") in {None, currency} for row in projection["issues"])
         tables = _actual_tables(parties, actual_complete)
+        tables.append(_balance_origin(parties, obligations, actual_complete))
+        if currency in page_payments:
+            page_table = _table("provider_order_balances", "المدفوع والمتبقي حسب صفحة الطلب", "fulfillment", [
+                _column("name", "المنصة", "text"), _column("status", "حالة الإثبات", "text"),
+                _column("orders", "عدد الطلبات", "count"), _column("paid", "دفعه العميل"),
+                _column("remaining", "متبقٍ على العميل")], page_payments[currency], complete=False,
+                notes=["يعرض هذا التفصيل مبالغ الطلبات قبل رسوم المنصة وتسويات البنك. قد يظهر طلب محفوظ مرة أخرى للمراجعة عند تغير دليله."])
+            page_table.update(show_totals=False, totals={})
+            tables.append(page_table)
         names = {(row["party_type"], row["party_id"]): _name(row) for row in parties}
         debt_rows = []
         categories = [("pos_receivable", "banks_network", "تسويات أجهزة الشبكة"),
@@ -459,7 +544,7 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         costs = _cost_tables(cost_exposure, currency, obligations)
         currency_issues = [row for row in projection["issues"] if row.get("currency") in {None, currency}]
         fees, provider_future = _provider_tables(obligations, projection["details"], currency_issues)
-        cod = _cod_table(obligations, projection["details"])
+        cod = _cod_table(obligations, projection["details"], prestart_cod.get(currency), customer_cod.get(currency))
         tables.extend([costs[-1], *costs[:-1], cod, fees, provider_future])
         forecast_rows = [_row(table["id"], table["title"], table["totals"]["amount"],
                               "positive" if table["id"] in {"cod_expected", "provider_collections_expected"} else "negative",
@@ -472,7 +557,7 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         result["currencies"][currency] = {
             "tables": tables, "debt_rows": debt_rows,
             "debt_totals": {"receivable": _money(receivable), "payable": _money(payable)},
-            "current_rows": current_rows, "forecast_rows": forecast_rows, "profit_rows": _profit_rows(),
+            "current_rows": current_rows, "forecast_rows": forecast_rows, "profit_rows": _profit_rows(recorded_salaries.get(currency)),
             "metrics": {"liquidity": _money(liquidity), "debts_receivable": _money(receivable), "debts_payable": _money(payable),
                         "monetary_position": _money(position), "prepaid_ad_credit": _money(prepaid), "employee_custody": _money(custody),
                         "displayed_position": _money(displayed), "forecast_change": None, "forecast_monetary_position": None,

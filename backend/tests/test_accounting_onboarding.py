@@ -309,7 +309,7 @@ async def test_provider_requires_explicit_bank_binding_never_inferred_from_payme
     assert result["detail"]["blockers"][0]["code"] == "provider_fee_policy_missing"
     fee = await request(api, "POST", "/fee-policies", {
         "provider": "tabby", "percentage": "2", "fixed_amount": "1", "currency": "SAR",
-        "vat_treatment": "exclusive", "effective_from": "2026-01-01",
+        "vat_treatment": "exclusive", "vat_rate": "15", "effective_from": "2026-01-01",
         "evidence": lines[0]["evidence_file_id"]})
     row = await section_lines(api, row, "providers", lines, fee_policy_ids=[fee["id"]])
     result = await action(api, row, "preview", status=409, key="provider-missing-binding")

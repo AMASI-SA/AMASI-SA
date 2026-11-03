@@ -9,6 +9,9 @@ from decimal import Decimal, ROUND_HALF_UP
 import re
 
 from operational_cost_completeness import cost_completeness
+from operational_prestart_cod_forecast import prestart_open_cod
+from operational_open_customer_cod import open_customer_cod
+from operational_courier_tariffs import matches as matches_courier_key, with_tariffs
 from operational_product_cost_policy import unreceived_eligible
 from operational_remaining_bundle_sources import load_remaining_bundles
 
@@ -141,6 +144,10 @@ async def project(db, owner, state, *, as_of=None):
     setup = setups[0] if len(setups) == 1 else {}
     if len(setups) > 1:
         issues["shipping_setup_ambiguous"] += 1
+    else:
+        setup, conflicts = with_tariffs(setup, owner, state)
+        if conflicts:
+            issues["operational_courier_tariff_authority_conflict"] += len(conflicts)
     pieces = [r for r in data["mezan_preparation_pieces_v1"]
         if not r.get("experiment_mode") and not r.get("experiment_run_id")]
     piece_counts = Counter(str(r.get("id") or "") for r in pieces)
@@ -167,6 +174,7 @@ async def project(db, owner, state, *, as_of=None):
     bundle_costs = await load_remaining_bundles(db, owner, [raw for _, raw in raw_orders], stamp,
         preparation_pieces=pieces, operational_state=state)
     current_stages, current_statuses = {}, {}
+    identified_orders = set()
     for record, raw in raw_orders:
         oid = str(raw.get("id") or "")
         num = str(raw.get("reference_id") or raw.get("order_number") or "")
@@ -181,6 +189,7 @@ async def project(db, owner, state, *, as_of=None):
         if not oid or not num or ids[oid] != 1 or nums[num] != 1:
             issues["historical_order_identity_ambiguous"] += 1
             continue
+        identified_orders.add(oid)
         if created > started:
             current_stages[oid] = _cutover_group(status)
             current_statuses[oid] = status
@@ -359,7 +368,7 @@ async def project(db, owner, state, *, as_of=None):
             carrier = shipping.get("company_code") or shipping.get("company")
             candidates = [c for c in setup.get("couriers", []) if usable(c)
                 and c.get("confirmed_by") and c.get("confirmed_at")
-                and carrier in (c.get("salla_carrier_keys") or [])]
+                and matches_courier_key(c, carrier)]
             if len(candidates) == 1 and candidates[0].get("courier_key"):
                 party = str(candidates[0]["courier_key"])
                 label = _name(candidates[0], "شركة شحن")
@@ -464,6 +473,17 @@ async def project(db, owner, state, *, as_of=None):
         if confirmed:
             add("poststart", kind, "confirmed_in_financial_balances", str(obligation.get("party_id") or ""),
                 str(obligation.get("name") or "جهة غير مكتملة"), currency, confirmed, 1, oid)
+    # Two suppliers can receive different items from one order. Keep IDs inside this
+    # projection and return only the distinct count per report table and currency.
+    stages = {"received_without_approved_invoice": "products_received_uninvoiced",
+              "awaiting_review": "products_unreceived", "under_fulfillment": "products_unreceived",
+              "unreceived": "products_unreceived", "not_delivered": "shipping_expected"}
+    table_orders = defaultdict(lambda: defaultdict(set))
+    for (_, _, stage, _, _, currency), group in values.items():
+        if stage in stages:
+            table_orders[currency][stages[stage]].update(group["orders"])
+    counts = {currency: {table: len(ids) if ids <= identified_orders else None for table, ids in tables.items()}
+              for currency, tables in table_orders.items()}
     groups = [{"period": period, "kind": kind, "stage": stage, "party_id": party,
         "party_name": name, "party_type": kind, "currency": currency,
         "amount": _fmt(v["amount"]), "units": v["units"], "orders": len(v["orders"])}
@@ -472,6 +492,11 @@ async def project(db, owner, state, *, as_of=None):
     return {"status": "preview", "as_of": stamp.isoformat(),
         "engine_as_of": engine_at.isoformat() if engine_at else None, "started_at": started.isoformat(),
         "currencies": {c: {k: _fmt(v) for k, v in sorted(details.items())} for c, details in sorted(currencies.items())},
+        "distinct_order_counts": counts,
+        "open_customer_cod": {"by_currency": await open_customer_cod(db, owner, raw_orders, data, state,
+            started, stamp, ids, nums)} if engine_at == stamp else {},
+        "prestart_open_cod": prestart_open_cod(raw_orders, data, state, started,
+            stamp, ids, nums, OPEN) if engine_at == stamp else {"by_currency":{}},
         "bucket_completeness": cost_completeness(issues, declared_scopes),
         "groups": groups, "issues": [{"code": c, "count": n} for c, n in sorted(issues.items())],
         "complete": not any(c != "historical_current_catalog_estimate_used" for c in issues),
