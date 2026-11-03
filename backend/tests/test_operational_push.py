@@ -39,7 +39,7 @@ class PushTests(unittest.IsolatedAsyncioTestCase):
         self.env.start(); self.addCleanup(self.env.stop)
         self.db.raw.users.insert_one({"id": "staff"})
         self.db.raw.order_review_auth_sessions_v2.insert_one({"_id": "session", "actor_id": "staff", "user_id": "owner", "state": "active", "expires_at": now() + timedelta(days=1)})
-        self.db.raw[DEVICES].insert_one({"_id": "device", "kind": "expo", "actor_id": "staff", "merchant_id": "owner", "session_id": "session", "generation": "g1", "active": True, "token": "ExpoPushToken[example]"})
+        self.db.raw[DEVICES].insert_one({"_id": "device", "kind": "expo", "actor_id": "staff", "merchant_id": "owner", "session_id": "session", "generation": "g1", "installation_id": "android_installation_12345678", "active": True, "token": "ExpoPushToken[example]"})
         self.sent = []
 
     async def sender(self, device, payload, **kwargs):
