@@ -9,6 +9,7 @@ from decimal import Decimal, ROUND_HALF_UP
 import re
 
 from operational_cost_completeness import cost_completeness
+from operational_prestart_cod_forecast import prestart_open_cod
 from operational_product_cost_policy import unreceived_eligible
 from operational_remaining_bundle_sources import load_remaining_bundles
 
@@ -486,6 +487,8 @@ async def project(db, owner, state, *, as_of=None):
         "engine_as_of": engine_at.isoformat() if engine_at else None, "started_at": started.isoformat(),
         "currencies": {c: {k: _fmt(v) for k, v in sorted(details.items())} for c, details in sorted(currencies.items())},
         "distinct_order_counts": counts,
+        "prestart_open_cod": prestart_open_cod(raw_orders, data, state, started,
+            stamp, ids, nums, OPEN) if engine_at == stamp else {"by_currency":{}},
         "bucket_completeness": cost_completeness(issues, declared_scopes),
         "groups": groups, "issues": [{"code": c, "count": n} for c, n in sorted(issues.items())],
         "complete": not any(c != "historical_current_catalog_estimate_used" for c in issues),

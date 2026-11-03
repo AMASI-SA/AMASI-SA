@@ -9,6 +9,7 @@ from copy import deepcopy
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from operational_balance_service import report
+from operational_prestart_cod_forecast import snapshot_cod_preview
 from operational_delivery_report_coverage import delivery_coverage_diagnostics
 from operational_profit_payroll import recorded_salary_subtotals
 from operational_provider_report_coverage import provider_evidence_coverage
@@ -291,7 +292,7 @@ def _provider_tables(obligations, details, issues):
     return fee_table, collection_table
 
 
-def _cod_table(obligations, details):
+def _cod_table(obligations, details, prestart=None):
     facts = details.get("facts") or {}
     metrics = details.get("cod_reports") or {}
     rows = []
@@ -323,13 +324,19 @@ def _cod_table(obligations, details):
         rows.append({"id": identity, "name": _name(obligation), "orders": 1, "amount": _money(value),
                      "order_id": order, "known_due": _money(due),
                      **({"reason": UNKNOWN + "لا يكفي الرصيد المتبقي وحده لإثبات طلب نشط غير مسلم."} if value is None else {})})
-    known = _sum(row["amount"] for row in rows if row["amount"] is not None)
+    if prestart:
+        rows.append({"id":"prestart_customer_cod", "name":"طلبات سابقة لبدء التشغيل ببوليصة خارجية جارية",
+                     "orders":prestart["orders"], "amount":prestart["amount"]})
+    known = [row["amount"] for row in rows if row["amount"] is not None]
     return _table("cod_expected", "تحصيل متوقع من العملاء للطلبات غير المسلمة", "forecast",
                   [_column("name", "مسار التحصيل / المطالبة", "text"), _column("orders", "الطلبات", "count"),
                    _column("amount", "تحصيل متوقع من العميل", role="receivable")], rows, complete=False,
-                  totals={"amount": None, "orders": len(rows)},
-                  notes=[UNKNOWN + COD_SCOPE, "المبالغ المتوقعة ليست عهدة نقدية لدى المندوب ولا تضاف إلى رصيد شركة الشحن المثبت.",
-                         "مجموع التحصيل المتوقع المثبت في الصفوف المتاحة: " + _money(known) + "."])
+                  totals={"amount": None, "orders": None},
+                  notes=[UNKNOWN + COD_SCOPE,
+                         "تشمل معاينة الطلبات السابقة الحالات ذات البوليصة الخارجية الجارية والمبلغ المتبقي المثبت في سلة.",
+                         "المبالغ المتوقعة ليست عهدة نقدية لدى المندوب ولا تضاف إلى رصيد شركة الشحن المثبت.",
+                         ("مجموع التحصيل المتوقع في الصفوف المتاحة " + _money(_sum(known)) + ".") if known
+                         else "لم يثبت مبلغ تحصيل متوقع في الصفوف المتاحة."])
 
 
 def _deliveries(obligations, details, currency, names, source_issues, *, coverage_note=None):
@@ -479,6 +486,8 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     if cost_ready:
         result["issues"].extend(_source_issue(row) for row in cost_exposure.get("issues", []))
     currencies = {row["currency"] for row in projection["parties"]}
+    prestart_cod = snapshot_cod_preview(cost_exposure, projection["started_at"], projection["as_of"])
+    currencies.update(prestart_cod)
     if cost_ready:
         currencies.update((cost_exposure.get("currencies") or {}).keys())
     result["currency_order"] = sorted(currencies, key=lambda currency: (currency != "SAR", currency))
@@ -520,7 +529,7 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         costs = _cost_tables(cost_exposure, currency, obligations)
         currency_issues = [row for row in projection["issues"] if row.get("currency") in {None, currency}]
         fees, provider_future = _provider_tables(obligations, projection["details"], currency_issues)
-        cod = _cod_table(obligations, projection["details"])
+        cod = _cod_table(obligations, projection["details"], prestart_cod.get(currency))
         tables.extend([costs[-1], *costs[:-1], cod, fees, provider_future])
         forecast_rows = [_row(table["id"], table["title"], table["totals"]["amount"],
                               "positive" if table["id"] in {"cod_expected", "provider_collections_expected"} else "negative",
