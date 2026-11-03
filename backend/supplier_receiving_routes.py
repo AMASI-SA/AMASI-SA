@@ -23,6 +23,7 @@ from pymongo.errors import DuplicateKeyError
 
 from supplier_scan_attempts import run_scan, read_outcome, install_reconciler, ATTEMPTS, transaction
 from supplier_receiving_direct_assignment import direct_assignment_offer, direct_assignment_patch
+from mobile_operational_flow_policy import FIELD_SUPPLIER, is_optional
 
 from supplier_invoice_recovery import register_recovery, require_close_generation, REQUEST_PATTERN
 from supplier_native_invoice_v2 import PurchaseTax, close_payload_hash, post_native_invoice
@@ -4747,12 +4748,23 @@ def make_supplier_receiving_router(
                         ),
                     },
                 )
-            direct_offer = direct_assignment_offer(
+            # The manager's CURRENT merchant policy, not an Android boolean,
+            # decides whether employees may assign a previously unsent piece.
+            supplier_assignment_optional = await is_optional(
+                db, context["merchant_id"], FIELD_SUPPLIER,
+            )
+            offered = direct_assignment_offer(
                 scanned_piece,
                 session,
                 actor_id=context["actor_id"],
                 actor_name=_actor_name(user),
             )
+            if offered and not supplier_assignment_optional:
+                raise HTTPException(status_code=409, detail={
+                    "code": "supplier_piece_supplier_required",
+                    "message": "إسناد المورد إجباري: يجب أن يرسلها الموظف المسند إليه أولًا.",
+                })
+            direct_offer = offered if supplier_assignment_optional else None
             if direct_offer and not payload.confirm_direct_receiving_assignment:
                 raise HTTPException(status_code=409, detail=direct_offer)
             if (
@@ -4974,11 +4986,14 @@ def make_supplier_receiving_router(
                     == "supplier_piece_dispatched_to_different_supplier"
                     and payload.confirm_supplier_reassignment
                 )
-                candidate_direct_offer = direct_assignment_offer(
-                    original_piece,
-                    session,
-                    actor_id=context["actor_id"],
-                    actor_name=_actor_name(user),
+                candidate_direct_offer = (
+                    direct_assignment_offer(
+                        original_piece,
+                        session,
+                        actor_id=context["actor_id"],
+                        actor_name=_actor_name(user),
+                    )
+                    if supplier_assignment_optional else None
                 )
                 if candidate_direct_offer and not payload.confirm_direct_receiving_assignment:
                     raise HTTPException(status_code=409, detail=candidate_direct_offer)
