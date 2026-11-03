@@ -457,3 +457,32 @@ async def test_current_bundle_conflicting_yes_and_no_keeps_cost_missing(db):
     result = await build_mezan_v2_product_cost_cooperative(ReadOnlyDB(db), OWNER, [order])
     assert result["product_rows"][0]["cost_status"] == "missing"
     assert result["product_rows"][0]["total_cost"] is None
+
+
+@pytest.mark.asyncio
+async def test_unpriced_bundle_duplicate_sale_line_identity_cannot_reprice(db):
+    # A duplicate canonical line ID must not be collapsed into one last-wins
+    # estimate, nor cause the component cost to be counted twice.
+    order = sale("dup-line", sale_line("line", 1), sale_line("line", 1, rose="no"))
+    result = await build_mezan_v2_product_cost(ReadOnlyDB(db), OWNER, [order])
+    assert result["incomplete_orders_count"] == 1
+    assert result["product_rows"][0]["total_cost"] is None
+    assert result["product_rows"][0]["cost_status"] == "missing"
+
+
+@pytest.mark.asyncio
+async def test_unpriced_bundle_stale_current_recipe_option_condition_fails_closed(db):
+    definition = await db["mezan_bundle_definitions_v2"].find_one({
+        "user_id": OWNER, "product_id": "shawl",
+    })
+    amended = deepcopy(definition["items"])
+    for row in amended:
+        if row.get("condition"):
+            row["condition"]["value_id"] = "old-value-no-longer-in-catalog"
+    await db["mezan_bundle_definitions_v2"].update_one({
+        "user_id": OWNER, "product_id": "shawl",
+    }, {"$set": {"items": amended}})
+    order = sale("stale-condition", sale_line("line", 3))
+    result = await build_mezan_v2_product_cost_cooperative(ReadOnlyDB(db), OWNER, [order])
+    assert result["product_rows"][0]["total_cost"] is None
+    assert result["product_rows"][0]["cost_status"] == "missing"
