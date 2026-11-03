@@ -174,6 +174,13 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool) 
     if not number:
         raise legacy.ShippingLabelError("order_number_required", "رقم الطلب مطلوب.", status_code=400)
     internal_id, order = await _resolve(db, owner, number)
+    # A cancelled/refunded order must never be moved back to completed.
+    original = (order.get("status") or {}).get("original") if isinstance(order.get("status"), dict) else None
+    if (legacy._status(order.get("status")) in _CANCELLED
+            or legacy._status(original) in _CANCELLED):
+        raise legacy.ShippingLabelError(
+            "order_cancelled", "الطلب ملغى في سلة؛ لم تتغير حالته ولم تُطبع شحنته.",
+        )
     changed = False
     status_error = None
     if issue and not _completed(order):
