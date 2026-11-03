@@ -654,6 +654,13 @@ def resolve_order_line_cost(item: dict, *, order_number: str, catalog_cost: dict
         return cost
     identities = {str(product_id or ""), str(row.get("parent_product_id") or ""), str(row.get("product_id") or "")}
     if identities & set(authority.get("composite_products") or []):
+        # Read-only current configured-cost policy for unpriced bundle sales.
+        # The caller must have preloaded a tenant-scoped, choice-specific
+        # estimate. A frozen, actual, or corrected record above always wins.
+        estimate = (authority.get("current_bundle_estimates") or {}).get(
+            (str(order_number), line_id(row)))
+        if estimate is not None:
+            return deepcopy(estimate)
         return _unknown(row.get("quantity"), "bundle_snapshot_missing")
     return {**catalog_cost, "historical_cost_verified": False}
 
