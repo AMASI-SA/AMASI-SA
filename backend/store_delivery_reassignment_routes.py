@@ -201,10 +201,11 @@ def _enrich_assignment(assignment: dict[str, Any], order: dict[str, Any] | None)
 
 
 class UnassignPayload(BaseModel):
-    """Operator revocation before delivery; physical custody return is explicit."""
+    """Operator revocation before delivery; no physical-return attestation required."""
     model_config = ConfigDict(extra="forbid")
     expected_driver_id: str = Field(min_length=1, max_length=80)
     reason: str = Field(default="إلغاء الإسناد من تطبيق الموظفين", min_length=3, max_length=500)
+    # Accepted from older APKs for compatibility, but never used to attest return.
     physical_return_confirmed: StrictBool = False
 
 
@@ -238,21 +239,18 @@ def _assert_unassignment_safe(
     workflow: dict[str, Any],
     *,
     expected_driver_id: str,
-    physical_return_confirmed: bool = False,
 ) -> str:
     """Return the old state only if revocation can safely release the driver.
 
-    An active in-transit delivery is allowed only with an explicit recorded
-    return of the physical package. No delivery, collection or settlement
-    evidence may be discarded. Frozen historical records remain untouched.
+    An in-transit assignment can be revoked without claiming the parcel
+    physically returned. Never discard financial evidence or prior custody
+    history; existing atomicity, identity and completion fences remain.
     """
     if normalize_text(assignment.get("driver_id")) != expected_driver_id:
         raise HTTPException(status_code=409, detail={"code": "assignment_driver_changed"})
     state = normalize_text(assignment.get("status"))
     if state not in {"assigned", "out_for_delivery"} or assignment.get("active") is not True:
         raise HTTPException(status_code=409, detail={"code": "assignment_delivered_cannot_unassign"})
-    if state == "out_for_delivery" and not physical_return_confirmed:
-        raise HTTPException(status_code=409, detail={"code": "assignment_physical_return_confirmation_required"})
     if any(normalize_text(assignment.get(field)) for field in (
         "delivered_at", "collection_method", "collection_amount",
         "delivered_by_driver_id", "delivery_proof_reference",
@@ -386,10 +384,9 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
     ) -> dict[str, Any]:
         """Revoke an undelivered assignment, but never orphan custody or money.
 
-        In-progress deliveries require a verified physical return recorded on
-        the former assignment. MongoDB transaction atomically releases the
-        current assignment while keeping immutable history and external Salla
-        order status. The new operator handover can assign this shipment later.
+        Revoke assigned or out-for-delivery without claiming physical return.
+        A transaction atomically releases the active projection, preserving
+        immutable history and the external Salla status for later reassignment.
         """
         actor = _require_operator(user)
         user_id = _merchant_user_id(actor)
@@ -422,7 +419,6 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
                         raise HTTPException(status_code=409, detail={"code": "assignment_projection_changed"})
                     prior_status = _assert_unassignment_safe(
                         assignment, order, workflow, expected_driver_id=expected_driver,
-                        physical_return_confirmed=payload.physical_return_confirmed,
                     )
                     for collection in _UNASSIGN_EVIDENCE_COLLECTIONS:
                         evidence = await db[collection].find_one(
