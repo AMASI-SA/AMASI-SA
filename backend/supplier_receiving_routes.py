@@ -3160,6 +3160,8 @@ async def supplier_scan_group_candidates(
             actor_name=_text(session.get("opened_by_name")),
         )
         dispatch_blocker = supplier_receiving_dispatch_blocker(row, supplier_id)
+        if allow_direct_assignment and direct_offer is None:
+            continue
         if dispatch_blocker and not (
             (allow_direct_assignment and direct_offer is not None)
             or (
@@ -4766,6 +4768,15 @@ def make_supplier_receiving_router(
             )
             if direct_offer and not payload.confirm_direct_receiving_assignment:
                 raise HTTPException(status_code=409, detail=direct_offer)
+            if (
+                not _text(scanned_piece.get("supplier_id"))
+                and not direct_offer
+                and not list(scanned_piece.get("supplier_receiving_history") or [])
+            ):
+                raise HTTPException(status_code=409, detail={
+                    "code": "supplier_receiving_unassigned_dispatch_inconsistent",
+                    "message": "سجل إرسال القطعة بلا هوية مورد؛ أوقف الاستلام وراجع إسنادها.",
+                })
             candidates = await supplier_scan_group_candidates(
                 db,
                 user_id=context["merchant_id"],
