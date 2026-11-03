@@ -120,6 +120,32 @@ def test_store_courier_receiver_name_with_current_order_destination(monkeypatch)
     assert data["address"]["address_line"] == "العنوان الجديد"
 
 
+def test_store_courier_verified_new_destination_wins_over_stale_receiver(monkeypatch):
+    monkeypatch.setattr(shipping, "_qr_data_uri", lambda _: "qr")
+    label = shipping._store_courier_print_data(
+        "295617138",
+        {
+            "customer": {"full_name": "المرسل", "mobile": "0500000001"},
+            "receiver": {"name": "المستلم", "mobile": "0500000002",
+                         "address": {"city": "جدة", "address_line": "القديم"}},
+            "shipping": {"address": {
+                "city": "جدة", "address_line": "عنوان سابق"
+            }},
+            "_mezan_current_shipping_address": {
+                "city": "الرياض", "address_line": "عنوان المستلم المعدل",
+                "short_address": "RYYY1234",
+            },
+        },
+        {"ship_to": {"city": "مكة", "address_line": "شحنة سابقة"}},
+        {"name": "أماسي"},
+    )
+    assert label["customer_name"] == "المستلم"
+    assert label["customer_phone"] == "0500000002"
+    assert label["address"]["city"] == "الرياض"
+    assert label["address"]["address_line"] == "عنوان المستلم المعدل"
+    assert label["address"]["short_address"] == "RYYY1234"
+
+
 def test_store_courier_never_fills_missing_receiver_address_from_sender(monkeypatch):
     monkeypatch.setattr(shipping, "_qr_data_uri", lambda _: "qr")
     data = shipping._store_courier_print_data(
