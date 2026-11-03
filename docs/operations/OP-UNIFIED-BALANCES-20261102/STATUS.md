@@ -1,6 +1,6 @@
 # OP-UNIFIED-BALANCES — PR1705 LIVE VERIFIED on Mezan; lease closed
 
-Main registry: **PR1687**. Published release: **PR1705**, branch `release/operational-ready-shippingbase-20261103`; PR1702 is closed unmerged and preserved. Latest continuation **DELIVERY-019.md**; final release attestation **DELIVERY-018.md**; exact technical acceptance **DELIVERY-008.md**, superseding pending-check wording in comment6590950351 and DELIVERY007. Read the latest evidence comment as well. Prior status preserved byte-for-byte in STATUS-PRE-B2-ACCEPTANCE-20261103.md; all previous numbered records and DELIVERY-REGISTER.md remain intact. Issue1006 is full.
+Main registry: **PR1687**. Published release: **PR1705**, branch `release/operational-ready-shippingbase-20261103`; PR1702 is closed unmerged and preserved. Latest continuation **DELIVERY-020.md**; final release attestation **DELIVERY-018.md**; exact technical acceptance **DELIVERY-008.md**, superseding pending-check wording in comment6590950351 and DELIVERY007. Read the latest evidence comment as well. Prior status preserved byte-for-byte in STATUS-PRE-B2-ACCEPTANCE-20261103.md; all previous numbered records and DELIVERY-REGISTER.md remain intact. Issue1006 is full.
 
 ## Historical frozen candidate PR1702 (superseded)
 
@@ -83,3 +83,7 @@ LIVE VERIFIED on https://mezansalla.com. A new green Deployment finished event a
 ## Post-release read-only audit — record 019
 
 The scoped SAR row sums reconcile with the displayed totals, but aggregate arithmetic does not establish source coverage. Native invoice identities matched the operational documents in scope; component-level tracing confirmed partial posting from missing linkage and an operational piece held in the wrong currency. Native delivery-fee snapshots exist while the operational handoff is pending; unknown/zero report values do not prove that no fee was earned. The read-only supplier matching panel temporarily failed during the audit. Expected COD and profit coverage remain incomplete. See [DELIVERY-019.md](DELIVERY-019.md) for sanitized findings and bounded follow-up. This registry-only documentation does not change the release attested in 018, post business records, approve adjustments, or republish.
+
+## Scoped post-release provider audit — record 020
+
+The reviewed live provider ledger showed opening/settlement claims and no new order-linked increase in the audited scope despite paid-labelled orders. On the same flagged orders, provider capture state/time evidence was missing and fee-policy warnings were visible. A gross order value or paid label alone does not establish a net collectible claim. [DELIVERY-020.md](DELIVERY-020.md) records this limited observation only. No code, production, financial, approval or repost action; the completed release remains attested by record 018.
