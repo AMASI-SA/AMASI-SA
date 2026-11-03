@@ -1,0 +1,69 @@
+# OP-UNIFIED-BALANCES — PR1705 frozen B3, final checks pending; NOT deployed
+
+Main registry: **PR1687**. Current release candidate: **PR1705**, branch `release/operational-ready-shippingbase-20261103`; PR1702 is closed unmerged and preserved. Latest continuation **DELIVERY-015.md**; exact technical acceptance **DELIVERY-008.md**, superseding pending-check wording in comment6590950351 and DELIVERY007. Read the latest evidence comment as well. Prior status preserved byte-for-byte in STATUS-PRE-B2-ACCEPTANCE-20261103.md; all previous numbered records and DELIVERY-REGISTER.md remain intact. Issue1006 is full.
+
+## Historical frozen candidate PR1702 (superseded)
+
+- A2: **3a13f952b2909ac8e6eac2d0f7cc3a59f879e767**, tree58d5a7a1de998ed9c40d5bb638f29336e6959d45.
+- J2: **7d1be020b9559ea294b6ea3f7511f37ee5e6a847**; latest production ref was re-read after final checks and still equalsJ2.
+- B2: **4b7eed3b40aae718a6652486010342c9d3701261**, tree **d0072df2a551403e09c4f5daee61936bfd15b0fe**.
+- Release candidate: **rg5-379d3096ad212f750c8f36d0bf0506a8b37556873f5d75728f3ebff0f92bc50b**.
+- Intent blob5011ad276af952897aa990f9dde9ab330eb91095, independently validated against the exact A2 generated artifact and read back from B2. A2→B2 changes only intent. Do not append documentation/source, squash or rebase frozen A2/B2.
+
+A2 preserves all ready accounting work plus production1701 photos/courier unassignment, proved by exact blob and direct-tree comparison in DELIVERY007. Closed/unmerged1700 and original A1/B1 are preserved unchanged. Do not merge1687 or1700 wholesale;1702 is the current candidate.
+
+## Exact completed verification
+
+A2 Operational41542992673 passed **1733 backend/335 frontend28suites**, zero failures/errors/skips. A2 readiness41542992759 passed deterministic dual builds/classification/proof/intent/clean worktree. A2 CodeQL41542992570 passed both languages.
+
+B2 Operational41544003584 independently passed the SAME **1733/335**, zero failures/errors/skips; official artifacts downloaded, SHA256-verified and parsed, embedded B2/tree exact. Counts are repeats/subsets, never additive. B2 readiness **41544003421** completed SUCCESS including both clean-clone Host20/24 adapter rehearsals, artifact/proof/identity/package-boundary checks and JSON build-meta route. B2 CodeQL **41544003494** passed both languages. Final B2 list:23 workflows success, one unrelated conditional TikTok Creator skip, no failures. No operational testcase skipped. Detailed artifact identities and hashes in DELIVERY008.
+
+Previous source-classification failure is resolved WITHOUT changing guards. Successful clean-clone rehearsal is still NOT actual Emergent deployment or proof that a lease is inactive.
+
+## Scope and explicit limits
+
+Owner decision6588193710: R03/R05 plus ALL safe ready supplier cutoff/SAR/per-piece receipt/payroll preview/delivery noncash/external-loan/scoped warning/report work. Independent unfinished provider postsettlement/full COD-profit and other backlog is deferred. Full behavior matrix READY-RELEASE-20261103.md on candidate; old source IDs in it are historical and superseded above.
+
+R03 supports frozen root financial base and existing service mapped to unchanged unique legacy partial/independent/pre-invoice receiving; unsupported nested financial-only bases remain explicit unknowns. R05 matches verified source debt/payments with existing operational identities or requires fresh hash-bound separate owner approval of missing mirrors. No second bank debit or original GL/stock/bank operation. No opening reset/re-entry, historical replay or automatic fee/payroll activation. Merchant balances have NOT been certified from synthetic tests.
+
+## Historical acceptance/host state at record 008 (superseded by record 011)
+
+Desktop/mobile visual and actual print/Excel acceptance are unproved: the local browser refused navigation before rendering (ERR_BLOCKED_BY_ADMINISTRATOR); no bypass attempted. A synthetic harness was built, but unit tests are not visual proof.
+
+Actual Emergent guard status is unobserved; no authenticated management/terminal connection obtained. Owner was sent read-only `cd /app && python3 -B scripts/production_release_guard.py status`. No/app or lease touched. Do not assume active=false or clear another task's lease. Complete authorized visual/host acceptance and re-read latest production BEFORE controlled merge. If changed, preserve it and prepare a new A/build/B as necessary, never modify frozen B2.
+
+Only after acceptance/coordination: merge1702 with expectedB2 and exact tree equality, actual host rehearsal/prepare/prepublish, ONE explicit publication, live three-probe verify and active=false. Publishing code is not approval of actual missing supplier money or day-one payroll; those need the separate preview/approval path. No hidden financial mutation in deployment.
+
+Production changed by this task:NO. Production merge:NO. Publication:NO. Financial activation:NO. /app/lease touched:NO.
+
+## 3 November continuation — record 009
+
+Fresh GitHub and host-access evidence plus exact synthetic visual acceptance steps: **DELIVERY-009.md**. B2 is still current and technically green; the documented Emergent terminal displayed Preview Unavailable (workspace resting), and its management page requires sign-in. Actual guard state is unknown; the other task's previously prepared release is not ours to clear. No candidate, production or financial state change.
+
+Management sign-in subsequently succeeded. No listed application explicitly identified itself as Mezan. Automated approval review rejected opening the differently named published project due to uncertain identity; confirm the exact project with the owner before opening its content or terminal. See the access update in DELIVERY-009.md and registration comment 6605472816. No host status, merge, publication or financial write.
+
+## 3 November continuation — record 010
+
+Owner confirmed the Emergent management application is the Mezan project. Its official Code → Open in VS Code → Open in Browser path reached the original host's separate code-server sign-in. Project identity is resolved. The editor's secure sign-in form was submitted and the editor returned `Incorrect password`; management remains signed in. No authenticated terminal or guard status was obtained. Use the official secure manual handoff for editor authentication. The actual lease and desktop/mobile/print/download acceptance are still unverified. The frozen #1702 B2 remains draft/unmerged; no candidate change, publication, lease mutation, or financial action. See [DELIVERY-010.md](DELIVERY-010.md) for what supersedes record 009 and the next read-only host command.
+
+## Acceptance at record 011 (print evidence updated in record 012)
+
+Authenticated production host: read-only guard status returned `{"active": false}`; host HEAD J2, no tracked changes, untracked files preserved. Exact B2 was built separately in a temporary synthetic checkout with Node 22.23.2. Actual desktop and 390px responsive layout were inspected (not a physical phone); bank-transfer-filtered XLSX was downloaded and reopened, not merely unit tested. The real print click created its print frame, but native Save as PDF and page inspection are not proven. See [DELIVERY-011.md](DELIVERY-011.md) for concrete amounts, workbook hash, and the one remaining visual acceptance action. After actual PDF review re-read host guard and production head before a controlled merge. #1702 remains draft/open/unmerged. No candidate or production write, publication, lease change or financial activation.
+
+## Print evidence at record 012 (accepted by owner in record 013)
+
+A user-supplied native **unfiltered** SAR PDF was rendered and inspected: seven A4 landscape pages, four of four order cards, legible Arabic and amounts, report only with browser headers/footers. In a separate observation on B2, the real transfer filter and print button produced a real browser print frame with exactly one print-order card, TEST-900002 (fee 20, collection 200 pending), one of four, liquidity 110000 unchanged. See [DELIVERY-012.md](DELIVERY-012.md) for artifact hash, amounts, and evidence boundaries. Actual full-report native PDF layout passed; filtered print handoff passed. The separate **saved filtered native PDF** requested in item 1 of record 011 is not evidenced, not a demonstrated defect. Owner may provide that artifact for exact acceptance or expressly accept the split observations. Recheck the host guard and production head after acceptance. No candidate/production merge, lease mutation, publication or financial activation.
+
+## Owner authorization and historical pre-merge status — record 013
+
+The owner expressly accepted the complementary full native PDF and separately observed filtered native print handoff; the print acceptance gate is closed by that decision, without claiming a saved filtered PDF. The actual host guard was inactive, tracked workspace clean at J2, no target path collisions; GitHub production ref matched J2. PR1702 was marked ready for review and re-read as open, non-draft, unmerged with its frozen B2 unchanged. Additional checks were triggered; their time-scoped statuses are recorded in [DELIVERY-013.md](DELIVERY-013.md). At 15:09 UTC there was no production merge, new lease, publication or financial action. Recheck the gates and expected heads, then record controlled merge and later live verification only after they actually occur.
+
+## New source and release candidate at record 014
+
+Independent PR1704 advanced the production branch from sealed reference J2 to H/J3 `28f7875f1dade085c6a2ec5eb1b159ca8305c338` before our conditional merge. PR1702 was closed unmerged and its B2 branch preserved. Its host scripts and release identity are archival and MUST NOT be used against the new base. The owner's complementary print evidence acceptance remains valid.
+
+PR1705 source A3 `0275986594f8759a0a7b6810b9e5c2c6f8aed9c6`, tree `2bba8e3bdea3215266ec419be7f1fb237b47a37a`, has H as its sole parent. A direct tree comparison shows the five shipping paths are the only differences from A2; each blob matches H, with zero overlap with the 136 accounting paths. An isolated governed dual build of A3 using documented preceding sealed reference J2 began; H is the actual parent, not a new sealed-intent anchor. Current CI and exact boundaries are in [DELIVERY-014.md](DELIVERY-014.md). B3 and fresh reviewed-intent gates are still required at this point. No merge, deployment, lease operation or monetary write by this work.
+
+## Frozen B3 and current release controls — record 015
+
+Current #1705 (open, ready for review, unmerged) is B3 `4de891930a9856c45b7d1579eb97cdf2f87fbf39`, tree `f2ca0af8322b05032834f1fde9bf7128c7575f9f`, sole parent A3. B3 differs by the reviewed intent file only. The host-isolated governed A/B freeze matched official successful A3 workflow_dispatch 41662396359, artifact 13243870536 and intent blob 468ecaa5b7d694de317560b9932d037f36b22747; release ID `rg5-6199c663b5a4e369d55dd9fbc99b8c2cee096da0c36114f90604c7e58ffc695f`. The automatic A3 source-only classifier failure and cancellations remain documented, not relabelled successes. The independent review-branch operational workflow 41663049652 was separately triggered at exact A3; its result is distinct from B3 and from the earlier cancelled A3 run. Current B3 checks and the replacement #1705 host stage script blobs are in [DELIVERY-015.md](DELIVERY-015.md). No stage script executed during registration. Owner release authorization stands conditional on final gates; no production merge, cloud deployment, lease or financial action yet.

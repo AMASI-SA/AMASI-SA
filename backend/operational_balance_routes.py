@@ -45,6 +45,37 @@ class Finish(Request):
     opening: Opening | None = None
 
 
+class SalaryStartPreview(Input):
+    first_day: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+class SalaryStartApproval(Request):
+    first_day: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    expected_preview_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    expected_session_scope: str = Field(pattern=r"^[a-f0-9]{64}$")
+    opening_salaries_excluded: bool = Field(strict=True)
+
+
+class NativePaymentLink(Input):
+    payment_operation_id: str = Field(min_length=1, max_length=300)
+    movement_id: str | None = Field(default=None, min_length=1, max_length=300)
+
+
+class NativePurchaseSelection(Input):
+    invoice_id: str = Field(min_length=1, max_length=300)
+    existing_obligation_ids: list[Annotated[str, Field(min_length=1, max_length=300)]] = Field(default_factory=list, max_length=1000)
+    payment_links: list[NativePaymentLink] = Field(default_factory=list, max_length=1000)
+    evidence_ref: str = Field(min_length=3, max_length=300)
+
+
+class NativePurchaseApproval(Request):
+    selection: NativePurchaseSelection
+    expected_preview_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
+    expected_session_scope: str = Field(pattern=r'^[a-f0-9]{64}$')
+    confirm_reviewed_identities: bool = Field(strict=True)
+    confirm_unrecorded_money: bool = Field(default=False, strict=True)
+
+
 class Allocation(Input):
     obligation_id: str = Field(min_length=1, max_length=300)
     amount: str = Field(min_length=1, max_length=30)
@@ -69,6 +100,7 @@ class Movement(Request):
     amount: str = Field(min_length=1, max_length=30)
     currency: str = Field(pattern="^[A-Z]{3}$")
     kind: Literal["payment", "collection", "settlement", "transfer", "refund", "wallet_funding", "correction"]
+    external_operation: Literal["borrow", "lend", "repay_borrowing", "collect_lending"] | None = None
     order_number: str | None = Field(default=None, max_length=160)
     note: str = Field(default="", max_length=1000)
     receipt_id: str | None = Field(default=None, max_length=100)
@@ -312,7 +344,7 @@ def make_operational_balance_router(db, current_user):
                 permission = "reports"
             elif re.fullmatch(r"/(inventory-purchases|supplier-adjustments)/entry/[^/]+/.+", path):
                 permission = "move"
-            elif path in {"/reports", "/cost-exposure", "/movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
+            elif path in {"/reports", "/cost-exposure", "/suppliers", "/supplier-invoice-review", "/financial-position", "/movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
                 permission = "reports"
             elif path in {"/customer-returns", "/customer-exchanges"}:
                 permission = "reports"
@@ -523,6 +555,7 @@ def make_operational_balance_router(db, current_user):
                 "can_select_ad_accounts": actor.get("role") == "owner" and source != "employee_app",
                 "can_configure_ad_funding": actor.get("role") == "owner" and source != "employee_app",
                 "can_manage_inventory_opening": actor.get("role") == "owner" and source != "employee_app",
+                "can_manage_salary_start": actor.get("role") == "owner" and source != "employee_app" and state["status"] == "active",
                 "can_create_owner_withdrawal": actor.get("role") == "owner",
                 "session_scope": digest([owner, actor["id"]]),
                 "opening_count": len(state["openings"]), "permissions": permissions,
@@ -617,6 +650,24 @@ def make_operational_balance_router(db, current_user):
             fail("operational_entity_conflict", "الجهة أو رقم العملية مستخدم من قبل")
         return {"id": ("operational-bank:" + identity) if kind == "bank" else identity, "name": existing["name"], "currency": existing["currency"], "kind": kind}
 
+    @router.get("/salary-start/context")
+    async def salary_start_context(user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, "manage")
+        from operational_salary_start import read_context
+        return await read_context(db, owner, actor["id"])
+
+    @router.post("/salary-start/preview")
+    async def salary_start_preview(payload: SalaryStartPreview, user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, "manage")
+        from operational_salary_start import preview
+        return await preview(db, owner, actor["id"], payload.first_day)
+
+    @router.post("/salary-start/approve")
+    async def salary_start_approve(payload: SalaryStartApproval, user=Depends(manage_guard)):
+        actor, owner, _ = await scope(db, user, "manage")
+        from operational_salary_start import approve
+        return await approve(db, owner, actor["id"], payload.model_dump())
+
     @router.post("/openings")
     async def opening(payload: Opening, user=Depends(manage_guard)):
         actor, owner, _ = await scope(db, user, "manage")
@@ -665,13 +716,26 @@ def make_operational_balance_router(db, current_user):
         if payload.business_date is None:
             data.pop("business_date")
         # Preserve existing request hashes for in-flight pre-FX mobile movements.
-        for field in ("bank_currency", "bank_amount", "bank_fee_amount"):
+        for field in ("bank_currency", "bank_amount", "bank_fee_amount", "external_operation"):
             if data[field] is None:
                 data.pop(field)
         if source == "employee_app":
             from operational_app_banks import require_assigned_bank
             await require_assigned_bank(db, owner, actor, data)
-        return await create_movement(db, owner, actor["id"], data, source=source)
+        result = await create_movement(db, owner, actor["id"], data, source=source)
+        if source == "employee_app" and result.get("external_balance_snapshot") is not None:
+            # Reporting permission is independent from recording a movement.
+            # Recheck it AFTER the commit; redact only balances on revocation,
+            # while preserving the acknowledgement of the committed operation.
+            same_scope = False
+            try:
+                readable_actor, readable_owner, _ = await scope(db, user, "reports")
+                same_scope = readable_actor["id"] == actor["id"] and readable_owner == owner
+            except HTTPException:
+                pass
+            if not same_scope:
+                result = {key: value for key, value in result.items() if key != "external_balance_snapshot"}
+        return result
 
     @router.get("/movements")
     async def movements(user=Depends(current_user)):
@@ -768,6 +832,126 @@ def make_operational_balance_router(db, current_user):
         _, owner, _ = await scope(db, user, "reports")
         from operational_open_cost_exposure import project
         return await project(db, owner, await read(db, owner))
+
+    @router.get("/suppliers")
+    async def supplier_accounts(user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, "reports")
+        from fulfillment_v2_routes import _actor_context, _require_permission
+        from operational_balance_service import accounting_inactive
+        from operational_supplier_workspace import supplier_workspace
+        supplier_context = await _actor_context(db, actor)
+        _require_permission(supplier_context, "suppliers.read")
+        if supplier_context["merchant_id"] != owner:
+            fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
+        state = await read(db, owner)
+        if state["status"] == "active":
+            try:
+                await accounting_inactive(db, owner)
+            except HTTPException as exc:
+                if not isinstance(exc.detail, dict) or exc.detail.get("code") != "operational_accounting_active":
+                    raise
+                # Do not present two current balance authorities while the
+                # background worker is finishing the operational freeze.
+                state = {**state, "status": "accounting_active"}
+        result = supplier_workspace(state)
+        can_record = False
+        if result["active"]:
+            try:
+                await scope(db, user, "move")
+                can_record = True
+            except HTTPException:
+                pass
+        result.update(session_scope=digest([owner, actor["id"]]),
+                      permissions={"record_movements": can_record})
+        return result
+
+    @router.get('/native-purchase-links/{invoice_id}/candidates')
+    async def native_purchase_candidates(invoice_id: str, user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, 'bank_manage')
+        from operational_native_purchase_link_service import candidates
+        return await candidates(db, owner, actor['id'], invoice_id)
+
+    @router.post('/native-purchase-links/preview')
+    async def native_purchase_preview(payload: NativePurchaseSelection, user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, 'bank_manage')
+        from operational_native_purchase_link_service import preview
+        return await preview(db, owner, actor['id'], payload.model_dump())
+
+    @router.post('/native-purchase-links/approve')
+    async def native_purchase_approve(payload: NativePurchaseApproval, user=Depends(guarded('bank_manage'))):
+        actor, owner, _ = await scope(db, user, 'bank_manage')
+        from operational_native_purchase_link_service import approve
+        return await approve(db, owner, actor['id'], payload.model_dump())
+
+    @router.get("/supplier-invoice-review")
+    async def supplier_invoice_review(user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, "reports")
+        from fulfillment_v2_routes import _actor_context, _require_permission
+        from operational_supplier_invoice_preview import supplier_invoice_preview
+        context = await _actor_context(db, actor)
+        _require_permission(context, "suppliers.read")
+        if context["merchant_id"] != owner:
+            fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
+        result = await supplier_invoice_preview(db, owner)
+        # A report may not disclose the previous owner's snapshot after an actor
+        # was disabled, reassigned or lost its read grant while sources loaded.
+        fresh, current_owner, _ = await scope(db, user, "reports")
+        latest_context = await _actor_context(db, fresh)
+        _require_permission(latest_context, "suppliers.read")
+        if current_owner != owner or latest_context["merchant_id"] != owner:
+            fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
+        from operational_balance_service import accounting_inactive
+        await accounting_inactive(db, owner)
+        result["session_scope"] = digest([owner, actor["id"]])
+        return result
+
+    @router.get("/financial-position")
+    async def financial_position(user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, "reports")
+        from operational_balance_service import accounting_inactive
+        from operational_financial_position import build_financial_position
+        from operational_financial_order_labels import attach_order_numbers
+
+        state = await read(db, owner)
+        if state["status"] == "active":
+            try:
+                await accounting_inactive(db, owner)
+            except HTTPException as exc:
+                if not isinstance(exc.detail, dict) or exc.detail.get("code") != "operational_accounting_active":
+                    raise
+                state = {**state, "status": "accounting_active"}
+        cost_exposure = None
+        if state["status"] == "active" and state.get("engine", {}).get("as_of"):
+            # The separately released cost-stage reader is an explicit optional
+            # dependency. Missing coverage is visible in the report; never
+            # substitute another balance authority or refresh/write on this GET.
+            try:
+                from operational_open_cost_exposure import project as cost_project
+            except ModuleNotFoundError as exc:
+                if exc.name != "operational_open_cost_exposure":
+                    raise
+            else:
+                try:
+                    cost_exposure = await cost_project(db, owner, state, as_of=state["engine"]["as_of"])
+                except ValueError as exc:
+                    # The optional bounded reader can reject its source scope.
+                    # Preserve the verified balance snapshot while explicitly
+                    # withholding estimates; unexpected errors still propagate.
+                    code = str(exc)
+                    if code not in {"operational_source_rejected", "operational_source_scope_too_large",
+                                    "operational_source_owner_mismatch"}:
+                        raise
+                    cost_exposure = {
+                        "status": "preview", "as_of": state["engine"]["as_of"],
+                        "engine_as_of": state["engine"]["as_of"], "started_at": state["started_at"],
+                        "currencies": {}, "groups": [], "complete": False,
+                        "issues": [{"code": code, "count": 1, "message":
+                            "غير متاح: تعذر التحقق من مصادر تكاليف الطلبات المفتوحة؛ الأرصدة الحالية من آخر احتساب محفوظ."}],
+                    }
+        result = build_financial_position(state, cost_exposure=cost_exposure, generated_at=now())
+        result = await attach_order_numbers(db, owner, result)
+        result.update(session_scope=digest([owner, actor["id"]]), permissions={"reports": True})
+        return result
 
     @router.get("/audit")
     async def audit_route(user=Depends(current_user)):
