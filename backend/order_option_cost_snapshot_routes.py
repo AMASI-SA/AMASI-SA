@@ -397,4 +397,54 @@ def make_order_option_cost_snapshot_router(db: Any, current_user: Callable[..., 
         except BundleHistoricalEvidenceUnavailable as exc:
             raise HTTPException(status_code=409, detail={"code": exc.code}) from exc
 
+    @router.post("/{order_number}/bundle-financial-cost-repair-plan")
+    async def bundle_financial_cost_repair_plan(
+        order_number: str, payload: dict = Body(...),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Transactional-compatible no-write plan, no cost conclusion yet."""
+        from bundle_historical_reporting_audit import BundleHistoricalEvidenceUnavailable
+        from bundle_historical_reporting_repair import build_missing_bundle_repair_plan
+        if not isinstance(user, dict) or not (
+            str(user.get("role") or "").strip().lower() == "owner"
+            or user.get("is_owner") is True
+        ):
+            raise HTTPException(status_code=403, detail={"code": "owner_required"})
+        if set(payload) != {"order_item_id", "attestation"} or not isinstance(payload["attestation"], dict):
+            raise HTTPException(status_code=422, detail={"code": "historical_repair_payload_invalid"})
+        try:
+            plan = await build_missing_bundle_repair_plan(
+                db, str(user["id"]), str(order_number),
+                payload["order_item_id"], payload["attestation"])
+        except BundleHistoricalEvidenceUnavailable as exc:
+            raise HTTPException(status_code=409, detail={"code": exc.code}) from exc
+        # Raw internal correction includes owner data. It is returned only to
+        # the private transaction function, never in a public API response.
+        return {k: v for k, v in plan.items() if k != "correction"}
+
+    @router.post("/{order_number}/bundle-financial-cost-repair-apply")
+    async def bundle_financial_cost_repair_apply(
+        order_number: str, payload: dict = Body(...),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Explicit user-reviewed manifest; disabled on Production by default."""
+        from bundle_historical_reporting_audit import BundleHistoricalEvidenceUnavailable
+        from bundle_historical_reporting_repair import apply_missing_bundle_repair
+        if not isinstance(user, dict) or not (
+            str(user.get("role") or "").strip().lower() == "owner"
+            or user.get("is_owner") is True
+        ):
+            raise HTTPException(status_code=403, detail={"code": "owner_required"})
+        required = {"order_item_id", "attestation", "manifest_sha", "approval_phrase"}
+        if set(payload) != required or not isinstance(payload["attestation"], dict):
+            raise HTTPException(status_code=422, detail={"code": "historical_repair_payload_invalid"})
+        try:
+            return await apply_missing_bundle_repair(
+                db, str(user["id"]), str(order_number),
+                payload["order_item_id"], payload["attestation"],
+                expected_manifest_sha=payload["manifest_sha"],
+                approval_phrase=payload["approval_phrase"])
+        except BundleHistoricalEvidenceUnavailable as exc:
+            raise HTTPException(status_code=409, detail={"code": exc.code}) from exc
+
     return router
