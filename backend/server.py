@@ -5165,6 +5165,8 @@ async def _global_startup() -> None:
     await db.webhook_tokens.create_index("user_id", unique=True)
     await db.webhook_tokens.create_index("token", unique=True)
     await db.unified_orders.create_index([("user_id", 1), ("order_number", 1)], unique=True)
+    # Read only the owner's saved Salla transaction evidence for the scoped orders.
+    await db.order_payment_transactions_v2.create_index([("user_id", 1), ("order_number", 1), ("source", 1)])
     await db.unified_orders.create_index([("user_id", 1), ("order_date", -1)])
     await db.unified_orders.create_index([("user_id", 1), ("data_source", 1)])
     await db.operating_salaries.create_index([("user_id", 1), ("status", 1)])

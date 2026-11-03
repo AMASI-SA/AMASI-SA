@@ -464,8 +464,7 @@ async def refresh(db, owner, *, clock=None):
         try:
             from operational_balance_inventory import assert_no_source_collision
             await assert_no_source_collision(db, owner, state)
-            options = {"operational_state": state} if state.get("ad_funding") or state.get("native_purchase_links") else {}
-            sources = await collect_sources(db, owner, state["started_at"], stamp, baselines=state.get("source_baselines"), **options)
+            sources = await collect_sources(db, owner, state["started_at"], stamp, baselines=state.get("source_baselines"), operational_state=state)
         except ValueError:
             fail("operational_source_setup_incomplete", "مصادر ميزان 2 غير مكتملة أو تجاوزت حدود القراءة")
         sources.setdefault("supplier_returns", []).extend(state.get("supplier_returns", []))

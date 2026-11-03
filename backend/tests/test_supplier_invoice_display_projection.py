@@ -130,3 +130,48 @@ def test_expanded_detail_limit_is_bounded():
     line={"piece_ids":[p["piece_id"] for p in pieces],"product_unit_price_halalas":0,"services":services}
     with pytest.raises(ValueError,match="supplier_display_detail_limit"):
         project_supplier_invoice_display([line],pieces)
+
+
+def test_printed_invoices_distinguish_the_base_from_a_later_service_charge():
+    import re
+
+    import pymupdf
+    from supplier_invoice_pdf import generate_supplier_invoice_pdf
+
+    pieces = [{"piece_id": "unit-1", "product_id": "scarf", "product_name": "سكارف شتوية"}]
+    service = {"service_id": "embroidery", "service_name": "تطريز الاسم", "unit_price_halalas": 1500}
+    for base, services in ((1500, []), (0, [service])):
+        line = {"piece_ids": ["unit-1"], "product_unit_price_halalas": base, "services": services}
+        view = project_supplier_invoice_display([line], pieces, expected_total_halalas=1500)
+        pdf = generate_supplier_invoice_pdf({"invoice_number": "DEMO", "display": view, "total_halalas": 1500})
+        with pymupdf.open(stream=pdf, filetype="pdf") as doc:
+            # Read only each money cell of the first detail row, in PDF points.
+            def cell_amounts(left, right):
+                text = doc[0].get_text(clip=pymupdf.Rect(left, 282, right, 332))
+                return re.findall(r"\d+\.\d{2}", text)
+            assert cell_amounts(241, 332) == ["0.00" if services else "15.00"]
+            assert cell_amounts(120, 240) == (["15.00"] if services else [])
+            assert cell_amounts(42, 120) == ["15.00"]
+
+
+def test_printed_base_and_service_breakdowns_retain_each_pieces_rounded_amount():
+    from supplier_invoice_pdf import _display_pdf_rows
+
+    pieces = [{"piece_id": piece_id, "product_id": "same"} for piece_id in ("a", "b", "c")]
+    # Same effective cost of 1.5 halalas. On the first financial line, the service
+    # on a+b rounds once to 1 halala. The service on c rounds up to 2.
+    lines = [
+        {"piece_ids": ["a", "b"], "product_unit_price_halalas": 1,
+         "services": [{"service_id": "first", "unit_price_halalas": 1, "quantity_per_piece": 0.5}]},
+        {"piece_ids": ["c"], "product_unit_price_halalas": 0,
+         "services": [{"service_id": "other", "unit_price_halalas": 3, "quantity_per_piece": 0.5}]},
+    ]
+    view = project_supplier_invoice_display(lines, pieces, expected_total_halalas=5)
+    assert len(view["cards"]) == 1
+    before = deepcopy(view)
+    rows = list(_display_pdf_rows(view))
+    assert [
+        (row["product_unit_price_halalas"], row["quantity"], row["services"][0]["total_halalas"], row["total_halalas"])
+        for row in rows
+    ] == [(1, 2, 1, 3), (0, 1, 2, 2)]
+    assert view == before

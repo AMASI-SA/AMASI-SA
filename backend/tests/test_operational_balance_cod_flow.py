@@ -7,7 +7,7 @@ from operational_balance_store import read
 
 
 async def native_order(db, method=None):
-    data = shipping_data(payment={'method': 'cod'}, paid_amount='100', status='delivered')
+    data = shipping_data(delivered_shipment=method is None, payment={'method': 'cod'}, paid_amount='100', status='delivered')
     if method:
         rate = data['mz2_shipping_setup_v2'][0]['contracts'][0]
         rate.update(party_type='store_driver', party_id='driver')
@@ -59,7 +59,7 @@ def test_native_missing_commission_keeps_cod_and_verified_shipping_then_complete
     from decimal import Decimal
     async def scenario(db):
         await started(db)
-        data=shipping_data(rich_rate(), payment={'method':'cod'},paid_amount='100',status='delivered')
+        data=shipping_data(rich_rate(), delivered_shipment=True, payment={'method':'cod'},paid_amount='100',status='delivered')
         setup=data['mz2_shipping_setup_v2'][0]
         next(e for e in setup['contract_evidence'] if e['purpose']=='commission_tax')['state']='revoked'
         for collection,documents in data.items():

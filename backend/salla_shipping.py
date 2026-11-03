@@ -281,6 +281,15 @@ def accept_shipping(existing: dict, incoming: dict | None) -> dict | None:
     elif existing:
         for key in SHIPMENT_FIELDS.values():
             result.setdefault(key, "pending" if key == "status" else None)
+    proof_key = "verified_order_delivery_transition"
+    previous = current.get(proof_key)
+    observed = incoming.get(proof_key)
+    if previous and previous.get("shipment_id") == result.get("shipment_id"):
+        if (observed and observed != previous or result.get("status") not in {"delivered", "تم التوصيل"}
+                or previous.get("waybill") != result.get("tracking_number")):
+            result[proof_key] = {**previous, "ambiguous": True}
+    elif not observed:
+        result.pop(proof_key, None)
     return result
 
 
