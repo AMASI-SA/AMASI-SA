@@ -338,6 +338,34 @@ def test_service_only_price_does_not_quarantine_another_invoices_product(explici
     assert not any(i['code'] == 'supplier_cross_invoice_component_coverage_ambiguous' for i in sources['issues'])
 
 
+@pytest.mark.parametrize('bad_unit', ['01', None, True, 2.0, '2.0', '٠٢', 0, 3, '99999999999'])
+def test_ambiguous_unit_coverage_cannot_double_the_received_supplier_estimate(bad_unit):
+    data = native_data(created=NEW)
+    data['mezan_supplier_invoices_v2'] = []
+    pieces = data['mezan_preparation_pieces_v1']
+    # The second technical receipt must prove coverage of ordered unit 2.
+    pieces[1]['unit_index'] = bad_unit
+    for piece in pieces:
+        piece.update(execution_status='received_from_supplier', received_at=APPROVED)
+    sources = collect(data)
+    assert any(i['code'] == 'preparation_piece_coverage_ambiguous' for i in sources['issues'])
+    assert not sources['orders'][0]['items']
+    assert not reconcile(active(), sources, NOW)['engine']['obligations']
+
+
+def test_separate_received_sibling_units_preserve_both_proven_estimates():
+    data = native_data(created=NEW)
+    data['mezan_supplier_invoices_v2'] = []
+    pieces = data['mezan_preparation_pieces_v1']
+    pieces[1].update(unit_index='02', order_item_id=' salla:10:line ', order_number=10)
+    for piece in pieces:
+        piece.update(execution_status='received_from_supplier', received_at=APPROVED)
+    sources = collect(data)
+    rows = reconcile(active(), sources, NOW)['engine']['obligations']
+    assert {key: row['expected'] for key, row in rows.items()} == {
+        'supplier:order-10:p1': '50.00', 'supplier:order-10:p2': '50.00'}
+
+
 def test_frozen_product_and_its_allocated_payment_survive_later_alias_collision():
     data = aliased_unit()
     later = data['mezan_supplier_invoices_v2'].pop()

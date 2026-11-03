@@ -1799,21 +1799,90 @@ def _invoice_charge_components(line: dict[str, Any]) -> set[str]:
     return components
 
 
+def _receipt_unit(piece: dict[str, Any]) -> tuple[str, str, int] | None:
+    order, item, index = (piece.get(k) for k in ("order_number", "order_item_id", "unit_index"))
+    if isinstance(index, str) and len(index) <= 9 and index.isascii() and index.isdecimal():
+        index = int(index)
+    if (isinstance(order, str) and order and order == order.strip()
+            and isinstance(item, str) and item and item == item.strip()
+            and isinstance(index, int) and not isinstance(index, bool) and 0 < index <= 999_999_999):
+        return order, item, index
+    return None
+
+
+async def _include_receipt_aliases(db, merchant_id, session_id, scans, pieces, requested, mongo_session):
+    # Normal materialization stores the same order/line/unit on the reserved
+    # piece and its scan. A legacy or incomplete tuple cannot identify an alias.
+    by_unit = {}
+    groups = {}
+    evidence = set()
+    for scan in scans:
+        pid = scan["piece_id"]
+        unit = _receipt_unit(scan)
+        current = _receipt_unit(pieces[pid])
+        if not unit or not current:
+            continue
+        if current != unit:
+            raise HTTPException(409, detail={"code": "supplier_receiving_unit_identity_changed",
+                "message": "تغير مرجع وحدة الطلب بعد المسح. راجع القطعة قبل الاعتماد."})
+        charges = by_unit.setdefault(unit, set())
+        if charges & requested[pid]:
+            raise HTTPException(409, detail={"code": "supplier_receiving_duplicate_unit_component",
+                "message": "تحتوي الجلسة تكلفة مكررة لوحدة واحدة من سطر الطلب."})
+        charges.update(requested[pid])
+        order, item, index = unit
+        # Native scans use integers. Older finalizations can store decimal
+        # strings with leading zeroes. Keep every lookup exact and indexable.
+        indices = groups.setdefault((order, item), set())
+        indices.add(index)
+        digits = str(index)
+        indices.update(digits.zfill(width) for width in range(len(digits), 10))
+
+    clauses = [{"order_number": order, "order_item_id": item, "unit_index": {"$in": list(indices)}}
+               for (order, item), indices in groups.items()]
+    for offset in range(0, len(clauses), 100):
+        events = db[RECEIVING_EVENTS].find(
+            {"user_id": merchant_id, "$or": clauses[offset:offset + 100],
+             "event_type": {"$in": ["supplier_piece_scanned", "supplier_piece_service_recorded"]},
+             "experiment_mode": {"$ne": True}, "experiment_run_id": {"$in": [None, ""]}},
+            {"_id": 0, "piece_id": 1, "event_type": 1, "session_id": 1, "order_number": 1,
+             "order_item_id": 1, "unit_index": 1, "supplier_invoice_id": 1}, session=mongo_session,
+        )
+        async for event in events:
+            pid = event.get("piece_id")
+            unit = _receipt_unit(event)
+            if event.get("session_id") == session_id or unit not in by_unit:
+                continue
+            if event["event_type"] == "supplier_piece_scanned":
+                # Serialize aliased reservations before either session posts.
+                # A later, independent service can still be invoiced afterwards.
+                raise HTTPException(409, detail={"code": "supplier_receiving_unit_reserved_elsewhere",
+                    "message": "وحدة الطلب محجوزة في جلسة استلام أخرى. راجع الحجز قبل الاعتماد."})
+            if not isinstance(pid, str) or not pid or not _text(event.get("supplier_invoice_id")):
+                raise HTTPException(409, detail={"code": "supplier_receiving_prior_invoice_incomplete",
+                    "message": "تعذر تحديد القطعة أو الفاتورة لاستلام سابق لوحدة الطلب."})
+            evidence.add((event["supplier_invoice_id"], pid))
+            requested.setdefault(pid, set()).update(by_unit[unit])
+    return evidence
+
+
 async def _check_prior_invoice_components(
-    db: Any, merchant_id: str, lines: list[dict[str, Any]], mongo_session: Any
+    db: Any, merchant_id: str, session_id: str, lines: list[dict[str, Any]], scans, pieces, mongo_session: Any
 ) -> None:
     # A mutable scan or piece snapshot cannot override a posted receipt. Separate
     # services on one physical unit may legitimately be invoiced independently.
     requested = {}
     for line in lines:
         components = _invoice_charge_components(line)
-        requested.update(dict.fromkeys(line["piece_ids"], components))
+        for pid in line["piece_ids"]:
+            requested[pid] = set(components)
+    evidence = await _include_receipt_aliases(db, merchant_id, session_id, scans, pieces, requested, mongo_session)
     invoices = db[SUPPLIER_INVOICES].find(
         {"user_id": merchant_id, "lines.piece_ids": {"$in": list(requested)},
          "experiment_mode": {"$ne": True}, "experiment_run_id": {"$in": [None, ""]},
          "status": {"$ne": "experiment_completed"},
          "$or": [{"approved_at": {"$ne": None}}, {"status": "payable_posted"}]},
-        {"_id": 0, "lines.piece_ids": 1, "lines.product_unit_price_halalas": 1,
+        {"_id": 0, "id": 1, "lines.piece_ids": 1, "lines.product_unit_price_halalas": 1,
          "lines.services.service_id": 1, "status": 1}, session=mongo_session,
     )
     async for invoice in invoices:
@@ -1828,11 +1897,15 @@ async def _check_prior_invoice_components(
                     "message": "راجع حالة فاتورة الاستلام السابقة لهذه القطعة قبل الاعتماد."})
             previous = _invoice_charge_components(line)
             for pid in matched:
+                evidence.discard((invoice.get("id"), pid))
                 overlap = requested[pid] & previous
                 if overlap:
                     raise HTTPException(409, detail={"code": "supplier_receiving_component_already_invoiced",
                         "piece_id": pid, "components": sorted(overlap),
                         "message": "سبق اعتماد تكلفة هذه القطعة أو الخدمة في فاتورة استلام."})
+    if evidence:
+        raise HTTPException(409, detail={"code": "supplier_receiving_prior_invoice_incomplete",
+            "message": "تعذر ربط استلام سابق لوحدة الطلب بفاتورته المعتمدة. راجع الاستلام قبل الاعتماد."})
 
 
 async def _post_supplier_invoice_ledger(
@@ -2615,6 +2688,11 @@ async def ensure_supplier_receiving_indexes(db: Any) -> None:
         unique=True,
         partialFilterExpression={"event_type": "supplier_piece_scanned"},
         name="uq_supplier_receiving_piece_scan_v1",
+    )
+    await db[RECEIVING_EVENTS].create_index(
+        [("user_id", ASCENDING), ("order_number", ASCENDING), ("order_item_id", ASCENDING),
+         ("unit_index", ASCENDING), ("event_type", ASCENDING)],
+        name="ix_supplier_receiving_order_unit_v1",
     )
     await db[SUPPLIER_INVOICES].create_index(
         [("user_id", ASCENDING), ("session_id", ASCENDING)],
@@ -5945,7 +6023,9 @@ def make_supplier_receiving_router(
             if payload.confirmed_total_halalas is not None:
                 require_invoice_integrity(draft["total_halalas"] == payload.confirmed_total_halalas, "confirmed_amount_mismatch")
             if not is_experiment:
-                await _check_prior_invoice_components(db, merchant_id, draft["lines"], mongo_session)
+                await _check_prior_invoice_components(
+                    db, merchant_id, session_id, draft["lines"], scans, current_by_id, mongo_session
+                )
             invoice_id = f"msiv2_{uuid.uuid5(uuid.NAMESPACE_URL, f'{merchant_id}:{session_id}').hex}"
             invoice_number = _text(fresh_session.get("reference")).replace(
                 "SR-", "SI-TEST-" if is_experiment else "SI-", 1

@@ -636,6 +636,21 @@ def cost_components(data, product_id, item, profile):
     return product_cost, services
 
 
+def physical_order_item_id(piece):
+    value = piece.get('order_item_id')
+    return value.strip() if isinstance(value, str) else None
+
+
+def physical_unit_index(piece):
+    """Native piece unit numbers can be stored as integers or decimal strings."""
+    value = piece.get('unit_index')
+    if isinstance(value, int) and not isinstance(value, bool):
+        return int(value) if 0 < value <= 999_999_999 else None
+    if isinstance(value, str) and len(value) <= 9 and value.isascii() and value.isdecimal():
+        return int(value) or None
+    return None
+
+
 def supplier_receipt_proven(piece, as_of=None):
     """Match durable physical receiving proof, not mere supplier assignment.
 
@@ -984,9 +999,11 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     order['items_complete'] = False
                     issue(out, str(exc) if str(exc) == 'mz2_product_cost_currency_requires_review' else 'mz2_product_cost_incomplete', item_id)
                     continue
-                matching = [p for p in pieces if p.get('order_number') == order_number and p.get('order_item_id') == item_id]
+                matching = [p for p in pieces if str(p.get('order_number')) == order_number
+                            and physical_order_item_id(p) == item_id]
                 if matching:
-                    if quantity != len(matching) or len({p.get('unit_index') for p in matching}) != len(matching):
+                    units = {physical_unit_index(piece) for piece in matching}
+                    if quantity != len(matching) or units != set(range(1, len(matching) + 1)):
                         order['items_complete'] = False
                         issue(out, 'preparation_piece_coverage_ambiguous', item_id)
                         continue
@@ -1170,11 +1187,10 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     # same order line and physical unit. Keep posted receipt IDs,
                     # but compare claims across the permanent unit identity.
                     physical_key = (piece_id,)
-                    unit = str(piece.get('unit_index') or '')
-                    order_item_id = piece.get('order_item_id')
-                    if (isinstance(order_item_id, str) and order_item_id.strip() and len(unit) <= 9
-                            and unit.isascii() and unit.isdecimal() and int(unit) > 0):
-                        physical_key = (order_item_id.strip(), int(unit))
+                    unit = physical_unit_index(piece)
+                    order_item_id = physical_order_item_id(piece)
+                    if order_item_id and unit is not None:
+                        physical_key = (order_item_id, unit)
                     for component, item_id in components:
                         coverage.setdefault((order_id, physical_key, component), set()).add((invoice['id'], item_id))
                         if accepted < start:

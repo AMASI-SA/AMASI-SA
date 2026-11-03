@@ -330,13 +330,16 @@ async def test_prior_component_lookup_is_owner_scoped_and_matches_each_invoice_l
     ):
         await db[r.SUPPLIER_INVOICES].insert_one({**previous, **fields, "id": key,
                                                   "invoice_number": key, "session_id": key})
-    queries = []
+    queries, unit_queries = [], []
     original = AsyncIOMotorCollection.find
 
     def capture(self, query, *args, **kwargs):
         if self.name == r.SUPPLIER_INVOICES and "lines.piece_ids" in query:
             assert kwargs["session"].in_transaction
             queries.append(query)
+        if self.name == r.RECEIVING_EVENTS and "$or" in query and "order_item_id" in query["$or"][0]:
+            assert kwargs["session"].in_transaction
+            unit_queries.append(query)
         return original(self, query, *args, **kwargs)
 
     monkeypatch.setattr(AsyncIOMotorCollection, "find", capture)
@@ -345,6 +348,9 @@ async def test_prior_component_lookup_is_owner_scoped_and_matches_each_invoice_l
     assert len(queries) == 1
     plan = await original(db[r.SUPPLIER_INVOICES], queries[0]).explain()
     assert "ix_supplier_invoice_piece_v2" in str(plan["queryPlanner"]["winningPlan"])
+    assert len(unit_queries) == 1
+    plan = await original(db[r.RECEIVING_EVENTS], unit_queries[0]).explain()
+    assert "ix_supplier_receiving_order_unit_v1" in str(plan["queryPlanner"]["winningPlan"])
 
 
 @pytest.mark.parametrize("fields", [
@@ -368,3 +374,129 @@ async def test_ambiguous_historical_receipt_requires_review(env, fields):
     assert response.json()["detail"]["code"] == "supplier_receiving_prior_invoice_incomplete"
     assert await db.general_ledger.count_documents({}) == 0
     assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 1
+
+
+@pytest.mark.parametrize("prior_charge,next_charge,expected", [
+    ("product", "product", 409), ("svc", "svc", 409), ("product", "svc", 200)
+])
+async def test_another_batch_id_for_same_order_unit(env, prior_charge, next_charge, expected):
+    db, http, _ = env
+    first, first_payload = await seed(db, (1500,), services=True)
+    pid = first_payload["invoice_lines"][0]["piece_ids"][0]
+    pending = (await db[r.PIECES].find_one({"piece_id": pid}))["services"]
+    if prior_charge == "product":
+        first_payload["invoice_lines"][0]["services"] = []
+        first_payload["confirmed_total_halalas"] = 1500
+    approved = await close(http, first, first_payload)
+    assert approved.status_code == 200, approved.text
+    # Legacy immutable scans may encode the same unit with leading zeroes.
+    await db[r.RECEIVING_EVENTS].update_one({"piece_id": pid}, {"$set": {"unit_index": "001"}})
+    second, payload = await seed(db, (1500,))
+    new_id = payload["invoice_lines"][0]["piece_ids"][0]
+    assert pid != new_id
+    if next_charge == "svc":
+        await db[r.PIECES].update_one({"piece_id": new_id}, {"$set": {"services": pending}})
+        await db[r.RECEIVING_EVENTS].update_one({"piece_id": new_id}, {"$set": {
+            "product_charge_eligible": False, "services": pending}})
+        payload["invoice_lines"][0].update(product_unit_price_halalas=0,
+            services=[{"service_id": "svc", "unit_price_halalas": 325}])
+        payload["confirmed_total_halalas"] = 325
+    response = await close(http, second, payload)
+    assert response.status_code == expected, response.text
+    if expected == 409:
+        assert response.json()["detail"]["code"] == "supplier_receiving_component_already_invoiced"
+        assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 1
+        assert await db.general_ledger.count_documents({}) == 2
+
+
+async def test_two_aliases_in_one_session(env):
+    db, http, _ = env
+    session, payload = await seed(db, (1500, 1500))
+    alias = payload["invoice_lines"][1]["piece_ids"][0]
+    for name in (r.PIECES, r.RECEIVING_EVENTS, r.PIECE_EVENTS):
+        await db[name].update_one({"piece_id": alias}, {"$set": {"order_item_id": "0", "unit_index": "001"}})
+    response = await close(http, session, payload)
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "supplier_receiving_duplicate_unit_component"
+    await unchanged(db, session)
+
+
+async def test_concurrently_reserved_unit_aliases_cannot_both_close(env):
+    db, http, _ = env
+    first, p = await seed(db, (1500,))
+    await db[r.SESSIONS].update_one({"id": first["id"]}, {"$set": {"opened_by": "another-receiver"}})
+    second, payload = await seed(db, (1500,))
+    response = await close(http, second, payload)
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "supplier_receiving_unit_reserved_elsewhere"
+    assert await db.general_ledger.count_documents({}) == 0
+    # The scan cancellation path already releases the active reservation.
+    await db[r.RECEIVING_EVENTS].update_one({"session_id": first["id"]}, {"$set": {"event_type": "removed"}})
+    response = await close(http, second, payload)
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.parametrize("ready", [True, False])
+async def test_mobile_build_rollback_retains_ready_unit_reservations(env, ready):
+    import mobile_reviewed_preparation_routes as mobile
+    from pymongo.errors import DuplicateKeyError
+
+    db, _, _ = env
+    await mobile.batch_module.ensure_preparation_batch_indexes(db)
+    state = "ready" if ready else "building"
+    await db[mobile.batch_module.BATCHES].insert_one({"user_id": "merchant", "id": "batch",
+        "client_request_id": "request", "status": state})
+    await db[mobile.REGISTRY].insert_one({"user_id": "merchant", "client_request_id": "request", "status": state})
+    unit = {"user_id": "merchant", "order_number": "order", "order_item_id": "item", "unit_index": 1}
+    allocations = db[mobile.PREPARATION_UNIT_ALLOCATIONS]
+    await allocations.insert_one({**unit, "batch_id": "batch", "status": "committed"})
+    await mobile._rollback_build(db, user_id="merchant", batch_id="batch", request_id="request")
+    if ready:
+        with pytest.raises(DuplicateKeyError):
+            await allocations.insert_one({**unit, "batch_id": "another-batch"})
+    else:
+        assert await allocations.count_documents(unit) == 0
+
+
+async def test_finalized_alias_with_missing_invoice_aborts_and_different_units_are_independent(env):
+    db, http, _ = env
+    current, payload = await seed(db, (1500,))
+    event = {"user_id": "merchant", "piece_id": "former-alias", "session_id": "previous-session",
+             "order_number": "123456789", "order_item_id": "0", "unit_index": 1,
+             "event_type": "supplier_piece_service_recorded", "supplier_invoice_id": "missing"}
+    await db[r.RECEIVING_EVENTS].insert_one(dict(event))
+    response = await close(http, current, payload)
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "supplier_receiving_prior_invoice_incomplete"
+    assert await db.general_ledger.count_documents({}) == 0
+    await db[r.RECEIVING_EVENTS].update_one({"piece_id": "former-alias"}, {"$set": {"unit_index": 2}})
+    assert (await close(http, current, payload)).status_code == 200
+
+
+@pytest.mark.parametrize("missing", [None, "allocation", "registry"])
+async def test_mobile_ready_transition_is_atomic(env, missing):
+    import mobile_reviewed_preparation_routes as mobile
+
+    db, _, _ = env
+    now = datetime.now(timezone.utc)
+    draft = {"user_id": "merchant", "status": "building", "expires_at": now}
+    await db[mobile.batch_module.BATCHES].insert_one({**draft, "id": "batch"})
+    if missing != "registry":
+        await db[mobile.REGISTRY].insert_one({**draft, "client_request_id": "request"})
+    if missing != "allocation":
+        await db[mobile.PREPARATION_UNIT_ALLOCATIONS].insert_one({**draft, "batch_id": "batch", "status": "reserved"})
+    args = dict(user_id="merchant", batch_id="batch", request_id="request", expected_quantity=1,
+                ready_patch={"status": "ready", "ready_at": now}, registry_patch={"status": "ready"})
+    if missing:
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException, match="preparation_file_reservation_mismatch"):
+            await mobile._publish_ready_file(db, **args)
+        assert (await db[mobile.batch_module.BATCHES].find_one({}))["status"] == "building"
+        for name in (mobile.PREPARATION_UNIT_ALLOCATIONS, mobile.REGISTRY):
+            assert await db[name].count_documents({"status": {"$in": ["ready", "committed"]}}) == 0
+    else:
+        await mobile._publish_ready_file(db, **args)
+        for name, status in ((mobile.batch_module.BATCHES, "ready"), (mobile.REGISTRY, "ready"),
+                             (mobile.PREPARATION_UNIT_ALLOCATIONS, "committed")):
+            row = await db[name].find_one({})
+            assert row["status"] == status and "expires_at" not in row
