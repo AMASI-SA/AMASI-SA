@@ -39,3 +39,5 @@ Production changed by this task:NO. Production merge:NO. Publication:NO. Financi
 ## 3 November continuation — record 009
 
 Fresh GitHub and host-access evidence plus exact synthetic visual acceptance steps: **DELIVERY-009.md**. B2 is still current and technically green; the documented Emergent terminal displayed Preview Unavailable (workspace resting), and its management page requires sign-in. Actual guard state is unknown; the other task's previously prepared release is not ours to clear. No candidate, production or financial state change.
+
+Management sign-in subsequently succeeded. No listed application explicitly identified itself as Mezan. Automated approval review rejected opening the differently named published project due to uncertain identity; confirm the exact project with the owner before opening its content or terminal. See the access update in DELIVERY-009.md and registration comment 6605472816. No host status, merge, publication or financial write.
