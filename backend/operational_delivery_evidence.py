@@ -5,6 +5,7 @@ It carries no price, sale, customer payment, bank effect, or opening allocation.
 Only an explicit delivery timestamp can cross the opening boundary: a source
 update clock or delivered label cannot supply a missing event time.
 """
+from collections import defaultdict
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
@@ -152,6 +153,7 @@ def _current_shipping(raw, source):
 
 
 def _courier(setup, owner, current):
+    from operational_courier_tariffs import matches as matches_key
     if not isinstance(setup, dict) or setup.get("user_id") != owner:
         _fail("shipping_setup_owner_mismatch")
     key = _text(current.get("company_code")) or _text(current.get("company_name"))
@@ -170,17 +172,17 @@ def _courier(setup, owner, current):
     if any(not isinstance(row.get("salla_carrier_keys"), list)
            or any(not _text(value) for value in row["salla_carrier_keys"]) for row in approved):
         _fail("courier_identity_ambiguous")
-    matches = [row for row in approved if key in (row.get("salla_carrier_keys") or [])]
+    matches = [row for row in approved if matches_key(row, key)]
     if len(matches) != 1 or not _text(matches[0].get("courier_key")):
         _fail("courier_identity_ambiguous")
     name = _text(current.get("company_name"))
-    named = [row for row in approved if name and name in (row.get("salla_carrier_keys") or [])]
+    named = [row for row in approved if name and matches_key(row, name)]
     if named and {row.get("courier_key") for row in named} != {matches[0]["courier_key"]}:
         _fail("courier_identity_conflict")
     return _text(matches[0]["courier_key"]), key
 
 
-def _shipment_time(raw, current, shipment, waybill):
+def _shipment_time(raw, current, shipment, waybill, *, include_nested=True, order_transition=None):
     shipping = raw.get("shipping") if isinstance(raw.get("shipping"), dict) else {}
     candidates = raw.get("shipments") or []
     candidates = candidates if isinstance(candidates, list) else [candidates] if isinstance(candidates, dict) else []
@@ -190,10 +192,18 @@ def _shipment_time(raw, current, shipment, waybill):
     shipping_id = shipping.get("shipment_id") or nested.get("id")
     if shipping_id is not None:
         candidates = [*candidates, {**shipping, "id": shipping_id}]
+    # Apply the same identity, state, carrier and waybill checks to a nested
+    # shipment as to each documented top-level source.
+    if include_nested and nested and _text(nested.get("id") or nested.get("shipment_id")) == shipment:
+        if shipping.get("shipment_id") is not None and _text(shipping["shipment_id"]) != shipment:
+            _fail("shipment_identity_conflict")
+        candidates = [*candidates, nested]
     selected = [row for row in candidates if isinstance(row, dict) and _text(row.get("id") or row.get("shipment_id")) == shipment]
     if not selected:
         _fail("shipment_source_missing")
     timestamps = []
+    dated_waybill = False
+    delivered_waybill = False
     for row in selected:
         if _inactive(row):
             _fail("shipment_inactive")
@@ -211,16 +221,70 @@ def _shipment_time(raw, current, shipment, waybill):
         references.append(_text(tracking.get("number")))
         if any(value != waybill for value in references if value is not None):
             _fail("shipment_waybill_conflict")
+        delivered_waybill |= waybill in references and status in DELIVERED
         if row.get("delivered_at") is not None:
             timestamps.append(_instant(row["delivered_at"]))
-    if not timestamps:
+            dated_waybill = dated_waybill or waybill in references
+    if not timestamps and order_transition is not None:
+        # Order status has no shipment ID. Only the sole original, delivered
+        # waybill can inherit that transition. Never pick one of several legs.
+        at = order_transition()
+        from salla_shipping import extract_shipping, same_carrier
+        observed = extract_shipping(raw) or {}
+        if (not delivered_waybill or current.get("superseded_shipment_ids")
+                or observed.get("shipment_id") != shipment or observed.get("tracking_number") != waybill
+                or not same_carrier(current, observed)
+                or len(selected) != len(candidates)
+                or nested and _text(nested.get("id") or nested.get("shipment_id")) != shipment):
+            _fail("order_waybill_unproven")
+        if any(_instant(row["created_at"]) > at for row in selected if row.get("created_at") is not None):
+            _fail("timestamp_before_shipment")
+        return at, True
+    if not dated_waybill:
         _fail("timestamp_missing")
     if len(set(timestamps)) != 1:
         _fail("timestamp_ambiguous")
-    return timestamps[0]
+    return timestamps[0], False
 
 
-def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at, as_of):
+def delivery_requires_cod_proof(raw, event):
+    """Nested and order-level delivery proofs alone do not establish collected cash."""
+    if event.get("timestamp_source") == "order_status_transition":
+        return True
+    try:
+        _shipment_time(raw, {}, event["shipment_id"], event["waybill"], include_nested=False)
+    except ValueError:
+        return True
+    return False
+
+
+def conflicting_shipments(sources, state):
+    """A current AWB or frozen shipment already used by another order needs review."""
+    seen = defaultdict(set)
+
+    def bind(oid, shipment, waybill):
+        if oid and shipment and waybill:
+            seen[("shipment", shipment)].add(oid)
+            seen[("waybill", waybill)].add(oid)
+
+    for source in sources:
+        raw = (source.get("raw_by_source") or {}).get("salla_direct")
+        if not isinstance(raw, dict):
+            continue
+        current = source.get("salla_shipping_current") or raw.get("salla_shipping_current")
+        if isinstance(current, dict):
+            bind(_text(raw.get("id")), _text(current.get("shipment_id")), _text(current.get("tracking_number")))
+    for k, event in (state or {}).get("engine", {}).get("facts", {}).items():
+        if k.startswith("delivery_event:") and event.get("party_type") == "courier":
+            bind(_text(event.get("order_id")), _text(event.get("shipment_id")), _text(event.get("waybill")))
+    for saved in (state or {}).get("historical_shipping_fee_approvals", {}).values():
+        p = saved["candidate"]
+        if p.get("party_type") == "courier":
+            bind(_text(p.get("order_id")), _text(p.get("shipment_id")), _text(p.get("waybill")))
+    return {key for key, orders in seen.items() if len(orders) > 1}
+
+
+def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at, as_of, history=(), shipment_conflicts=()):
     """Return a proved post-start event, None outside scope, or an exact issue.
 
     The caller retains normal order eligibility independently and quotes the
@@ -270,9 +334,16 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
     if _status(raw.get("status")) not in DELIVERED and _status(current.get("status")) not in DELIVERED:
         return None
     current, shipment, waybill = _current_shipping(raw, source)
-    delivered = _window(_shipment_time(raw, current, shipment, waybill), created, start, end)
+    if ("shipment", shipment) in shipment_conflicts or ("waybill", waybill) in shipment_conflicts:
+        _fail("shipment_shared_by_orders")
+    from operational_courier_transitions import order_delivery_time
+    at, from_order = _shipment_time(raw, current, shipment, waybill,
+        order_transition=lambda: order_delivery_time(raw, source, history, end))
+    delivered = _window(at, created, start, end)
     if delivered is None:
         return None
+    if from_order:
+        base["timestamp_source"] = "order_status_transition"
     party, carrier_key = _courier(setup, owner, current)
     identity = sha256(json.dumps([order_id, shipment], ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
     return {**base, "id": "courier-delivery:" + identity, "delivered_at": delivered.isoformat(),

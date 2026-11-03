@@ -30,7 +30,11 @@ def _money(value, *, halalas=False):
 
 def _time(value):
     try:
-        result = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+        # Motor returns BSON UTC dates without tzinfo by default; unzoned strings remain ambiguous.
+        if isinstance(value, datetime):
+            result = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+        else:
+            result = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
         if result.utcoffset() is None:
             raise ValueError()
         return result.astimezone(timezone.utc)

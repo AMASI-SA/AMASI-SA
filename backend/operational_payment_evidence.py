@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 from operational_balance_bank_orders import transfer_bank
+from operational_fee_methods import order_fee_rail
 
 # Exact aliases only: fuzzy substring matching is unsafe for financial routing.
 PAYMENT_METHODS = {
@@ -42,6 +43,12 @@ DIAGNOSTICS = {
     'provider_capture_timestamp_invalid': 'تاريخ التحصيل غير صالح أو بلا منطقة زمنية',
     'provider_capture_conflict': 'مبلغ التحصيل أو تاريخه خارج نطاق الطلب',
     'provider_capture_status_conflict': 'إثبات التحصيل الكامل يتعارض مع انتظار الدفع',
+    'provider_transaction_order_conflict': 'إثبات المعاملة لا يطابق الطلب؛ لم يثبت تحصيل جديد',
+    'provider_transaction_history_conflict': 'سجلات المعاملة متعارضة أو تشمل أكثر من دفعة؛ يلزم فحص المصدر',
+    'provider_transaction_binding_conflict': 'تعذرت مطابقة معرّف المعاملة أو جهة الدفع أو عملتها مع الطلب',
+    'provider_transaction_not_captured': 'حالة معاملة الدفع ليست تحصيلًا مؤكدًا',
+    'provider_transaction_amount_conflict': 'مبلغ معاملة الدفع لا يطابق المبلغ المثبت للطلب',
+    'provider_capture_timestamp_conflict': 'تاريخ التحصيل لا يطابق فترة الطلب أو سجل دفعه',
     'provider_capture_evidence_incomplete': 'المبلغ المدفوع ظاهر لكن إثبات التحصيل المؤرخ غير مكتمل',
     'provider_refund_execution_evidence_required': 'توجد إشارة استرداد؛ يلزم مطابقة التنفيذ ومصدر المبلغ قبل الاحتساب',
     'provider_cancellation_execution_evidence_required': 'حالة الإلغاء لا تثبت إلغاء التحصيل أو تنفيذ الاسترداد',
@@ -54,6 +61,12 @@ class PaymentEvidenceError(ValueError):
 
 
 def provider_for(method):
+    if isinstance(method, dict):
+        values = [method[k] for k in ("code", "slug") if method.get(k)]
+        if not values or not all(isinstance(v, str) for v in values):
+            return None
+        routes = {provider_for(v) for v in values}
+        return routes.pop() if len(routes) == 1 else None
     if not isinstance(method, str):
         return None
     method = method.strip().lower()
@@ -114,7 +127,7 @@ def _single(values, code):
     return values[0] if values else None
 
 
-def _method_rows(raw, provider, currency):
+def _method_rows(raw, provider, currency, *, page_balance=False):
     rows = raw.get('payment_methods')
     if rows is None:
         return []
@@ -126,8 +139,12 @@ def _method_rows(raw, provider, currency):
             raise PaymentEvidenceError('provider_payment_shape_invalid')
         if provider_for(row.get('payment_method')) != provider:
             raise PaymentEvidenceError('provider_split_payment_review_required')
+        if row.get('currency') is not None and row['currency'] != currency:
+            raise PaymentEvidenceError('provider_payment_currency_conflict')
         value = _amount(row.get('amount'), currency)
-        reference = _identity(row.get('transaction_reference'), 'provider_payment_reference_missing')
+        reference = row.get('transaction_reference')
+        if reference is not None or not (page_balance and len(rows) == 1):
+            reference = _identity(reference, 'provider_payment_reference_missing')
         plan = row.get('plan_id')
         plan = _identity(plan, 'provider_payment_plan_invalid') if plan is not None else None
         item = (value, plan)
@@ -167,7 +184,7 @@ def resolve_provider(raw, *, require_known=False):
     return provider
 
 
-def normalize_payment(raw, currency, total, created_at, as_of):
+def normalize_payment(raw, currency, total, created_at, as_of, *, page_balance=False):
     """Return (payment-or-None, diagnostics), without mutating the supplied order.
 
     Native payment_methods/payment_actions fields are retained as observations.
@@ -183,7 +200,7 @@ def normalize_payment(raw, currency, total, created_at, as_of):
         if provider is None:
             return None, []
         gross = _amount(total, currency)
-        native = _method_rows(raw, provider, currency)
+        native = _method_rows(raw, provider, currency, page_balance=page_balance)
         plans = [_identity(payment['plan_id'], 'provider_payment_plan_invalid')] if payment.get('plan_id') is not None else []
         plans += [item[2] for item in native if item[2] is not None]
         plan = _single(plans, 'provider_payment_plan_conflict')
@@ -222,6 +239,9 @@ def normalize_payment(raw, currency, total, created_at, as_of):
             raise PaymentEvidenceError('provider_payment_amount_conflict')
         result = {'provider': provider, 'gross': str(gross), 'currency': currency,
                   'cancelled': '0', 'refunds': []}
+        rail = order_fee_rail(raw) if provider == 'salla' else None
+        if rail:
+            result['payment_method'] = rail
         if plan is not None:
             result['plan_id'] = plan
         if observed is not None:
@@ -229,7 +249,7 @@ def normalize_payment(raw, currency, total, created_at, as_of):
                                          'source': 'canonical_salla_order', 'is_capture': False}
         reference_values = [_identity(payment[key], 'provider_payment_reference_missing')
                             for key in ('reference', 'transaction_reference') if payment.get(key) is not None]
-        reference_values += [native[0][0]] if native else []
+        reference_values += [native[0][0]] if native and native[0][0] is not None else []
         reference = _single(reference_values, 'provider_payment_reference_conflict')
         capture_status = payment.get('status')
         if capture_status is not None and not isinstance(capture_status, str):

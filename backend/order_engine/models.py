@@ -104,6 +104,11 @@ class CustomerDTO(CanonicalDTO):
     billing_address: Optional[AddressDTO] = None
 
 
+class OrderCollectionBalanceDTO(CanonicalDTO):
+    paid: str
+    remaining: str
+
+
 class PaymentDTO(CanonicalDTO):
     """Payment facts supplied by the commerce source.
 
@@ -126,6 +131,7 @@ class PaymentDTO(CanonicalDTO):
     receiving_bank_name: Optional[str] = None
     receipt_url: Optional[str] = None
 
+    source_balance: Optional[OrderCollectionBalanceDTO] = None
     transaction_reference: Optional[str] = None
     paid_at: Optional[datetime] = None
 
