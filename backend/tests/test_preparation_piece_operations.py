@@ -13,6 +13,7 @@ from preparation_piece_operations import (
     PIECE_STATUS_ASSIGNED,
     PIECE_STATUS_IN_PROGRESS,
     PIECE_STATUS_READY_FOR_ASSEMBLY,
+    PIECE_STATUS_RECEIVED,
     WORKFLOWS,
     FileSchedulePatchRequest,
     _assembly_batch_id,
