@@ -226,7 +226,7 @@ def reconcile(state, sources, as_of):
         checkpoint = (deepcopy(obligations), deepcopy(facts), deepcopy(engine["provider_reports"]), deepcopy(engine["cod_reports"]))
         try:
             created = instant(order["created_at"])
-            if delivery_only:
+            if delivery_only or order.get("delivery_event"):
                 event = order.get("delivery_event") or {}
                 carrier = order.get("carrier") or {}
                 delivered = instant(event.get("delivered_at"))
@@ -234,7 +234,8 @@ def reconcile(state, sources, as_of):
                         or not event.get("id") or str(event.get("order_id")) != oid
                         or event.get("order_number") != order.get("order_number")
                         or instant(event.get("order_created_at")) != created
-                        or not created <= start < delivered <= now
+                        or not (start < delivered <= now and created <= delivered)
+                        or (created > start if delivery_only else created < start)
                         or instant(order.get("delivered_at")) != delivered
                         or order.get("status") not in DELIVERED
                         or order.get("currency") != "SAR" or event.get("currency") != "SAR"
@@ -334,6 +335,12 @@ def reconcile(state, sources, as_of):
                     "party_id": frozen["id"] if frozen else (carrier or {}).get("id"),
                     "confirmed_custody": amount(confirmed_cod)}
             if frozen:
+                if order.get("native_driver_earning"):
+                    earning = order["native_driver_earning"]
+                    if (earning["party_id"] != frozen["id"] or frozen["party_type"] != "store_driver"
+                            or instant(earning["delivered_at"]) != instant(frozen["delivered_at"])):
+                        raise ValueError("driver_fee_saved_conflict")
+                    fact("native_driver_earning:" + oid, {k: v for k, v in earning.items() if k != "party_name"})
                 # Identity/COD can be proven while the fee contract is incomplete.
                 # A later verified fee attaches to the already frozen actual executor.
                 fee = facts.get("shipping_fee:" + oid)

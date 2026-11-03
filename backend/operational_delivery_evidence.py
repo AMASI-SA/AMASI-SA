@@ -180,7 +180,7 @@ def _courier(setup, owner, current):
     return _text(matches[0]["courier_key"]), key
 
 
-def _shipment_time(raw, current, shipment, waybill):
+def _shipment_time(raw, current, shipment, waybill, *, include_nested=True):
     shipping = raw.get("shipping") if isinstance(raw.get("shipping"), dict) else {}
     candidates = raw.get("shipments") or []
     candidates = candidates if isinstance(candidates, list) else [candidates] if isinstance(candidates, dict) else []
@@ -190,10 +190,17 @@ def _shipment_time(raw, current, shipment, waybill):
     shipping_id = shipping.get("shipment_id") or nested.get("id")
     if shipping_id is not None:
         candidates = [*candidates, {**shipping, "id": shipping_id}]
+    # Apply the same identity, state, carrier and waybill checks to a nested
+    # shipment as to each documented top-level source.
+    if include_nested and nested and _text(nested.get("id") or nested.get("shipment_id")) == shipment:
+        if shipping.get("shipment_id") is not None and _text(shipping["shipment_id"]) != shipment:
+            _fail("shipment_identity_conflict")
+        candidates = [*candidates, nested]
     selected = [row for row in candidates if isinstance(row, dict) and _text(row.get("id") or row.get("shipment_id")) == shipment]
     if not selected:
         _fail("shipment_source_missing")
     timestamps = []
+    dated_waybill = False
     for row in selected:
         if _inactive(row):
             _fail("shipment_inactive")
@@ -213,11 +220,25 @@ def _shipment_time(raw, current, shipment, waybill):
             _fail("shipment_waybill_conflict")
         if row.get("delivered_at") is not None:
             timestamps.append(_instant(row["delivered_at"]))
-    if not timestamps:
+            dated_waybill = dated_waybill or waybill in references
+    if not dated_waybill:
         _fail("timestamp_missing")
     if len(set(timestamps)) != 1:
         _fail("timestamp_ambiguous")
     return timestamps[0]
+
+
+def delivery_only_from_nested_shipment(raw, event):
+    """A newly supported nested carrier delivery event does not evidence COD collection."""
+    shipping = raw.get("shipping")
+    nested = shipping.get("shipment") if isinstance(shipping, dict) else None
+    if not isinstance(nested, dict) or not nested.get("delivered_at"):
+        return False
+    try:
+        _shipment_time(raw, {}, event["shipment_id"], event["waybill"], include_nested=False)
+    except ValueError:
+        return True
+    return False
 
 
 def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at, as_of):

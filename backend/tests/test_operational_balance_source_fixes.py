@@ -7,7 +7,7 @@ from backend.tests.test_operational_balance_sources import HardBoundaryDB, row, 
 import operational_balance_sources as src
 
 
-def shipping_data(rate=None, **raw):
+def shipping_data(rate=None, *, delivered_shipment=False, **raw):
     base = dict(id='rate', party_type='courier', party_id='carrier', context='delivery', currency='SAR',
                 effective_from=START, effective_to=None, status='approved', confirmed_by='owner', confirmed_at=START)
     if rate is None:
@@ -16,6 +16,14 @@ def shipping_data(rate=None, **raw):
             'mezan_product_cost_profiles_v2': [row(salla_product_id='p1', base_cost='20')],
             'mz2_shipping_setup_v2': [row(couriers=[dict(courier_key='carrier', name='Carrier', status='active',
                 confirmed_by='owner', confirmed_at=START, salla_carrier_keys=['carrier'])], contracts=[rate])]}
+    # A customer-facing delivered status is not shipment-specific delivery evidence.
+    if delivered_shipment:
+        order_raw = data['unified_orders'][0]['raw_by_source']['salla_direct']
+        data['unified_orders'][0]['salla_shipping_current'] = {
+            'source_kind':'shipment', 'company_code':'carrier','company_name':'Carrier',
+            'shipment_id':'shipment','tracking_number':'TEST-AWB','status':'delivered'}
+        order_raw['shipments'] = [{'id':'shipment','tracking_number':'TEST-AWB','company':{'code':'carrier'},
+                                  'status':'delivered','delivered_at':'2026-10-06T12:00:00+00:00'}]
     if rate.get('kind') == 'rich':
         data['mz2_shipping_setup_v2'][0]['contract_evidence'] = [{k:v for k,v in item.items() if k not in ('size','snapshot_sha256')} for item in rate['evidence_snapshot']['items']]
     return data
@@ -104,7 +112,7 @@ def test_rich_valid_base_survives_uncovered_commission_and_cod_stays_confirmed()
     from decimal import Decimal
     rate = rich_rate()
     rate['contract_version']['cod_fee_tiers'][0]['max_amount'] = '100'
-    data = shipping_data(rate, payment={'method': 'cod'}, paid_amount='100', status='delivered')
+    data = shipping_data(rate, delivered_shipment=True, payment={'method': 'cod'}, paid_amount='100', status='delivered')
     result = run(src.collect_sources(HardBoundaryDB(data), 'owner', START, NOW))
     carrier = result['orders'][0]['carrier']
     assert Decimal(carrier['cost']) == Decimal('10') and carrier['fee_complete'] is False

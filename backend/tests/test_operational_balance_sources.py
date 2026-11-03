@@ -396,6 +396,7 @@ HARD_SOURCE_ALLOWLIST = frozenset({'mz2_bank_transfer_bindings',
     'unified_orders', 'mezan_products_v2', 'mezan_product_cost_profiles_v2', 'mezan_product_resource_bindings_v2',
     'mezan_product_option_cost_bindings_v2', 'mezan_cost_resources_v2', 'mezan_preparation_pieces_v1',
     'mezan_supplier_invoices_v2', 'store_delivery_assignments', 'store_delivery_collections',
+    'store_delivery_driver_earnings', 'store_delivery_driver_settlements',
     'mezan_employee_salary_contracts_v2', 'operating_recurring_obligations_v2', 'operating_recurring_invoices_v2',
     'mz2_operational_owner_beneficiaries_v2',  # Explicit non-auth operational withdrawal registry.
     'mezan_snapchat_daily_projections_v2', 'mezan_meta_performance_daily_v2',
