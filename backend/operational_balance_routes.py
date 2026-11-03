@@ -41,6 +41,15 @@ class CourierTariffApproval(Request):
     confirmed: Literal[True]
 
 
+class ProviderHistoryApproval(Request):
+    order_id: str = Field(min_length=1, max_length=160)
+    expected_preview_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    expected_session_scope: str = Field(pattern=r"^[a-f0-9]{64}$")
+    evidence_id: str = Field(pattern=r"^[a-f0-9]{64}$")
+    statement_reference: str = Field(min_length=3, max_length=250)
+    confirmed_outstanding: bool
+
+
 class Opening(Request):
     party_type: PartyType
     party_id: str = Field(min_length=1, max_length=200)
@@ -910,6 +919,19 @@ def make_operational_balance_router(db, current_user):
         actor, owner, _ = await scope(db, user, "bank_manage")
         from operational_historical_shipping_service import approve
         return await approve(db, owner, actor["id"], payload.model_dump())
+
+
+    @router.get('/provider-history-reviews')
+    async def provider_history_candidates(user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, 'bank_manage')
+        from operational_provider_history_service import candidates
+        return await candidates(db, owner, actor['id'])
+
+    @router.post('/provider-history-reviews/approve')
+    async def provider_history_approve(payload: ProviderHistoryApproval, user=Depends(guarded('bank_manage'))):
+        actor, owner, _ = await scope(db, user, 'bank_manage')
+        from operational_provider_history_service import approve
+        return await approve(db, owner, actor['id'], payload.model_dump())
 
     @router.get('/native-purchase-links/{invoice_id}/candidates')
     async def native_purchase_candidates(invoice_id: str, user=Depends(current_user)):

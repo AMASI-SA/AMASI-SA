@@ -5,6 +5,7 @@ It carries no price, sale, customer payment, bank effect, or opening allocation.
 Only an explicit delivery timestamp can cross the opening boundary: a source
 update clock or delivered label cannot supply a missing event time.
 """
+from collections import defaultdict
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
@@ -257,7 +258,33 @@ def delivery_requires_cod_proof(raw, event):
     return False
 
 
-def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at, as_of, history=()):
+def conflicting_shipments(sources, state):
+    """A current AWB or frozen shipment already used by another order needs review."""
+    seen = defaultdict(set)
+
+    def bind(oid, shipment, waybill):
+        if oid and shipment and waybill:
+            seen[("shipment", shipment)].add(oid)
+            seen[("waybill", waybill)].add(oid)
+
+    for source in sources:
+        raw = (source.get("raw_by_source") or {}).get("salla_direct")
+        if not isinstance(raw, dict):
+            continue
+        current = source.get("salla_shipping_current") or raw.get("salla_shipping_current")
+        if isinstance(current, dict):
+            bind(_text(raw.get("id")), _text(current.get("shipment_id")), _text(current.get("tracking_number")))
+    for k, event in (state or {}).get("engine", {}).get("facts", {}).items():
+        if k.startswith("delivery_event:") and event.get("party_type") == "courier":
+            bind(_text(event.get("order_id")), _text(event.get("shipment_id")), _text(event.get("waybill")))
+    for saved in (state or {}).get("historical_shipping_fee_approvals", {}).values():
+        p = saved["candidate"]
+        if p.get("party_type") == "courier":
+            bind(_text(p.get("order_id")), _text(p.get("shipment_id")), _text(p.get("waybill")))
+    return {key for key, orders in seen.items() if len(orders) > 1}
+
+
+def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at, as_of, history=(), shipment_conflicts=()):
     """Return a proved post-start event, None outside scope, or an exact issue.
 
     The caller retains normal order eligibility independently and quotes the
@@ -307,6 +334,8 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
     if _status(raw.get("status")) not in DELIVERED and _status(current.get("status")) not in DELIVERED:
         return None
     current, shipment, waybill = _current_shipping(raw, source)
+    if ("shipment", shipment) in shipment_conflicts or ("waybill", waybill) in shipment_conflicts:
+        _fail("shipment_shared_by_orders")
     from operational_courier_transitions import order_delivery_time
     at, from_order = _shipment_time(raw, current, shipment, waybill,
         order_transition=lambda: order_delivery_time(raw, source, history, end))

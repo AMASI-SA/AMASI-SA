@@ -132,12 +132,12 @@ def prestart_open_cod(raw_orders, data, state, started, stamp, ids, numbers, ope
             "withheld_candidates":withheld}
 
 
-def snapshot_cod_preview(exposure, started_at, as_of):
+def snapshot_cod_preview(exposure, started_at, as_of, key='prestart_open_cod'):
     if not isinstance(exposure, dict) or exposure.get("status") != "preview":
         return {}
     try:
         if instant(exposure["started_at"]) == instant(started_at) and instant(exposure["as_of"]) == instant(as_of) == instant(exposure["engine_as_of"]):
-            return (exposure.get("prestart_open_cod") or {}).get("by_currency") or {}
+            return (exposure.get(key) or {}).get("by_currency") or {}
     except (ValueError, KeyError, TypeError):
         pass
     return {}

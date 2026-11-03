@@ -292,16 +292,18 @@ def _provider_tables(obligations, details, issues):
     return fee_table, collection_table
 
 
-def _cod_table(obligations, details, prestart=None):
+def _cod_table(obligations, details, prestart=None, customer=None):
     facts = details.get("facts") or {}
     metrics = details.get("cod_reports") or {}
+    customer = customer or {}
+    replaced = set(customer.get("replaced", []))
     rows = []
     for obligation in obligations:
         if obligation.get("kind") != "cod" or not str(obligation.get("id", "")).startswith("cod:"):
             continue
         identity = obligation["id"]
         order = identity[len("cod:"):]
-        if facts.get("shipping:" + order):
+        if identity in replaced or facts.get("shipping:" + order):
             continue
         source = metrics.get(identity, {})
         due, gross, collected = (_number(source.get(key)) for key in ("customer_outstanding", "gross", "collected"))
@@ -327,13 +329,14 @@ def _cod_table(obligations, details, prestart=None):
     if prestart:
         rows.append({"id":"prestart_customer_cod", "name":"طلبات سابقة لبدء التشغيل ببوليصة خارجية جارية",
                      "orders":prestart["orders"], "amount":prestart["amount"]})
+    rows.extend(customer.get("rows", []))
     known = [row["amount"] for row in rows if row["amount"] is not None]
     return _table("cod_expected", "تحصيل متوقع من العملاء للطلبات غير المسلمة", "forecast",
                   [_column("name", "مسار التحصيل / المطالبة", "text"), _column("orders", "الطلبات", "count"),
                    _column("amount", "تحصيل متوقع من العميل", role="receivable")], rows, complete=False,
                   totals={"amount": None, "orders": None},
                   notes=[UNKNOWN + COD_SCOPE,
-                         "تشمل معاينة الطلبات السابقة الحالات ذات البوليصة الخارجية الجارية والمبلغ المتبقي المثبت في سلة.",
+                         "تظهر مبالغ الطلبات المفتوحة المؤيدة بصفحة الطلب قبل الإسناد وبعده. تتطلب الطلبات السابقة دليلًا مؤرخًا بعد بداية التشغيل.",
                          "المبالغ المتوقعة ليست عهدة نقدية لدى المندوب ولا تضاف إلى رصيد شركة الشحن المثبت.",
                          ("مجموع التحصيل المتوقع في الصفوف المتاحة " + _money(_sum(known)) + ".") if known
                          else "لم يثبت مبلغ تحصيل متوقع في الصفوف المتاحة."])
@@ -488,6 +491,8 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     currencies = {row["currency"] for row in projection["parties"]}
     prestart_cod = snapshot_cod_preview(cost_exposure, projection["started_at"], projection["as_of"])
     currencies.update(prestart_cod)
+    customer_cod = snapshot_cod_preview(cost_exposure, projection["started_at"], projection["as_of"], "open_customer_cod")
+    currencies.update(customer_cod)
     page_payments = order_page_payment_rows(projection)
     currencies.update(page_payments)
     if cost_ready:
@@ -539,7 +544,7 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         costs = _cost_tables(cost_exposure, currency, obligations)
         currency_issues = [row for row in projection["issues"] if row.get("currency") in {None, currency}]
         fees, provider_future = _provider_tables(obligations, projection["details"], currency_issues)
-        cod = _cod_table(obligations, projection["details"], prestart_cod.get(currency))
+        cod = _cod_table(obligations, projection["details"], prestart_cod.get(currency), customer_cod.get(currency))
         tables.extend([costs[-1], *costs[:-1], cod, fees, provider_future])
         forecast_rows = [_row(table["id"], table["title"], table["totals"]["amount"],
                               "positive" if table["id"] in {"cod_expected", "provider_collections_expected"} else "negative",

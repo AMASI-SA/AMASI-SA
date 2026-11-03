@@ -29,6 +29,9 @@ async def _preview(db, owner, actor, number, stamp):
                 p = hits[0] if len(hits) == 1 else None
                 saved = saved_for(state, number)
                 openings, payouts, issues = review(state, p)
+                native_conflict = sources.get("historical_fee_native_conflicts", {}).get(number)
+                if native_conflict:
+                    issues.append(native_conflict)
                 if not p:
                     for entry in sources["issues"]:
                         details = entry.get("driver_fee_review") or entry.get("courier_fee_review") or {}

@@ -238,7 +238,7 @@ def normalize_history_row(
     }
 
     from operational_courier_transitions import native_status_transition
-    transition = native_status_transition(row, title, base["event_type"], provider_order_id)
+    transition = native_status_transition(row, provider_order_id)
     return {
         **({"native_status_transition": transition} if transition else {}),
         "order_number": order_number,

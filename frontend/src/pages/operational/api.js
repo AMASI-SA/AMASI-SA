@@ -7,6 +7,8 @@ export const operationalApi = {
     `${base}/supplier-invoice-review/receiving/${encodeURIComponent(invoiceId)}/correction-preview`,
     {params: {expected_as_of: asOf, expected_revision: revision}})),
   supplierInvoiceReview: () => data(api.get(`${base}/supplier-invoice-review`)),
+  providerHistoryReviews: () => data(api.get(`${base}/provider-history-reviews`)),
+  approveProviderHistory: body => data(api.post(`${base}/provider-history-reviews/approve`, body)),
   nativePurchaseCandidates: id => data(api.get(`${base}/native-purchase-links/${encodeURIComponent(id)}/candidates`)),
   previewNativePurchaseLink: body => data(api.post(`${base}/native-purchase-links/preview`, body)),
   approveNativePurchaseLink: body => data(api.post(`${base}/native-purchase-links/approve`, body)),

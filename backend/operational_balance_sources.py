@@ -63,7 +63,8 @@ from operational_payment_evidence import PAYMENT_METHODS, DIAGNOSTICS
 from operational_provider_transaction_evidence import (COLLECTION as TXN_COLLECTION,
     load_transaction_rows, normalize_operational_payment)
 from operational_courier_transitions import COLLECTION as DELIVERY_HISTORY, load_delivery_history
-ALLOWED_COLLECTIONS = ALLOWED_COLLECTIONS | {TXN_COLLECTION, DELIVERY_HISTORY}
+from operational_historical_shipping_fee import NATIVE_EVENTS as SHIPPING_EVENT_BLOCKERS, NATIVE_V2 as SHIPPING_V2_BLOCKERS
+ALLOWED_COLLECTIONS = ALLOWED_COLLECTIONS | {TXN_COLLECTION, DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS}
 
 MAX_ROWS = 20000
 # Existing MZ2 daily-movement codes plus explicitly requested operational types.
@@ -304,7 +305,7 @@ def usable(row):
 
 
 async def rows(db, owner, collection):
-    if not owner or collection not in ALLOWED_COLLECTIONS or collection in {TXN_COLLECTION, DELIVERY_HISTORY, 'users', 'settings', 'accounts', 'mz2_operational_bank_accounts'}:
+    if not owner or collection not in ALLOWED_COLLECTIONS or collection in {TXN_COLLECTION, DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'accounts', 'mz2_operational_bank_accounts'}:
         raise ValueError('operational_source_rejected')
     # Only native fee proof and payout state belong in the financial reader.
     # In particular never load receipt URLs, bank identifiers or note text here.
@@ -837,7 +838,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     out['delivery_event_coverage'] = {'version': 1, 'started_at': start.isoformat(), 'as_of': now.isoformat()}
     # No service with side effects is called: collection access is allowlisted.
     # The inventory catalogue is read on demand, not on each financial sync.
-    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - {TXN_COLLECTION, DELIVERY_HISTORY, 'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})}
+    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - {TXN_COLLECTION, DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})}
     from operational_shipping_fee_review import DriverEarnings, courier_issue, hold_prior_courier_event
     from operational_historical_shipping_fee import APPROVALS
     data['_review_fee_state'] = operational_state
@@ -865,6 +866,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     order_numbers = {}
     raw_orders = [(r.get('raw_by_source') or {}).get('salla_direct') for r in data['unified_orders']]
     raw_orders = [r for r in raw_orders if isinstance(r, dict)]
+    from operational_delivery_evidence import conflicting_shipments
+    shipment_conflicts = conflicting_shipments(data['unified_orders'], operational_state)
     delivery_history = await load_delivery_history(db, owner, data['unified_orders'], max_rows=MAX_ROWS)
     txn_by_order = await load_transaction_rows(db, owner, raw_orders, start, now, to_instant=instant, max_rows=MAX_ROWS)
     from operational_remaining_bundle_sources import load_remaining_bundles
@@ -904,7 +907,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 from operational_delivery_evidence import resolve_delivery_event
                 event = resolve_delivery_event(raw, source=source, owner=owner,
                     assignments=data['store_delivery_assignments'], setup=setup,
-                    started_at=started_at, as_of=as_of, history=delivery_history.get(order_number, ()))
+                    started_at=started_at, as_of=as_of, history=delivery_history.get(order_number, ()),
+                    shipment_conflicts=shipment_conflicts)
                 if event is None:
                     continue
                 order = {'id': identity, 'order_number': order_number, 'created_at': created.isoformat(),
@@ -1048,7 +1052,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         if not native_driver and status not in DELIVERED:
                             raise ValueError('operational_delivery_order_shipment_status_conflict')
                         event = resolve_delivery_event(raw, source=source, owner=owner,
-                            assignments=data['store_delivery_assignments'], setup=setup, started_at=started_at, as_of=as_of, history=delivery_history.get(order_number, ()))
+                            assignments=data['store_delivery_assignments'], setup=setup, started_at=started_at, as_of=as_of,
+                            history=delivery_history.get(order_number, ()), shipment_conflicts=shipment_conflicts)
                         if event is None:
                             raise ValueError('operational_delivery_timestamp_missing')
                         saved = (operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity)
@@ -1192,6 +1197,10 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     _employees(data, out)
     _advertising(data, out, start, now, baselines)
     _recurring(data, out, start, now)
+    if out.get('historical_fee_candidates'):
+        from operational_historical_shipping_fee import native_conflicts
+        out['historical_fee_native_conflicts'] = await native_conflicts(
+            db, owner, out['historical_fee_candidates'], max_rows=MAX_ROWS)
     return out
 
 

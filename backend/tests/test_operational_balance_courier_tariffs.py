@@ -74,7 +74,7 @@ def test_preview_then_pin_delivery_at_approved_price_and_replay_without_new_cash
             assert len(rates) == 2 and fee_total(await calculate(d, {**active(), 'courier_tariffs': rates})) == Decimal('21.85')
             native = {'user_id':'owner','couriers':[{'courier_key':'custom', 'salla_carrier_keys':['SmSa']}]}
             projected, conflicts = with_tariffs(native,'owner',{'owner_id':'owner','courier_tariffs':rates})
-            assert conflicts == ['smsa'] and not projected['couriers'] and not projected['contracts']
+            assert conflicts == ['smsa'] and projected['couriers'] == native['couriers'] and not projected['contracts']
     run(scenario())
 
 
@@ -108,3 +108,63 @@ def test_incomplete_cod_is_not_zero_and_unmatched_band_does_not_hide_base():
         assert q['fee_components'][1]['amount'] is None
     with pytest.raises(ValueError):
         terms(dict(COMPANY, vat_rate=.05))
+
+def test_only_exact_native_identity_can_replace_a_settings_label_and_periods_do_not_stack():
+    async def scenario():
+        async with database() as db:
+            cfg = {'user_id':'owner', 'couriers':[{'courier_key':'carrier-key', 'name':'سمسا',
+                'status':'active', 'salla_carrier_keys':['SMSA'], 'confirmed_by':'owner', 'confirmed_at':START}], 'contracts':[]}
+            await db.mz2_shipping_setup_v2.insert_one(deepcopy(cfg))
+            await db.settings.insert_one({'user_id':'owner','shipping_companies':[
+                COMPANY, dict(COMPANY, name='Former SMSA subcontractor')]})
+            catalog_rows = (await catalog(db, 'owner'))['items']
+            candidate, custom = catalog_rows
+            assert candidate['id'] == 'carrier-key' and candidate['keys'] == ['SMSA']
+            assert custom['name'] == 'Former SMSA subcontractor' and custom['unavailable'] and 'source_hash' not in custom
+            args = dict(party_id=candidate['id'], source_hash=candidate['source_hash'], reason='مستند',
+                        effective_from=START, confirmed=True, request_id='terms-1')
+            with pytest.raises(HTTPException) as exc:
+                await approve(db,'owner','owner',{**args,'effective_from':'2999-01-01T00:00:00Z'})
+            assert exc.value.detail['code'] == 'courier_tariff_future_date'
+            approval = await approve(db,'owner','owner',args)
+            state = {**active(), 'courier_tariffs': (await read(db,'owner'))['courier_tariffs']}
+            d = shipment()
+            d['mz2_shipping_setup_v2'] = [cfg]
+            initial = await calculate(d,state)
+            assert fee_total(initial) == Decimal('21.85')
+            assert initial['engine']['obligations']['cod:100']['party_id'] == 'carrier-key'
+            native = dict(courier_data()['mz2_shipping_setup_v2'][0]['contracts'][0],party_id='carrier-key',effective_from=START, effective_to=NOW)
+            cfg['contracts'] = [native]
+            overlap = await calculate(d, state)
+            assert fee_total(overlap) == 0
+            assert overlap['engine']['obligations']['cod:100']['confirmed'] == '200.00'
+            cfg['contracts'][0]['effective_to'] = '2026-10-06T12:00:00+00:00'  # event begins exactly then
+            assert fee_total(await calculate(d,state)) == Decimal('21.85')
+            cfg['contracts'][0]['effective_from'] = START
+            cfg['couriers'][0]['salla_carrier_keys'] = ['SMSA','OTHER']
+            projected, conflicts = with_tariffs(cfg,'owner',state)
+            assert conflicts == ['carrier-key'] and projected['couriers'] == cfg['couriers']
+            assert projected['contracts'] == cfg['contracts']
+            assert approval['id'] == 'carrier-key'
+    run(scenario())
+
+
+
+def test_approved_operational_tariff_prices_open_shipping_preview_without_a_native_contract():
+    from test_operational_open_cost_exposure import native_order, seeded_db, operating_state, preview
+    version = dict(id='smsa',name='سمسا',keys=['smsa','سمسا'],currency='SAR',terms=terms(COMPANY),
+        effective_from=START,version_id='v1',confirmed_at=NOW,confirmed_by='owner')
+    state = {**operating_state(), 'owner_id':'owner','courier_tariffs':[version]}
+    d = seeded_db(order_row=native_order(shipping={'company_code':'SMSA'}))
+    result=preview(d,state)
+    groups = [g for g in result['groups'] if g['party_id']=='smsa']
+    assert len(groups) == 1 and groups[0]['amount'] == '17.25'
+    assert not any(i['code']=='historical_shipping_unassigned' for i in result['issues'])
+
+def test_same_slug_does_not_expand_prior_custom_waybill_identity():
+    first = dict(id="other:a_b", name="A&B", keys=["A&B"], currency="SAR", terms=terms(COMPANY),
+                 effective_from=START, version_id="first", confirmed_at=START, confirmed_by="owner")
+    second = {**first,"name":"A-B","keys":["A-B"],"version_id":"next","effective_from":NOW}
+    state = {**active(), "courier_tariffs":[first, second]}
+    setup, conflicts = with_tariffs({}, "owner", state)
+    assert conflicts == ["other:a_b"] and setup["couriers"] == [] and setup["contracts"] == []

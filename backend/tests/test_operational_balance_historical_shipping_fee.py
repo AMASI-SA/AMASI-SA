@@ -105,3 +105,46 @@ def test_changed_evidence_between_preview_approval_or_refresh_fails_closed(kind)
         assert any(i["code"]=="historical_shipping_fee_source_changed" for i in first["engine"]["issues"])
         assert first["movements"] == [] and first["openings"] == state["openings"]
     run(scenario)
+
+
+@pytest.mark.parametrize("event,kind", [
+    ({"kind":"courier_fee","facts":{"order_number":"10"}}, "courier"),
+    ({"kind":"courier_fee","facts":{"order_number":"another","waybill":"TEST-AWB"}}, "courier"),
+    ({"kind":"store_driver_cod","facts":{"assignment_id":"assignment","delivery_fee":"10.00"}}, "store_driver"),
+    ({"kind":"shipping_settlement","facts":{"counterparty_type":"courier","counterparty_id":"carrier",
+        "settlement_type":"net_settlement","offset_amount":"5.00"}}, "courier"),
+    ({"kind":"shipping_settlement","facts":{"counterparty_type":"store_driver","counterparty_id":"driver",
+        "settlement_type":"fee_payment","offset_amount":"0.00"}}, "store_driver"),
+])
+def test_native_shipping_fee_or_pooled_offset_blocks_release_without_mutating_the_native_source(event, kind):
+    async def scenario(db):
+        state = await prepare(db, kind)
+        await db.mz2_shipping_accounting_events.insert_one({**event,"user_id":"other","status":"posted"})
+        p = await preview(db,"owner","owner","10",clock=NOW)
+        assert p["can_approve"]
+        await db.mz2_shipping_accounting_events.insert_one({**event,"user_id":"owner","status":"posting"})
+        assert not (await preview(db,"owner","owner","10",clock=NOW))["can_approve"]
+        with pytest.raises(HTTPException):
+            await approve(db,"owner","owner",consent(p),clock=NOW)
+        assert await read(db,"owner") == state
+        await db.mz2_shipping_accounting_events.delete_one({"user_id":"owner"})
+        await approve(db,"owner","owner",consent(p),clock=NOW)
+        state = await read(db,"owner")
+        await db.mz2_shipping_accounting_events.insert_one({**event,"user_id":"owner","status":"posted"})
+        result = await refreshed(db, state)
+        assert fee_total(result) == 0 and result["movements"] == []
+        assert any(i["code"]=="historical_shipping_fee_native_overlap" for i in result["engine"]["issues"])
+        assert await db.mz2_shipping_accounting_events.count_documents({"user_id":"owner","status":"posted"}) == 1
+    run(scenario)
+
+
+@pytest.mark.parametrize("e", [
+    {"kind":"fee","order_number":"10","party_type":"courier","party_id":"another"},
+    {"kind":"settlement","party_type":"courier","party_id":"carrier","action":"pay_fee"},
+])
+def test_v2_shipping_posting_or_settlement_blocks_same_fee(e):
+    async def scenario(db):
+        await prepare(db,"courier")
+        await db.mz2_shipping_native_events_v2.insert_one({**e,"user_id":"owner"})
+        assert not (await preview(db,"owner","owner","10",clock=NOW))["can_approve"]
+    run(scenario)

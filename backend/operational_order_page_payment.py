@@ -20,7 +20,7 @@ def corroborated_refund_basis(previous, payment, facts, order_id):
     return bool(records) and sum(records.values(), Decimal(0)) == _amount(previous["paid"], currency)
 
 
-def observed_balance(page, payment, order, state, *, now, start):
+def observed_balance(page, payment, order, state, *, now, start, historical_reviewed=False):
     """Return one current observation, or withhold it without changing any ledger object."""
     facts = state.get("engine", {}).get("facts", {})
     oid = str(order["id"])
@@ -69,7 +69,7 @@ def observed_balance(page, payment, order, state, *, now, start):
         last_version = state.get("engine", {}).get("order_versions", {}).get(oid)
         if not last_version or not version or version <= _instant(last_version):
             raise ValueError("provider_order_page_version_conflict")
-    if paid > known and not previous and not frozen and cutoff and created <= _instant(cutoff):
+    if paid > known and not previous and not frozen and cutoff and created <= _instant(cutoff) and not historical_reviewed:
         raise ValueError("provider_historical_capture_review_required")
     if paid > known:
         allocated = Decimal(0)

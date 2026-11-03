@@ -13,6 +13,7 @@ import {
 import "./financialPosition.css";
 import NativePurchaseReview from "./NativePurchaseReview";
 import HistoricalShippingFeeReview from "./HistoricalShippingFeeReview";
+import ProviderHistoryReview from "./ProviderHistoryReview";
 
 const emptyFilters = () => ({ order: "", party: "", payment: "" });
 const inactiveMessages = {
@@ -216,6 +217,7 @@ export default function OperationalFinancialPosition() {
         {exportError && <p className="ofp-warning ofp-no-print" role="alert">{exportError}</p>}
         {report && report.status !== "active" && <div className="ofp-page-notice" role="status"><Info size={24} aria-hidden="true" /><p>{inactiveMessages[report.status] || "التقرير التشغيلي الحالي غير متاح في هذه المرحلة."}</p></div>}
         {report?.status === "active" && !data && <div className="ofp-page-notice" role="status">لا توجد بيانات عملة جاهزة للعرض حتى آخر احتساب.</div>}
+        {data && user?.role === "owner" && <ProviderHistoryReview key={"history" + scope + report.session_scope} sessionScope={report.session_scope} />}
         {data && user?.role === "owner" && <NativePurchaseReview key={scope + report.session_scope} sessionScope={report.session_scope} onRefresh={refresh} />}
         {data && user?.role === "owner" && <div className="ofp-no-print">
             <a className="ofp-button" href="/shipping-settings-v2">مراجعة تعرفة شركات الشحن</a>

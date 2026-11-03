@@ -10,6 +10,8 @@ import re
 
 from operational_cost_completeness import cost_completeness
 from operational_prestart_cod_forecast import prestart_open_cod
+from operational_open_customer_cod import open_customer_cod
+from operational_courier_tariffs import matches as matches_courier_key, with_tariffs
 from operational_product_cost_policy import unreceived_eligible
 from operational_remaining_bundle_sources import load_remaining_bundles
 
@@ -142,6 +144,10 @@ async def project(db, owner, state, *, as_of=None):
     setup = setups[0] if len(setups) == 1 else {}
     if len(setups) > 1:
         issues["shipping_setup_ambiguous"] += 1
+    else:
+        setup, conflicts = with_tariffs(setup, owner, state)
+        if conflicts:
+            issues["operational_courier_tariff_authority_conflict"] += len(conflicts)
     pieces = [r for r in data["mezan_preparation_pieces_v1"]
         if not r.get("experiment_mode") and not r.get("experiment_run_id")]
     piece_counts = Counter(str(r.get("id") or "") for r in pieces)
@@ -362,7 +368,7 @@ async def project(db, owner, state, *, as_of=None):
             carrier = shipping.get("company_code") or shipping.get("company")
             candidates = [c for c in setup.get("couriers", []) if usable(c)
                 and c.get("confirmed_by") and c.get("confirmed_at")
-                and carrier in (c.get("salla_carrier_keys") or [])]
+                and matches_courier_key(c, carrier)]
             if len(candidates) == 1 and candidates[0].get("courier_key"):
                 party = str(candidates[0]["courier_key"])
                 label = _name(candidates[0], "شركة شحن")
@@ -487,6 +493,8 @@ async def project(db, owner, state, *, as_of=None):
         "engine_as_of": engine_at.isoformat() if engine_at else None, "started_at": started.isoformat(),
         "currencies": {c: {k: _fmt(v) for k, v in sorted(details.items())} for c, details in sorted(currencies.items())},
         "distinct_order_counts": counts,
+        "open_customer_cod": {"by_currency": await open_customer_cod(db, owner, raw_orders, data, state,
+            started, stamp, ids, nums)} if engine_at == stamp else {},
         "prestart_open_cod": prestart_open_cod(raw_orders, data, state, started,
             stamp, ids, nums, OPEN) if engine_at == stamp else {"by_currency":{}},
         "bucket_completeness": cost_completeness(issues, declared_scopes),

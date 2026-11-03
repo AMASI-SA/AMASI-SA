@@ -83,6 +83,7 @@ def reconcile_credits(state):
 
 
 from operational_provider_fees import provider_projection, independent_capture_without_fee_policy
+from operational_provider_history import approved_context, proof_hash
 from operational_provider_transaction_evidence import VERSION as NATIVE_TRANSACTION_EVIDENCE_VERSION, CANONICAL_WITH_UNBOUND_ACTIVITY
 from operational_product_cost_policy import unreceived_eligible
 from operational_order_page_payment import corroborated_refund_basis, observed_balance
@@ -417,7 +418,8 @@ def reconcile(state, sources, as_of):
                     payment["refunds"] = current_refunds
                     if page_mode and current_refunds and corroborated_refund_basis(facts.get(page_key), payment, facts, oid):
                         page_mode = False
-                    page_fact = observed_balance(page, payment, order, result, now=now, start=start) if page_mode else None
+                    reviewed = approved_context(state, order, payment) if page else False
+                    page_fact = observed_balance(page, payment, order, result, now=now, start=start, historical_reviewed=reviewed) if page_mode else None
                     recognition_day = instant(page_fact["observed_at"]).astimezone(RIYADH).date() if page_mode else created.date()
                     policy_day = created.astimezone(RIYADH).date()
                     try:
@@ -438,7 +440,7 @@ def reconcile(state, sources, as_of):
                                 raise
                             # A corroborating transaction cannot invalidate the independently
                             # proved page balance just because the fee schedule is damaged.
-                            observed_balance(page, payment, order, result, now=now, start=start)
+                            observed_balance(page, payment, order, result, now=now, start=start, historical_reviewed=reviewed)
                         if not page_mode and any(a.get("obligation_id") in {provider_key, "credit:" + provider_key}
                                for m in result.get("movements", []) for a in m.get("allocations", [])):
                             raise ValueError("provider_settled_capture_review_required") from exc
@@ -459,7 +461,7 @@ def reconcile(state, sources, as_of):
                                        if k.startswith("capture:") and v.get("order_id") == oid)):
                             raise ValueError("provider_capture_identity_conflict")
                         prior_as_of = (state.get("engine") or {}).get("as_of")
-                        if require_history_check and prior_as_of and any("capture:" + str(c["id"]) not in facts and
+                        if not reviewed and require_history_check and prior_as_of and any("capture:" + str(c["id"]) not in facts and
                                 instant(c["captured_at"]) <= instant(prior_as_of)
                                 for c in captures):
                             raise ValueError("provider_historical_capture_review_required")
@@ -531,6 +533,7 @@ def reconcile(state, sources, as_of):
                         obligations[provider_key]["incomplete"] = True
                     if page and str(error) in {"provider_historical_capture_review_required", "provider_settled_capture_review_required"}:
                         issues.append({"code": str(error), "source_id": provider_key, "provider": payment["provider"],
+                                       "history_proof_hash": proof_hash(order, payment), "history_created_at": order["created_at"],
                                        "order_page_balance_review": {k: page[k] for k in
                                            ("order_id", "order_number", "provider", "currency", "gross", "paid", "remaining")}})
                     else:
