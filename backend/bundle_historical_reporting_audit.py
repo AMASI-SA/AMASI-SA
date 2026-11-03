@@ -41,13 +41,14 @@ def _identity(value: Any) -> str | None:
 
 def _source_rows(item: dict) -> list[dict]:
     """Use the source field families already handled by the Salla mapper."""
-    product = item.get("product") if isinstance(item.get("product"), dict) else {}
-    variant = item.get("variant") if isinstance(item.get("variant"), dict) else {}
     rows: list[dict] = []
+    # Provider *item selections* only. Nested product/variant catalogs list
+    # every available option, not necessarily what this buyer selected.
+    # Those catalog arrays must never masquerade as historical choices.
     for candidate in (
         item.get("options"), item.get("choices"), item.get("attributes"),
         item.get("product_options"), item.get("selected_options"),
-        item.get("customer_options"), variant.get("options"), product.get("options"),
+        item.get("customer_options"),
     ):
         if isinstance(candidate, list):
             rows.extend(candidate)
