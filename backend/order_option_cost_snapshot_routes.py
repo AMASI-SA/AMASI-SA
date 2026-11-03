@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pymongo import ASCENDING
 
 from order_engine.repository import MongoOrderRepository
@@ -322,129 +322,5 @@ def make_order_option_cost_snapshot_router(db: Any, current_user: Callable[..., 
         return {"order_number": number, "currency": "SAR", "items": rows,
                 "total_cost": known if complete else None, "known_total_cost": known,
                 "cost_complete": complete, "snapshot_exists": bool(authority["lines"])}
-
-    async def _bundle_source_evidence(
-        *, order_number: str, order_item_id: str | None, user: dict,
-    ) -> dict[str, Any]:
-        from bundle_historical_reporting_audit import (
-            BundleHistoricalEvidenceUnavailable, inspect_historical_bundle_order,
-        )
-        if not isinstance(user, dict) or not (
-            str(user.get("role") or "").strip().lower() == "owner"
-            or user.get("is_owner") is True
-        ):
-            raise HTTPException(status_code=403, detail={"code": "owner_required"})
-        owner_id = str(user["id"])
-        number = str(order_number).strip()
-        if not number or len(number) > 64:
-            raise HTTPException(status_code=422, detail={"code": "order_number_invalid"})
-        try:
-            order = await get_order(MongoOrderRepository(db), user_id=owner_id, order_number=number)
-        except OrderNotFoundError as exc:
-            raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
-        if not order_item_id:
-            if len(order.items) != 1:
-                raise HTTPException(status_code=422, detail={"code": "explicit_order_item_id_required"})
-            order_item_id = order.items[0].order_item_id
-        item = next((row for row in order.items if row.order_item_id == order_item_id), None)
-        if item is None:
-            raise HTTPException(status_code=404, detail={"code": "order_item_not_found"})
-        product_ids = {str(v) for v in (item.product_id, item.parent_product_id) if v}
-        if not product_ids or not await db["mezan_bundle_definitions_v2"].find_one(
-            {"user_id": owner_id, "product_type": "composite",
-             "product_id": {"$in": sorted(product_ids)}}, {"_id": 1}
-        ):
-            raise HTTPException(status_code=409, detail={"code": "not_an_opted_in_composite_bundle"})
-        source_rows = await db["unified_orders"].find(
-            {"user_id": owner_id, "order_number": number},
-            {"_id": 0, "raw_by_source.salla_direct": 1},
-        ).limit(2).to_list(length=2)
-        if len(source_rows) != 1:
-            raise HTTPException(status_code=409, detail={"code": "historical_source_not_unique"})
-        original = ((source_rows[0].get("raw_by_source") or {}).get("salla_direct"))
-        try:
-            return inspect_historical_bundle_order(
-                order_number=number, raw_order=original,
-                canonical_items=list(order.items), target_line_id=order_item_id,
-            )
-        except BundleHistoricalEvidenceUnavailable as exc:
-            raise HTTPException(status_code=409, detail={"code": exc.code}) from exc
-
-    @router.get("/{order_number}/bundle-financial-source-audit")
-    async def bundle_financial_source_audit(
-        order_number: str, order_item_id: str | None = None,
-        user: dict = Depends(current_user),
-    ) -> dict[str, Any]:
-        """Owner-only original source audit; no pricing or database writes."""
-        return await _bundle_source_evidence(
-            order_number=order_number, order_item_id=order_item_id, user=user,
-        )
-
-    @router.post("/{order_number}/bundle-financial-cost-dry-run")
-    async def bundle_financial_cost_dry_run(
-        order_number: str, attestation: dict = Body(...),
-        order_item_id: str | None = None, user: dict = Depends(current_user),
-    ) -> dict[str, Any]:
-        """Review-only proposal: never applies a correction or touches stock."""
-        from bundle_historical_reporting_audit import (
-            BundleHistoricalEvidenceUnavailable, dry_run_attested_bundle_cost,
-        )
-        evidence = await _bundle_source_evidence(
-            order_number=order_number, order_item_id=order_item_id, user=user,
-        )
-        try:
-            return dry_run_attested_bundle_cost(evidence, attestation)
-        except BundleHistoricalEvidenceUnavailable as exc:
-            raise HTTPException(status_code=409, detail={"code": exc.code}) from exc
-
-    @router.post("/{order_number}/bundle-financial-cost-repair-plan")
-    async def bundle_financial_cost_repair_plan(
-        order_number: str, payload: dict = Body(...),
-        user: dict = Depends(current_user),
-    ) -> dict[str, Any]:
-        """Transactional-compatible no-write plan, no cost conclusion yet."""
-        from bundle_historical_reporting_audit import BundleHistoricalEvidenceUnavailable
-        from bundle_historical_reporting_repair import build_missing_bundle_repair_plan
-        if not isinstance(user, dict) or not (
-            str(user.get("role") or "").strip().lower() == "owner"
-            or user.get("is_owner") is True
-        ):
-            raise HTTPException(status_code=403, detail={"code": "owner_required"})
-        if set(payload) != {"order_item_id", "attestation"} or not isinstance(payload["attestation"], dict):
-            raise HTTPException(status_code=422, detail={"code": "historical_repair_payload_invalid"})
-        try:
-            plan = await build_missing_bundle_repair_plan(
-                db, str(user["id"]), str(order_number),
-                payload["order_item_id"], payload["attestation"])
-        except BundleHistoricalEvidenceUnavailable as exc:
-            raise HTTPException(status_code=409, detail={"code": exc.code}) from exc
-        # Raw internal correction includes owner data. It is returned only to
-        # the private transaction function, never in a public API response.
-        return {k: v for k, v in plan.items() if k != "correction"}
-
-    @router.post("/{order_number}/bundle-financial-cost-repair-apply")
-    async def bundle_financial_cost_repair_apply(
-        order_number: str, payload: dict = Body(...),
-        user: dict = Depends(current_user),
-    ) -> dict[str, Any]:
-        """Explicit user-reviewed manifest; disabled on Production by default."""
-        from bundle_historical_reporting_audit import BundleHistoricalEvidenceUnavailable
-        from bundle_historical_reporting_repair import apply_missing_bundle_repair
-        if not isinstance(user, dict) or not (
-            str(user.get("role") or "").strip().lower() == "owner"
-            or user.get("is_owner") is True
-        ):
-            raise HTTPException(status_code=403, detail={"code": "owner_required"})
-        required = {"order_item_id", "attestation", "manifest_sha", "approval_phrase"}
-        if set(payload) != required or not isinstance(payload["attestation"], dict):
-            raise HTTPException(status_code=422, detail={"code": "historical_repair_payload_invalid"})
-        try:
-            return await apply_missing_bundle_repair(
-                db, str(user["id"]), str(order_number),
-                payload["order_item_id"], payload["attestation"],
-                expected_manifest_sha=payload["manifest_sha"],
-                approval_phrase=payload["approval_phrase"])
-        except BundleHistoricalEvidenceUnavailable as exc:
-            raise HTTPException(status_code=409, detail={"code": exc.code}) from exc
 
     return router
