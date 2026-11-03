@@ -73,8 +73,10 @@ async def test_address_webhook_overrides_old_shipping_fields_only():
     db = _DB(old)
     address = {"city": {"name": "الرياض"}, "block": "النرجس",
                "address_line": "شارع جديد", "short_address": "RYYY1234"}
-    with patch("salla_integration.address_webhook_sync._resolve_user_id", new=AsyncMock(return_value="owner")), \\
-         patch("salla_integration.address_webhook_sync.operational_owner", side_effect=_scoped):
+    with (
+        patch("salla_integration.address_webhook_sync._resolve_user_id", new=AsyncMock(return_value="owner")),
+        patch("salla_integration.address_webhook_sync.operational_owner", side_effect=_scoped),
+    ):
         result = await sync_verified_shipping_address(db, _event(address))
     assert result["synced"] is True
     assert db.unified_orders.row["shipping_address_raw"] == address
@@ -92,8 +94,10 @@ async def test_address_webhook_overrides_old_shipping_fields_only():
 async def test_older_address_event_must_not_restore_old_destination():
     db = _DB({"user_id": "owner", "order_number": "295617138", "order_id": "42",
               "shipping_city": "الرياض", "salla_address_provider_updated_at": "2026-11-03T17:00:00+00:00"})
-    with patch("salla_integration.address_webhook_sync._resolve_user_id", new=AsyncMock(return_value="owner")), \\
-         patch("salla_integration.address_webhook_sync.operational_owner", side_effect=_scoped):
+    with (
+        patch("salla_integration.address_webhook_sync._resolve_user_id", new=AsyncMock(return_value="owner")),
+        patch("salla_integration.address_webhook_sync.operational_owner", side_effect=_scoped),
+    ):
         result = await sync_verified_shipping_address(db, _event(
             {"city": "جدة"}, created="2026-11-03T14:00:00+00:00"))
     assert result["synced"] is False
@@ -104,8 +108,10 @@ async def test_older_address_event_must_not_restore_old_destination():
 @pytest.mark.asyncio
 async def test_wrong_order_identity_rejected_without_write():
     db = _DB({"user_id": "owner", "order_number": "295617138", "order_id": "999"})
-    with patch("salla_integration.address_webhook_sync._resolve_user_id", new=AsyncMock(return_value="owner")), \\
-         patch("salla_integration.address_webhook_sync.operational_owner", side_effect=_scoped):
+    with (
+        patch("salla_integration.address_webhook_sync._resolve_user_id", new=AsyncMock(return_value="owner")),
+        patch("salla_integration.address_webhook_sync.operational_owner", side_effect=_scoped),
+    ):
         result = await sync_verified_shipping_address(db, _event({"city": "الرياض"}))
     assert result["reason"] == "order_identity_mismatch"
     assert not db.unified_orders.writes
@@ -133,7 +139,7 @@ def test_address_projection_prefers_verified_new_address_over_issued_shipment():
     after = _apply_v2_root_fallbacks(raw, row)
     order = map_salla_order(after)
     assert order.customer.shipping_address.city == "الرياض"
-    assert order.customer.shipping_address.address_line == "حي النرجس"
+    assert order.customer.shipping_address.formatted == "حي النرجس"
     assert raw["shipments"][0]["ship_to"] == old_shipment_address
     assert after["shipments"][0]["ship_to"] == old_shipment_address
     assert after["shipping"]["address"]["city"] == "الرياض"
