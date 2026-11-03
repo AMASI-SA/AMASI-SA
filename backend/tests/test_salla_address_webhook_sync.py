@@ -38,7 +38,7 @@ class _DB:
         self.unified_orders = _Orders(order)
 
 
-def _event(address, *, event="order.shipping.address.updated", created="2026-11-03T16:05:00+03:00"):
+def _event(address, *, event="order.updated", created="2026-11-03T16:05:00+03:00"):
     return {
         "event": event, "merchant": "store-1", "created_at": created,
         "data": {
@@ -158,6 +158,48 @@ def test_address_projection_prefers_verified_new_address_over_issued_shipment():
     assert raw["shipments"][0]["ship_to"] == old_shipment_address
     assert after["shipments"][0]["ship_to"] == old_shipment_address
     assert after["shipping"]["address"]["city"] == "الرياض"
+
+
+@pytest.mark.asyncio
+async def test_historical_shipment_recipient_does_not_override_current_address():
+    row = {"user_id": "owner", "order_number": "295617138", "order_id": "42",
+           "shipping_address_raw": {"city": "الرياض", "address_line": "العنوان الحالي"},
+           "salla_address_verified_at": "2026-11-03T15:00:00+00:00"}
+    db = _DB(row)
+    event = _event({"city": "جدة", "address_line": "قديم"})
+    event["data"].pop("shipping")
+    # A normal order.updated can still include an old issued AWB.
+    with (
+        patch("salla_integration.address_webhook_sync._resolve_user_id", new=AsyncMock(return_value="owner")),
+        patch("salla_integration.address_webhook_sync.operational_owner", side_effect=_scoped),
+    ):
+        result = await sync_verified_shipping_address(db, event)
+    assert result["reason"] == "address_not_present"
+    assert db.unified_orders.row["shipping_address_raw"]["city"] == "الرياض"
+    assert not db.unified_orders.writes
+
+
+@pytest.mark.asyncio
+async def test_repeated_order_updated_with_same_address_has_no_extra_write():
+    address = {"city": "الرياض", "address_line": "حي النرجس"}
+    db = _DB({"user_id": "owner", "order_number": "295617138", "order_id": "42",
+              "shipping_address_raw": address,
+              "salla_address_verified_at": "2026-11-03T15:00:00+00:00",
+              "salla_address_provider_updated_at": "2026-11-03T14:00:00+00:00"})
+    with (
+        patch("salla_integration.address_webhook_sync._resolve_user_id", new=AsyncMock(return_value="owner")),
+        patch("salla_integration.address_webhook_sync.operational_owner", side_effect=_scoped),
+    ):
+        result = await sync_verified_shipping_address(db, _event(address))
+    assert result["reason"] == "address_unchanged"
+    assert not db.unified_orders.writes
+
+
+def test_address_event_does_not_substitute_for_order_updated():
+    from salla_integration.address_webhook_sync import _current_address
+    assert _current_address({
+        "shipments": [{"ship_to": {"city": "جدة", "address_line": "شحنة قديمة"}}]
+    }) == ({}, "")
 
 
 def test_unverified_shipping_address_keeps_original_provider_precedence():
