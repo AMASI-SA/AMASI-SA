@@ -15,6 +15,7 @@ async function api(url, method='GET', body) {
 }
 async function check(name, fn) { await fn(); results.push({name,status:'PASS'}); console.log('PASS '+name); }
 (async()=>{
+  const proof = (await api('/__test/proof')).data;
   const browser = await chromium.launch({headless:true, ...(process.env.MZ2_BROWSER_CHANNEL ? {channel:process.env.MZ2_BROWSER_CHANNEL} : {})});
   const page = await browser.newPage({viewport:{width:1440,height:1100}});
   page.on('pageerror', error=>errors.push(error.message));
@@ -25,7 +26,6 @@ async function check(name, fn) { await fn(); results.push({name,status:'PASS'});
   const field = name=>page.getByLabel(name,{exact:true});
   const stage = index=>page.locator('nav button').nth(index).click();
   const save = async()=>{const pending=page.waitForResponse(r=>r.request().method()==='PUT' && r.url().includes('/sessions/'));await button('حفظ البيانات المالية').click();const response=await pending;assert.equal(response.status(),200,await response.text());return response.json();};
-  const proof = (await api('/__test/proof')).data;
   let created, session, lastSave;
   try {
     await check('UI create persists a new backend session; list/get use same ID',async()=>{

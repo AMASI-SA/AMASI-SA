@@ -16,11 +16,12 @@ function Select({ label, options, optional = false, ...props }) {
 }
 function FeeForm() {
     const [policies, setPolicies] = useState([]), [suggestions, setSuggestions] = useState([]);
+    const [conflicts, setConflicts] = useState([]);
     const [form, setForm] = useState(initial), [parts, setParts] = useState([]), [busy, setBusy] = useState(true), [message, setMessage] = useState("");
     useEffect(() => {
         let current = true;
         Promise.all([listOnboardingFeePolicies(), listOnboardingFeeCandidates()]).then(([saved, stored]) => {
-            if (current) { setPolicies(saved.items); setSuggestions(stored.items); }
+            if (current) { setPolicies(saved.items); setSuggestions(stored.items); setConflicts(stored.conflicts || []); }
         }).catch(() => { if (current) setMessage("تعذرت قراءة التعرفات. أعد تحميل الصفحة."); })
             .finally(() => { if (current) setBusy(false); });
         return () => { current = false; };
@@ -55,6 +56,12 @@ function FeeForm() {
         <form onSubmit={save}><fieldset disabled={busy} className="space-y-3">
             <legend className="font-bold">اعتماد تعرفة من مستند المنصة</legend>
             <p>يمكن تعبئة النسبة والرسم من إعدادات طرق الدفع المحفوظة. طابقها مع المستند وحدد فترة سريانها قبل الاعتماد.</p>
+            {conflicts.length > 0 && <div className="border rounded p-3"><strong>طرق دفع تحتاج مراجعة عقد المنصة</strong>
+                <ul>{conflicts.map(r => <li key={r.provider + (r.payment_method || "")}>
+                    {r.labels.join("، ")} — {r.reason === "duplicate_settings" ? "توجد عدة تعريفات محفوظة لطريقة الدفع نفسها." : "بيانات الرسم أو الضريبة غير مكتملة."}
+                </li>)}</ul>
+                <p>أدخل التعرفة المثبتة في العقد ومرجعه وتاريخ سريانها.</p>
+            </div>}
             <div className="flex flex-wrap gap-2">{suggestions.map(r => <button className="border rounded px-3" type="button" key={r.provider + (r.payment_method || "")} onClick={() => { setForm({ ...initial, provider: r.provider, payment_method: r.payment_method || "", percentage: r.percentage, fixed_amount: r.fixed_amount, vat_rate: r.vat_rate }); setParts([]); }}>{r.label} · {r.percentage}% + {r.fixed_amount}</button>)}</div>
             <Select label="المنصة" options={providers} value={form.provider} onChange={e => { setForm({ ...initial, provider: e.target.value }); setParts([]); }} />
             {form.provider === "salla" && <Select label="طريقة الدفع لدى سلة" options={{ ...rails, all: "تعرفة عامة لكل الطرق بحسب المستند" }} {...set("payment_method")} />}

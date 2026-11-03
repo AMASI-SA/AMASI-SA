@@ -23,7 +23,7 @@ def install_setup_contract_routes(router, raw, current_user, actor_for, base):
     @router.get(base + "/fee-policy-candidates")
     async def fee_candidates(user: dict = Depends(current_user)):
         _, owner = await actor_for(user, "drafts_manage")
-        return {"items": await list_fee_candidates(raw, owner)}
+        return await list_fee_candidates(raw, owner, include_conflicts=True)
 
     @router.post(base + "/fee-policies")
     async def policy(payload: FeePolicyCreate, user: dict = Depends(current_user)):

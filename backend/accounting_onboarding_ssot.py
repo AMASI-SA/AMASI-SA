@@ -151,7 +151,7 @@ async def list_fee_policies(db, owner):
     return [policy for row in rows for policy in row.get("policies", [])]
 
 
-async def list_fee_candidates(db, owner):
+async def list_fee_candidates(db, owner, *, include_conflicts=False):
     """Show only persisted merchant settings as editable suggestions, never as active contracts."""
     docs = await db["settings"].find({"user_id": owner}, {"_id": 0, "user_id": 1,
         "payment_methods.name": 1, "payment_methods.commission_percent": 1,
@@ -161,33 +161,35 @@ async def list_fee_candidates(db, owner):
     methods = docs[0].get("payment_methods", []) if docs else []
     if not isinstance(methods, list) or len(methods) > 250:
         _fail("provider_fee_settings_invalid")
-    candidates, duplicate = {}, set()
+    groups = {}
     for row in methods:
-        if not isinstance(row, dict):
+        if not isinstance(row, dict) or not isinstance(row.get("name"), str):
             continue
-        label = row.get("name")
-        provider = "salla" if fee_rail(label) else provider_for(label)
-        if not isinstance(label, str) or provider not in PROVIDERS:
+        label = row["name"]
+        rail = fee_rail(label)
+        provider = "salla" if rail else provider_for(label)
+        if provider in PROVIDERS and (provider != "salla" or rail):
+            groups.setdefault((provider, rail), []).append(row)
+
+    items, conflicts = [], []
+    for (provider, rail), matches in groups.items():
+        labels = [row["name"][:100] for row in matches]
+        scope = {"provider": provider, "payment_method": rail}
+        if len(matches) != 1:
+            conflicts.append({**scope, "labels": labels, "reason": "duplicate_settings"})
             continue
-        rail = fee_rail(label) if provider == "salla" else None
-        if provider == "salla" and not rail:
-            continue
-        key = (provider, rail)
-        if key in candidates:
-            duplicate.add(key)
-            continue
-        # Mark the key seen even if its first settings row is incomplete.
-        candidates[key] = None
+        row = matches[0]
         try:
             percent, fixed, tax = [Decimal(str(row[k])) for k in ("commission_percent", "fixed_fee", "vat_percent")]
-            if (not all(v.is_finite() for v in (percent, fixed, tax)) or not 0 <= percent <= 100
-                    or not 0 <= tax <= 100 or not 0 <= fixed <= 999999999999 or fixed != fixed.quantize(Decimal(".01"))):
-                continue
+            valid = (all(v.is_finite() for v in (percent, fixed, tax)) and 0 <= percent <= 100
+                     and 0 <= tax <= 100 and 0 <= fixed <= 999999999999 and fixed == fixed.quantize(Decimal(".01")))
         except (KeyError, ArithmeticError, ValueError):
+            valid = False
+        if not valid:
+            conflicts.append({**scope, "labels": labels, "reason": "incomplete_settings"})
             continue
-        candidates[key] = {"provider": provider, "payment_method": rail, "label": label[:100],
-            "percentage": str(percent), "fixed_amount": str(fixed), "vat_rate": str(tax)}
-    return [row for key, row in candidates.items() if key not in duplicate and row]
+        items.append({**scope, "label": labels[0], "percentage": str(percent), "fixed_amount": str(fixed), "vat_rate": str(tax)})
+    return {"items": items, "conflicts": conflicts} if include_conflicts else items
 
 
 async def resolve_fee_policy(db, owner, provider, transaction_date, currency="SAR"):

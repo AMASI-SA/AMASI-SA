@@ -42,6 +42,19 @@ test("settings prefill cannot implicitly adopt an opening date, contract evidenc
         refund_fee_treatment: null, cancellation_fee_treatment: null, currency: "SAR" }));
     expect(host.textContent).toContain("حُفظت التعرفة");
 });
+test("ambiguous aliases require contract review without prefill or approval", async () => {
+    fees.listOnboardingFeeCandidates.mockResolvedValue({ items: [], conflicts: [
+        {provider:"salla", payment_method:"credit_card", labels:["البطاقة الإئتمانية", "بطاقة ائتمانية"], reason:"duplicate_settings"},
+        {provider:"emkan", payment_method:null, labels:["إمكان"], reason:"incomplete_settings"},
+    ] });
+    await act(async () => root.render(<ProviderFeeSetup />));
+    expect(host.textContent).toContain("البطاقة الإئتمانية، بطاقة ائتمانية");
+    expect(host.textContent).toContain("بيانات الرسم أو الضريبة غير مكتملة");
+    expect(input("نسبة العمولة الإجمالية %").value).toBe("");
+    expect(host.querySelector("form").checkValidity()).toBe(false);
+    expect(fees.createOnboardingFeePolicy).not.toHaveBeenCalled();
+});
+
 test("non-owner never loads merchant settings or a confirmation form", async () => {
     useOptionalAuth.mockReturnValue({ user: { id: "staff", role: "employee" } });
     await act(async () => root.render(<ProviderFeeSetup />));

@@ -112,14 +112,53 @@ def test_preview_is_scoped_and_read_only_and_never_supplies_missing_default_or_d
         run(list_fee_candidates(db,"shop"))
 
 
+def test_conflicting_fee_labels_are_reported_and_never_offered_as_a_rate():
+    from operational_fee_methods import fee_rail
+    from operational_payment_evidence import provider_for
+
+    class PreviewDB(DB):
+        allowed = DB.allowed | {"settings"}
+    db = PreviewDB()
+    fee = dict(commission_percent="2", fixed_fee=0, vat_percent=15)
+    rows = [dict(fee, name="البطاقة الإئتمانية"), dict(fee, name="بطاقة ائتمانية", commission_percent=3),
+            dict(fee, name="EmkanInstallment", fixed_fee=None), dict(fee, name="إمكان"),
+            dict(fee, name="تمارا", vat_percent=None), dict(fee, name="مدى"), dict(fee, name="Visa")]
+    db["settings"].rows = [{"user_id": "shop", "payment_methods": rows}]
+
+    for alias in ("البطاقة الإئتمانية", "البطاقه الائتمانيه", "بطاقة ائتمانية"):
+        assert fee_rail(alias) == "credit_card"
+    assert fee_rail("البطاقة الإئتمانية لمزود آخر") is None
+    assert provider_for("البطاقة الإئتمانية") is None  # Fee labels do not change gross claim routing.
+
+    for ordered in (rows, list(reversed(rows))):
+        db["settings"].rows[0]["payment_methods"] = ordered
+        preview = run(list_fee_candidates(db, "shop", include_conflicts=True))
+        assert sorted(r["payment_method"] for r in preview["items"]) == ["mada", "visa"]
+        conflicts = {(r["provider"], r["payment_method"]): (r["reason"], set(r["labels"])) for r in preview["conflicts"]}
+        assert conflicts == {
+            ("salla", "credit_card"): ("duplicate_settings", {"البطاقة الإئتمانية", "بطاقة ائتمانية"}),
+            ("emkan", None): ("duplicate_settings", {"EmkanInstallment", "إمكان"}),
+            ("tamara", None): ("incomplete_settings", {"تمارا"}),
+        }
+    db["settings"].rows[0]["payment_methods"] = [rows[0]]
+    assert run(list_fee_candidates(db, "shop", include_conflicts=True)) == {"items": [
+        {"label":"البطاقة الإئتمانية","provider":"salla","payment_method":"credit_card","percentage":"2",
+         "fixed_amount":"0","vat_rate":"15"}], "conflicts":[]}
+    assert run(list_fee_policies(db, "shop")) == []
+
+
 @pytest.mark.asyncio
 async def test_scoped_preview_http_and_explicit_confirmation_only_write_metadata(api):
     terms = dict(name="مدى", commission_percent=1.25, fixed_fee=1, vat_percent=15)
-    await api.db.settings.insert_many([{"user_id": OWNER, "payment_methods": [terms], "unrelated_private_field":"hidden"},
+    await api.db.settings.insert_many([{"user_id": OWNER, "payment_methods": [
+        terms, dict(terms, name="إمكان"), dict(terms, name="EmkanInstallment", fixed_fee=2)], "unrelated_private_field":"hidden"},
         {"user_id": "other", "payment_methods": [{**terms,"commission_percent":98}]}])
     before = await fingerprint(api, exclude=())
     await request(api, "GET", "/fee-policy-candidates", user="viewer", status=403)
-    assert (await request(api, "GET", "/fee-policy-candidates"))["items"] == [
+    preview = await request(api, "GET", "/fee-policy-candidates")
+    assert preview["conflicts"] == [{"provider":"emkan", "payment_method":None, "reason":"duplicate_settings",
+                                     "labels":["إمكان", "EmkanInstallment"]}]
+    assert preview["items"] == [
         {"label":"مدى", "provider":"salla", "payment_method":"mada", "percentage":"1.25", "fixed_amount":"1", "vat_rate":"15"}]
     assert await fingerprint(api, exclude=()) == before
     config = dict(provider="salla", payment_method="mada", percentage="1.25", fixed_amount="1", vat_rate="15",
