@@ -235,7 +235,9 @@ async def test_current_configured_bundle_cost_applies_to_all_unpriced_sold_units
     assert result["product_rows"][0]["units_sold"] == 4
     assert result["product_rows"][0]["average_unit_cost"] == 55
     assert sold[0]["total_cost"] == 220
-    assert sum(readonly.reads.values()) <= 15
+    # New composite estimate adds bounded catalog reads; never N+1 reads
+    # per order. Legacy frozen-order read limits remain unchanged.
+    assert sum(readonly.reads.values()) <= 20
     # No snapshot/revision/journal is written by a profitability report.
     assert await db["mezan_order_cost_corrections_v1"].count_documents({}) == 0
     assert await db["mezan_order_item_cost_snapshots_v2"].count_documents({}) == 0
@@ -523,3 +525,19 @@ async def test_salla_distinct_order_row_ids_with_rose_name_and_private_text_cost
     assert products[0]["total_cost"] == 65
     assert await db["general_ledger"].count_documents({}) == 0
     assert await db["mezan_component_consumption_units_v1"].count_documents({}) == 0
+
+
+@pytest.mark.asyncio
+async def test_unpriced_current_bundle_reads_are_constant_across_order_count(db):
+    one = [sale("unpriced-001", sale_line("line-001", 1))]
+    many = [
+        sale(f"unpriced-{i:03}", sale_line(f"line-{i:03}", 1))
+        for i in range(1, 31)
+    ]
+    first_db, many_db = ReadOnlyDB(db), ReadOnlyDB(db)
+    one_cost = await build_mezan_v2_product_cost(first_db, OWNER, one)
+    many_cost = await build_mezan_v2_product_cost(many_db, OWNER, many)
+    assert one_cost["total"] == 55
+    assert many_cost["total"] == 1650
+    assert first_db.reads == many_db.reads
+    assert sum(many_db.reads.values()) <= 20
