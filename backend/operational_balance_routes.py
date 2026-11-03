@@ -883,28 +883,38 @@ def make_operational_balance_router(db, current_user):
         from operational_native_purchase_link_service import approve
         return await approve(db, owner, actor['id'], payload.model_dump())
 
-    @router.get("/supplier-invoice-review")
-    async def supplier_invoice_review(user=Depends(current_user), receiving_only: bool = False):
-        actor, owner, _ = await scope(db, user, "reports")
+    async def supplier_report_actor(user, owner_only):
         from fulfillment_v2_routes import _actor_context, _require_permission
-        from operational_supplier_invoice_preview import supplier_invoice_preview
+        actor, owner, _ = await scope(db, user, "reports")
+        if owner_only and actor["id"] != owner:
+            fail("supplier_review_owner_required", "معاينة التصحيح متاحة للمالك فقط", 403)
         context = await _actor_context(db, actor)
         _require_permission(context, "suppliers.read")
         if context["merchant_id"] != owner:
             fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
-        result = (await supplier_invoice_preview(db, owner, receiving_only=True) if receiving_only
-                  else await supplier_invoice_preview(db, owner))
-        # A report may not disclose the previous owner's snapshot after an actor
-        # was disabled, reassigned or lost its read grant while sources loaded.
-        fresh, current_owner, _ = await scope(db, user, "reports")
-        latest_context = await _actor_context(db, fresh)
-        _require_permission(latest_context, "suppliers.read")
-        if current_owner != owner or latest_context["merchant_id"] != owner:
-            fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
+        return actor["id"], owner
+
+    async def read_supplier_review(user, *, owner_only=False, **options):
         from operational_balance_service import accounting_inactive
+        from operational_supplier_invoice_preview import supplier_invoice_preview
+        actor_id, owner = await supplier_report_actor(user, owner_only)
+        result = await supplier_invoice_preview(db, owner, **options)
+        # Recheck the actual actor after the snapshot read, including supplier access.
+        if await supplier_report_actor(user, owner_only) != (actor_id, owner):
+            fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
         await accounting_inactive(db, owner)
-        result["session_scope"] = digest([owner, actor["id"]])
+        result["session_scope"] = digest([owner, actor_id])
         return result
+
+    @router.get("/supplier-invoice-review")
+    async def supplier_invoice_review(user=Depends(current_user), receiving_only: bool = False):
+        return await read_supplier_review(user, **({"receiving_only": True} if receiving_only else {}))
+
+    @router.get("/supplier-invoice-review/receiving/{invoice_id}/correction-preview")
+    async def receiving_correction_preview(invoice_id: str, expected_as_of: str, expected_revision: int,
+                                          user=Depends(current_user)):
+        return await read_supplier_review(user, owner_only=True, invoice_id=invoice_id,
+                                          expected_as_of=expected_as_of, expected_revision=expected_revision)
 
     @router.get("/financial-position")
     async def financial_position(user=Depends(current_user)):

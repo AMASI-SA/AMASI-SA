@@ -235,7 +235,37 @@ async def _receiving_only(scoped, owner, observed_at):
     return result
 
 
-async def supplier_invoice_preview(db, owner, *, as_of=None, receiving_only=False):
+async def _correction_preview(scoped, owner, observed_at, invoice_id, expected_as_of, expected_revision):
+    from operational_balance_service import accounting_inactive
+    from operational_receiving_correction import load_correction
+    from operational_receiving_coverage import compare_receiving
+    from operational_supplier_reconciliation import _id
+
+    await accounting_inactive(scoped, owner)
+    state = await read(scoped, owner)
+    saved = state.get("engine", {}).get("as_of")
+    if state.get("status") != "active" or not saved:
+        fail("supplier_review_no_saved_snapshot", "لا توجد لقطة تشغيلية نشطة يمكن مطابقتها.")
+    cutoff = instant(saved).isoformat()
+    if cutoff != expected_as_of or state.get("revision") != expected_revision:
+        fail("supplier_review_stale_snapshot", "تغيرت اللقطة التشغيلية؛ أعد فحص فواتير الاستلام.")
+    invoices = await scoped["mezan_supplier_invoices_v2"].find(
+        {"user_id": owner, "id": _id(invoice_id)}, {"_id": 0}).to_list(length=2)
+    comparison = compare_receiving(state, invoices, owner=owner, observed_at=observed_at)
+    if len(invoices) != 1 or len(comparison["rows"]) != 1:
+        fail("supplier_review_invoice_unavailable", "لم توجد هذه الفاتورة ضمن فترة اللقطة.", 404)
+    row = comparison["rows"][0]
+    if row["source_issue"]:
+        result = dict(invoice_id=invoice_id, status="blocked", legs=[], reasons=["invoice_evidence_incomplete"])
+    else:
+        result = await load_correction(scoped, owner, state, invoices[0], row, cutoff)
+    result.update(schema="receiving_correction_preview_v1", read_only=True, posting_allowed=False,
+                  snapshot_consistent=True, state_revision=expected_revision, saved_balance_as_of=cutoff)
+    return result
+
+
+async def supplier_invoice_preview(db, owner, *, as_of=None, receiving_only=False,
+                                   invoice_id=None, expected_as_of=None, expected_revision=None):
     """No refresh, no compare-and-swap, no journal call and no standalone fallback."""
     if not isinstance(owner, str) or not owner or owner != owner.strip():
         raise ValueError('supplier_preview_owner_scope_required')
@@ -244,6 +274,8 @@ async def supplier_invoice_preview(db, owner, *, as_of=None, receiving_only=Fals
         async with await db.client.start_session() as session:
             async with session.start_transaction(read_concern=ReadConcern('snapshot')):
                 scoped = SnapshotReads(db, owner, session)
+                if invoice_id is not None:
+                    return await _correction_preview(scoped, owner, stamp, invoice_id, expected_as_of, expected_revision)
                 if receiving_only:
                     return await _receiving_only(scoped, owner, stamp)
                 return await _preview(scoped, owner, stamp)
