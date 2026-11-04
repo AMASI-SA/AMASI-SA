@@ -133,7 +133,7 @@ class PrintCompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["order_status_completed"])
         self.assertIsNone(result["label_url"])
 
-    async def test_legacy_issue_and_completion_routes_return_same_existing_label_without_resume(self):
+    async def test_v1_refresh_and_completion_readback_prove_current_label_without_resume(self):
         from fastapi import FastAPI
         from httpx import ASGITransport, AsyncClient
         import preparation_piece_operations as pieces
@@ -143,7 +143,8 @@ class PrintCompletionTests(unittest.IsolatedAsyncioTestCase):
                    "responsibilities": {"instant_ready", "shipping_labeling"}}
         async def actor():
             return {"id": "employee", "role": "employee", "created_by": "owner"}
-        async def current_label(*args):
+        async def current_label(*args, **kwargs):
+            self.assertEqual(kwargs, {"issue": False, "completed_only": True})
             return await self.read()
         app = FastAPI()
         app.include_router(pieces.make_preparation_piece_operations_router(self.db, actor))
@@ -151,18 +152,22 @@ class PrintCompletionTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(pieces, "_actor_context", AsyncMock(return_value=context)), \
              patch.object(fulfillment, "_actor_context", AsyncMock(return_value=context)), \
              patch.object(delivery, "resume", AsyncMock(side_effect=AssertionError("must not resume delivery"))), \
-             patch("order_engine.shipping_label_service.refresh_shipping_label", AsyncMock(side_effect=current_label)):
+             patch("order_engine.amasi_shipping_compat.carrier_label", AsyncMock(side_effect=current_label)):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 before = await self.snapshot()
                 for method, path in (("GET", "/preparation-work-v1/assembly/orders/synthetic-1/completion"),
-                                     ("POST", "/fulfillment-v2/completed/synthetic-1/carrier-label")):
+                                     ("POST", "/fulfillment-v2/completed/synthetic-1/carrier-label/v1/refresh")):
                     response = await client.request(method, path)
                     self.assertEqual(response.status_code, 200, response.text)
                     self.assertTrue(response.json()["ready"])
                     self.assertEqual(response.json()["label_url"], "https://labels.test/current.pdf")
-                self.assertEqual(await self.snapshot(), before)
+                    if method == "GET":
+                        self.assertEqual(await self.snapshot(), before)
+                    else:
+                        self.assertEqual(response.json()["contract_version"], 1)
+                        self.assertEqual(response.json()["print_state"], "ready")
 
-    async def test_legacy_issue_permission_revoked_during_provider_read_is_denied(self):
+    async def test_v1_refresh_permission_revoked_during_provider_read_is_denied(self):
         from fastapi import FastAPI
         from httpx import ASGITransport, AsyncClient
         import fulfillment_v2_routes as fulfillment
@@ -174,14 +179,15 @@ class PrintCompletionTests(unittest.IsolatedAsyncioTestCase):
             context["permissions"].clear()
             return await self.provider_read(*args, **kwargs)
         self.provider.side_effect = revoke
-        async def current_label(*args):
+        async def current_label(*args, **kwargs):
+            self.assertEqual(kwargs, {"issue": False, "completed_only": True})
             return await self.read()
         app = FastAPI()
         app.include_router(fulfillment.make_fulfillment_v2_router(self.db, actor))
         with patch.object(fulfillment, "_actor_context", AsyncMock(side_effect=lambda *args: deepcopy(context))), \
-             patch("order_engine.shipping_label_service.refresh_shipping_label", AsyncMock(side_effect=current_label)):
+             patch("order_engine.amasi_shipping_compat.carrier_label", AsyncMock(side_effect=current_label)):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-                response = await client.post("/fulfillment-v2/completed/synthetic-1/carrier-label")
+                response = await client.post("/fulfillment-v2/completed/synthetic-1/carrier-label/v1/refresh")
                 self.assertEqual(response.status_code, 403, response.text)
 
     async def test_virtual_units_and_operational_work_must_be_ready(self):

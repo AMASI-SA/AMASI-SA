@@ -2,7 +2,7 @@
 import pytest
 
 import order_engine.shipping_label_service as shipping
-from order_engine.shipping_label_service import issue_shipping_label as real_issue
+from order_engine.shipping_label_service import _stale_label as stale_label, issue_shipping_label as real_issue
 from test_shipping_print_legacy_path import setup, OWNER, ORDER, dump, assert_only_rejection_cache_revoked
 
 
@@ -68,31 +68,35 @@ async def test_saved_document_keeps_current_courier_name_without_awb(setup):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("confirmed", [True, False])
-async def test_legacy_issue_uses_readback_without_status_post(setup, monkeypatch, confirmed):
+@pytest.mark.parametrize("confirmed,current_id", [(True, "200"), (True, "201"), (False, "200")])
+async def test_legacy_issue_uses_readback_without_status_post(setup, monkeypatch, confirmed, current_id):
     from unittest.mock import AsyncMock
     db, state = setup
     state["order"].update(status="completed" if confirmed else "in_progress", shipping={})
     state["rows"] = [{"id": "200", "order_id": "salla-order",
-                      "courier_name": "مندوب الرياض", "meta": {"app_id": 0},
+                      "courier_name": "مندوب الرياض", "meta": {"app_id": 0}, "status": "created",
                       "ship_to": {"name": "Recipient", "address_line": "Current address"}}]
     from salla_shipping import CURRENT_SHIPPING
     await db.unified_orders.update_one({"user_id": OWNER}, {"$set": {
-        CURRENT_SHIPPING: {"company_name": "مندوب الرياض", "company_code": "0"},
+        CURRENT_SHIPPING: {"company_name": "مندوب الرياض", "company_code": "0", "shipment_id": current_id,
+                           "superseded_shipment_ids": ["old"]},
+        "salla_shipment_id": current_id,
     }})
+    monkeypatch.setattr(shipping, "_stale_label", stale_label)
     monkeypatch.setattr(shipping, "_best_effort_resync", AsyncMock())
     # A historical order has no durable proof of a previous POST outcome.
     # Its issuance entry enrolls readback-only; new v2 worker dispatch is
     # independently covered using real piece/inventory transactions.
     result = await real_issue(db, OWNER, ORDER)
-    if confirmed:
+    if confirmed and current_id == "200":
         assert result["ready"] and result["label_type"] == "store_courier"
         assert result["tracking_number"] is None
         assert result["print_data"]["qr_code"]
         assert result["print_data"]["address"]["address_line"] == "Current address"
     else:
         assert not result["ready"] and result["requires_attention"]
-        assert result["error_code"] == "completion_status_unconfirmed"
+        assert not result.get("print_data") and not result.get("label_url")
+        assert result["error_code"] == ("shipping_snapshot_changed" if confirmed else "completion_status_unconfirmed")
     # The fixture rejects EVERY non-GET provider call.
     workflow = await db.order_review_workflows.find_one({"user_id": OWNER})
     assert workflow["assembly_delivery"]["legacy_readback_only"] is True

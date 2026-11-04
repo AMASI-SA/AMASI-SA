@@ -295,6 +295,81 @@ async def _with_verified_destination(
     return order
 
 
+async def mezan_courier_name(db, owner: str, number: str) -> str | None:
+    """Use the current Order Engine carrier also displayed by assembly search."""
+    from .repository import MongoOrderRepository
+    from .service import OrderNotFoundError, get_order
+
+    try:
+        order = await get_order(MongoOrderRepository(db), user_id=owner, order_number=number)
+    except OrderNotFoundError:
+        return None
+    carrier = order.shipping
+    if order.order_number == number and legacy._mobile_store_courier(carrier.company, carrier.company_code):
+        return carrier.company
+    return None
+
+
+async def local_mezan_courier_label(db, owner: str, number: str, workflow: dict) -> dict | None:
+    """Generate a merchant QR from the same transaction's current order and recipient."""
+    from assembly_status_policy import canonical_status
+
+    name = await mezan_courier_name(db, owner, number)
+    if not name:
+        return None
+    source = await db.unified_orders.find_one({"user_id": owner, "order_number": number}, {
+        "_id": 0, "order_status": 1, "order_status_slug": 1, "g47_salla_snapshot": 1,
+        "raw_by_source.salla_direct": 1, "shipping_address_raw": 1,
+        "shipping_address_source_path": 1, "salla_address_verified_at": 1, "salla_address_provider_updated_at": 1,
+    }) or {}
+    by_source = source.get("raw_by_source")
+    raw = by_source.get("salla_direct") if isinstance(by_source, dict) else None
+    if not isinstance(raw, dict):
+        raise legacy.ShippingLabelError("salla_order_reference_mismatch", "تعذّر تأكيد هوية الطلب في ميزان.")
+    status = canonical_status(source)
+    if status == "in_progress":
+        from assembly_completion_delivery import public_status
+        confirmed = public_status(workflow, canonical=status)["order_completion_status"] == "confirmed"
+        if not (confirmed and workflow.get("salla_order_status") == "completed"
+                and workflow.get("salla_order_status_verified_at")):
+            raise legacy.ShippingLabelError("carrier_order_in_progress", "بانتظار تأكيد تنفيذ الطلب في سلة.")
+    elif status != "completed":
+        raise legacy.ShippingLabelError("order_status_not_completed", "حالة الطلب الحالية لا تسمح بالطباعة.")
+    if not legacy._text(raw.get("id")) or legacy._text(raw.get("reference_id")) != number:
+        raise legacy.ShippingLabelError("salla_order_reference_mismatch", "تعذّر تأكيد هوية الطلب في ميزان.")
+
+    # A prior AWB, shipment address or cached print document never supplies this QR.
+    order = {**raw, "shipments": [], "shipment": None}
+    order.pop("_mezan_current_shipping_address", None)
+    order_at = legacy.provider_time(raw.get("updated_at"))
+    saved_at = legacy.provider_time(source.get("salla_address_provider_updated_at") or source.get("salla_address_verified_at"))
+    newer_recipient_street = (order_at and saved_at and order_at > saved_at
+                              and legacy._street_destination(legacy._order_delivery_address(order)))
+    path = legacy._text(source.get("shipping_address_source_path")).split(".")
+    if (source.get("salla_address_verified_at") and not newer_recipient_street
+            and not any(part in {"customer", "buyer", "sender", "ship_from"} for part in path)):
+        address = source.get("shipping_address_raw")
+        address = address if isinstance(address, dict) else {}
+        recipient = legacy.resolve_salla_recipient(order) or {}
+        same_recipient = all(not current or not saved or legacy._text(current).casefold() == legacy._text(saved).casefold()
+                             for current, saved in ((recipient.get("name"), address.get("name") or address.get("full_name")),
+                                                    (recipient.get("mobile"), address.get("mobile") or address.get("phone"))))
+        destination = legacy._delivery_address(address)
+        if destination and same_recipient:
+            order["_mezan_current_shipping_address"] = destination
+    store = raw.get("store") if isinstance(raw.get("store"), dict) else {}
+    if not store.get("name"):
+        integration = await db.salla_integrations.find_one({"user_id": owner}, {"_id": 0, "store_name": 1}) or {}
+        store = {**store, "name": integration.get("store_name") or "أماسي"}
+    data = legacy._store_courier_print_data(number, order, {}, store)
+    data.update(courier_name=name, store_phone=legacy._text(store.get("phone") or store.get("mobile")) or None)
+    return {"ok": True, "source": "mezan", "ready": True, "label_type": "store_courier",
+            "order_number": number, "assembly_completion_confirmed": True,
+            "order_status_completed": True, "order_status_changed": False, "shipment_id": None,
+            "tracking_number": None, "shipping_number": None, "label_url": None, "courier_name": name,
+            "status": "store_courier", "print_data": data, "message": "تم تجهيز بوليصة مندوب المتجر."}
+
+
 async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, completed_only: bool = False) -> dict[str, Any]:
     """One Salla order-status POST when needed; read the original carrier AWB.
 

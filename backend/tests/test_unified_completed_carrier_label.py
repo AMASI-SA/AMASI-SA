@@ -12,7 +12,7 @@ class UnifiedCompletedLabelTests(unittest.IsolatedAsyncioTestCase):
         self.authorize = AsyncMock()
         for name, target, mock in [
             ("guard", "fulfillment_carrier_label._require_print_completed_workflow", self.guard),
-            ("refresh", "order_engine.shipping_label_service.refresh_shipping_label", self.refresh),
+            ("refresh", "fulfillment_carrier_label.read_current_carrier_label", self.refresh),
             ("resume", "assembly_completion_delivery.resume", self.resume),
         ]:
             replacement = patch(target, mock)
@@ -32,7 +32,7 @@ class UnifiedCompletedLabelTests(unittest.IsolatedAsyncioTestCase):
         self.authorize.assert_awaited_once()
 
     async def test_not_completed_uses_durable_resume_only(self):
-        self.refresh.side_effect = ShippingLabelError("order_status_not_completed", "pending")
+        self.refresh.side_effect = ShippingLabelError("carrier_order_in_progress", "pending")
         result = await self.run_action()
         self.assertFalse(result["ready"])
         self.resume.assert_awaited_once()
@@ -46,7 +46,7 @@ class UnifiedCompletedLabelTests(unittest.IsolatedAsyncioTestCase):
         self.resume.assert_not_awaited()
 
     async def test_network_identity_and_shipment_errors_never_fall_back_to_issue(self):
-        for code in ["salla_shipping_unavailable", "salla_order_reference_mismatch", "shipping_snapshot_changed", "assembly_canonical_status_blocked"]:
+        for code in ["order_status_not_completed", "salla_shipping_unavailable", "salla_order_reference_mismatch", "shipping_snapshot_changed", "assembly_canonical_status_blocked"]:
             with self.subTest(code=code):
                 self.refresh.side_effect = ShippingLabelError(code, code)
                 with self.assertRaises(ShippingLabelError):
@@ -57,7 +57,7 @@ class UnifiedCompletedLabelTests(unittest.IsolatedAsyncioTestCase):
         self.authorize.side_effect = PermissionError("revoked")
         with self.assertRaises(PermissionError):
             await self.run_action()
-        self.refresh.side_effect = ShippingLabelError("order_status_not_completed", "pending")
+        self.refresh.side_effect = ShippingLabelError("carrier_order_in_progress", "pending")
         with self.assertRaises(PermissionError):
             await self.run_action()
         self.resume.assert_not_awaited()
@@ -66,10 +66,21 @@ class UnifiedCompletedLabelTests(unittest.IsolatedAsyncioTestCase):
 # Reuse the provider-boundary fixture in both memory and a real replica set.
 import pytest
 from test_shipping_print_legacy_path import setup, OWNER, ORDER, dump
+from order_engine import shipping_label_service as shipping
+from order_engine.shipping_label_service import _persist_verified_snapshot
+from salla_shipping import CURRENT_SHIPPING
 
 @pytest.mark.asyncio
-async def test_existing_completed_label_uses_same_boundary_despite_old_outbox(setup):
+async def test_existing_completed_label_uses_same_boundary_despite_old_outbox(setup, monkeypatch):
     db, state = setup
+    # The v1 provider must bind the current shipment and reject the former one.
+    await db.unified_orders.update_one({}, {"$set": {CURRENT_SHIPPING: {
+        "shipment_id": "200", "company_name": "SMSA", "superseded_shipment_ids": ["old"],
+    }, "salla_shipment_id": "200"}})
+    state["order"]["shipments"] = state["rows"]
+    monkeypatch.setattr(labels.compat, "call_salla", shipping.call_salla)
+    monkeypatch.setattr(shipping, "_persist_verified_snapshot", _persist_verified_snapshot)
+    monkeypatch.setattr(shipping, "refresh_shipping_label", AsyncMock(side_effect=AssertionError("legacy label path")))
     await db.order_review_workflows.update_one({}, {"$set": {"assembly_delivery": {
         "state": "requires_attention", "error_code": "assembly_completion_evidence_changed",
         "source_fingerprint": "old", "workflow_fingerprint": "old"}}})
@@ -96,12 +107,20 @@ async def test_all_unready_orders_block_shared_path_before_provider(setup):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("surface", ["completed", "assembly"])
 @pytest.mark.parametrize("allowed", [True, False])
-async def test_actual_explicit_routes_share_current_label_and_permission_boundary(setup, surface, allowed):
+async def test_actual_explicit_routes_share_current_label_and_permission_boundary(setup, surface, allowed, monkeypatch):
     from fastapi import FastAPI
     from httpx import ASGITransport, AsyncClient
     from fulfillment_v2_routes import make_fulfillment_v2_router
     from preparation_piece_operations import make_preparation_piece_operations_router
+    from order_engine import amasi_shipping_compat as compat, shipping_label_service as shipping
     db, state = setup
+    # Both public handlers use a versioned, read-only provider result.
+    current = AsyncMock(return_value={
+        "ok": True, "ready": True, "order_status_completed": True, "source": "salla",
+        "shipment_id": "active-1", "label_url": "https://labels.test/current.pdf",
+    })
+    monkeypatch.setattr(compat, "carrier_label", current)
+    monkeypatch.setattr("operational_atomic.operational_owner", shipping.operational_owner)
     await db.order_review_workflows.update_one({}, {"$set": {"assembly_delivery": {
         "state": "requires_attention", "error_code": "assembly_completion_evidence_changed"}}})
     async def user():
@@ -109,7 +128,7 @@ async def test_actual_explicit_routes_share_current_label_and_permission_boundar
     app = FastAPI()
     factory = make_fulfillment_v2_router if surface == "completed" else make_preparation_piece_operations_router
     app.include_router(factory(db, user))
-    path = f"/fulfillment-v2/completed/{ORDER}/carrier-label" if surface == "completed" else f"/preparation-work-v1/assembly/orders/{ORDER}/completion/resume"
+    path = f"/fulfillment-v2/completed/{ORDER}/carrier-label/v1" if surface == "completed" else f"/preparation-work-v1/assembly/orders/{ORDER}/completion/resume"
     before = await dump(db)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(path)
@@ -117,6 +136,19 @@ async def test_actual_explicit_routes_share_current_label_and_permission_boundar
     if allowed:
         assert response.json()["ready"] and response.json()["assembly_completion_confirmed"]
         assert response.json()["label_url"] == "https://labels.test/current.pdf"
+        assert current.await_args.kwargs == {"issue": False, "completed_only": True}
+        if surface == "completed":
+            assert response.json()["contract_version"] == 1 and response.json()["print_state"] == "ready"
     else:
-        assert not state["calls"]
-    assert await dump(db) == before
+        current.assert_not_awaited()
+    assert not state["calls"]
+    after = await dump(db)
+    if allowed and surface == "completed":
+        # v1 persists only the current label evidence; no business transition.
+        assert after["order_review_workflows"][0]["carrier_shipment_id"] == "active-1"
+        assert after["order_review_workflows"][0]["stage"] == before["order_review_workflows"][0]["stage"]
+        assert after["order_review_workflows"][0]["assembly_delivery"] == before["order_review_workflows"][0]["assembly_delivery"]
+        assert {k: v for k, v in after.items() if k != "order_review_workflows"} == {
+            k: v for k, v in before.items() if k != "order_review_workflows"}
+    else:
+        assert after == before

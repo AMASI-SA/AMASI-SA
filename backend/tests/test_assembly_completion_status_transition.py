@@ -67,7 +67,7 @@ class StatusTransitionTests(unittest.IsolatedAsyncioTestCase):
             return self.completed()
         with patch.object(delivery.shipping, "_resolve_order", resolve), \
              patch.object(delivery.shipping, "call_salla", AsyncMock(side_effect=AssertionError("No status POST after local completed"))) as post, \
-             patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(return_value={
+             patch.object(delivery.labels.compat, "carrier_label", AsyncMock(return_value={
                  "ready": True, "label_type": "store_courier", "print_data": {"courier_name": "Synthetic courier"}})):
             result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
         self.assertEqual(reads, ["GET", "GET"])
@@ -89,7 +89,7 @@ class StatusTransitionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(delivery.source_fingerprint(latest), original[delivery.FIELD]["source_fingerprint"])
         with patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=self.completed())), \
              patch.object(delivery.shipping, "call_salla", AsyncMock(side_effect=AssertionError("No POST"))) as post, \
-             patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(return_value={
+             patch.object(delivery.labels.compat, "carrier_label", AsyncMock(return_value={
                  "ready": True, "label_type": "store_courier", "print_data": {"courier_name": "Synthetic courier"}})):
             result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
         self.assertTrue(result["ready"], result)
@@ -116,7 +116,7 @@ class StatusTransitionTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(fulfillment, "persist_component_source_snapshot", persist_then_read), \
              patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=self.completed())) as resolve, \
              patch.object(delivery.shipping, "call_salla", AsyncMock(side_effect=AssertionError("No POST"))) as post, \
-             patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(return_value={
+             patch.object(delivery.labels.compat, "carrier_label", AsyncMock(return_value={
                  "ready": True, "label_type": "store_courier", "print_data": {"courier_name": "Synthetic courier"}})) as label:
             await self.webhook(payload, event="order.updated")
             self.assertEqual(len(observations), 1)
@@ -146,7 +146,7 @@ class StatusTransitionTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(fulfillment, "persist_component_source_snapshot", persist_then_read), \
              patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=self.completed())), \
              patch.object(delivery.shipping, "call_salla", AsyncMock(side_effect=AssertionError("No POST"))) as post, \
-             patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(return_value={
+             patch.object(delivery.labels.compat, "carrier_label", AsyncMock(return_value={
                  "ready": True, "label_type": "store_courier", "print_data": {"courier_name": "Synthetic courier"}})):
             await self.webhook(payload, event="order.updated")
         self.assertEqual(len(observations), 1)

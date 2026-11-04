@@ -212,17 +212,12 @@ def test_nested_cancellation_clears_saved_label():
 
 
 @pytest.mark.asyncio
-async def test_parallel_http_route_is_opt_in_and_old_route_is_retained(saved, monkeypatch):
+async def test_retired_routes_do_not_return_or_refresh_a_saved_pdf(saved):
     from fastapi import FastAPI
     from httpx import ASGITransport, AsyncClient
     import fulfillment_v2_routes as fulfillment
-    await saved.order_review_workflows.insert_one({"user_id": "owner", "order_number": "3001",
-        "stage": "completed", "assembly_status": "completed"})
-    calls = []
-    async def legacy(*args):
-        calls.append("legacy")
-        return {"ready": True, "source": "legacy-provider", "label_url": "https://labels.test/legacy.pdf"}
-    monkeypatch.setattr(fulfillment, "refresh_shipping_label", legacy)
+
+    before = await saved.unified_orders.find_one({})
     async def user():
         return {"id": "owner", "role": "owner"}
     app = FastAPI()
@@ -230,11 +225,10 @@ async def test_parallel_http_route_is_opt_in_and_old_route_is_retained(saved, mo
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         old = await client.post("/fulfillment-v2/completed/3001/carrier-label/refresh")
         new = await client.post("/fulfillment-v2/completed/3001/carrier-label/refresh-saved")
-    assert old.status_code == new.status_code == 200
-    assert old.json()["source"] == "legacy-provider"
-    assert new.json()["label_url"] == "https://labels.test/new.pdf"
-    assert new.json()["source"] == "mezan"
-    assert calls == ["legacy"]
+    for response in (old, new):
+        assert response.status_code == 410
+        assert response.json()["detail"]["code"] == "shipping_label_route_retired"
+    assert await saved.unified_orders.find_one({}) == before
 
 
 @pytest.mark.asyncio

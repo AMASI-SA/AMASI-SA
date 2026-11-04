@@ -220,6 +220,12 @@ export default function CompletedFulfillmentOrders() {
     const [scannerError, setScannerError] = useState("");
     const [scannerFeedback, setScannerFeedback] = useState(null);
     const scannerLock = useRef(false);
+    const labelRequest = useRef(null);
+    const pendingIssues = useRef(new Set());
+    const labelAccess = useRef(null);
+    labelAccess.current = { orders, permissions };
+    useEffect(() => () => { labelRequest.current = null; }, []);
+
 
     const load = useCallback(async (options = {}) => {
         const background = options?.background === true;
@@ -267,6 +273,11 @@ export default function CompletedFulfillmentOrders() {
 
     const issue = async (order) => {
         const orderNumber = order.order_number;
+        if (labelRequest.current?.orderNumber === orderNumber) return;
+        const request = { orderNumber };
+        labelRequest.current = request;
+        const isCurrent = () => labelRequest.current === request && labelAccess.current.permissions.can_print
+            && labelAccess.current.orders.some(row => row.order_number === orderNumber && !row.carrier_label_print_confirmed);
         setBusy(orderNumber);
         setError("");
         try {
@@ -274,18 +285,20 @@ export default function CompletedFulfillmentOrders() {
             const verifyExisting = current?.source === "salla_current_shipping" && Boolean(
                 current.shipment_id || current.tracking_number || current.label_available
             );
-            let result = verifyExisting
-                ? await refreshCompletedOrderCarrierLabel(orderNumber)
-                : await issueCompletedOrderCarrierLabel(orderNumber);
+            const readOnly = verifyExisting || pendingIssues.current.has(orderNumber);
+            if (!readOnly) pendingIssues.current.add(orderNumber);
+            let result = await (readOnly ? refreshCompletedOrderCarrierLabel : issueCompletedOrderCarrierLabel)(orderNumber);
+            if (!isCurrent()) return;
             setSnapshot(orderNumber, result);
 
-            // The courier app normally returns its signed PDF link in about
-            // two seconds. Keep the employee on one screen while we wait.
-            for (let attempt = 0; !verifyExisting && attempt < 5 && result?.order_status_completed && !result?.ready; attempt += 1) {
+            for (let attempt = 0; attempt < 5 && result.print_state === "pending"; attempt += 1) {
                 await wait(2000);
+                if (!isCurrent()) return;
                 result = await refreshCompletedOrderCarrierLabel(orderNumber);
+                if (!isCurrent()) return;
                 setSnapshot(orderNumber, result);
             }
+            if (result.ready) pendingIssues.current.delete(orderNumber);
 
             if (result?.order_status_completed === true && order.assembly_completion_confirmed === true
                 && result?.ready && result?.label_type === "store_courier") {
@@ -297,6 +310,7 @@ export default function CompletedFulfillmentOrders() {
                 toast.success("تحول الطلب في سلة إلى تم التنفيذ؛ رابط البوليصة ما زال قيد التجهيز");
             }
         } catch (issueError) {
+            if (!isCurrent()) return;
             setError(issueError.message);
             setOrders((current) => current.map((row) => (
                 row.order_number === orderNumber
@@ -314,7 +328,10 @@ export default function CompletedFulfillmentOrders() {
                     : row
             )));
         } finally {
-            setBusy("");
+            if (labelRequest.current === request) {
+                labelRequest.current = null;
+                setBusy("");
+            }
         }
     };
 

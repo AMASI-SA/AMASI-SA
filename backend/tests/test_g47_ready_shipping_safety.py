@@ -75,7 +75,7 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
             "assembly_delivery.status_attempted": True, "assembly_delivery.awb_attempted": True}})
         with patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=("internal", {
             "id": "internal", "reference_id": "local-assembly", "status": {"slug": "completed"}}))), \
-             patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(return_value={"ready": True})), \
+             patch.object(delivery.labels.compat, "carrier_label", AsyncMock(return_value={"ready": True})), \
              patch.object(delivery.shipping, "call_salla", AsyncMock()) as post:
             for _ in range(2):
                 result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
@@ -103,7 +103,7 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
         from orders_db import upsert_order
         from copy import deepcopy
         delivery = fixture.delivery
-        async def refresh(*args):
+        async def refresh(*args, **kwargs):
             row = await self.db.unified_orders.find_one({"order_number": "local-assembly"})
             for status in ("delivered", "in_progress"):
                 raw = deepcopy(row["raw_by_source"]["salla_direct"])
@@ -113,7 +113,7 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
             return {"ready": True, "label_url": "https://example.test/old.pdf"}
         with patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=("internal", {
                 "id": "internal", "reference_id": "local-assembly", "status": {"slug": "completed"}}))), \
-             patch.object(delivery.shipping, "refresh_shipping_label", refresh):
+             patch.object(delivery.labels.compat, "carrier_label", refresh):
             result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
         self.assertFalse(result["ready"])
         self.assertFalse((await self.workflow())["carrier_label_ready"])
@@ -123,7 +123,7 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
         await self.finish()
         import fulfillment_carrier_label as carrier
         from orders_db import upsert_order
-        async def refresh(*args):
+        async def refresh(*args, **kwargs):
             await upsert_order(self.db, "owner", "local-assembly",
                 {"order_status": "delivered", "order_status_slug": "delivered"},
                 "salla_direct", raw={"status": {"slug": "delivered"}})
