@@ -28,6 +28,7 @@ NON_PROVIDER_METHODS = {
     'الدفع عند الاستلام', 'دفع عند الاستلام', 'دفع عند الإستلام',
 }
 DIAGNOSTICS = {
+    'provider_closed_tender_total_mismatch': 'المبلغ المدفوع مثبت، وإجمالي الطلب يختلف عنه؛ راجع المتبقي وكشف المنصة.',
     'provider_payment_method_unknown': 'طريقة الدفع غير معروفة في قارئ الأرصدة',
     'provider_payment_method_conflict': 'تعارضت جهة الدفع بين حقول الطلب',
     'provider_split_payment_review_required': 'الطلب يحتوي عدة دفعات أو جهات دفع ويلزم تفصيلها',
@@ -251,6 +252,8 @@ def normalize_payment(raw, currency, total, created_at, as_of, *, page_balance=F
                             for key in ('reference', 'transaction_reference') if payment.get(key) is not None]
         reference_values += [native[0][0]] if native and native[0][0] is not None else []
         reference = _single(reference_values, 'provider_payment_reference_conflict')
+        if page_balance and reference and observed and observed > 0:
+            result['order_page_reference'] = reference
         capture_status = payment.get('status')
         if capture_status is not None and not isinstance(capture_status, str):
             raise PaymentEvidenceError('provider_payment_shape_invalid')

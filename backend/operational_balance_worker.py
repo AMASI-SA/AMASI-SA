@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 async def tick(db):
     async for item in db[STATES].find({"status": "active"}, {"_id": 1, "owner_id": 1}):
         try:
-            await refresh(db, item["owner_id"])
+            refreshed = await refresh(db, item["owner_id"])
         except Exception as exc:
             # A failed adapter never converts missing information into zero.
             detail = getattr(exc, "detail", {})
@@ -33,6 +33,18 @@ async def tick(db):
                 return None
             await mutate(db, item["owner_id"], mark)
             log.warning("Operational source reconciliation incomplete: %s", code)
+        else:
+            # Acquiring evidence from Salla must not make a successful balance
+            # refresh fail or hold a financial transaction open.
+            if refreshed.get("status") == "active":
+                coverage = refreshed.get("engine", {}).get("customer_tender_coverage", {})
+                pending = coverage.get("sar", {}).get("proof_lookups")
+                if pending:
+                    from salla_integration.paid_sar_sync import acquire_missing
+                    try:
+                        await acquire_missing(db, item["owner_id"], pending)
+                    except Exception:
+                        log.warning("Salla paid-SAR evidence acquisition deferred")
 
 
 async def run(db, interval=30):

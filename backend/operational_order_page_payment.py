@@ -2,6 +2,7 @@
 from decimal import Decimal
 
 from operational_payment_evidence import _amount, _instant
+from operational_provider_history import late_payment_blocks
 
 
 def corroborated_refund_basis(previous, payment, facts, order_id):
@@ -20,7 +21,7 @@ def corroborated_refund_basis(previous, payment, facts, order_id):
     return bool(records) and sum(records.values(), Decimal(0)) == _amount(previous["paid"], currency)
 
 
-def observed_balance(page, payment, order, state, *, now, start, historical_reviewed=False):
+def observed_balance(page, payment, order, state, *, now, start):
     """Return one current observation, or withhold it without changing any ledger object."""
     facts = state.get("engine", {}).get("facts", {})
     oid = str(order["id"])
@@ -62,16 +63,16 @@ def observed_balance(page, payment, order, state, *, now, start, historical_revi
             raise ValueError("provider_order_page_version_conflict")
     elif known != frozen or paid < known:
         raise ValueError("provider_capture_amount_conflict")
-    # The snapshot does not date a payment. A newly discovered old positive balance
-    # cannot be assigned to this run, even if a later edit changed the order timestamp.
     cutoff = state.get("engine", {}).get("as_of")
     if not previous and known and paid > known:
         last_version = state.get("engine", {}).get("order_versions", {}).get(oid)
         if not last_version or not version or version <= _instant(last_version):
             raise ValueError("provider_order_page_version_conflict")
-    if paid > known and not previous and not frozen and cutoff and created <= _instant(cutoff) and not historical_reviewed:
-        raise ValueError("provider_historical_capture_review_required")
-    if paid > known:
+    if paid > known and not known and not frozen:
+        late = cutoff and created <= _instant(cutoff)
+        if (late or state.get("movements")) and late_payment_blocks(state, order, payment, through=now):
+            raise ValueError("provider_historical_capture_review_required" if late else "provider_settled_capture_review_required")
+    elif paid > known:
         allocated = Decimal(0)
         for movement in state.get("movements", []):
             if (movement.get("party_type"), movement.get("party_id"), movement.get("currency")) != ("provider", party, currency):
@@ -93,6 +94,15 @@ def observed_balance(page, payment, order, state, *, now, start, historical_revi
         captures[capture_key] = value
     if payment.get("captures") and sum(captures.values(), Decimal(0)) != paid:
         raise ValueError("provider_capture_amount_conflict")
-    if previous and paid == known:
-        return previous
+    if previous:
+        old_ref = previous.get("transaction_reference")
+        new_ref = page.get("transaction_reference")
+        if old_ref and new_ref and old_ref != new_ref:
+            raise ValueError("provider_capture_identity_conflict")
+        if paid == known:
+            if new_ref and not old_ref:
+                return {**previous, "transaction_reference": new_ref}
+            return previous
+        if old_ref and not new_ref:
+            page = {**page, "transaction_reference": old_ref}
     return {**page, "observed_at": now.isoformat()}

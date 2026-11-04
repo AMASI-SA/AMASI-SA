@@ -12,7 +12,7 @@ from operational_balance_service import report
 from operational_prestart_cod_forecast import snapshot_cod_preview
 from operational_delivery_report_coverage import delivery_coverage_diagnostics
 from operational_profit_payroll import recorded_salary_subtotals
-from operational_provider_report_coverage import order_page_payment_rows, provider_evidence_coverage
+from operational_provider_report_coverage import provider_evidence_coverage
 
 
 ZERO = Decimal("0")
@@ -468,7 +468,7 @@ def _profit_rows(recorded_salary):
 
 def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     """Build JSON v1 from one saved operational snapshot without side effects."""
-    projection = report(state)
+    projection = report(state, provider_balances_sar=True)
     result = {"schema_version": 1, "authority": "operational_balance_report", "status": projection["status"],
               "started_at": projection["started_at"], "as_of": projection["as_of"],
               "generated_at": generated_at or projection["as_of"], "currency_order": [], "currencies": {},
@@ -493,8 +493,16 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     currencies.update(prestart_cod)
     customer_cod = snapshot_cod_preview(cost_exposure, projection["started_at"], projection["as_of"], "open_customer_cod")
     currencies.update(customer_cod)
-    page_payments = order_page_payment_rows(projection)
+    page_payments = projection["details"]["provider_order_payments"]
+    paid_totals = projection["details"]["provider_paid_totals"]
+    tender_coverage = projection["details"].get("customer_tender_coverage", {})
+    payment_sar = tender_coverage.get("sar")
+    other_tenders = tender_coverage.get("by_currency", {})
     currencies.update(page_payments)
+    currencies.update(paid_totals)
+    currencies.update(other_tenders)
+    if payment_sar is not None:
+        currencies.add("SAR")
     if cost_ready:
         currencies.update((cost_exposure.get("currencies") or {}).keys())
     result["currency_order"] = sorted(currencies, key=lambda currency: (currency != "SAR", currency))
@@ -504,6 +512,21 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         actual_complete = bool(projection["as_of"]) and not any(row.get("currency") in {None, currency} for row in projection["issues"])
         tables = _actual_tables(parties, actual_complete)
         tables.append(_balance_origin(parties, obligations, actual_complete))
+        if currency == "SAR" and payment_sar is not None:
+            rows = [{"id": row["method"], **row} for row in payment_sar["by_method"]]
+            tables.append(_table("provider_customer_paid", "مدفوعات العملاء حسب طريقة الدفع بالريال السعودي", "fulfillment",
+                [_column("name", "طريقة الدفع", "text"), _column("orders", "الطلبات", "count"),
+                 _column("paid", "دفعه العملاء"), _column("remaining", "متبقٍ على العملاء")],
+                rows, complete=payment_sar["paid"] is not None,
+                totals={"orders": tender_coverage["source_order_count"], "paid": payment_sar["paid"],
+                        "remaining": payment_sar.get("remaining")},
+                notes=["يُجمع المبلغ بالريال لكل دفعة بعد توزيع الدفع المشترك. وتظهر تفاصيل الإثبات بعملة الطلب الأصلية."]))
+        elif payment_sar is None and currency == "SAR" and currency in paid_totals:
+            rows = [{"id": row["provider"], **row} for row in paid_totals[currency]]
+            tables.append(_table("provider_customer_paid", "المدفوع المثبت بعملة الريال في اللقطة السابقة", "fulfillment",
+                [_column("name", "المنصة", "text"), _column("orders", "عدد الطلبات المدفوعة", "count"),
+                 _column("paid", "ما دفعه العملاء قبل الرسوم")], rows, complete=False,
+                notes=["يشمل المدفوع المثبت منذ بداية التشغيل لكل منصة مرة واحدة، بما فيه ما ينتظر مطابقة التسوية."]))
         if currency in page_payments:
             page_table = _table("provider_order_balances", "المدفوع والمتبقي حسب صفحة الطلب", "fulfillment", [
                 _column("name", "المنصة", "text"), _column("status", "حالة الإثبات", "text"),
@@ -512,6 +535,17 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
                 notes=["يعرض هذا التفصيل مبالغ الطلبات قبل رسوم المنصة وتسويات البنك. قد يظهر طلب محفوظ مرة أخرى للمراجعة عند تغير دليله."])
             page_table.update(show_totals=False, totals={})
             tables.append(page_table)
+        if other_tenders.get(currency):
+            rows = [{"id": row["method"], **row} for row in other_tenders[currency]]
+            tender_table = _table("customer_other_tenders", "تفصيل طرق الدفع الأخرى بعملة الطلب", "fulfillment",
+                [_column("name", "طريقة الدفع", "text"), _column("orders", "الطلبات", "count"),
+                 _column("paid", "مدفوع حسب سلة"), _column("remaining", "متبقٍ على العملاء"),
+                 _column("incomplete_orders", "طلبات تحتاج مطابقة", "count")], rows,
+                complete=not any(row["incomplete_orders"] for row in rows),
+                notes=["تعرض هذه المبالغ ما تثبته صفحة الطلب. يعتمد توريد الأموال للبنك على حركة البنك المطابقة."])
+            if payment_sar is not None:
+                tender_table.update(show_totals=False, totals={})
+            tables.append(tender_table)
         names = {(row["party_type"], row["party_id"]): _name(row) for row in parties}
         debt_rows = []
         categories = [("pos_receivable", "banks_network", "تسويات أجهزة الشبكة"),

@@ -146,6 +146,10 @@ def attach_returns(state, sources):
         if order is None:
             continue
         payment = order.get('payment') or deepcopy(case['payment_snapshot'])
+        if payment.get('split'):
+            # A legacy whole-order refund cannot determine a split tender's net amount.
+            payment['refund_allocation_unresolved'] = True
+            continue
         order['payment'] = with_recorded_refund(payment, case['payment_snapshot'],
                                                case['refund_reference'], case['amount'])
     return sources

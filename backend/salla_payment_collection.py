@@ -123,8 +123,8 @@ def provider_order_page_balance(raw, currency, total):
     return {"paid": format(paid, ".2f"), "remaining": format(due, ".2f")}
 
 
-def order_page_source_current(source, raw):
-    """Both reads must refer to the same version of the same native order."""
+def order_page_source_current(source, raw, *, referenced_provider_payment=False):
+    """Validate the native order against its stored identity and source watermark."""
     from operational_payment_evidence import _instant
 
     oid = raw.get("id")
@@ -135,11 +135,40 @@ def order_page_source_current(source, raw):
             or str(source.get("salla_order_id", oid)) != str(oid)
             or str(source.get("order_number", ref)) != str(ref)
             or not isinstance(watermark, dict)
-            or any(watermark.get(k) for k in ("cancelled", "requires_authoritative_refresh", "component_pending"))):
+            or any(watermark.get(k) for k in ("cancelled", "requires_authoritative_refresh"))):
         return False
+    if watermark.get("component_pending"):
+        # The raw order and version are committed together; a separate fulfillment
+        # callback clears this flag. Only an independently referenced financial
+        # observation may proceed while that callback is outstanding.
+        if not referenced_provider_payment or watermark.get("source_updated_at") is None:
+            return False
+        if str(source.get("order_status_slug") or "").lower() in {
+                "cancelled", "canceled", "restored", "refunded", "ملغي", "ملغى", "مسترجع"}:
+            return False
+        try:
+            version = _instant(raw.get("updated_at") or raw.get("date_updated"))
+            status_version = source.get("last_salla_direct_status_source_updated_at")
+            return (version >= _instant(watermark["source_updated_at"])
+                    and (status_version is None or version >= _instant(status_version)))
+        except ValueError:
+            return False
     if watermark.get("source_updated_at") is None:
         return True
     try:
         return _instant(watermark["source_updated_at"]) == _instant(raw.get("updated_at") or raw.get("date_updated"))
     except ValueError:
         return False
+
+
+def provider_order_page_current(source, raw, *, owner, order_number, provider_order_id):
+    if (not owner or source.get("user_id") != owner or not order_number or not provider_order_id
+            or str(raw.get("id")) != provider_order_id or str(raw.get("reference_id") or raw.get("order_number")) != order_number
+            or str(source.get("order_id", provider_order_id)) != provider_order_id):
+        return False
+    methods = raw.get("payment_methods")
+    referenced = (isinstance(methods, list) and 0 < len(methods) <= 100
+                  and all(isinstance(m, dict) and m.get("transaction_reference") for m in methods)
+                  and str(source.get("order_id") or source.get("salla_order_id") or "") == provider_order_id
+                  and str(source.get("order_number") or "") == order_number)
+    return order_page_source_current(source, raw, referenced_provider_payment=referenced)

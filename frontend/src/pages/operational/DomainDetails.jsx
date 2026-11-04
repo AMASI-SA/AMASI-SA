@@ -26,6 +26,9 @@ export default function DomainDetails({report}) {
   const obligations = unique(report.obligations || []);
   const parties = report.parties || [];
   const facts = report.details?.facts || {};
+  const orderPayments = Object.entries(report.details?.provider_order_payments || {});
+  const paidTotals = Object.entries(report.details?.provider_paid_totals || {});
+  const providerFees = Object.entries(report.details?.provider_reports || {});
   const named = id => {
     const matches = obligations.filter(o => o.id === id || o.ad_day_id === id);
     const obligation = matches[0];
@@ -64,7 +67,19 @@ export default function DomainDetails({report}) {
     return {...p,covered:sum(covered),invoiceNet:sum([...evidence].map(id=>facts[id]?.net_amount)),invoiceTax:sum([...evidence].map(id=>facts[id]?.tax_amount)),invoiceGross:sum([...evidence].map(id=>facts[id]?.gross_amount)),acceptedReturns:sum(acceptedReturns)};
   });
   return <div className="op-domain-details">
-    <details className="op-card"><summary>تفاصيل منصات الدفع</summary>{!Object.keys(report.details?.provider_reports || {}).length && <p className="op-muted">لا توجد بيانات مسجلة لهذا القسم حتى الآن؛ يبدأ الاحتساب بعد إنهاء الافتتاحيات وتوفر العمليات المؤهلة.</p>}{Object.entries(report.details?.provider_reports || {}).map(([id,row]) => {
+    <details className="op-card"><summary>تفاصيل منصات الدفع</summary>
+      {orderPayments.map(([currency, rows]) => <div className="op-table" key={currency}>
+        <table><caption>مدفوعات العملاء منذ بداية التشغيل · {currency}</caption>
+          <thead><tr><th>المنصة</th><th>حالة الإثبات</th><th>الطلبات</th><th>دفعه العملاء قبل الرسوم</th><th>متبقٍ على العملاء</th></tr></thead>
+          <tbody>{rows.map(row => <tr key={row.id}>
+            <td>{row.name}</td><td>{row.status}</td><td>{row.orders}</td><td>{row.paid}</td><td>{row.remaining}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>)}
+      {!providerFees.length && <p className="op-muted">{orderPayments.length || paidTotals.length
+        ? 'تظهر مدفوعات الطلبات أعلاه. لم تتوفر تفاصيل رسوم المنصة وتسوياتها لهذه اللقطة.'
+        : 'لا توجد بيانات مسجلة لهذا القسم حتى الآن؛ يبدأ الاحتساب بعد إنهاء الافتتاحيات وتوفر العمليات المؤهلة.'}</p>}
+      {providerFees.map(([id,row]) => {
       const p = named(id);
       return <article key={id}><h3>{p.name} · {p.currency}</h3><dl>{Object.entries(feeLabels).map(([key,label]) => <div key={key}>{label}: {row[key] ?? p.obligation?.[key] ?? 'غير مكتمل'}</div>)}</dl></article>;
     })}</details>

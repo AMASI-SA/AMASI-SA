@@ -12,6 +12,7 @@ from fastapi import HTTPException
 
 from operational_balance_store import audit, digest, fail, mutate, now, read, remember, replay, RECEIPTS, claim_movement
 from operational_balance_engine import reconcile_credits
+from operational_provider_report_coverage import provider_customer_payments
 from operational_external_advances import ACTIONS as EXTERNAL_ACTIONS, CREATION as EXTERNAL_CREATION, REPAYMENT as EXTERNAL_REPAYMENT, advance_id, advance_obligations, balance_snapshot
 from operational_ad_wallet_pool import enabled as wallet_pool_enabled, project_pool
 
@@ -558,8 +559,16 @@ async def supplier_return(db, owner, actor, payload, *, clock=None):
     return await mutate(db, owner, apply)
 
 
-def report(state, *, as_of=None):
+def report(state, *, as_of=None, provider_balances_sar=False):
     state = reconcile_credits(deepcopy(state))
+    from operational_provider_balance_sar import convert_claim, convert_projection, unavailable, usable_bases
+    valuations = usable_bases(state) if provider_balances_sar else {}
+    valuation_issues = []
+    allocated = {}
+    for movement in state["movements"]:
+        for entry in movement.get("allocations", []):
+            key = entry["obligation_id"]
+            allocated[key] = allocated.get(key, Decimal(0)) + Decimal(entry["amount"])
     parties = {}
     def get(kind, identity, currency, name=None):
         key = party_key(kind, identity, currency)
@@ -586,6 +595,15 @@ def report(state, *, as_of=None):
             obligations.append({**opening, "kind": "baseline", "expected": "0.00", "confirmed": opening["amount"],
                                 "direction": "receivable" if signed >= 0 else "payable"})
     for obligation in obligations:
+        used = allocated.get(obligation["id"], Decimal(0))
+        if provider_balances_sar and obligation["party_type"] == "provider" and obligation["currency"] != "SAR":
+            original = obligation.get("original_obligation_id", obligation["id"])
+            basis = valuations.get(original, {})
+            if basis and (basis["provider"], basis["currency"]) == (obligation["party_id"], obligation["currency"]):
+                source_claim = state["engine"]["obligations"][original]
+                used = convert_claim(obligation, used, basis, source_claim["confirmed"], allocated.get(original, Decimal(0)))
+            else:
+                unavailable(obligation, valuation_issues)
         row = get(obligation["party_type"], obligation["party_id"], obligation["currency"], obligation.get("name"))
         if obligation["party_type"] == "ad_account" and wallet_pool_enabled(state, obligation["party_id"], obligation["currency"]):
             # These rows retain the source amount and day, but payment belongs
@@ -598,8 +616,6 @@ def report(state, *, as_of=None):
         direction = obligation["direction"]
         row["expected_" + direction] += Decimal(obligation.get("expected", "0"))
         row["confirmed_" + direction] += Decimal(obligation.get("confirmed", "0"))
-        used = sum((Decimal(a["amount"]) for m in state["movements"] for a in m.get("allocations", [])
-                    if a["obligation_id"] == obligation["id"]), Decimal(0))
         remaining = Decimal(obligation.get("confirmed", "0")) - used
         if obligation.get("funding_type") == "prepaid":
             row["ad_wallet_spent"] += remaining
@@ -751,6 +767,8 @@ def report(state, *, as_of=None):
         summary["owner_withdrawals"] += row["owner_withdrawals"]
     summaries = {c: {k: fmt(v) for k, v in s.items()} for c, s in summaries.items()}
     details = {k: v for k, v in state.get("engine", {}).items() if k not in {"audit", "obligations"}}
+    # The evidence refresh queue belongs to the worker, not the public report.
+    details.get("customer_tender_coverage", {}).get("sar", {}).pop("proof_lookups", None)
     details["employee_custody"] = [{"party_id": row["party_id"], "name": row["name"], "currency": row["currency"],
         **{key: fmt(row[key]) for key in ("opening", "custody_funded", "custody_spent", "custody_returned", "custody_remaining", "custody_adjustments")},
         "receipts": [{key: movement.get(key) for key in ("id", "receipt_id", "receipt_hash", "amount", "direction", "source", "actor_id", "occurred_at", "note")}
@@ -806,6 +824,8 @@ def report(state, *, as_of=None):
                           estimated_fees_remaining=fmt(estimated-covered_fee), actual_fees=fmt(totals["fees"]),
                           expected_receivable=fmt(expected), settled=fmt(totals["cash"]),
                           outstanding=fmt(expected-totals["cash"]))
+    for identity in provider_metrics.keys() & valuations.keys():
+        provider_metrics[identity] = convert_projection(provider_metrics[identity], valuations[identity])
     details["provider_reports"] = provider_metrics
     cod_metrics = deepcopy(details.get("cod_reports", {}))
     for identity, projection in cod_metrics.items():
@@ -818,7 +838,10 @@ def report(state, *, as_of=None):
                           confirmed_custody=fmt(confirmed), settled=fmt(settled),
                           outstanding=fmt(max(confirmed-settled, Decimal(0))))
     details["cod_reports"] = cod_metrics
-    issues = deepcopy(state.get("engine", {}).get("issues", []))
+    issues = deepcopy(state.get("engine", {}).get("issues", [])) + valuation_issues
+    details["provider_order_payments"], details["provider_paid_totals"] = provider_customer_payments({
+        "details": details, "issues": issues, "obligations": obligations,
+    })
     for row in parties.values():
         if row["party_type"] == "ad_account" and row["ad_wallet_balance"] < 0:
             issues.append({"code": "advertising_prepaid_wallet_negative", "source_id": row["party_id"],

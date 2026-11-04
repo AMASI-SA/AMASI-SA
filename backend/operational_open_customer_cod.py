@@ -137,7 +137,7 @@ async def open_customer_cod(db, owner, raw_orders, data, state, started, stamp, 
                         ("credit:cod:", "provider:", "credit:provider:"))
                     or any(prefix + oid in booked for prefix in ("cod:", "credit:cod:", "shipping:",
                         "delivery_event:", "cod_collection:", "cod_customer_confirmation:", "native_driver_earning:",
-                        "provider:", "credit:provider:", "provider_order_balance:"))):
+                        "provider:", "credit:provider:", "provider_order_balance:", "provider_split:"))):
                 continue
             created = instant(raw.get("date") or raw.get("created_at") or raw.get("order_date"))
             version = instant(raw.get("updated_at") or raw.get("date_updated") or created)
