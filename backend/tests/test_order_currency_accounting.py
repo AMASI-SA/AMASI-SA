@@ -364,3 +364,37 @@ async def test_payment_gateway_metrics_do_not_zero_an_unverified_rate(monkeypatc
     assert result["totals"]["gross"] is None
     assert result["totals"]["currency_conversion_complete"] is False
     assert result["totals"]["unverified_order_numbers"] == ["missing-rate"]
+
+
+@pytest.mark.asyncio
+async def test_dashboard_currency_hydration_yields_and_preserves_projection_rules():
+    from copy import deepcopy
+    import order_currency as fx
+
+    def projection(number, rate):
+        return {"order_number": number, "raw_by_source": {"salla_direct": _salla_order(
+            total="10", currency="QAR", rate=rate,
+        )}}
+
+    rows = [
+        {"order_number": " old ", "currency": "QAR", "total_amount": 10},
+        {"order_number": "paid", "currency": "QAR", "total_amount": 10, "total_amount_sar": 11,
+         "accounting_currency": "SAR", "currency_conversion_status": "verified", "exchange_rate_to_sar": "1.1"},
+        {"order_number": "missing", "currency": "QAR", "total_amount": 10},
+        {"currency": "QAR", "total_amount": 10, **projection("embedded", "1.4")},
+        {"order_number": "old", "currency": "QAR", "total_amount": 10},
+    ]
+    rows += [deepcopy(rows[0]) for _ in range(64)]
+    projected = [projection("paid", "9"), projection("old", "1.2"), projection(" old ", "1.3")] * 16
+    expected = hydrate_order_currency_fields(deepcopy(rows), projected)
+    progress = []
+
+    async def checkpoint():
+        progress.append(sum("original_currency" in row for row in rows))
+
+    hydrated = await fx.hydrate_order_currency_fields_cooperative(rows, iter(projected), checkpoint=checkpoint)
+
+    assert hydrated is rows and rows == expected
+    assert [row["total_amount_sar"] for row in rows] == [13, 11, None, 14, 13] + [13] * 64
+    assert all("raw_by_source" not in row for row in rows)
+    assert 0 in progress and any(0 < n < len(rows) for n in progress)

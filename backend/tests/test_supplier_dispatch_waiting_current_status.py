@@ -1,4 +1,5 @@
 """Real HTTP + isolated Mongo tests for the waiting-review/dispatch status fence."""
+import asyncio
 import os
 import uuid
 from copy import deepcopy
@@ -299,6 +300,49 @@ async def test_allowed_dispatch_preserves_existing_success_and_idempotency(db):
     replay = await request(db, "POST", body)
     assert replay.json()["dispatch"]["id"] == reply.json()["dispatch"]["id"]
     assert db.writes == []
+
+
+@pytest.mark.asyncio
+async def test_lost_dispatch_confirmation_replays_one_saved_file_across_app_instances(db):
+    await seed_order(db)
+    await seed_piece(db)
+    body = payload("A")
+    first_app = FastAPI()
+    first_app.include_router(dispatch.make_preparation_supplier_dispatch_router(db, lambda: OWNER))
+
+    async def disconnect_before_confirmation(scope, receive, send):
+        async def drop_success(message):
+            if message["type"] == "http.response.start" and message["status"] == 201:
+                raise httpx.ReadError("synthetic disconnect before delivery")
+            await send(message)
+
+        await first_app(scope, receive, drop_success)
+
+    transport = httpx.ASGITransport(app=disconnect_before_confirmation)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        with pytest.raises(httpx.ReadError, match="synthetic disconnect before delivery"):
+            await client.post("/supplier-dispatch-v1/dispatches", json=body)
+
+    saved = await db.raw[dispatch.DISPATCHES].find_one({"client_request_id": body["client_request_id"]})
+    assert saved and saved["status"] == "sent" and saved["piece_ids"] == ["piece-A"]
+    db.writes.clear()
+    # Each request() constructs a new app. Both retries carry the original client request ID.
+    retries = await asyncio.gather(request(db, "POST", body), request(db, "POST", body))
+    assert all(r.status_code == 201 and r.json()["ok"] for r in retries)
+    assert all(r.json()["dispatch"]["id"] == saved["id"] for r in retries)
+    # A fresh tap in the Android app can send a new key for the same completed selection.
+    fresh_request = payload("A")
+    assert fresh_request["client_request_id"] != body["client_request_id"]
+    fresh_reply = await request(db, "POST", fresh_request)
+    assert fresh_reply.status_code == 409, fresh_reply.text
+    assert db.writes == []
+    assert await db.raw[dispatch.DISPATCHES].count_documents({}) == 1
+    event = {"dispatch_id": saved["id"], "event_type": "preparation_pieces_sent_to_supplier"}
+    assert await db.raw[dispatch.DISPATCH_EVENTS].count_documents(event) == 1
+    assert await db.raw[dispatch.PIECE_EVENTS].count_documents(event) == 1
+    workspace = (await request(db)).json()
+    account = next(row for row in workspace["supplier_accounts"] if row["supplier_id"] == "supplier")
+    assert [row["id"] for row in account["dispatches"]] == [saved["id"]]
 
 
 @pytest.mark.asyncio

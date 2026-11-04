@@ -117,3 +117,16 @@ def test_health_not_repeated_within_sixty_seconds(tmp_path, monkeypatch):
             c.main(["--enabled", "--inventory", str(inventory), "--output", str(tmp_path / "output")])
     assert len([call for call in fetch.call_args_list if call.args[1] == "/api/live"]) == 1
     assert len([call for call in fetch.call_args_list if call.args[1] == "/api/health/diagnostics"]) == 3
+
+
+def test_employee_route_schema_matches_registry_and_drops_arbitrary_suffixes():
+    import observability_metrics as registry
+    assert c.HISTOGRAMS == registry.NAMES
+    assert c.COUNTERS == registry.COUNTERS
+    per_route = "employee_route.duration.reviewed_products"
+    forbidden = "employee_route.status.reviewed_products.403.sensitive"
+    raw = {"phase1": {"histograms": {per_route: {"count": 1}, per_route + ".sensitive": {"count": 2}},
+                      "counters": {"employee_route.status.reviewed_products.403": 1, forbidden: 2}}}
+    out = c.sanitize(raw)
+    assert out["histograms"] == {per_route: {"count": 1}}
+    assert out["counters"] == {"employee_route.status.reviewed_products.403": 1}

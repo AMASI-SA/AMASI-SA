@@ -283,6 +283,7 @@ def pytest_collection_modifyitems(session, config, items):
     import dashboard_v2_routes as dash
     import dashboard_b_computation_experiment as computation
     import orders_db
+    from order_currency import summarize_orders_sar
     from test_dashboard_b_baseline_mongo import legacy_handler
 
     @contextmanager
@@ -328,6 +329,7 @@ def pytest_collection_modifyitems(session, config, items):
         def actual(db, scope):
             handler = legacy_handler(db)
             handler.__globals__.update(
+                summarize_orders_sar=summarize_orders_sar,
                 orders_to_parsed_cooperative=parser,
                 _dashboard_deepcopy=copy.deepcopy,
             )
