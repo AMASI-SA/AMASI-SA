@@ -134,3 +134,14 @@ Operational bug found by real Mongo load
   No invoice, financial policy, provider write or Production repair is included.
   No historical events are rewritten or backfilled. Concurrent ready-action audit
   repair beyond the existing handler's behavior remains outside this small fix.
+
+Employee Ready authorization read repair
+  The real physical Ready route reauthorizes the employee within its existing
+  restricted fulfillment transaction. Role-assignment user_id identifies the
+  employee, while owner_user_id identifies the tenant. The capability previously
+  treated that user_id as a merchant ID and rejected the legitimate read409.
+  The repair permits only role-assignment reads with the SAME existing explicit
+  owner proof used by employee management. It adds no collection write permission,
+  financial capability, role grant, invoice change or pause bypass. Regression
+  tests require foreign/unproven owners to fail and general_ledger writes to fail;
+  existing salary/lifecycle/review transaction contracts also run against real Mongo.

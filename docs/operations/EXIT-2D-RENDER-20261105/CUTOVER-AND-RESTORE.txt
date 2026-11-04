@@ -47,9 +47,14 @@ Ownership transfer, after separate approval
      Existing broad sync role owns shipping/payment/review loops together; do not
      claim individual provider canaries unless their existing enable flags safely
      isolate them. No provider features are enabled just to test worker execution.
-  7. Traffic progression/readiness must never create two write owners. During
-     gradual Web traffic transfer, old mutating endpoints remain blocked until
-     cutover complete. For zero-write canaries use the isolated synthetic dataset.
+  7. Traffic progression/readiness must never create two write owners. If the old
+     Web process also launches legacy workers, stop that ENTIRE process/replica;
+     do not keep it serving a canary after claiming its workers stopped. Use an
+     external maintenance page during the stop/final-copy window. Gradual traffic
+     resumes on the new Web only after its required ownership/data gates pass.
+     Worker arming flags do not block HTTP mutations: keep external write ingress
+     closed during read checks and use a reviewed route allowlist, never assume
+     every GET is free of writes. For zero-write canaries use isolated synthetic data.
      Validate provider read-back, dedupe IDs, unique indexes and backlog progress
      before widening writes. Observe unknown-outcome queues without auto-replay.
   8. Rollback is another ownership transfer: disable NEW producers, drain/kill and
