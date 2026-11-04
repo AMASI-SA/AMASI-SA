@@ -40,6 +40,13 @@ Goal: dashboard summary / reporting, advertising analytics / synchronization and
 - [Isolated local contention benchmark](LOCAL-BENCHMARK.md) and [raw results](local-contention.json) compare idle and loaded synthetic business routes. They establish local contention and do not replace branch-matched Preview before/after measurements.
 - [Workload inventory](WORKLOADS.md) traces the native and shadow reporting launchers and the campaign AI path that can dispatch live ad actions. No scheduler ownership has been changed.
 
+## Offline comparison and supplier retry
+
+- [Counterbalanced process comparison](LOCAL-ISOLATION.md) uses the same rate and input for every loaded arm. All 3,000 measured operations and 200 validated dashboard cost jobs completed. Supplier-create p95 fell from 103.14 to 24.75 ms and from 68.74 to 20.44 ms across two paired comparisons. This uses a supervised, disposable process in the local harness. It does not launch a service in an application deployment.
+- The real-Mongo supplier regression disconnects the client after the first HTTP 201 is ready and before any response is delivered. Two fresh app instances replay the original request ID and return the single committed file. A new request ID for the same fully assigned piece gets HTTP 409. One dispatch, one dispatch event, one piece event and one visible supplier file are checked. All 59 cases in the supplier status-fence module passed. The test covers disconnect after commit; it does not determine the outcome of the November 3 file.
+- The [mobile main source reviewed](https://github.com/AMASI-SA/amasi-mobile/blob/f2d7ed60fb569dd226c6b60e16538064c368f822/frontend/src/features/myProducts/repository.ts#L317) generates a fresh request ID for each explicit call. The APK installed on a specific phone was not inspected. Check saved supplier files before retrying after an ambiguous timeout.
+- [Support follow-up](https://mail.google.com/mail/u/?authuser=amasi.jewelery%40gmail.com#sent/1a1a402447b49547) requested the lifecycle, isolated Preview path, and price for this project. No paid resource or environment change was requested.
+
 ## Earlier test evidence and limits
 
 - `node --test /mnt/data/mezanscope-test/dashboardFetchAdmission.test.mjs` on a local *behaviorally identical pure-JS gate*: **5 PASS / 0 FAIL**. This proves helper state transitions only; it is **not** the repository Jest suite nor end-to-end/CI/Preview performance validation.
