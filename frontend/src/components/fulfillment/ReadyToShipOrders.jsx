@@ -373,6 +373,12 @@ export function CompletedAssemblyOrderCard({
     );
 }
 
+function labelCompletion(label) {
+    return { ...label, assembly_completion_confirmed: label.assembly_completion_confirmed === true,
+        order_completion_status: label.order_status_completed === true ? "confirmed" : "pending",
+        label_status: label.ready === true ? "available" : "pending", requires_attention: false };
+}
+
 export default function ReadyToShipOrders() {
     const [orders, setOrders] = useState([]);
     const [permissions, setPermissions] = useState({});
@@ -385,6 +391,7 @@ export default function ReadyToShipOrders() {
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
     const [resumeUncertain, setResumeUncertain] = useState(false);
+    const pendingLabelOrders = useRef(new Set());
     const [labelScanner, setLabelScanner] = useState(null);
     const [labelScannerBusy, setLabelScannerBusy] = useState(false);
     const [labelScannerError, setLabelScannerError] = useState("");
@@ -450,6 +457,7 @@ export default function ReadyToShipOrders() {
         try {
             const data = await searchAssemblyOrder(value);
             if (epoch !== requestEpoch.current) return null;
+            setResumeUncertain(pendingLabelOrders.current.has(data.order_number));
             setResult(reconcileRead(data));
             return data;
         } catch (searchError) {
@@ -597,17 +605,17 @@ export default function ReadyToShipOrders() {
         setSuccess("");
         setResult(invalidateShipping);
         try {
-            const label = await (resumeUncertain || result.carrier_label?.order_status_completed === true
+            const refreshOnly = pendingLabelOrders.current.has(orderNumber) || result.carrier_label?.order_status_completed === true;
+            pendingLabelOrders.current.add(orderNumber);
+            const label = await (refreshOnly
                 ? refreshCompletedOrderCarrierLabel(orderNumber)
                 : issueCompletedOrderCarrierLabel(orderNumber));
             if (label?.order_number && label.order_number !== orderNumber) throw new Error("order mismatch");
-            const completion = { ...label, order_number: orderNumber,
-                assembly_completion_confirmed: label.assembly_completion_confirmed === true,
-                order_completion_status: label.order_status_completed === true ? "confirmed" : "pending",
-                label_status: label.ready === true ? "available" : "pending" };
+            const completion = labelCompletion(label);
             if (epoch !== requestEpoch.current) return;
             if (completion?.order_number !== orderNumber) throw new Error("order mismatch");
-            setResumeUncertain(false);
+            if (label.ready) pendingLabelOrders.current.delete(orderNumber);
+            setResumeUncertain(pendingLabelOrders.current.has(orderNumber));
             setResult((current) => current?.order_number !== orderNumber ? current : {
                 ...current, ...completion,
                 carrier_label: { ready: false, order_status_completed: false, ...(completion.carrier_label || completion) },
@@ -623,6 +631,8 @@ export default function ReadyToShipOrders() {
         }
     };
 
+    const pollCurrentLabel = result?.carrier_label?.print_state === "pending"
+        || result?.carrier_label?.order_status_completed === true;
     useEffect(() => {
         if (!result?.order_number || !result.assembly_completion_confirmed
             || busy || result.requires_attention || result.label_status === "available") return undefined;
@@ -630,10 +640,18 @@ export default function ReadyToShipOrders() {
         const epoch = requestEpoch.current;
         let stopped = false;
         let timer;
+        let refreshes = 0;
         const poll = async () => {
             try {
-                const completion = await getAssemblyCompletion(orderNumber);
+                if (pollCurrentLabel) refreshes += 1;
+                const completion = pollCurrentLabel
+                    ? labelCompletion(await refreshCompletedOrderCarrierLabel(orderNumber))
+                    : await getAssemblyCompletion(orderNumber);
                 if (stopped || epoch !== requestEpoch.current || completion?.order_number !== orderNumber) return;
+                if (pollCurrentLabel && completion.ready) {
+                    pendingLabelOrders.current.delete(orderNumber);
+                    setResumeUncertain(false);
+                }
                 setResult((current) => current?.order_number !== orderNumber ? current : {
                     ...current, ...completion,
                     carrier_label: { ready: false, order_status_completed: false, ...(completion.carrier_label || completion) },
@@ -641,12 +659,12 @@ export default function ReadyToShipOrders() {
             } catch {
                 // A read failure must never replay Ready or change its saved result.
             } finally {
-                if (!stopped) timer = setTimeout(poll, 5000);
+                if (!stopped && refreshes < 5) timer = setTimeout(poll, 5000);
             }
         };
         timer = setTimeout(poll, 5000);
         return () => { stopped = true; clearTimeout(timer); };
-    }, [result?.order_number, result?.assembly_completion_confirmed, result?.requires_attention, result?.label_status, busy]);
+    }, [result?.order_number, result?.assembly_completion_confirmed, result?.requires_attention, result?.label_status, pollCurrentLabel, busy]);
 
     const openLabelConfirmation = useCallback(() => {
         if (!result?.order_number || result.assembly_completion_confirmed !== true

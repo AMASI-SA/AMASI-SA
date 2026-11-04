@@ -25,11 +25,6 @@ from .product_image_enrichment import enrich_order_item_images
 from .recipient_enrichment import enrich_order_recipients
 from .repository import MongoOrderRepository, OrderRepository
 from .salla_refresh import refresh_order_from_salla
-from .shipping_label_service import (
-    ShippingLabelError,
-    issue_shipping_label,
-    refresh_shipping_label,
-)
 from .service import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
@@ -477,60 +472,11 @@ def make_order_engine_router(
             "source": "mezan_local",
         }
 
-    @router.post("/{order_number}/shipping-label/refresh")
-    async def refresh_order_shipping_label(
-        order_number: str,
-        user: dict = Depends(current_user),
-    ) -> dict[str, Any]:
-        owner = _require_owner(user)
-        try:
-            from fulfillment_carrier_label import _require_print_completed_workflow
-            await _require_print_completed_workflow(
-                db, user_id=str(owner["id"]), order_number=str(order_number))
-            return await refresh_shipping_label(
-                db,
-                str(owner["id"]),
-                str(order_number),
-            )
-        except ShippingLabelError as exc:
-            raise HTTPException(
-                status_code=exc.status_code,
-                detail={
-                    "code": exc.code,
-                    "message": str(exc),
-                    "order_number": str(order_number),
-                },
-            ) from exc
-
     @router.post("/{order_number}/shipping-label")
-    async def create_order_shipping_label(
-        order_number: str,
-        user: dict = Depends(current_user),
-    ) -> dict[str, Any]:
-        owner = _require_owner(user)
-        try:
-            workflow = await db.order_review_workflows.find_one({
-                "user_id": str(owner["id"]), "order_number": str(order_number),
-                "assembly_status": "completed",
-            })
-            if workflow:
-                from assembly_completion_delivery import resume
-                return await resume(db, user_id=str(owner["id"]), order_number=str(order_number),
-                                    actor_id=str(owner["id"]), actor_name=str(owner.get("name") or ""), manual=True)
-            return await issue_shipping_label(
-                db,
-                str(owner["id"]),
-                str(order_number),
-            )
-        except ShippingLabelError as exc:
-            raise HTTPException(
-                status_code=exc.status_code,
-                detail={
-                    "code": exc.code,
-                    "message": str(exc),
-                    "order_number": str(order_number),
-                },
-            ) from exc
+    @router.post("/{order_number}/shipping-label/refresh")
+    async def retired_order_shipping_label(order_number: str, user: dict = Depends(current_user)):
+        _require_owner(user)
+        raise HTTPException(410, detail={"code": "shipping_label_route_retired"})
 
     @router.get("/{order_number}", response_model=OrderDTO)
     async def get_order_row(

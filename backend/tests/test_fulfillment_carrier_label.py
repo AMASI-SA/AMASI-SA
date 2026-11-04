@@ -500,7 +500,14 @@ async def test_experiment_override_cannot_bypass_readonly_current_carrier_policy
         return await callback(scoped)
     monkeypatch.setattr(delivery, "operational_owner", local_owner)
     monkeypatch.setattr(shipping, "operational_owner", local_owner)
-    monkeypatch.setattr(shipping, "_print_shipment_rows", shipment_rows)
+    from order_engine import amasi_shipping_compat
+
+    async def official_shipments(_db, owner, method, path, **kwargs):
+        assert method == "GET" and owner == "owner-1"
+        assert path == "/orders/salla-order-1/shipments"
+        return {"data": await shipment_rows(_db, owner, "salla-order-1")}
+
+    monkeypatch.setattr(amasi_shipping_compat, "call_salla", official_shipments)
     result = await shipping.issue_shipping_label(
         db,
         "owner-1",

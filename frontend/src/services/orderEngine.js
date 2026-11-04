@@ -1,4 +1,5 @@
 import api from "../lib/api";
+import { issueCompletedOrderCarrierLabel, refreshCompletedOrderCarrierLabel } from "./fulfillmentV2";
 import {
     getPreviewOrder,
     getPreviewOrderSummary,
@@ -161,10 +162,7 @@ export async function issueShippingLabel(orderNumber) {
         throw new Error("إصدار البوليصة غير متاح في المعاينة التجريبية.");
     }
     try {
-        const { data } = await api.post(
-            `/orders-v2/${encodeURIComponent(normalized)}/shipping-label`,
-        );
-        return data;
+        return await issueCompletedOrderCarrierLabel(normalized);
     } catch (error) {
         throw new Error(shippingLabelErrorMessage(error));
     }
@@ -178,10 +176,7 @@ export async function verifyShippingLabel(orderNumber) {
         return { ok: true, ready: false, source: "preview" };
     }
     try {
-        const { data } = await api.post(
-            `/orders-v2/${encodeURIComponent(normalized)}/shipping-label/refresh`,
-        );
-        return data;
+        return await refreshCompletedOrderCarrierLabel(normalized);
     } catch (error) {
         throw new Error(shippingLabelErrorMessage(error));
     }

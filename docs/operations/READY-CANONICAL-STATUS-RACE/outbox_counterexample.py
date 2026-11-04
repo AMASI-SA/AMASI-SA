@@ -43,7 +43,7 @@ async def scenario(boundary, *, shipment_read_in_refresh=False):
             await delivered()
             return [{"id": "current", "status": "draft", "type": "shipment"}]
 
-        async def refresh(*args):
+        async def refresh(*args, **kwargs):
             # New GET-only workers read shipments inside refresh, rather than
             # a second issuance branch. Preserve the original diagnostic by default.
             if boundary == "awb_post" and shipment_read_in_refresh:
@@ -59,7 +59,7 @@ async def scenario(boundary, *, shipment_read_in_refresh=False):
             return {"success": True}
 
         with patch.object(shipping, "_resolve_order", resolve), \
-             patch.object(shipping, "refresh_shipping_label", refresh), \
+             patch.object(fixture.delivery.labels.compat, "carrier_label", refresh), \
              patch.object(shipping, "_print_shipment_rows", rows), \
              patch.object(shipping, "_create_payload", return_value={"order_id": "internal"}), \
              patch.object(shipping, "call_salla", post):

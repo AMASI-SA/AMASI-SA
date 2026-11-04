@@ -239,6 +239,29 @@ test("fresh guard failure remains visible instead of being suppressed as a store
     expect(markup).toContain("FRESH-STALE");
 });
 
+test("a delayed authorized store label prints in the window reserved by the user's click", async () => {
+    const popup = { opener: window, close: jest.fn(), location: { replace: jest.fn() } };
+    let activeClick = true;
+    const opened = jest.spyOn(window, "open").mockImplementation(() => activeClick ? popup : null);
+    let finish;
+    refreshCompletedOrderCarrierLabel.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const data = { order_number: "1001", qr_code: "current-order-QR" };
+    try {
+        const printing = openCurrentCarrierLabel("1001");
+        activeClick = false;
+        expect(opened).toHaveBeenCalledTimes(1);
+        expect(opened).toHaveBeenCalledWith("about:blank", "_blank");
+        expect(popup.opener).toBeNull();
+        expect(printStoreCourierLabel).not.toHaveBeenCalledWith(popup, expect.anything());
+        expect(popup.location.replace).not.toHaveBeenCalled();
+        printStoreCourierLabel.mockReturnValueOnce(true);
+        finish({ ready: true, order_status_completed: true, label_type: "store_courier", print_data: data });
+        await printing;
+        expect(printStoreCourierLabel).toHaveBeenCalledWith(popup, data);
+        expect(opened).toHaveBeenCalledTimes(1);
+    } finally { opened.mockRestore(); }
+});
+
 test("opening refreshes first and opens only the new provider artifact", async () => {
     const labelWindow = { opener: "previous", location: { replace: jest.fn() } };
     const opened = jest.spyOn(window, "open").mockImplementation(() => labelWindow);
@@ -251,23 +274,29 @@ test("opening refreshes first and opens only the new provider artifact", async (
     opened.mockRestore();
 });
 
-test("provider failure and missing artifact open nothing", async () => {
-    const opened = jest.spyOn(window, "open").mockImplementation(() => null);
+test("provider failure and missing artifact close the reserved window without printing", async () => {
+    const popup = { close: jest.fn(), location: { replace: jest.fn() } };
+    const opened = jest.spyOn(window, "open").mockReturnValue(popup);
     refreshCompletedOrderCarrierLabel.mockRejectedValueOnce(new Error("salla_shipping_unavailable"));
     await expect(openCurrentCarrierLabel("1001")).rejects.toThrow("salla_shipping_unavailable");
     refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ order_status_completed: true, ready: true });
     await expect(openCurrentCarrierLabel("1001")).rejects.toThrow();
-    expect(opened).not.toHaveBeenCalled();
+    expect(popup.close).toHaveBeenCalledTimes(2);
+    expect(popup.location.replace).not.toHaveBeenCalled();
+    expect(printStoreCourierLabel).not.toHaveBeenCalledWith(popup, expect.anything());
     opened.mockRestore();
 });
 
 test.each([undefined, false, "true"])("fresh label without positive completed proof (%s) never opens", async (completed) => {
-    const opened = jest.spyOn(window, "open").mockImplementation(() => null);
+    const popup = { close: jest.fn(), location: { replace: jest.fn() } };
+    const opened = jest.spyOn(window, "open").mockReturnValue(popup);
     try {
         refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ ready: true, order_status_completed: completed,
             label_url: "https://fresh.test/label" });
         await expect(openCurrentCarrierLabel("1001")).rejects.toThrow("لم تؤكد سلة");
-        expect(opened).not.toHaveBeenCalled();
+        expect(popup.close).toHaveBeenCalledTimes(1);
+        expect(popup.location.replace).not.toHaveBeenCalled();
+        expect(printStoreCourierLabel).not.toHaveBeenCalledWith(popup, expect.anything());
     } finally { opened.mockRestore(); }
 });
 
@@ -278,6 +307,8 @@ test("failed open clears cached green readiness and print confirmation", async (
     const order = { order_number: "A", assembly_completion_confirmed: true, salla_order_status: "completed",
         carrier_label_ready: true, carrier_label_url: "https://saved.test/old.pdf" };
     refreshCompletedOrderCarrierLabel.mockRejectedValueOnce(new Error("offline"));
+    const popup = { close: jest.fn() };
+    const opened = jest.spyOn(window, "open").mockReturnValue(popup);
     try {
         await act(async () => root.render(<CarrierLabelControl order={order} permissions={permissions} />));
         await act(async () => container.querySelector('[data-testid="download-official-carrier-label"]').click());
@@ -285,7 +316,8 @@ test("failed open clears cached green readiness and print confirmation", async (
         expect(container.querySelector('[data-testid="confirm-carrier-label-print"]')).toBeNull();
         expect(container.querySelector('[data-testid="print-existing-carrier-label"]').disabled).toBe(true);
         expect(container.querySelector('[role="alert"]').textContent).toBe("offline");
-    } finally { await act(async () => root.unmount()); delete global.IS_REACT_ACT_ENVIRONMENT; }
+        expect(popup.close).toHaveBeenCalledTimes(1);
+    } finally { opened.mockRestore(); await act(async () => root.unmount()); delete global.IS_REACT_ACT_ENVIRONMENT; }
 });
 
 test("store courier also prints only freshly verified print data", async () => {
@@ -337,6 +369,33 @@ test("full completed orders page loads a canonical order and renders its card", 
     } finally {
         act(() => root.unmount());
         container.remove();
+        delete global.IS_REACT_ACT_ENVIRONMENT;
+    }
+});
+
+test.each([false, true])("one issue waits for the v1 completion read (unmount=%s)", async unmount => {
+    jest.useFakeTimers();
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    const order = { order_number: "PENDING-ORDER", items: [], assembly_completion_confirmed: true };
+    listCompletedFulfillmentOrders.mockResolvedValueOnce({ items: [order], permissions });
+    issueCompletedOrderCarrierLabel.mockResolvedValueOnce({ order_number: order.order_number, contract_version: 1,
+        ready: false, print_state: "pending", order_status_completed: false });
+    refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ order_number: order.order_number, contract_version: 1,
+        ready: true, print_state: "ready", order_status_completed: true, label_url: "https://carrier.test/current.pdf" });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    try {
+        await act(async () => root.render(<CompletedFulfillmentOrders />));
+        await act(async () => container.querySelector('[data-testid="issue-official-carrier-label"]').click());
+        expect(issueCompletedOrderCarrierLabel).toHaveBeenCalledTimes(1);
+        if (unmount) act(() => root.unmount());
+        await act(async () => jest.advanceTimersByTime(2000));
+        expect(refreshCompletedOrderCarrierLabel).toHaveBeenCalledTimes(unmount ? 0 : 1);
+        if (!unmount) expect(container.querySelector('[data-testid="download-official-carrier-label"]')).not.toBeNull();
+        expect(issueCompletedOrderCarrierLabel).toHaveBeenCalledTimes(1);
+    } finally {
+        if (!unmount) act(() => root.unmount());
+        jest.useRealTimers();
         delete global.IS_REACT_ACT_ENVIRONMENT;
     }
 });
@@ -434,7 +493,7 @@ test.each(["same-order", "other-order", "permission"])("legacy print with stale 
     let resolve;
     const pending = new Promise(done => { resolve = done; });
     refreshCompletedOrderCarrierLabel.mockReturnValueOnce(pending);
-    const popup = { opener: null, location: { replace: jest.fn() } };
+    const popup = { opener: null, close: jest.fn(), location: { replace: jest.fn() } };
     const opened = jest.spyOn(window, "open").mockReturnValue(popup);
     const container = document.createElement("div");
     document.body.appendChild(container);
@@ -456,7 +515,11 @@ test.each(["same-order", "other-order", "permission"])("legacy print with stale 
         }} permissions={{ ...permissions, can_print: change !== "permission" }} />));
         await act(async () => resolve({ order_status_completed: true, ready: true, shipment_id: "PROVIDER", tracking_number: "PROVIDER-AWB", label_url: "https://salla.test/ready.pdf" }));
         if (change === "same-order") expect(popup.location.replace).toHaveBeenCalledWith("https://salla.test/ready.pdf");
-        else expect(opened).not.toHaveBeenCalled();
+        else {
+            expect(popup.close).toHaveBeenCalledTimes(1);
+            expect(popup.location.replace).not.toHaveBeenCalled();
+            expect(printStoreCourierLabel).not.toHaveBeenCalledWith(popup, expect.anything());
+        }
         expect(issueCompletedOrderCarrierLabel).not.toHaveBeenCalled();
     } finally {
         await act(async () => root.unmount());
