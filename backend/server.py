@@ -5188,6 +5188,8 @@ async def _global_startup() -> None:
     await db.account_transactions.create_index([("user_id", 1), ("account_id", 1), ("transaction_date", -1)])
     # Indexes for the "تجهيز المنتجات" feature (iteration 34).
     await ensure_preparation_indexes(db)
+    from preparation_piece_operations import ensure_assembly_piece_lookup_indexes
+    await ensure_assembly_piece_lookup_indexes(db)
     await ensure_salla_indexes(db)
     await ensure_payment_settlements_indexes(db)
     # Backfill: older salaries created before the country column existed are
