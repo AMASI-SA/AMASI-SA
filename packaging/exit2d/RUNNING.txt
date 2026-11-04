@@ -1,0 +1,72 @@
+EXIT-2D independent runtime — DEVELOPMENT CANDIDATE, not a deployment approval
+
+One image, explicit process roles; original server entrypoint defaults remain.
+Commands from repository root:
+  python backend/independent_runtime.py migration
+  python backend/independent_runtime.py worker-reports --port 8000
+  python backend/independent_runtime.py web --port 8000
+  python backend/independent_runtime.py worker-sync
+  python backend/independent_runtime.py worker-accounting
+
+Web/API and reports run in separate HTTP services. Set Web's
+MEZAN_REPORT_WORKER_URL to the private HTTP(S) origin of the reports service.
+The reports service exposes existing GET dashboard/dashboard-v2/report/export
+handlers with original authentication and calculations; other application
+routes are refused. Web preserves public URLs and streams these requests and
+responses without credentials in URLs, retries or a local heavy-work fallback.
+Unrelated employee/Salla/Qoyod/accounting routes execute their existing handlers
+in Web. Interactive advertising operations retain their existing approval and
+request semantics; only lifecycle schedulers move. Excel imports/reprocessing
+and preparation PDFs also retain their existing request semantics in this slice.
+Do not interpret this slice as moving every potentially expensive API operation.
+
+Sync and accounting are non-HTTP background services. They require
+MEZAN_WORKER_ENABLED=1. In production they additionally refuse startup without
+MEZAN_LEGACY_WORKERS_STOPPED=1, which may be set only after an authorized,
+verified stop/drain of the old workers. This confirmation flag is not a magic
+fence for old binaries that do not participate: cutover still requires proof
+that legacy processes stopped. Each new worker holds a role-scoped cross-source
+Mongo lease and shuts down on lost ownership; existing per-job policies remain.
+Existing disabled scheduler flags are not enabled by the entrypoint.
+The old combined `worker` command is retained only for synthetic historical
+acceptance; production rejects it. No invoice code is replaced or modified.
+
+Migration has its own independent-schema-v1 completion namespace so completion
+of the old mixed startup cannot incorrectly satisfy the new schema gate.
+Migration forwards existing index definitions through an index-only boundary;
+legacy repair/backfills are not run. Existing-account owner recovery is an
+explicit failure, not an implicit promotion. Web installs current security
+layers per process with index creation disabled, waits for schema/Mongo, and
+does not run router startup/shutdown callbacks or original mixed startup.
+Application requests can still perform their original authorized writes.
+
+Production packaging:
+  docker build -f packaging/exit2d/Dockerfile -t mezan-independent:reviewed .
+The production image has NO fixture passwords, keys, DB URL or test environment.
+Inject credentials via the selected host's secret manager. APP_ENV=production
+requires the existing verified governed artifact identity; build/materialize it
+using the reviewed release process before packaging backend/release_identity.json.
+This task does not generate a new reviewed intent or claim production packaging
+acceptance. Never insert public acceptance values into a real deployment.
+Keep the reports service private and use a production secret/configuration
+matrix appropriate to each role. All services must use the same reviewed source
+and schema, and a compatible Mongo database. Do not connect these commands to
+Production under the development authorization.
+
+Synthetic Linux acceptance:
+  bash packaging/exit2c/run_linux.sh
+Uses restored September harness with current role adaptations and a disposable
+Mongo replica set in network=none, loopback-only namespaces, read-only application
+files, tmpfs and public synthetic fixtures. No host ports or real provider/SMTP
+credentials. No Production DB/volume mounts, data restore or external calls.
+Includes real HTTP auth/restart/Mongo-down acceptance, original focused suites,
+worker lifecycle checks, actual separated role starters and report boundary tests.
+The process-isolation benchmark uses artificial CPU work; it is not a capacity
+estimate for actual reports or Production load. Check STATUS.json for exact fresh
+results rather than inferring acceptance from these instructions.
+
+Reused September source: 6f0884e98b8fddef4a884b1321a9a216b9d30498.
+Restored tests are adapted against current Production source cec4c3854031c357577f07568f91a44c082905fc;
+the original September branch and full local archive remain untouched.
+The original 28-entry discovery proposal is a frozen baseline, not a runtime
+permission grant. New code is subject to independent role and HTTP tests.

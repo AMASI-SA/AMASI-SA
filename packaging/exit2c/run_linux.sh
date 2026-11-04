@@ -7,6 +7,12 @@ if test "$mode" != runtime; then accept_args=("$mode"); fi
 # One standard Ubuntu job. Runtime cannot route outside the disposable namespace.
 docker build --no-cache -f packaging/exit2c/Dockerfile -t mezan-exit2c:candidate .
 docker build --no-cache -f packaging/exit2c/tests.Dockerfile -t mezan-exit2c:tests .
+docker run --rm --network none --read-only --tmpfs /tmp --cap-drop ALL \
+  --security-opt no-new-privileges --pids-limit 256 --memory 3g --cpus 2 \
+  --entrypoint python mezan-exit2c:tests -m unittest discover -s /opt/exit2d -p 'test_*.py'
+docker run --rm --network none --read-only --tmpfs /tmp --cap-drop ALL \
+  --security-opt no-new-privileges --pids-limit 256 --memory 3g --cpus 2 \
+  --entrypoint python mezan-exit2c:tests /opt/exit2d/benchmark.py
 if test "$mode" = --preparation-only; then
   # Once in the success scenario, on the same copied source and pinned image.
   docker run --rm --network none --read-only --tmpfs /tmp --cap-drop ALL \
@@ -378,6 +384,4 @@ life no-worker
 echo 'PASS worker explicit arming, singleton fencing, loss cancellation, restart and TERM'
 docker run --rm "${runtime[@]}" -e MEZAN_WORKER_ENABLED=1 --entrypoint python mezan-exit2c:candidate /opt/acceptance/worker_shutdown.py --linux
 docker run --rm "${runtime[@]}" -e MEZAN_WORKER_ENABLED=1 --entrypoint python mezan-exit2c:candidate /opt/exit2d/role_acceptance.py
-docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:tests -m unittest discover -s /opt/exit2d -p test_reports.py
-docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:tests /opt/exit2d/benchmark.py
 echo 'PASS EXIT-2C scoped acceptance; temporary containers cleaned next'

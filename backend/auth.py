@@ -552,6 +552,8 @@ async def ensure_user_settings(db, user_id: str) -> dict:
     return settings
 
 
-async def install_runtime_security(app, db, *, initialize_indexes=True):
+async def install_runtime_security(app, db, *, initialize_indexes=False):
     """Explicit-app entry point reused by independent role lifespans."""
+    if app is None:
+        raise ValueError("independent security requires an explicit FastAPI app")
     await install_process_local_auth_security(db, app=app, initialize_indexes=initialize_indexes)

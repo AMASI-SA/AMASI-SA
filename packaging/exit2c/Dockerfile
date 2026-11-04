@@ -3,7 +3,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /opt/mezan
 RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
-COPY packaging/exit2a/requirements.txt /opt/requirements.txt
+COPY packaging/exit2d/runtime-requirements.txt /opt/requirements.txt
 RUN python -m pip --isolated install --index-url https://pypi.org/simple --no-cache-dir -r /opt/requirements.txt \
     && python -m pip check
 COPY backend /opt/mezan/backend

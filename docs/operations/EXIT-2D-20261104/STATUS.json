@@ -6,13 +6,13 @@
   "base_source_sha": "cec4c3854031c357577f07568f91a44c082905fc",
   "historical_sha": "6f0884e98b8fddef4a884b1321a9a216b9d30498",
   "checkpoint_commit_sha": "19fdb529f906db64b729704fc43071a49c4170e8",
-  "remote_checkpoint": "PRIOR_CHECKPOINT_VERIFIED_CURRENT_WIP_PENDING_PUSH",
+  "remote_checkpoint": "19fdb529 and 54a99910 verified on remote; current follow-up pending push",
   "production_changed": false,
   "application_files_changed": true,
   "qoyod_behavior_changed": false,
   "production_connections": 0,
   "paid_resources_created": 0,
-  "ci_runs_started": 0,
+  "ci_runs_started": 1,
   "pr_created": false,
   "merged": false,
   "release_lease_created": false,
@@ -34,6 +34,12 @@
       "command": "python -B packaging/exit2d/inventory.py --plan docs/operations/EXIT-2D-20261104/role-plan.json",
       "exit_code": 0,
       "meaning": "Static bounded inventory coverage only; runtime_verified=false"
+    },
+    {
+      "command": "python -B -m unittest discover -s packaging/exit2d -p test_*.py",
+      "environment": "isolated local Python 3.13 venv",
+      "passed": 17,
+      "exit_code": 0
     }
   ],
   "remaining": [
@@ -75,5 +81,19 @@
     "Synthetic replica-set Docker acceptance and process isolation benchmark prepared"
   ],
   "runtime_acceptance": "NOT_YET_EXECUTED_ON_LINUX",
-  "ci_state": "Dedicated standard Ubuntu workflow prepared; no deploy or artifact upload"
+  "ci_state": "First Linux run failed due to missing restored historical test files; corrected, second source run pending",
+  "ci_runs": [
+    {
+      "id": 41900254875,
+      "source_sha": "54a99910111ca14b4c930ec647b262b3f70a67f0",
+      "result": "failure",
+      "cause": "Harness referenced two historical independent test modules not yet restored; no application acceptance reached"
+    }
+  ],
+  "local_performance": {
+    "kind": "synthetic_process_isolation_not_production_capacity",
+    "concurrent_employee_requests": 20,
+    "same_process_p95_ms": 609.395,
+    "independent_reports_p95_ms": 47.218
+  }
 }
