@@ -26,7 +26,7 @@ def _money(value):
 
 
 def saved_basis(binding, account, settings, as_of):
-    """Read one configured account without adopting another account's defaults."""
+    """Read the exact configured terms for one bound account."""
     matches = [row for row in settings
                if row.get("mezan_integration_account_id") == account.get("mezan_integration_account_id")]
     if len(matches) != 1:

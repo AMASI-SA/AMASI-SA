@@ -22,12 +22,13 @@ FIELDS = {
         "delivery_fee_settled_amount", "earning_offset", "ledger_txn_group_id", "accounting_operation_id"),
 }
 REASONS = {
-    "driver_fee_history_review_required": "أجرة مثبتة في التطبيق تخص فترة سبق احتسابها؛ طابق الافتتاح والتسديد قبل اعتمادها.",
+    "driver_fee_history_review_required": "هذه الأجرة مرتبطة بمطابقة محفوظة للافتتاح والسداد؛ تُطبق وفق الاعتماد المسجل.",
     "driver_fee_policy_review_required": "تعذرت مطابقة أجرة التطبيق مع إعدادات عقود التوصيل السارية.",
     "driver_fee_payout_review_required": "توجد تسوية أجور مجمعة أو معلّقة لهذا المندوب؛ لا يمكن تخصيصها لهذا الطلب تلقائيًا.",
     "driver_fee_evidence_conflict": "تعذر إثبات تطابق الإسناد والاستحقاق أو الجهة أو العملة أو وقت التسليم.",
     "driver_fee_amount_conflict": "تختلف أجرة الإسناد عن مبلغ الاستحقاق أو عن التعرفة السارية.",
     "driver_fee_saved_conflict": "الأجرة أو المستفيد يختلف عن قيد أو تخصيص سابق؛ حُفظ القيد السابق دون تعديل.",
+    "driver_fee_native_overlap": "يوجد قيد أجرة أو تسوية سابقة في محاسبة الشحن؛ طابقها قبل إضافة الاستحقاق.",
 }
 
 
@@ -154,7 +155,7 @@ class DriverEarnings:
                 or any(row.get("currency", "SAR") != "SAR" for row in [a, e])):
                 raise ValueError("driver_fee_evidence_conflict")
             delivered = _instant(a.get("delivered_at"))
-            if (not self.start < delivered <= self.as_of or delivered < _instant(order["created_at"])
+            if (not self.start <= delivered <= self.as_of or delivered < _instant(order["created_at"])
                 or _instant(e.get("earned_at")) != delivered):
                 raise ValueError("driver_fee_evidence_conflict")
             n = amount(e.get("amount"))
@@ -186,8 +187,6 @@ class DriverEarnings:
             from operational_historical_shipping_fee import saved_for
             if saved_for(self.aggregate, num):
                 raise ValueError("driver_fee_history_review_required")
-            if not previous and not stored and self.state.get("as_of") and delivered <= _instant(self.state["as_of"]):
-                raise ValueError("driver_fee_history_review_required")
             return info, None
         except (ValueError, ArithmeticError, TypeError, KeyError) as exc:
             code = str(exc) if str(exc) in REASONS else "driver_fee_evidence_conflict"
@@ -215,7 +214,7 @@ def courier_issue(out, code, raw, source, *, candidate=None, event=None):
         "operational_delivery_order_shipment_status_conflict":"حالة الطلب وحالة البوليصة الحالية مختلفتان؛ طابق دليل التسليم قبل الاحتساب.",
         "operational_delivery_shipment_source_missing":"يلزم مستند الشحنة الأصلية المطابق للبوليصة الحالية.",
         "operational_delivery_courier_identity_ambiguous":"يلزم ربط شركة الشحنة بهوية تشغيلية معتمدة واحدة.",
-        "courier_fee_historical_review_required":"تسليم سابق لم يظهر كقيد مؤكد عند احتسابه؛ راجع الافتتاح والمدفوعات قبل اعتماد الأجرة.",
+        "courier_fee_historical_review_required":"ترتبط الأجرة بسداد سابق أو مطابقة محفوظة؛ راجع التخصيصات قبل اعتمادها.",
         "shipping_identity_or_rate_incomplete":"يلزم مطابقة الشركة وعقد توصيل معتمد وساري بتاريخ التسليم.",
     }
     msg = actions.get(code, "راجع هوية الشحنة الحالية وتاريخ التسليم وعقد الشركة قبل الاعتماد.")
@@ -235,13 +234,73 @@ def hold_prior_courier_event(state, event, carrier):
     if saved_for(state, event["order_number"]):
         return True
     engine = state.get("engine", {})
-    saved_at = engine.get("as_of")
-    if not saved_at or _instant(event["delivered_at"]) > _instant(saved_at):
-        return False
     key = "shipping:" + event["order_id"]
-    frozen = engine.get("facts", {}).get(key)
-    if not frozen:
-        return True
     obs = engine.get("obligations", {})
-    return (carrier or {}).get("cost") is not None and not any(
-        amount(obs[k].get("confirmed", 0)) > 0 for k in (key, key + ":base_shipping") if k in obs)
+    keys = {key, key + ":base_shipping"}
+    # Replays retain their original obligation and its allocations. A previous
+    # calculation time alone does not settle a newly discovered delivery.
+    if any(amount(obs[k].get("confirmed", 0)) > 0 for k in keys if k in obs):
+        return False
+    def same_party(row):
+        return all(row.get(k) == event[k] for k in ("party_type", "party_id", "currency"))
+    payable_ids = {k for k, row in obs.items() if same_party(row) and row.get("direction") == "payable"}
+    payable_ids.update(row["id"] for row in state.get("openings", {}).values()
+                       if same_party(row) and row.get("direction") == "for_party")
+    for movement in state.get("movements", []):
+        allocations = movement.get("allocations") or []
+        if any(row.get("obligation_id") in keys for row in allocations):
+            return True
+        if not same_party(movement) or movement.get("direction") != "outgoing":
+            continue
+        try:
+            if (movement.get("kind") != "payment" or not allocations
+                    or sum((amount(row["amount"]) for row in allocations), Decimal(0)) != amount(movement["amount"])
+                    or any(row.get("obligation_id") not in payable_ids for row in allocations)):
+                return True
+        except (ValueError, ArithmeticError, TypeError, KeyError):
+            return True
+    return False
+
+
+async def hold_native_fee_overlaps(db, owner, out, state, *, max_rows):
+    """Check first fee recognition against native postings and pooled payouts."""
+    from operational_historical_shipping_fee import native_conflicts
+    obligations = (state or {}).get("engine", {}).get("obligations", {})
+    new_fees = []
+    for order in out["orders"] + out["delivery_events"]:
+        event, carrier = order.get("delivery_event"), order.get("carrier") or {}
+        if not event:
+            continue
+        key = "shipping:" + order["id"]
+        if any(amount(obligations[k].get("confirmed", 0)) > 0
+               for k in (key, key + ":base_shipping") if k in obligations):
+            continue
+        has_fee = carrier.get("cost") is not None and amount(carrier["cost"]) > 0
+        has_fee = has_fee or any(part.get("complete") is True and amount(part.get("amount")) > 0
+                                 for part in carrier.get("fee_components", []))
+        if has_fee:
+            new_fees.append(order)
+    candidates = out.get("historical_fee_candidates", []) + [order["delivery_event"] for order in new_fees]
+    if not candidates:
+        return
+    conflicts = await native_conflicts(db, owner, candidates, max_rows=max_rows)
+    out["historical_fee_native_conflicts"] = conflicts
+    for order in new_fees:
+        reason = conflicts.get(order["order_number"])
+        if not reason:
+            continue
+        event, carrier = order["delivery_event"], order["carrier"]
+        info = order.pop("native_driver_earning", None)
+        if event["party_type"] == "store_driver":
+            code, field = "driver_fee_native_overlap", "driver_fee_review"
+        else:
+            code, field = "courier_fee_native_overlap", "courier_fee_review"
+        if info is None:
+            info = {k: event[k] for k in ("order_id", "order_number", "party_id", "currency", "delivered_at")}
+            info.update(party_name=event.get("source_carrier_key") or event["party_id"],
+                        candidate_amount=carrier.get("cost"))
+        out["issues"].append({"code": code, "source_id": order["id"], "status": "incomplete",
+                              "component": "shipping_fee", "recognition_state": "confirmed",
+                              field: info, "required_action": reason})
+        carrier.update(cost=None, fee_complete=False)
+        carrier.pop("fee_components", None)

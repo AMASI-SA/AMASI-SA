@@ -42,7 +42,7 @@ AD_SOURCES = {
 ALLOWED_COLLECTIONS = frozenset(ENTITY_COLLECTIONS.values()) | {
     'accounts', 'mz2_operational_bank_accounts',  # Identity only; excluded from financial scans.
     'mz2_opening_facts_v2',  # POS identity only; never import native opening amounts.
-    'settings',  # Projected courier identity only; excluded from financial-source scans.
+    'settings',  # Scoped courier identities and owner-authorized payment commission terms.
     'mz2_shipping_setup_v2', 'mz2_provider_fee_policies_v2', 'mz2_bank_transfer_bindings',
     'mz2_ad_account_bindings_v2', 'mezan_integration_accounts_v2',
     'mz2_ad_fx_snapshots_v2', 'mezan_ad_account_cost_settings_v2',
@@ -816,6 +816,9 @@ def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, co
                     issue(out, reason, identity, component='shipping_fee', recognition_state='confirmed',
                           driver_fee_review=evidence, required_action=REASONS[reason])
                     return
+                from operational_historical_shipping_fee import register_candidate
+                register_candidate(out, data['_fee_review_numbers'], delivery_event,
+                                   rate=rate, quote=quote, earning=evidence)
                 order['native_driver_earning'] = evidence
                 order['delivered_at'] = evidence['delivered_at']
                 if quote is None:
@@ -827,9 +830,7 @@ def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, co
         if party_id and quote:
             if party_kind == 'courier' and delivery_event and order_number in data['_fee_review_numbers']:
                 from operational_historical_shipping_fee import register_candidate
-                from operational_shipping_fee_review import hold_prior_courier_event
-                if hold_prior_courier_event(data['_review_fee_state'], delivery_event, quote):
-                    register_candidate(out, data['_fee_review_numbers'], delivery_event, rate=rate, quote=quote)
+                register_candidate(out, data['_fee_review_numbers'], delivery_event, rate=rate, quote=quote)
             problems = quote.pop('component_issues')
             order['carrier'] = {'id': party_id, 'kind': party_kind, **({'contract_id': rate['id']} if rate and rate.get('id') else {}), **quote}
             for problem in problems:
@@ -855,9 +856,15 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     # No service with side effects is called: collection access is allowlisted.
     # The inventory catalogue is read on demand, not on each financial sync.
     data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - {TXN_COLLECTION, DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})}
+    fee_settings = await db['settings'].find({'user_id': owner}, {
+        '_id': 0, 'user_id': 1, 'payment_methods': 1, 'updated_at': 1}).to_list(2)
+    out['provider_fee_settings'] = {}
+    if len(fee_settings) == 1 and fee_settings[0].get('user_id') == owner:
+        out['provider_fee_settings'] = {key: fee_settings[0].get(key) for key in ('payment_methods', 'updated_at')}
+    elif fee_settings:
+        issue(out, 'provider_fee_settings_ambiguous')
     from operational_shipping_fee_review import DriverEarnings, courier_issue, hold_prior_courier_event
     from operational_historical_shipping_fee import APPROVALS
-    data['_review_fee_state'] = operational_state
     data['_fee_review_numbers'] = {r['candidate']['order_number'] for r in (operational_state or {}).get(APPROVALS, {}).values()}
     if historical_fee_order:
         data['_fee_review_numbers'].add(historical_fee_order)
@@ -901,6 +908,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     counted_order_ids, inspected_order_ids = set(), set()
     source_ids = Counter(str(r.get('id') or '') for r in raw_orders)
     source_numbers = Counter(str(r.get('reference_id') or r.get('order_number') or '') for r in raw_orders)
+    bank_catalog = None
     for source in data['unified_orders']:
         raw = (source.get('raw_by_source') or {}).get('salla_direct')
         if not isinstance(raw, dict):
@@ -1041,13 +1049,22 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             observe_nonprovider(customer_tenders, raw, source, order, total_value, normalized_payment, owner,
                                 blocked=payment_identity_conflict, payment_issues=payment_issues)
             inspected_order_ids.add(identity)
-            from operational_balance_bank_orders import transfer_bank, resolve, QUALIFYING
-            if not payment_identity_conflict and transfer_bank(method)[0] and status in QUALIFYING:
+            from operational_balance_bank_orders import transfer_bank, resolve, native_paid_amount, QUALIFYING
+            native_bank = method == 'bank'
+            if not payment_identity_conflict and transfer_bank(method)[0] and (native_bank or status in QUALIFYING):
                 try:
-                    bank = resolve(data, owner, payment.get('method') or raw.get('payment_method'), order['currency'])
-                    if total <= 0 or total != total.quantize(Decimal('.01')):
+                    paid = total
+                    if native_bank:
+                        paid = native_paid_amount(raw, source, owner=owner, order_number=order_number,
+                            provider_order_id=identity, currency=order['currency'], total=total_value, as_of=as_of)
+                        if bank_catalog is None:
+                            from operational_bank_catalog import bank_identities
+                            bank_catalog = await bank_identities(db, owner, include_routing=True)
+                    bank = resolve(data, owner, payment.get('method') or raw.get('payment_method'),
+                                   order['currency'], raw=raw, banks=bank_catalog or ())
+                    if paid <= 0 or paid != paid.quantize(Decimal('.01')):
                         raise ValueError('operational_order_bank_amount_invalid')
-                    order['bank_credit'] = {'bank_id': bank['id'], 'bank_name': bank['name'], 'amount': str(total)}
+                    order['bank_credit'] = {'bank_id': bank['id'], 'bank_name': bank['name'], 'amount': str(paid)}
                 except ValueError as exc:
                     issue(out, str(exc), identity)
             cod = method in {'cod', 'cash_on_delivery', 'cashondelivery', 'cash on delivery', 'الدفع عند الاستلام', 'دفع عند الاستلام', 'دفع عند الإستلام'}
@@ -1240,10 +1257,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     _employees(data, out)
     _advertising(data, out, start, now, baselines)
     _recurring(data, out, start, now)
-    if out.get('historical_fee_candidates'):
-        from operational_historical_shipping_fee import native_conflicts
-        out['historical_fee_native_conflicts'] = await native_conflicts(
-            db, owner, out['historical_fee_candidates'], max_rows=MAX_ROWS)
+    from operational_shipping_fee_review import hold_native_fee_overlaps
+    await hold_native_fee_overlaps(db, owner, out, operational_state, max_rows=MAX_ROWS)
     finish_coverage(customer_tenders, counted_order_ids - inspected_order_ids)
     return out
 

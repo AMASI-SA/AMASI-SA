@@ -22,6 +22,19 @@ All report tables use 13 rows per page. The unconfirmed platform collection tabl
 - The shared deployment workspace has not been modified.
 - Issue #1006 has reached its comment limit. The task PR and this status document carry continuation evidence.
 
+## Combined implementation checkpoint
+
+- The payment table now aggregates order count, gross payments, configured fees, refunds and the remaining net balance. The separate fee table is removed. Gross allocation authority remains the default for financial mutations, with an explicit net mode for report presentation.
+- Post-start payment claims can reconcile against a uniquely identified opening whose payout allocations are complete. Target-order conflicts and unallocated payouts retain review requirements.
+- Driver and courier fee discovery uses delivery time at or after the operational start. Previously computed report time no longer places an otherwise eligible delivery on hold. Native fee and payout overlap checks protect first recognition.
+- Native bank transfers use saved owner bank-routing aliases and the exact current paid bank leg. Customer wallet contributions remain separate from the bank credit.
+- Coherent customer bank and COD balances are readable while fulfillment acknowledgement is pending. Owner, order identity, exact source version and the report cutoff are checked.
+- Focused local checks passed for 130 frontend cases, 123 provider-fee cases, 279 delivery/source cases and 80 bank/catalog/source cases. Real Mongo regression execution is pending the combined CI run.
+- An independent review found the default provider report could reduce the gross amount available to settlement allocation. Net reporting is now opt-in and two real-Mongo regression cases cover explicit fee settlement and automatic gross allocation.
+- An independent review found a future customer source version could enter an earlier report. An explicit report-time bound and a regression case now cover that path.
+- The earlier checkpoint `f3557945a1f9865ec0ad49fb16e68986df5ba532` passed CI run `41857831575` with 2238 backend tests, 16 shipping tests plus 18 subtests, and 372 frontend tests across 34 suites.
+- Local Mongo startup returns `open Operation not permitted`. GitHub CI supplies the isolated Mongo 8.0.12 replica set for integration validation.
+
 ## Next action
 
-Finish the independently owned source, delivery and presentation changes. Run focused tests, inspect the combined diff, then preserve a verified source checkpoint before release validation.
+Run the combined checkpoint through the full existing operational CI, correct failures, review the exact candidate and prepare the governed release. Production has not changed in this task.

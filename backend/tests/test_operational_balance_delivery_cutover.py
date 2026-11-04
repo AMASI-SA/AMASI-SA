@@ -91,8 +91,8 @@ def test_old_delivery_uses_event_time_for_fee_contract_not_later_order_update():
     assert state['engine']['facts']['shipping:100']['delivered_at'] == DELIVERED
 
 
-@pytest.mark.parametrize('delivered_at', [OLD, START])
-def test_prestart_and_exact_start_deliveries_remain_opening_history(delivered_at):
+@pytest.mark.parametrize('delivered_at', [OLD, '2026-10-04T23:59:59.999999+00:00'])
+def test_prestart_deliveries_remain_opening_history(delivered_at):
     state = reconcile(active(), collect(driver_data(delivered_at=delivered_at)), NOW)
     assert fee_total(state) == 0
     assert 'cod:100' not in state['engine']['obligations']
@@ -254,7 +254,7 @@ def test_delivery_stream_cannot_bypass_event_cutoff_or_replay_injected_sale_fiel
     state = reconcile(active(), sources, NOW)
     assert fee_total(state) == Decimal('12.00')
     assert not any(row['kind'] in {'supplier', 'provider'} for row in state['engine']['obligations'].values())
-    event['delivery_event']['delivered_at'] = event['delivered_at'] = START
+    event['delivery_event']['delivered_at'] = event['delivered_at'] = '2026-10-04T23:59:59.999999+00:00'
     rejected = reconcile(active(), sources, NOW)
     assert fee_total(rejected) == 0
     assert any(i['code'] == 'operational_delivery_event_contract_invalid' for i in rejected['engine']['issues'])

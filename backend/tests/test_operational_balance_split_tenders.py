@@ -76,7 +76,7 @@ def test_wallet_is_evidence_but_never_booked_as_provider_or_cash():
     assert out["movements"] == []
 
 
-def test_paid_opening_protects_only_affected_tender_and_exposes_gross_for_both():
+def test_fully_allocated_opening_payout_allows_distinct_post_start_split_tenders():
     doc, _ = source()
     initial = state_after_previous_tick()
     initial["openings"] = {"open":{"id":"open","party_type":"provider","party_id":"salla","currency":"SAR",
@@ -84,10 +84,10 @@ def test_paid_opening_protects_only_affected_tender_and_exposes_gross_for_both()
     initial["movements"] = [{"id":"m", "party_type":"provider","party_id":"salla","currency":"SAR", "amount":"50",
                              "direction":"incoming","kind":"settlement","allocations":[{"obligation_id":"open","amount":"50"}]}]
     out = reconcile(initial, {"orders":[normalized(doc)]}, T2)
-    assert amounts(out) == {"tabby":"65.00"}
+    assert amounts(out) == {"tabby":"65.00", "salla":"35.00"}
     summary = displayed(out)
     assert summary["تابي"] == (1,"65.00","إثبات محفوظ")
-    assert summary["سلة"][:2] == (1,"35.00") and "للمراجعة" in summary["سلة"][2]
+    assert summary["سلة"] == (1,"35.00","إثبات محفوظ")
     assert out["movements"] == initial["movements"]
 
 

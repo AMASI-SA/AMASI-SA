@@ -868,7 +868,7 @@ def make_operational_balance_router(db, current_user):
     @router.get("/reports")
     async def reports(user=Depends(current_user)):
         _, owner, _ = await scope(db, user, "reports")
-        return report(await read(db, owner), provider_balances_sar=True, ad_balances_sar=True)
+        return report(await read(db, owner), provider_balances_sar=True, provider_balances_net=True, ad_balances_sar=True)
 
     @router.get("/cost-exposure")
     async def cost_exposure(user=Depends(current_user)):

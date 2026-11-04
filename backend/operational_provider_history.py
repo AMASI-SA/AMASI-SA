@@ -87,18 +87,26 @@ def _context(state, row, *, obligation_key=None, through=None):
             allocations = m.get("allocations") or []
             ids = [a["obligation_id"] for a in allocations]
             gross = _amount(m["amount"], ccy) + _amount(m.get("actual_fee_amount", "0"), ccy)
-            if any(k in {o["id"] for o in openings} for k in ids):
-                issues.append("opening_settlement")
-                break
+            opening_ids = {o["id"] for o in openings}
             if not ids or sum((_amount(a["amount"], ccy) for a in allocations), Decimal(0)) != gross:
                 issues.append("pooled")
                 break
             if (len(ids) != len(set(ids)) or m.get("direction") != "incoming" or m.get("kind") != "settlement"
-                    or any(not k.startswith("provider:") or k == key for k in ids) or m.get("order_number") == number
+                    or any((not k.startswith("provider:") and k not in opening_ids) or k == key for k in ids) or m.get("order_number") == number
                     or any(_amount(a["amount"], ccy) <= 0 for a in allocations)):
                 issues.append("movement")
                 break
             for other in ids:
+                # The owner's opening is the balance at started_at. A complete
+                # allocation to that opening cannot also cover a uniquely
+                # evidenced order created strictly after that boundary.
+                if other in opening_ids:
+                    opening = next(o for o in openings if o["id"] == other)
+                    used = sum((_amount(a["amount"], ccy) for movement in movements
+                                for a in movement.get("allocations", []) if a.get("obligation_id") == other), Decimal(0))
+                    if opening["direction"] != "for_us" or used > _amount(opening["amount"], ccy):
+                        issues.append("movement")
+                    continue
                 ob = engine.get("obligations", {}).get(other, {})
                 if (ob.get("kind"), ob.get("party_type"), ob.get("party_id"), ob.get("currency")) != ("provider","provider",party,ccy):
                     issues.append("movement")
@@ -179,6 +187,15 @@ def _sar_payout_overlap(state, order, payment, key):
                 return True
             # Only a valid allocation to a different specific order excludes overlap.
             for identity in ids:
+                opening = state.get("openings", {}).get(identity, {})
+                if ((opening.get("party_type"), opening.get("party_id"), opening.get("currency")) == ("provider", party, "SAR")
+                        and opening.get("direction") == "for_us"
+                        and _instant(state["started_at"]) < created):
+                    used = sum((_amount(a["amount"], "SAR") for movement in state.get("movements", [])
+                                for a in movement.get("allocations", []) if a.get("obligation_id") == identity), Decimal(0))
+                    if used > _amount(opening.get("amount"), "SAR"):
+                        return True
+                    continue
                 claim = claims.get(identity, {})
                 if (not isinstance(identity, str) or not identity.startswith("provider:")
                         or (claim.get("kind"), claim.get("party_id"), claim.get("currency")) != ("provider", party, "SAR")):

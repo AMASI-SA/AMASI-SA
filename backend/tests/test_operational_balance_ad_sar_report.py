@@ -1,6 +1,7 @@
 """Current advertising valuation preserves native balances and paid bank fees."""
 from copy import deepcopy
 from datetime import datetime
+import asyncio
 
 import pytest
 
@@ -9,6 +10,7 @@ from operational_balance_engine import reconcile
 from operational_balance_service import report
 from operational_financial_position import build_financial_position
 from backend.tests.test_operational_balance_financial_position import state_for, opening, table, NOW
+from backend.tests.test_operational_balance_sources import DB, row
 
 
 def configured_basis(**changes):
@@ -116,3 +118,26 @@ def test_worker_refresh_replaces_saved_terms_and_clears_removed_configuration():
     removed = reconcile(updated, {"ad_balance_sar_basis": {}}, NOW)
     assert removed["engine"]["ad_balance_sar_basis"] == {}
     assert state["engine"]["ad_balance_sar_basis"]["ads"]["exchange_rate_to_sar"] == "3.75"
+
+
+def test_source_binds_saved_cost_terms_to_the_exact_connected_account():
+    from operational_balance_sources import collect_sources
+    state = state_for()
+    setting = row(mezan_integration_account_id="account", provider="snapchat_ads",
+                  external_account_id="external", native_currency="USD",
+                  exchange_rate_to_sar="3.75", bank_commission_pct="2",
+                  apply_bank_commission=True, updated_at="2026-10-30T00:00:00Z")
+    db = DB({
+        "mz2_ad_account_bindings_v2": [row(_id="ads", platform="snapchat", funding_mode="postpaid",
+            integration_account_id="account", platform_account_id="external",
+            confirmed_by="owner", confirmed_at=state["started_at"])],
+        "mezan_integration_accounts_v2": [row(mezan_integration_account_id="account",
+            provider="snapchat_ads", external_account_id="external", currency="USD",
+            timezone="Asia/Riyadh", connection_status="connected")],
+        COLLECTION: [setting],
+    })
+    source = asyncio.run(collect_sources(db, "owner", state["started_at"], NOW))
+    assert source["ad_balance_sar_basis"]["ads"]["exchange_rate_to_sar"] == "3.75"
+    db.data[COLLECTION].append({**setting, "exchange_rate_to_sar": "4.00"})
+    ambiguous = asyncio.run(collect_sources(db, "owner", state["started_at"], NOW))
+    assert ambiguous["ad_balance_sar_basis"] == {}

@@ -179,7 +179,7 @@ export default function OperationalFinancialPosition() {
         return () => { current = false; };
     }, [scope, authLoading, authMissing, revision]);
 
-    useEffect(() => { setFilters(emptyFilters()); setCurrency(""); }, [scope]);
+    useEffect(() => { setFilters(emptyFilters()); setCurrency(""); setPrinting(false); }, [scope]);
 
     // Hide the old scope synchronously, before the replacement request's effect.
     const report = state.scope === scope && state.phase === "ready" ? state.report : null;
@@ -199,6 +199,7 @@ export default function OperationalFinancialPosition() {
         handlePrint();
     };
     const refresh = () => {
+        setPrinting(false);
         setState({ scope, phase: "loading", report: null, error: "" });
         setRevision(value => value + 1);
     };

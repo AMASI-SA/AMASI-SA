@@ -559,7 +559,7 @@ async def supplier_return(db, owner, actor, payload, *, clock=None):
     return await mutate(db, owner, apply)
 
 
-def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=False):
+def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=False, provider_balances_net=False):
     state = reconcile_credits(deepcopy(state))
     from operational_provider_balance_sar import convert_claim, convert_projection, unavailable, usable_bases
     valuations = usable_bases(state) if provider_balances_sar else {}
@@ -751,25 +751,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
     if ad_balances_sar:
         from operational_ad_balance_sar import project_parties
         project_parties(parties, state.get("engine", {}).get("ad_balance_sar_basis", {}), valuation_issues)
-    summaries = {}
-    for row in parties.values():
-        summary = summaries.setdefault(row["currency"], {key: Decimal(0) for key in (
-            "actual_liquidity", "receivable", "payable", "expected_receivable", "expected_payable", "confirmed", "settled", "outstanding",
-            "custody_remaining", "operating_expenses_paid", "owner_withdrawals")})
-        if row["party_type"] in {"bank", "cash"}:
-            summary["actual_liquidity"] += row["actual"]
-        summary["receivable"] += row["outstanding_receivable"]
-        summary["payable"] += row["outstanding_payable"]
-        summary["expected_receivable"] += row["expected_receivable"]
-        summary["expected_payable"] += row["expected_payable"]
-        summary["confirmed"] += row["confirmed_receivable"] + row["confirmed_payable"]
-        summary["settled"] += row["settled"]
-        summary["outstanding"] += row["outstanding_receivable"] + row["outstanding_payable"]
-        summary["custody_remaining"] += row["custody_remaining"]
-        summary["operating_expenses_paid"] += row["expense_paid"]
-        summary["owner_withdrawals"] += row["owner_withdrawals"]
-    summaries = {c: {k: fmt(v) for k, v in s.items()} for c, s in summaries.items()}
-    details = {k: v for k, v in state.get("engine", {}).items() if k not in {"audit", "obligations"}}
+    details = {k: v for k, v in state.get("engine", {}).items() if k not in {"audit", "obligations", "provider_fee_inputs"}}
     # The evidence refresh queue belongs to the worker, not the public report.
     details.get("customer_tender_coverage", {}).get("sar", {}).pop("proof_lookups", None)
     details["employee_custody"] = [{"party_id": row["party_id"], "name": row["name"], "currency": row["currency"],
@@ -845,6 +827,36 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
     details["provider_order_payments"], details["provider_paid_totals"] = provider_customer_payments({
         "details": details, "issues": issues, "obligations": obligations,
     })
+    from operational_provider_summary import provider_balances
+    details["provider_balances"], resolved_fees = provider_balances(
+        state, details, obligations, parties if provider_balances_net else deepcopy(parties), valuations,
+        sar_view=provider_balances_sar)
+    issues = [entry for entry in issues if not (
+        entry.get("code") == "provider_fee_estimate_unavailable" and entry.get("source_id") in resolved_fees)]
+    for currency, providers in details["provider_balances"].items():
+        for provider in providers:
+            if not provider["complete"]:
+                issues.append({"code": "provider_net_balance_incomplete", "provider": provider["provider"],
+                               "currency": currency, "source_id": "provider:" + provider["provider"],
+                               "message": "صافي المنصة يحتاج إلى استكمال العمولة أو مطابقة المدفوع مع التسويات."})
+    summaries = {}
+    for row in parties.values():
+        summary = summaries.setdefault(row["currency"], {key: Decimal(0) for key in (
+            "actual_liquidity", "receivable", "payable", "expected_receivable", "expected_payable", "confirmed", "settled", "outstanding",
+            "custody_remaining", "operating_expenses_paid", "owner_withdrawals")})
+        if row["party_type"] in {"bank", "cash"}:
+            summary["actual_liquidity"] += row["actual"]
+        summary["receivable"] += row["outstanding_receivable"]
+        summary["payable"] += row["outstanding_payable"]
+        summary["expected_receivable"] += row["expected_receivable"]
+        summary["expected_payable"] += row["expected_payable"]
+        summary["confirmed"] += row["confirmed_receivable"] + row["confirmed_payable"]
+        summary["settled"] += row["settled"]
+        summary["outstanding"] += row["outstanding_receivable"] + row["outstanding_payable"]
+        summary["custody_remaining"] += row["custody_remaining"]
+        summary["operating_expenses_paid"] += row["expense_paid"]
+        summary["owner_withdrawals"] += row["owner_withdrawals"]
+    summaries = {c: {k: fmt(v) for k, v in s.items()} for c, s in summaries.items()}
     for row in parties.values():
         if row["party_type"] == "ad_account" and row["ad_wallet_balance"] < 0:
             issues.append({"code": "advertising_prepaid_wallet_negative", "source_id": row["party_id"],

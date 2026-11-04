@@ -150,27 +150,27 @@ def test_provider_net_cash_and_actual_fees_are_not_subtracted_twice():
     before = deepcopy(state)
     result = build_financial_position(state)
     assert result["currencies"]["SAR"]["metrics"]["liquidity"] == "1035.00"
-    assert table(result, "providers")["totals"] == {"name": "الإجمالي", "receivable": "60.00", "payable": "0.00"}
-    assert table(result, "provider_fees_expected")["totals"]["amount"] == "6.00"
+    assert table(result, "providers")["totals"] == {"name": "الإجمالي", "orders": 1, "gross": "100.00",
+                                                     "fees": "11.00", "refunded": "0.00", "net": "54.00"}
     assert table(result, "provider_collections_expected")["totals"]["amount"] == "0.00"
-    assert result["currencies"]["SAR"]["metrics"]["monetary_position"] == "1095.00"
+    assert result["currencies"]["SAR"]["metrics"]["monetary_position"] == "1089.00"
     assert state == before
 
 
-def test_uncaptured_provider_forecast_is_gross_before_one_fee_deduction():
+def test_uncaptured_provider_forecast_is_net_after_one_fee_deduction():
     result = build_financial_position(provider_state(captured="0.00"))
-    assert table(result, "providers")["totals"]["receivable"] == "0.00"
+    assert table(result, "providers")["totals"]["net"] == "0.00"
     # The engine's expected obligation is net 90. Gross 100 minus a single 10
     # future fee is 90; using expected 90 and deducting 10 again would be 80.
-    assert table(result, "provider_collections_expected")["rows"][0]["amount"] == "100.00"
-    assert table(result, "provider_fees_expected")["rows"][0]["amount"] == "10.00"
+    assert table(result, "provider_collections_expected")["rows"][0]["amount"] == "90.00"
+    assert table(result, "providers")["rows"][0]["fees"] == "0.00"
     assert table(result, "provider_collections_expected")["complete"] is False
 
 
 def test_net_zero_provider_with_retained_fee_is_unknown_never_invented_zero():
     result = build_financial_position(provider_state(captured="0.00", cancelled="100.00"))
-    assert table(result, "provider_fees_expected")["rows"][0]["amount"] is None
-    assert table(result, "provider_fees_expected")["complete"] is False
+    assert table(result, "providers")["rows"][0]["fees"] is None
+    assert table(result, "providers")["complete"] is False
 
 
 def test_missing_provider_policy_cannot_disappear_as_complete_zero_fees():
@@ -181,9 +181,10 @@ def test_missing_provider_policy_cannot_disappear_as_complete_zero_fees():
     state = reconcile(state, {"orders": [order], "fee_policies": []}, NOW)
     assert "provider:order-one" not in state["engine"]["obligations"]
     result = build_financial_position(state)
-    for identity in ("provider_fees_expected", "provider_collections_expected"):
-        assert table(result, identity)["complete"] is False
-        assert table(result, identity)["totals"]["amount"] is None
+    assert table(result, "providers")["complete"] is False
+    assert table(result, "providers")["totals"]["fees"] is None
+    assert table(result, "provider_collections_expected")["complete"] is False
+    assert table(result, "provider_collections_expected")["totals"]["amount"] is None
     assert result["currencies"]["SAR"]["metrics"]["monetary_position"] is None
 
 
@@ -439,7 +440,7 @@ def test_public_table_contract_keeps_exact_nullable_money_and_stable_rows():
     fixture = synthetic_report_fixture()
     required = {"banks_network", "cash", "suppliers", "employees", "external", "ads", "employee_custody",
                 "couriers", "drivers", "providers", "shipping_expected", "products_unreceived",
-                "products_received_uninvoiced", "cod_expected", "provider_fees_expected"}
+                "products_received_uninvoiced", "cod_expected", "provider_collections_expected"}
     for currency in fixture["currencies"].values():
         assert required <= {table["id"] for table in currency["tables"]}
         for tab in currency["tables"]:

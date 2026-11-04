@@ -115,6 +115,8 @@ def reconcile(state, sources, as_of):
         engine["customer_tender_coverage"] = deepcopy(sources["customer_tender_coverage"])
     if "ad_balance_sar_basis" in sources:
         engine["ad_balance_sar_basis"] = deepcopy(sources["ad_balance_sar_basis"])
+    from operational_configured_provider_fees import refresh_provider_fee_inputs
+    refresh_provider_fee_inputs(result, sources)
     issues = deepcopy(sources.get("issues", []))
 
     def issue(code, identity):
@@ -244,7 +246,7 @@ def reconcile(state, sources, as_of):
                         or not event.get("id") or str(event.get("order_id")) != oid
                         or event.get("order_number") != order.get("order_number")
                         or instant(event.get("order_created_at")) != created
-                        or not (start < delivered <= now and created <= delivered)
+                        or not (start <= delivered <= now and created <= delivered)
                         or (created > start if delivery_only else created < start)
                         or instant(order.get("delivered_at")) != delivered
                         or order.get("status") not in DELIVERED

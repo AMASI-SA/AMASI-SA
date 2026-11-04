@@ -156,6 +156,9 @@ test("print and Excel include off-page records while delivery filters reset the 
     await act(async () => useReactToPrint.mock.calls.at(-1)[0].onAfterPrint());
     expect(host.querySelectorAll('[data-testid="financial-table-suppliers"] tbody tr')).toHaveLength(13);
     expect(host.querySelector('[data-testid="financial-table-suppliers"] tbody tr').textContent).toContain("مورد التصدير 14");
+    await click("طباعة التقرير");
+    await act(async () => useReactToPrint.mock.calls.at(-1)[0].onPrintError("print", new Error("print unavailable")));
+    expect(host.querySelectorAll('[data-testid="financial-table-suppliers"] tbody tr')).toHaveLength(13);
     await click("تصدير Excel");
     const workbook = XLSX.writeFile.mock.calls[0][0];
     expect(JSON.stringify(workbook.worksheets.map(sheet => sheet.getSheetValues()))).toContain("مورد التصدير 27");

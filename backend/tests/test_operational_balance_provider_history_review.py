@@ -56,7 +56,7 @@ def test_unambiguous_post_start_payment_leaves_historical_review_and_is_booked_o
     assert reconcile(result,{"orders":[order]},T2) == result
 
 
-@pytest.mark.parametrize("kind",["pooled","opening","target","credit","unknown","partial","refund","bank","cod","source","before_start"])
+@pytest.mark.parametrize("kind",["pooled","target","credit","unknown","partial","refund","bank","cod","source","before_start"])
 @pytest.mark.parametrize("prior_review", [True, False])
 def test_late_payment_never_overrides_changed_source_return_or_pooled_and_opening_payout(kind, prior_review):
     state,order=history()
@@ -86,6 +86,29 @@ def test_late_payment_never_overrides_changed_source_return_or_pooled_and_openin
     result=reconcile(state,{"orders":[order]},T2)
     assert result["engine"]["obligations"].get(KEY,{}).get("confirmed","0.00") == "0.00"
     assert result["movements"] == state["movements"] and result["openings"] == state["openings"]
+
+
+@pytest.mark.parametrize("captures", [False, True])
+def test_post_start_payment_can_follow_an_explicitly_settled_prestart_opening(captures):
+    state, order = history(captures=captures)
+    state["movements"] = [{"party_type": "provider", "party_id": "tamara", "currency": "SAR", "kind": "settlement",
+        "direction": "incoming", "amount": "90.00", "actual_fee_amount": "10.00",
+        "allocations": [{"obligation_id": "opening-id", "amount": "100.00"}]}]
+    before = deepcopy(state)
+    result = reconcile(state, {"orders": [order]}, T2)
+    assert result["engine"]["obligations"][KEY]["confirmed"] == "100.00"
+    assert result["openings"] == before["openings"] and result["movements"] == before["movements"]
+    assert reconcile(result, {"orders": [order]}, T2) == result
+
+
+@pytest.mark.parametrize("allocation", ["99.00", "500.00"])
+def test_post_start_payment_stays_held_for_partial_or_excess_opening_allocation(allocation):
+    state, order = history()
+    state["movements"] = [{"party_type": "provider", "party_id": "tamara", "currency": "SAR", "kind": "settlement",
+        "direction": "incoming", "amount": "100.00" if allocation == "99.00" else "500.00", "actual_fee_amount": "0.00",
+        "allocations": [{"obligation_id": "opening-id", "amount": allocation}]}]
+    result = reconcile(state, {"orders": [order]}, T2)
+    assert KEY not in result["engine"]["obligations"]
 
 
 def test_pending_legacy_approval_survives_enrichment_with_a_nonconflicting_reference():

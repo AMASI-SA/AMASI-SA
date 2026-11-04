@@ -36,17 +36,16 @@ def review(result):
     return build_financial_position(result)["currencies"]["SAR"].get("driver_fee_review", [])
 
 
-def test_previously_unlinked_earning_visible_separate_from_debt_and_cash():
+def test_previously_unlinked_poststart_earning_accrues_once_after_previous_calculation():
     d, prior = fixture(), active()
     prior["engine"] = {"as_of": NOW}
     result = calculated(d, prior)
-    assert fee_total(result) == 0
+    assert fee_total(result) == 10
     assert result["engine"]["obligations"]["cod:100"]["confirmed"] == "200.00"
-    assert [(r["order_number"],r["candidate_amount"],r["reason"]) for r in review(result)] == [
-        ("10", "10.00", "driver_fee_history_review_required")]
+    assert review(result) == []
     assert result["movements"] == prior["movements"]
     assert result["openings"] == prior["openings"]
-    assert review(calculated(d, result)) == review(result)
+    assert calculated(d, result) == result
 
 
 def test_nested_exact_waybill_official_delivery_time_without_update_date_fallback():
@@ -166,13 +165,98 @@ def test_no_carrier_confirmation_from_order_updated_or_workflow_timestamp(old):
     assert table['rows'][0]['samples']=='10'
 
 
-def test_historical_courier_new_proof_never_creates_opening_overlap():
+def test_previously_unlinked_poststart_courier_fee_accrues_once_after_previous_calculation():
     prior=active(); prior['engine']={'as_of':NOW}
     result=calculated(courier_data(), prior)
-    assert fee_total(result)==0 and 'cod:100' not in result['engine']['obligations']
-    held=next(i for i in result['engine']['issues'] if i['code']=='courier_fee_historical_review_required')
-    assert held['courier_fee_review']['candidate_amount'] is not None
+    assert fee_total(result)==12
+    assert result['engine']['obligations']['cod:100']['confirmed']=='200.00'
+    assert not any(i['code']=='courier_fee_historical_review_required' for i in result['engine']['issues'])
     assert result['openings']==prior['openings'] and result['movements']==prior['movements']
+    assert calculated(courier_data(), result)==result
+
+
+@pytest.mark.parametrize('allocation', [None, 'shipping:100:base_shipping', 'unknown-payable'])
+def test_courier_payout_overlap_holds_new_fee_without_rewriting_settlements(allocation):
+    prior=active(); prior['engine']={'as_of':NOW}
+    prior['movements']=[{'id':'paid', 'party_type':'courier', 'party_id':'carrier', 'currency':'SAR',
+        'kind':'payment', 'direction':'outgoing', 'amount':'10.00',
+        'allocations':[] if allocation is None else [{'obligation_id':allocation, 'amount':'10.00'}]}]
+    result=calculated(courier_data(), prior)
+    assert fee_total(result)==0
+    assert result['movements']==prior['movements'] and result['openings']==prior['openings']
+    assert any(i['code']=='courier_fee_historical_review_required' for i in result['engine']['issues'])
+
+
+def test_courier_payment_allocated_to_opening_does_not_hide_new_poststart_fee():
+    prior=active(); prior['engine']={'as_of':NOW}
+    prior['openings']['old-courier-balance']={'id':'old-courier-balance', 'party_type':'courier',
+        'party_id':'carrier', 'currency':'SAR', 'direction':'for_party', 'name':'Carrier', 'amount':'10.00'}
+    prior['movements']=[{'id':'paid', 'party_type':'courier', 'party_id':'carrier', 'currency':'SAR',
+        'kind':'payment', 'direction':'outgoing', 'amount':'10.00',
+        'allocations':[{'obligation_id':'old-courier-balance', 'amount':'10.00'}]}]
+    result=calculated(courier_data(), prior)
+    assert fee_total(result)==12
+    assert result['movements']==prior['movements'] and result['openings']==prior['openings']
+    assert calculated(courier_data(), result)==result
+
+
+@pytest.mark.parametrize('kind', ['store_driver', 'courier'])
+def test_native_shipping_overlap_checked_before_first_fee_and_keeps_collection_evidence(monkeypatch, kind):
+    inspected=[]
+    async def conflict(db, owner, candidates, *, max_rows):
+        assert owner=='owner' and max_rows>0
+        inspected.extend(candidates)
+        return {'10':'Existing native fee posting'}
+    monkeypatch.setattr('operational_historical_shipping_fee.native_conflicts', conflict)
+    data=fixture() if kind=='store_driver' else courier_data()
+    prior=active(); prior['engine']={'as_of':NOW}
+    result=calculated(data, prior)
+    assert [(p['order_number'],p['party_type']) for p in inspected]==[('10',kind)]
+    assert fee_total(result)==0
+    assert result['engine']['obligations']['cod:100']['confirmed']=='200.00'
+    assert 'native_driver_earning:100' not in result['engine']['facts']
+    code='driver_fee_native_overlap' if kind=='store_driver' else 'courier_fee_native_overlap'
+    assert any(i['code']==code for i in result['engine']['issues'])
+    assert result['movements']==prior['movements'] and result['openings']==prior['openings']
+
+
+@pytest.mark.parametrize('kind', ['store_driver', 'courier'])
+def test_booked_fee_and_its_payment_survive_later_native_overlap_report(monkeypatch, kind):
+    data=fixture() if kind=='store_driver' else courier_data()
+    first=calculated(data)
+    first['movements']=[{'id':'paid', 'party_type':kind,
+        'party_id':'driver' if kind=='store_driver' else 'carrier', 'currency':'SAR',
+        'kind':'payment', 'direction':'outgoing', 'amount':'10.00',
+        'allocations':[{'obligation_id':'shipping:100:base_shipping', 'amount':'10.00'}]}]
+    async def unexpected(*args, **kwargs):
+        raise AssertionError('Already booked delivery must preserve its frozen obligation')
+    monkeypatch.setattr('operational_historical_shipping_fee.native_conflicts', unexpected)
+    again=calculated(data, first)
+    assert again['engine']['obligations']==first['engine']['obligations']
+    assert again['engine']['facts']==first['engine']['facts']
+    assert again['movements']==first['movements']
+
+
+@pytest.mark.parametrize('delivered_at', [
+    '2026-10-31T23:50:00Z', '2026-11-01T09:04:35Z', '2026-11-02T10:17:42Z',
+    '2026-11-02T11:04:39Z', '2026-11-02T09:18:23Z', '2026-10-31T23:40:45Z',
+    '2026-10-31T21:30:01.284707Z',
+])
+def test_old_order_delivery_on_or_after_riyadh_start_accrues_native_driver_fee(delivered_at):
+    start='2026-11-01T00:30:01.284707+03:00'
+    now='2026-11-04T12:00:00+03:00'
+    data=fixture()
+    data['store_delivery_assignments'][0]['delivered_at']=delivered_at
+    data['store_delivery_driver_earnings'][0]['earned_at']=delivered_at
+    data['store_delivery_collections'][0]['collected_at']=delivered_at
+    prior=active(); prior.update(started_at=start, engine={'as_of':now})
+    src=run(collect_sources(HardBoundaryDB(data), 'owner', start, now, operational_state=prior))
+    result=reconcile(prior, src, now)
+    assert fee_total(result)==10
+    assert result['engine']['obligations']['shipping:100:base_shipping']['party_id']=='driver'
+    assert not review(result)
+    assert result['movements']==prior['movements'] and result['openings']==prior['openings']
+    assert reconcile(result, src, now)==result
 
 
 @pytest.mark.parametrize('bad', ['wrong_waybill','timezone','conflicting_dates','other_shipment','status'])

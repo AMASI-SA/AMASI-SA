@@ -2,6 +2,7 @@
 import asyncio
 import hashlib
 import json
+from decimal import Decimal
 import pytest
 from fastapi import HTTPException
 from test_operational_balance_integration import run, started, refresh, read, report, movement, create_movement, NOW
@@ -90,4 +91,99 @@ def test_same_order_cannot_credit_again_after_owner_change():
         assert error.value.detail['code']=='operational_request_scope_conflict'
         assert len((await read(db,'owner'))['movements'])==1
         assert not (await read(db,'other'))['movements']
+    run(scenario)
+
+
+def native_bank_order(number, *, name='مصرف الراجحي', paid='100.00', remaining=None):
+    from test_operational_balance_order_page_payment_flow import order_document
+    document = order_document('bank', paid, remaining, number=number, created='2026-10-06T10:00:00+00:00')
+    raw = document['raw_by_source']['salla_direct']
+    raw['bank'] = {'bank_id': 'native-bank-id', 'bank_name': name}
+    raw['payment_methods'] = [{'payment_method': 'bank', 'amount': paid, 'transaction_reference': None}]
+    raw['payment_actions']['refund_action'] = {
+        'paid_amount': {'amount': paid, 'currency': 'SAR'}, 'refund_amount': {'amount': '0.00', 'currency': 'SAR'}}
+    document['g47_salla_snapshot'] = {'component_pending': True, 'source_updated_at': raw['updated_at']}
+    return document
+
+
+async def native_accounts(db):
+    await db.accounts.insert_many([
+        {'user_id': 'owner', 'id': code, 'name': name, 'account_type': 'bank', 'status': 'active',
+         'currency': 'SAR', 'bank_transfer_aliases': [f'bank_{code}'], 'opening_balance': 90000, 'current_balance': 99000}
+        for code, name in [('rajhi', 'الراجحي'), ('inma', 'الإنماء')]
+    ])
+
+
+def test_twenty_one_native_bank_orders_credit_the_configured_account_once_and_complete_customer_coverage():
+    async def scenario(db):
+        await started(db)
+        await native_accounts(db)
+        documents = [native_bank_order(str(990000 + index)) for index in range(21)]
+        await db.unified_orders.insert_many(documents)
+        before = await read(db, 'owner')
+        await asyncio.gather(refresh(db, 'owner', clock=NOW), refresh(db, 'owner', clock=NOW))
+        await refresh(db, 'owner', clock=NOW)
+        state = await read(db, 'owner')
+        assert state['openings'] == before['openings']
+        credits = [movement for movement in state['movements'] if movement.get('automatic_order_bank')]
+        assert len(credits) == len({credit['request_id'] for credit in credits}) == 21
+        assert {credit['bank_id'] for credit in credits} == {'account:rajhi'}
+        assert sum(Decimal(credit['amount']) for credit in credits) == Decimal('2100.00')
+        projection = report(state)
+        assert projection['summary']['actual_liquidity'] == '3100.00'
+        bank = next(party for party in projection['parties'] if party['party_id'] == 'account:rajhi')
+        assert bank['actual'] == '2100.00'
+        coverage = projection['details']['customer_tender_coverage']
+        assert coverage['source_order_count'] == coverage['sar']['verified_orders'] == 21
+        assert coverage['sar']['paid'] == '2100.00' and coverage['sar']['missing_orders'] == 0
+        assert coverage['sar']['by_method'][0]['method'] == 'bank'
+        assert (await db.accounts.find_one({'id': 'rajhi'}))['current_balance'] == 99000
+
+        # A changed owner mapping cannot replay the same orders into a second bank.
+        await db.accounts.update_one({'id': 'rajhi'}, {'$set': {'bank_transfer_aliases': []}})
+        await db.accounts.update_one({'id': 'inma'}, {'$set': {'bank_transfer_aliases': ['bank_inma', 'bank_rajhi']}})
+        await refresh(db, 'owner', clock=NOW)
+        repeated = await read(db, 'owner')
+        assert repeated['movements'] == state['movements']
+        assert sum(issue['code'] == 'operational_order_bank_credit_conflict' for issue in repeated['engine']['issues']) == 21
+    run(scenario)
+
+
+def test_native_alinma_partial_paid_amount_never_credits_the_unpaid_order_total():
+    async def scenario(db):
+        await started(db)
+        await native_accounts(db)
+        await db.unified_orders.insert_one(native_bank_order('991001', name='مصرف الإنماء', paid='45.50', remaining='54.50'))
+        for _ in range(2):
+            await refresh(db, 'owner', clock=NOW)
+        state = await read(db, 'owner')
+        credit, = state['movements']
+        assert credit['bank_id'] == 'account:inma' and credit['amount'] == '45.50'
+        projection = report(state)
+        assert projection['summary']['actual_liquidity'] == '1045.50'
+        bank, = projection['details']['customer_tender_coverage']['sar']['by_method']
+        assert bank['paid'] == '45.50' and bank['remaining'] == '54.50'
+    run(scenario)
+
+
+def test_native_bank_wallet_split_posts_only_the_explicit_bank_leg():
+    async def scenario(db):
+        await started(db)
+        await native_accounts(db)
+        document = native_bank_order('991002')
+        document['raw_by_source']['salla_direct']['payment_methods'] = [
+            {'payment_method': 'bank', 'amount': '85.00', 'transaction_reference': 'bank-proof'},
+            {'payment_method': 'customer_wallet', 'amount': '15.00', 'transaction_reference': 'wallet-proof'},
+        ]
+        await db.unified_orders.insert_one(document)
+        for _ in range(2):
+            await refresh(db, 'owner', clock=NOW)
+        state = await read(db, 'owner')
+        credit, = state['movements']
+        assert credit['bank_id'] == 'account:rajhi' and credit['amount'] == '85.00'
+        projection = report(state)
+        assert projection['summary']['actual_liquidity'] == '1085.00'
+        coverage = projection['details']['customer_tender_coverage']['sar']
+        assert coverage['paid'] == '100.00' and coverage['missing_orders'] == 0
+        assert {row['method']: row['paid'] for row in coverage['by_method']} == {'bank': '85.00', 'wallet': '15.00'}
     run(scenario)

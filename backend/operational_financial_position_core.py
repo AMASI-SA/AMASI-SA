@@ -149,6 +149,8 @@ def _actual_tables(parties, complete):
     debt_columns = [_column("name", "الجهة", "text"), _column("receivable", "لنا", role="receivable"),
                     _column("payable", "علينا", role="payable")]
     for kind, identity, title, section in PARTIES:
+        if kind == "provider":
+            continue
         rows = [{"id": _party_id(row), "name": _name(row),
                  "receivable": row["outstanding_receivable"], "payable": row["outstanding_payable"]}
                 for row in parties if row["party_type"] == kind]
@@ -157,8 +159,6 @@ def _actual_tables(parties, complete):
             notes = ["لنا هو رصيد ذمة الشركة بعد السداد المخصص، وعلينا أجرة الشحن المتبقية. يلزم كشف الشركة لإثبات تحصيلها من العميل."]
         if kind == "store_driver":
             notes = ["التحصيل المتبقي لنا والرسوم المتبقية علينا منفصلان؛ لا يضاف التحصيل مرة ثانية إلى النقد."]
-        if kind == "provider":
-            notes = ["المطالبات المثبتة ظاهرة قبل الرسوم التقديرية المتبقية؛ تخصم الرسوم المستقبلية مرة واحدة في التوقعات."]
         tables.append(_table(identity, title, section, debt_columns, rows, complete=complete, notes=notes))
     converted_ads = []
     for row in parties:
@@ -269,8 +269,26 @@ def _cost_tables(exposure, currency, obligations):
     return tables
 
 
-def _provider_tables(obligations, details, issues):
-    fees, collections = [], []
+def _provider_table(rows, issues):
+    columns = [_column("name", "المنصة", "text"), _column("orders", "عدد الطلبات", "count"),
+               _column("gross", "إجمالي المدفوع"), _column("fees", "العمولات مع ضريبتها"),
+               _column("refunded", "الاستردادات"), _column("net", "صافي المتبقي لنا", role="receivable")]
+    complete = all(row["complete"] for row in rows) and not any(
+        str(issue.get("source_id", "")).startswith("provider:") or str(issue.get("code", "")).startswith("provider_")
+        for issue in issues)
+    result = _table("providers", "منصات الدفع", "fulfillment", columns,
+                  [{"id": row["provider"], **row} for row in rows],
+                  complete=complete,
+                  totals={"orders": sum(row["orders"] for row in rows)},
+                  notes=["الصافي يشمل الافتتاحي المدخل والتسويات المثبتة. تقدير العمولة يخص المدفوع بعد البداية فقط، والعمولة الفعلية تحل محل تقدير الجزء المسوّى.",
+                         "المبالغ التي تنتظر مطابقة الهوية أو حوالة غير موزعة تظهر مع عدم اكتمال الصافي."])
+    if not complete and not rows:
+        result["totals"].update(gross=None, fees=None, refunded=None, net=None)
+    return result
+
+
+def _provider_collection_table(obligations, details, issues):
+    collections = []
     # A failed policy can prevent the obligation from being created at all.
     # Absence of a row is not evidence of zero fees or zero future collection.
     complete = not any(str(issue.get("source_id", "")).startswith("provider:")
@@ -279,37 +297,29 @@ def _provider_tables(obligations, details, issues):
         if row.get("kind") != "provider" or row.get("derived_credit"):
             continue
         projection = (details.get("provider_reports") or {}).get(row["id"])
-        fee = pending = None
+        pending = None
         if projection:
             net = _number(projection.get("net"))
             captured = _number(projection.get("confirmed_receivable"))
-            fee = _number(projection.get("estimated_fees_remaining"))
+            fee = _number(projection.get("estimated_fees_original", projection.get("estimated_fees")))
             if net is not None and captured is not None and net >= ZERO and captured >= ZERO:
-                pending = max(net - captured, ZERO)
-            if fee is not None and fee < ZERO:
-                fee = None
-            # A retained fee on an entirely cancelled/refunded uncaptured sale
-            # cannot be turned into zero by the report's net-zero denominator.
-            if net == ZERO and row.get("direction") == "payable" and (_number(row.get("expected")) or ZERO) > ZERO and fee == ZERO:
-                fee = None
-        complete = complete and fee is not None and pending is not None and not row.get("incomplete")
+                if captured >= net:
+                    pending = ZERO
+                elif captured == ZERO and fee is not None:
+                    pending = max(net - fee, ZERO)
+        complete = complete and pending is not None and not row.get("incomplete")
         common = {"id": row["id"], "name": _name(row), "orders": 1}
-        fees.append({**common, "amount": _money(fee)})
         collections.append({**common, "amount": _money(pending)})
     columns = [_column("name", "منصة الدفع / المطالبة", "text"), _column("orders", "الطلبات", "count"),
                _column("amount", "المبلغ المتوقع")]
-    note = "الرسوم الفعلية للجزء المسوى استبدلت تقديراته؛ يعرض هنا تقدير الجزء المتبقي فقط."
-    fee_table = _table("provider_fees_expected", "رسوم منصات الدفع المتوقعة", "forecast", columns, fees,
-                       complete=complete, notes=[note], totals={"orders": len(fees)})
     collection_table = _table("provider_collections_expected", "تحصيل منصات الدفع غير المثبت بعد", "forecast",
                               columns, collections, complete=complete,
-                              notes=["إجمالي التحصيل المتوقع قبل الرسوم، بعد استبعاد الالتقاط المثبت؛ تخصم الرسوم في بند مستقل."],
+                              notes=["صافي التحصيل المستقبلي بعد رسومه، مع استبعاد المدفوع المثبت. عمولات المدفوع المثبت مخصومة في جدول المنصات."],
                               totals={"orders": len(collections)})
     if not complete:
-        for table in (fee_table, collection_table):
-            table["notes"].append(UNKNOWN + "تفاصيل بعض مطالبات منصات الدفع غير مكتملة.")
-            table["totals"]["amount"] = None
-    return fee_table, collection_table
+        collection_table["notes"].append(UNKNOWN + "تفاصيل بعض مطالبات منصات الدفع غير مكتملة.")
+        collection_table["totals"]["amount"] = None
+    return collection_table
 
 
 def _cod_table(obligations, details, prestart=None, customer=None):
@@ -488,7 +498,7 @@ def _profit_rows(recorded_salary):
 
 def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     """Build JSON v1 from one saved operational snapshot without side effects."""
-    projection = report(state, provider_balances_sar=True, ad_balances_sar=True)
+    projection = report(state, provider_balances_sar=True, ad_balances_sar=True, provider_balances_net=True)
     result = {"schema_version": 1, "authority": "operational_balance_report", "status": projection["status"],
               "started_at": projection["started_at"], "as_of": projection["as_of"],
               "generated_at": generated_at or projection["as_of"], "currency_order": [], "currencies": {},
@@ -520,6 +530,7 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     other_tenders = tender_coverage.get("by_currency", {})
     currencies.update(page_payments)
     currencies.update(paid_totals)
+    currencies.update(projection["details"]["provider_balances"])
     currencies.update(other_tenders)
     if payment_sar is not None:
         currencies.add("SAR")
@@ -531,30 +542,9 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         obligations = [row for row in projection["obligations"] if row.get("currency") == currency]
         actual_complete = bool(projection["as_of"]) and not any(row.get("currency") in {None, currency} for row in projection["issues"])
         tables = _actual_tables(parties, actual_complete)
+        tables.append(_provider_table(projection["details"]["provider_balances"].get(currency, []),
+                                      [row for row in projection["issues"] if row.get("currency") in {None, currency}]))
         tables.append(_balance_origin(parties, obligations, actual_complete))
-        if currency == "SAR" and payment_sar is not None:
-            rows = [{"id": row["method"], **row} for row in payment_sar["by_method"]]
-            tables.append(_table("provider_customer_paid", "مدفوعات العملاء حسب طريقة الدفع بالريال السعودي", "fulfillment",
-                [_column("name", "طريقة الدفع", "text"), _column("orders", "الطلبات", "count"),
-                 _column("paid", "دفعه العملاء"), _column("remaining", "متبقٍ على العملاء")],
-                rows, complete=payment_sar["paid"] is not None,
-                totals={"orders": tender_coverage["source_order_count"], "paid": payment_sar["paid"],
-                        "remaining": payment_sar.get("remaining")},
-                notes=["يُجمع المبلغ بالريال لكل دفعة بعد توزيع الدفع المشترك. وتظهر تفاصيل الإثبات بعملة الطلب الأصلية."]))
-        elif payment_sar is None and currency == "SAR" and currency in paid_totals:
-            rows = [{"id": row["provider"], **row} for row in paid_totals[currency]]
-            tables.append(_table("provider_customer_paid", "المدفوع المثبت بعملة الريال في اللقطة السابقة", "fulfillment",
-                [_column("name", "المنصة", "text"), _column("orders", "عدد الطلبات المدفوعة", "count"),
-                 _column("paid", "ما دفعه العملاء قبل الرسوم")], rows, complete=False,
-                notes=["يشمل المدفوع المثبت منذ بداية التشغيل لكل منصة مرة واحدة، بما فيه ما ينتظر مطابقة التسوية."]))
-        if currency in page_payments:
-            page_table = _table("provider_order_balances", "المدفوع والمتبقي حسب صفحة الطلب", "fulfillment", [
-                _column("name", "المنصة", "text"), _column("status", "حالة الإثبات", "text"),
-                _column("orders", "عدد الطلبات", "count"), _column("paid", "دفعه العميل"),
-                _column("remaining", "متبقٍ على العميل")], page_payments[currency], complete=False,
-                notes=["يعرض هذا التفصيل مبالغ الطلبات قبل رسوم المنصة وتسويات البنك. قد يظهر طلب محفوظ مرة أخرى للمراجعة عند تغير دليله."])
-            page_table.update(show_totals=False, totals={})
-            tables.append(page_table)
         if other_tenders.get(currency):
             rows = [{"id": row["method"], **row} for row in other_tenders[currency]]
             tender_table = _table("customer_other_tenders", "تفصيل طرق الدفع الأخرى بعملة الطلب", "fulfillment",
@@ -597,13 +587,13 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         ]
         costs = _cost_tables(cost_exposure, currency, obligations)
         currency_issues = [row for row in projection["issues"] if row.get("currency") in {None, currency}]
-        fees, provider_future = _provider_tables(obligations, projection["details"], currency_issues)
+        provider_future = _provider_collection_table(obligations, projection["details"], currency_issues)
         cod = _cod_table(obligations, projection["details"], prestart_cod.get(currency), customer_cod.get(currency))
-        tables.extend([costs[-1], *costs[:-1], cod, fees, provider_future])
+        tables.extend([costs[-1], *costs[:-1], cod, provider_future])
         forecast_rows = [_row(table["id"], table["title"], table["totals"]["amount"],
                               "positive" if table["id"] in {"cod_expected", "provider_collections_expected"} else "negative",
                               None if table["complete"] else UNKNOWN + "تغطية هذا البند غير مكتملة.")
-                         for table in (cod, provider_future, *costs, fees)]
+                         for table in (cod, provider_future, *costs)]
         forecast_rows.extend([
             _row("forecast_change", "صافي التغير المتوقع", None, "total", UNKNOWN + COD_SCOPE),
             _row("forecast_monetary_position", "المركز النقدي والديون المتوقع", None, "total", UNKNOWN + "التكاليف والتحصيل المستقبليان غير مكتملين."),
