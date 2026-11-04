@@ -28,6 +28,7 @@ NON_PROVIDER_METHODS = {
     'الدفع عند الاستلام', 'دفع عند الاستلام', 'دفع عند الإستلام',
 }
 DIAGNOSTICS = {
+    'provider_closed_tender_total_mismatch': 'المبلغ المدفوع مثبت، وإجمالي الطلب يختلف عنه؛ راجع المتبقي وكشف المنصة.',
     'provider_payment_method_unknown': 'طريقة الدفع غير معروفة في قارئ الأرصدة',
     'provider_payment_method_conflict': 'تعارضت جهة الدفع بين حقول الطلب',
     'provider_split_payment_review_required': 'الطلب يحتوي عدة دفعات أو جهات دفع ويلزم تفصيلها',

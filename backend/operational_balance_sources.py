@@ -895,6 +895,9 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 'required_action': 'أعد معاينة مطابقة الفاتورة والسداد؛ لم تُرحّل الفروق تلقائيًا'})
     bundle_costs = await load_remaining_bundles(db, owner, raw_orders, now, preparation_pieces=pieces,
         operational_state=operational_state, native_matches=native_matches)
+    from operational_customer_tender_coverage import new_coverage, observe_nonprovider
+    customer_tenders = out["customer_tender_coverage"] = new_coverage(start.isoformat(), now.isoformat())
+    counted_order_ids = set()
     source_ids = Counter(str(r.get('id') or '') for r in raw_orders)
     source_numbers = Counter(str(r.get('reference_id') or r.get('order_number') or '') for r in raw_orders)
     for source in data['unified_orders']:
@@ -908,6 +911,10 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 continue
             identity = str(raw.get('id') or '')
             order_number = str(raw.get('reference_id') or raw.get('order_number') or '')
+            if created > start and identity and identity not in counted_order_ids:
+                counted_order_ids.add(identity)
+                customer_tenders["source_order_count"] += 1
+                customer_tenders["uninspected_source_orders"] += 1
             if not identity or not order_number:
                 raise ValueError('order_identity_missing')
             if source_ids[identity] != 1 or source_numbers[order_number] != 1:
@@ -1030,6 +1037,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             payment_identity_conflict = any(row['code'] in {
                 'provider_payment_method_conflict', 'provider_payment_shape_invalid',
                 'provider_split_payment_review_required'} for row in payment_issues)
+            observe_nonprovider(customer_tenders, raw, source, order, total_value, normalized_payment, owner,
+                                blocked=payment_identity_conflict)
             from operational_balance_bank_orders import transfer_bank, resolve, QUALIFYING
             if not payment_identity_conflict and transfer_bank(method)[0] and status in QUALIFYING:
                 try:

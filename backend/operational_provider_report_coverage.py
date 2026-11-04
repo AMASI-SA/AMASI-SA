@@ -2,7 +2,7 @@
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 
-from operational_split_payment import provider_shares
+from operational_split_payment import provider_shares, split_reference_owners
 
 PLATFORMS = {"salla": "سلة", "tabby": "تابي", "tamara": "تمارا", "emkan": "إمكان"}
 LABELS = {
@@ -139,6 +139,28 @@ def provider_customer_payments(projection):
             captured[(claim["currency"], party, oid)] += Decimal(fact["amount"])
     for identity, value in captured.items():
         paid_by_order[identity] = max(paid_by_order[identity], value)
+
+    # A closed foreign checkout may prove its charged tender even when the
+    # original order total disagrees. It is never an order balance or a claim.
+    observations = [i["paid_tender_observation"] for i in projection["issues"]
+                    if i.get("code") == "provider_closed_tender_total_mismatch"
+                    and i.get("scope") == "provider_payment" and isinstance(i.get("paid_tender_observation"), dict)
+                    and i["paid_tender_observation"].get("order_id") == i.get("source_id")]
+    if observations:
+        facts = projection["details"].get("facts", {})
+        owners = split_reference_owners(facts)
+        scopes = defaultdict(set)
+        for currency, provider, order in paid_by_order:
+            scopes[order].add((currency, provider))
+        for row in observations:
+            owners[row["reference"]].add(row["order_id"])
+            scopes[row["order_id"]].add((row["currency"], row["provider"]))
+        for row in observations:
+            oid = row["order_id"]
+            if (owners[row["reference"]] == {oid} and len(scopes[oid]) == 1
+                    and "provider_split:" + oid not in facts):
+                identity = (row["currency"], row["provider"], oid)
+                paid_by_order[identity] = max(paid_by_order[identity], Decimal(row["paid"]))
 
     totals = defaultdict(lambda: [0, Decimal(0)])
     for (currency, provider, _), paid in paid_by_order.items():

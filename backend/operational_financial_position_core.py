@@ -495,8 +495,11 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     currencies.update(customer_cod)
     page_payments = projection["details"]["provider_order_payments"]
     paid_totals = projection["details"]["provider_paid_totals"]
+    tender_coverage = projection["details"].get("customer_tender_coverage", {})
+    other_tenders = tender_coverage.get("by_currency", {})
     currencies.update(page_payments)
     currencies.update(paid_totals)
+    currencies.update(other_tenders)
     if cost_ready:
         currencies.update((cost_exposure.get("currencies") or {}).keys())
     result["currency_order"] = sorted(currencies, key=lambda currency: (currency != "SAR", currency))
@@ -520,6 +523,14 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
                 notes=["يعرض هذا التفصيل مبالغ الطلبات قبل رسوم المنصة وتسويات البنك. قد يظهر طلب محفوظ مرة أخرى للمراجعة عند تغير دليله."])
             page_table.update(show_totals=False, totals={})
             tables.append(page_table)
+        if other_tenders.get(currency):
+            rows = [{"id": row["method"], **row} for row in other_tenders[currency]]
+            tables.append(_table("customer_other_tenders", "مدفوعات العملاء بطرق الدفع الأخرى", "fulfillment",
+                [_column("name", "طريقة الدفع", "text"), _column("orders", "الطلبات", "count"),
+                 _column("paid", "مدفوع حسب سلة"), _column("remaining", "متبقٍ على العملاء"),
+                 _column("incomplete_orders", "طلبات تحتاج مطابقة", "count")], rows,
+                complete=not any(row["incomplete_orders"] for row in rows),
+                notes=["تعرض هذه المبالغ ما تثبته صفحة الطلب. يعتمد توريد الأموال للبنك على حركة البنك المطابقة."]))
         names = {(row["party_type"], row["party_id"]): _name(row) for row in parties}
         debt_rows = []
         categories = [("pos_receivable", "banks_network", "تسويات أجهزة الشبكة"),

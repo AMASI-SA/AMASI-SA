@@ -43,3 +43,68 @@ def test_referenced_paid_order_is_current_while_fulfillment_callback_is_pending(
 def test_component_pending_never_weakens_owner_identity_version_or_native_proof(changes):
     (payment, problems), _, _ = recognize(**changes)
     assert payment is None and problems
+
+
+def foreign_payment(*, order=100, paid='99.98', tender=None, changes=None):
+    raw = {'id': 71, 'reference_id': 825, 'status': {'slug': 'in_progress'}, 'currency': 'KWD',
+           'payment_method': 'credit_card', 'total': {'amount': order, 'currency': 'KWD'}, 'updated_at': STAMP,
+           'payment_actions': {'remaining_action': {'has_remaining_amount': False, 'remaining_amount': None,
+                                                  'paid_amount': {'amount': paid, 'currency': 'KWD'}},
+                               'refund_action': {'paid_amount': {'amount': paid, 'currency': 'KWD'},
+                                                 'refund_amount': {'amount': 0, 'currency': 'KWD'},
+                                                 'refunded_transactions': []}},
+           'payment_methods': [{'payment_method': 'credit_card', 'amount': tender or paid,
+                                'transaction_reference': 'native-cc-reference'}]}
+    if changes:
+        changes(raw)
+    return normalize_operational_payment(raw, 'KWD', order, '2026-11-01T01:00:00Z', '2026-11-03T09:00:00Z',
+        owner='owner', order_number='825', provider_order_id='71', rows=[],
+        source={'user_id':'owner', 'order_number':'825', 'order_id':'71'})
+
+
+@pytest.mark.parametrize('amount', ['99.98', '99.99'])
+def test_closed_foreign_tender_keeps_paid_amount_separate_from_mismatching_order_total(amount):
+    from operational_provider_report_coverage import provider_customer_payments
+
+    payment, issues = foreign_payment(paid=amount)
+    assert payment is None  # no claim or made-up capture time
+    issue, = issues
+    assert issue['code'] == 'provider_closed_tender_total_mismatch'
+    observation = issue['paid_tender_observation']
+    assert (observation['paid'], observation['gross']) == (amount, '100.00')
+    assert 'remaining' not in observation and 'captured_at' not in observation
+    report_issue = {**issue, 'source_id':'71','scope':'provider_payment'}
+    source = {'details':{'facts':{}},'obligations':[],'issues':[report_issue,report_issue]}
+    for _ in range(2):
+        pages, totals = provider_customer_payments(source)
+        assert not pages and totals['KWD'] == [{'provider':'salla','name':'سلة','orders':1,'paid':amount}]
+
+
+@pytest.mark.parametrize('kwargs', [
+    {'paid':'30.00'}, {'tender':'99.96'}, {'changes':lambda r:r['payment_methods'][0].pop('transaction_reference')},
+    {'changes':lambda r:r['payment_actions']['remaining_action'].update(has_remaining_amount=True)},
+    {'changes':lambda r:r['payment_actions']['refund_action'].update(paid_amount={'amount':'99.98','currency':'SAR'})},
+    {'changes':lambda r:r['payment_actions']['refund_action'].update(refund_amount={'amount':5,'currency':'KWD'})},
+    {'changes':lambda r:r['payment_actions']['refund_action'].update(pending_refund_amount={'amount':5,'currency':'KWD'})},
+    {'changes':lambda r:r.update(is_pending_payment=True)},
+    {'changes':lambda r:r.update(payment_status='declined')},
+    {'changes':lambda r:r.update(status={'slug':'restored'})},
+    {'changes':lambda r:r.update(updated_at='2026-11-03T09:01:00Z')},
+])
+def test_unproved_tender_never_enters_customer_paid_detail(kwargs):
+    _, issues = foreign_payment(**kwargs)
+    assert not any(i.get('paid_tender_observation') for i in issues)
+
+
+def test_foreign_observation_never_counts_a_frozen_different_provider_or_reference_owner_twice():
+    from operational_provider_report_coverage import provider_customer_payments
+
+    _, (issue,) = foreign_payment()
+    observed = {**issue, 'scope':'provider_payment', 'source_id':'71'}
+    frozen = {'order_id':'71', 'provider':'tamara', 'currency':'KWD',
+              'paid':'99.98','gross':'99.98','remaining':'0.00'}
+    projection = {'details':{'facts':{'provider_order_balance:71':frozen}}, 'obligations':[], 'issues':[observed]}
+    assert provider_customer_payments(projection)[1]['KWD'] == [
+        {'provider':'tamara','name':'تمارا','orders':1,'paid':'99.98'}]
+    projection['details']['facts'] = {'capture:native-cc-reference':{'order_id':'different', 'provider':'salla', 'amount':'99.98'}}
+    assert not provider_customer_payments(projection)[1]

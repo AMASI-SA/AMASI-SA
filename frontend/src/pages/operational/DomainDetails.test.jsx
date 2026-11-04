@@ -22,8 +22,21 @@ test('shows recorded and pending customer payments separately when fee projectio
     ['تمارا', 'إثبات محفوظ', '2', '178.45', '0.00'], ['سلة', 'للمراجعة', '1', '24.10', '3.00'],
   ]);
   expect(paymentSection.textContent).toContain('SAR');
-  expect(paymentSection.textContent).toContain('تمارا · 178.45 SAR · عدد الطلبات المدفوعة 2');
+  expect(host.querySelector('section[aria-label="مدفوعات الطلبات منذ بداية التشغيل"]').textContent)
+    .toContain('تمارا · 178.45 SAR · عدد الطلبات المدفوعة 2');
   expect(paymentSection.textContent).not.toContain('لا توجد بيانات مسجلة');
+});
+
+test('unassigned bank payments and customer balances stay visible without a bank posting', async () => {
+  await render({details: {customer_tender_coverage: {source_order_count: 4, by_currency: {SAR: [
+    {method: 'bank', name: 'تحويل بنكي', orders: 1, paid: '25.00', remaining: '0.00', incomplete_orders: 0},
+    {method: 'cod', name: 'الدفع عند الاستلام', orders: 2, paid: null, remaining: null, incomplete_orders: 2},
+  ]}}}});
+  const coverage = host.querySelector('section[aria-label="مدفوعات الطلبات منذ بداية التشغيل"]');
+  expect(coverage.textContent).toContain('عدد طلبات سلة في الفترة: 4');
+  expect([...coverage.querySelectorAll('tbody tr')].map(row => [...row.cells].map(cell => cell.textContent))).toEqual([
+    ['تحويل بنكي', '1', '25.00', '0.00', '0'], ['الدفع عند الاستلام', '2', 'غير متاح', 'غير متاح', '2'],
+  ]);
 });
 
 test('advertising keeps latest daily snapshot and groups month by account and currency using exact cents',async()=>{

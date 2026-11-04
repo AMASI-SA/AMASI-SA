@@ -111,6 +111,8 @@ def reconcile(state, sources, as_of):
     engine.setdefault("provider_reports", {})
     engine.setdefault("cod_reports", {})
     engine.setdefault("audit", [])
+    if "customer_tender_coverage" in sources:
+        engine["customer_tender_coverage"] = deepcopy(sources["customer_tender_coverage"])
     issues = deepcopy(sources.get("issues", []))
 
     def issue(code, identity):
