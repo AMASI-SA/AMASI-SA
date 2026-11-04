@@ -390,7 +390,10 @@ async def project(db, owner, state, *, as_of=None):
             if is_cod and currency != "SAR":
                 raise ValueError("historical_shipping_cod_currency_requires_review")
             due = number(cod_facts(raw, number(amounts.get("total", raw.get("total"))))["outstanding"]) if is_cod else None
-            quote = shipping_charge(rates[0], owner, party, stamp, due, setup)
+            # This historical adapter already admits only SAR contracts, with
+            # an explicit SAR default for its legacy setup records above.
+            quote = shipping_charge({**rates[0], 'currency': 'SAR'}, owner, party, stamp, due,
+                                    setup, cod_currency=currency)
             if not quote.get("fee_complete"):
                 raise ValueError("historical_shipping_fee_component_incomplete")
             amount = number(quote["cost"])

@@ -111,11 +111,14 @@ def _currency(raw, assignment=None):
     currencies = [row["currency"] for row in candidates if row.get("currency") is not None]
     if not currencies:
         _fail("currency_missing")
-    # The existing delivery contracts and driver responsibility producer are
-    # native SAR. Do not relabel their fees with a foreign customer currency.
-    if any(value != "SAR" for value in currencies):
+    # Courier delivery evidence carries the customer's currency; its service
+    # price is quoted independently. The native driver producer remains SAR.
+    if (any(not isinstance(value, str) or len(value) != 3 or not value.isascii()
+            or not value.isalpha() or value != value.upper() for value in currencies)
+            or len(set(currencies)) != 1
+            or (assignment is not None and currencies[0] != "SAR")):
         _fail("currency_unsupported")
-    return "SAR"
+    return currencies[0]
 
 
 def _window(value, created, start, end):

@@ -126,11 +126,23 @@ def reconcile(state, sources, as_of):
         if entry not in issues:
             issues.append(entry)
 
+    shipping_keys = {}
+
+    def index_shipping_key(key):
+        if key.startswith("shipping:"):
+            root = ":".join(key.split(":", 2)[:2])
+            shipping_keys.setdefault(root, set()).add(key)
+
+    for mapping in (obligations, facts):
+        for key in mapping:
+            index_shipping_key(key)
+
     def fact(key, payload):
         previous = facts.get(key)
         if previous is not None and previous != payload:
             raise ValueError("confirmed_evidence_changed")
         facts[key] = payload
+        index_shipping_key(key)
         return payload
 
     def put(key, kind, party, party_type, currency, expected=ZERO, confirmed=ZERO,
@@ -142,6 +154,75 @@ def reconcile(state, sources, as_of):
                             **metadata}
         if existing_name:
             obligations[key]["name"] = existing_name
+        if kind == "shipping":
+            index_shipping_key(key)
+
+    shipping_allocations = {}
+    for movement in result.get("movements", []):
+        for allocation in movement.get("allocations", []):
+            key = allocation.get("obligation_id", "")
+            if key.startswith("shipping:"):
+                shipping_allocations.setdefault(key, set()).add(movement.get("currency"))
+                index_shipping_key(key)
+
+    def shipping_currency(oid, carrier, frozen, order_currency):
+        """Reproject estimates, but never reinterpret a frozen or allocated fee."""
+        key = "shipping:" + oid
+        keys = shipping_keys.get(key, ())
+        related = {k: obligations[k] for k in keys if k in obligations}
+        recorded = {row.get("currency") for k, row in related.items()
+                    if money(row.get("confirmed", "0")) > ZERO}
+        for allocated in keys:
+            if allocated in shipping_allocations:
+                if allocated not in related:
+                    raise ValueError("shipping_settled_evidence_incomplete")
+                recorded.add(related[allocated].get("currency"))
+                recorded.update(value for value in shipping_allocations[allocated] if value)
+        saved_fees = [(k, facts[k], "currency") for k in keys
+                      if k != key and facts.get(k, {}).get("cost") is not None]
+        if frozen and frozen.get("cost") is not None:
+            saved_fees.append((key, frozen, "fee_currency"))
+        if facts.get("shipping_fee:" + oid):
+            saved_fees.append(("shipping_fee:" + oid, facts["shipping_fee:" + oid], "currency"))
+        for saved_key, saved, field in saved_fees:
+            value = saved.get(field) or related.get(saved_key, {}).get("currency")
+            if value:
+                recorded.add(value)
+        # Legacy facts did not carry a currency. Their existing payable is the
+        # evidence; a current quote cannot silently assign them a new currency.
+        if saved_fees and not recorded:
+            raise ValueError("shipping_confirmed_currency_missing")
+        if None in recorded or "" in recorded:
+            raise ValueError("shipping_confirmed_currency_missing")
+        proposed = (carrier or {}).get("currency") if not frozen or (carrier or {}).get("id") == frozen["id"] else None
+        if len(recorded) > 1 or (recorded and proposed and proposed not in recorded):
+            raise ValueError("shipping_confirmed_currency_conflict")
+        if recorded:
+            return next(iter(recorded))
+        # Native quotes always carry the contract currency. The fallback keeps
+        # older normalized callers compatible without changing their evidence.
+        return proposed or order_currency
+
+    def shipping_components(oid, carrier):
+        """A later whole commission includes any already frozen fixed part."""
+        components = [dict(component) for component in carrier["fee_components"]]
+        fixed_key, whole_key = "shipping:" + oid + ":cod_fixed_commission", "shipping:" + oid + ":cod_commission"
+        fixed = facts.get(fixed_key)
+        whole = facts.get(whole_key)
+        if not fixed and (whole or money(obligations.get(whole_key, {}).get("confirmed", "0")) > ZERO):
+            components = [row for row in components if row["id"] != "cod_fixed_commission"]
+        for component in components:
+            if component["id"] != "cod_commission" or not component.get("complete"):
+                continue
+            if fixed:
+                remainder = money(component["amount"]) - money(fixed["cost"])
+                if remainder < ZERO:
+                    raise ValueError("shipping_confirmed_component_conflict")
+                component["amount"] = amount(remainder)
+            elif (fixed_key in shipping_allocations
+                  or money(obligations.get(fixed_key, {}).get("confirmed", "0")) > ZERO):
+                raise ValueError("shipping_settled_component_review_required")
+        return components
 
     # Supplier invoice approval is independent from the customer's order
     # lifecycle. In particular, an old order (or unavailable current estimate)
@@ -252,7 +333,9 @@ def reconcile(state, sources, as_of):
                         or (created > start if delivery_only else created < start)
                         or instant(order.get("delivered_at")) != delivered
                         or order.get("status") not in DELIVERED
-                        or order.get("currency") != "SAR" or event.get("currency") != "SAR"
+                        or not isinstance(order.get("currency"), str) or not order["currency"]
+                        or event.get("currency") != order["currency"]
+                        or ((delivery_only or event.get("party_type") == "store_driver") and order["currency"] != "SAR")
                         or event.get("party_type") not in {"courier", "store_driver"}
                         or not event.get("party_id") or event.get("party_id") != carrier.get("id")
                         or event.get("party_type") != carrier.get("party_type", carrier.get("kind"))):
@@ -306,13 +389,27 @@ def reconcile(state, sources, as_of):
             carrier = order.get("carrier")
             service_key = "shipping:" + oid
             frozen = facts.get(service_key)
+            try:
+                fee_currency = shipping_currency(oid, carrier, frozen, currency)
+                if carrier and carrier.get("fee_components"):
+                    carrier = {**carrier, "fee_components": shipping_components(oid, carrier)}
+                    fixed_key = service_key + ":cod_fixed_commission"
+                    if (fixed_key in obligations and not facts.get(fixed_key)
+                            and fixed_key not in shipping_allocations
+                            and money(obligations[fixed_key].get("confirmed", "0")) == ZERO
+                            and not any(row["id"] == "cod_fixed_commission" for row in carrier["fee_components"])):
+                        obligations[fixed_key] = {**obligations[fixed_key], "expected": "0.00"}
+            except ValueError as error:
+                fee_currency = None
+                issue(str(error), service_key)
             if frozen is None and carrier and order.get("status") in DELIVERED:
-                frozen = fact(service_key, {"id": carrier["id"], "cost": amount(money(carrier["cost"])) if carrier.get("cost") is not None else None,
+                frozen = fact(service_key, {"id": carrier["id"], "cost": amount(money(carrier["cost"])) if carrier.get("cost") is not None and fee_currency else None,
                                            "party_type": carrier.get("party_type", carrier.get("kind", "courier")),
                                            "delivered_at": order.get("delivered_at", updated.isoformat()),
                                            "cod_amount": amount(money(order.get("cod_amount", "0"))),
                                            "cod_evidence": deepcopy(order.get("cod") or ({"evidence_complete": False} if order.get("cod_required") else {})),
-                                           "component_mode": bool(carrier.get("fee_components"))})
+                                           "component_mode": bool(carrier.get("fee_components")),
+                                           **({"fee_currency": fee_currency} if carrier.get("cost") is not None and fee_currency else {})})
             cod_fact = facts.get("cod_collection:" + oid)
             cod_evidence = deepcopy(order.get("cod") or {})
             if frozen:
@@ -349,7 +446,7 @@ def reconcile(state, sources, as_of):
                 engine["cod_reports"]["cod:" + oid] = {**cod_metadata, "order_id": oid, "currency": currency,
                     "party_id": frozen["id"] if frozen else (carrier or {}).get("id"),
                     "confirmed_custody": amount(confirmed_cod)}
-            if frozen:
+            if frozen and fee_currency:
                 if order.get("native_driver_earning"):
                     earning = order["native_driver_earning"]
                     if (earning["party_id"] != frozen["id"] or frozen["party_type"] != "store_driver"
@@ -363,7 +460,7 @@ def reconcile(state, sources, as_of):
                 if fee is None and frozen.get("cost") is not None:
                     fee = {"cost": frozen["cost"]}
                 if fee is None and carrier and carrier["id"] == frozen["id"] and carrier.get("cost") is not None:
-                    fee = fact("shipping_fee:" + oid, {"cost": amount(money(carrier["cost"]))})
+                    fee = fact("shipping_fee:" + oid, {"cost": amount(money(carrier["cost"])), "currency": fee_currency})
                 components = carrier.get("fee_components", []) if carrier and carrier["id"] == frozen["id"] else []
                 # Preserve an already confirmed aggregate from older snapshots;
                 # introducing component rows must not duplicate that liability.
@@ -379,39 +476,40 @@ def reconcile(state, sources, as_of):
                         component_key = service_key + ":" + component["id"]
                         component_fact = facts.get(component_key)
                         if component_fact is None and component.get("complete") and component.get("amount") is not None:
-                            component_fact = fact(component_key, {"cost": amount(money(component["amount"]))})
+                            component_fact = fact(component_key, {"cost": amount(money(component["amount"])), "currency": fee_currency})
                         if component_fact is not None:
-                            put(component_key, "shipping", frozen["id"], frozen["party_type"], currency,
+                            put(component_key, "shipping", frozen["id"], frozen["party_type"], fee_currency,
                                 confirmed=money(component_fact["cost"]), business_date=day(frozen["delivered_at"]), fee_component=component["id"])
                         elif component_key in obligations:
                             obligations[component_key] = {**obligations[component_key], "expected": "0.00"}
                 elif fee is not None:
-                    put(service_key, "shipping", frozen["id"], frozen["party_type"], currency,
+                    put(service_key, "shipping", frozen["id"], frozen["party_type"], fee_currency,
                         confirmed=money(fee["cost"]), business_date=day(frozen["delivered_at"]))
                 elif service_key in obligations:
                     obligations[service_key] = {**obligations[service_key], "expected": "0.00"}
+            if frozen:
                 if confirmed_cod or cod_evidence or "cod:" + oid in obligations:
                     put("cod:" + oid, "cod", frozen["id"], frozen["party_type"], currency,
                         confirmed=confirmed_cod, direction="receivable", business_date=day(frozen["delivered_at"]), **cod_metadata)
             elif carrier:
-                if carrier.get("fee_components"):
+                if fee_currency and carrier.get("fee_components"):
                     if service_key in obligations:
                         obligations[service_key] = {**obligations[service_key], "expected": "0.00"}
                     for component in carrier["fee_components"]:
                         component_key = service_key + ":" + component["id"]
-                        put(component_key, "shipping", carrier["id"], carrier.get("party_type", carrier.get("kind", "courier")), currency,
+                        put(component_key, "shipping", carrier["id"], carrier.get("party_type", carrier.get("kind", "courier")), fee_currency,
                             expected=ZERO if cancelled or not component.get("complete") else money(component["amount"]),
                             business_date=created.date(), fee_component=component["id"])
-                elif carrier.get("cost") is not None:
-                    put(service_key, "shipping", carrier["id"], carrier.get("party_type", carrier.get("kind", "courier")), currency,
+                elif fee_currency and carrier.get("cost") is not None:
+                    put(service_key, "shipping", carrier["id"], carrier.get("party_type", carrier.get("kind", "courier")), fee_currency,
                         expected=ZERO if cancelled else money(carrier["cost"]), business_date=created.date())
-                elif service_key in obligations:
+                elif fee_currency and service_key in obligations:
                     obligations[service_key] = {**obligations[service_key], "expected": "0.00"}
                 put("cod:" + oid, "cod", carrier["id"], carrier.get("party_type", carrier.get("kind", "courier")), currency,
                     expected=ZERO if cancelled else money(order.get("cod_amount", "0")), direction="receivable", business_date=created.date(), **cod_metadata)
             else:
                 for key, obligation in obligations.items():
-                    if key == service_key or key.startswith(service_key + ":") or key == "cod:" + oid:
+                    if (fee_currency and (key == service_key or key.startswith(service_key + ":"))) or key == "cod:" + oid:
                         obligations[key] = {**obligation, "expected": "0.00"}
             if (not delivery_only and order.get("payment") and
                     apply_split_payment(result, order, now, put, issue, sources.get("fee_policies", []), reference_owners)):
