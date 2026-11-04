@@ -22,7 +22,7 @@ invoice for 4 → 10 May 2026:
                                                             within ±0.10
 """
 import pytest
-from provider_fee_test_helpers import legacy_fee_mode
+from tests.provider_fee_test_helpers import legacy_fee_mode
 
 
 class _Cursor:

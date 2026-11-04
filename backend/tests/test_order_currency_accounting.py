@@ -1,5 +1,5 @@
 import pytest
-from provider_fee_test_helpers import legacy_fee_mode
+from tests.provider_fee_test_helpers import legacy_fee_mode
 
 import payment_gateway_metrics
 from accounts_routes import _order_expected_amount_sar

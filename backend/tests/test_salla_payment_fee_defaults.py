@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from provider_fee_test_helpers import legacy_fee_mode
+from tests.provider_fee_test_helpers import legacy_fee_mode
 
 from excel_parser import match_settings
 import payment_gateway_metrics as gateway_metrics

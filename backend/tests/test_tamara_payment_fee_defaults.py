@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import openpyxl
 import pytest
-from provider_fee_test_helpers import legacy_fee_mode
+from tests.provider_fee_test_helpers import legacy_fee_mode
 
 from bnpl.settlements_service import _capture_fee_components
 import payment_gateway_metrics as gateway_metrics

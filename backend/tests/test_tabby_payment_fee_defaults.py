@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import openpyxl
 import pytest
-from provider_fee_test_helpers import legacy_fee_mode
+from tests.provider_fee_test_helpers import legacy_fee_mode
 
 from bnpl import settlements_service as settlements
 from bnpl.config_store import (
