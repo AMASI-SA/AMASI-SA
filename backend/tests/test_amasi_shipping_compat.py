@@ -159,7 +159,7 @@ class AmasiCompatibleShippingTests(unittest.IsolatedAsyncioTestCase):
             document = await compat.carrier_label(None, "owner", self.number, issue=False, completed_only=True)
         self.assertEqual(document["print_data"]["address"]["address_line"], "Gift destination")
         self.assertEqual(document["print_data"]["address"]["short_address"], "GIFT1234")
-        self.api.assert_awaited_once_with(None, "owner", "GET", "/shipments", params={"order_id": "42", "per_page": 50})
+        self.api.assert_awaited_once_with(None, "owner", "GET", "/orders/42/shipments", params={"per_page": 50})
 
     async def test_native_named_order_courier_needs_no_shipment_or_driver_assignment(self):
         for name in ["مندوب جدة", "mandoob riyadh", "مندوب المتجر"]:
@@ -686,8 +686,59 @@ class MobileShippingV1Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(label["address"]["address_line"], "Recipient delivery street")
         self.assertEqual(label["address"]["short_address"], "GIFT1234")
         self.assertEqual(label["address"]["district"], "Gift district")
-        provider.assert_awaited_once_with(self.db, "merchant", "GET", "/shipments",
-                                          params={"order_id": "42", "per_page": 50})
+        provider.assert_awaited_once_with(self.db, "merchant", "GET", "/orders/42/shipments", params={"per_page": 50})
+
+    async def test_order_read_scope_alone_supplies_recipient_destination(self):
+        row = await self.seed_gift_receiver()
+        # Some order-scoped legacy DTOs omit redundant parent, direction and status.
+        scoped = {k: v for k, v in row.items() if k not in {"order_id", "type", "status", "courier_name"}}
+        scoped["company"] = {"name": row["courier_name"]}
+        async def reply(db, owner, method, path, **kwargs):
+            self.assertEqual((method, path), ("GET", "/orders/42/shipments"))
+            return {"data": [scoped]}
+        with patch.object(compat, "call_salla", side_effect=reply):
+            response = await self.client.post(self.path + "/refresh")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["print_data"]["address"]["short_address"], "GIFT1234")
+
+    async def test_lean_list_member_gets_only_its_own_full_ship_to(self):
+        row = await self.seed_gift_receiver()
+        lean = {**row, "ship_to": {k: v for k, v in row["ship_to"].items()
+                                   if k in {"name", "city", "district", "address_line_two"}}}
+        for detail, allowed in [(row, True), ({**row, "order_id": 999}, False), ({**row, "id": 999}, False),
+                                ({**row, "courier_name": "SMSA"}, False),
+                                ({**row, "ship_to": {**row["ship_to"], "name": "Gift buyer"}}, False)]:
+            paths = []
+            async def reply(db, owner, method, path, **kwargs):
+                self.assertEqual(method, "GET")
+                paths.append(path)
+                if path == "/orders/42/shipments":
+                    raise SallaError("not supported", status_code=404)
+                if path == "/shipments":
+                    return {"data": [lean]}
+                self.assertEqual(path, "/shipments/74")
+                return {"data": detail}
+            with self.subTest(detail=detail), patch.object(compat, "call_salla", side_effect=reply):
+                result = await self.client.post(self.path + "/refresh")
+                self.assertEqual(result.status_code, 200 if allowed else 409, result.text)
+                self.assertEqual(paths, ["/orders/42/shipments", "/shipments", "/shipments/74"])
+                if allowed:
+                    address = result.json()["print_data"]["address"]
+                    self.assertEqual((address["address_line"], address["short_address"]), ("Recipient delivery street", "GIFT1234"))
+
+    async def test_provider_unavailable_is_distinct_from_missing_recipient_address(self):
+        await self.seed_gift_receiver()
+        for error in (TimeoutError(), SallaError("scope denied", status_code=403)):
+            with self.subTest(error=error), patch.object(compat, "call_salla", side_effect=error):
+                result = await self.client.post(self.path + "/refresh")
+                self.assertEqual(result.status_code, 503, result.text)
+                self.assertEqual(result.json()["detail"]["code"], "recipient_address_source_unavailable")
+        await self.db.unified_orders.update_one(self.key, {"$set": {
+            "raw_by_source.salla_direct.receiver.address": {"address_line": "Known receiver street"},
+        }})
+        with patch.object(compat, "call_salla", side_effect=SallaError("scope denied", status_code=403)):
+            result = await self.client.post(self.path + "/refresh")
+        self.assertEqual(result.json()["print_data"]["address"]["address_line"], "Known receiver street")
 
     async def test_unproven_cache_and_generic_buyer_address_do_not_mask_recipient(self):
         shipment = await self.seed_gift_receiver()
