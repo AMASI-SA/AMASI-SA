@@ -5,6 +5,7 @@ sys.path[:0] = ['/opt/mezan', '/opt/mezan/backend', '/opt/mezan/backend/tests']
 from independent_runtime import validate_before_import
 validate_before_import('web')
 os.environ['OPERATIONAL_TEST_MONGO_URI'] = 'mongodb://127.0.0.1:27017'
+os.environ['MZ2_TEST_MONGO_URI'] = 'mongodb://127.0.0.1:27017'
 import pytest
 names = ['test_operational_balance_courier_acquisition.py', 'test_provider_fee_source_terms.py',
     'test_provider_fee_runtime_binding.py', 'test_bnpl_fee_completeness_boundaries.py',
