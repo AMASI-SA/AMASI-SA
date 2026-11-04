@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 
 from operational_balance_service import report
+from excel_parser import match_settings
 from operational_configured_provider_fees import estimate_fee, refresh_provider_fee_inputs
 from operational_financial_position import build_financial_position
 from operational_financial_position_core import _provider_collection_table
@@ -45,7 +46,64 @@ def test_saved_rates_and_provider_rounding_are_used_without_defaulting_missing_f
         assert estimate_fee(source, "tamara", "100") is None
     duplicated = settings()
     duplicated["payment_methods"] *= 2
-    assert estimate_fee(duplicated, "tamara", "100") is None
+    assert estimate_fee(duplicated, "tamara", "100") == Decimal("9.76")
+
+
+@pytest.mark.parametrize("method, expected_rate", [
+    ("credit_card", 1.25), ("البطاقة الإئتمانية", 1.25),
+    ("بطاقة ائتمانية", 3.5), ("بطاقة بنكية", 2.0),
+    ("visa", 2.4), ("mastercard", 2.5),
+])
+def test_saved_alias_precedence_matches_legacy_mezan(method, expected_rate):
+    # Deliberately distinct synthetic rates exercise the legacy selection order.
+    terms = {"payment_methods": [
+        settings("البطاقة الإئتمانية", "1.25", "1", "15")["payment_methods"][0],
+        settings("بطاقة ائتمانية", "3.50", "1", "15")["payment_methods"][0],
+        settings("بطاقة بنكية", "2.00", "1", "15")["payment_methods"][0],
+        settings("Visa", "2.40", "1", "15")["payment_methods"][0],
+        settings("MasterCard", "2.50", "1", "15")["payment_methods"][0],
+    ]}
+    parsed = {"payment_methods": [{"name": method, "orders_count": 1, "total_sales": 123.45}],
+              "orders_individual": [{"payment_method": method, "total_amount": 123.45}],
+              "shipping_companies": []}
+    legacy, = match_settings(parsed, terms["payment_methods"], [])["payment_breakdown"]
+    assert legacy["matched"] and legacy["commission_percent"] == expected_rate
+    assert estimate_fee(terms, "salla", "123.45", method=method) == Decimal(str(legacy["fee_amount"]))
+
+
+def test_invalid_selected_alias_stays_unknown_and_does_not_fall_through_to_another_rate():
+    terms = settings("البطاقة الإئتمانية", "1.25", "1", "15")
+    terms["payment_methods"][0].pop("fixed_fee")
+    terms["payment_methods"] += settings("بطاقة ائتمانية", "3.50", "1", "15")["payment_methods"]
+    assert estimate_fee(terms, "salla", "100", method="credit_card") is None
+    assert estimate_fee(terms, "salla", "100", method="salla") is None
+
+
+@pytest.mark.parametrize("first_method, second_method, expected_fee", [
+    ("mada", "mada", "2.30"), ("mada", {"code": "mada"}, "2.30"),
+    ("mada", "visa", None), ("mada", None, None),
+    ("بطاقة ائتمانية", "بطاقة ائتمانية", "5.18"),
+    ("credit_card", "البطاقة الإئتمانية", "2.59"),
+    ("credit_card", "بطاقة ائتمانية", None),
+])
+def test_same_rail_split_uses_one_per_order_fee_and_mixed_or_unknown_rails_stay_unresolved(first_method, second_method, expected_fee):
+    state = state_for()
+    terms = settings("مدى", "1", "1", "15")
+    terms["payment_methods"] += settings("Visa", "2", "1", "15")["payment_methods"]
+    terms["payment_methods"] += settings("البطاقة الإئتمانية", "1.25", "1", "15")["payment_methods"]
+    terms["payment_methods"] += settings("بطاقة ائتمانية", "3.50", "1", "15")["payment_methods"]
+    legs = [{"provider": "salla", "method": first_method, "amount": "40.00"},
+            {"provider": "salla", "method": second_method, "amount": "60.00"}]
+    split = {"order_id": "one", "currency": "SAR", "gross": "100.00", "tenders": legs}
+    obligation(state, "provider:one:salla", "provider", "provider", "100.00", party="salla", direction="receivable")
+    state["engine"]["facts"]["provider_split:one"] = {"evidence": split, "booked_providers": ["salla"]}
+    order = {"id": "one", "currency": "SAR", "payment": {"split": split}, "created_at": NOW, "updated_at": NOW}
+    refresh_provider_fee_inputs(state, {"provider_fee_settings": terms, "orders": [order]})
+    row = platform(state, "salla")
+    assert (row["orders"], row["gross"], row["fees"]) == (1, "100.00", expected_fee)
+    assert row["complete"] is (expected_fee is not None)
+    if expected_fee is not None:
+        assert Decimal(row["net"]) == Decimal("100") - Decimal(expected_fee)
 
 
 def test_one_table_subtracts_fee_once_preserves_opening_and_creates_no_cash():

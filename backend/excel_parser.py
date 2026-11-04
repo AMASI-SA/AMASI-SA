@@ -442,6 +442,22 @@ def _payment_synonym_match(settings_key: str, order_key: str) -> bool:
     return False
 
 
+def resolve_payment_setting(name: str, payment_map: dict, canonical_payment_map: dict):
+    """Use the legacy exact-name, canonical-first, then unknown-label precedence."""
+    key = normalize_name(name)
+    configured = payment_map.get(key)
+    sub_key, _display, _parent = normalize_payment_method(name)
+    if configured is None and sub_key in KNOWN_PAYMENT_SUB_KEYS:
+        configured = canonical_payment_map.get(sub_key)
+        if configured is None and sub_key in CARD_FALLBACK_SUB_KEYS:
+            configured = canonical_payment_map.get("credit_card")
+    if configured is None and sub_key not in KNOWN_PAYMENT_SUB_KEYS:
+        for configured_key, candidate in payment_map.items():
+            if _payment_synonym_match(configured_key, key):
+                return candidate
+    return configured
+
+
 def match_settings(
     parsed: dict,
     payment_settings: list[dict],
@@ -505,20 +521,8 @@ def match_settings(
         return value.quantize(cent, rounding=ROUND_HALF_UP)
 
     for pm in parsed["payment_methods"]:
-        key = normalize_name(pm["name"])
-        cfg = payment_map.get(key)
+        cfg = resolve_payment_setting(pm["name"], payment_map, canonical_payment_map)
         order_sub_key, _display, _parent = normalize_payment_method(pm["name"])
-        if cfg is None and order_sub_key in KNOWN_PAYMENT_SUB_KEYS:
-            cfg = canonical_payment_map.get(order_sub_key)
-            if cfg is None and order_sub_key in CARD_FALLBACK_SUB_KEYS:
-                cfg = canonical_payment_map.get("credit_card")
-        # Iteration 30 fallback: use broad synonym/fuzzy matching only for an
-        # unknown legacy label.  Two different known rails stay distinct.
-        if cfg is None and order_sub_key not in KNOWN_PAYMENT_SUB_KEYS:
-            for k, v in payment_map.items():
-                if _payment_synonym_match(k, key):
-                    cfg = v
-                    break
         matched = cfg is not None
         cfg = cfg or {"commission_percent": 0.0, "fixed_fee": 0.0, "vat_percent": 0.0}
 

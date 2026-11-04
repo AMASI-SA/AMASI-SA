@@ -3,8 +3,9 @@ from copy import deepcopy
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, ROUND_HALF_UP
 
 from bnpl.settlements_service import _capture_fee_components
+from excel_parser import normalize_name, resolve_payment_setting
 from operational_fee_methods import fee_rail
-from payment_methods import CARD_FALLBACK_SUB_KEYS, normalize_payment_method
+from payment_methods import KNOWN_PAYMENT_SUB_KEYS, normalize_payment_method
 
 CENT = Decimal(".01")
 ZERO = Decimal(0)
@@ -26,20 +27,22 @@ def cash(value):
 
 
 def configured_terms(settings, provider, method=None):
-    """Resolve one explicit, valid configured row. Zero must be explicitly saved."""
+    """Use the legacy row precedence, retaining strict validation of saved values."""
     key = fee_rail(method) if provider == "salla" else provider
-    rows = {}
-    for row in settings.get("payment_methods") or []:
-        if not isinstance(row, dict):
-            continue
-        subkey, _name, _parent = normalize_payment_method(row.get("name") or "")
-        rows.setdefault(subkey, []).append(row)
-    matches = rows.get(key, [])
-    if not matches and key in CARD_FALLBACK_SUB_KEYS:
-        matches = rows.get("credit_card", [])
-    if len(matches) != 1:
+    if key is None:
         return None
-    row = matches[0]
+    exact_rows, canonical_rows = {}, {}
+    for row in settings.get("payment_methods") or []:
+        if not isinstance(row, dict) or not isinstance(row.get("name"), str):
+            continue
+        exact_rows[normalize_name(row["name"])] = row
+        subkey, _name, _parent = normalize_payment_method(row["name"])
+        if subkey in KNOWN_PAYMENT_SUB_KEYS:
+            canonical_rows.setdefault(subkey, row)
+    lookup = method if provider == "salla" and isinstance(method, str) else key
+    row = resolve_payment_setting(lookup, exact_rows, canonical_rows)
+    if row is None:
+        return None
     values = [number(row.get(k)) for k in ("commission_percent", "fixed_fee", "vat_percent")]
     if any(v is None for v in values):
         return None

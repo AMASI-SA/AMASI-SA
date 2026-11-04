@@ -4,6 +4,7 @@ Legacy display rows flattened timestamps/statuses and defaulted missing currency
 SAR. They are not financial evidence. No network call or data mutation here.
 """
 from collections import defaultdict
+from decimal import Decimal
 
 from operational_payment_evidence import (
     PaymentEvidenceError, _amount, _identity, _instant, _method_rows, _single,
@@ -177,9 +178,23 @@ def normalize_transaction_payment(raw, currency, total, created_at, as_of, *, ow
         return withheld("provider_transaction_binding_conflict")
 
 
+def is_closed_tender_balance(page, currency):
+    """Recognize the native closed-tender proof while keeping customer due unknown."""
+    if (not isinstance(page, dict) or page.get("source") != "canonical_salla_closed_tender"
+            or currency == "SAR" or page.get("currency") != currency
+            or "remaining" not in page or page["remaining"] is not None):
+        return False
+    try:
+        paid = _amount(page["paid"], currency)
+        gross = _amount(page["gross"], currency)
+        _identity(page.get("transaction_reference"), "provider_payment_reference_missing")
+        return paid > 0 and 0 < gross - paid <= Decimal(".02")
+    except (ValueError, KeyError, TypeError):
+        return False
+
+
 def _closed_foreign_tender(raw, payment, *, owner, order_number, provider_order_id, source, created_at, as_of):
     """Keep independently paid money visible when Salla closes an FX order with a small gross difference."""
-    from decimal import Decimal
     from salla_payment_collection import provider_order_page_current
 
     ccy = payment["currency"]
@@ -247,13 +262,23 @@ def normalize_operational_payment(raw, currency, total, created_at, as_of, *, ow
         canonical = {**canonical, "payment": {**(canonical.get("payment") or {}), "paid_amount": amounts["paid"]}}
     payment, issues = normalize_transaction_payment(canonical, currency, total, created_at, as_of, owner=owner,
         order_number=order_number, provider_order_id=provider_order_id, rows=rows, page_balance=amounts)
-    if not amounts and payment is not None and issues and all(
+    if not amounts and payment is not None and all(
             i["code"] == "provider_capture_evidence_incomplete" for i in issues):
         observation = _closed_foreign_tender(raw, payment, owner=owner, order_number=order_number,
             provider_order_id=provider_order_id, source=source, created_at=created_at, as_of=as_of)
         if observation is not None:
-            return None, [{"code":"provider_closed_tender_total_mismatch", "provider":provider,
-                           "paid_tender_observation":observation}]
+            # The tender is the provider's proved principal and fee basis. Keep
+            # the different order total and unknown customer due in its source proof.
+            payment["gross"] = observation["paid"]
+            payment["order_page_balance"] = {
+                "source": "canonical_salla_closed_tender", "owner_id": owner,
+                "order_id": provider_order_id, "order_number": order_number,
+                "provider": provider, "currency": currency, "gross": observation["gross"],
+                "paid": observation["paid"], "remaining": None,
+                "transaction_reference": observation["reference"],
+                "source_updated_at": _instant(raw.get("updated_at") or raw.get("date_updated")).isoformat(),
+            }
+            return payment, []
     if not amounts or payment is None or any(i["code"] != "provider_capture_evidence_incomplete" for i in issues):
         return payment, issues
     if not provider_order_page_current(source, raw, owner=owner, order_number=order_number, provider_order_id=provider_order_id):

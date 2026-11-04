@@ -1,5 +1,6 @@
 """A delivered service is not payment collection, a rate guess or a new bank entry."""
 from copy import deepcopy
+from datetime import datetime
 import pytest
 
 from test_operational_balance_delivery_cutover import (
@@ -34,6 +35,182 @@ def calculated(d, prior=None):
 
 def review(result):
     return build_financial_position(result)["currencies"]["SAR"].get("driver_fee_review", [])
+
+
+def legacy_driver_delivery(saved_at, delivered_at):
+    data = fixture()
+    data["store_delivery_assignments"][0].update(delivery_fee_snapshot="20.00", delivered_at=delivered_at)
+    data["store_delivery_driver_earnings"][0].update(amount="20.00", earned_at=delivered_at)
+    data["store_delivery_collections"] = []
+    raw = data["unified_orders"][0]["raw_by_source"]["salla_direct"]
+    raw.update(created_at="2026-10-06T01:00:00+00:00", total={"amount": "327.24", "currency": "SAR"},
+               paid_amount="327.24", remaining_amount="0.00",
+               payment={"method": "mada", "status": "paid", "paid_amount": "327.24",
+                        "paid_at": "2026-10-06T02:00:00+00:00", "reference": "paid-order"})
+    prior = active()
+    prior["engine"] = {"as_of": NOW, "facts": {
+        "shipping:100": {"id": "driver", "party_type": "store_driver", "cost": None,
+                         "delivered_at": saved_at, "cod_amount": "0.00", "cod_evidence": {},
+                         "component_mode": False},
+        "cod_collection:100": {"amount": "0.00", "evidence": {}, "party_id": "driver"},
+    }}
+    return data, prior
+
+
+@pytest.mark.parametrize("saved_at", [
+    "2026-10-06T12:00:00+00:00", "2026-10-06T12:00:01+00:00", "2026-10-06T15:00:01+03:00",
+])
+def test_unpriced_legacy_second_precision_recognizes_driver_and_provider_once(saved_at):
+    native_time = "2026-10-06T12:00:00.912175+00:00"
+    data, prior = legacy_driver_delivery(saved_at, native_time)
+    before = deepcopy(data)
+    result = calculated(data, prior)
+    assert fee_total(result) == 20
+    assert result["engine"]["obligations"]["shipping:100:base_shipping"]["confirmed"] == "20.00"
+    assert result["engine"]["obligations"]["provider:100"]["confirmed"] == "327.24"
+    assert "cod:100" not in result["engine"]["obligations"]
+    assert result["engine"]["facts"]["cod_collection:100"] == prior["engine"]["facts"]["cod_collection:100"]
+    assert result["engine"]["facts"]["shipping:100"] == prior["engine"]["facts"]["shipping:100"]
+    assert result["engine"]["facts"]["delivery_event:100"]["delivered_at"] == native_time
+    assert result["engine"]["facts"]["native_driver_earning:100"]["delivered_at"] == native_time
+    assert result["movements"] == prior["movements"] and result["openings"] == prior["openings"]
+    assert not review(result)
+    assert calculated(data, result) == result
+    assert data == before
+
+
+@pytest.mark.parametrize("saved_at,delivered_at", [
+    ("2026-10-06T12:00:00.900000+00:00", "2026-10-06T12:00:00.912175+00:00"),
+    ("2026-10-06T12:00:02+00:00", "2026-10-06T12:00:00.912175+00:00"),
+    ("2026-10-06T12:00:01+00:00", "2026-10-06T12:00:00+00:00"),
+    ("2026-10-07T00:00:00+00:00", "2026-10-06T23:59:59.912175+00:00"),
+    ("2026-10-07T00:00:00+03:00", "2026-10-06T20:59:59.912175+00:00"),
+])
+def test_legacy_driver_time_conflicts_preserve_saved_facts(saved_at, delivered_at):
+    data, prior = legacy_driver_delivery(saved_at, delivered_at)
+    result = calculated(data, prior)
+    assert fee_total(result) == 0
+    assert review(result)[0]["reason"] == "driver_fee_saved_conflict"
+    assert result["engine"]["facts"] == prior["engine"]["facts"]
+    assert "provider:100" not in result["engine"]["obligations"]
+
+
+@pytest.mark.parametrize("field,value", [
+    ("cost", "20.00"), ("cost", "25.00"), ("component_mode", True),
+    ("party_type", "courier"), ("id", "other-driver"),
+])
+def test_precision_compatibility_cannot_change_a_priced_fee_or_saved_driver(field, value):
+    data, prior = legacy_driver_delivery("2026-10-06T12:00:01+00:00", "2026-10-06T12:00:00.912175+00:00")
+    prior["engine"]["facts"]["shipping:100"][field] = value
+    result = calculated(data, prior)
+    assert fee_total(result) == 0
+    assert review(result)[0]["reason"] == "driver_fee_saved_conflict"
+    assert result["engine"]["facts"] == prior["engine"]["facts"]
+
+
+@pytest.mark.parametrize("fact_key", ["shipping:100:base_shipping", "shipping_fee:100"])
+def test_legacy_precision_holds_conflicting_saved_fee_facts_without_an_obligation(fact_key):
+    data, prior = legacy_driver_delivery("2026-10-06T12:00:01+00:00", "2026-10-06T12:00:00.912175+00:00")
+    prior["engine"]["facts"][fact_key] = {"cost": "25.00"}
+    result = calculated(data, prior)
+    assert fee_total(result) == 0
+    assert review(result)[0]["reason"] == "driver_fee_saved_conflict"
+    assert result["engine"]["facts"] == prior["engine"]["facts"]
+
+
+def test_legacy_precision_replay_keeps_base_fee_and_cod_commission_separate():
+    data = fixture(with_rate=True)
+    native_time = "2026-10-06T12:00:00.912175+00:00"
+    data["store_delivery_assignments"][0]["delivered_at"] = native_time
+    data["store_delivery_driver_earnings"][0]["earned_at"] = native_time
+    data["store_delivery_collections"][0]["collected_at"] = native_time
+    priced = calculated(data)
+    prior = active()
+    prior["engine"] = {"as_of": NOW, "facts": {"shipping:100": {
+        **priced["engine"]["facts"]["shipping:100"], "cost": None, "component_mode": False,
+        "delivered_at": "2026-10-06T12:00:01+00:00"}}}
+    result = calculated(data, prior)
+    assert fee_total(result) == 12
+    assert result["engine"]["facts"]["shipping:100:base_shipping"]["cost"] == "10.00"
+    assert result["engine"]["facts"]["shipping_fee:100"]["cost"] == "12.00"
+    assert not review(result)
+    assert calculated(data, result) == result
+
+
+@pytest.mark.parametrize("saved_at", [
+    datetime(2026, 10, 6, 12, 0, 1), {"date": "2026-10-06 12:00:01", "timezone": "UTC"},
+])
+def test_legacy_precision_keeps_saved_timestamp_format_requirements(saved_at):
+    data, prior = legacy_driver_delivery(saved_at, "2026-10-06T12:00:00.912175+00:00")
+    result = calculated(data, prior)
+    assert fee_total(result) == 0
+    assert result["engine"]["facts"] == prior["engine"]["facts"]
+
+
+@pytest.mark.parametrize("field,value", [
+    ("assignment_id", "other-assignment"), ("order_id", "other-order"),
+    ("driver_id", "other-driver"), ("earned_at", "2026-10-06T12:00:01+00:00"),
+])
+def test_legacy_precision_requires_the_same_native_assignment_and_earning(field, value):
+    data, prior = legacy_driver_delivery("2026-10-06T12:00:01+00:00", "2026-10-06T12:00:00.912175+00:00")
+    data["store_delivery_driver_earnings"][0][field] = value
+    result = calculated(data, prior)
+    assert fee_total(result) == 0
+    assert review(result)[0]["reason"] == "driver_fee_evidence_conflict"
+    assert result["engine"]["facts"] == prior["engine"]["facts"]
+
+
+@pytest.mark.parametrize("status", ["posted", "pending_driver_confirmation"])
+def test_legacy_precision_keeps_native_payout_overlap_under_review(status):
+    data, prior = legacy_driver_delivery("2026-10-06T12:00:01+00:00", "2026-10-06T12:00:00.912175+00:00")
+    data["store_delivery_driver_settlements"] = [row(
+        driver_id="driver", settlement_type="earning_payment", status=status)]
+    result = calculated(data, prior)
+    assert fee_total(result) == 0
+    assert review(result)[0]["reason"] == "driver_fee_payout_review_required"
+    assert result["engine"]["facts"] == prior["engine"]["facts"]
+
+
+def test_legacy_precision_keeps_an_existing_fee_allocation_without_a_matching_obligation_held():
+    data, prior = legacy_driver_delivery("2026-10-06T12:00:01+00:00", "2026-10-06T12:00:00.912175+00:00")
+    prior["movements"] = [{"id": "paid", "party_type": "store_driver", "party_id": "driver", "currency": "SAR",
+                           "kind": "payment", "direction": "outgoing", "amount": "20.00",
+                           "allocations": [{"obligation_id": "shipping:100:base_shipping", "amount": "20.00"}]}]
+    result = calculated(data, prior)
+    assert fee_total(result) == 0
+    assert review(result)[0]["reason"] == "driver_fee_saved_conflict"
+    assert result["movements"] == prior["movements"]
+    assert result["engine"]["facts"] == prior["engine"]["facts"]
+
+
+def test_legacy_precision_preserves_a_booked_driver_fee_and_its_payment_on_replay_and_price_change():
+    data, prior = legacy_driver_delivery("2026-10-06T12:00:01+00:00", "2026-10-06T12:00:00.912175+00:00")
+    booked = calculated(data, prior)
+    booked["movements"] = [{"id": "paid", "party_type": "store_driver", "party_id": "driver", "currency": "SAR",
+                            "kind": "payment", "direction": "outgoing", "amount": "20.00",
+                            "allocations": [{"obligation_id": "shipping:100:base_shipping", "amount": "20.00"}]}]
+    repeated = calculated(data, booked)
+    assert not review(repeated)
+    assert repeated["engine"]["obligations"] == booked["engine"]["obligations"]
+    assert repeated["engine"]["facts"] == booked["engine"]["facts"]
+    data["store_delivery_assignments"][0]["delivery_fee_snapshot"] = "25.00"
+    data["store_delivery_driver_earnings"][0]["amount"] = "25.00"
+    held = calculated(data, repeated)
+    assert review(held)[0]["reason"] == "driver_fee_saved_conflict"
+    assert held["engine"]["obligations"] == booked["engine"]["obligations"]
+    assert held["engine"]["facts"] == booked["engine"]["facts"]
+    assert held["movements"] == booked["movements"] and held["openings"] == booked["openings"]
+
+
+@pytest.mark.parametrize("fact_key,field", [("delivery_event:100", "id"), ("native_driver_earning:100", "earning_id")])
+def test_legacy_precision_preserves_existing_event_and_earning_provenance(fact_key, field):
+    data, prior = legacy_driver_delivery("2026-10-06T12:00:01+00:00", "2026-10-06T12:00:00.912175+00:00")
+    accepted = calculated(data, prior)
+    prior["engine"]["facts"][fact_key] = {**accepted["engine"]["facts"][fact_key], field: "different-proof"}
+    result = calculated(data, prior)
+    assert fee_total(result) == 0
+    assert all(result["engine"]["facts"][key] == value for key, value in prior["engine"]["facts"].items())
+    assert any(issue["code"] == "operational_delivery_confirmed_evidence_changed" for issue in result["engine"]["issues"])
 
 
 def test_previously_unlinked_poststart_earning_accrues_once_after_previous_calculation():

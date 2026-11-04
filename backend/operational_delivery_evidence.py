@@ -6,7 +6,7 @@ Only an explicit delivery timestamp can cross the opening boundary: a source
 update clock or delivered label cannot supply a missing event time.
 """
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -65,6 +65,36 @@ def _instant(value):
         if str(error).startswith("operational_delivery_"):
             raise
         _fail("timestamp_invalid")
+
+
+def delivery_time_matches(frozen, delivered_at, *, order_id, native_driver_earning=None):
+    """Match a validated native earning to an unpriced legacy second timestamp."""
+    saved_at = frozen.get("delivered_at")
+    if isinstance(saved_at, str):
+        saved_at = datetime.fromisoformat(saved_at.replace("Z", "+00:00"))
+    if not isinstance(saved_at, datetime) or saved_at.utcoffset() is None:
+        return False
+    saved, delivered = _instant(saved_at), _instant(delivered_at)
+    if saved == delivered:
+        return True
+    earning = native_driver_earning or {}
+    # Keep both timestamps intact. Compatibility only completes an unpriced
+    # legacy driver fact after the source has proved its assignment and earning.
+    return (frozen.get("party_type") == "store_driver"
+            and "cost" in frozen and frozen["cost"] is None
+            and frozen.get("component_mode") is False
+            and saved.microsecond == 0 and delivered.microsecond != 0
+            and saved.date() == delivered.date()
+            and saved_at.date() == delivered.astimezone(saved_at.tzinfo).date()
+            and abs(saved - delivered) < timedelta(seconds=1)
+            and isinstance(earning, dict)
+            and _text(earning.get("order_id")) == str(order_id)
+            and _text(earning.get("assignment_id")) is not None
+            and _text(earning.get("earning_id")) is not None
+            and earning.get("currency") == "SAR"
+            and earning.get("party_id") == frozen.get("id")
+            and earning.get("candidate_amount") is not None
+            and _instant(earning.get("delivered_at")) == delivered)
 
 
 def _inactive(row):

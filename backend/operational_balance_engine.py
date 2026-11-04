@@ -13,6 +13,8 @@ from hashlib import sha256
 import json
 from zoneinfo import ZoneInfo
 
+from operational_delivery_evidence import delivery_time_matches
+
 
 RIYADH = timezone(timedelta(hours=3))
 CENT = Decimal("0.01")
@@ -258,7 +260,8 @@ def reconcile(state, sources, as_of):
                 frozen_delivery = facts.get("shipping:" + oid)
                 if frozen_delivery and (frozen_delivery.get("id") != event["party_id"]
                         or frozen_delivery.get("party_type") != event["party_type"]
-                        or instant(frozen_delivery["delivered_at"]) != delivered):
+                        or not delivery_time_matches(frozen_delivery, delivered, order_id=oid,
+                                                     native_driver_earning=order.get("native_driver_earning"))):
                     raise ValueError("operational_delivery_confirmed_evidence_changed")
                 # Separate provenance preserves the payload of existing shipping
                 # facts and the obligation IDs used by recorded settlements.
@@ -350,7 +353,8 @@ def reconcile(state, sources, as_of):
                 if order.get("native_driver_earning"):
                     earning = order["native_driver_earning"]
                     if (earning["party_id"] != frozen["id"] or frozen["party_type"] != "store_driver"
-                            or instant(earning["delivered_at"]) != instant(frozen["delivered_at"])):
+                            or not delivery_time_matches(frozen, earning["delivered_at"], order_id=oid,
+                                                         native_driver_earning=earning)):
                         raise ValueError("driver_fee_saved_conflict")
                     fact("native_driver_earning:" + oid, {k: v for k, v in earning.items() if k != "party_name"})
                 # Identity/COD can be proven while the fee contract is incomplete.
@@ -541,10 +545,13 @@ def reconcile(state, sources, as_of):
                     if provider_key in obligations:
                         obligations[provider_key] = {**obligations[provider_key], "expected": "0.00", "incomplete": True}
                     if page and str(error) in {"provider_historical_capture_review_required", "provider_settled_capture_review_required"}:
+                        balance_review = {k: page[k] for k in
+                                          ("order_id", "order_number", "provider", "currency", "gross", "paid", "remaining")}
+                        if page.get("source") == "canonical_salla_closed_tender":
+                            balance_review.update(source=page["source"], transaction_reference=page["transaction_reference"])
                         issues.append({"code": str(error), "source_id": provider_key, "provider": payment["provider"],
                                        "history_proof_hash": proof_hash(order, payment), "history_created_at": order["created_at"],
-                                       "order_page_balance_review": {k: page[k] for k in
-                                           ("order_id", "order_number", "provider", "currency", "gross", "paid", "remaining")}})
+                                       "order_page_balance_review": balance_review})
                     else:
                         issue(str(error), provider_key)
             versions[oid] = updated.isoformat()

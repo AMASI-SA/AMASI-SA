@@ -64,3 +64,21 @@ The owner UI collects the remaining SAR balance, report timestamp in Riyadh and 
 Publication remains pending this wallet follow-up. No release intent has been frozen and no lease has been opened for this task. Complete the wallet backend and HTTP regressions, verify the exact final source, then create the intent-only commit and perform the governed deployment rehearsal and authorized publication.
 
 The completed wallet backend passed 84 focused pure, financial-position and provider regressions. Two real-Mongo HTTP cases passed for owner access, store/currency/session binding, idempotency and replacement. Default wallet projection observes the operational report cutoff, so a newer saved statement becomes reportable when the worker advances that cutoff. Original order currency does not establish a separate wallet-account currency. The store-currency closing remains the liability authority. The frontend payable/source-date regression passed alongside all 23 financial-position tests.
+
+## Published release and focused acceptance follow-up
+
+PR #1748 was merged and published with source `8dca226c11eb4fb3660b26d435ff633128edc7dc`, intent `c33547d42fcb1e93b0d71dc691a9d88eb783156c` and deployment `972777b46b7829349ad3ddbd2825045b945a2666`. All applicable checks completed successfully. Exact-source validation included 2395 operational backend tests, 16 shipping tests with 18 subtests, 379 frontend tests across 35 suites and 2439 stock tests with seven subtests.
+
+The actual Emergent adapter, package boundary verification, prepare and prepublish passed. Emergent displayed the newer successful deployment `cdbe378`. The unchanged production guard completed all three full verification rounds for runtime `rg5-082173167477a6bcc78a6a232cd1ad3087b61c50ac0ac0f4dc5168a345e644e4`. Subsequent status reported the matching lease inactive. The UI exposes runtime logs, so the outer Cloud Build argument vector and package snapshot ordering remain unobserved.
+
+Live acceptance verified the consolidated platform table, SAR advertising valuation and page navigation with invariant full totals. A fresh owner-verified Salla wallet report was saved through the audited form and appears once as a customer payable with its evidence date. Private financial values and source rows remain outside this repository.
+
+The focused follow-up uses branch `codex/operational-final-reconciliation-20261104` from deployment `972777b46b7829349ad3ddbd2825045b945a2666`.
+
+- Saved payment-method selection now shares the exact legacy Mezan precedence. Independent comparison matched the original implementation across 1328 cases. Same-rail split legs use one per-order fee only when their selected saved terms also agree. Focused fee and parser validation passed 48 cases.
+- A closed foreign tender with independently matching native payment evidence supplies the proved paid principal while retaining its different order total and unknown customer due. It creates no invented capture timestamp. The focused suite passed 21 cases. Historical payouts, reference ownership, owner and source identity, later capture and retry guards remain covered.
+- A legacy unpriced driver delivery can match native subsecond evidence within one second when both UTC and saved local dates agree. Conflicting saved base or total fees remain held, including orphan facts. Focused delivery validation passed 223 cases and independent combined validation passed 134 cases. The complete exact-source Mongo rerun is pending.
+- Extended legacy fee validation passed 65 cases. The Tabby parser refund-sign assertion also fails on the unchanged published source, where fee credits have negative signs and explicit credit fields. This pre-existing parser expectation remains outside this focused correction.
+- Live bank acceptance identified missing bank identity in the saved canonical source for a bounded set of paid orders. The native detail proves the bank. Source enrichment and verification are in progress.
+
+Production currently runs the verified #1748 release. No follow-up intent or lease exists yet. The next action is to complete native bank enrichment, run the combined exact-source suites and CI, freeze the intent-only commit and perform the authorized governed deployment and three-round verification.

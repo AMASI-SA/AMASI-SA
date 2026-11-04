@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from operational_balance_store import digest
 from operational_payment_evidence import _amount, _instant
+from operational_provider_transaction_evidence import is_closed_tender_balance
 
 HISTORICAL = "provider_historical_capture_review_required"
 SETTLED = "provider_settled_capture_review_required"
@@ -38,7 +39,8 @@ def _context(state, row, *, obligation_key=None, through=None):
         fresh = through is not None and (not engine.get("as_of") or created > _instant(engine["as_of"]))
 
         if (not owner or owner != state.get("owner_id") or not oid or not number or party not in {"salla","tabby","tamara","emkan"}
-                or paid <= 0 or paid + _amount(row["remaining"], ccy) != _amount(row["gross"], ccy)
+                or paid <= 0 or (not is_closed_tender_balance(row, ccy)
+                    and paid + _amount(row["remaining"], ccy) != _amount(row["gross"], ccy))
                 or not _instant(state["started_at"]) < created <= _instant(through or engine["as_of"])):
             issues.append("order")
         claim = engine.get("obligations", {}).get(key)
@@ -120,14 +122,17 @@ def _context(state, row, *, obligation_key=None, through=None):
 def make_review_row(order, payment):
     page = payment.get("order_page_balance") or {}
     fields = ("owner_id", "order_id", "order_number", "provider", "currency", "gross", "paid", "remaining")
-    if (page.get("source") != "canonical_salla_order_page" or not all(page.get(k) for k in fields)
+    closed_tender = is_closed_tender_balance(page, payment.get("currency"))
+    if ((page.get("source") != "canonical_salla_order_page" and not closed_tender)
+            or not all(page.get(k) or (k == "remaining" and closed_tender) for k in fields)
             or (page["provider"], page["currency"]) != (payment.get("provider"), payment.get("currency"))
-            or _amount(page["gross"], page["currency"]) != _amount(payment["gross"], page["currency"])
+            or _amount(page["paid"] if closed_tender else page["gross"], page["currency"]) != _amount(payment["gross"], page["currency"])
             or order.get("bank_credit") or payment.get("refunds") or payment.get("cancellations")
             or _amount(payment.get("cancelled", 0), page["currency"]) != 0
             or (str(order["id"]), order["order_number"]) != (page["order_id"], page["order_number"])):
         return None
-    return {**{k: page[k] for k in fields}, "created_at": order["created_at"]}
+    provenance = {k: page[k] for k in ("source", "transaction_reference")} if closed_tender else {}
+    return {**{k: page[k] for k in fields}, **provenance, "created_at": order["created_at"]}
 
 
 def preview_row(state, row, code):
