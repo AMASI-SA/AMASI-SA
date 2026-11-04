@@ -1,5 +1,6 @@
 import React, {useState} from 'react';
 import {operationalApi as api, messageFor} from './api';
+import PaginatedReportTable from './PaginatedReportTable';
 
 const feeLabels = {gross:'المبيعات',cancelled:'الإلغاءات',refunded:'الاستردادات',net:'الصافي',estimated_fees:'العمولة التقديرية',actual_fees:'العمولة الفعلية المسوّاة',expected_receivable:'المتوقع بعد التسوية',settled:'الوارد الفعلي من التسويات',outstanding:'المتبقي'};
 const cents = value => {
@@ -68,14 +69,14 @@ export default function DomainDetails({report}) {
   });
   return <div className="op-domain-details">
     <details className="op-card"><summary>تفاصيل منصات الدفع</summary>
-      {orderPayments.map(([currency, rows]) => <div className="op-table" key={currency}>
+      {orderPayments.map(([currency, rows]) => <PaginatedReportTable key={currency} rows={rows} label={`مدفوعات العملاء منذ بداية التشغيل · ${currency}`}>{pageRows => <div className="op-table">
         <table><caption>مدفوعات العملاء منذ بداية التشغيل · {currency}</caption>
           <thead><tr><th>المنصة</th><th>حالة الإثبات</th><th>الطلبات</th><th>دفعه العملاء قبل الرسوم</th><th>متبقٍ على العملاء</th></tr></thead>
-          <tbody>{rows.map(row => <tr key={row.id}>
+          <tbody>{pageRows.map(row => <tr key={row.id}>
             <td>{row.name}</td><td>{row.status}</td><td>{row.orders}</td><td>{row.paid}</td><td>{row.remaining}</td>
           </tr>)}</tbody>
         </table>
-      </div>)}
+      </div>}</PaginatedReportTable>)}
       {!providerFees.length && <p className="op-muted">{orderPayments.length || paidTotals.length
         ? 'تظهر مدفوعات الطلبات أعلاه. لم تتوفر تفاصيل رسوم المنصة وتسوياتها لهذه اللقطة.'
         : 'لا توجد بيانات مسجلة لهذا القسم حتى الآن؛ يبدأ الاحتساب بعد إنهاء الافتتاحيات وتوفر العمليات المؤهلة.'}</p>}

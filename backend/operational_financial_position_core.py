@@ -160,6 +160,26 @@ def _actual_tables(parties, complete):
         if kind == "provider":
             notes = ["المطالبات المثبتة ظاهرة قبل الرسوم التقديرية المتبقية؛ تخصم الرسوم المستقبلية مرة واحدة في التوقعات."]
         tables.append(_table(identity, title, section, debt_columns, rows, complete=complete, notes=notes))
+    converted_ads = []
+    for row in parties:
+        valuation = row.get("ad_sar_valuation")
+        if row["party_type"] != "ad_account" or not valuation:
+            continue
+        native = row["native_balance"]
+        converted_ads.append({"id": _party_id(row), "name": _name(row),
+                              "amount_usd": _money(_number(native["outstanding_payable"]) - _number(native["ad_wallet_balance"])),
+                              "amount_sar": _money(_number(valuation["amount_sar"]) - _number(row["ad_wallet_balance"])),
+                              "bank_commission": valuation["bank_commission"],
+                              "bank_commission_vat": valuation["bank_commission_vat"],
+                              "receivable": row["ad_wallet_balance"], "payable": row["outstanding_payable"]})
+    if converted_ads:
+        tables.append(_table("ads_currency_conversion", "تحويل أرصدة الإعلانات الدولارية إلى الريال", "actual", [
+            _column("name", "الحساب الإعلاني", "text"), _column("amount_usd", "المبلغ بالدولار"),
+            _column("amount_sar", "المبلغ بالريال"), _column("bank_commission", "العمولة البنكية"),
+            _column("bank_commission_vat", "ضريبة العمولة"), _column("receivable", "لنا بالريال", role="receivable"),
+            _column("payable", "علينا بالريال شامل الرسوم", role="payable")], converted_ads, complete=complete,
+            notes=["سعر الصرف والعمولة من الإعداد المحفوظ لكل حساب. ضريبة العمولة 15٪ من العمولة البنكية على المبلغ المتبقي علينا.",
+                   "المبلغ الموجب يمثل المستحق علينا، والسالب يمثل الرصيد الإعلاني المقدم لنا. تُعرض قيمة الرصيد المقدم أيضًا ضمن أرصدة الإعلانات."]))
     ads = [{"id": _party_id(row), "name": _name(row), "prepaid": row["ad_wallet_balance"],
             "payable": row["outstanding_payable"]} for row in parties if row["party_type"] == "ad_account"]
     tables.append(_table("ads", "حسابات الإعلانات", "actual", [_column("name", "الحساب", "text"),
@@ -173,7 +193,7 @@ def _actual_tables(parties, complete):
         tables.append(_table("other_balances", "حقوق والتزامات أخرى مسجلة", "actual", debt_columns,
                              other, complete=complete,
                              notes=["هذه أرصدة موثقة في المصدر التشغيلي؛ لا تعني أن السحب أو التمويل مصروف ربح."]))
-    order = ["banks_network", "cash", "suppliers", "employees", "external", "ads", "employee_custody",
+    order = ["banks_network", "cash", "suppliers", "employees", "external", "ads_currency_conversion", "ads", "employee_custody",
              "other_balances", "couriers", "drivers", "providers"]
     return sorted(tables, key=lambda item: order.index(item["id"]))
 
@@ -468,7 +488,7 @@ def _profit_rows(recorded_salary):
 
 def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     """Build JSON v1 from one saved operational snapshot without side effects."""
-    projection = report(state, provider_balances_sar=True)
+    projection = report(state, provider_balances_sar=True, ad_balances_sar=True)
     result = {"schema_version": 1, "authority": "operational_balance_report", "status": projection["status"],
               "started_at": projection["started_at"], "as_of": projection["as_of"],
               "generated_at": generated_at or projection["as_of"], "currency_order": [], "currencies": {},

@@ -515,6 +515,24 @@ test('draft reports explain empty summaries without pretending zero balances', a
   expect([...host.querySelectorAll('.op-summary strong')].every(e=>e.textContent==='لم يبدأ الاحتساب')).toBe(true);
   expect(api.finish).not.toHaveBeenCalled();
 });
+test('party report uses 13-row pages and resets the page when the party type changes', async () => {
+  api.context.mockResolvedValue({session_scope:'report-pages',status:'active',permissions:{reports:true,move:false}});
+  api.reports.mockResolvedValue({parties:Array.from({length:27},(_,index)=>({
+    party_type:index === 26 ? 'bank' : 'supplier',party_id:`party-${index}`,currency:'SAR',name:`جهة ${index + 1}`,
+    outstanding_receivable:'12.34',outstanding_payable:'56.78'
+  })),summaries:{SAR:{receivable:'999.99'}},issues:[],details:{}});
+  await render(<OperationalBalances/>);
+  const controls = host.querySelector('[aria-label="صفحات أرصدة الجهات"]');
+  const table = controls.parentElement.querySelector('table');
+  expect(table.querySelectorAll('tbody tr')).toHaveLength(13);
+  await act(async()=>controls.querySelector('[aria-label="الصفحة التالية — أرصدة الجهات"]').click());
+  expect(table.querySelector('tbody tr').textContent).toContain('جهة 14');
+  expect(host.querySelector('.op-summary').textContent).toContain('999.99 SAR');
+  await input(host.querySelector('label.op-field select'),'bank');
+  expect(table.querySelectorAll('tbody tr')).toHaveLength(1);
+  expect(table.querySelector('tbody tr').textContent).toContain('جهة 27');
+  expect(controls.querySelector('[aria-label="الصفحة السابقة — أرصدة الجهات"]').disabled).toBe(true);
+});
 test('draft purchase message distinguishes setup from missing permission', async () => {
   api.context.mockResolvedValue({status:'draft',permissions:{manage:true,move:true,reports:true}});
   await render(<OperationalBalances />);

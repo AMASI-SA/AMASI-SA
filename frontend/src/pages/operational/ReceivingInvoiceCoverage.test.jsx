@@ -58,7 +58,23 @@ test('requests one invoice on demand and displays separate simulated gross legs'
   expect([...section.querySelectorAll('tbody tr')].map(tr => [...tr.cells].map(td => td.textContent))).toEqual([
     ['wrong-piece','منتج','QAR','5.00','0.00'], ['wrong-piece','منتج','SAR','0.00','5.00'],
   ]);
-  expect(section.querySelectorAll('button')).toHaveLength(0);
+  const controls = [...section.querySelectorAll('button')];
+  expect(controls).toHaveLength(2);
+  expect(controls.every(button => button.closest('.op-report-pagination') && button.disabled)).toBe(true);
+});
+
+test('correction preview paginates 13 source legs without requesting a second preview', async () => {
+  api.receivingCorrectionPreview.mockResolvedValue({...preview, legs:Array.from({length:14},(_,index)=>({
+    piece_id:`piece-${index + 1}`,component:'product',currency:'SAR',before:'0.00',after:'5.00',
+  }))});
+  await loadCoverage();
+  await click(previewButton);
+  const section = host.querySelector('[aria-label="مقترح التصحيح التاريخي"]');
+  expect(section.querySelectorAll('tbody tr')).toHaveLength(13);
+  await act(async()=>section.querySelector('[aria-label="الصفحة التالية — القيمة قبل التصحيح المقترح وبعده"]').click());
+  expect(section.querySelectorAll('tbody tr')).toHaveLength(1);
+  expect(section.querySelector('tbody tr').textContent).toContain('piece-14');
+  expect(api.receivingCorrectionPreview).toHaveBeenCalledTimes(1);
 });
 
 test('explains a blocked invoice without showing any proposed amounts', async () => {

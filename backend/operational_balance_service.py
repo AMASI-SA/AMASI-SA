@@ -559,7 +559,7 @@ async def supplier_return(db, owner, actor, payload, *, clock=None):
     return await mutate(db, owner, apply)
 
 
-def report(state, *, as_of=None, provider_balances_sar=False):
+def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=False):
     state = reconcile_credits(deepcopy(state))
     from operational_provider_balance_sar import convert_claim, convert_projection, unavailable, usable_bases
     valuations = usable_bases(state) if provider_balances_sar else {}
@@ -748,6 +748,9 @@ def report(state, *, as_of=None, provider_balances_sar=False):
                           case["refund_source_name"])
             account["actual"] -= Decimal(case["amount"])
             account["customer_refunds_manual_debited"] += Decimal(case["amount"])
+    if ad_balances_sar:
+        from operational_ad_balance_sar import project_parties
+        project_parties(parties, state.get("engine", {}).get("ad_balance_sar_basis", {}), valuation_issues)
     summaries = {}
     for row in parties.values():
         summary = summaries.setdefault(row["currency"], {key: Decimal(0) for key in (

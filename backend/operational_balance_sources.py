@@ -45,7 +45,7 @@ ALLOWED_COLLECTIONS = frozenset(ENTITY_COLLECTIONS.values()) | {
     'settings',  # Projected courier identity only; excluded from financial-source scans.
     'mz2_shipping_setup_v2', 'mz2_provider_fee_policies_v2', 'mz2_bank_transfer_bindings',
     'mz2_ad_account_bindings_v2', 'mezan_integration_accounts_v2',
-    'mz2_ad_fx_snapshots_v2',
+    'mz2_ad_fx_snapshots_v2', 'mezan_ad_account_cost_settings_v2',
     'mz2_ad_automation_policies_v2', 'expense_categories', 'users',
     'unified_orders', 'mezan_products_v2', 'mezan_product_cost_profiles_v2',
     'mezan_product_resource_bindings_v2', 'mezan_product_option_cost_bindings_v2', 'mezan_cost_resources_v2',
@@ -851,6 +851,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     out = {key: [] for key in ('orders', 'delivery_events', 'supplier_receipts', 'supplier_returns', 'employees',
                                'ad_snapshots', 'recurring', 'fee_policies', 'issues')}
     out['delivery_event_coverage'] = {'version': 1, 'started_at': start.isoformat(), 'as_of': now.isoformat()}
+    out['ad_balance_sar_basis'] = {}
     # No service with side effects is called: collection access is allowlisted.
     # The inventory catalogue is read on demand, not on each financial sync.
     data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - {TXN_COLLECTION, DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})}
@@ -1301,6 +1302,11 @@ def _advertising(data, out, start, now, baselines=None):
             issue(out, 'ad_account_incomplete', binding.get('_id'))
             continue
         account = accounts[0]
+        if account.get('currency') == 'USD':
+            from operational_ad_balance_sar import saved_basis
+            basis = saved_basis(binding, account, data['mezan_ad_account_cost_settings_v2'], now)
+            if basis:
+                out['ad_balance_sar_basis'][str(binding['_id'])] = basis
         for row in data[collection]:
             if row.get('ad_account_id') != account.get('external_account_id') or row.get('provider') != provider:
                 continue

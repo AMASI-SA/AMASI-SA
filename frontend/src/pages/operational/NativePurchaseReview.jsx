@@ -2,6 +2,7 @@ import ReceivingInvoiceCoverage from './ReceivingInvoiceCoverage';
 import {useEffect, useRef, useState} from 'react';
 import {operationalApi as api, requestId, messageFor} from './api';
 import {formatPositionMoney} from './financialPositionPresentation';
+import PaginatedReportTable from './PaginatedReportTable';
 import './nativePurchaseReview.css';
 
 const messages = {
@@ -178,11 +179,13 @@ export default function NativePurchaseReview({sessionScope, onRefresh}) {
       </>}
       {!pending && preview && <div aria-label="فروق المطابقة">
         {!preview.can_approve ? (preview.issues || []).map(c => <p role="alert" key={c}>{textFor(c)}</p>) : <>
-          <div className="ofp-table-scroll"><table><caption>الأرصدة التشغيلية قبل الاعتماد وبعده — SAR</caption>
+          <PaginatedReportTable label="الأرصدة التشغيلية قبل الاعتماد وبعده" resetKey={preview.preview_hash} rows={[
+            {id: 'supplier', name: 'المستحق للمورد علينا', before: preview.before.supplier_outstanding_sar, after: preview.after.supplier_outstanding_sar, difference: preview.supplier_difference_sar},
+            ...Object.keys(preview.before.banks).map(id => ({id: `bank:${id}`, name: `البنك ${id}`, before: preview.before.banks[id], after: preview.after.banks[id], difference: preview.bank_differences_sar[id]})),
+          ]}>{rows => <div className="ofp-table-scroll"><table><caption>الأرصدة التشغيلية قبل الاعتماد وبعده — SAR</caption>
             <thead><tr><th>الجهة</th><th>قبل</th><th>بعد</th><th>الفرق</th></tr></thead><tbody>
-              <tr><th>المستحق للمورد علينا</th><td>{formatPositionMoney(preview.before.supplier_outstanding_sar)}</td><td>{formatPositionMoney(preview.after.supplier_outstanding_sar)}</td><td>{formatPositionMoney(preview.supplier_difference_sar)}</td></tr>
-              {Object.keys(preview.before.banks).map(k => <tr key={k}><th>البنك {k}</th><td>{formatPositionMoney(preview.before.banks[k])}</td><td>{formatPositionMoney(preview.after.banks[k])}</td><td>{formatPositionMoney(preview.bank_differences_sar[k])}</td></tr>)}
-            </tbody></table></div>
+              {rows.map(row => <tr key={row.id}><th>{row.name}</th><td>{formatPositionMoney(row.before)}</td><td>{formatPositionMoney(row.after)}</td><td>{formatPositionMoney(row.difference)}</td></tr>)}
+            </tbody></table></div>}</PaginatedReportTable>
           <label><input type="checkbox" aria-label="تأكيد هويات المطابقة" checked={confirmed} disabled={busy} onChange={e => setConfirmed(e.target.checked)}/> أؤكد أن المستحقات وحركات السداد المختارة تخص فاتورة المصدر نفسها.</label>
           {preview.unrecorded_money_confirmation_required && <label><input type="checkbox" aria-label="تأكيد المبالغ غير المسجلة" checked={moneyConfirmed} disabled={busy} onChange={e => setMoneyConfirmed(e.target.checked)}/> أؤكد أن المبالغ المقترح إضافتها غير مسجلة سابقًا ولا مشمولة في رصيد البداية.</label>}
           <button className="ofp-button" type="button" disabled={busy || !confirmed || (preview.unrecorded_money_confirmation_required && !moneyConfirmed)} onClick={approve}>اعتماد الفرق التشغيلي المعروض</button>
