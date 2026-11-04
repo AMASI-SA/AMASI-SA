@@ -41,6 +41,10 @@ The combined checkpoint `e0c2116a6095ce2051038195445782b07275162a` ran CI `41861
 
 Independent fee review additionally covered fully evidenced settlement without configured estimates, cumulative foreign settlement rounding, and a full refund after an already settled capture. A refund overlapping a partial payout retains an incomplete net when actual fee-credit attribution is unavailable.
 
+A prepublication readback identified that the saved provider payouts use the incoming `collection` kind with complete opening allocations. The overlap checks now accept that existing writer contract with zero collection fees, alongside valid settlements. Target-order, pooled, partial and excess allocations still require reconciliation. Synthetic native-currency, SAR-converted, page, capture and split-wallet cases cover the real source shape. The focused follow-up passed 247 cases, with three Mongo cases assigned to CI.
+
+The unconfirmed collection table now omits claims whose matching saved page or booked split evidence proves complete payment, and rows with an already proved zero future amount. Partial, held or mismatched evidence remains visible.
+
 The governed Node v22.23.2 and Yarn v1.22.22 toolchain is installed. The shared deployment guard was checked inactive, and the current production health reports the earlier reviewed performance source `00374911cee75a11f5b5bbc56952df2ae0852a75`. The production branch remains the reviewed base `84bd03dcd585f57b2b08bf93c8ac0fd8beb58463`.
 
 Run the corrected checkpoint through the full operational CI, then bootstrap the governed build, freeze its intent-only commit and rehearse the actual Emergent adapter before the already authorized publication. Production has not changed in this task.

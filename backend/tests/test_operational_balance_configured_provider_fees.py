@@ -7,6 +7,7 @@ import pytest
 from operational_balance_service import report
 from operational_configured_provider_fees import estimate_fee, refresh_provider_fee_inputs
 from operational_financial_position import build_financial_position
+from operational_financial_position_core import _provider_collection_table
 from operational_provider_balance_sar import refresh_basis
 from test_operational_balance_financial_position import NOW, obligation, opening, state_for, table
 
@@ -156,7 +157,7 @@ def test_split_tenders_count_one_order_per_provider_and_fee_only_its_own_share()
     terms["payment_methods"] += settings("مدى", "2", "1", "0")["payment_methods"]
     legs = [{"provider": "tabby", "method": "tabby_installment", "amount": "65.00"},
             {"provider": "salla", "method": "mada", "amount": "35.00"}]
-    split = {"order_id": "one", "currency": "SAR", "tenders": legs}
+    split = {"order_id": "one", "currency": "SAR", "gross": "100.00", "tenders": legs}
     for leg in legs:
         obligation(state, "provider:one:" + leg["provider"], "provider", "provider", leg["amount"],
                    party=leg["provider"], direction="receivable")
@@ -166,6 +167,34 @@ def test_split_tenders_count_one_order_per_provider_and_fee_only_its_own_share()
     rows = {row["provider"]: row for row in report(state)["details"]["provider_balances"]["SAR"]}
     assert (rows["tabby"]["orders"], rows["tabby"]["gross"], rows["tabby"]["fees"], rows["tabby"]["net"]) == (1, "65.00", "7.50", "57.50")
     assert (rows["salla"]["orders"], rows["salla"]["gross"], rows["salla"]["fees"], rows["salla"]["net"]) == (1, "35.00", "1.70", "33.30")
+    assert table(build_financial_position(state), "provider_collections_expected")["rows"] == []
+    incomplete = deepcopy(state)
+    incomplete["engine"]["obligations"]["provider:one:tabby"]["confirmed"] = "60.00"
+    future = table(build_financial_position(incomplete), "provider_collections_expected")
+    assert [row["id"] for row in future["rows"]] == ["provider:one:tabby"]
+    assert future["rows"][0]["amount"] is None
+
+
+@pytest.mark.parametrize("paid, due, incomplete, expected_rows", [
+    ("100.00", "0.00", False, 0), ("40.00", "60.00", False, 1), ("100.00", "0.00", True, 1)])
+def test_future_collection_table_requires_matching_full_page_proof(paid, due, incomplete, expected_rows):
+    state, _ = paid_state(gross=paid)
+    state["engine"]["obligations"]["provider:one"]["incomplete"] = incomplete
+    state["engine"]["facts"]["provider_order_balance:one"] = {"order_id": "one", "provider": "tamara", "currency": "SAR",
+        "gross": "100.00", "paid": paid, "remaining": due}
+    future = table(build_financial_position(state), "provider_collections_expected")
+    assert len(future["rows"]) == expected_rows
+    assert future["totals"]["amount"] == ("0.00" if not expected_rows else None)
+
+
+@pytest.mark.parametrize("changes", [{"order_id": "different"}, {"provider": "tabby"}, {"currency": "KWD"}])
+def test_unmatched_full_payment_page_does_not_hide_unknown_future_collection(changes):
+    state, _ = paid_state()
+    page = {"order_id": "one", "provider": "tamara", "currency": "SAR", "gross": "100.00",
+            "paid": "100.00", "remaining": "0.00", **changes}
+    future = _provider_collection_table(list(state["engine"]["obligations"].values()),
+                                       {"facts": {"provider_order_balance:one": page}}, [])
+    assert len(future["rows"]) == 1 and future["rows"][0]["amount"] is None
 
 
 def test_unresolved_paid_claim_has_fee_estimate_but_cannot_fabricate_a_net_claim():

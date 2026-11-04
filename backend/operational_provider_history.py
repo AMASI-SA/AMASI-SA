@@ -26,7 +26,7 @@ def proof_hash(order, payment):
 
 
 def _context(state, row, *, obligation_key=None, through=None):
-    """Check only attributable provider money. A pooled or opening payout always blocks."""
+    """Check attributable provider money and the full allocation of incoming payouts."""
     owner, oid, number, party, ccy = (row[k] for k in ("owner_id", "order_id", "order_number", "provider", "currency"))
     key = obligation_key or "provider:" + oid
     scope = (party, ccy)
@@ -91,7 +91,8 @@ def _context(state, row, *, obligation_key=None, through=None):
             if not ids or sum((_amount(a["amount"], ccy) for a in allocations), Decimal(0)) != gross:
                 issues.append("pooled")
                 break
-            if (len(ids) != len(set(ids)) or m.get("direction") != "incoming" or m.get("kind") != "settlement"
+            if (len(ids) != len(set(ids)) or m.get("direction") != "incoming" or m.get("kind") not in {"settlement", "collection"}
+                    or (m.get("kind") == "collection" and _amount(m.get("actual_fee_amount", "0"), ccy) != 0)
                     or any((not k.startswith("provider:") and k not in opening_ids) or k == key for k in ids) or m.get("order_number") == number
                     or any(_amount(a["amount"], ccy) <= 0 for a in allocations)):
                 issues.append("movement")
@@ -182,7 +183,8 @@ def _sar_payout_overlap(state, order, payment, key):
             if m.get("occurred_at") and _instant(m["occurred_at"]) < created:
                 continue
             total = sum((_amount(a["amount"], "SAR") for a in lines), Decimal(0))
-            if (not lines or len(set(ids)) != len(ids) or m.get("kind") != "settlement"
+            if (not lines or len(set(ids)) != len(ids) or m.get("kind") not in {"settlement", "collection"}
+                    or (m.get("kind") == "collection" and _amount(m.get("actual_fee_amount", "0"), "SAR") != 0)
                     or total != _amount(m["amount"], "SAR") + _amount(m.get("actual_fee_amount", "0"), "SAR")):
                 return True
             # Only a valid allocation to a different specific order excludes overlap.

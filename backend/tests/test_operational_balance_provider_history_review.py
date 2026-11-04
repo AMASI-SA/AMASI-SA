@@ -1,4 +1,5 @@
 from copy import deepcopy
+from decimal import Decimal
 from hashlib import sha256
 
 import httpx
@@ -89,16 +90,60 @@ def test_late_payment_never_overrides_changed_source_return_or_pooled_and_openin
 
 
 @pytest.mark.parametrize("captures", [False, True])
-def test_post_start_payment_can_follow_an_explicitly_settled_prestart_opening(captures):
+@pytest.mark.parametrize("kind", ["settlement", "collection"])
+@pytest.mark.parametrize("currency", ["SAR", "KWD"])
+def test_post_start_payment_can_follow_an_explicitly_settled_prestart_opening(captures, kind, currency):
     state, order = history(captures=captures)
-    state["movements"] = [{"party_type": "provider", "party_id": "tamara", "currency": "SAR", "kind": "settlement",
-        "direction": "incoming", "amount": "90.00", "actual_fee_amount": "10.00",
-        "allocations": [{"obligation_id": "opening-id", "amount": "100.00"}]}]
+    order["currency"] = order["payment"]["currency"] = currency
+    order["payment"]["order_page_balance"]["currency"] = currency
+    if currency != "SAR":
+        order["customer_payment_sar"] = {"currency": currency, "basis": "salla_list_paid",
+            "native": {"tamara": "100.00"}, "shares": {"tamara": "1250.00"}, "paid": "1250.00"}
+    fee = "10.00" if kind == "settlement" else "0.00"
+    state["movements"] = [
+        {"id": "opening-payout-one", "party_type": "provider", "party_id": "tamara", "currency": "SAR", "kind": kind,
+         "direction": "incoming", "amount": str(Decimal("100") - Decimal(fee)), "actual_fee_amount": fee,
+         "occurred_at": T1, "allocations": [{"obligation_id": "opening-id", "amount": "100.00"}]},
+        {"id": "opening-payout-two", "party_type": "provider", "party_id": "tamara", "currency": "SAR", "kind": kind,
+         "direction": "incoming", "amount": "75.00", "actual_fee_amount": "0.00", "occurred_at": T1,
+         "allocations": [{"obligation_id": "opening-id", "amount": "75.00"}]},
+    ]
     before = deepcopy(state)
     result = reconcile(state, {"orders": [order]}, T2)
     assert result["engine"]["obligations"][KEY]["confirmed"] == "100.00"
     assert result["openings"] == before["openings"] and result["movements"] == before["movements"]
     assert reconcile(result, {"orders": [order]}, T2) == result
+
+
+@pytest.mark.parametrize("currency", ["SAR", "KWD"])
+@pytest.mark.parametrize("change", ["pooled", "partial", "target", "credit", "fee", "payment", "refund", "correction"])
+def test_collection_exception_preserves_pooled_target_and_movement_kind_guards(currency, change):
+    state, order = history()
+    order["currency"] = order["payment"]["currency"] = currency
+    order["payment"]["order_page_balance"]["currency"] = currency
+    if currency != "SAR":
+        order["customer_payment_sar"] = {"currency": currency, "basis": "salla_list_paid",
+            "native": {"tamara": "100.00"}, "shares": {"tamara": "1250.00"}, "paid": "1250.00"}
+    payout = {"party_type": "provider", "party_id": "tamara", "currency": "SAR", "kind": "collection",
+        "direction": "incoming", "amount": "100.00", "actual_fee_amount": "0.00", "occurred_at": T1,
+        "allocations": [{"obligation_id": "opening-id", "amount": "100.00"}]}
+    if change == "pooled":
+        payout["allocations"] = []
+    elif change == "partial":
+        payout["allocations"][0]["amount"] = "99.00"
+    elif change == "target":
+        payout["order_number"] = order["order_number"]
+    elif change == "credit":
+        payout["allocations"][0]["obligation_id"] = "credit:" + KEY
+    elif change == "fee":
+        payout.update(amount="99.00", actual_fee_amount="1.00")
+    else:
+        payout["kind"] = change
+    state["movements"] = [payout]
+    before = deepcopy(state)
+    result = reconcile(state, {"orders": [order]}, T2)
+    assert KEY not in result["engine"]["obligations"]
+    assert result["movements"] == before["movements"] and result["openings"] == before["openings"]
 
 
 @pytest.mark.parametrize("allocation", ["99.00", "500.00"])

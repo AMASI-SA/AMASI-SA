@@ -287,6 +287,34 @@ def _provider_table(rows, issues):
     return result
 
 
+def _fully_paid_provider_claim(row, facts):
+    if row.get("incomplete") or row.get("party_type") != "provider":
+        return False
+    native = row.get("native_balance") or row
+    confirmed = _number(native.get("confirmed"))
+    if confirmed is None or confirmed <= ZERO:
+        return False
+    identity, provider = str(row["id"]), row["party_id"]
+    order = identity.removeprefix("provider:")
+    page = facts.get("provider_order_balance:" + order, {})
+    if ((page.get("order_id"), page.get("provider"), page.get("currency")) == (order, provider, native["currency"])
+            and _number(page.get("paid")) == _number(page.get("gross")) == confirmed
+            and _number(page.get("remaining")) == ZERO):
+        return True
+    if not order.endswith(":" + provider):
+        return False
+    order = order.removesuffix(":" + provider)
+    fact = facts.get("provider_split:" + order, {})
+    split = fact.get("evidence", {})
+    if ((split.get("order_id"), split.get("currency")) != (order, native["currency"])
+            or provider not in fact.get("booked_providers", [])):
+        return False
+    tenders = split.get("tenders", [])
+    return (bool(tenders) and all((_number(leg.get("amount")) or ZERO) > ZERO for leg in tenders)
+            and _sum(leg["amount"] for leg in tenders) == _number(split.get("gross"))
+            and _sum(leg["amount"] for leg in tenders if leg.get("provider") == provider) == confirmed)
+
+
 def _provider_collection_table(obligations, details, issues):
     collections = []
     # A failed policy can prevent the obligation from being created at all.
@@ -295,6 +323,8 @@ def _provider_collection_table(obligations, details, issues):
                        or str(issue.get("code", "")).startswith("provider_") for issue in issues)
     for row in obligations:
         if row.get("kind") != "provider" or row.get("derived_credit"):
+            continue
+        if _fully_paid_provider_claim(row, details.get("facts") or {}):
             continue
         projection = (details.get("provider_reports") or {}).get(row["id"])
         pending = None
@@ -307,6 +337,8 @@ def _provider_collection_table(obligations, details, issues):
                     pending = ZERO
                 elif captured == ZERO and fee is not None:
                     pending = max(net - fee, ZERO)
+        if pending == ZERO and not row.get("incomplete"):
+            continue
         complete = complete and pending is not None and not row.get("incomplete")
         common = {"id": row["id"], "name": _name(row), "orders": 1}
         collections.append({**common, "amount": _money(pending)})
