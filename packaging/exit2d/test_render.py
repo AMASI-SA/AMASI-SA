@@ -34,6 +34,8 @@ class HostingBoundary(unittest.TestCase):
         for update in ({'DB_NAME': 'production'}, {'QOYOD_API_KEY': 'example'},
                        {'SALLA_TOKEN_ENC_KEY': 'example'}, {'APP_ENV': 'production'},
                        {'MONGO_URL': 'mongodb://u:p@other-host:27017'},
+                       {'MONGO_URL': 'mongodb://u:p@production.example:27017',
+                        'MEZAN_STAGING_MONGO_HOST': 'production.example'},
                        {'MONGO_URL': 'mongodb://u:p@staging-mongo:27017/?authSource=other'},
                        {'MONGO_URL': 'mongodb://staging-mongo:27017'}):
             with self.subTest(update=list(update)):

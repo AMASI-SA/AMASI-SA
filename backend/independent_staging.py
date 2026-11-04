@@ -32,7 +32,8 @@ def validate(environment=None):
         raise RuntimeError('synthetic database required')
     url = urlsplit(env.get('MONGO_URL', ''))
     host = env.get('MEZAN_STAGING_MONGO_HOST', '')
-    if (url.scheme != 'mongodb' or not host or url.hostname != host
+    if (url.scheme != 'mongodb' or not re.fullmatch(r'(?:mezan-exit2d-mongo(?:-[a-z0-9]+)?|staging-mongo)', host)
+            or url.hostname != host
             or url.port != 27017 or not url.username or not url.password
             or url.path not in {'', '/', '/mezan_exit2d_staging'}
             or url.query or url.fragment or ',' in url.netloc):

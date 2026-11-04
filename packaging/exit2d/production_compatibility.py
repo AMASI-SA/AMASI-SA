@@ -1,6 +1,6 @@
 """Post-merge shipping/fee contracts, with real libraries and synthetic fixtures."""
 import sys
-sys.path[:0] = ['/opt/mezan/backend', '/opt/mezan/backend/tests']
+sys.path[:0] = ['/opt/mezan', '/opt/mezan/backend', '/opt/mezan/backend/tests']
 from independent_runtime import validate_before_import
 validate_before_import('web')
 import pytest
