@@ -23,7 +23,7 @@ from typing import Any, Callable, Iterable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
-from pymongo import ASCENDING, DESCENDING
+from pymongo import ASCENDING, DESCENDING, IndexModel
 from pymongo.write_concern import WriteConcern
 from operational_atomic import operational_owner
 from mobile_operational_flow_policy import FIELD_PREPARATION, is_optional
@@ -503,6 +503,25 @@ def _piece_upsert_update(
         "$setOnInsert": insert_values,
         "$set": mutable_values,
     }
+
+
+async def ensure_assembly_piece_lookup_indexes(db: Any) -> None:
+    """Build Ready lookup indexes in release startup, outside employee requests."""
+    def identity(field: str, name: str) -> IndexModel:
+        return IndexModel(
+            [("user_id", ASCENDING), (field, ASCENDING)],
+            name=name,
+        )
+
+    await db[PIECES].create_indexes([
+        identity("piece_id", "ix_assembly_ready_piece"),
+        identity("id", "ix_assembly_ready_legacy_id"),
+        identity("order_number", "ix_assembly_ready_order_pieces"),
+    ])
+    await db[WORKFLOWS].create_indexes([
+        identity("operational_items.operational_item_id", "ix_assembly_ready_operational_item"),
+        identity("items.direct_assembly_piece_ids", "ix_assembly_ready_direct_piece"),
+    ])
 
 
 async def ensure_piece_operation_indexes(db: Any) -> None:
@@ -3869,6 +3888,18 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
     from assembly_mobile_settings import make_assembly_mobile_settings_router
     make_assembly_mobile_settings_router(db, current_user, router=router)
 
+    indexes_ready = False
+    index_lock = asyncio.Lock()
+
+    async def ensure_read_indexes() -> None:
+        nonlocal indexes_ready
+        if indexes_ready:
+            return
+        async with index_lock:
+            if not indexes_ready:
+                await ensure_piece_operation_indexes(db)
+                indexes_ready = True
+
     @router.get("/my-work")
     async def my_work(
         limit: int = Query(50, ge=1, le=200),
@@ -3901,7 +3932,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
                 status_code=403,
                 detail={"code": "preparation_receipt_permission_required"},
             )
-        await ensure_piece_operation_indexes(db)
+        await ensure_read_indexes()
         return {
             "ok": True,
             **await _preparation_receiving_custody_view(
@@ -3927,7 +3958,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
                 status_code=403,
                 detail={"code": "preparation_receipt_permission_required"},
             )
-        await ensure_piece_operation_indexes(db)
+        await ensure_read_indexes()
         return await _preparation_receipt_search(
             db,
             user_id=context["merchant_id"],
@@ -4059,7 +4090,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             "fulfillment.ready.read",
             responsibility="instant_ready",
         )
-        await ensure_piece_operation_indexes(db)
+        await ensure_read_indexes()
         result = await _assembly_search(
             db,
             user_id=context["merchant_id"],
@@ -4100,7 +4131,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             "fulfillment.ready.read",
             responsibility="instant_ready",
         )
-        await ensure_piece_operation_indexes(db)
+        await ensure_read_indexes()
         return await _assembly_order_board(
             db,
             user_id=context["merchant_id"],
