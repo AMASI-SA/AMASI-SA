@@ -21,8 +21,10 @@ async def measure(owner_cookie, employee_cookie):
             response = await client.get("http://127.0.0.1:8001" + path,
                 headers={**headers, "Cookie": cookie})
             assert response.status_code == 200, "synthetic HTTP load returned non-200"
+            if path.startswith("/api/dashboard"):
+                assert response.json()["totals"]["orders_make_count"] >= 5000, "report did not exercise seeded orders"
             return (time.perf_counter() - started) * 1000
-        reports = [asyncio.create_task(request("/api/dashboard", owner_cookie)) for _ in range(4)]
+        reports = [asyncio.create_task(request("/api/dashboard?from_date=2026-09-06&to_date=2026-09-06", owner_cookie)) for _ in range(4)]
         await asyncio.sleep(0.05)
         employees = sorted(await asyncio.gather(*[
             request("/api/auth/me", employee_cookie) for _ in range(20)]))
@@ -50,6 +52,7 @@ if __name__ == "__main__":
         "user_id": owner["id"], "order_number": f"EXIT2D-PERF-{index:05}",
         "order_date": "2026-09-06", "order_status": "completed", "total_amount": 100,
         "payment_method": "مدى", "shipping_company": "Synthetic", "products": [],
+        "currency": "SAR", "total_product_cost": 10,
         "data_source": "make", "created_at": "2026-09-06T12:00:00+00:00",
     } for index in range(5000)])
     asyncio.run(measure(owner_cookie, employee_cookie))

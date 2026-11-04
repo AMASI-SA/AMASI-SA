@@ -17,7 +17,7 @@ from starlette.responses import JSONResponse
 
 REPORT_PATHS = re.compile(
     r"^/api/(?:dashboard(?:/[^/]+)?|dashboard-v2(?:/[^/]+(?:/[^/]+)?)?"
-    r"|reports/ads|analyses/[^/]+/export/(?:excel|pdf))$"
+    r"|reports/ads|operational-reports|analyses(?:/[^/]+(?:/export/(?:excel|pdf))?)?)$"
 )
 BOOT_PATHS = {"/live", "/api/live", "/health", "/api/health", "/ready", "/api/ready"}
 HOP_HEADERS = {b"connection", b"keep-alive", b"proxy-authenticate", b"proxy-authorization",
@@ -30,6 +30,7 @@ def is_report_request(method, path):
 
 def validate_worker_url(value):
     parsed = urlsplit(value)
+    parsed.port  # Reject malformed/non-numeric ports before accepting traffic.
     if (parsed.scheme not in {"http", "https"} or not parsed.hostname
             or parsed.username or parsed.password or parsed.query or parsed.fragment
             or parsed.path not in {"", "/"}):
@@ -92,9 +93,11 @@ class ReportBoundary:
                 await send({"type": "http.response.body", "body": chunk, "more_body": True})
             await send({"type": "http.response.body", "body": b"", "more_body": False})
         finally:
-            if response is not None:
-                await response.aclose()
-            self.slots.release()
+            try:
+                if response is not None:
+                    await response.aclose()
+            finally:
+                self.slots.release()
 
     @staticmethod
     async def unavailable(scope, receive, send):

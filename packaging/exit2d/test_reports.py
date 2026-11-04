@@ -80,12 +80,30 @@ class ReportTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(response.status_code, 503)
 
     def test_explicit_path_and_origin_boundaries(self):
-        for path in ("/api/dashboard-v2/abandoned-carts/recent", "/api/analyses/fixture/export/pdf"):
+        for path in ("/api/dashboard-v2/abandoned-carts/recent", "/api/analyses/fixture/export/pdf",
+                "/api/analyses", "/api/analyses/fixture", "/api/operational-reports"):
             self.assertTrue(is_report_request("GET", path))
-        for value in ("file:///tmp/x", "http://user:password@host", "https://host/path", "https://host?query"):
+        for value in ("file:///tmp/x", "http://user:password@host", "https://host/path", "https://host?query",
+                "http://host:not-a-port"):
             with self.assertRaises(ValueError):
                 validate_worker_url(value)
         self.assertFalse(is_report_request("GET", "/api/dashboard-employee"))
+
+    async def test_upstream_close_failure_does_not_leak_concurrency_slot(self):
+        class BrokenStream(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield b"fixture"
+            async def aclose(self):
+                raise RuntimeError("synthetic close failure")
+        async with httpx.AsyncClient(transport=httpx.MockTransport(
+                lambda request: httpx.Response(200, stream=BrokenStream()))) as worker:
+            app = ReportBoundary(endpoint, role="web", worker_url="http://worker", client=worker)
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://web") as client:
+                with self.assertRaises(RuntimeError):
+                    await client.get("/api/dashboard")
+            # All four request slots remain available after the failed stream.
+            for _ in range(4):
+                await asyncio.wait_for(app.slots.acquire(), 0.1)
 
 
 if __name__ == "__main__":

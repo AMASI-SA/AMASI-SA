@@ -10,7 +10,7 @@ Commands from repository root:
 
 Web/API and reports run in separate HTTP services. Set Web's
 MEZAN_REPORT_WORKER_URL to the private HTTP(S) origin of the reports service.
-The reports service exposes existing GET dashboard/dashboard-v2/report/export
+The reports service exposes existing GET dashboard/dashboard-v2/operational-report/analysis/export
 handlers with original authentication and calculations; other application
 routes are refused. Web preserves public URLs and streams these requests and
 responses without credentials in URLs, retries or a local heavy-work fallback.
@@ -61,8 +61,10 @@ files, tmpfs and public synthetic fixtures. No host ports or real provider/SMTP
 credentials. No Production DB/volume mounts, data restore or external calls.
 Includes real HTTP auth/restart/Mongo-down acceptance, original focused suites,
 worker lifecycle checks, actual separated role starters and report boundary tests.
-The process-isolation benchmark uses artificial CPU work; it is not a capacity
-estimate for actual reports or Production load. Check STATUS.json for exact fresh
+The process-isolation benchmark uses artificial CPU work. A separate real API
+benchmark seeds 5,000 synthetic orders and obtains genuine owner/employee sessions,
+then measures employee auth requests during four concurrent dashboard requests.
+Neither benchmark is a capacity estimate for Production. Check STATUS.json for exact fresh
 results rather than inferring acceptance from these instructions.
 
 Reused September source: 6f0884e98b8fddef4a884b1321a9a216b9d30498.
