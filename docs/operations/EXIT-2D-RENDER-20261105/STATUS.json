@@ -7,7 +7,7 @@
   "integration_merge": "440c25ded463ae2a5be86d92e1772ade2142e72e",
   "state": "WIP_HOSTING_IMPLEMENTATION",
   "latest_integration_merge": "1a58d185ff5d849df48d29bec9d3fe1a74dd8fa2",
-  "code_checkpoint": "26d22fedbaa3951c54007a5d29c9fbb5e8cbe122",
+  "code_checkpoint": "2f9daf4b5315b87bb5befa7de34beb76e6146d1b",
   "draft_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1757",
   "verification": {
     "post_merge_unit_tests_passed": 24,
@@ -15,7 +15,8 @@
     "bounded_28_entry_inventory": "passed; 18 registrations and148 launch candidates; runtime reachability remains separate",
     "local_compatibility": {"passed":151,"skipped_real_replica_required":17,"subtests":59},
     "earlier_host_image_job": {"source":"68d881623b314e10e1a976d73d82d2dfc132cec6","run":41922573450,"job":126899681962,"conclusion":"success"},
-    "latest_source_linux_run": 41923633021,
+    "post_merge_compatibility_evidence": {"source":"31fe1c1bbf501d93f99170b2b07d2ed9f4624f37","run":41923459537,"inherited_passed":365,"shipping_fee_passed":247,"subtests":83,"overall_run":"failure at supplier ready event null-key collision"},
+    "latest_source_linux_run": 41924452274,
     "linux": "pending; earlier host image success is not acceptance of latest source"
   },
   "production_changed": false,
@@ -24,5 +25,7 @@
   "remaining": ["Latest-source combined Linux/image acceptance", "operational performance and genuine employee outage evidence", "synthetic restore evidence", "real Render resource approval and platform rehearsal", "future authorized Production stop/restore/V5 handoff"],
   "next_action": "Inspect current candidate Linux jobs, repair only demonstrated failures and preserve exact source/run mapping",
   "base_monthly_usd": {"hobby":127.50,"pro":152.50,"tax_and_overages_excluded":true},
-  "production_guard_or_intent_edited": false
+  "production_guard_or_intent_edited": false,
+  "known_release_readiness_gate": "Generic Frontend build/release-readiness rejects old frozen intent and unreviewed new backend modules; unchanged V5 gate, no bypass",
+  "supplier_ready_repair": "Stable per-dispatch event request identity; no financial logic, provider write, data repair or backfill"
 }
