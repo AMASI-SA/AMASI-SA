@@ -81,3 +81,9 @@ frozenB, inspect existing terminal before rerunning its unknown last command,
 and freshly check guard/remote base. ADB had no device after tooling restart;
 started existing Mezan-Operational-UAT without wipe, reconnected authorizing
 transport; device is visible but boot/shell readiness still pending.
+
+## Current release checkpoint: PR1752
+Production advanced to20c47efffa3efdf1afa29b6312ceaa8d261070cf, so PR1750 was closed without merge. Current branch codex/employee-loading-prod20c-20261104 starts directly at that base. Source A f23a6967b543dac9d2fce98ea0cb0144a1bda733 is pushed in PR1752. Focused38 tests pass. Source readiness41891286950 and waiting-review41891286868 passed; last observed CodeQL and stock eligibility still pending.
+Intent-only B ac9e8b3c6fcd2a8cf8d20a04b72eba86bdd008d8 is committed locally from the successful readiness artifact; source and base identity verified. A..B changes only release/release-intent-v5.json. Push failed with GitHub DNS/connectivity errors; remote B presence is unverified. Durable fallback patch: D:/codex-artifacts/performance-20261104/0001-release-freeze-employee-loading-source-f23a6967.patch.
+User explicitly authorized merge and publish. No merge/publish/lease performed for this slice. Browser/computer-control tools remain unavailable. Bundle work deferred by user; no bundle fixes in release. Production changed by this slice: NO.
+Next: verify remote branch before retrying B push, finish B checks and clean-clone rehearsal, verify latest production base still20c47, merge A/B without squash/rebase. Then restore supported Emergent access, check guard status, update /app preserving unrelated files, run rehearsal/prepare/prepublish, publish and require explicit newer Deployment Succeeded plus guard verify three probes. No new mobile APK published.
