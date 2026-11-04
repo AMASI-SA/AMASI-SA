@@ -321,13 +321,22 @@ async def with_courier_destination(db, owner, callback):
     try:
         return await operational_owner(db, owner, lambda scoped: callback(scoped, None))
     except _RecipientShipmentNeeded as missing:
-        internal_id = missing.args[0]
-    rows = await _outgoing_address_rows(db, owner, internal_id)
+        internal_id, number, courier, recipient = missing.args
+    try:
+        rows = await _outgoing_address_rows(db, owner, internal_id, number, courier, recipient)
+    except legacy.ShippingLabelError as unavailable:
+        # A missing optional national code must not suppress a known street.
+        try:
+            return await operational_owner(db, owner, lambda scoped: callback(scoped, []))
+        except legacy.ShippingLabelError as local_error:
+            if local_error.code == "recipient_address_unavailable":
+                raise unavailable from None
+            raise
     return await operational_owner(db, owner, lambda scoped: callback(scoped, rows))
 
 
-async def _outgoing_address_rows(db, owner, internal_id):
-    response = await _get(db, owner, "/shipments", params={"order_id": internal_id, "per_page": 50})
+def _address_list(response):
+    """Only a complete, order-filtered page can identify the current child."""
     if not isinstance(response, dict):
         return []
     rows = _rows(response)
@@ -341,9 +350,79 @@ async def _outgoing_address_rows(db, owner, internal_id):
     return rows
 
 
-def _shipment_destination(rows, internal_id, number, courier, recipient):
+async def _outgoing_address_rows(db, owner, internal_id, number, courier, recipient, selected=None):
+    """List rows can omit the actual destination. Read only the proven child."""
+    if not internal_id.isdecimal():
+        return []
+    if selected and not _needs_shipment_destination(
+        _shipment_destination([selected], internal_id, number, courier, recipient), True
+    ):
+        return [selected]
+    unreadable = False
+    tried_details = set()
+    partial = []
+    for path, params, scoped in (
+        (f"/orders/{internal_id}/shipments", {"per_page": 50}, True),
+        ("/shipments", {"order_id": internal_id, "per_page": 50}, False),
+    ):
+        if selected is not None and not scoped:
+            rows = [selected]
+        else:
+            response = await _get(db, owner, path, params=params)
+            unreadable |= response is None
+            rows = _address_list(response)
+        # Scope comes from the URL we requested, never a field provided by Salla.
+        rows = [{**row, "_mezan_order_scoped": scoped} for row in rows]
+        if scoped:
+            for row in rows:
+                nested = row.get("order") if isinstance(row.get("order"), dict) else {}
+                row["order_id"] = row.get("order_id") or nested.get("id") or internal_id
+        current = _current_destination_rows(rows, internal_id, number, courier)
+        if len(current) != 1:
+            continue
+        address = _shipment_destination(current, internal_id, number, courier, recipient)
+        if not _needs_shipment_destination(address, True):
+            return current
+        shipment_id = legacy._text(current[0].get("id"))
+        if any(address.get(k) for k in (*_STREET_FIELDS, *_NATIONAL_FIELDS)):
+            partial = current
+        if not shipment_id.isdecimal() or shipment_id in tried_details:
+            continue
+        tried_details.add(shipment_id)
+        response = await _get(db, owner, f"/shipments/{shipment_id}")
+        if response is None:
+            unreadable = True
+            continue
+        detail = response.get("data") if isinstance(response, dict) else None
+        if isinstance(detail, dict) and isinstance(detail.get("shipment"), dict):
+            detail = {**detail, **detail["shipment"]}
+        if not isinstance(detail, dict) or not detail:
+            continue
+        if legacy._text(detail.get("id")) != shipment_id:
+            return []
+        merged = {**current[0], **{k: v for k, v in detail.items() if v not in (None, "", {}, [])},
+                  "_mezan_order_scoped": scoped}
+        if (detail.get("order") and isinstance(detail["order"], dict)
+                and legacy._text(detail["order"].get("id")) not in {"", internal_id}):
+            return []
+        # Never splice an old address or buyer's name into the detail ship_to.
+        enriched = _shipment_destination([merged], internal_id, number, courier, recipient)
+        if not enriched:
+            return []
+        if not _needs_shipment_destination(enriched, True):
+            return [merged]
+        if any(enriched.get(k) for k in (*_STREET_FIELDS, *_NATIONAL_FIELDS)):
+            partial = [merged]
+    if unreadable and not partial:
+        raise legacy.ShippingLabelError(
+            "recipient_address_source_unavailable", "تعذّر الاتصال بسلة لقراءة عنوان شحنة المستلم.", status_code=503,
+        )
+    return partial
+
+
+def _current_destination_rows(rows, internal_id, number, courier):
     from store_delivery_domain import normalize_shipping_carrier
-    from .customer_history import normalize_saudi_mobile
+    from salla_shipping import _carrier
 
     current = []
     for row in rows:
@@ -351,18 +430,33 @@ def _shipment_destination(rows, internal_id, number, courier, recipient):
             continue
         nested = row.get("order") if isinstance(row.get("order"), dict) else {}
         order_id = row.get("order_id") or nested.get("id")
-        if legacy._text(order_id) != internal_id or legacy._text(row.get("order_reference_id")) not in {"", number}:
+        reference = row.get("order_reference_id") or nested.get("reference_id")
+        if legacy._text(order_id) != internal_id or legacy._text(reference) not in {"", number}:
             continue
-        if normalize_shipping_carrier(row.get("courier_name")) != normalize_shipping_carrier(courier):
+        if normalize_shipping_carrier(_carrier(row).get("company_name")) != normalize_shipping_carrier(courier):
             continue
-        if legacy._status(row.get("type") or row.get("shipment_type")) not in {"shipment", "outbound", "outgoing"}:
+        direction = legacy._status(row.get("type") or row.get("shipment_type"))
+        status = legacy._status(row.get("status"))
+        if (not direction or not status) and not row.get("_mezan_order_scoped"):
             continue
-        if _current([row], internal_id) and legacy._status(row.get("status")) not in {"", "delivered", "returned", "refunded"}:
+        if direction and direction not in {"shipment", "outbound", "outgoing"}:
+            continue
+        if _current([row], internal_id) and status not in {"delivered", "returned", "refunded"}:
             current.append(row)
+    return current
+
+
+def _shipment_destination(rows, internal_id, number, courier, recipient):
+    from .customer_history import normalize_saudi_mobile
+
+    current = _current_destination_rows(rows, internal_id, number, courier)
     if len(current) != 1:
         return {}
     ship_to = current[0].get("ship_to")
     if not isinstance(ship_to, dict):
+        return {}
+    if (not current[0].get("type") and not current[0].get("shipment_type")
+            and not (recipient.get("mobile") or recipient.get("name"))):
         return {}
     known_phone = legacy._text(recipient.get("mobile") or recipient.get("phone"))
     phone = legacy._text(ship_to.get("phone") or ship_to.get("mobile"))
@@ -379,7 +473,7 @@ def _shipment_destination(rows, internal_id, number, courier, recipient):
             "phone": ship_to.get("phone") or ship_to.get("mobile")}
 
 
-_STREET_FIELDS = ("address_line", "address_line_two", "formatted", "street")
+_STREET_FIELDS = ("address_line", "formatted", "street")
 _NATIONAL_FIELDS = ("short_address", "national_address")
 
 
@@ -405,7 +499,7 @@ def _prefer_destination(local, ship_to):
 
 
 def _apply_recipient_destination(order, recipient, address):
-    if not legacy._street_destination(address):
+    if not any(address.get(k) for k in (*_STREET_FIELDS, *_NATIONAL_FIELDS)):
         raise legacy.ShippingLabelError("recipient_address_unavailable", "تعذّر جلب عنوان مستلم الطلب من سلة.")
     updated = {**order, "_mezan_current_shipping_address": address}
     name = recipient.get("name") or address.get("name")
@@ -450,7 +544,12 @@ async def _with_verified_destination(db, owner, number, internal_id, order, ship
     current = await _with_order_destination(db, owner, number, internal_id, current)
     address = current.get("_mezan_current_shipping_address") or legacy._order_delivery_address(current)
     if _needs_shipment_destination(address, True) or not recipient.get("name"):
-        rows = [shipment] if shipment else await _outgoing_address_rows(db, owner, internal_id)
+        try:
+            rows = await _outgoing_address_rows(db, owner, internal_id, number, courier, recipient, shipment)
+        except legacy.ShippingLabelError:
+            if not any(address.get(k) for k in (*_STREET_FIELDS, *_NATIONAL_FIELDS)):
+                raise
+            rows = []
         incoming = _shipment_destination(rows, internal_id, number, courier, recipient)
         address = _prefer_destination(address, incoming)
     return _apply_recipient_destination(current, recipient, address)
@@ -527,7 +626,7 @@ async def local_mezan_courier_label(db, owner: str, number: str, workflow: dict,
         local = _prefer_destination(address, stored)
         if _needs_shipment_destination(local, separate) or (separate and not (recipient.get("name") or local.get("name"))):
             if shipment_rows is None:
-                raise _RecipientShipmentNeeded(internal_id)
+                raise _RecipientShipmentNeeded(internal_id, number, name, recipient)
             incoming = _shipment_destination(shipment_rows, internal_id, number, name, recipient)
             local = _prefer_destination(address, incoming)
         if separate:
