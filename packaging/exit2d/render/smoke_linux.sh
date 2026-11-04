@@ -71,7 +71,10 @@ for service in "$reports" "$sync" "$accounting"; do
 done
 docker kill "$web" >/dev/null
 docker start "$web" >/dev/null
-sleep 10
+for attempt in $(seq 1 60); do
+  if probe /api/ready 200 >/dev/null 2>&1; then break; fi
+  sleep 1
+done
 probe /api/ready 200
 for service in "$web" "$reports" "$sync" "$accounting"; do
   docker stop --time 30 "$service" >/dev/null

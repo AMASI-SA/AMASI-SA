@@ -353,6 +353,9 @@ exec {accept_out}<&-
 unset accept_in accept_out accept_pid
 docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/exit2d/http_benchmark.py
 docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/exit2d/operational_benchmark.py
+docker kill "$reports" >/dev/null
+docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/exit2d/fault_probe.py reports-down
+docker start "$reports" >/dev/null
 life profile
 stop_webs
 life no-writes

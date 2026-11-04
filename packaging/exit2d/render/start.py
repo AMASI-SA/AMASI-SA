@@ -70,6 +70,8 @@ def main():
         raise RuntimeError('this image is synthetic hosting only; Production requires V5 packaging')
     if role == 'web':
         address = os.environ.get('MEZAN_REPORT_WORKER_ADDRESS', '')
+        if os.environ.get('MEZAN_REPORT_WORKER_HOST'):
+            address = os.environ['MEZAN_REPORT_WORKER_HOST'] + ':8000'
         if not address or '/' in address or '@' in address:
             raise RuntimeError('private report address required')
         os.environ['MEZAN_REPORT_WORKER_URL'] = 'http://' + address

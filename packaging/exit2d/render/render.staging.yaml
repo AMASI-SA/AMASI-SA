@@ -60,8 +60,8 @@ services:
       - fromGroup: mezan-exit2d-synthetic-secrets
       - key: MEZAN_STAGING_MONGO_HOST
         fromService: {name: mezan-exit2d-mongo, type: pserv, property: host}
-      - key: MEZAN_REPORT_WORKER_ADDRESS
-        fromService: {name: mezan-exit2d-reports, type: pserv, property: hostport}
+      - key: MEZAN_REPORT_WORKER_HOST
+        fromService: {name: mezan-exit2d-reports, type: pserv, property: host}
   - name: mezan-exit2d-reports
     type: pserv
     runtime: docker
