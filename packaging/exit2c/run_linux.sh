@@ -386,4 +386,12 @@ life no-worker
 echo 'PASS worker explicit arming, singleton fencing, loss cancellation, restart and TERM'
 docker run --rm "${runtime[@]}" -e MEZAN_WORKER_ENABLED=1 --entrypoint python mezan-exit2c:candidate /opt/acceptance/worker_shutdown.py --linux
 docker run --rm "${runtime[@]}" -e MEZAN_WORKER_ENABLED=1 --entrypoint python mezan-exit2c:candidate /opt/exit2d/role_acceptance.py
+
+# All application processes have drained; both namespaces belong solely to this
+# network-none disposable Mongo. Never pass a URI, host path or Production dump.
+docker stop --time 10 "$reports" >/dev/null
+docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/exit2d/restore_acceptance.py seed
+docker exec "$mongo" mongodump --host 127.0.0.1 --db mezan_exit2c --archive=/tmp/synthetic.archive --quiet
+docker exec "$mongo" mongorestore --host 127.0.0.1 --archive=/tmp/synthetic.archive --nsFrom='mezan_exit2c.*' --nsTo='mezan_exit2d_restore.*' --quiet
+docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/exit2d/restore_acceptance.py verify
 echo 'PASS EXIT-2C scoped acceptance; temporary containers cleaned next'
