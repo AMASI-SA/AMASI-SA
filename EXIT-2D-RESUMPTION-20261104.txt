@@ -1,0 +1,123 @@
+ميزان — تقرير استئناف EXIT-2D وتصميم نقل الاستضافة
+تاريخ المراجعة: 2026-11-04، Asia/Riyadh. الحالة: تصميم ومراجعة فقط، غير معتمد للنشر.
+
+القرار المقترح
+أوصي بـRender للانتقال الأول إذا كان تشغيل البيانات خارج السعودية مقبولًا: Web/API وثلاثة Background Workers، مع MongoDB مُدارة مستقلة وتخزين ملفات مشترك عبر Object Storage. هذا أقرب إلى الحلقات المستمرة الموجودة ويقلل تغييرات نموذج التشغيل. Cloud Run بديل أقوى عندما تكون المنطقة السعودية أو IAM وإدارة الأحداث أولوية، لكنه يحتاج تشغيلًا وهندسة إضافيين. Railway مناسب للتجارب والفرق التي تفضل المحاسبة حسب الاستهلاك، دون أفضلية مؤكدة في تكلفة ميزان قبل القياس.
+هذه توصية هندسية مشروطة، وليست اعتماد شراء أو قرارًا مبنيًا على قياسات إنتاج؛ لا توجد قياسات حديثة معتمدة لحجم البيانات وRSS واستهلاك CPU والمرور.
+
+1. الهوية والحفظ
+المستودع: AMASI-SA/AMASI-SA.
+المصدر التاريخي: 6f0884e98b8fddef4a884b1321a9a216b9d30498، بتاريخ 2026-09-09.
+origin/codex/exit-2d-preparation-lifecycle-acceptance ما زال يشير إلى المصدر نفسه عند المراجعة.
+خط الأساس المشترك: 1de6118484ac4fe1d0981e230618dbb573d8c58c.
+مصدر الإنتاج بعد git fetch: 20c47efffa3efdf1afa29b6312ceaa8d261070cf، merge PR #1751، بتاريخ 2026-11-04.
+هذه هوية مصدر GitHub، وليست إثبات النسخة التي تعمل حاليًا على Emergent.
+الفرع الجديد المحلي: codex/exit-2d-resume-20261104، مبني على مصدر الإنتاج أعلاه.
+مساحة العمل: C:/Users/amasi/.codex/tmp/exit2d-resume-20261104.
+مرجع حفظ محلي إضافي: codex/exit-2d-september-preserved-6f0884.
+أرشيف كامل لملفات المصدر المتتبعة في سبتمبر، 2779 مدخلًا:
+C:/Users/amasi/.codex/tmp/exit2d-september-6f0884.zip
+SHA256: 046f43a821079c9b54b697ba41cc3f5f4855deaf826566944431864132e8f27c
+فحص CRC لجميع مداخل ZIP نجح. الأرشيف لا يحتوي ملفات غير متتبعة أو بيانات الإنتاج ولا يمثل نسخة MongoDB احتياطية؛ تاريخ Git محفوظ عبر المرجع المحلي والأصل البعيد ولم يُعدّل.
+مجلد المراجعة المستخرج: C:/Users/amasi/.codex/tmp/exit2d-september-review.
+لم تُلمس تعديلات قيود الموجودة في مساحة Windows الأصلية. لا commit أو push أو PR جديد أو merge أو نشر.
+
+2. ماذا أنجز سبتمبر؟
+EXIT-2A: حزمة Linux قابلة لإعادة التجربة واعتماديات بديلة عن emergentintegrations، Mongo اصطناعية معزولة، اختبارات Auth/طلبات/PDF وإعادة تشغيل. كانت تجربة محدودة المسارات، وليست حزمة إنتاج.
+EXIT-2C: فصل صريح إلى migration وweb وworker؛ الويب يستخدم المسارات والحماية الفعلية دون تشغيل دورة الخلفية المختلطة؛ migration محدودة بالفهرسة؛ worker يتطلب تسليحًا صريحًا وlease ثابتة وheartbeat وfencing وإيقافًا محدود الزمن. اختبارات فعلية متعددة العمليات وMongo وAuth والتعافي وTERM موجودة ويمكن البناء عليها.
+PR #1016 ما زال Draft ومفتوحًا وغير مدمج عند القراءة. رأسه الموثق a9c8404faf914979487f7e7237ebcb22d68fdfb2، وليس رأس EXIT-2D.
+وصف PR الأحدث يوثق نجاح candidate على Linux: 274 اختبار backend و11 subtests، و27 اختبار frontend. كما يوثق نجاح حالات إيقاف worker الأربع، وتصحيح حفظ جلسات القبول إلى ذاكرة controller.
+Release Readiness بقي فاشلًا لعقد عضوية frontend في reviewed Intent؛ لا يجوز تحويل نجاح candidate إلى جاهزية إصدار.
+README/RESULTS في الشجرة التاريخية يحتفظان بنتائج أقدم تقول إن آخر shutdown delta ينتظر Linux؛ وصف PR الأحدث يسجل إتمامه لاحقًا على رأس EXIT-2C. هذا اختلاف زمني في الأدلة، وليس مبررًا لإعادة المرحلة من الصفر.
+EXIT-2D: محاكي HTTP لسلة، سيناريوهات deny/unavailable/success، تشخيصات آمنة لا تسرّب الجلسات، عقود قطع التحضير والخيارات والصور، supplier visibility، confirmed webhook وانتقال status، وحارس قبل استيراد ASGI.
+الحالة الصريحة في PREPARATION_SIMULATOR_STATUS: تجربة دورة التطبيق الكاملة على Linux لم تُنفذ. توجد فجوة لإثبات انتقال مراجعة R1 إلى R2 قانونيًا للوحدة نفسها؛ اختبار تغير hash افتراضي لا يثبت انتقال HTTP فعليًا. فشل label lookup مُحاكى لا يثبت شحنة ناجحة.
+Issue #1006 نقطة تسليم تاريخية واسعة للتطبيق، وليس دليلًا على اكتمال EXIT أو صلاحية بيانات نشره القديمة اليوم. قرأت نصه الأساسي؛ لم أراجع تعليقاته البالغ عددها نحو 2500، ولم أتخذ حالته القديمة كحالة إنتاج راهنة.
+
+3. الفرق مع الإنتاج الحالي وما لا يصلح نقله حرفيًا
+المقارنة بين الرأسين: 28 commit خاصة بجهة سبتمبر مقابل 1305 خاصة بجهة الإنتاج؛ ليست 1305 تغييرات تخص الاستضافة فقط.
+1311 مسار backend تختلف بين الرأسين. packaging/exit2a وpackaging/exit2c وindependent_runtime.py وindependent_callbacks.py وindependent_schema.py غير موجودة في شجرة الإنتاج الحالية؛ هذا غياب عن الشجرة، وليس إثباتًا لحذف عمل سبتمبر بعد دمجه.
+server.py: +271/-57؛ auth.py: +61/-26؛ qoyod_manual/auto_send.py: +264/-31؛ order_review_routes.py: +695/-174؛ reviewed_preparation_batches.py: +35/-3. هذه مقارنة ملفات بين الرأسين، لا إسناد سببي لكل تغيير إلى النقل.
+تعارض توافق مؤكد: independent_runtime القديم يستورد runtime_mongo.bounded_readiness وauth.install_runtime_security؛ هذان الاسمان غير متاحين في الإنتاج الحالي، الذي يستخدم install_process_local_auth_security. إعادة ملف التشغيل وحده ستفشل أو تفقد توافق الحماية.
+الإنتاج ما زال يخلط _global_startup و_local_startup مع تشغيل عمال داخل العملية. توجد الآن: salla_orders_v3 shadow، Qoyod legacy وPlan-B، صيانة tokens، operational_balance، review_completion_resume، assembly_completion_delivery، shipping_label_inbox، payment_update_inbox، operational_push. توجد أيضًا callbacks مسجلة في الراوتر تحتاج جردًا جديدًا بالهوية الدقيقة.
+لا يكفي تصنيف callbacks القديمة الخمس؛ كل loop وsubprocess جديد يجب أن تكون له جهة تشغيل وإيقاف واحدة. Unknown callback يرفض التشغيل إلى أن يُصنّف، بدل تخطيه بصمت.
+مصدر الإنتاج الحالي هو المرجع للسياسات والفواتير والأهلية وقيود. لا استبدال لأي ملف qoyod بملفه القديم، ولا cherry-pick شامل لفرع سبتمبر، ولا دمج جماعي للاعتماديات القديمة.
+
+4. تصميم الخدمات المستهدفة — أربع خدمات دائمة ووظيفة ترحيل منفصلة
+أ) Web/API: الموقع وواجهات الموظفين وAuth والجلسات وRBAC، استقبال webhook مع التحقق من التوقيع، وقراءات سريعة. يستقبل الأعمال الدائمة ويثبتها في inbox قبل الإقرار، ثم يعيد نتيجة/معرف مهمة حسب العقد الحالي. لا schedulers عامة ولا إرسال فواتير خلفي. العمليات التفاعلية الحالية ذات الأثر الخارجي تحتاج جردًا قبل نقلها؛ لا تغيير عقودها ضمن هذه المراجعة.
+ب) Worker الإعلانات والمزامنات: Snapchat/Meta/Google/TikTok، CAPI، مزامنة سلة وtokens والمنتجات والطلبات، review resume والتسليم وshipping/payment inbox والـoperational push وفق جرد ملكية دقيق. المهام التشغيلية الإضافية هنا معلنة بدل ضياعها خارج التقسيم الرباعي. أي فصل خامس لاحق قرار مستقل.
+ج) Worker التقارير ولوحة التحكم: exports وPDF الثقيلة والتجميعات وread-model snapshots. Web يقرأ آخر snapshot مع وقت تحديثه؛ تُعاد استخدام معادلات الربحية والمحاسبة الحالية دون إعادة اشتقاقها. حدود CPU/RAM وطوابير مستقلة تمنع تقريرًا ثقيلًا من تعطيل الموظفين.
+د) Worker المحاسبة وقيود: يشغّل wrappers للعمل الحالي فقط ويحافظ على legacy_pipeline_frozen وPlan-B والأهلية والدفعات وموانع التكرار كما هي. operational_balance يُصنف هنا مبدئيًا بعد مراجعة آثاره. إيقاف عام مستقل للإرسال، concurrency أولية واحدة، ومراقبة reconciliation.
+هـ) Migration job: مرحلة واحدة مضبوطة لكل source/schema version؛ لا backfill أو cleanup مالي تلقائي. تُراجع كل index جديدة وTTL/unique على نسخة معزولة أولًا. Web readiness ترفض مخططًا غير مكتمل.
+تُستخدم صورة تطبيق موحدة immutable مع command مختلف لكل دور. لكل خدمة هوية وصلاحيات وأسرار وحدود موارد؛ لا حاجة لإعادة كتابة التطبيق إلى microservices أو اعتماد Redis لمجرد الفصل.
+تُبنى طبقة تنفيذ فوق inbox/leases الموجودة في Mongo حيث تحقق العقود. لا يُنشأ queue جديد قبل تقييم الموجود. Web والمزامنة لا يمتلكان أسرار إرسال قيود إلا إذا أثبت جرد endpoint تفاعلي ضرورة انتقال تدريجي محدد ومراجع.
+قفل سبتمبر singleton واحد يصلح كمرحلة انتقال لعامل واحد، ولا يكفي لثلاثة عوامل. التصميم الجديد يحتاج role-scoped leases مع tenant/job keys، وجسر ملكية يمنع legacy worker والـroles الجديدة من العمل معًا أثناء النقل. أسماء leases الجديدة وحدها لا توقف القديم.
+لا ادعاء exactly-once بين Mongo ومزود خارجي: تثبيت job identity وunique dedupe وCAS/fence وheartbeat، ثم provider idempotency إن دعمه المزود. نجاح خارجي مع timeout داخلي يصبح outcome_unknown ويخضع للاستعلام والمصالحة، لا blind resend. لا تغيير لخوارزمية إرسال الفواتير الآن؛ أي دعم ناقص يُرفع كمانع قبول مستقل.
+
+5. مقارنة الإمكانيات والتكلفة
+أسعار صفحات المزودين قُرئت في هذه المراجعة؛ بالدولار قبل الضرائب، تقديرات لا عروض شراء.
+Render: خدمات Web وعمال مستمرون وDocker وشبكة خاصة. 1 CPU/2GB = 25$/شهر للخدمة وفق صفحة الأسعار المفهرسة؛ أربع خدمات بهذا الحجم = 100$/شهر. مثال أعلى للقياس فقط: Web وتقارير 2CPU/4GB بسعر 85$ لكل منهما، وعاملان 25$ = 220$. رسوم workspace والبناء والمرور والملفات وMongo والنسخ الاحتياطية تُضاف حسب الخطة؛ صفحة الأسعار ديناميكية ولم تعرض تفاصيل workspace نصيًا، فتحتاج تثبيت عرضها قبل الشراء. لا تفترض أن 2GB تكفي ميزان قبل الاختبار. المناطق المعلنة تشمل Frankfurt وSingapore ولا تشمل السعودية. القرص التقليدي خاص بمثيل واحد ولا يصلح مشاركة ملفات الخدمات الأربع.
+Railway: Pro حد أدنى 20$ يتضمن 20$ استخدامًا، لا يُضاف فوق كامل استهلاك الشهر. RAM = 0.00000386$/GB-second، CPU = 0.00000772$/vCPU-second، egress=0.05$/GB، volume=0.00000006$/GB-second. على 30 يومًا، 8GB RAM مستهلكة باستمرار ونشاط CPU إجمالي 0.4–4 vCPU => نحو 88–160$ compute؛ ليست مقارنة مضمونة لأن CPU usage وRAM usage مختلفان عن الحجز. المناطق المعلنة California/Virginia/Amsterdam/Singapore، لا منطقة سعودية في القائمة المقروءة.
+Cloud Run: Web على Service، التقارير القصيرة على Jobs أو مستهلك مستقل، الحلقات الدائمة على Worker Pools؛ لا تعتمد CPU المتاحة فقط أثناء HTTP لتشغيل عامل دائم. Worker Pools تحتاج ضبط instances/آلية scaling، وليست autoscaling افتراضيًا. توجد منطقة Dammam بالقوائم؛ يجب تثبيت توافر المورد المختار والأسعار والحصص ونمط الوصول للحساب قبل الاعتماد، وعدم افتراض أن كل مزايا المناطق متطابقة.
+مثال Cloud Run موحد مرجعي us-central1 لا عرض Dammam: ثلاث Worker Pools كل منها 1vCPU/2GiB لمدة 30 يومًا = 106.64$ قبل free tier، من CPU 0.000011244$/second وRAM 0.000001235$/GiB-second. Web مماثل instance-based دائم = 57.02$، الإجمالي 163.66$ compute. web request-based أو تقارير Jobs قصيرة قد تخفضه؛ المنطقة والبناء وregistry وlogs وNAT/storage/egress وMongo تزيده. لا خصومات التزام مدفوع ضمن المقترح.
+حساب ميزانية نهائية: compute + managed Mongo مع backups + object storage والطلبات + egress + logs/build/registry + خدمات الشبكة/الأسرار + تداخل الاستضافتين أثناء الانتقال. رسوم Mongo غير مقدرة لعدم وجود حجم/IOPS/إصدار/مزود مؤكد؛ لا يصح اختراع إجمالي شهري شامل.
+التوصية: Render أولًا لبساطة نقل الحلقات الحالية وتوقع الفاتورة؛ Cloud Run إذا رجحت المنطقة السعودية أو IAM/الأحداث بعد إثبات توافرها وقياسها؛ Railway للتجربة أو إذا أثبت القياس وفرًا واقعيًا. لا تشغيل Mongo إنتاج كقالب أحادي على volume لمجرد سهولة الإنشاء؛ تُفضّل خدمة Mongo مُدارة مع نسخ قابلة للاستعادة وفق صلاحية المالك.
+
+6. خطة MongoDB والملفات والأسرار — تصميم فقط
+قبل أي اتصال/تصدير: إثبات production deployment -> DB/cluster identity، الإصدار وFCV وreplica/sharded topology، مالك الحساب وصلاحية export/restore، أحجام collections/indexes/TTL، backup ID وزمنه وretention ونافذة الاستعادة. لا نفترض ملكية Atlas ولا نستخدم اتصالًا تاريخيًا مكشوفًا. أدلة سبتمبر القديمة لا تثبت أن هذه المعلومات ما زالت ناقصة عند المالك اليوم؛ هي غير متحققة في هذه الجولة.
+الأفضل فصل نقل compute عن نقل DB إذا سمحت الملكية والشبكة: استخدام نفس DB أولًا بعد اعتماد الوصول وملكية الكتابة، ثم ترحيل DB في نافذة أخرى. لا تفعيل وصول جديد الآن.
+إذا لزم نقل DB معًا: backup متسق ثم restore تجريبية واختبارات مطابقة؛ في replica set يمكن mongodump --oplog مع mongorestore --oplogReplay إذا الصلاحيات والتوبولوجيا تسمح. --oplog ليس مع --db/--collection وليس حلًا لـmongos/sharded. يُستخدم snapshot/live migration مدعوم أو توقف كتابة منضبط عند تعذر CDC؛ لا وصفة dump عامة تضمن عدم الفقد.
+الدلتا التي تحدث بعد نهاية dump لا تغطيها --oplog تلقائيًا؛ تلزم CDC مدعومة مستمرة حتى حاجز التحويل أو تجميد كل الكتابات وأخذ نسخة نهائية متسقة. احتفظ بمعرفات الطلبات والفواتير والدفعات وinbox/outbox والـdedupe وcheckpoints وحالات outcome_unknown؛ لا تصفرها ولا تعِد enqueue تلقائيًا.
+التحقق: counts وcanonical hashes حسب tenant/window، indexes/options وTTL/unique، references، أرصدة ونتائج تقارير مقارنة دون كتابة مالية، عينات تاريخية وحديثة، dead letters/checkpoints والتشفير والمرفقات. restore لا تُقبل بمجرد ping.
+الملفات: جرد Mongo Binary/GridFS إن وجدت، paths/volumes/buckets والـPDF الأصلية وصور المنتجات والمرفقات. مثال مؤكد في الإنتاج: product_media_upload_routes.py يحفظ Binary(content) وsha256 في mezan_product_media_uploads_v2 مع TTL سبعة أيام؛ لذلك نسخ directory وحده لا ينقل جميع الملفات. ليست كل PDF محفوظة كأصل؛ regeneration لا تضمن byte identity.
+تُحفظ الملفات الموجودة في Mongo ضمن نقل DB أولًا بلا إعادة تصميم متزامنة. الملفات الخارجية: manifest بالمعرف والحجم وSHA256 وMIME والمالك/tenant، نسخ مبدئي ثم delta نهائية عند حاجز الكتابة، فحص جميع hashes وإعادة الفتح من الخدمتين بعد restart. Object Storage خاص وversioned مع روابط قصيرة العمر وتحقق RBAC؛ local disk مؤقت فقط. لا حذف للأصل قبل انتهاء فترة الرجوع المعتمدة.
+الأسرار: جرد أسماء وإصدارات فقط، نقل من المالك عبر secret manager خارج Git والصورة والlogs. مفاتيح SALLA/QOYOD/META/GOOGLE/SNAPCHAT/TIKTOK الحالية والسابقة وMEZAN_CUSTOMER_PII_ENC_KEY وأسرار sessions/JWT وOAuth/webhooks تُحفظ بما يضمن فك البيانات والجلسات. لا توليد بديل عشوائي لمفتاح تشفير قائم، ولا rotation متزامنة مع النقل. اختبار decrypt على بيانات مصرح بها في بيئة معزولة لاحقًا؛ المفاتيح الاصطناعية لا تستخدم للإنتاج.
+لا رفع بيانات عملاء أو أسرار إلى Actions artifacts. حقوق download/restore والجدار الشبكي وفصل حسابات الاختبار شرط قبل تجربة نسخة حقيقية لاحقًا.
+
+7. خطة الاختبار المعزولة وإعادة الاستخدام
+مرحلة A: الاحتفاظ بأرشيف سبتمبر وتسجيل provenance/hashes. نقل انتقائي للـharness والاختبارات إلى نسخة حديثة دون backport ملفات الأعمال. جرد callbacks/tasks والمنافذ وsubprocesses وimport-time writes وAuth/readiness. إعادة استخدام independent runtime كتصميم مع تكييفه للواجهات الحالية؛ لا اعتباره ملفًا جاهزًا للتشغيل.
+مرحلة B: Linux Docker موجود ومعتمد لاحقًا، synthetic Mongo مستقلة لكل سيناريو، network=none مع loopback، ملفات readonly/tmpfs، بلا credentials ولا ports ولا provider/SMTP حقيقي. لا تثبيت Docker/WSL تلقائيًا. فحص guard قبل أول application import وإثبات عدم وجود outbound.
+مرحلة C: إعادة EXIT-2C متعددة العمليات على المصدر الجديد، ثم EXIT-2D deny/unavailable/success والدورة الكاملة: review/draft/finalize/allocation/supplier/receipt/assembly/PDF والصور وwebhook/restart. حل فجوة R1/R2 بانتقال قانوني مدعوم أو إعلان عدم انطباق المتطلب صراحة؛ لا تزوير نجاحه.
+مرحلة D: إثبات Web بلا schedulers/migration lifecycle writes، وكل عامل لا يبدأ مهمة عامل آخر. اختبار تسليم ownership بين نسختين/بين legacy والـroles، duplicate job وfence loss وrestart بعد provider success وقبل DB ack، clock skew وretry وdead-letter، SIGTERM ثم kill لمهمة تقاوم الإلغاء. startup claims وحدها لا توقف side effect سبق إطلاقه.
+مرحلة E: قياس API p95/p99 وRSS/CPU/event-loop lag وMongo connection pools وqueue age/report freshness تحت تزامن واقعي. أربع خدمات بمجموع replicas غير محدود قد تضاعف pools؛ لا توسع web عشوائيًا. تُحدد حدود قبول الأداء من خط أساس مقاس واتفاق العمل، لا أرقام اعتباطية.
+مرحلة F: backup/restore كاملة مع ملفات وأسرار مأذون بها لاحقًا في بيئة منفصلة ومنع outbound افتراضيًا، وتجربة cutover/rollback بمؤشرات تكرار/فقد صفر على fixtures، ثم مراجعة artifact/Intent النهائي. CI الجديد يحتاج تقدير jobs/ميزانية جديدة؛ حصة سبتمبر 38/40 ليست تصريحًا متجددًا ولا رصيدًا صالحًا اليوم.
+
+8. خطة الانتقال التدريجي المستقبلية للإنتاج — تحتاج اعتمادًا مستقلًا
+0) تثبيت source SHA وبناء image digest مع مراجعة security/role matrix وrestore drill وDNS/OAuth/cookies/RP ID/CORS/webhook inventory. الحفاظ على النطاق العام يقلل تغيير عقود sessions/passkeys؛ Preview ليس إثباتًا لنطاق الإنتاج.
+1) نشر بيئة جديدة معزولة بعد الموافقة والتكلفة، shadow reads/fixtures فقط، والعمال الخارجيون غير مسلحين. لا replay لـPOST مالية أو إعلانية عبر shadow traffic.
+2) إذا استُخدمت DB مشتركة، canary Web يبدأ بقراءات مصنفة آمنة فقط والعمليات غير القابلة للعكس تبقى في writer واحد. لا canary نسبي على قاعدتي بيانات مستقلتين قابلة للكتابة.
+3) نقل worker التقارير أولًا بعد إثبات عدم ازدواج جدولة التجميعات؛ ثم المزامنات أسرةً واحدةً مع drain/checkpoint/ownership؛ المحاسبة وقيود أخيرًا في نافذة مستقلة مع بقاء سياسات الإرسال دون تعديل.
+4) عند نقل DB: وقف كل writers بما في ذلك webhooks/jobs/الموظفون والواجهات التفاعلية القديمة؛ التقاط الأحداث في buffer متين معرف الهوية أو إثبات إعادة تسليم المزود قبل القبول، barrier/checkpoint نهائي ثم delta/restore/checks. لا ACK لحدث لم يُحفظ. تحويل اتصال كل writers إلى قاعدة واحدة، ثم فتح الجديد بمالك واحد لكل مجال. DNS وحده لا يسكت النسخة القديمة.
+5) مراقبة auth/errors/latency/queue age وbacklog وdedupe وprovider reconciliation والأرصدة والملفات، ومقارنتها بخط الأساس. بوابات فقد/تكرار أو unknown outcome غير محلولة تمنع التقدم.
+6) الرجوع قبل أي كتابة جديدة يمكن بتحويل المسار إلى القديم. بعد كتابة الهدف: لا رجوع أعمى إلى DB قديمة؛ إيقاف الكتابات ومصالحة الدلتا/عكس replication بطريقة مختبرة أو forward-fix. رجوع compute على نفس DB يتطلب توافق schema وسحب ملكية العمال أولًا.
+7) الاحتفاظ بالبيئة والنسخ الأصلية طوال مدة رجوع تعتمد لاحقًا؛ لا حذف ضمن هذه المهمة. RPO=0 هدف مشروط بإثبات حاجز الكتابة والتقاط كل الأحداث؛ RTO يُقاس في rehearsal ولا يُضمن الآن.
+أي تغيير/إعادة نشر في Emergent يجب أن يتبع AGENTS.md: prepare ثم prepublish من /app تحت lease المالك، ثم Deployment Succeeded أحدث وverify الناجح ثلاث مرات داخليًا. لا استعمال نجاح GitHub كإثبات نشر. إجراءات الإصدار الحالية لا تُعطّل؛ الاستضافة الجديدة تحتاج آلية هوية/تحقق مكافئة تُراجع قبل الاعتماد.
+
+9. التحقق المنفذ في هذه الجولة وحدوده
+git fetch origin نجح؛ تحقق الرأس التاريخي والبعيد وخط الأساس ومقارنات stat/numstat وغياب ملفات runtime في الإنتاج. إنشاء worktree وفرعي العمل/الحفظ محليًا، لا تعديل لملفات التطبيق.
+قراءة PR #1016 ونص Issue #1006 الأساسي عبر GitHub connector، وملفات README/RESULTS/PREPARATION_SIMULATOR_STATUS وindependent_runtime.py وstartup وAuth وruntime_mongo وQoyod من المصدر.
+Python محلي 3.13 على Windows، دون Docker متاح في PATH. تشغيل اختبارات تاريخية من نسخة مستخرجة لا تستورد server الحقيقي:
+python -B -m unittest test_salla_http_simulator test_snapshot_evidence test_supplier_workspace_contract test_simulator_runtime_boundary test_webhook_guard_order
+النتيجة بعد استكمال ملفات سياق المصدر التاريخي: 47 اختبارًا، 46 نجح، خطأ واحد ModuleNotFoundError: cryptography في اختبار round-trip. exit=1؛ لا claim بأن المجموعة خضراء. المحاولة الأولى كانت باستخراج جزئي سبّب missing-source failures؛ صُحح سياق الاستخراج فقط ولم تُعدّل الاختبارات، ثم أعيد التشغيل لهذا السبب المحدد.
+لا تثبيت اعتماديات، ولا Linux/Docker lifecycle جديد، ولا benchmark إنتاج، ولا اختبار provider/accounting حي. نجاح اختبارات Windows لا يثبت قبول runtime على Linux أو صحة الدمج مع الإنتاج.
+الحكم: إعادة الاستخدام ممكنة ومجدية؛ جاهزية النقل الفعلي جزئية وغير مقبولة بعد. الموانع: role split وتوافق المصدر الحالي، lifecycle Linux كاملة، legacy/new ownership، restore/files/decryption، supervisor وcapacity، artifact/release approval.
+
+10. المصادر المرجعية
+https://github.com/AMASI-SA/AMASI-SA/pull/1016
+https://github.com/AMASI-SA/AMASI-SA/issues/1006
+https://github.com/AMASI-SA/AMASI-SA/tree/6f0884e98b8fddef4a884b1321a9a216b9d30498/packaging/exit2c
+https://github.com/AMASI-SA/AMASI-SA/blob/6f0884e98b8fddef4a884b1321a9a216b9d30498/backend/independent_runtime.py
+https://github.com/AMASI-SA/AMASI-SA/blob/20c47efffa3efdf1afa29b6312ceaa8d261070cf/backend/server.py
+https://render.com/pricing
+https://render.com/docs/compute-plans
+https://render.com/docs/background-workers
+https://render.com/docs/disks
+https://render.com/docs/regions
+https://railway.com/pricing
+https://docs.railway.com/deployments/regions
+https://cloud.google.com/run/pricing
+https://docs.cloud.google.com/run/docs/overview/what-is-cloud-run
+https://docs.cloud.google.com/run/docs/deploy-worker-pools
+https://www.mongodb.com/docs/database-tools/mongodump/
+https://www.mongodb.com/docs/manual/tutorial/backup-and-restore-tools/
+
+تحديث قبل نقطة الحفظ: بعد fetch جديد تقدم الإنتاج إلى cec4c3854031c357577f07568f91a44c082905fc (PR #1752). حُدث فرع التطوير fast-forward دون force أو تعديل فرع الإنتاج؛ أُعيد الجرد على هذا الأساس. المرجع 20c47eff في الأقسام السابقة هو خط أساس التقرير الأصلي. فوّض المستخدم لاحقًا تنفيذ الفصل والاختبارات وDraft PR دون نشر.

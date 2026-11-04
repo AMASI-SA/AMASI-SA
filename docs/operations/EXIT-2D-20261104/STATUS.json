@@ -1,0 +1,70 @@
+{
+  "task_id": "EXIT-2D-20261104",
+  "status": "OFFLINE_INVENTORY_VERIFIED_RUNTIME_NOT_IMPLEMENTED",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/exit-2d-resume-20261104",
+  "base_source_sha": "cec4c3854031c357577f07568f91a44c082905fc",
+  "historical_sha": "6f0884e98b8fddef4a884b1321a9a216b9d30498",
+  "checkpoint_commit_sha": null,
+  "remote_checkpoint": "AUTHORIZED_READY_FOR_PUSH",
+  "production_changed": false,
+  "application_files_changed": false,
+  "qoyod_behavior_changed": false,
+  "production_connections": 0,
+  "paid_resources_created": 0,
+  "ci_runs_started": 0,
+  "pr_created": false,
+  "merged": false,
+  "release_lease_created": false,
+  "deployed": false,
+  "inventory": {
+    "hooks": 18,
+    "launch_candidates": 137,
+    "classified_scope_entries": 28,
+    "parse_errors": 0,
+    "live_reachability_verified": false
+  },
+  "verification": [
+    {
+      "command": "python -B -m unittest discover -s packaging/exit2d -p test_inventory.py",
+      "exit_code": 0,
+      "passed": 8
+    },
+    {
+      "command": "python -B packaging/exit2d/inventory.py --plan docs/operations/EXIT-2D-20261104/role-plan.json",
+      "exit_code": 0,
+      "meaning": "Static bounded inventory coverage only; runtime_verified=false"
+    }
+  ],
+  "remaining": [
+    "Verify remote checkpoint and record final SHA in Issue #1006",
+    "Current security/bootstrap and index-only migration adaptation",
+    "Actual role-specific runtime and legacy ownership bridge",
+    "Reports worker extraction preserving calculations",
+    "Linux isolated lifecycle and real supervisor acceptance",
+    "Authorized backup/files/decryption restore rehearsal",
+    "Capacity measurements and hosting approval",
+    "Separate release and production cutover approval"
+  ],
+  "next_safe_action": "Review current security installers and prepare default-preserving lifecycle separation on the development branch only",
+  "durable_local_checkpoint_directory": "C:/Users/amasi/.codex/checkpoints/EXIT-2D-20261104",
+  "checkpoint_commit_sha_resolution": "Exact final checkpoint SHA is recorded in Issue #1006 and the verified remote branch head; this file cannot embed its own containing commit hash",
+  "authorization": {
+    "commit_task_changes": true,
+    "push_task_branch": true,
+    "comment_issue_1006": true,
+    "merge": false,
+    "deploy": false,
+    "production_mutations": false,
+    "development_and_tests": true,
+    "draft_pr": true
+  },
+  "workflow_preflight": {
+    "checkpoint_workflow_files": 156,
+    "push_workflows_reviewed": 40,
+    "matching_push_branch_filters": 0,
+    "issue_comment_create_workflow_run_triggers_found": 0,
+    "default_branch_workflows_also_inspected": true,
+    "manual_workflow_dispatch": false
+  }
+}
