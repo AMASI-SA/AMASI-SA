@@ -1,0 +1,40 @@
+{
+  "base": "939d4a8f7cfce9ca0c93a99cc9d2595490f66b34",
+  "candidate_module_sha256": "b66254cd578a69e0b1d8ded6dbae0c36dea40092b057a8c38981a69f571ca5f5",
+  "python": "3.12.14",
+  "order": "ABBA x 5",
+  "runs": [
+    {
+      "orders": 2048,
+      "output_sha256": "a1fe71604b424c89a4bd92dbc8d5802e4f9c1b8b04fa0c4ffae05abb2a8321a3",
+      "arms": {
+        "A": {
+          "trials": 10,
+          "median_elapsed_ms": 14.447,
+          "median_largest_ready_callback_gap_ms": 14.478
+        },
+        "B": {
+          "trials": 10,
+          "median_elapsed_ms": 14.223,
+          "median_largest_ready_callback_gap_ms": 5.184
+        }
+      }
+    },
+    {
+      "orders": 8192,
+      "output_sha256": "20183b8b00de6195a99a795d97f3d90636920b4a6ea94cf4d546ccdd6a064f41",
+      "arms": {
+        "A": {
+          "trials": 10,
+          "median_elapsed_ms": 56.028,
+          "median_largest_ready_callback_gap_ms": 56.077
+        },
+        "B": {
+          "trials": 10,
+          "median_elapsed_ms": 57.144,
+          "median_largest_ready_callback_gap_ms": 5.285
+        }
+      }
+    }
+  ]
+}

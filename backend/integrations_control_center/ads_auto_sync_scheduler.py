@@ -15,12 +15,13 @@ import socket
 import uuid
 from contextlib import suppress
 from datetime import date, datetime, timedelta, timezone
+from time import monotonic
 from typing import Any, Callable
 
 import httpx
 from fastapi import APIRouter, Depends
 from pymongo import ReturnDocument
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import ConnectionFailure, DuplicateKeyError
 from resource_governor import ResourcePressure, StageMetric, governor
 
 from .meta_native_reporting import (
@@ -1265,6 +1266,7 @@ async def _refresh_snapchat(
     start_date: date,
     end_date: date,
     now: datetime,
+    on_progress: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     if not snapchat_oauth_configured() or not snapchat_native_sync_enabled():
         return {"provider": SNAPCHAT_PROVIDER_ID, "status": "skipped", "reason": "disabled"}
@@ -1535,6 +1537,8 @@ async def _refresh_snapchat(
                         "ad_account_id": account_id,
                         "provider_calls": int(account_context.provider_calls),
                     })
+                if on_progress is not None:
+                    on_progress()
         financial_batch_complete = (
             financial_errors_count == 0
             and len(items) == len(accounts)
@@ -1959,6 +1963,7 @@ async def run_auto_sync_cycle(
     db: Any,
     *,
     now: Callable[[], datetime] = _utcnow,
+    on_progress: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     started = now().astimezone(timezone.utc)
     start_date, end_date = riyadh_date_range(started, rolling_days())
@@ -2032,9 +2037,10 @@ async def run_auto_sync_cycle(
                 db, user_id=user_id, start_date=start_date,
                 end_date=end_date, now=started,
             )
+        progress_options = {"on_progress": on_progress} if on_progress is not None else {}
         return await _refresh_snapchat(
             db, user_id=user_id, start_date=provider_start_date,
-            end_date=end_date, now=started,
+            end_date=end_date, now=started, **progress_options,
         )
 
     # Fixed worker count and bounded queue: no coroutine is allocated per target.
@@ -2054,6 +2060,8 @@ async def run_auto_sync_cycle(
                     raw[index] = await execute(user_id, provider)
                 except Exception as exc:  # retain target/result alignment
                     raw[index] = exc
+                if on_progress is not None:
+                    on_progress()
             finally:
                 queue.task_done()
 
@@ -2061,13 +2069,17 @@ async def run_auto_sync_cycle(
         asyncio.create_task(worker(), name=f"ads-auto-sync-worker-{index}")
         for index in range(configured_concurrency)
     ]
-    for index, (user_id, provider) in enumerate(targets):
-        await queue.put((index, user_id, provider))
-    for _ in workers:
-        await queue.put(None)
-    await queue.join()
-    for task in workers:
-        await task
+    try:
+        for index, (user_id, provider) in enumerate(targets):
+            await queue.put((index, user_id, provider))
+        for _ in workers:
+            await queue.put(None)
+        await asyncio.gather(*workers)
+    finally:
+        for task in workers:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*workers, return_exceptions=True)
     results: list[dict[str, Any]] = []
     for (user_id, provider), item in zip(targets, raw):
         if isinstance(item, Exception):
@@ -2110,53 +2122,112 @@ async def run_auto_sync_cycle(
     }
 
 
-async def _acquire_lease(
-    db: Any,
-    *,
-    worker_id: str,
-    now: datetime,
-) -> bool:
-    collection = _collection(db, SCHEDULER_COLLECTION)
+def _lease_expiry() -> dict[str, Any]:
+    return {"$add": ["$$NOW", int(LEASE_TTL.total_seconds() * 1000)]}
+
+
+async def _acquire_lease(db: Any, *, worker_id: str) -> bool:
+    """Claim with a fresh acquisition token using Mongo time, including first insert."""
+    interval = interval_seconds()
+    due = {"$and": [
+        # Aggregation comparisons otherwise sort malformed BSON types before dates.
+        {"$in": [{"$type": "$lease_expires_at"}, ["missing", "null", "date"]]},
+        {"$in": [{"$type": "$next_due_at"}, ["missing", "date"]]},
+        {"$lte": [{"$ifNull": ["$lease_expires_at", "$$NOW"]}, "$$NOW"]},
+        {"$lte": [{"$ifNull": ["$next_due_at", "$$NOW"]}, "$$NOW"]},
+    ]}
+    claim = {
+        "status": "running",
+        "lease_owner": {"$literal": worker_id},
+        "lease_expires_at": _lease_expiry(),
+        "last_started_at": "$$NOW",
+        "next_due_at": {"$add": ["$$NOW", interval * 1000]},
+        "interval_seconds": interval,
+        "rolling_days": rolling_days(),
+        "enabled": True,
+        "updated_at": "$$NOW",
+        "created_at": {"$ifNull": ["$created_at", "$$NOW"]},
+    }
     try:
-        document = await collection.find_one_and_update(
-            {
-                "_id": SCHEDULER_ID,
-                "$and": [
-                    {
-                        "$or": [
-                            {"lease_expires_at": {"$lte": now}},
-                            {"lease_expires_at": None},
-                            {"lease_expires_at": {"$exists": False}},
-                        ]
-                    },
-                    {
-                        "$or": [
-                            {"next_due_at": {"$lte": now}},
-                            {"next_due_at": {"$exists": False}},
-                        ]
-                    },
-                ],
-            },
-            {
-                "$set": {
-                    "status": "running",
-                    "lease_owner": worker_id,
-                    "lease_expires_at": now + LEASE_TTL,
-                    "last_started_at": now,
-                    "next_due_at": now + timedelta(seconds=interval_seconds()),
-                    "interval_seconds": interval_seconds(),
-                    "rolling_days": rolling_days(),
-                    "enabled": True,
-                    "updated_at": now,
-                },
-                "$setOnInsert": {"created_at": now},
-            },
+        document = await _collection(db, SCHEDULER_COLLECTION).find_one_and_update(
+            {"_id": SCHEDULER_ID},
+            [{"$replaceWith": {"$cond": [due, {"$mergeObjects": ["$$ROOT", claim]}, "$$ROOT"]}}],
             upsert=True,
             return_document=ReturnDocument.AFTER,
+            projection={"lease_owner": 1},
         )
     except DuplicateKeyError:
         return False
     return bool(document and document.get("lease_owner") == worker_id)
+
+
+class _SchedulerLeaseUnconfirmed(RuntimeError):
+    pass
+
+
+class _SchedulerCycleStalled(RuntimeError):
+    pass
+
+
+def _live_lease(worker_id: str) -> dict[str, Any]:
+    return {
+        "_id": SCHEDULER_ID,
+        "lease_owner": worker_id,
+        "status": "running",
+        "lease_expires_at": {"$type": "date"},
+        # Reject a write that reached Mongo after expiry, even if queued earlier.
+        "$expr": {"$gt": ["$lease_expires_at", "$$NOW"]},
+    }
+
+
+async def _renew_lease(db: Any, worker_id: str, valid_until: float | None = None) -> float:
+    for attempt in range(2):
+        expires = monotonic() + LEASE_TTL.total_seconds()
+        try:
+            update = await asyncio.wait_for(
+                _collection(db, SCHEDULER_COLLECTION).update_one(
+                    _live_lease(worker_id),
+                    [{"$set": {"lease_expires_at": _lease_expiry(), "updated_at": "$$NOW"}}],
+                ),
+                timeout=HEARTBEAT_SECONDS,
+            )
+            break
+        except (ConnectionFailure, TimeoutError) as exc:
+            # Retry only the lease CAS, with time for its full timeout plus margin.
+            if (attempt or valid_until is None
+                    or monotonic() + 2 * HEARTBEAT_SECONDS >= valid_until):
+                raise _SchedulerLeaseUnconfirmed("ads scheduler lease renewal unconfirmed") from exc
+            logger.warning("Transient ads scheduler heartbeat error (%s); retrying lease renewal", type(exc).__name__)
+        except Exception as exc:
+            raise _SchedulerLeaseUnconfirmed("ads scheduler lease renewal failed") from exc
+    if update.matched_count != 1:
+        raise _SchedulerLeaseUnconfirmed("ads scheduler lease expired or ownership changed")
+    return expires
+
+
+async def _run_leased_cycle(db: Any, worker_id: str) -> dict[str, Any]:
+    valid_until = await _renew_lease(db, worker_id)
+    last_progress = monotonic()
+
+    def progressed() -> None:
+        nonlocal last_progress
+        last_progress = monotonic()
+
+    cycle = asyncio.create_task(run_auto_sync_cycle(db, on_progress=progressed), name="ads-auto-sync-cycle")
+    try:
+        while True:
+            done, _ = await asyncio.wait((cycle,), timeout=HEARTBEAT_SECONDS)
+            if done:
+                return cycle.result()
+            if monotonic() - last_progress >= ACTIVE_JOB_TTL.total_seconds():
+                raise _SchedulerCycleStalled(
+                    "no advertising target or Snapchat account completed before the stale-job limit"
+                )
+            valid_until = await _renew_lease(db, worker_id, valid_until)
+    finally:
+        if not cycle.done():
+            cycle.cancel()
+        await asyncio.gather(cycle, return_exceptions=True)
 
 
 async def _release_lease(
@@ -2166,12 +2237,7 @@ async def _release_lease(
     result: dict[str, Any] | None = None,
     error: Exception | None = None,
 ) -> None:
-    now = _utcnow()
-    patch: dict[str, Any] = {
-        "lease_expires_at": now,
-        "last_finished_at": now,
-        "updated_at": now,
-    }
+    patch: dict[str, Any] = {}
     if error is None:
         patch.update(
             {
@@ -2191,10 +2257,12 @@ async def _release_lease(
                 },
             }
         )
-    await _collection(db, SCHEDULER_COLLECTION).update_one(
-        {"_id": SCHEDULER_ID, "lease_owner": worker_id},
-        {"$set": patch},
+    update = await _collection(db, SCHEDULER_COLLECTION).update_one(
+        _live_lease(worker_id),
+        {"$set": patch, "$currentDate": {"lease_expires_at": True, "last_finished_at": True, "updated_at": True}},
     )
+    if update.matched_count != 1:
+        raise _SchedulerLeaseUnconfirmed("ads scheduler lease expired or lost before final status")
 
 
 async def auto_sync_loop(db: Any) -> None:
@@ -2210,21 +2278,22 @@ async def auto_sync_loop(db: Any) -> None:
     )
     while True:
         try:
-            acquired = await _acquire_lease(
-                db, worker_id=worker_id, now=_utcnow()
-            )
+            lease_owner = f"{worker_id}:{uuid.uuid4().hex}"
+            acquired = await _acquire_lease(db, worker_id=lease_owner)
             if acquired:
                 try:
-                    result = await run_auto_sync_cycle(db)
-                    await _release_lease(
-                        db, worker_id=worker_id, result=result
-                    )
-                except asyncio.CancelledError:
+                    result = await _run_leased_cycle(db, lease_owner)
+                except (_SchedulerLeaseUnconfirmed, _SchedulerCycleStalled):
+                    # Let the lease expire naturally after cancelling and joining the cycle.
                     raise
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("Mezan V2 ads auto-sync cycle failed")
                     await _release_lease(
-                        db, worker_id=worker_id, error=exc
+                        db, worker_id=lease_owner, error=exc
+                    )
+                else:
+                    await _release_lease(
+                        db, worker_id=lease_owner, result=result
                     )
         except asyncio.CancelledError:
             raise

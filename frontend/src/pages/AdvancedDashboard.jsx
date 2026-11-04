@@ -22,6 +22,7 @@ import { resolveOrderCampaign } from "../lib/orderCampaignAttribution";
 import OrderCurrencyAmount from "../components/OrderCurrencyAmount";
 import { mergeDashboardWithPlatformSpend, needsCanonicalDashboardSpendRefresh } from "../lib/dashboardPlatformSpendMerge";
 import { dashboardRequestRangeKey } from "../lib/dashboardLatestResponseBroker";
+import { createDashboardFetchAdmission } from "../lib/dashboardFetchAdmission";
 import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
 import { buildMezanProductCostHref, buildMissingMezanCostHref } from "../lib/mezanV2CostLinks";
 import {
@@ -780,13 +781,16 @@ export default function AdvancedDashboard() {
     const { orders, hasMore: hasMoreOrders, loading: ordersLoading, loadMore: loadMoreOrders } = useOrders();
     const dashboardDataRef = useRef(null);
     const requestSequenceRef = useRef(0);
-    const backgroundRefreshInFlightRef = useRef(false);
+    const dashboardRefreshGateRef = useRef(null);
+    if (dashboardRefreshGateRef.current === null) {
+        dashboardRefreshGateRef.current = createDashboardFetchAdmission();
+    }
     const lastOrderSignatureRef = useRef("");
     const orderSignature = useMemo(() => dashboardOrdersSignature(orders), [orders]);
     const loadPeriod = useCallback(async (next, { background = false } = {}) => {
-        if (background && backgroundRefreshInFlightRef.current) return;
+        const gate = dashboardRefreshGateRef.current;
+        if (!gate.start(background)) return;
         const requestSequence = ++requestSequenceRef.current;
-        if (background) backgroundRefreshInFlightRef.current = true;
         try {
             await loadDashboardPeriodSnapshot({
                 next,
@@ -799,7 +803,7 @@ export default function AdvancedDashboard() {
                 platformSpendLoader: getDashboardAdsSpend,
             });
         } finally {
-            if (background) backgroundRefreshInFlightRef.current = false;
+            gate.finish(background);
         }
     }, []);
   const refreshDashboard = useCallback(() => {

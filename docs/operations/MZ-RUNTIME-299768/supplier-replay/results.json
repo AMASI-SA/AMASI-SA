@@ -1,0 +1,37 @@
+{
+  "source_sha": "188b1c5b0515d081ad4ebef3f6b7a44998a9fe0e",
+  "database": "private loopback MongoDB 8.0.12",
+  "distinct_web_processes": true,
+  "A_exit_signal": "SIGKILL",
+  "A_withheld_http": 201,
+  "A_client_error": "RemoteProtocolError",
+  "B_replay_http": 201,
+  "identical_body_bytes": true,
+  "same_dispatch_id": true,
+  "dispatches": 1,
+  "dispatch_events": 1,
+  "piece_events": 1,
+  "B_continuous_order_and_workspace_pairs": 5,
+  "phases": {
+    "before_submit": {
+      "order_http": 200,
+      "workspace_http": 200,
+      "visible_dispatches": 0
+    },
+    "A_withholding_201": {
+      "order_http": 200,
+      "workspace_http": 200,
+      "visible_dispatches": 1
+    },
+    "A_terminated_before_retry": {
+      "order_http": 200,
+      "workspace_http": 200,
+      "visible_dispatches": 1
+    },
+    "after_B_replay": {
+      "order_http": 200,
+      "workspace_http": 200,
+      "visible_dispatches": 1
+    }
+  }
+}
