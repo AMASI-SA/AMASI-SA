@@ -1,0 +1,15 @@
+{
+  "task_id": "EXIT-2D-RENDER-20261105",
+  "branch": "codex/exit-2d-render-integration-20261105",
+  "tested_reference": "3d03ff3b2985ddd0a826d2f18acdeea13cc0d66f",
+  "prior_delivery": "c19bb28b8cb705132794d13e0e4df52d074873e2",
+  "production_integrated": "f1dfb844393bf86b8a82d1a1fb6eeeadff8f694f",
+  "integration_merge": "440c25ded463ae2a5be86d92e1772ade2142e72e",
+  "state": "WIP_HOSTING_IMPLEMENTATION",
+  "verification": {"post_merge_unit_tests_passed": 19, "linux": "pending"},
+  "production_changed": false,
+  "production_connections": 0,
+  "paid_resources_created": 0,
+  "remaining": ["Render packaging", "current source Linux compatibility", "independent service crash/restart", "operational path performance", "cutover proof", "restore rehearsal plan", "resource approval proposal"],
+  "next_action": "Finish isolated staging images and Blueprint; preserve V5 Production guard unchanged"
+}

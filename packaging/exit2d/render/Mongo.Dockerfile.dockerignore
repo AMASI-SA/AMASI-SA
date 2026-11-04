@@ -1,0 +1,5 @@
+**
+!packaging
+!packaging/exit2d
+!packaging/exit2d/render
+!packaging/exit2d/render/mongo-start.sh

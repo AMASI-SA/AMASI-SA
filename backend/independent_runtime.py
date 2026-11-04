@@ -64,6 +64,9 @@ def validate_before_import(role: str) -> None:
         ) and not (simulator and k == "SALLA_TOKEN_ENC_KEY")]
         if forbidden:
             raise RuntimeError("provider credentials forbidden in synthetic runtime")
+    elif os.environ.get("APP_ENV") == "staging":
+        from independent_staging import validate
+        validate()
     elif os.environ.get("APP_ENV", "production") != "production":
         raise RuntimeError("unsupported independent environment")
     if role == "worker" and os.environ.get("APP_ENV") != "test":
@@ -78,6 +81,9 @@ def load_server(role: str):
 
 
 def release_key(server) -> str:
+    if os.environ.get("APP_ENV") == "staging":
+        from independent_staging import validate
+        return validate()
     from startup_guard import verified_release_key
     return verified_release_key(server.release_health_payload())
 
