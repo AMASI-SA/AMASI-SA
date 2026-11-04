@@ -11,7 +11,7 @@ Executable topology
   Browser -> Render TLS -> Web nginx:10000 -> original API:8000.
   nginx serves the actual Vite output; /build-meta.json has JSON/no-store,
   /api/ preserves existing URLs and authenticated request semantics.
-  Web report boundary -> reports pserv:8000 using Render internal hostport.
+  Web report boundary -> reports pserv:8000 using Render's injected private host.
   Sync worker and accounting worker are separate background services.
   Mongo is an authenticated single-member replica set pserv with a 10GB disk.
   All five services are in the same dedicated workspace/Frankfurt region.
@@ -118,3 +118,19 @@ Acceptance limits
   validation and .onrender.com acceptance happen only after resource approval.
   A full Production V5 source A / intent-only B handoff for the final reviewed
   code and canonical frontend origin remains a later, separately approved step.
+  The generic Frontend build/release-readiness PR check currently rejects the
+  retained Production intent because the candidate adds backend modules and
+  integrates later intent history. This is an explicit unsatisfied Production
+  artifact gate, not a staging Vite build failure; do not bypass or weaken it.
+  Staging image CI builds and boots the actual frontend separately. No all-checks
+  green/merge-ready assertion is made while this release-readiness gate is red.
+
+Operational bug found by real Mongo load
+  Repeated supplier "ready" actions collided at(user_id,null) under the existing
+  compound sparse unique event-request index: Mongo indexes the document whenever
+  user_id exists even if client_request_id is missing. New ready events receive
+  stable supplier-ready:<dispatch-id> request identity. The load checks ten distinct
+  dispatches and sequential replays, requiring one ready event per dispatch.
+  No invoice, financial policy, provider write or Production repair is included.
+  No historical events are rewritten or backfilled. Concurrent ready-action audit
+  repair beyond the existing handler's behavior remains outside this small fix.
