@@ -191,8 +191,10 @@ def test_contradictory_order_cannot_approve_non_cash_money(patch):
     run_mock(check)
 
 
-@pytest.mark.parametrize('case', ['native_ledger', 'unscoped_read', 'foreign_read', 'extra_write', 'native_control_write', 'wrong_state_revision'])
+@pytest.mark.parametrize('case', ['native_ledger', 'unscoped_read', 'foreign_read', 'extra_write', 'native_control_write',
+                                  'wrong_state_revision', 'page_scan', 'page_owner', 'page_operator', 'page_write'])
 def test_capability_denial_is_latched_before_calling_database(case):
+    from operational_balance_store import AUDIT_PAGES
     from operational_driver_review_store import ReviewDatabase
     async def check(db):
         scoped = ReviewDatabase(db, object(), 'owner')
@@ -200,6 +202,10 @@ def test_capability_denial_is_latched_before_calling_database(case):
             if case == 'native_ledger': scoped.general_ledger
             elif case == 'unscoped_read': scoped.store_delivery_collections.find({})
             elif case == 'foreign_read': scoped.store_delivery_collections.find({'user_id': 'other'})
+            elif case == 'page_scan': scoped[AUDIT_PAGES].find({'owner_id': 'owner', '_id': 'page'})
+            elif case == 'page_owner': await scoped[AUDIT_PAGES].find_one({'owner_id': 'other', '_id': 'page'})
+            elif case == 'page_operator': await scoped[AUDIT_PAGES].find_one({'owner_id': 'owner', '_id': {'$ne': None}})
+            elif case == 'page_write': await scoped[AUDIT_PAGES].insert_one({'owner_id': 'owner', '_id': 'page'})
             elif case == 'extra_write': await scoped.store_delivery_collections.update_one({'_id': 'x','user_id':'owner'}, {'$set':{'amount':'999','financial_source':'operational'}})
             elif case == 'native_control_write': await scoped.mz2_atomic_owners.update_one({'_id':'owner'}, {'$set':{'ledger_backend_state':'v2_active'}})
             else: await scoped[STATES].replace_one({'_id':'owner','revision':1},{'_id':'owner','owner_id':'owner','revision':7})

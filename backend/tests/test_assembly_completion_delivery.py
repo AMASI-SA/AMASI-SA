@@ -93,7 +93,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
             raise TimeoutError("synthetic response loss")
         with patch.object(delivery.shipping, "_resolve_order", resolve), \
              patch.object(delivery.shipping, "call_salla", post), \
-             patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(return_value={"ready": True, "label_url": "https://example.test/current.pdf"})):
+             patch.object(delivery.labels.compat, "carrier_label", AsyncMock(return_value={"ready": True, "label_url": "https://example.test/current.pdf"})):
             first = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
             self.assertFalse(first["ready"])
             self.assertEqual(first["error_code"], "TimeoutError")
@@ -136,7 +136,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=("internal", {
                 "id": "internal", "reference_id": "local-assembly", "status": {"slug": "in_progress"}}))), \
              patch.object(delivery.shipping, "call_salla", AsyncMock(return_value={"success": True})) as post, \
-             patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock()) as label:
+             patch.object(delivery.labels.compat, "carrier_label", AsyncMock()) as label:
             result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
         post.assert_awaited_once()
         label.assert_not_awaited()
@@ -155,7 +155,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=("internal", {
                 "id": "internal", "reference_id": "local-assembly", "status": {"slug": "completed"}}))), \
                  patch.object(delivery.shipping, "call_salla", AsyncMock(side_effect=AssertionError("POST repeated"))), \
-                 patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(return_value={"ready": True})):
+                 patch.object(delivery.labels.compat, "carrier_label", AsyncMock(return_value={"ready": True})):
                 self.assertEqual(await delivery.run_once(restarted[self.db.name]), 1)
             self.assertEqual((await self.workflow())[delivery.FIELD]["state"], "confirmed")
             await self.db[delivery.WORKFLOWS].update_one({"user_id": "owner"}, {"$set": {
@@ -183,6 +183,33 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["order_completion_status"], "pending")
             self.assertFalse(result["ready"])
 
+    async def test_completed_store_worker_publishes_current_qr_without_legacy_or_carrier_label_io(self):
+        number = "local-assembly"
+        key = {"user_id": "owner", "order_number": number}
+        await self.db.unified_orders.update_one(key, {"$set": {
+            "shipping_company": "مندوب الرياض",
+            "raw_by_source.salla_direct.shipping": {"company_name": "مندوب الرياض"},
+            "raw_by_source.salla_direct.payment_actions.remaining_action.remaining_amount": {"amount": 100, "currency": "SAR"},
+        }})
+        await self.finish()
+        proof = AsyncMock(return_value=(number, {"id": number, "reference_id": number,
+                                                  "status": {"slug": "completed"}}))
+        with patch.object(delivery.shipping, "_resolve_order", proof), \
+             patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(side_effect=AssertionError("legacy reader"))), \
+             patch.object(delivery.labels.compat, "carrier_label", AsyncMock(side_effect=AssertionError("external label"))), \
+             patch.object(delivery.shipping, "call_salla", AsyncMock(side_effect=AssertionError("status replay"))):
+            result = await delivery.resume(self.db, user_id="owner", order_number=number)
+        proof.assert_awaited_once()
+        self.assertTrue(result["ready"], result.get("error_code"))
+        self.assertEqual(result["label_type"], "store_courier")
+        self.assertEqual(result["print_data"]["order_number"], number)
+        self.assertTrue(result["print_data"]["qr_code"])
+        saved = await self.workflow()
+        self.assertEqual(saved[delivery.FIELD]["state"], "confirmed")
+        self.assertEqual(saved["carrier_label_print_data"], result["print_data"])
+        self.assertFalse(saved[delivery.FIELD]["status_attempted"])
+        self.assertFalse(saved[delivery.FIELD]["awb_attempted"])
+
     async def test_provider_draft_waits_for_current_label_without_awb_post(self):
         await self.finish()
         label_ready = False
@@ -194,11 +221,11 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
             posts.append(args[3])
             label_ready = True
             raise TimeoutError("synthetic AWB response lost")
-        async def refresh(*args):
+        async def refresh(*args, **kwargs):
             return {"ready": label_ready, "shipment_id": "current"}
         with patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=("internal", {
             "id": "internal", "reference_id": "local-assembly", "status": {"slug": "completed"}}))), \
-             patch.object(delivery.shipping, "refresh_shipping_label", refresh), \
+             patch.object(delivery.labels.compat, "carrier_label", refresh), \
              patch.object(delivery.shipping, "_print_shipment_rows", AsyncMock(return_value=[{
                  "id": "current", "status": "draft", "type": "shipment"}])), \
              patch.object(delivery.shipping, "_create_payload", return_value={"order_id": "internal"}), \
@@ -234,7 +261,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=("internal", {
             "id": "internal", "reference_id": "local-assembly", "status": {"slug": "completed"}}))), \
              patch.object(delivery.shipping, "call_salla", AsyncMock(side_effect=AssertionError("POST repeated"))), \
-             patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(return_value={"ready": True})):
+             patch.object(delivery.labels.compat, "carrier_label", AsyncMock(return_value={"ready": True})):
             # The old shipping service entry point shares the durable lease.
             result = await delivery.shipping.issue_shipping_label(self.db, "owner", "local-assembly")
             self.assertTrue(result["ready"])
@@ -256,7 +283,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
             return "internal", {"id": "internal", "reference_id": "local-assembly", "status": {"slug": "completed"}}
         with patch.object(delivery.shipping, "_resolve_order", resolve), \
              patch.object(delivery.shipping, "call_salla", AsyncMock()) as post, \
-             patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(return_value={"ready": True})):
+             patch.object(delivery.labels.compat, "carrier_label", AsyncMock(return_value={"ready": True})):
             task = asyncio.create_task(delivery.resume(self.db, user_id="owner", order_number="local-assembly"))
             await asyncio.wait_for(entered.wait(), 10)
             task.cancel()
@@ -290,12 +317,12 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
             posts.append(args[3])
             state = "completed"
             await metadata_change()
-        async def refresh(*args):
+        async def refresh(*args, **kwargs):
             await metadata_change()
             return {"ready": True, "label_url": "https://example.test/current.pdf"}
         with patch.object(delivery.shipping, "_resolve_order", resolve), \
              patch.object(delivery.shipping, "call_salla", post), \
-             patch.object(delivery.shipping, "refresh_shipping_label", refresh):
+             patch.object(delivery.labels.compat, "carrier_label", refresh):
             for _ in range(2):
                 result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
                 self.assertTrue(result["ready"], result)
@@ -305,13 +332,13 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_material_workflow_change_during_label_read_cannot_publish_stale_confirmation(self):
         await self.finish()
-        async def refresh(*args):
+        async def refresh(*args, **kwargs):
             await self.db[delivery.WORKFLOWS].update_one({"user_id": "owner"}, {
                 "$set": {"items.0.quantity": 99}})
             return {"ready": True, "label_url": "https://example.test/stale.pdf"}
         with patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=("internal", {
                 "id": "internal", "reference_id": "local-assembly", "status": {"slug": "completed"}}))), \
-             patch.object(delivery.shipping, "refresh_shipping_label", refresh), \
+             patch.object(delivery.labels.compat, "carrier_label", refresh), \
              patch.object(delivery.shipping, "call_salla", AsyncMock()) as post:
             result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
         self.assertFalse(result["ready"])

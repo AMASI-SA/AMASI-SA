@@ -18,6 +18,7 @@ from pymongo import ReturnDocument
 from operational_atomic import operational_owner
 from assembly_status_policy import canonical_status, source_status, status_values, component_refresh_pending
 from order_engine import shipping_label_service as shipping
+import fulfillment_carrier_label as labels
 
 WORKFLOWS = "order_review_workflows"
 FIELD = "assembly_delivery"
@@ -253,19 +254,17 @@ async def _deliver(db, operation):
     await guard_effect(db, operation, patch={
         f"{FIELD}.order_confirmed": True, "salla_order_status": "completed",
         "salla_order_status_verified_at": now().isoformat()})
-    # Refresh verifies status and the current active shipment before any AWB IO.
-    result = await shipping.refresh_shipping_label(db, owner, number)
-    # Salla creates the shipment on completed. Only read its current label;
-    # never create a separate AWB, including when a draft has no tracking yet.
-    from fulfillment_carrier_label import _workflow_patch
-    patch = _workflow_patch({**result, "order_status_completed": True}, now=now().isoformat())
-    patch.update({f"{FIELD}.state": "confirmed" if result.get("ready") else (
-                      "requires_attention" if operation[FIELD]["attempts"] >= MAX_ATTEMPTS else "pending"),
-                  f"{FIELD}.error_code": None if result.get("ready") else "completion_label_pending", f"{FIELD}.lease_until": "",
-                  f"{FIELD}.claim": None,
-                  f"{FIELD}.due_at": (now() + timedelta(seconds=30)).isoformat()})
-    await guard_effect(db, operation, patch=patch)
-    return result
+    async def publish(scoped, result):
+        # For a Mezan courier this CAS shares the transaction that produced its QR.
+        patch = labels._workflow_patch({**result, "order_status_completed": True}, now=now().isoformat())
+        patch.update({f"{FIELD}.state": "confirmed" if result.get("ready") else (
+                          "requires_attention" if operation[FIELD]["attempts"] >= MAX_ATTEMPTS else "pending"),
+                      f"{FIELD}.error_code": None if result.get("ready") else "completion_label_pending",
+                      f"{FIELD}.lease_until": "", f"{FIELD}.claim": None,
+                      f"{FIELD}.due_at": (now() + timedelta(seconds=30)).isoformat()})
+        await guard_effect(scoped, operation, patch=patch)
+
+    return await labels.read_current_carrier_label(db, owner, number, publish=publish)
 
 
 async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manual=False, authorize_first_issue=None):

@@ -468,6 +468,26 @@ describe("ready acknowledges local save independently of shipping and reads", ()
             expect(resumeAssemblyCompletion).not.toHaveBeenCalled();
         } finally { jest.useRealTimers(); }
     });
+    test("explicit v1 pending reads only v1 refresh until the current carrier label is ready", async () => {
+        jest.useFakeTimers();
+        try {
+            markAssemblyPieceReady.mockResolvedValue({ ok: true, piece: { ...piece, assembly_ready: true },
+                progress: { order_number: "42", order_completed: true, ready_count: 1, total_count: 1 },
+                order_completion_status: "pending", label_status: "pending" });
+            const pending = { order_number: "42", contract_version: 1, assembly_completion_confirmed: true,
+                order_status_completed: false, ready: false, print_state: "pending" };
+            issueCompletedOrderCarrierLabel.mockResolvedValueOnce(pending);
+            refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ ...pending, ready: true, order_status_completed: true,
+                print_state: "ready", label_url: "https://carrier.test/current.pdf" });
+            await act(async () => container.querySelector('[data-testid="mark-assembly-piece-ready"]').click());
+            await act(async () => container.querySelector('[data-testid="assembly-issue-carrier-label"]').click());
+            await act(async () => jest.advanceTimersByTime(5000));
+            expect(issueCompletedOrderCarrierLabel).toHaveBeenCalledTimes(1);
+            expect(refreshCompletedOrderCarrierLabel).toHaveBeenCalledTimes(1);
+            expect(getAssemblyCompletion).not.toHaveBeenCalled();
+            expect(container.querySelector('[data-testid="assembly-download-official-carrier-label"]')).not.toBeNull();
+        } finally { jest.useRealTimers(); }
+    });
     test("lost response reads saved state without replaying POST", async () => {
         markAssemblyPieceReady.mockRejectedValue(new Error("timeout"));
         searchAssemblyOrder.mockResolvedValue({ order_number: "42", pieces: [{ ...piece, can_mark_ready: false, assembly_ready: true }] });

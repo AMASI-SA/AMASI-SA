@@ -843,7 +843,7 @@ class MobileShippingV1Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json()["detail"]["code"], "shipping_snapshot_changed")
         self.assertNotIn("carrier_label_url", await self.workflows.find_one(self.key))
 
-    async def test_slow_web_refresh_cannot_overwrite_newer_mobile_refresh(self):
+    async def test_slow_v1_refresh_cannot_overwrite_newer_v1_refresh(self):
         import asyncio
 
         started, resume = asyncio.Event(), asyncio.Event()
@@ -856,7 +856,7 @@ class MobileShippingV1Tests(unittest.IsolatedAsyncioTestCase):
             return self.pdf
 
         with patch.object(compat, "carrier_label", side_effect=provider):
-            slow = asyncio.create_task(self.client.post(self.path.replace("/v1", "/amasi") + "/refresh"))
+            slow = asyncio.create_task(self.client.post(self.path + "/refresh"))
             try:
                 await asyncio.wait_for(started.wait(), 2)
                 fast = await self.client.post(self.path + "/refresh")

@@ -341,6 +341,33 @@ test("full completed orders page loads a canonical order and renders its card", 
     }
 });
 
+test.each([false, true])("one issue waits for the v1 completion read (unmount=%s)", async unmount => {
+    jest.useFakeTimers();
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    const order = { order_number: "PENDING-ORDER", items: [], assembly_completion_confirmed: true };
+    listCompletedFulfillmentOrders.mockResolvedValueOnce({ items: [order], permissions });
+    issueCompletedOrderCarrierLabel.mockResolvedValueOnce({ order_number: order.order_number, contract_version: 1,
+        ready: false, print_state: "pending", order_status_completed: false });
+    refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ order_number: order.order_number, contract_version: 1,
+        ready: true, print_state: "ready", order_status_completed: true, label_url: "https://carrier.test/current.pdf" });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    try {
+        await act(async () => root.render(<CompletedFulfillmentOrders />));
+        await act(async () => container.querySelector('[data-testid="issue-official-carrier-label"]').click());
+        expect(issueCompletedOrderCarrierLabel).toHaveBeenCalledTimes(1);
+        if (unmount) act(() => root.unmount());
+        await act(async () => jest.advanceTimersByTime(2000));
+        expect(refreshCompletedOrderCarrierLabel).toHaveBeenCalledTimes(unmount ? 0 : 1);
+        if (!unmount) expect(container.querySelector('[data-testid="download-official-carrier-label"]')).not.toBeNull();
+        expect(issueCompletedOrderCarrierLabel).toHaveBeenCalledTimes(1);
+    } finally {
+        if (!unmount) act(() => root.unmount());
+        jest.useRealTimers();
+        delete global.IS_REACT_ACT_ENVIRONMENT;
+    }
+});
+
 test("without canonical projection saved stale error remains visible", () => {
     const order = { carrier_label_error_code: "shipping_snapshot_changed", carrier_label_error_message: "SAVED-STALE" };
     expect(savedCarrierSnapshot(order).error_message).toBe("SAVED-STALE");

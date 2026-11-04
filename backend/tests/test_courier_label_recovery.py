@@ -3,6 +3,7 @@ from mongomock_motor import AsyncMongoMockClient
 
 import assembly_status_policy
 import fulfillment_carrier_label as labels
+from order_engine import amasi_shipping_compat as compat
 import operational_atomic
 from order_engine import shipping_label_service as shipping
 
@@ -26,7 +27,7 @@ async def test_recovery_requires_current_completed_store_courier(monkeypatch, la
     async def status(*args, **kwargs): return "completed"
     async def owner(db, user_id, fn): return await fn(db)
     monkeypatch.setattr(shipping, "_assert_current_print_status", get_fence)
-    monkeypatch.setattr(shipping, "refresh_shipping_label", refresh)
+    monkeypatch.setattr(compat, "local_mezan_courier_label", refresh)
     monkeypatch.setattr(shipping, "_label_baseline", get_baseline)
     monkeypatch.setattr(assembly_status_policy, "source_status", status)
     monkeypatch.setattr(operational_atomic, "operational_owner", owner)
@@ -45,7 +46,7 @@ async def test_recovery_refuses_changed_shipping_snapshot(monkeypatch):
     async def status(*args, **kwargs): return "completed"
     async def owner(db, user_id, fn): return await fn(db)
     monkeypatch.setattr(shipping, "_assert_current_print_status", get_fence)
-    monkeypatch.setattr(shipping, "refresh_shipping_label", refresh)
+    monkeypatch.setattr(compat, "local_mezan_courier_label", refresh)
     monkeypatch.setattr(shipping, "_label_baseline", get_baseline)
     monkeypatch.setattr(assembly_status_policy, "source_status", status)
     monkeypatch.setattr(operational_atomic, "operational_owner", owner)

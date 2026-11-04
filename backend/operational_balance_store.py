@@ -10,9 +10,10 @@ from datetime import datetime, timezone
 from hashlib import sha256
 import json
 
-from bson import BSON
 from fastapi import HTTPException
 from pymongo.errors import DuplicateKeyError
+
+from operational_balance_archive import AUDIT_PAGES, ArchiveError, CapacityError, prepare, stage_pages, unpack
 
 STATES = "operational_balance_states_v1"
 RECEIPTS = "operational_balance_receipts_v1"
@@ -48,8 +49,19 @@ def initial(owner):
             "audit": [], "engine": {}, "snapshot": None}
 
 
-async def read(db, owner):
+async def _raw_state(db, owner):
     return await db[STATES].find_one({"_id": owner, "owner_id": owner}) or initial(owner)
+
+
+async def logical_state(db, owner, stored):
+    try:
+        return await unpack(db, owner, stored)
+    except ArchiveError:
+        fail("operational_audit_archive_invalid", "تعذر التحقق من اكتمال سجل التدقيق التشغيلي", 503)
+
+
+async def read(db, owner):
+    return await logical_state(db, owner, await _raw_state(db, owner))
 
 
 async def mutate(db, owner, operation):
@@ -60,25 +72,31 @@ async def mutate(db, owner, operation):
     """
     for _ in range(12):
         await check_authorization()
-        before = await read(db, owner)
+        stored = await _raw_state(db, owner)
+        before = await logical_state(db, owner, stored)
         after = deepcopy(before)
         result = await operation(after)
         await check_authorization()
         if after == before:
             return result
         after["revision"] = before["revision"] + 1
-        if len(BSON.encode(after)) > MAX_STATE_BYTES:
+        try:
+            packed, pages = prepare(owner, stored, before, after, MAX_STATE_BYTES)
+            await stage_pages(db, pages)
+        except ArchiveError:
+            fail("operational_audit_archive_invalid", "تعذر التحقق من اكتمال سجل التدقيق التشغيلي", 503)
+        except CapacityError:
             fail("operational_capacity_requires_archive", "بلغ السجل حد السعة؛ يلزم أرشفة معتمدة دون حذف التاريخ")
         # Recheck after every source read and immediately before the CAS write.
         await check_authorization()
         if before["revision"] == 0:
             try:
-                await db[STATES].insert_one(after)
+                await db[STATES].insert_one(packed)
                 return result
             except DuplicateKeyError:
                 continue
         changed = await db[STATES].replace_one(
-            {"_id": owner, "owner_id": owner, "revision": before["revision"]}, after)
+            {"_id": owner, "owner_id": owner, "revision": before["revision"]}, packed)
         if changed.matched_count == 1:
             return result
     fail("operational_concurrent_change", "تغيرت البيانات بالتزامن؛ أعد المحاولة")
