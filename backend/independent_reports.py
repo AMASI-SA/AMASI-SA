@@ -12,6 +12,7 @@ import re
 from urllib.parse import urlsplit
 
 import httpx
+from starlette.middleware import Middleware
 from starlette.responses import JSONResponse
 
 
@@ -119,4 +120,6 @@ def install_report_boundary(app, role):
             self.client = app.state.report_worker_client
             return await super().__call__(scope, receive, send)
 
-    app.add_middleware(Boundary, role=role, worker_url=url)
+    # Keep original CORS/browser/readiness middleware outside this boundary,
+    # including for a locally generated 503 when the reports worker is down.
+    app.user_middleware.append(Middleware(Boundary, role=role, worker_url=url))

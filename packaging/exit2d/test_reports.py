@@ -3,12 +3,13 @@ import asyncio
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 import httpx
 
 sys.path.insert(0, str(Path("/opt/mezan/backend") if Path("/opt/mezan/backend").is_dir()
     else Path(__file__).resolve().parents[2] / "backend"))
-from independent_reports import ReportBoundary, is_report_request, validate_worker_url
+from independent_reports import ReportBoundary, is_report_request, validate_worker_url, install_report_boundary
 
 
 async def endpoint(scope, receive, send):
@@ -104,6 +105,19 @@ class ReportTests(unittest.IsolatedAsyncioTestCase):
             # All four request slots remain available after the failed stream.
             for _ in range(4):
                 await asyncio.wait_for(app.slots.acquire(), 0.1)
+
+    async def test_original_cors_wraps_worker_unavailable_response(self):
+        from starlette.applications import Starlette
+        from starlette.middleware.cors import CORSMiddleware
+        app = Starlette()
+        app.add_middleware(CORSMiddleware, allow_origins=["https://frontend.example.test"],
+            allow_credentials=True)
+        with patch.dict("os.environ", {"APP_ENV": "test", "MEZAN_REPORT_WORKER_URL": ""}):
+            install_report_boundary(app, "web")
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://web") as client:
+            response = await client.get("/api/dashboard", headers={"Origin": "https://frontend.example.test"})
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.headers["access-control-allow-origin"], "https://frontend.example.test")
 
 
 if __name__ == "__main__":

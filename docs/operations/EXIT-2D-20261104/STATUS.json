@@ -1,18 +1,18 @@
 {
   "task_id": "EXIT-2D-20261104",
-  "status": "WIP_RUNTIME_SEPARATION_IMPLEMENTED_PENDING_LINUX",
+  "status": "REAL_LINUX_ACCEPTANCE_PASSED_PRIOR_SOURCE_FINAL_REPORT_CORS_RECHECK_PENDING",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/exit-2d-resume-20261104",
   "base_source_sha": "cec4c3854031c357577f07568f91a44c082905fc",
   "historical_sha": "6f0884e98b8fddef4a884b1321a9a216b9d30498",
   "checkpoint_commit_sha": "19fdb529f906db64b729704fc43071a49c4170e8",
-  "remote_checkpoint": "19fdb529 and 54a99910 verified on remote; current follow-up pending push",
+  "remote_checkpoint": "Normal branch checkpoints verified through 414cffa2d5419e20ab175b5629e5e0531760df1a; current source push pending",
   "production_changed": false,
   "application_files_changed": true,
   "qoyod_behavior_changed": false,
   "production_connections": 0,
   "paid_resources_created": 0,
-  "ci_runs_started": 3,
+  "ci_runs_started": 5,
   "pr_created": false,
   "merged": false,
   "release_lease_created": false,
@@ -49,7 +49,7 @@
     }
   ],
   "remaining": [
-    "Run and diagnose Linux acceptance on current source",
+    "Verify current-source Linux after preserving outer CORS/readiness around report proxy; create Draft PR",
     "Current security/bootstrap and index-only migration adaptation",
     "Actual role-specific runtime and legacy ownership bridge",
     "Reports worker extraction preserving calculations",
@@ -86,7 +86,7 @@
     "Independent report HTTP role and streaming Web boundary with explicit per-request cookies",
     "Synthetic replica-set Docker acceptance and process isolation benchmark prepared"
   ],
-  "runtime_acceptance": "NOT_YET_EXECUTED_ON_LINUX",
+  "runtime_acceptance": "Passed at a7ce77d812446fb1243a3ae93ecf6f839c53f7e3; latest CORS placement source will be verified separately",
   "ci_state": "Run 4 pending after existing preparation wrapper compatibility repair; real API synthetic-load benchmark added",
   "ci_runs": [
     {
@@ -115,6 +115,36 @@
       "cause": "Real preparation route exposed pre-existing wrapper permissions keyword mismatch; September two-line forwarding fix reused without policy changes",
       "migration_retry_idempotence": "passed",
       "web_lifecycle_profile_zero_writes": "passed"
+    },
+    {
+      "id": 41903198518,
+      "source_sha": "a7ce77d812446fb1243a3ae93ecf6f839c53f7e3",
+      "result": "success",
+      "focused_pytest_passed": 365,
+      "subtests_passed": 11,
+      "new_unittest_passed": 17,
+      "synthetic_process_isolation_p95_ms": {
+        "same_process": 608.191,
+        "independent_reports": 16.995
+      },
+      "real_api_synthetic_load": {
+        "orders": 5000,
+        "concurrent_reports": 4,
+        "employee_auth_requests": 20,
+        "employee_auth_p95_ms": 140.589,
+        "report_max_ms": 2694.675,
+        "all_statuses_200": true
+      },
+      "actual_role_ownership_and_shutdown": [
+        "worker-sync",
+        "worker-accounting"
+      ],
+      "migration_and_web_lifecycle_profile": "passed"
+    },
+    {
+      "id": 41904070279,
+      "source_sha": "414cffa2d5419e20ab175b5629e5e0531760df1a",
+      "result": "in_progress_at_checkpoint"
     }
   ],
   "local_performance": {
@@ -127,5 +157,11 @@
     "passed": 47,
     "failed": 0,
     "scope": "Historical September source unchanged, cryptography supplied in isolated venv"
-  }
+  },
+  "actual_registered_worker_families": 6,
+  "unverified_registration_families": [
+    "supplier_scan_attempts.install_reconciler",
+    "product_google_taxonomy_ai_pilot.make_product_google_taxonomy_ai_pilot_router"
+  ],
+  "local_final_new_unit_tests_passed": 19
 }
