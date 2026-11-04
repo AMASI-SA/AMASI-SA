@@ -25,10 +25,10 @@ def proof_hash(order, payment):
                    order.get("updated_at"), payment])
 
 
-def _context(state, row):
+def _context(state, row, *, obligation_key=None):
     """Check only attributable provider money. A pooled or opening payout always blocks."""
     owner, oid, number, party, ccy = (row[k] for k in ("owner_id", "order_id", "order_number", "provider", "currency"))
-    key = "provider:" + oid
+    key = obligation_key or "provider:" + oid
     scope = (party, ccy)
     engine = state.get("engine", {})
     issues = []
@@ -48,7 +48,8 @@ def _context(state, row):
         if any(r.get("order_id") == oid or r.get("order_number") == number
                for group in ("customer_returns","customer_exchanges") for r in state.get(group, [])):
             issues.append("return")
-        if ("cod_collection:" + oid in engine.get("facts", {}) or
+        cod = engine.get("facts", {}).get("cod_collection:" + oid)
+        if ((cod is not None and (_amount(cod["amount"], ccy) > 0 or cod.get("evidence"))) or
                 _amount(engine.get("obligations", {}).get("cod:" + oid, {}).get("confirmed", 0), ccy) > 0):
             issues.append("claim")
         for movement in state.get("movements", []):
@@ -98,11 +99,13 @@ def make_review_row(order, payment):
     page = payment.get("order_page_balance") or {}
     fields = ("owner_id", "order_id", "order_number", "provider", "currency", "gross", "paid", "remaining")
     if (page.get("source") != "canonical_salla_order_page" or not all(page.get(k) for k in fields)
+            or (page["provider"], page["currency"]) != (payment.get("provider"), payment.get("currency"))
+            or _amount(page["gross"], page["currency"]) != _amount(payment["gross"], page["currency"])
             or order.get("bank_credit") or payment.get("refunds") or payment.get("cancellations")
             or _amount(payment.get("cancelled", 0), page["currency"]) != 0
             or (str(order["id"]), order["order_number"]) != (page["order_id"], page["order_number"])):
         return None
-    return {**{k: page[k] for k in fields}, "created_at": order["created_at"], "proof_hash": proof_hash(order, payment)}
+    return {**{k: page[k] for k in fields}, "created_at": order["created_at"]}
 
 
 def preview_row(state, row, code):
@@ -121,7 +124,41 @@ def approved_context(state, order, payment):
     if not saved or saved.get("owner_id") != state.get("owner_id") or saved.get("confirmed_by") != state.get("owner_id"):
         return False
     row = make_review_row(order, payment)
-    if not row or saved.get("proof_hash") != row["proof_hash"] or not saved.get("evidence_id"):
+    if not row:
+        return False
+    row["proof_hash"] = proof_hash(order, payment)
+    page = payment["order_page_balance"]
+    if saved.get("proof_hash") != row["proof_hash"] and "transaction_reference" in page:
+        # Older review records predate preservation of the source's transaction
+        # reference. Every field reviewed then must still match the saved hash.
+        legacy_page = {k: v for k, v in page.items() if k != "transaction_reference"}
+        row["proof_hash"] = proof_hash(order, {**payment, "order_page_balance": legacy_page})
+    if saved.get("proof_hash") != row["proof_hash"] or not saved.get("evidence_id"):
         return False
     preview = preview_row(state, row, HISTORICAL)
     return not preview["blocks"] and saved.get("preview_hash") == preview["preview_hash"]
+
+
+def late_payment_blocks(state, order, payment, *, obligation_key=None):
+    """An older snapshot alone cannot hide post-start money. Check possible overlaps."""
+    if state.get(REVIEWS) and digest(str(order["id"])) in state[REVIEWS]:
+        # Revalidate any pending owner decision against its original evidence.
+        return not approved_context(state, order, payment)
+    if payment.get("order_page_balance") is not None:
+        row = make_review_row(order, payment)
+        if not row:
+            return True
+    else:
+        currency = payment["currency"]
+        captures = payment.get("captures", [])
+        if (not captures or order.get("bank_credit") or payment.get("refunds") or payment.get("cancellations")
+                or _amount(payment.get("cancelled", 0), currency)):
+            return True
+        paid = sum((_amount(c["amount"], currency) for c in captures), Decimal(0))
+        gross = _amount(payment["gross"], currency)
+        row = {"owner_id": state.get("owner_id"), "order_id": str(order["id"]),
+               "order_number": order.get("order_number"), "created_at": order["created_at"],
+               "provider": payment["provider"], "currency": currency, "gross": gross,
+               "paid": paid, "remaining": gross - paid}
+    blocks, _, _ = _context(state, row, obligation_key=obligation_key)
+    return bool(blocks)

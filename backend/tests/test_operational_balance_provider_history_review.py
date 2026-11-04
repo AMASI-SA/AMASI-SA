@@ -8,7 +8,7 @@ from fastapi import FastAPI, Header
 from operational_balance_engine import reconcile
 from operational_balance_routes import make_operational_balance_router
 from operational_balance_store import STATES, RECEIPTS, digest, initial, read
-from operational_provider_history import BLOCKS, HISTORICAL, REVIEWS, approved_context, preview_row
+from operational_provider_history import BLOCKS, HISTORICAL, REVIEWS, approved_context, preview_row, proof_hash
 from operational_provider_history_service import _candidates
 from test_operational_balance_integration import run
 from test_operational_balance_order_page_recognition import BORN, START, T1, T2, raw_document, normalize
@@ -26,11 +26,14 @@ def history(*, captures=False):
     p["order_page_balance"]["owner_id"] = "owner"
     s = {**initial("owner"),"status":"active","started_at":START,"revision":1,
          "openings":{"opening-id":{"id":"opening-id","party_id":"tamara","party_type":"provider","currency":"SAR","direction":"for_us","amount":"400.00"}},
-         "engine":{"as_of":"2026-10-05T12:00:00+00:00"}}
+         "engine":{"as_of":"2026-10-05T12:00:00+00:00","facts":{},"obligations":{}}}
     order = {"id":OID,"order_number":"123","currency":"SAR","created_at":BORN,"updated_at":T1,"payment":p}
-    frozen = reconcile(s,{"orders":[order]},T1)
-    assert _candidates(frozen)[OID][1] == HISTORICAL
-    return frozen,order
+    # Persisted pre-upgrade review snapshot, before the late-evidence rule changed.
+    s["engine"]["issues"] = [{"code": HISTORICAL, "source_id": KEY,
+        "history_proof_hash": proof_hash(order, {**p, "currency": "SAR", "refunds": []}), "history_created_at": BORN,
+        "order_page_balance_review": {k: p["order_page_balance"][k] for k in
+            ("order_id", "order_number", "provider", "currency", "gross", "paid", "remaining")}}]
+    return s,order
 
 
 def authorize(state):
@@ -42,12 +45,10 @@ def authorize(state):
 
 
 @pytest.mark.parametrize("captures",[False, True])
-def test_proved_new_post_start_claim_requires_owner_review_then_recognizes_once(captures):
+def test_unambiguous_post_start_payment_leaves_historical_review_and_is_booked_once(captures):
     state,order = history(captures=captures)
     before = deepcopy(state)
     assert KEY not in state["engine"]["obligations"]
-    assert KEY not in reconcile(state,{"orders":[order]},T2)["engine"]["obligations"]
-    authorize(state)
     result = reconcile(state,{"orders":[order]},T2)
     assert result["engine"]["obligations"][KEY]["confirmed"] == "100.00"
     assert result["engine"]["obligations"][KEY]["fee_estimate_complete"] is False
@@ -55,10 +56,12 @@ def test_proved_new_post_start_claim_requires_owner_review_then_recognizes_once(
     assert reconcile(result,{"orders":[order]},T2) == result
 
 
-@pytest.mark.parametrize("kind",["pooled","opening","target","credit","unknown","partial","refund","bank","cod","source","foreign","before_start"])
-def test_approval_never_overrides_changed_source_return_or_pooled_and_opening_payout(kind):
+@pytest.mark.parametrize("kind",["pooled","opening","target","credit","unknown","partial","refund","bank","cod","source","before_start"])
+@pytest.mark.parametrize("prior_review", [True, False])
+def test_late_payment_never_overrides_changed_source_return_or_pooled_and_opening_payout(kind, prior_review):
     state,order=history()
-    authorize(state)
+    if prior_review:
+        authorize(state)
     movement={"party_type":"provider","party_id":"tamara","currency":"SAR","kind":"settlement","direction":"incoming",
               "amount":"10.00","actual_fee_amount":"0","allocations":[]}
     if kind in {"pooled","opening","target","credit","unknown","partial"}:
@@ -77,14 +80,37 @@ def test_approval_never_overrides_changed_source_return_or_pooled_and_opening_pa
         state["engine"]["facts"]["cod_collection:"+OID]={"amount":"100.00","id":"f1","party_type":"courier","evidence_complete":True}
     elif kind=="source":
         order["updated_at"] = T2
-    elif kind=="foreign":
-        state[REVIEWS][digest(OID)]["confirmed_by"]="other"
     else:
         order["created_at"]=START
     assert not approved_context(state,order,order["payment"])
     result=reconcile(state,{"orders":[order]},T2)
     assert result["engine"]["obligations"].get(KEY,{}).get("confirmed","0.00") == "0.00"
     assert result["movements"] == state["movements"] and result["openings"] == state["openings"]
+
+
+def test_pending_legacy_approval_survives_enrichment_with_a_nonconflicting_reference():
+    state, order = history()
+    authorize(state)
+    order["payment"]["order_page_balance"]["transaction_reference"] = "newly-preserved-reference"
+    result = reconcile(state, {"orders": [order]}, T2)
+    assert result["engine"]["obligations"][KEY]["confirmed"] == "100.00"
+    assert result["engine"]["facts"]["provider_order_balance:" + OID]["transaction_reference"] == "newly-preserved-reference"
+
+
+def test_foreign_pending_approval_cannot_release_late_payment():
+    state, order = history()
+    authorize(state)
+    state[REVIEWS][digest(OID)]["confirmed_by"] = "other"
+    result = reconcile(state, {"orders": [order]}, T2)
+    assert KEY not in result["engine"]["obligations"]
+    assert _candidates(result)[OID][1] == HISTORICAL
+
+
+def test_prepaid_delivery_zero_custody_marker_is_not_a_cash_collection():
+    state, order = history()
+    state["engine"]["facts"]["cod_collection:" + OID] = {"amount": "0.00", "evidence": {}}
+    result = reconcile(state, {"orders": [order]}, T2)
+    assert result["engine"]["obligations"][KEY]["confirmed"] == "100.00"
 
 
 def test_http_review_requires_owner_scoped_evidence_and_only_writes_idempotent_metadata():

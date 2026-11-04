@@ -1023,6 +1023,10 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             normalized_payment, payment_issues = normalize_operational_payment(
                 raw, order['currency'], total, created, now, owner=owner, order_number=order_number,
                 provider_order_id=identity, rows=txn_by_order.get(order_number, ()), source=source)
+            if (not normalized_payment and "provider_split:" + identity in
+                    (operational_state or {}).get("engine", {}).get("facts", {})):
+                # Changing the order's payment method cannot turn a frozen split receipt into bank cash or COD.
+                payment_issues.append({"code": "provider_payment_method_conflict"})
             payment_identity_conflict = any(row['code'] in {
                 'provider_payment_method_conflict', 'provider_payment_shape_invalid',
                 'provider_split_payment_review_required'} for row in payment_issues)
