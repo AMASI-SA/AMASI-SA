@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: run.sh REPOSITORY FROZEN_REFERENCE MONGOD PYTHON OUT_JSON [orders] [block_sequence]
+# Usage: run.sh REPOSITORY FROZEN_REFERENCE MONGOD PYTHON OUT_JSON [orders] [block_sequence] [candidate] [base]
 set -euo pipefail
 repo=$(realpath "$1")
 ref=$(realpath "$2")
@@ -9,8 +9,8 @@ output=$(realpath -m "$5")
 size=${6:-512}
 blocks=${7:-ABBA}
 script=$(realpath "$(dirname "$0")/probe.py")
-base=a56dbacd36678566eec3b5a76406db7582c3e7f2
-candidate=d5531f3745e17dcb81dd50ba70239e5bc54ff5fe
+base=$(git -C "$repo" rev-parse --verify "${9:-a56dbacd36678566eec3b5a76406db7582c3e7f2}^{commit}")
+candidate=$(git -C "$repo" rev-parse --verify "${8:-d5531f3745e17dcb81dd50ba70239e5bc54ff5fe}^{commit}")
 test "$(git -C "$ref" rev-parse HEAD)" = 05b159dc4183f14adc7c370bfbd8014d8858e6b8
 test -z "$(git -C "$ref" status --porcelain -- backend/tests/test_dashboard_b_baseline_mongo.py)"
 tempdir=$(mktemp -d)

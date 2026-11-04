@@ -26,3 +26,15 @@ Use a Python interpreter with backend test dependencies and a local mongod execu
 ./run.sh "$repo" 188b1c5b0515d081ad4ebef3f6b7a44998a9fe0e "$mongod" "$python" primary-local.json
 ./run.sh "$repo" 188b1c5b0515d081ad4ebef3f6b7a44998a9fe0e "$mongod" "$python" supplementary-local.json extra_smoke.py
 ```
+
+## Historical product-sales GET
+
+The optional native ranking request reads the full date window. The server now requests just the catalog identifiers and image, the eight product-line fields used by the report, and the existing cost-item documents. MongoDB retains malformed array entries so a previously invalid order cannot silently yield a partial financial total. Keeping the original cost-item documents preserves the report's first-truthy SKU, product ID and name fallback. Large batches and long orders periodically yield to the request-local CPU budget.
+
+The local A/B compared the unchanged baseline handler with the candidate using the same private MongoDB 8.0.12 data and date filter. The fixture included 150 orders of 12 product entries and one stress order of 7,200 entries, three empty order shapes, overlapping keys, padded product metadata, an unrelated merchant and out-of-range data. The projected BSON size across the two reads fell from **9,407,377 to 1,440,534 bytes** (84.7%). This measures uncompressed projected documents. Four timed responses per arm were byte-identical and returned SAR 76,500 in sales and SAR 19,500 in profit on fully costed sales. A ready callback ran during the stress order in all four candidate reads and in none of the four baseline reads. The experiment does not establish deployed request time. [Recorded result](product-sales.json)
+
+Independent checks cover SKU, numeric product ID and name fallback, matched and incomplete costs, image precedence, SAR currency, foreign-tenant exclusion, and the existing error response for mixed scalar arrays. The native permission smoke on the candidate returned 403 with the reviewed-only grant and 200 with the extra products grant. The harness only exposes read queries to the report. To reproduce from the repository root with backend test dependencies installed, run the following command.
+
+```sh
+PYTHON_DOTENV_DISABLED=1 python docs/operations/MZ-RUNTIME-299768/mobile-screens/product_sales_ab.py --mongod "$mongod"
+```

@@ -1,0 +1,64 @@
+{
+  "baseline_revision": "939d4a8f7cfce9ca0c93a99cc9d2595490f66b34",
+  "mongo": "8.0.12",
+  "arms": {
+    "baseline": {
+      "source_sha256": "7192986202faf7b0e5ed1065b7ff86b0e3d0956d5802c5a08f2f84479d0dab74",
+      "projected_bson_bytes": 9407377,
+      "response_sha256": "9b5a55897e86659b95bb3431ae82600f2bc2bae05e6c8ebf0b076a5b76c3a1e3",
+      "large_document": [
+        {
+          "callback_ran": false,
+          "document_ms": 8.369
+        },
+        {
+          "callback_ran": false,
+          "document_ms": 9.751
+        },
+        {
+          "callback_ran": false,
+          "document_ms": 8.924
+        },
+        {
+          "callback_ran": false,
+          "document_ms": 8.392
+        }
+      ],
+      "http_duration_ms": [
+        42.872,
+        41.391,
+        39.335,
+        33.85
+      ]
+    },
+    "candidate": {
+      "source_sha256": "f29d12a859aa9e4f1c32fa045d3745098f1b259324ba13da3f9964f6dafdeaca",
+      "projected_bson_bytes": 1440534,
+      "response_sha256": "9b5a55897e86659b95bb3431ae82600f2bc2bae05e6c8ebf0b076a5b76c3a1e3",
+      "large_document": [
+        {
+          "callback_ran": true,
+          "document_ms": 9.059
+        },
+        {
+          "callback_ran": true,
+          "document_ms": 11.989
+        },
+        {
+          "callback_ran": true,
+          "document_ms": 9.598
+        },
+        {
+          "callback_ran": true,
+          "document_ms": 9.268
+        }
+      ],
+      "http_duration_ms": [
+        36.269,
+        41.323,
+        38.097,
+        38.177
+      ]
+    }
+  }
+}

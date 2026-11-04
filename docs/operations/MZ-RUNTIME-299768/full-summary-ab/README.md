@@ -35,3 +35,16 @@ A second uninstrumented run used the same driver, block order and counts with 2,
 The corresponding scheduled tick counts were 935 and 988. Across both cohort sizes these are 64 successful measured full responses. The heavier run's loop-delay p99 fell, while loop-delay p95 and response p95 rose. This is a shared-host synthetic sample and does not establish an end-to-end improvement.
 
 A separate diagnostic posted one ready event-loop callback immediately before each actual outer currency reducer and checked whether it ran before that same call returned. We observed both implementations with their normal 5 ms CPU budget, apart from this small wrapper at reducer entry and exit. At 512 orders, the callback ran inside 0 of 6 base passes and 0 of 6 candidate passes. At 2,048 orders, it ran inside 0 of 6 base passes and 6 of 6 candidate passes. Timing tables above use exclusively uninstrumented runs. The diagnostic covers same-range aliasing and separate selected/current-month inputs. To reproduce the diagnostic, copy both scripts to a clean directory, apply `diagnostic/ready-callback.patch` there with `patch -p1`, and call `run.sh` with `512 AB` or `2048 AB`. The recorded diagnostic outputs are in `diagnostic/observed512.json` and `diagnostic/observed2048.json`.
+
+## FX hydration scheduling
+
+The legacy dashboard and the V2 dashboard order reader both rebuild historical currency fields from narrow Mongo projections. The isolated diagnostic compares the original synchronous pass at `939d4a8f7cfce9ca0c93a99cc9d2595490f66b34` with the cooperative pass on the same synthetic orders. Half of each cohort uses native SAR and half uses verified QAR. Ten alternating trials per version produced identical serialized order data at both sizes.
+
+| Orders | Median largest ready-callback gap, base / candidate | Median phase duration, base / candidate |
+| ---: | ---: | ---: |
+| 2,048 | 14.48 / 5.18 ms | 14.45 / 14.22 ms |
+| 8,192 | 56.08 / 5.29 ms | 56.03 / 57.14 ms |
+
+One continuously ready asyncio callback records scheduling opportunities during hydration. At 8,192 orders other tasks could run sooner, while the full hydration phase took about 1.1 ms longer. HTTP response time, scheduled-tick latency, database work and the employee incident are outside this in-memory measurement.
+
+Run from the repository root with `PYTHONPATH=backend python docs/operations/MZ-RUNTIME-299768/full-summary-ab/diagnostic/currency_hydration.py`. Fixture sizes, raw precision and complete output hashes are in [currency_hydration.json](diagnostic/currency_hydration.json).

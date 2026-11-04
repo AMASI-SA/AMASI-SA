@@ -8,7 +8,7 @@ evidence is unknown; it is never relabelled as SAR.
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 
 ACCOUNTING_CURRENCY = "SAR"
@@ -309,11 +309,33 @@ def hydrate_order_currency_fields(
     This compatibility path fixes historical rows immediately after deploy and
     deliberately does not persist or expose the raw Salla payload.
     """
-    raw_by_order = {
-        str(row.get("order_number") or "").strip(): _salla_raw(row)
-        for row in projected_rows
-        if str(row.get("order_number") or "").strip()
-    }
+    for _ in _hydrate_currency_steps(orders, projected_rows):
+        pass
+    return orders
+
+
+async def hydrate_order_currency_fields_cooperative(
+    orders: list[dict[str, Any]], projected_rows: Iterable[dict[str, Any]], *, checkpoint,
+) -> list[dict[str, Any]]:
+    """Use the same hydration steps with a request-local CPU budget."""
+    # Sample the CPU clock after small groups of complete rows.
+    for count, _ in enumerate(_hydrate_currency_steps(orders, projected_rows), 1):
+        if count % 32 == 0:
+            await checkpoint()
+    await checkpoint()
+    return orders
+
+
+def _hydrate_currency_steps(
+    orders: list[dict[str, Any]], projected_rows: Iterable[dict[str, Any]],
+) -> Iterator[None]:
+    raw_by_order = {}
+    for row in projected_rows:
+        number = str(row.get("order_number") or "").strip()
+        if number:
+            raw_by_order[number] = _salla_raw(row)
+        yield
+
     for order in orders:
         order_number = str(order.get("order_number") or "").strip()
         raw = raw_by_order.get(order_number) or _salla_raw(order)
@@ -357,7 +379,7 @@ def hydrate_order_currency_fields(
         if not order.get("currency"):
             order["currency"] = fields["original_currency"]
         order.pop("raw_by_source", None)
-    return orders
+        yield
 
 
 def summarize_orders_sar(orders: Iterable[dict[str, Any]]) -> dict[str, Any]:

@@ -104,9 +104,11 @@ from courier_cod_fee_rules import (
     validate_courier_cod_fee_tiers,
 )
 from order_status_policy import attach_order_status_policy_routes
+from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
 from order_currency import (
     SALLA_RAW_CURRENCY_PROJECTION,
     hydrate_order_currency_fields,
+    hydrate_order_currency_fields_cooperative,
     order_total_sar,
     summarize_orders_sar,
 )
@@ -2121,7 +2123,9 @@ async def dashboard(
             orders_q,
             raw_projection,
         ).to_list(100000)
-        hydrate_order_currency_fields(all_orders, projected_rows)
+        await hydrate_order_currency_fields_cooperative(
+            all_orders, projected_rows, checkpoint=CPUWorkBudget(PARSER_BUDGET_MS).checkpoint,
+        )
         attach_projected_salla_attribution(all_orders, projected_rows)
 
     # Iteration 31: data_source self-heal. Past orders whose data_source

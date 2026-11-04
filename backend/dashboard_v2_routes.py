@@ -43,6 +43,7 @@ from order_cost_authority import (
 from order_currency import (
     SALLA_RAW_CURRENCY_PROJECTION,
     hydrate_order_currency_fields,
+    hydrate_order_currency_fields_cooperative,
     order_amount_to_sar,
     order_total_sar,
     summarize_orders_sar_cooperative,
@@ -475,7 +476,9 @@ async def _filtered_orders(
             db.unified_orders.find(query, raw_projection),
             100000,
         )
-        hydrate_order_currency_fields(orders, projected_rows)
+        await hydrate_order_currency_fields_cooperative(
+            orders, projected_rows, checkpoint=CPUWorkBudget(PARSER_BUDGET_MS).checkpoint,
+        )
         if include_marketing_attribution:
             attach_projected_salla_attribution(orders, projected_rows)
     pm_list = [part.strip() for part in (payment_methods or "").split(",") if part.strip()]

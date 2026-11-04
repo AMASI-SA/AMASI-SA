@@ -337,7 +337,7 @@ async def test_executive_sales_yields_for_each_distinct_order_range(
     import asyncio
     from datetime import date
     import dashboard_v2_routes as dashboard
-    from order_currency import summarize_orders_sar_cooperative
+    from order_currency import hydrate_order_currency_fields_cooperative, summarize_orders_sar_cooperative
 
     db = AsyncMongoMockClient().executive_sales
     await db.unified_orders.insert_many([
@@ -348,6 +348,11 @@ async def test_executive_sales_yields_for_each_distinct_order_range(
     # Exhaust the CPU budget at every checkpoint without timing assertions.
     monkeypatch.setattr(dashboard, "PARSER_BUDGET_MS", 0, raising=False)
     sizes = []
+    hydrated_sizes = []
+
+    async def observe_hydration(orders, projected_rows, *, checkpoint):
+        hydrated_sizes.append(len(orders))
+        return await hydrate_order_currency_fields_cooperative(orders, projected_rows, checkpoint=checkpoint)
 
     async def observe_summary(orders, *, checkpoint):
         sizes.append(len(orders))
@@ -358,6 +363,7 @@ async def test_executive_sales_yields_for_each_distinct_order_range(
         return result
 
     monkeypatch.setattr(dashboard, "summarize_orders_sar_cooperative", observe_summary, raising=False)
+    monkeypatch.setattr(dashboard, "hydrate_order_currency_fields_cooperative", observe_hydration)
 
     async def user():
         return {"id": OWNER, "role": "owner"}
@@ -374,3 +380,4 @@ async def test_executive_sales_yields_for_each_distinct_order_range(
     assert payload["month_kpis"]["total_sales"] == 37.5
     assert payload["totals"]["total_sales"] == expected_total
     assert sizes == expected_sizes
+    assert sorted(hydrated_sizes) == sorted(expected_sizes)

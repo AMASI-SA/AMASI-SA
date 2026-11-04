@@ -2,7 +2,7 @@
 import asyncio
 import time
 
-from observability_metrics import metrics
+from observability_metrics import EMPLOYEE_ROUTES, metrics
 
 
 def route_group(scope):
@@ -38,9 +38,18 @@ class DiagnosticsMiddleware:
                 return
             finished = True
             metrics.end_request(token)
-            metrics.observe("api.duration." + route_group(scope), time.monotonic() - started)
+            elapsed = time.monotonic() - started
+            metrics.observe("api.duration." + route_group(scope), elapsed)
             category = str(status) if status in (500, 502, 503, 504) else f"{status // 100}xx"
-            metrics.increment("api.status." + ("cancelled" if cancelled else category))
+            outcome = "cancelled" if cancelled else category
+            metrics.increment("api.status." + outcome)
+            template = getattr(scope.get("route"), "path", "")
+            route = EMPLOYEE_ROUTES.get((scope.get("method"), template.removeprefix("/api")))
+            if route:
+                metrics.observe("employee_route.duration." + route, elapsed)
+                if not cancelled and status in (401, 403):
+                    outcome = str(status)
+                metrics.increment(f"employee_route.status.{route}.{outcome}")
         async def measured_send(message):
             nonlocal status
             if message["type"] == "http.response.start":
