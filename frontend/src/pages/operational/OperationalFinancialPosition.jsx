@@ -49,9 +49,9 @@ function DataCell({ value, column }) {
 
 function ReportTable({ table, printing }) {
     const columns = table.columns || [];
-    return <article className={`ofp-table-card${["providers", "ads_currency_conversion", "customer_wallets"].includes(table.id) ? " ofp-table-wide" : ""}${table.kind === "forecast" ? " ofp-table-forecast" : ""}`} data-testid={`financial-table-${table.id}`}>
+    return <article className={`ofp-table-card${["providers", "ads_currency_conversion", "customer_wallets"].includes(table.id) ? " ofp-table-wide" : ""}${table.kind === "forecast" ? " ofp-table-forecast" : ""}${table.kind === "review" ? " ofp-no-print" : ""}`} data-testid={`financial-table-${table.id}`}>
         <div className="ofp-table-title"><h3>{table.title}</h3>{table.complete !== true && <span className="ofp-status">غير مكتمل</span>}</div>
-        <PaginatedReportTable rows={table.rows || []} label={table.title} pageSize={table.id === "provider_collections_expected" ? 10 : 13} showAll={printing}>{rows => <div className="ofp-table-scroll"><table>
+        <PaginatedReportTable rows={table.rows || []} label={table.title} pageSize={table.id === "provider_collections_expected" ? 10 : 13} showAll={printing && table.kind !== "review"}>{rows => <div className="ofp-table-scroll"><table>
             <thead><tr>{columns.map(column => <th scope="col" key={column.key}>{column.label}</th>)}</tr></thead>
             <tbody>{rows.map((row, index) => <tr key={row.id || index}>{columns.map(column =>
                 <td key={column.key} className={column.type === "text" ? "ofp-label-cell" : "ofp-value-cell"}><DataCell value={row[column.key]} column={column} /></td>)}</tr>)}
@@ -96,7 +96,7 @@ function DeliveryDetails({ delivery, filters, onFiltersChange, currency }) {
     const parties = deliveryParties(allRows);
     const payments = [...new Set(allRows.map(row => row.payment_method || "unavailable"))];
     const update = patch => onFiltersChange({ ...filters, ...patch });
-    return <article className="ofp-deliveries" data-testid="financial-deliveries">
+    return <article className="ofp-deliveries ofp-no-print" data-testid="financial-deliveries">
         <div className="ofp-detail-heading"><div><h3>تفاصيل الشحن والتحصيل لكل طلب</h3><p>أجرة التنفيذ وحالة التحصيل ومكان المبلغ لكل طلب · {currency}</p></div>{delivery?.complete !== true && <span className="ofp-status">تفاصيل غير مكتملة</span>}</div>
         <div className="ofp-delivery-filters ofp-no-print" aria-label="فلاتر تفاصيل الطلبات">
             <label><span>رقم الطلب أو معرفه</span><div className="ofp-search"><MagnifyingGlass size={18} aria-hidden="true" /><input type="search" aria-label="البحث برقم الطلب" placeholder="ابحث برقم الطلب أو معرفه" value={filters.order} onChange={event => update({ order: event.target.value })} /></div></label>
@@ -105,7 +105,7 @@ function DeliveryDetails({ delivery, filters, onFiltersChange, currency }) {
             <button type="button" className="ofp-button" onClick={() => onFiltersChange(emptyFilters())}>مسح الفلاتر</button>
         </div>
         <p className="ofp-detail-scope">السجلات المعروضة: <bdi>{rows.length}</bdi> من <bdi>{allRows.length}</bdi>. فلاتر التفاصيل لا تغيّر إجماليات التقرير، ويشمل التصدير التفاصيل المعروضة.</p>
-        <div className="ofp-delivery-screen"><PaginatedReportTable rows={rows} label="تفاصيل الشحن والتحصيل لكل طلب" resetKey={JSON.stringify(filters)}>{pageRows => <div className="ofp-table-scroll"><table className="ofp-delivery-table"><thead><tr>
+        <PaginatedReportTable rows={rows} label="تفاصيل الشحن والتحصيل لكل طلب" resetKey={JSON.stringify(filters)}>{pageRows => <div className="ofp-table-scroll"><table className="ofp-delivery-table"><thead><tr>
             <th scope="col">الطلب والتسليم</th><th scope="col">جهة التنفيذ</th><th scope="col">الدفع وجهة التحصيل</th><th scope="col">حالة التحصيل</th>
             {DELIVERY_MONEY_COLUMNS.map(column => <th scope="col" key={column.key}>{column.label}</th>)}
         </tr></thead><tbody>{pageRows.map(row => <tr key={row.id} data-testid="financial-delivery-row">
@@ -114,12 +114,7 @@ function DeliveryDetails({ delivery, filters, onFiltersChange, currency }) {
             <td><strong>{paymentLabel(row.payment_method)}</strong><small>{destinationLabel(row.collection_destination)}</small>{row.destination_name && <small>{row.destination_name}</small>}</td>
             <td><CollectionStatus value={row.collection_status} /></td>
             {DELIVERY_MONEY_COLUMNS.map(column => <td key={column.key}><Money value={row[column.key]} role={column.role} /></td>)}
-        </tr>)}</tbody></table></div>}</PaginatedReportTable></div>
-        <div className="ofp-delivery-print">{rows.map(row => <section key={row.id} className="ofp-print-order">
-            <h4>{positionText(row.order_number) !== UNAVAILABLE ? "الطلب " : ""}{deliveryOrderLabel(row)} · {positionText(row.party_name)}</h4>
-            <p>{formatRiyadhDateTime(row.delivered_at)} · {paymentLabel(row.payment_method)} · {destinationLabel(row.collection_destination)} · {collectionLabel(row.collection_status)}{row.destination_name ? ` · ${row.destination_name}` : ""}</p>
-            <dl>{DELIVERY_MONEY_COLUMNS.map(column => <div key={column.key}><dt>{column.label}</dt><dd><Money value={row[column.key]} role={column.role} /></dd></div>)}</dl>
-        </section>)}</div>
+        </tr>)}</tbody></table></div>}</PaginatedReportTable>
         {!rows.length && <p className="ofp-empty-cell">{allRows.length ? "لا توجد تفاصيل تطابق الفلاتر المحددة." : delivery?.complete === true ? "لا توجد طلبات موثقة ضمن هذا القسم حتى آخر احتساب." : "لم تتوفر أدلة كافية لعرض تفاصيل الطلبات."}</p>}
         <Notes items={[DELIVERY_SCOPE_NOTE, ...(delivery?.notes || [])]} />
     </article>;
@@ -132,7 +127,8 @@ function ReportWarnings({ report, data }) {
     if (!messages.length && !incomplete) return null;
     return <aside className="ofp-warning" role="status"><WarningCircle size={21} aria-hidden="true" /><div>
         {incomplete && <strong>بعض أقسام التقرير غير مكتملة؛ المبلغ غير المتاح لا يُعرض كصفر.</strong>}
-        {messages.map(message => <p key={message}>{message}</p>)}
+        {!incomplete && <div className="ofp-print-only"><strong>توجد ملاحظات على بيانات التقرير تحتاج إلى مراجعة.</strong></div>}
+        <div className="ofp-no-print">{messages.map(message => <p key={message}>{message}</p>)}</div>
     </div></aside>;
 }
 

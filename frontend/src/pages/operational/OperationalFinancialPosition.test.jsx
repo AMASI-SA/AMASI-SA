@@ -158,11 +158,17 @@ test("report tables paginate independently with 13 rows and 10 unconfirmed platf
     expect(host.querySelector('[data-testid="financial-table-suppliers"] tbody tr').textContent).toContain("مورد 1");
 });
 
-test("print and Excel include off-page records while delivery filters reset the selected page", async () => {
+test("print includes every summary row and Excel retains off-page delivery details", async () => {
     const report = fixture();
-    const suppliers = report.currencies.SAR.tables[0];
+    const data = report.currencies.SAR;
+    const suppliers = data.tables[0];
     suppliers.rows = Array.from({ length: 27 }, (_, index) => ({ ...suppliers.rows[0], id: `supplier-${index}`, name: `مورد التصدير ${index + 1}` }));
-    const delivery = report.currencies.SAR.deliveries;
+    data.tables.push({ ...suppliers, id: "provider_collections_expected", title: "تحصيل المنصات غير المؤكد", section: "forecast" });
+    data.debt_rows = Array.from({ length: 14 }, (_, index) => ({ ...data.debt_rows[0], id: `debt-${index}`, name: `جهة ${index + 1}` }));
+    data.profit_rows = Array.from({ length: 14 }, (_, index) => ({ id: `profit-${index}`, label: `بند ربح ${index + 1}`, amount: "3.00" }));
+    data.current_rows = Array.from({ length: 14 }, (_, index) => ({ id: `current-${index}`, label: `بند حالي ${index + 1}`, amount: "4.00" }));
+    data.forecast_rows = Array.from({ length: 14 }, (_, index) => ({ id: `forecast-${index}`, label: `بند متوقع ${index + 1}`, amount: null }));
+    const delivery = data.deliveries;
     delivery.rows = Array.from({ length: 27 }, (_, index) => ({ ...delivery.rows[0], id: `delivery-${index}`, order_number: `900${String(index + 1).padStart(2, "0")}` }));
     operationalApi.financialPosition.mockResolvedValueOnce(report);
     await render();
@@ -171,12 +177,27 @@ test("print and Excel include off-page records while delivery filters reset the 
     expect(visibleOrders()).toHaveLength(13);
     expect(visibleOrders()[0]).toContain("90014");
     print.mockImplementation(() => {
-        expect(host.querySelectorAll('[data-testid="financial-table-suppliers"] tbody tr')).toHaveLength(27);
-        expect(host.querySelectorAll(".ofp-print-order")).toHaveLength(27);
+        const content = useReactToPrint.mock.calls.at(-1)[0].contentRef.current;
+        for (const id of ["suppliers", "provider_collections_expected"]) {
+            expect(content.querySelectorAll(`[data-testid="financial-table-${id}"] tbody tr`)).toHaveLength(27);
+            expect(content.querySelectorAll(`[data-testid="financial-table-${id}"] tfoot tr`)).toHaveLength(1);
+        }
+        expect(content.querySelectorAll('[data-testid="financial-debt-summary"] tbody tr')).toHaveLength(14);
+        expect(content.querySelectorAll('[data-testid="financial-debt-summary"] tfoot tr')).toHaveLength(1);
+        for (const className of ["ofp-profit", "ofp-current", "ofp-forecast-summary"]) {
+            expect(content.querySelectorAll(`.${className} tbody tr`)).toHaveLength(14);
+        }
+        expect(content.querySelectorAll(".ofp-print-order")).toHaveLength(0);
+        expect(content.querySelector('[data-testid="financial-deliveries"]').classList.contains("ofp-no-print")).toBe(true);
     });
     await click("طباعة التقرير");
     await act(async () => useReactToPrint.mock.calls.at(-1)[0].onAfterPrint());
     expect(host.querySelectorAll('[data-testid="financial-table-suppliers"] tbody tr')).toHaveLength(13);
+    expect(host.querySelectorAll('[data-testid="financial-table-provider_collections_expected"] tbody tr')).toHaveLength(10);
+    expect(host.querySelectorAll('[data-testid="financial-debt-summary"] tbody tr')).toHaveLength(13);
+    for (const className of ["ofp-profit", "ofp-current", "ofp-forecast-summary"]) {
+        expect(host.querySelectorAll(`.${className} tbody tr`)).toHaveLength(13);
+    }
     expect(host.querySelector('[data-testid="financial-table-suppliers"] tbody tr').textContent).toContain("مورد التصدير 14");
     await click("طباعة التقرير");
     await act(async () => useReactToPrint.mock.calls.at(-1)[0].onPrintError("print", new Error("print unavailable")));
@@ -189,6 +210,47 @@ test("print and Excel include off-page records while delivery filters reset the 
     expect(visibleOrders()).toHaveLength(1);
     expect(visibleOrders()[0]).toContain("90001");
     expect(field("الصفحة السابقة — تفاصيل الشحن والتحصيل لكل طلب").disabled).toBe(true);
+});
+
+test("print keeps financial summaries and metadata with compact warnings while hiding review details", async () => {
+    const report = fixture();
+    const data = report.currencies.SAR;
+    for (const id of ["driver_fee_review", "courier_fee_review"]) {
+        data.tables.push({ ...data.tables[1], id, kind: "review", complete: false,
+            rows: [{ id: `${id}-row`, name: "تفاصيل مصدر تخص طلبًا منفردًا", payable: null }] });
+    }
+    report.issues = Array.from({ length: 25 }, (_, index) => ({ message: `تشخيص تفصيلي للطلب ${index}` }));
+    operationalApi.financialPosition.mockResolvedValueOnce(report);
+    await render();
+    await click("طباعة التقرير");
+    const content = useReactToPrint.mock.calls.at(-1)[0].contentRef.current;
+    expect(content.querySelector('[data-testid="financial-deliveries"]').closest(".ofp-no-print")).not.toBeNull();
+    for (const id of ["driver_fee_review", "courier_fee_review"]) {
+        expect(content.querySelector(`[data-testid="financial-table-${id}"]`).closest(".ofp-no-print")).not.toBeNull();
+    }
+    for (const id of ["suppliers", "drivers", "products_unreceived"]) {
+        expect(content.querySelector(`[data-testid="financial-table-${id}"]`).closest(".ofp-no-print")).toBeNull();
+    }
+    expect(content.querySelector(".ofp-warning strong").textContent).toContain("بعض أقسام التقرير غير مكتملة");
+    const diagnostic = [...content.querySelectorAll(".ofp-warning p")].find(row => row.textContent.includes("تشخيص تفصيلي للطلب"));
+    expect(diagnostic.closest(".ofp-no-print")).not.toBeNull();
+    expect(content.querySelector(".ofp-scope-bar").textContent).toContain("العملة: SAR");
+    expect(content.querySelector(".ofp-scope-bar").textContent).toContain("آخر احتساب");
+    expect(content.querySelector(".ofp-scope-bar").textContent).toContain("منذ بدء التشغيل");
+    expect(content.querySelector(".ofp-report-footer").textContent).toContain("إعداد التقرير");
+    expect(content.querySelector(".ofp-profit").textContent).toContain(payrollNote);
+    expect(content.querySelector('[data-testid="financial-table-products_unreceived"]').textContent).toContain("غير متاح");
+    expect(content.querySelector('[data-testid="financial-table-products_unreceived"]').textContent).toContain("تكلفة المنتج لم تكتمل");
+});
+
+test("print retains a compact source warning when section completeness flags are true", async () => {
+    const report = fixture();
+    report.currencies.SAR.completeness = { actual: true, forecast: true, profit: true };
+    operationalApi.financialPosition.mockResolvedValueOnce(report);
+    await render();
+    await click("طباعة التقرير");
+    const warning = useReactToPrint.mock.calls.at(-1)[0].contentRef.current.querySelector(".ofp-warning");
+    expect(warning.querySelector(".ofp-print-only").textContent).toContain("توجد ملاحظات على بيانات التقرير تحتاج إلى مراجعة");
 });
 
 test("USD advertising conversion uses supplied SAR fees and net balances above the account balances", async () => {
@@ -378,7 +440,7 @@ test.each([
     expect(host.textContent).toContain("NEW-OWNER-REPORT");
 });
 
-test("unknown canonical order number remains distinct from its identifier in screen, print and search", async () => {
+test("unknown canonical order number remains distinct from its identifier in screen and search", async () => {
     const payload = fixture();
     payload.currencies.SAR.deliveries.rows[0].order_number = null;
     payload.currencies.SAR.deliveries.rows[0].order_id = "opaque-order-identifier";
@@ -386,14 +448,12 @@ test("unknown canonical order number remains distinct from its identifier in scr
     await render();
     const screenRow = host.querySelector('[data-testid="financial-delivery-row"]');
     expect(screenRow.cells[0].textContent).toContain("معرف الطلب: opaque-order-identifier");
-    expect(host.querySelector(".ofp-print-order h4").textContent).toContain("معرف الطلب: opaque-order-identifier");
-    expect(host.querySelector(".ofp-print-order h4").textContent).not.toContain("الطلب معرف الطلب");
     await change(field("البحث برقم الطلب"), "opaque-order");
     expect(visibleOrders()).toHaveLength(1);
 });
 
 
-test.each(["confirmed", "courier_collection_unverified"])("courier %s renders booked debt apart from receipt on screen, paper and Excel", async status => {
+test.each(["confirmed", "courier_collection_unverified"])("courier %s renders booked debt apart from receipt on screen and Excel", async status => {
     const response = fixture();
     const item = response.currencies.SAR.deliveries.rows.find(row => row.party_type === "courier");
     Object.assign(item, { collection_status: status, collection_amount: status === "confirmed" ? "987.65" : null,
@@ -401,13 +461,12 @@ test.each(["confirmed", "courier_collection_unverified"])("courier %s renders bo
     operationalApi.financialPosition.mockResolvedValue(response);
     await render();
     await change(field("البحث برقم الطلب"), "2001");
-    for (const area of [host.querySelector('[data-testid="financial-delivery-row"]'), host.querySelector(".ofp-print-order")]) {
-        expect(area.textContent).toContain("لم يُوثّق تحصيل الشركة من العميل");
-        expect(area.textContent).toContain("231.11");
-        expect(area.textContent).toContain("111.11");
-        expect(area.textContent).not.toContain("تحصيل مؤكد");
-        expect(area.textContent).not.toContain("987.65");
-    }
+    const area = host.querySelector('[data-testid="financial-delivery-row"]');
+    expect(area.textContent).toContain("لم يُوثّق تحصيل الشركة من العميل");
+    expect(area.textContent).toContain("231.11");
+    expect(area.textContent).toContain("111.11");
+    expect(area.textContent).not.toContain("تحصيل مؤكد");
+    expect(area.textContent).not.toContain("987.65");
     await click("تصدير Excel");
     const [workbook] = XLSX.writeFile.mock.calls[0];
     const sheet = JSON.stringify(workbook.getWorksheet("تفاصيل الطلبات").getSheetValues());

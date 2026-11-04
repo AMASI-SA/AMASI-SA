@@ -28,9 +28,20 @@ The extended Order Engine route fixture requires a database stub with `unified_o
 
 Independent arithmetic replay passed all supplied authentic BNPL events and the separately retrieved stored settlement rows. The source review identified unavailable current installment-plan evidence, incomplete provider pricing evidence and a rejected provider authentication probe. Operational adoption dates and these coverage gaps require explicit disclosure in the completion report. Private analysis records preserve the source provenance and arithmetic comparisons.
 
+## Release handoff
+
+PR #1753 merged as `f1dfb844393bf86b8a82d1a1fb6eeeadff8f694f`, preserving source A `01612f3040b50155017be9d2c91defb47c814e4b` and intent-only B `51d7c01a75998e6432323b8bd153cbe33fd8f0a5`. All twenty-five applicable workflows passed. Clean-clone deployment rehearsals passed with host Node 20 and 24 and on the Emergent server. Publication started on 5 November at 00:07 Riyadh time after the preceding release lease closed and the new prepare/prepublish checks passed.
+
+## Print summary follow-up
+
+The owner requested compact printed financial summaries after observing individual delivery cards across many pages. The follow-up is based on the merged release and targets the existing report print button. It removes the per-order print-card template, hides detailed review sections and verbose diagnostics in print, preserves concise completeness warnings, and allows summary tables to flow across pages with repeated column headers and a single final total.
+
+The complete summary rows are expanded before the print clone. Normal screen pagination and the selected page are restored after printing or a print error. Three focused regressions failed on the previous source. The completed patch passed thirty-seven tests across four suites and an independent no-cache repeat. Browser print-preview acceptance remains pending.
+
 ## Pending work
 
-- Complete remote CI, freeze the v5 A/B contract and use the authorized release workflow.
+- Verify the current publication identity and close its matching release lease.
 - Save supported merchant fee policies through the owner UI and verify live reconciliation and repeat-run stability.
+- Freeze, test and publish the print follow-up with a new v5 A/B contract, then verify the report print preview.
 
-Implementation and local verification are complete. Production release and owner fee configuration are pending. The next step is the source A and intent-only B handoff, remote CI, clean-clone rehearsal and authorized publication, followed by live acceptance and fee configuration.
+Issue #1006 reached its comment capacity. The release PRs and this status document preserve continuation. Private merchant evidence and fee configuration remain outside Git.
