@@ -119,6 +119,7 @@ export function onboardingErrorMessage(error) {
 }
 
 export const listOnboardingFeePolicies = () => api.get(`${BASE}/fee-policies`).then(body);
+export const listOnboardingFeeCandidates = () => api.get(`${BASE}/fee-policy-candidates`).then(body);
 export const createOnboardingFeePolicy = payload => api.post(`${BASE}/fee-policies`, payload).then(body);
 export const listOnboardingPrepaids = cutover => api.get(`${BASE}/prepaid-candidates`, { params: { cutover } }).then(body);
 export const selectOnboardingPrepaid = payload => api.post(`${BASE}/prepaid-selections`, payload).then(body);

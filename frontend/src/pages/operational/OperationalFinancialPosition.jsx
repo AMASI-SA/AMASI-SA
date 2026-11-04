@@ -12,6 +12,8 @@ import {
 } from "./financialPositionPresentation";
 import "./financialPosition.css";
 import NativePurchaseReview from "./NativePurchaseReview";
+import HistoricalShippingFeeReview from "./HistoricalShippingFeeReview";
+import ProviderHistoryReview from "./ProviderHistoryReview";
 
 const emptyFilters = () => ({ order: "", party: "", payment: "" });
 const inactiveMessages = {
@@ -51,7 +53,7 @@ function ReportTable({ table }) {
                 <td key={column.key} className={column.type === "text" ? "ofp-label-cell" : "ofp-value-cell"}><DataCell value={row[column.key]} column={column} /></td>)}</tr>)}
                 {!table.rows?.length && <tr><td className="ofp-empty-cell" colSpan={Math.max(columns.length, 1)}>{table.complete === true ? "لا توجد أرصدة مسجلة لهذا القسم." : "لم تتوفر بيانات مكتملة لهذا القسم."}</td></tr>}
             </tbody>
-            {table.totals && Object.keys(table.totals).length > 0 && <tfoot><tr>{columns.map((column, index) => <td key={column.key}>
+            {table.show_totals !== false && table.totals && Object.keys(table.totals).length > 0 && <tfoot><tr>{columns.map((column, index) => <td key={column.key}>
                 {index === 0 && column.type === "text" ? "الإجمالي" : <DataCell value={table.totals[column.key]} column={column} />}
             </td>)}</tr></tfoot>}
         </table></div>
@@ -60,7 +62,7 @@ function ReportTable({ table }) {
 }
 
 function DebtTable({ data }) {
-    return <article className="ofp-table-card ofp-debts" data-testid="financial-debt-summary"><div className="ofp-table-title"><h3>إجمالي الديون والمستحقات</h3></div>
+    return <article className="ofp-table-card ofp-debts" data-testid="financial-debt-summary"><div className="ofp-table-title"><h3>إجمالي الديون والمستحقات</h3>{data.completeness?.actual !== true && <span className="ofp-status">الأرصدة المسجّلة فقط</span>}</div>
         <table><thead><tr><th scope="col">الجهة</th><th scope="col">لنا</th><th scope="col">علينا</th></tr></thead>
             <tbody>{(data.debt_rows || []).map(row => <tr key={row.id}><td className="ofp-label-cell">{row.name}</td><td><Money value={row.receivable} role="receivable" /></td><td><Money value={row.payable} role="payable" /></td></tr>)}</tbody>
             <tfoot><tr><td>الإجمالي</td><td><Money value={data.debt_totals?.receivable} role="receivable" /></td><td><Money value={data.debt_totals?.payable} role="payable" /></td></tr></tfoot>
@@ -205,6 +207,7 @@ export default function OperationalFinancialPosition() {
 
     return <main className="ofp-page" dir="rtl" aria-label="تقرير المركز المالي التشغيلي" data-testid="operational-financial-position">
         <div className="ofp-toolbar ofp-no-print"><div><span className="ofp-eyebrow">الأرصدة التشغيلية / التقارير</span><h1>المركز المالي التشغيلي</h1></div><div className="ofp-actions">
+            {data && user?.role === "owner" && <a className="ofp-button" href="/operational-balances/provider-fees">مراجعة تعرفات منصات الدفع</a>}
             <button type="button" className="ofp-button" onClick={refresh} disabled={loading || authMissing}><ArrowClockwise size={19} aria-hidden="true" />تحديث التقرير</button>
             <button type="button" className="ofp-button" onClick={() => handlePrint()} disabled={!data}><Printer size={20} aria-hidden="true" />طباعة التقرير</button>
             <button type="button" className="ofp-button ofp-export" onClick={exportReport} disabled={!data || exporting}><MicrosoftExcelLogo size={20} aria-hidden="true" />{exporting ? "جارٍ التصدير…" : "تصدير Excel"}</button>
@@ -214,7 +217,12 @@ export default function OperationalFinancialPosition() {
         {exportError && <p className="ofp-warning ofp-no-print" role="alert">{exportError}</p>}
         {report && report.status !== "active" && <div className="ofp-page-notice" role="status"><Info size={24} aria-hidden="true" /><p>{inactiveMessages[report.status] || "التقرير التشغيلي الحالي غير متاح في هذه المرحلة."}</p></div>}
         {report?.status === "active" && !data && <div className="ofp-page-notice" role="status">لا توجد بيانات عملة جاهزة للعرض حتى آخر احتساب.</div>}
+        {data && user?.role === "owner" && <ProviderHistoryReview key={"history" + scope + report.session_scope} sessionScope={report.session_scope} />}
         {data && user?.role === "owner" && <NativePurchaseReview key={scope + report.session_scope} sessionScope={report.session_scope} onRefresh={refresh} />}
+        {data && user?.role === "owner" && <div className="ofp-no-print">
+            <a className="ofp-button" href="/shipping-settings-v2">مراجعة تعرفة شركات الشحن</a>
+            <HistoricalShippingFeeReview key={scope + report.session_scope + activeCurrency} orders={data.shipping_fee_review_orders} />
+        </div>}
         {data && <article className="ofp-report" dir="rtl" ref={printRef} data-testid="financial-position-content">
             <header className="ofp-report-header"><div className="ofp-brand">ميزان<span>التقرير التشغيلي</span></div><div><h2>تقرير المركز المالي التشغيلي</h2><p>الأرصدة والذمم كما في {formatRiyadhArabicLong(report.as_of)}</p></div><span className="ofp-report-kind">الأرصدة والتوقعات</span></header>
             <div className="ofp-scope-bar"><div><CalendarBlank size={19} aria-hidden="true" /><span>آخر احتساب: <bdi>{formatRiyadhDateTime(report.as_of)}</bdi></span></div>

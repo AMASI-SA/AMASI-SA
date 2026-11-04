@@ -40,7 +40,7 @@ def test_missing_capture_does_not_hide_or_double_supplier_invoice(method):
                             'transaction_reference':'synthetic-reference'}]
     raw['payment_actions']={'remaining_action':{'paid_amount':{'amount':str(total),'currency':raw['currency']}}}
     sources=collect(data)
-    assert any(r['code']=='provider_capture_evidence_incomplete' for r in sources['issues'])
+    assert sources['orders'][0]['payment']['order_page_balance']['paid'] == format(Decimal(total), '.2f')
     first=reconcile(active(),sources,SUPPLIER_NOW)
     second=reconcile(first,sources,SUPPLIER_NOW)
     assert first==second

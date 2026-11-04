@@ -133,6 +133,6 @@ async def search_orders(repository: OrderRepository, *, user_id: str, filters: d
     unique_rows = {}
     for row in rows:
         unique_rows.setdefault(str(row.order_number), row)
-    mapped = [_map_row(row.salla_raw, current_status=row.current_status) for row in unique_rows.values()]
+    mapped = [_map_row(row.salla_raw, current_status=row.current_status, native_payment_source=row.native_payment_source) for row in unique_rows.values()]
     items = [item for item in mapped if _matches(item, filters, start, end)]
     return SearchResult(items=items, summary=_summary(items, cutoff))

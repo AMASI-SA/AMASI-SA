@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pymongo.errors import BulkWriteError, DuplicateKeyError
+from pymongo.write_concern import WriteConcern
 
 import reviewed_preparation_batches as batch_module
 import reviewed_products_catalog as catalog_module
@@ -138,15 +139,37 @@ async def _employee_for_assignment(
     return employee
 
 
+async def _publish_ready_file(db, *, user_id, batch_id, request_id, expected_quantity, ready_patch, registry_patch):
+    # A visible file, its permanent allocations and its registry entry must
+    # survive together, including a lost commit reply or a mid-save crash.
+    async def publish(tx):
+        batch = await db[batch_module.BATCHES].update_one(
+            {"user_id": user_id, "id": batch_id, "status": "building"},
+            {"$set": ready_patch, "$unset": {"expires_at": ""}}, session=tx)
+        promoted = await db[PREPARATION_UNIT_ALLOCATIONS].update_many(
+            {"user_id": user_id, "batch_id": batch_id, "status": "reserved"},
+            {"$set": {"status": "committed", "committed_at": ready_patch["ready_at"]},
+             "$unset": {"expires_at": ""}}, session=tx)
+        registry = await db[REGISTRY].update_one(
+            {"user_id": user_id, "client_request_id": request_id, "status": "building"},
+            {"$set": registry_patch, "$unset": {"expires_at": ""}}, session=tx)
+        if batch.modified_count != 1 or promoted.modified_count != expected_quantity or registry.modified_count != 1:
+            raise HTTPException(409, detail={"code": "preparation_file_reservation_mismatch"})
+
+    async with await db.client.start_session() as session:
+        await session.with_transaction(publish, write_concern=WriteConcern("majority"))
+
+
 async def _rollback_build(db: Any, *, user_id: str, batch_id: str, request_id: str) -> None:
-    await db[PREPARATION_UNIT_ALLOCATIONS].delete_many({
-        "user_id": user_id,
-        "batch_id": batch_id,
+    # Only a discarded build may release its reservations. Once ready, the
+    # file can be replayed and rematerialized with this same batch identity.
+    discarded = await db[batch_module.BATCHES].delete_one({
+        "user_id": user_id, "id": batch_id, "status": "building",
     })
-    await db[batch_module.BATCHES].delete_one({
-        "user_id": user_id,
-        "id": batch_id,
-        "status": {"$ne": "ready"},
+    if not discarded.deleted_count:
+        return
+    await db[PREPARATION_UNIT_ALLOCATIONS].delete_many({
+        "user_id": user_id, "batch_id": batch_id,
     })
     await db[REGISTRY].delete_one({
         "user_id": user_id,
@@ -519,17 +542,6 @@ def make_mobile_reviewed_preparation_router(
                 "pdf_sha256": hashlib.sha256(pdf_bytes).hexdigest(),
                 "moved_to_in_progress": False,
             }
-            await db[batch_module.BATCHES].update_one(
-                {"user_id": user_id, "id": batch_id, "status": "building"},
-                {"$set": ready_patch, "$unset": {"expires_at": ""}},
-            )
-            await db[PREPARATION_UNIT_ALLOCATIONS].update_many(
-                {"user_id": user_id, "batch_id": batch_id, "status": "reserved"},
-                {
-                    "$set": {"status": "committed", "committed_at": ready_at},
-                    "$unset": {"expires_at": ""},
-                },
-            )
             registry_patch = {
                 "status": "ready",
                 "batch_id": batch_id,
@@ -538,9 +550,9 @@ def make_mobile_reviewed_preparation_router(
                 "registered_at": ready_at,
                 "updated_at": ready_at,
             }
-            await db[REGISTRY].update_one(
-                {"user_id": user_id, "client_request_id": payload.client_request_id},
-                {"$set": registry_patch, "$unset": {"expires_at": ""}},
+            await _publish_ready_file(
+                db, user_id=user_id, batch_id=batch_id, request_id=payload.client_request_id,
+                expected_quantity=expected_quantity, ready_patch=ready_patch, registry_patch=registry_patch,
             )
             registry.update(registry_patch)
             batch = {**shell, **ready_patch}

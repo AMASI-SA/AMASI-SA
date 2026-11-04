@@ -2,7 +2,13 @@ import api from '../../lib/api';
 const base = '/operational-balances';
 const data = promise => promise.then(response => response.data);
 export const operationalApi = {
+  receivingInvoiceCoverage: () => data(api.get(`${base}/supplier-invoice-review`, {params: {receiving_only: true}})),
+  receivingCorrectionPreview: (invoiceId, asOf, revision) => data(api.get(
+    `${base}/supplier-invoice-review/receiving/${encodeURIComponent(invoiceId)}/correction-preview`,
+    {params: {expected_as_of: asOf, expected_revision: revision}})),
   supplierInvoiceReview: () => data(api.get(`${base}/supplier-invoice-review`)),
+  providerHistoryReviews: () => data(api.get(`${base}/provider-history-reviews`)),
+  approveProviderHistory: body => data(api.post(`${base}/provider-history-reviews/approve`, body)),
   nativePurchaseCandidates: id => data(api.get(`${base}/native-purchase-links/${encodeURIComponent(id)}/candidates`)),
   previewNativePurchaseLink: body => data(api.post(`${base}/native-purchase-links/preview`, body)),
   approveNativePurchaseLink: body => data(api.post(`${base}/native-purchase-links/approve`, body)),

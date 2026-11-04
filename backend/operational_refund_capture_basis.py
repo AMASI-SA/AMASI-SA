@@ -81,6 +81,8 @@ def recorded_capture_for_cancelled_order(raw, state, order_id, provider,
                     or _cash(snapshot.get('gross')) != _cash(total)
                     or _cash(case.get('order_total')) != _cash(total)
                     or snapshot.get('plan_id') != normalized.get('plan_id')
+                    or (snapshot.get('payment_method') and normalized.get('payment_method')
+                        and snapshot['payment_method'] != normalized['payment_method'])
                     or _cash(snapshot.get('cancelled', '0')) != 0
                     or snapshot.get('cancellations')
                     or _captures(snapshot, facts, order_id, provider) != current_captures):
