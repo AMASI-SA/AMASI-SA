@@ -1098,6 +1098,7 @@ async def _employee_workspace(
     employee_id: str,
     limit: int,
     piece_grain: bool = False,
+    overview_only: bool = False,
 ) -> dict[str, Any]:
     pieces = await db[PIECES].find(
         {
@@ -1109,6 +1110,13 @@ async def _employee_workspace(
         {"_id": 0, "user_id": 0, "image_b64": 0},
     ).sort("updated_at", -1).limit(50000).to_list(50000)
     pieces = await annotate_waiting_pieces(db, user_id=user_id, pieces=pieces)
+    if overview_only:
+        return {
+            "employee_id": employee_id,
+            "summary": employee_workspace_stage_summary(pieces),
+            "files": [], "supplier_accounts": [], "suppliers": [],
+            "details_loaded": False,
+        }
     batch_ids = sorted({
         _text(row.get("batch_id")) for row in pieces if _text(row.get("batch_id"))
     })
@@ -1439,6 +1447,17 @@ def make_preparation_supplier_dispatch_router(
             if not indexes_ready:
                 await ensure_supplier_dispatch_indexes(db)
                 indexes_ready = True
+
+    @router.get("/overview")
+    async def overview(user: dict = Depends(current_user)) -> dict[str, Any]:
+        worker = await _require_preparation_worker(
+            db, user, permission="preparation.assigned.read",
+        )
+        await ensure_indexes_once()
+        return {"ok": True, **await _employee_workspace(
+            db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker),
+            limit=0, piece_grain=True, overview_only=True,
+        )}
 
     @router.get("/workspace")
     async def workspace(
