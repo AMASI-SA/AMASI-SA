@@ -99,6 +99,96 @@ class AmasiCompatibleShippingTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(result["label_url"])
                 self.assertIsNone(result["shipment_id"])
 
+    async def test_store_courier_current_order_aliases_and_city_guard(self):
+        from mongomock_motor import AsyncMongoMockClient
+        from salla_shipping import CURRENT_SHIPPING
+
+        db = AsyncMongoMockClient().mezan
+        key = {"user_id": "owner", "order_number": self.number}
+        city = "مندوب الرياض"
+        await db.unified_orders.insert_one({**key, CURRENT_SHIPPING: {
+            "company_name": city, "company_code": "0", "superseded_shipment_ids": ["99"],
+        }})
+        await db.order_review_workflows.insert_one({**key, "store_courier_assignee_name": "موصل الاختبار"})
+        self.api.return_value = {"data": []}
+        async def local_owner(database, owner, callback):
+            return await callback(database)
+
+        cases = [
+            ({"shipping_company_name": city, "courier_id": 0}, True),
+            ({"courier_name": city, "courier_code": "0"}, True),
+            ({"delivery_method": city}, True),
+            ({"shipping_company_name": city, "shipments": [self.pdf]}, True),
+            ({"shipping": {"company_name": "مندوب جدة", "company_code": "0"}}, False),
+            ({"shipping_company_name": city, "courier_code": "different"}, False),
+            ({"shipping_company_code": "0"}, False),
+            ({"shipping_company_name": "iMile", "shipping_company_code": "0"}, False),
+            ({}, False),
+            ({"shipping": {"shipment": {"id": 99, "courier_name": city}}}, False),
+            ({"shipments": [{**self.pdf, "courier_name": "مندوب جدة", "meta": {"app_id": 0}}]}, False),
+        ]
+        with patch.object(legacy, "operational_owner", local_owner):
+            for fields, allowed in cases:
+                with self.subTest(fields=fields):
+                    self.resolve.return_value = self.order_id, {**self.completed, **fields}
+                    if not allowed:
+                        with self.assertRaises(legacy.ShippingLabelError) as error:
+                            await compat.carrier_label(db, "owner", self.number, issue=False, completed_only=True)
+                        self.assertEqual(error.exception.code, "shipping_snapshot_changed")
+                        continue
+                    result = await compat.carrier_label(db, "owner", self.number, issue=False, completed_only=True)
+                    self.assertTrue(result["ready"] and result["order_status_completed"])
+                    self.assertEqual(result["label_type"], "store_courier")
+                    self.assertEqual(result["print_data"]["courier_name"], city)
+                    self.assertEqual(result["print_data"]["assigned_courier_name"], "موصل الاختبار")
+                    self.assertEqual(result["print_data"]["order_number"], self.number)
+                    self.assertTrue(result["print_data"]["qr_code"])
+                    self.assertIsNone(result["shipment_id"])
+                    self.assertIsNone(result["label_url"])
+        self.assertTrue(all(call.args[2] == "GET" for call in self.api.call_args_list))
+
+    async def test_native_named_order_courier_needs_no_shipment_or_driver_assignment(self):
+        for name in ["مندوب جدة", "mandoob riyadh", "مندوب المتجر"]:
+            with self.subTest(name=name), patch.object(legacy, "_store_identity", new_callable=AsyncMock, return_value={}):
+                old = {**self.pdf, "courier_name": "مندوب آخر", "meta": {"app_id": 0}}
+                self.resolve.return_value = self.order_id, {
+                    **self.completed, "shipping_company_name": name, "shipments": [old],
+                }
+                label = await compat.carrier_label(None, "owner", self.number, issue=False, completed_only=True)
+                self.assertTrue(label["ready"])
+                self.assertEqual(label["label_type"], "store_courier")
+                self.assertEqual(label["print_data"]["courier_name"], name)
+                self.assertIsNone(label["shipment_id"])
+                self.assertIsNone(label["label_url"])
+        self.api.assert_not_awaited()
+
+    async def test_authoritative_order_city_wins_over_legacy_carrier_display(self):
+        from mongomock_motor import AsyncMongoMockClient
+        from salla_shipping import CURRENT_SHIPPING
+
+        db = AsyncMongoMockClient().mezan
+        key = {"user_id": "owner", "order_number": self.number}
+        await db.unified_orders.insert_one({**key, "shipping_company": "مندوب الرياض", CURRENT_SHIPPING: {
+            "company_name": "shipping", "source_path": "delivery_method",
+        }})
+        await db.order_review_workflows.insert_one({**key, "store_courier_assignee_name": "مندوب سابق"})
+        self.resolve.return_value = self.order_id, {**self.completed, "shipping_company_name": "مندوب جدة"}
+        with patch.object(legacy, "_store_identity", new_callable=AsyncMock, return_value={}):
+            label = await compat.carrier_label(db, "owner", self.number, issue=False, completed_only=True)
+        self.assertEqual(label["print_data"]["courier_name"], "مندوب جدة")
+        self.assertFalse(label["print_data"].get("assigned_courier_name"))
+        self.assertIsNone(label["label_url"])
+        self.api.assert_not_awaited()
+
+    async def test_native_external_order_identity_does_not_generate_merchant_qr(self):
+        for name in ["SMSA", "Unlisted Express"]:
+            with self.subTest(name=name):
+                self.resolve.return_value = self.order_id, {**self.completed, "shipping_company_name": name}
+                self.api.return_value = {"data": []}
+                label = await compat.carrier_label(None, "owner", self.number, issue=False, completed_only=True)
+                self.assertFalse(label["ready"])
+                self.assertNotIn("print_data", label)
+
     async def test_native_global_list_requires_positive_order_identity_without_local_facts(self):
         for parent, allowed in [(None, False), (314, False), (42, True)]:
             async def reply(db, owner, method, path, **kwargs):
@@ -264,6 +354,60 @@ class AmasiCompatibleShippingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["label_type"], "store_courier")
         self.assertEqual(len(self.api.call_args_list), 2)
 
+    async def test_fresh_courier_destination_without_reading_history(self):
+        database = AsyncMock()
+        database.unified_orders.find_one.side_effect = AssertionError("fresh delivery address needs no local read")
+        buyer = {"name": "المشتري", "shipping_address": {"address_line": "عنوان المشتري"}}
+        recipient = {"name": "المستلم", "phone": "0500000000"}
+        current = {"id": 51, "ship_to": {"address_line": "عنوان الشحنة الحالية"},
+                   "ship_from": {"address_line": "عنوان المرسل"}}
+        for source, expected in [
+            ({"recipient": {**recipient, "address": {"address_line": "عنوان المستلم الجديد"}}}, "عنوان المستلم الجديد"),
+            ({"shipping": {"address": {"address_line": "عنوان التوصيل الجديد"}}}, "عنوان التوصيل الجديد"),
+        ]:
+            with self.subTest(source=source):
+                order = {"id": 42, "reference_id": self.number, "receiver": recipient, "customer": buyer,
+                         "shipments": [{"ship_to": {"address_line": "عنوان بوليصة قديمة"}}], **source}
+                selected = await compat._with_verified_destination(database, "owner", self.number, "42", order, current)
+                label = legacy._store_courier_print_data(self.number, {**selected, "shipments": []}, {}, {})
+                self.assertEqual(label["address"]["address_line"], expected)
+                self.assertEqual(label["recipient_name"], "المستلم")
+        database.unified_orders.find_one.assert_not_awaited()
+
+    async def test_sparse_order_never_mixes_verified_destination_with_old_shipment(self):
+        db = AsyncMock()
+        live = {"recipient": {"name": "أمل", "address": {"city": "الرياض"}}}
+        shipment = {"id": 51, "ship_to": {"name": "أمل", "city": "الرياض", "street": "شارع قديم"}}
+        saved = {"order_id": "42", "salla_address_verified_at": "2026-11-03",
+                 "shipping_address_raw": {"name": "أمل", "city": "الرياض", "street": "الشارع الجديد"}}
+        for current, record, row, expected in [
+            (live, saved, shipment, "الشارع الجديد"), ({}, saved, shipment, "الشارع الجديد"),
+            (live, {}, shipment, "شارع قديم"), ({}, {}, shipment, "شارع قديم"),
+            (live, {**saved, "shipping_address_raw": {"name": "ليلى", "city": "الرياض", "street": "غير صالح"}},
+             None, None),
+            (live, {**saved, "shipping_address_raw": {"name": "أمل", "city": "جدة", "street": "غير صالح"}},
+             None, None),
+        ]:
+            with self.subTest(current=current, record=record):
+                db.unified_orders.find_one.return_value = record
+                selected = await compat._with_verified_destination(db, "owner", self.number, "42", current, row)
+                label = legacy._store_courier_print_data(self.number, selected, {}, {})
+                self.assertEqual(label["address"].get("street"), expected)
+
+    async def test_independent_recipient_never_inherits_saved_buyer_or_sender_destination(self):
+        database = AsyncMock()
+        order = {"id": 42, "recipient": {"name": "المستلم", "phone": "0500000000"},
+                 "customer": {"name": "المشتري", "shipping_address": {"address_line": "عنوان المشتري"}}}
+        for source in ("webhook.customer.address", "shipping.ship_from"):
+            with self.subTest(source=source):
+                database.unified_orders.find_one.return_value = {
+                    "order_id": "42", "shipping_address_raw": {"address_line": "عنوان غير صالح للمستلم"},
+                    "salla_address_verified_at": "2026-11-03", "shipping_address_source_path": source}
+                document = await compat._with_verified_destination(database, "owner", self.number, "42", order)
+                label = legacy._store_courier_print_data(self.number, document, {}, {})
+                self.assertEqual(label["recipient_name"], "المستلم")
+                self.assertEqual(label["address"], {})
+
     async def test_verified_destination_fallback_is_owner_and_order_scoped(self):
         class Collection:
             def __init__(self):
@@ -364,6 +508,7 @@ class MobileShippingV1Tests(unittest.IsolatedAsyncioTestCase):
             self.assertIs(db, self.db)
             self.assertEqual(owner, "merchant")
             return await work(db)
+        self.local_owner = local_owner
         transaction = patch("operational_atomic.operational_owner", local_owner)
         transaction.start()
         self.addCleanup(transaction.stop)
@@ -383,6 +528,78 @@ class MobileShippingV1Tests(unittest.IsolatedAsyncioTestCase):
         self.pdf = {"ok": True, "ready": True, "source": "salla", "shipment_id": "42",
                     "label_url": "https://carrier.example/official.pdf", "tracking_number": None,
                     "order_status_completed": True}
+
+    async def test_city_courier_from_single_current_order_matched_provider_child(self):
+        from salla_shipping import CURRENT_SHIPPING
+
+        city = "مندوب الرياض"
+        await self.db.unified_orders.insert_one({**self.key, "order_id": "42",
+                                                 CURRENT_SHIPPING: {"company_name": city}})
+        await self.workflows.update_one(self.key, {"$set": {"store_courier_assignee_name": "موصل الاختبار"}})
+        order = {"id": 42, "reference_id": self.key["order_number"], "status": {"slug": "completed"},
+                 "delivery_method": "shipping"}
+        current = {"id": 51, "order_id": 42, "courier_id": 88, "courier_name": city,
+                   "meta": {"app_id": 0}, "type": "shipment", "status": "created"}
+        provider_rows = [current]
+        pagination = {}
+        async def reply(db, owner, method, path, **kwargs):
+            self.assertEqual((owner, method), ("merchant", "GET"))
+            if path == "/orders/42":
+                return {"data": order}
+            if path == "/shipments":
+                self.assertEqual(kwargs["params"]["order_id"], "42")
+                return {"data": provider_rows, "pagination": pagination}
+            return {"data": []}
+
+        cases = [
+            ([current], True), ([{**current, "order_id": 43}], False),
+            ([{**current, "type": "return"}], False), ([{**current, "status": "cancelled"}], False),
+            ([{**current, "status": "delivered"}], False),
+            ([{**current, "courier_name": "مندوب جدة"}], False),
+            ([current, {**current, "id": 52}], False),
+        ]
+        with patch.object(compat, "call_salla", side_effect=reply), patch.object(legacy, "operational_owner", self.local_owner):
+            for provider_rows, allowed in cases:
+                with self.subTest(rows=provider_rows):
+                    response = await self.client.post(self.path + "/refresh")
+                    self.assertEqual(response.status_code, 200 if allowed else 409)
+                    if allowed:
+                        result = response.json()
+                        self.assertEqual(result["print_state"], "ready")
+                        self.assertEqual(result["label_type"], "store_courier")
+                        self.assertEqual(result["print_data"]["courier_name"], city)
+                        self.assertEqual(result["print_data"]["assigned_courier_name"], "موصل الاختبار")
+                        self.assertTrue(result["assembly_completion_confirmed"] and result["order_status_completed"])
+                        self.assertIsNone(result["label_url"])
+                    else:
+                        self.assertEqual(response.json()["detail"]["code"], "shipping_snapshot_changed")
+            provider_rows = [current]
+            for pagination in ({"totalPages": 2}, {"total_pages": 3}, {"links": {"next": "next-page"}}):
+                response = await self.client.post(self.path + "/refresh")
+                self.assertEqual(response.status_code, 409)
+            pagination = {}
+            for metadata, allowed in [
+                ({"superseded_shipment_ids": ["23"]}, True),
+                ({"source_path": "delivery_method", "company_name": "shipping"}, True),
+                ({"source_path": "shipping_company", "company_name": "iMile"}, False),
+            ]:
+                with self.subTest(metadata=metadata):
+                    await self.db.unified_orders.update_one(self.key, {"$set": {
+                        CURRENT_SHIPPING: metadata, "shipping_company": city,
+                    }})
+                    response = await self.client.post(self.path + "/refresh")
+                    self.assertEqual(response.status_code, 200 if allowed else 409)
+                    if allowed:
+                        self.assertEqual(response.json()["print_data"]["assigned_courier_name"], "موصل الاختبار")
+                    else:
+                        self.assertEqual(response.json()["detail"]["code"], "shipping_snapshot_changed")
+            for changed in [{"shipment_id": "999"}, {"superseded_shipment_ids": ["51"]}]:
+                await self.db.unified_orders.update_one(self.key, {"$set": {
+                    CURRENT_SHIPPING: {"company_name": city, **changed},
+                }})
+                response = await self.client.post(self.path + "/refresh")
+                self.assertEqual(response.status_code, 409)
+                self.assertEqual(response.json()["detail"]["code"], "shipping_snapshot_changed")
 
     async def test_handoff_rejects_issue_and_only_fresh_in_progress_uses_existing_outbox(self):
         from assembly_completion_delivery import pending_operation

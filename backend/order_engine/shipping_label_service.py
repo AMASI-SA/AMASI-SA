@@ -369,6 +369,46 @@ def _cod_balance_when_salla_omits_remaining(
         ) from exc
 
 
+def _delivery_address(value: Any) -> dict[str, Any]:
+    """Normalize the destination only; never choose a sender/ship_from."""
+    from .recipient_enrichment import _address
+    value = value if isinstance(value, dict) else {}
+    if not value:
+        return {}
+    inner = value.get("address")
+    if isinstance(inner, dict) and inner:
+        value = inner
+    candidate = _address(value) or {}
+    # A name/mobile-only receiver is not evidence of their address.
+    return candidate if any(candidate.get(key) not in (None, "", [], {}) for key in (
+        "address_line", "address_line_two", "formatted", "street", "block",
+        "district", "short_address", "national_address", "city",
+    )) else {}
+
+
+def _street_destination(address: dict[str, Any]) -> bool:
+    return any(address.get(key) for key in (
+        "address_line", "address_line_two", "formatted", "street", "short_address", "national_address",
+    ))
+
+
+def _order_delivery_address(order: dict[str, Any]) -> dict[str, Any]:
+    """Explicit delivery fields on this order, excluding shipment history and buyer/sender."""
+    shipping = order.get("shipping")
+    shipping = shipping if isinstance(shipping, dict) else {}
+    candidates = [source.get(key) for source in (order, shipping)
+                  for key in ("recipient", "receiver", "consignee", "ship_to")]
+    candidates.extend((shipping.get("address"), order.get("shipping_address"), order.get("address")))
+    first = {}
+    for candidate in candidates:
+        address = _delivery_address(candidate)
+        if not first:
+            first = address
+        if _street_destination(address):
+            return address
+    return first
+
+
 def _store_courier_print_data(
     order_number: str,
     order: dict[str, Any],
@@ -379,8 +419,6 @@ def _store_courier_print_data(
     ship_to = ship_to if isinstance(ship_to, dict) else {}
     customer = order.get("customer")
     customer = customer if isinstance(customer, dict) else {}
-    shipping = order.get("shipping")
-    shipping = shipping if isinstance(shipping, dict) else {}
     packages = shipment.get("packages")
     packages = packages if isinstance(packages, list) else []
 
@@ -392,45 +430,9 @@ def _store_courier_print_data(
         else {}
     )
 
-    def delivery_address(value: Any) -> dict[str, Any]:
-        """Normalize the destination only; never choose a sender/ship_from."""
-        from .recipient_enrichment import _address
-        value = value if isinstance(value, dict) else {}
-        if not value:
-            return {}
-        inner = value.get("address")
-        if isinstance(inner, dict) and inner:
-            value = inner
-        candidate = _address(value) or {}
-        # A name/mobile-only receiver is not evidence of their address.
-        return candidate if any(candidate.get(key) not in (None, "", [], {}) for key in (
-            "address_line", "address_line_two", "formatted", "street", "block",
-            "district", "short_address", "national_address", "city",
-        )) else {}
-
-    # Always print the *delivery* destination. In particular, historical
-    # shipment ship_to and customer/buyer addresses must never supersede the
-    # order's receiver/current destination after a Salla address edit.
-    explicit_recipient_address = (
-        delivery_address((order.get("recipient") or {}).get("address"))
-        if isinstance(order.get("recipient"), dict) else {}
-    ) or (
-        delivery_address((order.get("receiver") or {}).get("address"))
-        if isinstance(order.get("receiver"), dict) else {}
-    ) or (
-        delivery_address((shipping.get("recipient") or {}).get("address"))
-        if isinstance(shipping.get("recipient"), dict) else {}
-    )
     order_destination = (
-        # Once Salla's order-update/current-address fact has been verified in
-        # Mezan, it is newer than any old receiver/ship_to embedded in an
-        # already issued shipment. Keep recipient identity separate below.
-        delivery_address(order.get("_mezan_current_shipping_address"))
-        or explicit_recipient_address
-        or delivery_address(order.get("ship_to"))
-        or delivery_address(shipping.get("ship_to"))
-        or delivery_address(shipping.get("address"))
-        or delivery_address(order.get("shipping_address"))
+        _delivery_address(order.get("_mezan_current_shipping_address"))
+        or _order_delivery_address(order)
     )
 
     if recipient:
@@ -454,7 +456,7 @@ def _store_courier_print_data(
         )
         # Buyer fallback is allowed only if there is no explicit independent
         # receiver. Under no circumstances use shipping.ship_from / sender.
-        address_source = order_destination or delivery_address(ship_to) or delivery_address(customer_shipping)
+        address_source = order_destination or _delivery_address(ship_to) or _delivery_address(customer_shipping)
 
     address_keys = (
         "country",
@@ -1166,35 +1168,65 @@ def _stale_label() -> ShippingLabelError:
     )
 
 
+def _mobile_generation_carrier(row: dict[str, Any]) -> dict[str, str]:
+    current = _label_metadata(row)
+    carrier = _label_carrier(row) if current else {"name": "", "code": ""}
+    if (current.get("source_path") == "delivery_method"
+            and carrier["name"].casefold() == "shipping" and not carrier["code"]):
+        carrier["name"] = ""
+    return carrier
+
+
+def _mobile_label_carrier(row: dict[str, Any]) -> dict[str, str]:
+    current = _mobile_generation_carrier(row)
+    if any(current.values()):
+        return current
+    # Mirror the order DTO's root display only when the current generation
+    # carries no identity. That legacy display still needs fresh provider proof.
+    return {"name": _text(row.get("shipping_company")), "code": _text(row.get("shipping_company_code"))}
+
+
+def _mobile_store_courier(name, app_id):
+    from store_delivery_domain import is_city_courier_company, normalize_shipping_carrier
+    from shipping_companies import normalize_shipping_company
+
+    normalized = normalize_shipping_carrier(name)
+    if is_city_courier_company(normalized) or normalized in {"مندوب", "مندوب المتجر", "مندوب المحل", "mandoob"}:
+        return True
+    # Salla identifies other merchant-operated custom carriers with app_id=0.
+    # A generic transport mode or a known external carrier cannot establish it.
+    key, _ = normalize_shipping_company(normalized)
+    return bool(normalized and normalized != "shipping" and key.startswith("other:") and app_id in (0, "0"))
+
+
 def _internal_carrier(row: dict[str, Any] | None) -> bool:
-    carrier = _label_carrier(row or {})
-    return bool(carrier["name"] or carrier["code"]) and _is_store_courier({
-        "courier_name": carrier["name"], "meta": {"app_id": carrier["code"]},
-    })
+    carrier = _mobile_label_carrier(row or {})
+    return _mobile_store_courier(carrier["name"], carrier["code"])
 
 
-async def _internal_delivery_document(db, user_id, order_number, order, baseline):
+def _store_label_carriers_match(left, right):
+    # app_id=0 identifies a delivery class shared by many different city couriers.
+    from store_delivery_domain import normalize_shipping_carrier
+    left_name = normalize_shipping_carrier(left["name"])
+    right_name = normalize_shipping_carrier(right["name"])
+    return bool(left_name and left_name == right_name
+                and (not left["code"] or not right["code"] or left["code"] == right["code"]))
+
+
+async def _internal_delivery_document(db, user_id, order_number, order, baseline, provider_carrier):
     """Internal delivery is not an external shipment or an external label.
 
     Ignore old embedded shipments, including their addresses. Recheck the
     carrier generation after provider reads; a real concurrent switch blocks.
     Assignment is read at the same final boundary, never from an old label.
     """
-    # Explicit order-level carrier facts take precedence over old embedded
-    # shipments. A provider read contradicting our frozen carrier is a race.
-    order_carrier = extract_shipping({"shipping": order.get("shipping"),
-        "shipping_company": order.get("shipping_company"),
-        "shipping_company_code": order.get("shipping_company_code")})
-    if order_carrier and _label_carriers_match(_label_carrier(baseline), {
-        "code": _text(order_carrier.get("company_code")),
-        "name": _text(order_carrier.get("company_name")),
-    }) is not True:
+    if not _store_label_carriers_match(_mobile_label_carrier(baseline), provider_carrier):
         raise _stale_label()
     store = await _store_identity(db, user_id)
     async def document(scoped):
         current = await _label_baseline(scoped, user_id, order_number)
         if not _internal_carrier(current) or (
-            _label_carrier(current) != _label_carrier(baseline)
+            _mobile_label_carrier(current) != _mobile_label_carrier(baseline)
             or _label_metadata(current).get("carrier_updated_at") !=
                 _label_metadata(baseline).get("carrier_updated_at")
         ):
@@ -1206,7 +1238,7 @@ async def _internal_delivery_document(db, user_id, order_number, order, baseline
         ) or {}
         current_order = {**order, "shipments": []}
         data = _store_courier_print_data(order_number, current_order, {}, store)
-        data.update(courier_name=_label_carrier(current)["name"] or "مندوب المتجر",
+        data.update(courier_name=provider_carrier["name"],
                     assigned_courier_id=workflow.get("store_courier_assignee_id"),
                     assigned_courier_name=workflow.get("store_courier_assignee_name"),
                     assignment_id=workflow.get("store_delivery_assignment_id"))

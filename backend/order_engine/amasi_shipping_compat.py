@@ -143,10 +143,35 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
             result.append(row)
         return result
 
+    needs_current_child = strict and not current_id and not _order_label_carrier(order, strict=True)
+    standalone = None
+
+    async def verified(selected):
+        if not needs_current_child or not (legacy._internal_carrier(baseline) or _mobile_courier_row(selected)):
+            return selected
+        # A sparse order does not identify its current shipment. A unique active
+        # child from an order-filtered complete provider list can identify its courier.
+        response = standalone
+        if response is None:
+            response = await _get(db, owner, "/shipments", params={"order_id": internal_id, "per_page": 50})
+        page = response.get("pagination") if isinstance(response, dict) else None
+        page = page if isinstance(page, dict) else {}
+        rows = candidates(response, standalone=True)
+        eligible = [row for row in rows if _current([row], internal_id)
+                    and legacy._status(row.get("status")) not in {"", "delivered", "returned", "refunded"}]
+        if (len(eligible) != 1 or len(_rows(response)) >= 50
+                or (page.get("links") or {}).get("next")
+                or any(str(page.get(key, 1)) != "1" for key in ("totalPages", "total_pages", "last_page"))):
+            raise legacy._stale_label()
+        return eligible[0]
+
+    if needs_current_child and legacy._internal_carrier(baseline):
+        return await verified({})
+
     embedded = candidates(order.get("shipments", []))
     selected = _current(embedded, internal_id)
     if selected and _printable(selected)["ready"]:
-        return selected
+        return await verified(selected)
 
     # Order-scope shipments first, as in the earlier Amasi-compatible path.
     # The standalone API is fallback only: a 403/504 must not veto a PDF
@@ -156,10 +181,12 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
         ("/shipments", {"order_id": internal_id, "per_page": 50}),
     ):
         response = await _get(db, owner, path, params=params)
+        if path == "/shipments":
+            standalone = response
         if response is not None:
             selected = _merge_rows(selected, candidates(response, standalone=(path == "/shipments")), internal_id)
         if selected and _printable(selected)["ready"]:
-            return selected
+            return await verified(selected)
 
     shipment_id = legacy._text(selected.get("id")) if selected else ""
     if shipment_id:
@@ -176,7 +203,29 @@ async def _shipment(db: Any, owner: str, internal_id: str, order: dict[str, Any]
                 selected = _merge_rows(selected, [{**data, "id": shipment_id}], internal_id)
             if selected and _printable(selected)["ready"]:
                 break
-    return selected or {}
+    return await verified(selected or {})
+
+
+def _mobile_courier_row(row: dict) -> bool:
+    meta = row.get("meta") if isinstance(row.get("meta"), dict) else {}
+    return legacy._mobile_store_courier(row.get("courier_name"), meta.get("app_id"))
+
+
+def _order_label_carrier(order: dict, *, strict: bool) -> dict:
+    if strict:
+        # Resolve the same order aliases as ingestion but never use shipment history
+        # (including shipping.shipment) as a substitute for an explicit current carrier.
+        shipping = order.get("shipping")
+        carrier = legacy.extract_shipping({
+            **order, "shipments": [], "shipment": None,
+            "shipping": {**shipping, "shipment": None} if isinstance(shipping, dict) else None,
+        }) or {}
+        if carrier.get("source_path") == "delivery_method" and legacy._text(carrier.get("company_name")).casefold() == "shipping":
+            return {}
+        return carrier
+    return legacy.extract_shipping({key: order.get(key) for key in (
+        "shipping", "shipping_company", "shipping_company_code",
+    )}) or {}
 
 
 def _order_status(order: dict[str, Any]) -> str | None:
@@ -190,30 +239,60 @@ def _order_status(order: dict[str, Any]) -> str | None:
 
 async def _with_verified_destination(
     db: Any, owner: str, number: str, internal_id: str, order: dict[str, Any],
+    shipment: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Read the last verified *order* destination, not an archived AWB.
 
     Only the merchant's own validated order identity can supply this fallback.
     Never change a shipment or make an additional request to Salla.
     """
+    from store_delivery_domain import normalize_city
+    fresh = legacy._order_delivery_address(order)
+    if legacy._street_destination(fresh):
+        return order
+
+    recipient = legacy.resolve_salla_recipient({**order, "shipments": []}) or {}
+
+    def compatible(address, contact):
+        previous_city = normalize_city(address.get("city"))
+        if fresh.get("city") and previous_city and previous_city != normalize_city(fresh["city"]):
+            return False
+        for current, previous in ((recipient.get("name"), contact.get("full_name") or contact.get("name")),
+                                  (recipient.get("mobile"), contact.get("mobile") or contact.get("phone"))):
+            if current and previous and legacy._text(current).casefold() != legacy._text(previous).casefold():
+                return False
+        return True
+
+    saved_destination = {}
     collection = getattr(db, "unified_orders", None) if db is not None else None
-    if collection is None:
-        return order
-    row = await collection.find_one(
-        {"user_id": str(owner), "order_number": str(number)},
-        {"_id": 0, "order_id": 1, "raw_by_source.salla_direct.id": 1,
-         "salla_address_verified_at": 1, "shipping_address_raw": 1},
-    )
-    saved = row if isinstance(row, dict) else {}
-    raw = saved.get("raw_by_source") or {}
-    raw = raw.get("salla_direct") if isinstance(raw, dict) else {}
-    raw = raw if isinstance(raw, dict) else {}
-    saved_id = legacy._text(raw.get("id") or saved.get("order_id"))
-    address = saved.get("shipping_address_raw")
-    if (not saved.get("salla_address_verified_at") or not isinstance(address, dict)
-            or not address or (saved_id and saved_id != internal_id)):
-        return order
-    return {**order, "_mezan_current_shipping_address": dict(address)}
+    if collection is not None:
+        saved = await collection.find_one(
+            {"user_id": str(owner), "order_number": str(number)},
+            {"_id": 0, "order_id": 1, "raw_by_source.salla_direct.id": 1,
+             "salla_address_verified_at": 1, "shipping_address_raw": 1, "shipping_address_source_path": 1},
+        )
+        saved = saved if isinstance(saved, dict) else {}
+        raw = saved.get("raw_by_source")
+        raw = raw.get("salla_direct") if isinstance(raw, dict) else None
+        saved_id = legacy._text((raw.get("id") if isinstance(raw, dict) else None) or saved.get("order_id"))
+        address = saved.get("shipping_address_raw")
+        source = legacy._text(saved.get("shipping_address_source_path")).split(".")
+        if (saved.get("salla_address_verified_at") and saved_id == internal_id and isinstance(address, dict)
+                and not any(part in {"customer", "buyer", "sender", "ship_from"} for part in source)):
+            destination = legacy._delivery_address(address)
+            if destination and compatible(destination, address):
+                saved_destination = destination
+                if legacy._street_destination(destination):
+                    return {**order, "_mezan_current_shipping_address": destination}
+
+    if shipment:
+        destination = legacy._order_delivery_address(shipment)
+        contact = legacy.resolve_salla_recipient(shipment) or {}
+        if destination and compatible(destination, contact) and (not fresh or legacy._street_destination(destination)):
+            return {**order, "_mezan_current_shipping_address": destination}
+    if not fresh and saved_destination:
+        return {**order, "_mezan_current_shipping_address": saved_destination}
+    return order
 
 
 async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, completed_only: bool = False) -> dict[str, Any]:
@@ -253,6 +332,8 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, 
 
     attempts = _READ_ATTEMPTS_AFTER_STATUS if issue else 1
     result = {}
+    carrier = {}
+    order_internal = False
     for attempt in range(attempts):
         if attempt:
             await asyncio.sleep(0.55)
@@ -261,20 +342,20 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, 
                 order = latest
         if _order_status(order) not in printable:
             continue
+        carrier = _order_label_carrier(order, strict=completed_only)
+        if completed_only:
+            order_internal = legacy._mobile_store_courier(carrier.get("company_name"), carrier.get("company_code"))
+            if order_internal:
+                # A named current merchant courier needs no shipment/AWB lookup.
+                result = {}
+                break
         result = await _shipment(db, owner, internal_id, order, strict=completed_only, baseline=baseline)
         if result and (legacy._is_store_courier(result) or _printable(result)["ready"]):
             break
-        if not result:
-            carrier = legacy.extract_shipping({
-                "shipping": order.get("shipping"),
-                "shipping_company": order.get("shipping_company"),
-                "shipping_company_code": order.get("shipping_company_code"),
-            }) or {}
-            if legacy._is_store_courier({
-                "courier_name": carrier.get("company_name"),
-                "meta": {"app_id": carrier.get("company_code")},
-            }):
-                break
+        if not result and not completed_only and legacy._is_store_courier({
+            "courier_name": carrier.get("company_name"), "meta": {"app_id": carrier.get("company_code")},
+        }):
+            break
 
     if _order_status(order) not in printable:
         raise legacy.ShippingLabelError(
@@ -284,27 +365,35 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, 
         )
 
     if completed_only:
-        order_carrier = legacy.extract_shipping({key: order.get(key) for key in (
-            "shipping", "shipping_company", "shipping_company_code",
-        )}) or {}
-        provider_carrier = {"name": legacy._text(order_carrier.get("company_name")),
-                            "code": legacy._text(order_carrier.get("company_code"))}
-        order_internal = legacy._is_store_courier({"courier_name": provider_carrier["name"],
-                                                   "meta": {"app_id": provider_carrier["code"]}})
-        row_internal = bool(result and legacy._is_store_courier(result))
-        local_carrier = legacy._label_carrier(baseline or {})
-        local_internal = legacy._internal_carrier(baseline)
-        if any(local_carrier.values()) and any(provider_carrier.values()):
+        provider_carrier = {"name": legacy._text(carrier.get("company_name")),
+                            "code": legacy._text(carrier.get("company_code"))}
+        row_internal = _mobile_courier_row(result)
+        local_carrier = legacy._mobile_label_carrier(baseline or {})
+        if (order_internal and not any(legacy._mobile_generation_carrier(baseline or {}).values())
+                and not legacy._store_label_carriers_match(local_carrier, provider_carrier)):
+            # A legacy display cannot overrule the freshly fetched order's city
+            # or associate a former driver's assignment with its new document.
+            local_carrier = {"name": "", "code": ""}
+        local_internal = legacy._mobile_store_courier(local_carrier["name"], local_carrier["code"])
+        if not local_internal and any(local_carrier.values()) and any(provider_carrier.values()):
             if legacy._label_carriers_match(local_carrier, provider_carrier) is False:
                 raise legacy._stale_label()
         if local_internal:
             # Canonical store courier beats old embedded external shipments
             # only when the provider still independently confirms this carrier.
-            if not order_internal and not (row_internal and not any(provider_carrier.values())):
+            if not any(provider_carrier.values()) and row_internal:
+                snap = _printable(result)
+                row_code = legacy._text(snap["courier_code"])
+                if local_carrier["code"] == "0" and (result.get("meta") or {}).get("app_id") in (0, "0"):
+                    row_code = "0"
+                provider_carrier = {"name": legacy._text(snap["courier_name"]), "code": row_code}
+            elif not order_internal:
                 raise legacy._stale_label()
-            document_order = await _with_verified_destination(db, owner, number, internal_id, order)
-            return await legacy._internal_delivery_document(db, owner, number, document_order, baseline)
-        if (row_internal or order_internal) and any(local_carrier.values()):
+            document_order = await _with_verified_destination(
+                db, owner, number, internal_id, order, result if row_internal else None,
+            )
+            return await legacy._internal_delivery_document(db, owner, number, document_order, baseline, provider_carrier)
+        if (row_internal or order_internal) and (local_carrier["name"] or local_carrier["code"] not in {"", "0"}):
             raise legacy._stale_label()
         if result and any(provider_carrier.values()):
             snap = _printable(result)
@@ -317,12 +406,7 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, 
             )
     observed = {"observed_order_status": _order_status(order)} if _order_status(order) in _DONE else {}
     if not result:
-        carrier = legacy.extract_shipping({
-            "shipping": order.get("shipping"),
-            "shipping_company": order.get("shipping_company"),
-            "shipping_company_code": order.get("shipping_company_code"),
-        }) or {}
-        merchant_courier = legacy._is_store_courier({
+        merchant_courier = order_internal if completed_only else legacy._is_store_courier({
             "courier_name": carrier.get("company_name"),
             "meta": {"app_id": carrier.get("company_code")},
         })
@@ -339,9 +423,9 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, 
                     "print_data": print_data, "status": "store_courier",
                     "message": "تم تجهيز بوليصة مندوب المتجر."}
 
-    if result and legacy._is_store_courier(result):
+    if result and (row_internal if completed_only else legacy._is_store_courier(result)):
         store = await legacy._store_identity(db, owner)
-        print_order = await _with_verified_destination(db, owner, number, internal_id, order)
+        print_order = await _with_verified_destination(db, owner, number, internal_id, order, result)
         print_data = legacy._store_courier_print_data(number, print_order, result, store)
         return {**observed, "ok": True, "source": "mezan", "ready": True,
                 "label_type": "store_courier", "order_status_completed": True,
