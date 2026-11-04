@@ -54,6 +54,8 @@ Secrets and setup after explicit resource approval
        MONGO_URL=mongodb://<percent-encoded-user>:<percent-encoded-password>@<private-mongo-host>:27017
        JWT_SECRET (new random staging-only key)
        ADMIN_PASSWORD (new strong staging-only password)
+       MFA_BOOTSTRAP_CODE (new staging-only activation secret, at least12 characters;
+         required by the existing owner first-enrollment policy, never disable MFA)
        FRONTEND_URL=https://<new-web-name>.onrender.com
        WEBAUTHN_ORIGIN=the exact same HTTPS origin
        WEBAUTHN_RP_ID=<new-web-name>.onrender.com (host only)
