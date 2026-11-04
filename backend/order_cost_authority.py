@@ -410,7 +410,8 @@ async def _read_snapshots(db: Any, collection: str, query: dict, projection: dic
 
 async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *, budget: Any = None,
                                     include_corrections: bool = True,
-                                    include_frozen_metadata: bool = False) -> dict:
+                                    include_frozen_metadata: bool = False,
+                                    current_profitability_estimate: bool | None = None) -> dict:
     """Bounded, tenant-scoped batches, never one DB query per order/component."""
     from bundle_catalog_v2 import BUNDLES
     from stock_component_consumption_service import PLANS, UNITS
@@ -580,6 +581,21 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
         result["read_batches"] += 1
         if budget is not None:
             await budget.checkpoint()
+    # This reporting-only estimate must NOT redefine historical evidence
+    # or completed/provisional marketing outcomes. The protected Dashboard
+    # V2 / Sold Products readers already supply CPUWorkBudget; bare historical
+    # and marketing callers do not. Support an explicit opt-out for future
+    # callers without editing those source-pinned reducer functions.
+    if current_profitability_estimate is None:
+        from dashboard_cpu_budget import CPUWorkBudget
+        current_profitability_estimate = isinstance(budget, CPUWorkBudget)
+    if current_profitability_estimate:
+        from current_bundle_reporting_estimate import load_current_bundle_estimates
+        estimates = await load_current_bundle_estimates(
+            db, user_id, orders, result, budget=budget,
+        )
+        if estimates:
+            result["current_bundle_estimates"] = estimates
     return result
 
 
@@ -634,6 +650,13 @@ def resolve_order_line_cost(item: dict, *, order_number: str, catalog_cost: dict
         return cost
     identities = {str(product_id or ""), str(row.get("parent_product_id") or ""), str(row.get("product_id") or "")}
     if identities & set(authority.get("composite_products") or []):
+        estimate = (authority.get("current_bundle_estimates") or {}).get(
+            (str(order_number), line_id(row)))
+        # A verified frozen/actual/approved line always wins above; missing
+        # composite lines may use today's selected, owner-configured cost
+        # as an explicitly labeled expected estimate, never a supplier write.
+        if estimate is not None:
+            return deepcopy(estimate)
         return _unknown(row.get("quantity"), "bundle_snapshot_missing")
     return {**catalog_cost, "historical_cost_verified": False}
 
