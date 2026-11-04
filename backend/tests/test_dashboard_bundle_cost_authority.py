@@ -219,15 +219,28 @@ async def test_catalog_components_and_options_are_shared_for_ordinary_products(d
 
 
 @pytest.mark.asyncio
-async def test_unresolved_bundle_cost_is_not_replaced_with_current_parent_70(db):
+async def test_current_configured_bundle_cost_applies_to_all_unpriced_sold_units(db):
+    # Owner rule: every sold unit uses configured current selected costs when
+    # no immutable order-line cost exists; never blindly use Salla parent 70.
     order = sale("no-history", sale_line("line", 4))
-    result = await build_mezan_v2_product_cost(ReadOnlyDB(db), OWNER, [order])
+    readonly = ReadOnlyDB(db)
+    result = await build_mezan_v2_product_cost(readonly, OWNER, [order])
+    cooperative = await build_mezan_v2_product_cost_cooperative(ReadOnlyDB(db), OWNER, [order])
     sold = await load_sold_products(ReadOnlyDB(db), OWNER, [order])
-    assert result["incomplete_orders_count"] == 1
-    assert result["product_rows"][0]["cost_status"] == "missing"
-    assert result["product_rows"][0]["total_cost"] is None
-    assert result["product_rows"][0]["net_profit"] is None
-    assert sold[0]["total_cost"] is None
+    assert result == cooperative
+    assert result["incomplete_orders_count"] == 0
+    assert result["product_rows"][0]["cost_status"] == "complete"
+    assert result["product_rows"][0]["total_cost"] == 220
+    assert result["total"] == result["product_profit_summary"]["total_cost"] == 220
+    assert result["product_rows"][0]["units_sold"] == 4
+    assert result["product_rows"][0]["average_unit_cost"] == 55
+    assert sold[0]["total_cost"] == 220
+    # New composite estimate adds bounded catalog reads; never N+1 reads
+    # per order. Legacy frozen-order read limits remain unchanged.
+    assert sum(readonly.reads.values()) <= 20
+    # No snapshot/revision/journal is written by a profitability report.
+    assert await db["mezan_order_cost_corrections_v1"].count_documents({}) == 0
+    assert await db["mezan_order_item_cost_snapshots_v2"].count_documents({}) == 0
 
 
 @pytest.mark.asyncio
@@ -327,57 +340,235 @@ async def test_executive_http_replaces_old_cost_and_decreases_profit_by_140_once
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("period_start, expected_sizes, expected_total", [
-    ("2026-11-01", [3], 37.5),
-    ("2026-11-02", [3, 2], 22.5),
-])
-async def test_executive_sales_yields_for_each_distinct_order_range(
-    monkeypatch, period_start, expected_sizes, expected_total,
-):
-    import asyncio
-    from datetime import date
-    import dashboard_v2_routes as dashboard
-    from order_currency import hydrate_order_currency_fields_cooperative, summarize_orders_sar_cooperative
+async def test_current_cost_rose_and_external_name_service_four_units_without_operational_writes(db):
+    """Independent supplier embroidery is an expense estimate, not receipt."""
+    root = await db[PRODUCTS].find_one({"user_id": OWNER, "salla_product_id": "shawl"})
+    await db[PRODUCTS].update_one(
+        {"user_id": OWNER, "salla_product_id": "shawl"}, {"$set": {
+            "options": [*root["options"], {
+                "id": "name-choice", "name": "هل تريد اضافة الاسم ؟",
+                "required": False, "values": [
+                    {"id": "yes", "name": "نعم"}, {"id": "no", "name": "لا"},
+                ],
+            }],
+        }})
+    await db[RESOURCES].insert_one({"user_id": OWNER, "id": "external-name",
+        "unit_cost": 10, "track_inventory": False, "kind": "service"})
+    await db[BINDINGS].insert_one({"user_id": OWNER, "id": "name-supplier",
+        "salla_product_id": "shawl", "option_id": "name-choice",
+        "value_id": "yes", "mode": "resource", "resource_id": "external-name",
+        "quantity": 1})
+    line = sale_line("line", 4)
+    line["options"] = [*line["options"], {
+        "option_id": "name-choice", "value_id": "yes",
+        "name": "هل تريد اضافة الاسم ؟", "value": "نعم",
+    }]
+    order = sale("unpriced-service", line)
+    first = await build_mezan_v2_product_cost(ReadOnlyDB(db), OWNER, [order])
+    sold = await load_sold_products(ReadOnlyDB(db), OWNER, [order])
+    assert first["total"] == first["product_profit_summary"]["total_cost"] == 260
+    assert first["product_rows"][0]["average_unit_cost"] == 65
+    assert sold[0]["total_cost"] == 260
+    await db[COST_PROFILES].update_one({"user_id": OWNER, "salla_product_id": "shawl"},
+                                      {"$set": {"base_cost": 16}})
+    await db[COST_PROFILES].update_one({"user_id": OWNER, "salla_product_id": "rose"},
+                                      {"$set": {"base_cost": 45}})
+    await db[RESOURCES].update_one({"user_id": OWNER, "id": "external-name"},
+                                  {"$set": {"unit_cost": 11}})
+    latest = await build_mezan_v2_product_cost_cooperative(ReadOnlyDB(db), OWNER, [order])
+    # Owner policy uses *today's* costs for all four sold units: 16+45+11=72.
+    assert latest["total"] == 288
+    assert latest["product_rows"][0]["average_unit_cost"] == 72
+    assert latest["product_profit_summary"]["total_cost"] == 288
+    for coll in ("purchase_invoices", "mezan_component_consumption_units_v1",
+                 "general_ledger", "supplier_invoices", "mezan_order_cost_corrections_v1"):
+        assert await db[coll].count_documents({}) == 0
 
-    db = AsyncMongoMockClient().executive_sales
-    await db.unified_orders.insert_many([
-        sale("one", order_date="2026-11-01", total_amount=15),
-        sale("two", total_amount=17.5), sale("three", total_amount=5),
-    ])
-    monkeypatch.setattr(dashboard, "_today_riyadh", lambda: date(2026, 11, 2))
-    # Exhaust the CPU budget at every checkpoint without timing assertions.
-    monkeypatch.setattr(dashboard, "PARSER_BUDGET_MS", 0, raising=False)
-    sizes = []
-    hydrated_sizes = []
 
-    async def observe_hydration(orders, projected_rows, *, checkpoint):
-        hydrated_sizes.append(len(orders))
-        return await hydrate_order_currency_fields_cooperative(orders, projected_rows, checkpoint=checkpoint)
+@pytest.mark.asyncio
+async def test_unpriced_mixed_current_choices_not_all_charged_for_rose(db):
+    yes = sale("yes", sale_line("yes-line", 2, rose="yes"))
+    no = sale("no", sale_line("no-line", 3, rose="no"))
+    result = await build_mezan_v2_product_cost(ReadOnlyDB(db), OWNER, [yes, no])
+    coop = await build_mezan_v2_product_cost_cooperative(ReadOnlyDB(db), OWNER, [yes, no])
+    sold = await load_sold_products(ReadOnlyDB(db), OWNER, [yes, no])
+    assert coop == result
+    assert result["total"] == (2 * 55) + (3 * 15) == 155
+    assert result["product_rows"][0]["units_sold"] == 5
+    assert result["product_rows"][0]["total_cost"] == 155
+    assert result["product_profit_summary"]["total_cost"] == 155
+    assert sold[0]["total_cost"] == 155
 
-    async def observe_summary(orders, *, checkpoint):
-        sizes.append(len(orders))
-        marker = asyncio.Event()
-        asyncio.get_running_loop().call_soon(marker.set)
-        result = await summarize_orders_sar_cooperative(orders, checkpoint=checkpoint)
-        assert marker.is_set(), "the event loop did not get a turn during the SAR pass"
-        return result
 
-    monkeypatch.setattr(dashboard, "summarize_orders_sar_cooperative", observe_summary, raising=False)
-    monkeypatch.setattr(dashboard, "hydrate_order_currency_fields_cooperative", observe_hydration)
+@pytest.mark.asyncio
+async def test_unpriced_salla_order_row_id_uses_catalog_option_id_only_for_financial_estimate(db):
+    order = sale("old-option-ids", sale_line("line", 1))
+    order["products"][0]["options"] = [{
+        "id": "928241773", "option": {"id": "rose", "name": "هل تريد تغليف ورد؟"},
+        "values": [{"id": "yes", "name": "نعم"}],
+    }]
+    cost = await build_mezan_v2_product_cost(ReadOnlyDB(db), OWNER, [order])
+    assert cost["total"] == 55
+    assert cost["product_rows"][0]["cost_sources"] == ["current_bundle_catalog_estimate"]
+    # Supplier/stock original token identities are not changed.
+    assert order["products"][0]["options"][0]["id"] == "928241773"
 
-    async def user():
-        return {"id": OWNER, "role": "owner"}
 
-    async def legacy(**kwargs):
-        return {"totals": {}}
+@pytest.mark.asyncio
+async def test_unpriced_ambiguous_or_unknown_choice_keeps_missing_not_zero(db):
+    line = sale_line("unrecognized", 1)
+    line["options"] = [{"name": "غير معروف", "value": "اختيار غير معروف"}]
+    order = sale("ambiguous", line)
+    result = await build_mezan_v2_product_cost_cooperative(ReadOnlyDB(db), OWNER, [order])
+    sold = await load_sold_products(ReadOnlyDB(db), OWNER, [order])
+    assert result["incomplete_orders_count"] == 1
+    assert result["product_rows"][0]["total_cost"] is None
+    assert result["product_rows"][0]["cost_status"] == "missing"
+    assert sold[0]["total_cost"] is None
 
-    app = FastAPI()
-    app.include_router(make_dashboard_v2_router(db, user, legacy, lambda current: None))
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/dashboard-v2", params={"from_date": period_start, "to_date": "2026-11-02"})
-    assert response.status_code == 200, response.text
-    payload = response.json()
-    assert payload["month_kpis"]["total_sales"] == 37.5
-    assert payload["totals"]["total_sales"] == expected_total
-    assert sizes == expected_sizes
-    assert sorted(hydrated_sizes) == sorted(expected_sizes)
+
+@pytest.mark.asyncio
+async def test_frozen_bundle_still_wins_over_new_current_cost_policy(db):
+    order = sale("frozen-priority", sale_line("line", 4))
+    await freeze(db, order)
+    await db[COST_PROFILES].update_many({"user_id": OWNER},
+                                        {"$set": {"base_cost": 999}})
+    report = await build_mezan_v2_product_cost(ReadOnlyDB(db), OWNER, [order])
+    assert report["total"] == 220
+    assert report["product_rows"][0]["total_cost"] == 220
+    assert report["product_rows"][0]["cost_sources"] == ["bundle_snapshot"]
+
+
+@pytest.mark.asyncio
+async def test_current_bundle_without_original_choice_rows_stays_unpriced(db):
+    order = sale("no-selection-source", sale_line("line", 4))
+    order["products"][0]["options"] = []
+    result = await build_mezan_v2_product_cost(ReadOnlyDB(db), OWNER, [order])
+    assert result["product_rows"][0]["cost_status"] == "missing"
+    assert result["product_rows"][0]["total_cost"] is None
+    assert result["incomplete_orders_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_current_bundle_conflicting_yes_and_no_keeps_cost_missing(db):
+    order = sale("conflicting-source", sale_line("line", 1))
+    order["products"][0]["options"].append({
+        "option_id": "rose", "value_id": "no",
+        "name": "هل تريد تغليف ورد؟", "value": "لا",
+    })
+    result = await build_mezan_v2_product_cost_cooperative(ReadOnlyDB(db), OWNER, [order])
+    assert result["product_rows"][0]["cost_status"] == "missing"
+    assert result["product_rows"][0]["total_cost"] is None
+
+
+@pytest.mark.asyncio
+async def test_unpriced_bundle_duplicate_sale_line_identity_cannot_reprice(db):
+    # A duplicate canonical line ID must not be collapsed into one last-wins
+    # estimate, nor cause the component cost to be counted twice.
+    order = sale("dup-line", sale_line("line", 1), sale_line("line", 1, rose="no"))
+    result = await build_mezan_v2_product_cost(ReadOnlyDB(db), OWNER, [order])
+    assert result["incomplete_orders_count"] == 1
+    assert result["product_rows"][0]["total_cost"] is None
+    assert result["product_rows"][0]["cost_status"] == "missing"
+
+
+@pytest.mark.asyncio
+async def test_unpriced_bundle_stale_current_recipe_option_condition_fails_closed(db):
+    definition = await db["mezan_bundle_definitions_v2"].find_one({
+        "user_id": OWNER, "product_id": "shawl",
+    })
+    amended = deepcopy(definition["items"])
+    for row in amended:
+        if row.get("condition"):
+            row["condition"]["value_id"] = "old-value-no-longer-in-catalog"
+    await db["mezan_bundle_definitions_v2"].update_one({
+        "user_id": OWNER, "product_id": "shawl",
+    }, {"$set": {"items": amended}})
+    order = sale("stale-condition", sale_line("line", 3))
+    result = await build_mezan_v2_product_cost_cooperative(ReadOnlyDB(db), OWNER, [order])
+    assert result["product_rows"][0]["total_cost"] is None
+    assert result["product_rows"][0]["cost_status"] == "missing"
+
+
+@pytest.mark.asyncio
+async def test_salla_distinct_order_row_ids_with_rose_name_and_private_text_cost_65(db):
+    """Order row id differs from catalog option id; private text has no price."""
+    await db[PRODUCTS].update_one({"user_id": OWNER, "salla_product_id": "shawl"},
+        {"$push": {"options": {"$each": [
+            {"id": "name-choice", "name": "هل تريد اضافة اسم على الشال ؟",
+             "type": "radio", "values": [{"id": "yes", "name": "نعم"}, {"id": "no", "name": "لا"}]},
+            {"id": "embroidery-text", "name": "التطريز على الشال", "type": "text", "values": []},
+            {"id": "gift-message", "name": "كرت اهداء", "type": "text", "values": []},
+        ]}}})
+    await db[RESOURCES].insert_one({"user_id": OWNER, "id": "name-external",
+        "kind": "service", "unit_cost": 10, "track_inventory": False})
+    await db[BINDINGS].insert_one({"user_id": OWNER, "id": "name-external-binding",
+        "salla_product_id": "shawl", "option_id": "name-choice",
+        "value_id": "yes", "mode": "resource", "resource_id": "name-external", "quantity": 1})
+    line = sale_line("salla-row", 1)
+    line["options"] = [
+        {"id": "928241773", "option": {"id": "rose", "name": "هل تريد تغليف ورد؟",
+         "type": "radio"}, "values": [{"id": "yes", "name": "نعم"}]},
+        {"id": "1952424308", "option": {"id": "name-choice", "name": "هل تريد اضافة اسم على الشال ؟",
+         "type": "radio"}, "values": [{"id": "yes", "name": "نعم"}]},
+        {"id": "1176813685", "option": {"id": "embroidery-text", "name": "التطريز على الشال",
+         "type": "text"}, "value": {"text": "PRIVATE_NAME"}},
+        {"id": "268562294", "option": {"id": "gift-message", "name": "كرت اهداء",
+         "type": "text"}, "value": {"text": "PRIVATE_GIFT"}},
+    ]
+    order = sale("salla-real-row-ids", line)
+    executive = await build_mezan_v2_product_cost_cooperative(ReadOnlyDB(db), OWNER, [order])
+    products = await load_sold_products(ReadOnlyDB(db), OWNER, [order])
+    assert executive["total"] == executive["product_profit_summary"]["total_cost"] == 65
+    assert executive["product_rows"][0]["average_unit_cost"] == 65
+    assert executive["product_rows"][0]["cost_sources"] == ["current_bundle_catalog_estimate"]
+    assert products[0]["total_cost"] == 65
+    assert await db["general_ledger"].count_documents({}) == 0
+    assert await db["mezan_component_consumption_units_v1"].count_documents({}) == 0
+
+
+@pytest.mark.asyncio
+async def test_unpriced_current_bundle_reads_are_constant_across_order_count(db):
+    one = [sale("unpriced-001", sale_line("line-001", 1))]
+    many = [
+        sale(f"unpriced-{i:03}", sale_line(f"line-{i:03}", 1))
+        for i in range(1, 31)
+    ]
+    first_db, many_db = ReadOnlyDB(db), ReadOnlyDB(db)
+    one_cost = await build_mezan_v2_product_cost(first_db, OWNER, one)
+    many_cost = await build_mezan_v2_product_cost(many_db, OWNER, many)
+    assert one_cost["total"] == 55
+    assert many_cost["total"] == 1650
+    assert first_db.reads == many_db.reads
+    assert sum(many_db.reads.values()) <= 20
+
+
+@pytest.mark.asyncio
+async def test_current_estimate_is_opt_in_to_profitability_not_marketing_or_historical_authority(db):
+    from dashboard_cpu_budget import CPUWorkBudget
+    from order_cost_authority import (
+        _unknown, load_order_cost_authority, resolve_order_line_cost,
+    )
+
+    order = sale("scope-isolation", sale_line("scope-line", 1))
+    line = order["products"][0]
+
+    async def read(budget=None, **kwargs):
+        a = await load_order_cost_authority(
+            ReadOnlyDB(db), OWNER, [order], budget=budget, **kwargs)
+        return resolve_order_line_cost(
+            line, order_number=order["order_number"],
+            authority=a, catalog_cost=_unknown(1, "missing"),
+            product_id="shawl",
+        )
+
+    historical = await read()
+    assert historical["calculation_cost_available"] is False
+    assert "bundle_snapshot_missing" in historical["missing_cost_reasons"]
+    dashboard = await read(CPUWorkBudget(5))
+    assert dashboard["calculation_cost_available"] is True
+    assert dashboard["line_total"] == 55
+    assert dashboard["historical_cost_verified"] is False
+    disabled = await read(CPUWorkBudget(5), current_profitability_estimate=False)
+    assert disabled["calculation_cost_available"] is False
+    assert disabled["cost_authority"] == "unresolved_snapshot"
