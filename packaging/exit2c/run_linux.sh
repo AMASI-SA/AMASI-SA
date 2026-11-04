@@ -74,7 +74,7 @@ for attempt in $(seq 1 30); do
   if docker exec "$mongo" mongosh --quiet --eval 'quit(db.hello().isWritablePrimary?0:1)' >/dev/null 2>&1; then break; fi
   sleep 1
 done
-runtime=(--network "container:$mongo" --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 3g --cpus 2)
+runtime=(--network "container:$mongo" --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 2g --cpus 1)
 migration_runtime=("${runtime[@]}")
 if test "$mode" != runtime; then
   runtime+=(-e MEZAN_ACCEPTANCE_PROFILE -e SALLA_API_BASE -e SALLA_AUTH_BASE -e SALLA_TOKEN_ENC_KEY -e EXIT2D_SIM_TOKEN -e EXIT2D_SIM_MODE -e SALLA_WEBHOOK_SECRET -e MEZAN_SNAPCHAT_CAPI_ENABLED)

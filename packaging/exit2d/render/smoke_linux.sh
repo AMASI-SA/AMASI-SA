@@ -20,10 +20,10 @@ trap cleanup EXIT
 docker build -f packaging/exit2d/render/Dockerfile --build-arg "RENDER_GIT_COMMIT=$GITHUB_SHA" -t mezan-host:staging .
 docker build -f packaging/exit2d/render/Mongo.Dockerfile -t mezan-host:mongo .
 docker network create --internal "$network" >/dev/null
-docker run -d --name "$mongo" --network "$network" --network-alias staging-mongo --tmpfs /data/db --tmpfs /data/configdb \
+docker run -d --name "$mongo" --network "$network" --network-alias staging-mongo --memory 2g --cpus 1 --tmpfs /data/db --tmpfs /data/configdb \
   -e MONGO_INITDB_ROOT_USERNAME=fixture -e MONGO_INITDB_ROOT_PASSWORD=synthetic-only-password \
   -e MONGO_REPLICA_KEY=syntheticOnlyReplicaKey1234567890 mezan-host:mongo
-runtime=(--network "$network" --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges --memory 3g --cpus 2
+runtime=(--network "$network" --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges --memory 2g --cpus 1
   -e APP_ENV=staging -e MEZAN_SYNTHETIC_HOSTING=1 -e DB_NAME=mezan_exit2d_staging
   -e MONGO_URL=mongodb://fixture:synthetic-only-password@staging-mongo:27017
   -e MEZAN_STAGING_MONGO_HOST=staging-mongo -e JWT_SECRET=synthetic-hosting-public-key-not-for-production
