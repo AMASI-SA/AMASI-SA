@@ -113,7 +113,7 @@
 .ofp-collection-status { display: inline-block; padding: 3px 7px; border-radius: 4px; background: #eef1f5; color: #5c6a7c; font-size: 10px; font-weight: 700; white-space: nowrap; }
 .ofp-confirmed { background: #e5f3e8; color: #246c3e; }
 .ofp-pending { background: #fff1cb; color: #8a6019; }
-.ofp-print-only, .ofp-scope-bar > .ofp-print-only, .ofp-delivery-print { display: none; }
+.ofp-print-only, .ofp-scope-bar > .ofp-print-only { display: none; }
 @media (max-width: 1100px) {
     .ofp-page { padding: 18px; }
     .ofp-report { padding: 18px; }
@@ -159,37 +159,31 @@
     .ofp-report-footer { font-size: 10px; }
 }
 @media print {
-    .ofp-no-print, .ofp-delivery-screen { display: none !important; }
-    .ofp-print-only, .ofp-scope-bar > .ofp-print-only, .ofp-delivery-print { display: block; }
+    .ofp-no-print { display: none !important; }
+    .ofp-print-only, .ofp-scope-bar > .ofp-print-only { display: block; }
     .ofp-report { border: 0; border-radius: 0; box-shadow: none; padding: 0; color: #173458; font-family: 'Cairo', 'Tajawal', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .ofp-report-header { grid-template-columns: 120px 1fr 120px; margin-bottom: 12px; }
     .ofp-report-header h2 { font-size: 25px; }
     .ofp-brand { font-size: 30px; }
     .ofp-report-kind { display: block; }
     .ofp-scope-bar { font-size: 10px; }
-    .ofp-section { margin-top: 18px; break-before: page; }
-    .ofp-section:first-of-type { break-before: auto; }
+    .ofp-section { margin-top: 12px; break-before: auto; }
     .ofp-section-heading { break-after: avoid; }
     .ofp-section-heading h2 { font-size: 18px; }
-    .ofp-table-grid, .ofp-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-    .ofp-summary-grid { grid-template-areas: "debts profit" "current forecast"; }
-    .ofp-table-card { break-inside: avoid; }
+    .ofp-table-grid, .ofp-summary-grid { display: block; }
+    .ofp-table-card { break-inside: auto; overflow: visible; margin-bottom: 12px; }
+    .ofp-table-title { break-after: avoid; }
     .ofp-table-title h3 { font-size: 15px; }
     .ofp-table-scroll { overflow: visible; }
     .ofp-report table { font-size: 10px; }
+    .ofp-report thead { display: table-header-group; }
+    .ofp-report tfoot { display: table-row-group; }
+    .ofp-report tr { break-inside: avoid; }
     .ofp-report th, .ofp-report td { padding: 5px; }
     .ofp-report tfoot .ofp-money { font-size: 12px; }
     .ofp-notes { font-size: 9px; }
     .ofp-final-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); break-inside: avoid; }
     .ofp-final-metrics > div + div { border-top: 0; padding-top: 0; border-inline-start: 1px solid #95bda1; }
     .ofp-final-metrics strong { font-size: 24px; }
-    .ofp-deliveries { overflow: visible; }
-    .ofp-detail-heading { break-after: avoid; }
-    .ofp-print-order { padding: 12px; border-top: 1px solid #a6b9cb; break-inside: avoid; }
-    .ofp-print-order h4 { font-size: 13px; font-weight: 800; margin: 0 0 4px; }
-    .ofp-print-order p { margin: 0; font-size: 10px; }
-    .ofp-print-order dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px 12px; margin: 9px 0 0; }
-    .ofp-print-order dl > div { display: flex; justify-content: space-between; align-items: center; gap: 6px; border-bottom: 1px solid #e0e8ef; font-size: 10px; padding: 3px 0; }
-    .ofp-print-order dd { margin: 0; }
     .ofp-report-footer { font-size: 9px; }
 }
