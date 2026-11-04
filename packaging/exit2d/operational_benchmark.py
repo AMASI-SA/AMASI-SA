@@ -90,13 +90,13 @@ async def run(owner_cookie, employee_cookie, database):
         try:
             await asyncio.sleep(.05)
             for index in range(10):
-                workspace = await call('GET', '/api/supplier-dispatch-v1/workspace', employee_cookie, group='my_products')
+                workspace = await call('GET', '/api/supplier-dispatch-v1/workspace?grain=piece', employee_cookie, group='my_products')
                 assert workspace.get('files'), 'my-products fixture not visible'
                 await call('GET', '/api/preparation-work-v1/assembly/orders?state=in_progress', employee_cookie, group='assembly_labeling')
                 await call('GET', '/api/fulfillment-v2/ready-to-ship', employee_cookie, group='ready_board')
                 payload = {'client_request_id': f'exit2d-perf-dispatch-{index}',
                     'supplier_id': 'exit2d-perf-supplier', 'file_number': f'PF-EXIT2D-PERF-{index}',
-                    'selections': [{'group_key': 'product:synthetic', 'quantity': 1}]}
+                    'selections': [{'group_key': f'piece:PF-EXIT2D-PERF-{index}', 'quantity': 1}]}
                 result = await call('POST', '/api/supplier-dispatch-v1/dispatches', employee_cookie,
                     expected=201, payload=payload, group='create_supplier_file')
                 dispatch = result['dispatch']['id']

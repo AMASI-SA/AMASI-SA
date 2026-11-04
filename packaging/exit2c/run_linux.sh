@@ -300,6 +300,7 @@ if test "$mode" != runtime; then
 fi
 
 docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:tests /opt/acceptance/regressions.py
+docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:tests /opt/exit2d/production_compatibility.py
 docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/acceptance/test_acceptance_controller.py
 life duplicate-fixture
 if docker run --rm "${runtime[@]}" mezan-exit2c:candidate migration; then
