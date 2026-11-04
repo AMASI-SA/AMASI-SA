@@ -1,0 +1,36 @@
+name: EXIT-2D Independent Runtime
+
+on:
+  push:
+    branches: [codex/exit-2d-resume-20261104]
+    paths:
+      - backend/**
+      - packaging/exit2a/**
+      - packaging/exit2c/**
+      - packaging/exit2d/**
+      - .github/workflows/exit2d-independent-runtime.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exit2d-independent-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  isolated-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Record source identity
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git rev-parse HEAD
+      - name: Offline inventory tooling contracts
+        run: python -B -m unittest discover -s packaging/exit2d -p test_inventory.py
+      - name: Real application in network-none synthetic Mongo namespace
+        run: bash packaging/exit2c/run_linux.sh
