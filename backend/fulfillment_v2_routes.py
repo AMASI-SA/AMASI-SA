@@ -2476,17 +2476,16 @@ def make_fulfillment_v2_router(
             if mobile_v1 and issue and workflow.get("stage") != "completed":
                 raise HTTPException(409, detail={"code": "assembly_completion_required"})
             if mobile_v1:
-                from operational_atomic import operational_owner
-                from order_engine.amasi_shipping_compat import local_mezan_courier_label, mezan_courier_name
+                from order_engine.amasi_shipping_compat import local_mezan_courier_label, mezan_courier_name, with_courier_destination
                 from order_engine.shipping_label_service import _label_baseline
 
                 try:
                     if await mezan_courier_name(db, owner, number):
-                        async def local_document(scoped):
+                        async def local_document(scoped, shipment_rows):
                             current = await _require_print_completed_workflow(scoped, user_id=owner, order_number=number)
                             if issue and current.get("stage") != "completed":
                                 raise HTTPException(409, detail={"code": "assembly_completion_required"})
-                            document = await local_mezan_courier_label(scoped, owner, number, current)
+                            document = await local_mezan_courier_label(scoped, owner, number, current, shipment_rows)
                             if document is None:
                                 return None
                             if await authorized_owner() != owner:
@@ -2499,7 +2498,7 @@ def make_fulfillment_v2_router(
                                 {"$set": patch},
                             )
                             return document
-                        document = await operational_owner(db, owner, local_document)
+                        document = await with_courier_destination(db, owner, local_document)
                         if document is not None:
                             return document
 

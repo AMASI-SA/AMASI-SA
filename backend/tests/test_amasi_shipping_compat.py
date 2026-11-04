@@ -147,6 +147,20 @@ class AmasiCompatibleShippingTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIsNone(result["label_url"])
         self.assertTrue(all(call.args[2] == "GET" for call in self.api.call_args_list))
 
+    async def test_provider_named_merchant_courier_reads_separate_gift_recipient_destination(self):
+        order = {**self.completed, "shipping_company_name": "مندوب الرياض",
+                 "source": "store", "receiver": {"name": "Recipient", "phone": "0500000001"},
+                 "customer": {"name": "Buyer", "shipping_address": {"address_line": "Buyer home"}}}
+        row = {"id": 74, "order_id": 42, "type": "shipment", "status": "created", "courier_name": "مندوب الرياض",
+               "ship_to": {"name": "Recipient", "phone": "+966500000001", "address_line": "Gift destination", "short_address": "GIFT1234"}}
+        self.resolve.return_value = self.order_id, order
+        self.api.return_value = {"data": [row]}
+        with patch.object(legacy, "_store_identity", new_callable=AsyncMock, return_value={}):
+            document = await compat.carrier_label(None, "owner", self.number, issue=False, completed_only=True)
+        self.assertEqual(document["print_data"]["address"]["address_line"], "Gift destination")
+        self.assertEqual(document["print_data"]["address"]["short_address"], "GIFT1234")
+        self.api.assert_awaited_once_with(None, "owner", "GET", "/shipments", params={"order_id": "42", "per_page": 50})
+
     async def test_native_named_order_courier_needs_no_shipment_or_driver_assignment(self):
         for name in ["مندوب جدة", "mandoob riyadh", "مندوب المتجر"]:
             with self.subTest(name=name), patch.object(legacy, "_store_identity", new_callable=AsyncMock, return_value={}):
@@ -640,6 +654,129 @@ class MobileShippingV1Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(saved["salla_order_status_verified_at"], "2026-01-01")
         self.assertTrue(saved["carrier_label_ready"])
         self.assertFalse(saved.get("carrier_label_print_confirmed"))
+
+    async def seed_gift_receiver(self):
+        await self.seed_current_mezan_courier()
+        await self.db.unified_orders.update_one(self.key, {
+            "$set": {
+                "raw_by_source.salla_direct.source": "store",
+                "raw_by_source.salla_direct.receiver": {"name": "Gift recipient", "phone": "+966500000001"},
+                "raw_by_source.salla_direct.customer": {
+                    "name": "Gift buyer", "mobile": "500000002",
+                    "shipping_address": {"address_line": "Buyer home", "short_address": "BUYR1111"},
+                },
+                "shipping_address_source_path": "order.customer.shipping_address",
+                "shipping_address_raw": {"address_line": "Buyer home", "short_address": "BUYR1111"},
+            },
+        })
+        return {"id": 74, "order_id": 42, "courier_name": "مندوب الرياض", "type": "shipment",
+                "status": "created", "ship_from": {"name": "Store", "address_line": "Sender warehouse"},
+                "ship_to": {"name": "Gift recipient", "phone": "966500000001", "city": "Riyadh",
+                            "district": {"name": "Gift district"}, "address_line": "Recipient delivery street",
+                            "address_line_two": "Floor 2", "short_address": "GIFT1234"}}
+
+    async def test_gift_label_uses_current_ship_to_address_not_buyer_or_warehouse(self):
+        shipment = await self.seed_gift_receiver()
+        with patch.object(compat, "call_salla", new_callable=AsyncMock,
+                          return_value={"data": [shipment]}) as provider:
+            response = await self.client.post(self.path + "/refresh")
+        self.assertEqual(response.status_code, 200, response.text)
+        label = response.json()["print_data"]
+        self.assertEqual(label["recipient_name"], "Gift recipient")
+        self.assertEqual(label["address"]["address_line"], "Recipient delivery street")
+        self.assertEqual(label["address"]["short_address"], "GIFT1234")
+        self.assertEqual(label["address"]["district"], "Gift district")
+        provider.assert_awaited_once_with(self.db, "merchant", "GET", "/shipments",
+                                          params={"order_id": "42", "per_page": 50})
+
+    async def test_unproven_cache_and_generic_buyer_address_do_not_mask_recipient(self):
+        shipment = await self.seed_gift_receiver()
+        buyer = {"address_line": "Buyer home", "short_address": "BUYR1111"}
+        for path in ("", "unknown", "webhook.customer.shipping_address", "order.shipments[0].ship_from"):
+            await self.db.unified_orders.update_one(self.key, {"$set": {
+                "shipping_address_source_path": path, "shipping_address_raw": buyer,
+                "raw_by_source.salla_direct.address": buyer, "raw_by_source.salla_direct.shipping.address": buyer,
+                "raw_by_source.salla_direct.receiver.address": {"city": "Buyer city", "district": "Older district"},
+            }})
+            with self.subTest(path=path), patch.object(compat, "call_salla", new_callable=AsyncMock,
+                                                      return_value={"data": [shipment]}):
+                response = await self.client.post(self.path)
+                self.assertEqual(response.status_code, 200, response.text)
+                address = response.json()["print_data"]["address"]
+                self.assertEqual((address["address_line"], address["short_address"]),
+                                 ("Recipient delivery street", "GIFT1234"))
+
+    async def test_gift_missing_receiver_name_uses_shipment_contact_not_buyer(self):
+        shipment = await self.seed_gift_receiver()
+        for receiver in ({"phone": "+966500000001"}, {}):
+            await self.db.unified_orders.update_one(self.key, {"$set": {
+                "raw_by_source.salla_direct.source": "buy_as_gift", "raw_by_source.salla_direct.receiver": receiver,
+            }})
+            with self.subTest(receiver=receiver), patch.object(compat, "call_salla", return_value={"data": [shipment]}):
+                response = await self.client.post(self.path + "/refresh")
+                self.assertEqual(response.status_code, 200, response.text)
+                label = response.json()["print_data"]
+                self.assertEqual(label["recipient_name"], "Gift recipient")
+                self.assertEqual(label["address"]["short_address"], "GIFT1234")
+
+    async def test_local_current_outgoing_receiver_snapshot_needs_no_provider(self):
+        shipment = await self.seed_gift_receiver()
+        await self.db.unified_orders.update_one(self.key, {"$set": {
+            "salla_shipment_id": "74", "salla_shipment_snapshot": shipment,
+            legacy.CURRENT_SHIPPING: {"shipment_id": "74", "company_name": shipment["courier_name"]},
+        }})
+        with patch.object(compat, "call_salla", side_effect=AssertionError("local destination is sufficient")):
+            response = await self.client.post(self.path + "/refresh")
+        self.assertEqual(response.json()["print_data"]["address"]["short_address"], "GIFT1234")
+
+    async def test_label_fills_the_missing_recipient_field_without_requiring_foreign_national_address(self):
+        shipment = await self.seed_gift_receiver()
+        for existing in ({"address_line": "Recipient delivery street"}, {"short_address": "GIFT1234"}):
+            await self.db.unified_orders.update_one(self.key, {"$set": {"raw_by_source.salla_direct.receiver.address": existing}})
+            with self.subTest(existing=existing), patch.object(compat, "call_salla", new_callable=AsyncMock,
+                                                              return_value={"data": [shipment]}):
+                response = await self.client.post(self.path + "/refresh")
+                label = response.json()["print_data"]["address"]
+                self.assertEqual((label["address_line"], label["short_address"]), ("Recipient delivery street", "GIFT1234"))
+        address = {"address_line": "Current Doha street", "country_code": "QA"}
+        await self.db.unified_orders.update_one(self.key, {"$set": {"raw_by_source.salla_direct.receiver.address": address}})
+        with patch.object(compat, "call_salla", side_effect=AssertionError("national address not expected")):
+            response = await self.client.post(self.path + "/refresh")
+        self.assertEqual(response.json()["print_data"]["address"]["address_line"], address["address_line"])
+
+    async def test_old_cached_label_cannot_replace_explicit_current_receiver_street(self):
+        shipment = await self.seed_gift_receiver()
+        await self.db.unified_orders.update_one(self.key, {"$set": {
+            "raw_by_source.salla_direct.receiver.address": {"street": "New street"},
+            "raw_by_source.salla_direct.updated_at": "2026-03-05T22:00:00Z",
+            "salla_shipment_id": "74", "salla_shipment_snapshot": {**shipment, "updated_at": "2026-03-05T19:00:00Z"},
+            legacy.CURRENT_SHIPPING: {"shipment_id": "74"},
+        }})
+        with patch.object(compat, "call_salla", return_value={"data": []}):
+            response = await self.client.post(self.path + "/refresh")
+        address = response.json()["print_data"]["address"]
+        self.assertEqual(address["street"], "New street")
+        self.assertNotIn("short_address", address)
+        self.assertNotIn("address_line", address)
+
+    async def test_foreign_ambiguous_superseded_and_incoming_shipments_do_not_supply_gift_destination(self):
+        shipment = await self.seed_gift_receiver()
+        await self.db.unified_orders.update_one(self.key, {"$set": {
+            "salla_shipment_id": "74", "salla_shipment_snapshot": shipment,
+            legacy.CURRENT_SHIPPING: {"superseded_shipment_ids": ["74"]},
+        }})
+        for response in ({"data": []}, {"data": [{**shipment, "order_id": 43}]},
+                         {"data": [{**shipment, "status": "cancelled"}]}, {"data": [{**shipment, "type": "return"}]},
+                         {"data": [{**shipment, "ship_to": {**shipment["ship_to"], "phone": "500000002"}}]},
+                         {"data": [{**shipment, "ship_to": {**shipment["ship_to"], "name": "Gift buyer"}}]},
+                         {"data": [shipment, {**shipment, "id": 75}]},
+                         {"data": [shipment], "pagination": {"links": {"next": "page2"}}}):
+            with self.subTest(response=response), patch.object(compat, "call_salla", new_callable=AsyncMock, return_value=response):
+                result = await self.client.post(self.path + "/refresh")
+                self.assertEqual(result.status_code, 409, result.text)
+                self.assertEqual(result.json()["detail"]["code"], "recipient_address_unavailable")
+        workflow = await self.workflows.find_one(self.key)
+        self.assertFalse(workflow.get("carrier_label_ready"))
 
     async def test_local_courier_final_read_accepts_new_city_epoch_and_tracking_but_not_external(self):
         await self.seed_current_mezan_courier()

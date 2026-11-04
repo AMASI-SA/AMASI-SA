@@ -196,16 +196,15 @@ __all__ = ["sync_completed_carrier_label"]
 
 async def read_current_carrier_label(db, owner, number, *, publish=None):
     """Read the same local QR or official provider document used by carrier-label/v1."""
-    from operational_atomic import operational_owner
 
     if await compat.mezan_courier_name(db, owner, number):
-        async def local(scoped):
+        async def local(scoped, shipment_rows):
             workflow = await _require_print_completed_workflow(scoped, user_id=owner, order_number=number)
-            document = await compat.local_mezan_courier_label(scoped, owner, number, workflow)
+            document = await compat.local_mezan_courier_label(scoped, owner, number, workflow, shipment_rows)
             if document is not None and publish is not None:
                 await publish(scoped, document)
             return document
-        document = await operational_owner(db, owner, local)
+        document = await compat.with_courier_destination(db, owner, local)
         if document is not None:
             return document
     document = await compat.carrier_label(db, owner, number, issue=False, completed_only=True)
@@ -216,13 +215,12 @@ async def read_current_carrier_label(db, owner, number, *, publish=None):
 
 async def recover_store_courier_label_for_handover(db, *, user_id, order_number):
     """Persist freshly verified courier proof when a print-only read left it absent."""
-    from operational_atomic import operational_owner
     from assembly_status_policy import source_status
     from order_engine import shipping_label_service as shipping
 
     number = _text(order_number)
     fence = await shipping._assert_current_print_status(db, user_id, number)
-    async def persist(scoped):
+    async def persist(scoped, shipment_rows):
         workflow = await _require_completed_workflow(scoped, user_id=user_id, order_number=number)
         assignment = {key: workflow.get(key) for key in (
             "store_courier_assignee_id", "store_courier_assignee_name", "store_delivery_assignment_id")}
@@ -231,7 +229,7 @@ async def recover_store_courier_label_for_handover(db, *, user_id, order_number)
                    "assignment": assignment}
         if current != fence or any(assignment.values()) or await source_status(scoped, user_id, number) not in {"in_progress", "completed"}:
             raise ShippingLabelError("shipping_snapshot_changed", "تغيرت بيانات الشحنة؛ أعد المحاولة.")
-        result = await compat.local_mezan_courier_label(scoped, user_id, number, workflow)
+        result = await compat.local_mezan_courier_label(scoped, user_id, number, workflow, shipment_rows)
         if not (result and result.get("ready") is True and result.get("order_status_completed") is True
                 and result.get("label_type") == "store_courier"):
             return False
@@ -244,7 +242,7 @@ async def recover_store_courier_label_for_handover(db, *, user_id, order_number)
         )
         return True
 
-    return await operational_owner(db, user_id, persist)
+    return await compat.with_courier_destination(db, user_id, persist)
 
 
 async def prepare_completed_carrier_label(db, *, user_id, order_number, actor_id, actor_name, authorize):
