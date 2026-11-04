@@ -1042,6 +1042,10 @@ def employee_workspace_stage_summary(pieces: list[dict[str, Any]]) -> dict[str, 
 
 
 async def ensure_supplier_dispatch_indexes(db: Any) -> None:
+    await db[PIECES].create_index(
+        [("user_id", ASCENDING), ("responsible_employee_id", ASCENDING), ("_id", DESCENDING)],
+        name="ix_supplier_waiting_employee_cursor",
+    )
     await db[DISPATCHES].create_index(
         [("user_id", ASCENDING), ("client_request_id", ASCENDING)],
         unique=True,
@@ -1089,6 +1093,69 @@ async def _active_suppliers(db: Any, *, user_id: str) -> list[dict[str, Any]]:
             "service_links": 1,
         },
     ).sort("company_name", 1).to_list(2000)
+
+
+async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str) -> dict[str, Any]:
+    from bson import ObjectId
+
+    query = {"user_id": user_id, "responsible_employee_id": employee_id,
+             "experiment_archived_at": None, "status": {"$ne": PIECE_STATUS_CANCELLED}}
+    if after:
+        if after.startswith("o:") and ObjectId.is_valid(after[2:]):
+            boundary = ObjectId(after[2:])
+        elif after.startswith("s:") and len(after) > 2:
+            boundary = after[2:]
+        else:
+            raise HTTPException(status_code=400, detail="invalid_waiting_cursor")
+        query["$expr"] = {"$lt": ["$_id", {"$literal": boundary}]}
+
+    chosen = []
+    cursor = db[PIECES].find(query, {"image_b64": 0}).sort("_id", -1).batch_size(32)
+    try:
+        while len(chosen) < 11:
+            batch = await cursor.to_list(length=32)
+            if not batch:
+                break
+            candidates = [row for row in batch if piece_is_available_for_supplier_dispatch(row)]
+            if candidates:
+                annotated = await annotate_waiting_pieces(db, user_id=user_id, pieces=candidates)
+                chosen.extend(row for row in annotated if row.get("waiting_review_eligible") is True)
+    finally:
+        await cursor.close()
+
+    next_cursor = None
+    if len(chosen) > 10:
+        key = chosen[9]["_id"]
+        next_cursor = ("o:" if isinstance(key, ObjectId) else "s:") + str(key)
+    chosen = chosen[:10]
+    by_batch = defaultdict(list)
+    for row in chosen:
+        by_batch[_text(row.get("batch_id"))].append(row)
+    ids = list(by_batch)
+    registry = {}
+    if ids:
+        scope = {"user_id": user_id, "id": {"$in": ids}}
+        projection = {"_id": 0, "id": 1, "lines.order_item_id": 1, "lines.group_key": 1,
+                      "lines.image_url": 1, "lines.resolved_image_url": 1,
+                      "lines.selected_image_url": 1, "lines.image_candidates": 1}
+        batches = await db[BATCHES].find(scope, projection).to_list(len(ids))
+        missing = {_text(row.get("batch_id")) for row in chosen if not _text(row.get("sku"))}
+        if missing:
+            siblings = db[PIECES].find(
+                {"user_id": user_id, "responsible_employee_id": employee_id,
+                 "experiment_archived_at": None, "status": {"$ne": PIECE_STATUS_CANCELLED},
+                 "batch_id": {"$in": list(missing)}, "sku": {"$nin": [None, ""]}},
+                {"_id": 0, "batch_id": 1, "product_name": 1, "sku": 1, "product_id": 1, "group_key": 1},
+            )
+            _hydrate_legacy_piece_identity(chosen + [row async for row in siblings])
+        _hydrate_piece_images_from_batches(chosen, batches)
+        registries = await db[REGISTRY].find({"user_id": user_id, "batch_id": {"$in": ids}},
+                                            {"_id": 0}).to_list(len(ids))
+        registry = {_text(row.get("batch_id")): row for row in registries}
+    files = [_file_view(registry.get(key, {}), rows, piece_grain=True, waiting_only=True)
+             for key, rows in by_batch.items()]
+    return {"ok": True, "employee_id": employee_id, "files": files, "next_cursor": next_cursor,
+            "suppliers": await _active_suppliers(db, user_id=user_id)}
 
 
 async def _employee_workspace(
@@ -1439,6 +1506,12 @@ def make_preparation_supplier_dispatch_router(
             if not indexes_ready:
                 await ensure_supplier_dispatch_indexes(db)
                 indexes_ready = True
+
+    @router.get("/waiting-page")
+    async def waiting_page(after: str = Query("", max_length=256), user: dict = Depends(current_user)) -> dict[str, Any]:
+        worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
+        await ensure_indexes_once()
+        return await _waiting_page(db, _merchant_user_id(worker), _actor_id(worker), after)
 
     @router.get("/workspace")
     async def workspace(

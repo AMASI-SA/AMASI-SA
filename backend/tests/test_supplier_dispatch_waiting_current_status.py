@@ -377,10 +377,40 @@ async def test_warm_workspace_skips_index_commands_but_reads_changed_order_statu
         first = await client.get("/supplier-dispatch-v1/workspace", params={"grain": "piece"})
         assert first.status_code == 200
         assert first.json()["summary"]["waiting_review_pieces"] == 1
-        assert len([write for write in db.writes if write[1] == "create_index"]) == 6
+        assert len([write for write in db.writes if write[1] == "create_index"]) == 7
         await seed_order(db, current="cancelled")
         db.writes.clear()
         second = await client.get("/supplier-dispatch-v1/workspace", params={"grain": "piece"})
         assert second.status_code == 200
         assert second.json()["summary"]["waiting_review_pieces"] == 0
         assert db.writes == []
+
+@pytest.mark.asyncio
+async def test_waiting_pages_only_contain_current_employee_eligible_pieces(db):
+    await seed_order(db, "A")
+    for i in range(24):
+        await seed_piece(db, "A", f"eligible-{i}")
+    await seed_piece(db, "A", "foreign-employee", responsible_employee_id="another")
+    await seed_order(db, "X", current="cancelled")
+    await seed_piece(db, "X", "outside-order-status")
+    await seed_piece(db, "A", "already-sent", supplier_dispatch_status="sent")
+    app = FastAPI()
+    app.include_router(dispatch.make_preparation_supplier_dispatch_router(db, lambda: OWNER))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        after = ""
+        seen = set()
+        for expected in [10, 10, 4]:
+            response = await client.get("/supplier-dispatch-v1/waiting-page", params={"after": after})
+            assert response.status_code == 200, response.text
+            page = response.json()
+            ids = [p["piece_id"] for f in page["files"] for p in f["products"]]
+            assert len(ids) == len(set(ids)) == expected
+            assert not seen.intersection(ids)
+            seen.update(ids)
+            after = page["next_cursor"]
+        assert after is None
+        assert seen == {f"eligible-{i}" for i in range(24)}
+        await seed_order(db, "A", current="cancelled")
+        response = await client.get("/supplier-dispatch-v1/waiting-page")
+        assert response.json()["files"] == []
+        assert (await client.get("/supplier-dispatch-v1/waiting-page?after=bad")).status_code == 400
