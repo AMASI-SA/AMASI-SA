@@ -94,7 +94,7 @@ def _window(value, created, start, end):
         _fail("timestamp_before_order")
     if delivered > end:
         _fail("event_in_future")
-    return delivered if delivered > start else None
+    return delivered if delivered >= start else None
 
 
 def _driver_assignment(assignments, owner, order_id, number):

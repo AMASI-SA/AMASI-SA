@@ -76,19 +76,45 @@ def test_wallet_is_evidence_but_never_booked_as_provider_or_cash():
     assert out["movements"] == []
 
 
-def test_paid_opening_protects_only_affected_tender_and_exposes_gross_for_both():
+@pytest.mark.parametrize("kind", ["settlement", "collection"])
+def test_fully_allocated_opening_payout_allows_distinct_post_start_split_tenders(kind):
     doc, _ = source()
     initial = state_after_previous_tick()
     initial["openings"] = {"open":{"id":"open","party_type":"provider","party_id":"salla","currency":"SAR",
                                    "direction":"for_us","amount":"200.00"}}
     initial["movements"] = [{"id":"m", "party_type":"provider","party_id":"salla","currency":"SAR", "amount":"50",
-                             "direction":"incoming","kind":"settlement","allocations":[{"obligation_id":"open","amount":"50"}]}]
+                             "direction":"incoming","kind":kind,"allocations":[{"obligation_id":"open","amount":"50"}]}]
     out = reconcile(initial, {"orders":[normalized(doc)]}, T2)
-    assert amounts(out) == {"tabby":"65.00"}
+    assert amounts(out) == {"tabby":"65.00", "salla":"35.00"}
     summary = displayed(out)
     assert summary["تابي"] == (1,"65.00","إثبات محفوظ")
-    assert summary["سلة"][:2] == (1,"35.00") and "للمراجعة" in summary["سلة"][2]
+    assert summary["سلة"] == (1,"35.00","إثبات محفوظ")
     assert out["movements"] == initial["movements"]
+
+
+@pytest.mark.parametrize("overlap", ["none", "pooled", "partial", "target"])
+def test_opening_collection_and_wallet_split_book_only_uncovered_provider_money(overlap):
+    doc, _ = source("mada", "customer_wallet")
+    order = normalized(doc)
+    initial = state_after_previous_tick()
+    initial["openings"] = {"open": {"id": "open", "party_type": "provider", "party_id": "salla", "currency": "SAR",
+                                   "direction": "for_us", "amount": "200.00"}}
+    payout = {"id": "prior-collection", "party_type": "provider", "party_id": "salla", "currency": "SAR",
+              "direction": "incoming", "kind": "collection", "amount": "50.00", "actual_fee_amount": "0.00",
+              "allocations": [{"obligation_id": "open", "amount": "50.00"}]}
+    if overlap == "pooled":
+        payout["allocations"] = []
+    elif overlap == "partial":
+        payout["allocations"][0]["amount"] = "49.00"
+    elif overlap == "target":
+        payout["allocations"][0]["obligation_id"] = "provider:" + order["id"] + ":salla"
+    initial["movements"] = [payout]
+    out = reconcile(initial, {"orders": [order]}, T2)
+    assert amounts(out) == ({"salla": "65.00"} if overlap == "none" else {})
+    assert all(row["party_type"] == "provider" and row["party_id"] == "salla"
+               for row in out["engine"]["obligations"].values())
+    assert out["movements"] == initial["movements"] and out["openings"] == initial["openings"]
+    assert reconcile(out, {"orders": [order]}, T2) == out
 
 
 @pytest.mark.parametrize("change", ["shortfall","reference","currency","refund","negative","unknown","owner",

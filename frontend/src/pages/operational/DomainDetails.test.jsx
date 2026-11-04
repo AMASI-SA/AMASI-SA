@@ -13,15 +13,18 @@ test('empty detail sections explain absence instead of rendering blank panels',a
  for(const node of host.querySelectorAll('details')) expect(node.textContent).toContain('لا توجد بيانات مسجلة لهذا القسم');
 });
 
-test('shows recorded and pending customer payments separately when fee projections are unavailable', async () => {
-  await render({details: {provider_paid_totals: {SAR: [{provider: 'tamara', name: 'تمارا', orders: 2, paid: '178.45'}]}, provider_order_payments: {SAR: [
-    {id: 'tamara-saved', name: 'تمارا', status: 'إثبات محفوظ', orders: 2, paid: '178.45', remaining: '0.00'},
-    {id: 'salla-review', name: 'سلة', status: 'للمراجعة', orders: 1, paid: '24.10', remaining: '3.00'},
+test('one provider table keeps missing fees and net unavailable alongside customer payment proof', async () => {
+  await render({details: {provider_paid_totals: {SAR: [{provider: 'tamara', name: 'تمارا', orders: 2, paid: '178.45'}]}, provider_balances: {SAR: [
+    {provider: 'tamara', name: 'تمارا', orders: 2, gross: '178.45', fees: null, refunded: '0.00', net: null, opening: '10.00', settled: '0.00', complete: false},
+    {provider: 'salla', name: 'سلة', orders: 1, gross: '24.10', fees: null, refunded: '0.00', net: null, opening: '0.00', settled: '0.00', complete: false},
   ]}}});
   const paymentSection = section('تفاصيل منصات الدفع');
-  expect([...paymentSection.querySelectorAll('tbody tr')].map(row => [...row.cells].map(cell => cell.textContent))).toEqual([
-    ['تمارا', 'إثبات محفوظ', '2', '178.45', '0.00'], ['سلة', 'للمراجعة', '1', '24.10', '3.00'],
+  expect(paymentSection.querySelectorAll('table')).toHaveLength(1);
+  expect([...paymentSection.querySelectorAll('tbody tr')].map(row => [row.querySelector('strong').textContent, ...[...row.cells].slice(1).map(cell => cell.textContent)])).toEqual([
+    ['تمارا', '2', '178.45', 'غير متاح', '0.00', 'غير متاح'], ['سلة', '1', '24.10', 'غير متاح', '0.00', 'غير متاح'],
   ]);
+  expect(paymentSection.textContent).toContain('رصيد البداية 10.00');
+  expect(paymentSection.textContent).toContain('بيانات غير مكتملة');
   expect(paymentSection.textContent).toContain('SAR');
   expect(host.querySelector('section[aria-label="مدفوعات الطلبات منذ بداية التشغيل"]').textContent)
     .toContain('تمارا · 178.45 SAR · عدد الطلبات المدفوعة 2');
@@ -52,6 +55,20 @@ test('SAR total uses the customer receipt including foreign orders and keeps ori
   expect(panel.querySelector('details:not([open])').textContent).toContain('9.00 KWD');
 });
 
+test('wallet redemption remains settled order value and is labeled as using a prior customer credit', async () => {
+  await render({ details: { customer_tender_coverage: { source_order_count: 1, sar: {
+    paid: '100.00', known_paid: '100.00', missing_orders: 0,
+    by_method: [
+      { method: 'tabby', name: 'تابي', orders: 1, paid: '85.00', remaining: '0.00' },
+      { method: 'wallet', name: 'محفظة العميل', orders: 1, paid: '15.00', remaining: '0.00' },
+    ],
+  } } } });
+  expect(host.querySelector('h3').textContent).toContain('إجمالي المبالغ المسددة للطلبات · 100.00');
+  const wallet = [...host.querySelectorAll('tbody tr')].find(row => row.textContent.includes('المستخدم من أرصدة محافظ العملاء'));
+  expect(wallet.cells[2].textContent).toBe('15.00');
+  expect(host.textContent).toContain('يخفض التزامنا له');
+});
+
 test('advertising keeps latest daily snapshot and groups month by account and currency using exact cents',async()=>{
  const obligations=[
   {id:'a1',party_type:'ad_account',party_id:'a',currency:'USD',business_date:'2026-10-05'},
@@ -78,9 +95,19 @@ test('supplier covered invoices and accepted returns use evidence once and show 
  await render({parties:[{party_type:'supplier',party_id:'s',currency:'SAR',name:'مورد',settled:'50.00',outstanding_payable:'40.00',outstanding_receivable:'0.00'}],obligations:[{id:'s1',kind:'supplier',party_id:'s',party_type:'supplier',currency:'SAR',evidence_ids:['receipt:r1']},{id:'s2',kind:'supplier',party_id:'s',party_type:'supplier',currency:'SAR',evidence_ids:['receipt:r1']}],details:{facts:{'receipt:r1':{amount:'100.00'},'return:a':{receipt_id:'receipt:r1',amount:'10.00'},'return:other':{receipt_id:'receipt:other',amount:'999.00'}}}});
  const text=section('تغطية الموردين والمرتجعات والمدفوعات').textContent;expect(text).toContain('قيمة الفواتير المغطاة: 100.00');expect(text).toContain('المرتجعات المقبولة: 10.00');expect(text).toContain('المدفوع المخصص: 50.00');expect(text).toContain('المتبقي علينا: 40.00');expect(text).not.toContain('تأكيد الاستلام');
 });
-test('provider actual settlement fee remains distinct from estimated fee and cash settlement',async()=>{
- await render({obligations:[{id:'provider:o',party_type:'provider',party_id:'tabby',currency:'SAR'}],parties:[{party_type:'provider',party_id:'tabby',currency:'SAR',name:'تابي'}],details:{provider_reports:{'provider:o':{gross:'100.00',cancelled:'0.00',refunded:'10.00',net:'90.00',estimated_fees:'5.00',actual_fees:'4.00',expected_receivable:'0.00',settled:'86.00',outstanding:'0.00'}}}});
- const text=section('تفاصيل منصات الدفع').textContent;expect(text).toContain('العمولة التقديرية: 5.00');expect(text).toContain('العمولة الفعلية المسوّاة: 4.00');expect(text).toContain('الوارد الفعلي من التسويات: 86.00');expect(text).not.toContain('provider:o');
+test('provider totals use the server net and one row instead of repeating claim fee details',async()=>{
+ await render({obligations:[{id:'provider:o',party_type:'provider',party_id:'tabby',currency:'SAR'}],parties:[{party_type:'provider',party_id:'tabby',currency:'SAR',name:'تابي'}],details:{
+   provider_reports:{'provider:o':{gross:'100.00',estimated_fees:'5.00',actual_fees:'4.00',settled:'86.00'}},
+   provider_balances:{SAR:[{provider:'tabby',name:'تابي',orders:1,gross:'100.00',fees:'4.00',refunded:'10.00',net:'0.00',opening:'0.00',settled:'86.00',complete:true}]}
+ }});
+ const panel=section('تفاصيل منصات الدفع');
+ expect(panel.querySelectorAll('tbody tr')).toHaveLength(1);
+ expect(panel.querySelectorAll('thead th')).toHaveLength(6);
+ expect([...panel.querySelector('tbody tr').cells].slice(1).map(cell=>cell.textContent)).toEqual(['1','100.00','4.00','10.00','0.00']);
+ expect(panel.textContent).toContain('المحول للبنك 86.00');
+ expect(panel.textContent).not.toContain('5.00');
+ expect(panel.textContent).not.toContain('provider:o');
+ expect(panel.querySelectorAll('article')).toHaveLength(0);
 });
 
 test('hybrid daily spend and FX aggregate wallet and credit once and keep balances separate',async()=>{

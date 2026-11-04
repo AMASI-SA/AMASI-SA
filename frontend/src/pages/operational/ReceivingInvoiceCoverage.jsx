@@ -1,5 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {operationalApi as api, messageFor} from './api';
+import PaginatedReportTable from './PaginatedReportTable';
 
 const reasons = {
   missing: 'لا يوجد قيد مرتبط بدليل هذه القطعة',
@@ -63,15 +64,15 @@ function CorrectionPreview({invoiceId, asOf, revision, sessionScope}) {
       {proposal.status === 'blocked' ? <>
         <p>تعذرت معاينة تصحيح هذه الفاتورة.</p>
         <ul>{proposal.reasons.map(reason => <li key={reason}>{correctionReasons[reason] || 'يحتاج دليل الفاتورة إلى مراجعة.'}</li>)}</ul>
-      </> : <div className="ofp-table-scroll">
+      </> : <PaginatedReportTable rows={proposal.legs} label="القيمة قبل التصحيح المقترح وبعده" resetKey={invoiceId}>{rows => <div className="ofp-table-scroll">
         <table><caption>القيمة الإجمالية لكل مكوّن قبل التصحيح المقترح وبعده، للمعاينة فقط</caption>
           <thead><tr><th>القطعة</th><th>المكوّن</th><th>العملة</th><th>المسجّل</th><th>المقترح</th></tr></thead>
-          <tbody>{proposal.legs.map(leg => <tr key={JSON.stringify([leg.piece_id,leg.component,leg.currency])}>
+          <tbody>{rows.map(leg => <tr key={JSON.stringify([leg.piece_id,leg.component,leg.currency])}>
             <td><bdi>{leg.piece_id}</bdi></td><td>{leg.component === 'product' ? 'منتج' : 'خدمة '+leg.component.replace(/^service:/,'')}</td>
             <td><bdi>{leg.currency}</bdi></td><td><bdi>{leg.before}</bdi></td><td><bdi>{leg.after}</bdi></td>
           </tr>)}</tbody>
         </table>
-      </div>}
+      </div>}</PaginatedReportTable>}
     </section>}
   </>;
 }

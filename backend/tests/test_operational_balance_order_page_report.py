@@ -22,11 +22,11 @@ def test_page_breakdown_keeps_remaining_with_customer_and_held_amounts_out_of_de
     s["engine"]["issues"] = [candidate, deepcopy(candidate)]
     before = deepcopy(s)
     result = build_financial_position(s, generated_at=NOW)
-    rows = table(result, "provider_order_balances")["rows"]
-    assert [(r["orders"],r["paid"],r["remaining"]) for r in rows] == [(1, "40.00", "60.00")]
-    held = table(result, "provider_order_balances", currency="QAR")
-    assert [(r["orders"],r["paid"],r["remaining"]) for r in held["rows"]] == [(1,"100.00","0.00")]
-    assert not held["show_totals"] and "مراجعة" in held["rows"][0]["status"]
+    rows = table(result, "providers")["rows"]
+    assert [(r["orders"],r["gross"],r["fees"]) for r in rows] == [(1, "40.00", None)]
+    held = table(result, "providers", currency="QAR")
+    assert [(r["orders"],r["gross"],r["net"]) for r in held["rows"]] == [(1,"100.00",None)]
+    assert not held["complete"] and held["rows"][0]["held_orders"] == 1
     assert result["currencies"]["SAR"]["debt_totals"]["receivable"] == "540.00"
     assert result["currencies"]["SAR"]["metrics"]["liquidity"] == "90.00"
     assert result["currencies"]["QAR"]["debt_totals"]["receivable"] == "0.00"
@@ -46,8 +46,9 @@ def test_source_paid_total_counts_a_page_and_its_captures_once_and_keeps_opening
     s["engine"]["issues"] = [{"code": "provider_settled_capture_review_required",
         "source_id": "provider:a", "order_page_balance_review": page("a", "85.00", "15.00")}]
     result = build_financial_position(s, generated_at=NOW)
-    totals = table(result, "provider_customer_paid")["rows"]
-    assert [(row["orders"], row["paid"]) for row in totals] == [(2, "105.00")]
+    totals = table(result, "providers")["rows"]
+    assert [(row["orders"], row["gross"]) for row in totals] == [(2, "105.00")]
+    assert totals[0]["net"] is None
     assert result["currencies"]["SAR"]["debt_totals"]["receivable"] == "560.00"
 
 
@@ -59,7 +60,8 @@ def test_foreign_order_is_reported_once_in_the_sar_customer_total():
         "paid": "110.19", "by_method": [{"method": "tamara", "name": "تمارا",
             "orders": 1, "paid": "110.19", "remaining": None}]}}
     result = build_financial_position(state, generated_at=NOW)
-    paid = table(result, "provider_customer_paid")
-    assert paid["totals"]["paid"] == "110.19" and paid["rows"][0]["orders"] == 1
+    paid = table(result, "providers")
+    assert paid["totals"]["gross"] == "110.19" and paid["rows"][0]["orders"] == 1
+    assert paid["rows"][0]["fees"] is None and paid["rows"][0]["net"] is None
     assert all(t["id"] != "provider_customer_paid" for t in result["currencies"]["KWD"]["tables"])
-    assert table(result, "provider_order_balances", currency="KWD")["rows"][0]["paid"] == "9.00"
+    assert table(result, "providers", currency="KWD")["rows"][0]["gross"] == "9.00"

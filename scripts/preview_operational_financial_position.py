@@ -30,7 +30,7 @@ from operational_supplier_invoice_preview import SnapshotReads
 
 SECONDS = 40
 PUBLIC_PARTIES = {'smsa', 'imile', 'salla', 'tamara', 'tabby', 'emkan'}
-BALANCE_TABLES = ('couriers', 'drivers', 'providers', 'suppliers')
+BALANCE_TABLES = ('couriers', 'drivers', 'suppliers')
 
 
 def party_label(owner, key):
@@ -59,8 +59,19 @@ def summary(owner, state, exposure):
                 label = party_label(owner, 'supplier:' + key if table_id == 'suppliers' else key)
                 parties[label] = {k: row[k] for k in ('receivable', 'payable')}
             balances[table_id] = {'complete': table['complete'], 'parties': parties}
+        providers = tables['providers']
+        parties = {}
+        for row in providers['rows']:
+            net = None if row['net'] is None else Decimal(row['net'])
+            parties[party_label(owner, row['provider'])] = {
+                **{key: row[key] for key in ('orders', 'gross', 'fees', 'refunded', 'net',
+                                            'opening', 'settled', 'known_net', 'complete')},
+                'receivable': None if net is None else format(max(net, Decimal(0)), '.2f'),
+                'payable': None if net is None else format(max(-net, Decimal(0)), '.2f'),
+            }
+        balances['providers'] = {'complete': providers['complete'], 'parties': parties}
         forecast = {}
-        for table_id in ('cod_expected', 'provider_fees_expected'):
+        for table_id in ('cod_expected',):
             table = tables[table_id]
             forecast[table_id] = {
                 'complete': table['complete'], 'reported_total': table['totals']['amount'],
@@ -76,15 +87,6 @@ def summary(owner, state, exposure):
                 'complete': table['complete'], 'reported_total': table['totals']['amount'],
                 'known_subtotal': known_amount(table['rows']), 'distinct_orders': table['totals']['orders'],
             }
-        # Fee rows refer to source obligations; aggregate per platform without
-        # exporting those order keys or duplicating the receivable.
-        fees = {}
-        obligations = state.get('engine', {}).get('obligations', {})
-        for r in tables['provider_fees_expected']['rows']:
-            party = party_label(owner, obligations[r['id']]['party_id'])
-            fees.setdefault(party, []).append(r)
-        forecast['provider_fees_expected']['known_by_platform'] = {
-            party: known_amount(rows) for party, rows in fees.items()}
         recorded_fees = {}
         for movement in state['movements']:
             if (movement.get('party_type'), movement.get('direction'), movement.get('kind'),

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { operationalApi as api, messageFor } from './api';
+import PaginatedReportTable from './PaginatedReportTable';
 
 const periods = {prestart: 'طلبات سابقة لبدء التشغيل', poststart: 'طلبات بعد بدء التشغيل'};
 const stages = {
@@ -86,13 +87,13 @@ export default function OperationalCostExposure({enabled = true, scopeKey = 'def
       {catalogEstimates > 0 && <p role="status" className="op-cost-caution">توجد {catalogEstimates} تكلفة لطلب قديم قُدرت اعتمادًا على سعر التكلفة الحالي في كتالوج سلة، وليس سعرًا تاريخيًا معتمدًا وقت الطلب؛ تحقق منها قبل اعتماد قرار مالي.</p>}
       {partial && <p role="status" className="op-cost-caution">يوجد {incomplete.reduce((n, item) => n + Number(item.count || 0), 0).toLocaleString('en-US')} تنبيهًا عن بيانات تكلفة أو هوية ناقصة؛ لذلك قد يكون الإجمالي جزئيًا.</p>}
       <details className="op-cost-detail"><summary>تفصيل التكاليف حسب الحالة والجهة ({(data.groups || []).length} صف)</summary>
-        <div className="op-table"><table>
+        <PaginatedReportTable rows={data.groups || []} label="تفصيل التكاليف حسب الحالة والجهة" resetKey={scopeKey}>{rows => <div className="op-table"><table>
           <thead><tr><th>الفترة</th><th>النوع</th><th>الحالة</th><th>الجهة / التجميع</th><th>القطع أو البنود</th><th>الطلبات</th><th>التكلفة</th></tr></thead>
-          <tbody>{(data.groups || []).map((item, i) => <tr key={[i, item.period, item.kind, item.stage, item.party_id || item.party_name].join(':')}>
+          <tbody>{rows.map((item, i) => <tr key={[i, item.period, item.kind, item.stage, item.party_id || item.party_name].join(':')}>
             <td>{periods[item.period] || item.period}</td><td>{kinds[item.kind] || item.kind}</td>
             <td>{stages[item.stage] || item.stage}</td><td>{item.party_name}</td><td>{item.units}</td><td>{item.orders}</td>
             <td>{item.amount} {item.currency}</td></tr>)}</tbody>
-        </table>{!(data.groups || []).length && <p>لا توجد بنود تكلفة مكتملة ضمن النطاق الحالي.</p>}</div>
+        </table>{!(data.groups || []).length && <p>لا توجد بنود تكلفة مكتملة ضمن النطاق الحالي.</p>}</div>}</PaginatedReportTable>
       </details>
       <details className="op-cost-detail"><summary>تنبيهات جودة التكاليف ({gaps.reduce((n, item) => n + Number(item.count || 0), 0)})</summary>
         {gaps.map(item => <p key={item.code}>{item.code}: {item.count}</p>)}

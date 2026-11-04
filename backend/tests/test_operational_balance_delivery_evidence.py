@@ -69,9 +69,9 @@ def test_courier_event_uses_exact_current_shipment_and_explicit_delivery_time():
     assert resolve(values) == event
 
 
-@pytest.mark.parametrize("at", ["2026-10-31T23:59:59+03:00", START])
+@pytest.mark.parametrize("at", ["2026-10-31T23:59:59+03:00", "2026-10-31T23:59:59.999999+03:00"])
 @pytest.mark.parametrize("driver", [True, False])
-def test_prestart_and_exact_start_events_belong_to_opening_boundary(at, driver):
+def test_prestart_events_belong_to_opening_boundary(at, driver):
     values = evidence(driver=driver)
     if driver:
         values[2][0]["delivered_at"] = at
@@ -79,6 +79,18 @@ def test_prestart_and_exact_start_events_belong_to_opening_boundary(at, driver):
         values[0]["shipping"]["delivered_at"] = at
         values[0]["shipments"][0]["delivered_at"] = at
     assert resolve(values) is None
+
+
+@pytest.mark.parametrize("driver", [True, False])
+def test_exact_start_delivery_is_eligible_in_utc_and_riyadh(driver):
+    values = evidence(driver=driver)
+    at = "2026-10-31T21:00:00+00:00"
+    if driver:
+        values[2][0]["delivered_at"] = at
+    else:
+        values[0]["shipping"]["delivered_at"] = at
+        values[0]["shipments"][0]["delivered_at"] = at
+    assert resolve(values)["delivered_at"] == at
 
 
 @pytest.mark.parametrize("driver", [True, False])
@@ -240,7 +252,7 @@ def test_missing_currency_is_not_assumed_from_a_fee_contract():
 
 def test_old_foreign_currency_delivery_does_not_create_a_perpetual_new_event_issue():
     values = evidence()
-    values[2][0]["delivered_at"] = START
+    values[2][0]["delivered_at"] = "2026-10-31T23:59:59.999999+03:00"
     values[0]["currency"] = "QAR"
     assert resolve(values) is None
 

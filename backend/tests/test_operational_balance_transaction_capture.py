@@ -124,7 +124,6 @@ def test_refunds_split_and_cancellations_remain_review_only_even_with_signed_cap
 def test_native_positive_capture_with_no_fee_schedule_is_gross_only_and_replay_safe():
     from operational_balance_engine import reconcile
     from operational_balance_service import report
-    from operational_financial_position_core import _provider_tables
     payment, _ = recognize(source_order("mada"),[stored()])
     sources = {"orders":[{"id":ORDER, "order_number":NUMBER, "currency":"SAR","created_at":CREATED,
                           "updated_at":PAID, "payment":payment}], "fee_policies":[]}
@@ -136,8 +135,8 @@ def test_native_positive_capture_with_no_fee_schedule_is_gross_only_and_replay_s
     assert new["movements"]==[] and new["openings"]=={}
     assert reconcile(new,sources,NOW)["engine"]["facts"]==new["engine"]["facts"]
     view=report(new)
-    fees, _ = _provider_tables(view["obligations"],view["details"],view["issues"])
-    assert fees["totals"]["amount"] is None and fees["rows"][0]["amount"] is None
+    row, = view["details"]["provider_balances"]["SAR"]
+    assert row["fees"] is None and row["net"] is None and row["gross"] == "57.19"
 
 
 def test_late_dated_capture_after_start_books_once_without_fee_schedule():
@@ -374,7 +373,7 @@ def test_financial_position_previews_only_known_provider_evidence_without_summin
     original=deepcopy(state)
     report=build_financial_position(state)
     salla=next(d for d in report["dependencies"] if d["code"]=="provider_evidence_coverage_salla")
-    assert salla["observed_order_counts"]=={"capture":1,"settlement_allocation":1,"missing_time":1,"fee_review":1}
+    assert salla["observed_order_counts"]=={"capture":1,"settlement_allocation":1,"missing_time":1}
     assert salla["status"]=="incomplete" and "لقطة" in salla["message"] and "سلة" in salla["message"]
     unknown=next(d for d in report["dependencies"] if d["code"]=="provider_evidence_coverage_unassigned")
     assert unknown["observed_order_counts"]=={"capture_review":1}
