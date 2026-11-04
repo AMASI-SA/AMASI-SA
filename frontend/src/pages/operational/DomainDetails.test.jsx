@@ -12,6 +12,20 @@ test('empty detail sections explain absence instead of rendering blank panels',a
  for(const node of host.querySelectorAll('details')) expect(node.textContent).toContain('لا توجد بيانات مسجلة لهذا القسم');
 });
 
+test('shows recorded and pending customer payments separately when fee projections are unavailable', async () => {
+  await render({details: {provider_paid_totals: {SAR: [{provider: 'tamara', name: 'تمارا', orders: 2, paid: '178.45'}]}, provider_order_payments: {SAR: [
+    {id: 'tamara-saved', name: 'تمارا', status: 'إثبات محفوظ', orders: 2, paid: '178.45', remaining: '0.00'},
+    {id: 'salla-review', name: 'سلة', status: 'للمراجعة', orders: 1, paid: '24.10', remaining: '3.00'},
+  ]}}});
+  const paymentSection = section('تفاصيل منصات الدفع');
+  expect([...paymentSection.querySelectorAll('tbody tr')].map(row => [...row.cells].map(cell => cell.textContent))).toEqual([
+    ['تمارا', 'إثبات محفوظ', '2', '178.45', '0.00'], ['سلة', 'للمراجعة', '1', '24.10', '3.00'],
+  ]);
+  expect(paymentSection.textContent).toContain('SAR');
+  expect(paymentSection.textContent).toContain('تمارا · 178.45 SAR · عدد الطلبات المدفوعة 2');
+  expect(paymentSection.textContent).not.toContain('لا توجد بيانات مسجلة');
+});
+
 test('advertising keeps latest daily snapshot and groups month by account and currency using exact cents',async()=>{
  const obligations=[
   {id:'a1',party_type:'ad_account',party_id:'a',currency:'USD',business_date:'2026-10-05'},

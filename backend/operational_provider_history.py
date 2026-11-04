@@ -25,37 +25,53 @@ def proof_hash(order, payment):
                    order.get("updated_at"), payment])
 
 
-def _context(state, row):
+def _context(state, row, *, obligation_key=None, through=None):
     """Check only attributable provider money. A pooled or opening payout always blocks."""
     owner, oid, number, party, ccy = (row[k] for k in ("owner_id", "order_id", "order_number", "provider", "currency"))
-    key = "provider:" + oid
+    key = obligation_key or "provider:" + oid
     scope = (party, ccy)
     engine = state.get("engine", {})
     issues = []
     try:
         paid = _amount(row["paid"], ccy)
+        created = _instant(row["created_at"])
+        fresh = through is not None and (not engine.get("as_of") or created > _instant(engine["as_of"]))
+
         if (not owner or owner != state.get("owner_id") or not oid or not number or party not in {"salla","tabby","tamara","emkan"}
                 or paid <= 0 or paid + _amount(row["remaining"], ccy) != _amount(row["gross"], ccy)
-                or not _instant(state["started_at"]) < _instant(row["created_at"]) <= _instant(engine["as_of"])):
+                or not _instant(state["started_at"]) < created <= _instant(through or engine["as_of"])):
             issues.append("order")
         claim = engine.get("obligations", {}).get(key)
         if claim and (claim.get("party_type") != "provider" or (claim.get("party_id"), claim.get("currency")) != scope
                 or claim.get("direction") != "receivable" or _amount(claim["confirmed"], ccy) != 0):
             issues.append("claim")
-        if any(isinstance(f, dict) and f.get("order_id") == oid and name.startswith(("capture:", "refund:", "provider_order_balance:"))
+        if any(isinstance(f, dict) and f.get("order_id") == oid and (
+                name.startswith(("capture:", "refund:")) or
+                (name.startswith("provider_order_balance:") and _amount(f["paid"], ccy) > 0))
                for name, f in engine.get("facts", {}).items()):
             issues.append("claim")
         if any(r.get("order_id") == oid or r.get("order_number") == number
                for group in ("customer_returns","customer_exchanges") for r in state.get(group, [])):
             issues.append("return")
-        if ("cod_collection:" + oid in engine.get("facts", {}) or
+        cod = engine.get("facts", {}).get("cod_collection:" + oid)
+        if ((cod is not None and (_amount(cod["amount"], ccy) > 0 or cod.get("evidence"))) or
                 _amount(engine.get("obligations", {}).get("cod:" + oid, {}).get("confirmed", 0), ccy) > 0):
             issues.append("claim")
+        movements = []
         for movement in state.get("movements", []):
-            if (movement.get("order_number") == number or movement.get("original_order_number") == number
+            other_split_provider = (obligation_key and movement.get("party_type") == "provider"
+                                    and movement.get("party_id") not in (party, "", None))
+            same_number = number in (movement.get("order_number"), movement.get("original_order_number"))
+            if ((same_number and not other_split_provider) or (movement.get("order_id") == oid and not other_split_provider)
                     or movement.get("request_id") == "order-bank:" + oid
                     or any(a.get("obligation_id") in (key, "credit:" + key) for a in movement.get("allocations", []))):
                 issues.append("target")
+            # A recorded payout predating a new order could not settle that order.
+            # Explicit order/obligation links above still require reconciliation.
+            if fresh and movement.get("occurred_at") and _instant(movement["occurred_at"]) < created:
+                continue
+            if movement.get("party_type") == "provider" and (movement.get("party_id"), movement.get("currency")) == scope:
+                movements.append(movement)
             if (movement.get("party_type") == "provider" and movement.get("party_id") in (None, "", party)
                     and movement.get("currency") in (None, "", ccy) and (not movement.get("party_id") or not movement.get("currency"))):
                 issues.append("movement")
@@ -67,8 +83,6 @@ def _context(state, row):
                        and o.get("currency") in (None, "", ccy) and (not o.get("currency") or not o.get("party_id"))
                        for o in state.get("openings",{}).values())):
             issues.append("opening")
-        movements = [m for m in state.get("movements", []) if m.get("party_type") == "provider"
-                     and (m.get("party_id"), m.get("currency")) == scope]
         for m in movements:
             allocations = m.get("allocations") or []
             ids = [a["obligation_id"] for a in allocations]
@@ -98,11 +112,13 @@ def make_review_row(order, payment):
     page = payment.get("order_page_balance") or {}
     fields = ("owner_id", "order_id", "order_number", "provider", "currency", "gross", "paid", "remaining")
     if (page.get("source") != "canonical_salla_order_page" or not all(page.get(k) for k in fields)
+            or (page["provider"], page["currency"]) != (payment.get("provider"), payment.get("currency"))
+            or _amount(page["gross"], page["currency"]) != _amount(payment["gross"], page["currency"])
             or order.get("bank_credit") or payment.get("refunds") or payment.get("cancellations")
             or _amount(payment.get("cancelled", 0), page["currency"]) != 0
             or (str(order["id"]), order["order_number"]) != (page["order_id"], page["order_number"])):
         return None
-    return {**{k: page[k] for k in fields}, "created_at": order["created_at"], "proof_hash": proof_hash(order, payment)}
+    return {**{k: page[k] for k in fields}, "created_at": order["created_at"]}
 
 
 def preview_row(state, row, code):
@@ -121,7 +137,41 @@ def approved_context(state, order, payment):
     if not saved or saved.get("owner_id") != state.get("owner_id") or saved.get("confirmed_by") != state.get("owner_id"):
         return False
     row = make_review_row(order, payment)
-    if not row or saved.get("proof_hash") != row["proof_hash"] or not saved.get("evidence_id"):
+    if not row:
+        return False
+    row["proof_hash"] = proof_hash(order, payment)
+    page = payment["order_page_balance"]
+    if saved.get("proof_hash") != row["proof_hash"] and "transaction_reference" in page:
+        # Older review records predate preservation of the source's transaction
+        # reference. Every field reviewed then must still match the saved hash.
+        legacy_page = {k: v for k, v in page.items() if k != "transaction_reference"}
+        row["proof_hash"] = proof_hash(order, {**payment, "order_page_balance": legacy_page})
+    if saved.get("proof_hash") != row["proof_hash"] or not saved.get("evidence_id"):
         return False
     preview = preview_row(state, row, HISTORICAL)
     return not preview["blocks"] and saved.get("preview_hash") == preview["preview_hash"]
+
+
+def late_payment_blocks(state, order, payment, *, obligation_key=None, through=None):
+    """An older snapshot alone cannot hide post-start money. Check possible overlaps."""
+    if state.get(REVIEWS) and digest(str(order["id"])) in state[REVIEWS]:
+        # Revalidate any pending owner decision against its original evidence.
+        return not approved_context(state, order, payment)
+    if payment.get("order_page_balance") is not None:
+        row = make_review_row(order, payment)
+        if not row:
+            return True
+    else:
+        currency = payment["currency"]
+        captures = payment.get("captures", [])
+        if (not captures or order.get("bank_credit") or payment.get("refunds") or payment.get("cancellations")
+                or _amount(payment.get("cancelled", 0), currency)):
+            return True
+        paid = sum((_amount(c["amount"], currency) for c in captures), Decimal(0))
+        gross = _amount(payment["gross"], currency)
+        row = {"owner_id": state.get("owner_id"), "order_id": str(order["id"]),
+               "order_number": order.get("order_number"), "created_at": order["created_at"],
+               "provider": payment["provider"], "currency": currency, "gross": gross,
+               "paid": paid, "remaining": gross - paid}
+    blocks, _, _ = _context(state, row, obligation_key=obligation_key, through=through)
+    return bool(blocks)

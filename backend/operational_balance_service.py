@@ -12,6 +12,7 @@ from fastapi import HTTPException
 
 from operational_balance_store import audit, digest, fail, mutate, now, read, remember, replay, RECEIPTS, claim_movement
 from operational_balance_engine import reconcile_credits
+from operational_provider_report_coverage import provider_customer_payments
 from operational_external_advances import ACTIONS as EXTERNAL_ACTIONS, CREATION as EXTERNAL_CREATION, REPAYMENT as EXTERNAL_REPAYMENT, advance_id, advance_obligations, balance_snapshot
 from operational_ad_wallet_pool import enabled as wallet_pool_enabled, project_pool
 
@@ -819,6 +820,9 @@ def report(state, *, as_of=None):
                           outstanding=fmt(max(confirmed-settled, Decimal(0))))
     details["cod_reports"] = cod_metrics
     issues = deepcopy(state.get("engine", {}).get("issues", []))
+    details["provider_order_payments"], details["provider_paid_totals"] = provider_customer_payments({
+        "details": details, "issues": issues, "obligations": obligations,
+    })
     for row in parties.values():
         if row["party_type"] == "ad_account" and row["ad_wallet_balance"] < 0:
             issues.append({"code": "advertising_prepaid_wallet_negative", "source_id": row["party_id"],

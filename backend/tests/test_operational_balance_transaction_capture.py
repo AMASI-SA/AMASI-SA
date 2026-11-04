@@ -140,16 +140,17 @@ def test_native_positive_capture_with_no_fee_schedule_is_gross_only_and_replay_s
     assert fees["totals"]["amount"] is None and fees["rows"][0]["amount"] is None
 
 
-def test_does_not_post_new_historic_capture_during_routine_obligation_recalculation():
+def test_late_dated_capture_after_start_books_once_without_fee_schedule():
     from operational_balance_engine import reconcile
     payment, _ = recognize(source_order("mada"),[stored()])
     sources={"orders":[{"id": ORDER,"order_number":NUMBER,"currency":"SAR","created_at":CREATED,
         "updated_at":PAID,"payment":payment}],"fee_policies":[]}
-    state={"status":"active","started_at":"2026-10-05T00:00:00+00:00","engine":{"as_of":NOW},
+    state={"owner_id": OWNER, "status":"active","started_at":"2026-10-05T00:00:00+00:00","engine":{"as_of":NOW},
            "movements":[],"openings":{}}
     out=reconcile(state,sources,"2026-10-07T00:00:00+00:00")
-    assert "capture:capture-A" not in out["engine"]["facts"]
-    assert [x for x in out["engine"]["issues"] if x["code"]=="provider_historical_capture_review_required"]
+    assert out["engine"]["facts"]["capture:capture-A"]["amount"] == "57.19"
+    assert out["engine"]["obligations"]["provider:" + ORDER]["confirmed"] == "57.19"
+    assert reconcile(out, sources, "2026-10-07T00:00:00+00:00") == out
     assert out["movements"]==[] and out["openings"]=={}
 
 
@@ -293,7 +294,7 @@ def test_inconsistent_optional_observation_cannot_release_a_canonical_capture(ch
     assert issues and not (p or {}).get("captures")
 
 
-def test_recovered_canonical_capture_is_held_for_historical_or_settlement_review_with_valid_fee_policy():
+def test_recovered_canonical_capture_posts_after_a_refresh_but_not_over_a_pooled_settlement():
     from operational_balance_engine import reconcile
     from test_operational_balance_engine import policy
     raw=source_order("mada")
@@ -302,18 +303,15 @@ def test_recovered_canonical_capture_is_held_for_historical_or_settlement_review
     assert not issues and payment["captures"] and payment["capture_source"]=="canonical_order_with_unbound_activity"
     sources={"orders":[{"id":ORDER,"order_number":NUMBER,"currency":"SAR","created_at":CREATED,
                         "updated_at":PAID,"payment":payment}],"fee_policies":[policy(provider="salla")]}
-    start={"status":"active","started_at":"2026-10-05T00:00:00+00:00","movements":[],"openings":{}}
-    for state,expected in [
-        ({**start,"engine":{"as_of":NOW}}, "provider_historical_capture_review_required"),
-        ({**start,"movements":[{"party_type":"provider","party_id":"salla","currency":"SAR","kind":"collection",
-                                 "direction":"incoming","amount":"12.00","allocations":[]}]},
-         "provider_settled_capture_review_required"),
-    ]:
-        before=deepcopy(state)
-        out=reconcile(state,sources,NOW)
-        assert expected in [i["code"] for i in out["engine"]["issues"]]
-        assert out["engine"]["facts"]==before.get("engine",{}).get("facts",{})
-        assert out["movements"]==before["movements"] and state==before
+    start={"owner_id": OWNER,"status":"active","started_at":"2026-10-05T00:00:00+00:00","movements":[],"openings":{},
+           "engine":{"as_of":NOW}}
+    pooled = {**start, "movements":[{"party_type":"provider","party_id":"salla","currency":"SAR","kind":"collection",
+                                     "direction":"incoming","amount":"12.00","allocations":[]}]}
+    before=deepcopy(pooled)
+    out=reconcile(pooled,sources,NOW)
+    assert "provider_historical_capture_review_required" in [i["code"] for i in out["engine"]["issues"]]
+    assert not out["engine"]["facts"]
+    assert out["movements"]==before["movements"] and pooled==before
     first=reconcile(start,sources,NOW)
     assert first["engine"]["obligations"]["provider:"+ORDER]["confirmed"]=="57.19"
     assert reconcile(first,sources,NOW)==first

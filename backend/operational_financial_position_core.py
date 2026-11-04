@@ -12,7 +12,7 @@ from operational_balance_service import report
 from operational_prestart_cod_forecast import snapshot_cod_preview
 from operational_delivery_report_coverage import delivery_coverage_diagnostics
 from operational_profit_payroll import recorded_salary_subtotals
-from operational_provider_report_coverage import order_page_payment_rows, provider_evidence_coverage
+from operational_provider_report_coverage import provider_evidence_coverage
 
 
 ZERO = Decimal("0")
@@ -493,8 +493,10 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     currencies.update(prestart_cod)
     customer_cod = snapshot_cod_preview(cost_exposure, projection["started_at"], projection["as_of"], "open_customer_cod")
     currencies.update(customer_cod)
-    page_payments = order_page_payment_rows(projection)
+    page_payments = projection["details"]["provider_order_payments"]
+    paid_totals = projection["details"]["provider_paid_totals"]
     currencies.update(page_payments)
+    currencies.update(paid_totals)
     if cost_ready:
         currencies.update((cost_exposure.get("currencies") or {}).keys())
     result["currency_order"] = sorted(currencies, key=lambda currency: (currency != "SAR", currency))
@@ -504,6 +506,12 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         actual_complete = bool(projection["as_of"]) and not any(row.get("currency") in {None, currency} for row in projection["issues"])
         tables = _actual_tables(parties, actual_complete)
         tables.append(_balance_origin(parties, obligations, actual_complete))
+        if currency in paid_totals:
+            rows = [{"id": row["provider"], **row} for row in paid_totals[currency]]
+            tables.append(_table("provider_customer_paid", "إجمالي ما دفعه العملاء عبر المنصات", "fulfillment",
+                [_column("name", "المنصة", "text"), _column("orders", "عدد الطلبات المدفوعة", "count"),
+                 _column("paid", "ما دفعه العملاء قبل الرسوم")], rows, complete=False,
+                notes=["يشمل المدفوع المثبت منذ بداية التشغيل لكل منصة مرة واحدة، بما فيه ما ينتظر مطابقة التسوية."]))
         if currency in page_payments:
             page_table = _table("provider_order_balances", "المدفوع والمتبقي حسب صفحة الطلب", "fulfillment", [
                 _column("name", "المنصة", "text"), _column("status", "حالة الإثبات", "text"),
