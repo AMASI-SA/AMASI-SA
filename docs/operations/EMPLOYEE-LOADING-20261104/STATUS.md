@@ -36,3 +36,10 @@ governed v5 release intent/rehearsal before authorized publication. Shared /app
 guard last read inactive; no source changes or lease created. Untracked shared
 files and original Qoyod checkout preserved. Production changed by this
 follow-up: NO.
+
+Integrated current Production972777b46 after concurrent PR1748 advanced the base.
+No overlapping supplier-dispatch changes. Focused38 tests passed again. Previous
+source9c4491e5294a3353591ae44f26a4559e0c465fe1 real-Mongo CI41875021940
+passed161 tests. Its readiness failed because Production advanced, not a build
+execution failure. New exact-source CI required. Issue1006 rejects comments at
+GitHub2500-comment limit; continuation is retained in PR1749 and this document.
