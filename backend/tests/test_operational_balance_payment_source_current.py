@@ -45,7 +45,7 @@ def test_component_pending_never_weakens_owner_identity_version_or_native_proof(
     assert payment is None and problems
 
 
-def foreign_payment(*, order=100, paid='99.98', tender=None, changes=None):
+def foreign_payment(*, order=100, paid='99.98', tender=None, changes=None, source_changes=None, rows=()):
     raw = {'id': 71, 'reference_id': 825, 'status': {'slug': 'in_progress'}, 'currency': 'KWD',
            'payment_method': 'credit_card', 'total': {'amount': order, 'currency': 'KWD'}, 'updated_at': STAMP,
            'payment_actions': {'remaining_action': {'has_remaining_amount': False, 'remaining_amount': None,
@@ -58,8 +58,8 @@ def foreign_payment(*, order=100, paid='99.98', tender=None, changes=None):
     if changes:
         changes(raw)
     return normalize_operational_payment(raw, 'KWD', order, '2026-11-01T01:00:00Z', '2026-11-03T09:00:00Z',
-        owner='owner', order_number='825', provider_order_id='71', rows=[],
-        source={'user_id':'owner', 'order_number':'825', 'order_id':'71'})
+        owner='owner', order_number='825', provider_order_id='71', rows=rows,
+        source={'user_id':'owner', 'order_number':'825', 'order_id':'71', **(source_changes or {})})
 
 
 @pytest.mark.parametrize('amount', ['99.98', '99.99'])
@@ -67,17 +67,16 @@ def test_closed_foreign_tender_keeps_paid_amount_separate_from_mismatching_order
     from operational_provider_report_coverage import provider_customer_payments
 
     payment, issues = foreign_payment(paid=amount)
-    assert payment is None  # no claim or made-up capture time
-    issue, = issues
-    assert issue['code'] == 'provider_closed_tender_total_mismatch'
-    observation = issue['paid_tender_observation']
+    assert payment is not None and not issues and not payment.get('captures')
+    assert payment['gross'] == amount
+    observation = payment['order_page_balance']
     assert (observation['paid'], observation['gross']) == (amount, '100.00')
-    assert 'remaining' not in observation and 'captured_at' not in observation
-    report_issue = {**issue, 'source_id':'71','scope':'provider_payment'}
-    source = {'details':{'facts':{}},'obligations':[],'issues':[report_issue,report_issue]}
+    assert observation['remaining'] is None and 'captured_at' not in observation
+    source = {'details':{'facts':{'provider_order_balance:71':observation}},'obligations':[],'issues':[]}
     for _ in range(2):
         pages, totals = provider_customer_payments(source)
-        assert not pages and totals['KWD'] == [{'provider':'salla','name':'سلة','orders':1,'paid':amount}]
+        assert pages['KWD'][0]['remaining'] is None
+        assert totals['KWD'] == [{'provider':'salla','name':'سلة','orders':1,'paid':amount}]
 
 
 @pytest.mark.parametrize('kwargs', [
@@ -92,14 +91,17 @@ def test_closed_foreign_tender_keeps_paid_amount_separate_from_mismatching_order
     {'changes':lambda r:r.update(updated_at='2026-11-03T09:01:00Z')},
 ])
 def test_unproved_tender_never_enters_customer_paid_detail(kwargs):
-    _, issues = foreign_payment(**kwargs)
+    payment, issues = foreign_payment(**kwargs)
+    assert not payment or 'order_page_balance' not in payment
     assert not any(i.get('paid_tender_observation') for i in issues)
 
 
 def test_foreign_observation_never_counts_a_frozen_different_provider_or_reference_owner_twice():
     from operational_provider_report_coverage import provider_customer_payments
 
-    _, (issue,) = foreign_payment()
+    issue = {'code':'provider_closed_tender_total_mismatch', 'provider':'salla',
+             'paid_tender_observation': {'order_id':'71', 'provider':'salla', 'currency':'KWD',
+                 'reference':'native-cc-reference', 'paid':'99.98', 'gross':'100.00'}}
     observed = {**issue, 'scope':'provider_payment', 'source_id':'71'}
     frozen = {'order_id':'71', 'provider':'tamara', 'currency':'KWD',
               'paid':'99.98','gross':'99.98','remaining':'0.00'}

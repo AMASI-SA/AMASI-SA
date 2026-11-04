@@ -165,7 +165,9 @@ def observe_nonprovider(summary, raw, source, order, total, payment, owner, *, b
                     i.get("code") == "provider_closed_tender_total_mismatch"), None)
         if page:
             party = page["provider"]
-            native[party], due[party] = Decimal(page["paid"]), Decimal(page["remaining"])
+            native[party] = Decimal(page["paid"])
+            if page["remaining"] is not None:
+                due[party] = Decimal(page["remaining"])
         elif obs:
             native[obs["provider"]] = Decimal(obs["paid"])
         elif payment.get("captures") and payment.get("provider"):

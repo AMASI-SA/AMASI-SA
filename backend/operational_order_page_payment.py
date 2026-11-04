@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from operational_payment_evidence import _amount, _instant
 from operational_provider_history import late_payment_blocks
+from operational_provider_transaction_evidence import is_closed_tender_balance
 
 
 def corroborated_refund_basis(previous, payment, facts, order_id):
@@ -32,8 +33,13 @@ def observed_balance(page, payment, order, state, *, now, start):
     if not page or (page.get("order_id"), page.get("order_number"), page.get("provider"), page.get("currency")) != (
             oid, order.get("order_number"), party, currency) or not state.get("owner_id") or page.get("owner_id") != state["owner_id"]:
         raise ValueError("provider_order_page_identity_conflict")
-    gross, paid, due = (_amount(page[k], currency) for k in ("gross", "paid", "remaining"))
-    if gross != _amount(payment["gross"], currency) or paid + due != gross or gross <= 0:
+    gross, paid = (_amount(page[k], currency) for k in ("gross", "paid"))
+    if is_closed_tender_balance(page, currency):
+        valid_amounts = _amount(payment["gross"], currency) == paid
+    else:
+        due = _amount(page["remaining"], currency)
+        valid_amounts = gross == _amount(payment["gross"], currency) and paid + due == gross
+    if not valid_amounts or gross <= 0:
         raise ValueError("provider_payment_amount_conflict")
     if any(payment.get(k) for k in ("refunds", "cancellations")) or _amount(payment.get("cancelled", 0), currency):
         raise ValueError("provider_refund_execution_evidence_required")

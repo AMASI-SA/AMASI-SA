@@ -25,3 +25,31 @@ def test_accounting_activation_freezes_once_without_accounting_write():
             await create_movement(db, "owner", "owner", movement())
         assert error.value.detail["code"] == "operational_not_active"
     run(scenario)
+
+
+@pytest.mark.asyncio
+async def test_successful_worker_refresh_queues_missing_native_bank_proof(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    import operational_balance_worker as worker
+
+    issues = [{"code": "operational_order_bank_binding_incomplete", "source_id": "missing-bank"}]
+    calls = []
+
+    async def owners():
+        yield {"owner_id": "owner"}
+
+    async def refreshed(db, owner):
+        return {"status": "active", "engine": {"issues": issues}}
+
+    async def acquire(db, owner, pending):
+        calls.append((owner, pending))
+
+    class Database:
+        def __getitem__(self, key):
+            return SimpleNamespace(find=lambda *args: owners())
+
+    monkeypatch.setattr(worker, "refresh", refreshed)
+    monkeypatch.setitem(sys.modules, "salla_integration.bank_payment_sync", SimpleNamespace(acquire_missing=acquire))
+    await worker.tick(Database())
+    assert calls == [("owner", issues)]

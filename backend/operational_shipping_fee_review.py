@@ -8,7 +8,7 @@ support the base delivery cost. Any applicable delivery policy must agree.
 from collections import Counter, defaultdict
 from decimal import Decimal, InvalidOperation
 
-from operational_delivery_evidence import _instant, _text
+from operational_delivery_evidence import _instant, _text, delivery_time_matches
 
 NATIVE = "store_delivery_operational"
 PENDING = "pending_mz2_driver_balance_link"
@@ -168,11 +168,18 @@ class DriverEarnings:
                     or r.get("currency") != "SAR" or amount(r.get("confirmed")) != n for r in previous)
                     or (not previous and {key, key + ":base_shipping"} & self.allocation_keys)):
                 raise ValueError("driver_fee_saved_conflict")
-            frozen = self.state.get("facts", {}).get(key)
+            saved_facts = self.state.get("facts", {})
+            frozen = saved_facts.get(key)
             if frozen and (frozen.get("party_type") != "store_driver" or frozen.get("id") != a["driver_id"]
-                        or _instant(frozen.get("delivered_at")) != delivered):
+                        or not delivery_time_matches(frozen, delivered, order_id=oid, native_driver_earning=info)):
                 raise ValueError("driver_fee_saved_conflict")
-            stored = self.state.get("facts", {}).get("native_driver_earning:" + oid)
+            if frozen and _instant(frozen["delivered_at"]) != delivered:
+                saved_prices = ((saved_facts.get(key + ":base_shipping"), n),
+                                (saved_facts.get("shipping_fee:" + oid), quote.get("cost") if quote else n))
+                if any(saved is not None and (expected is None or amount(saved.get("cost")) != amount(expected))
+                       for saved, expected in saved_prices):
+                    raise ValueError("driver_fee_saved_conflict")
+            stored = saved_facts.get("native_driver_earning:" + oid)
             if stored and stored != {k:v for k,v in info.items() if k != "party_name"}:
                 raise ValueError("driver_fee_saved_conflict")
             if ambiguous_setup or matching_rates > 1 or (matching_rates and not quote):

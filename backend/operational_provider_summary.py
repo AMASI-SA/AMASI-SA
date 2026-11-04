@@ -2,7 +2,8 @@
 from collections import defaultdict
 from decimal import Decimal
 
-from operational_configured_provider_fees import cash, estimate_fee, number
+from operational_configured_provider_fees import cash, configured_terms, estimate_fee, number
+from operational_fee_methods import fee_rail
 from operational_provider_balance_sar import sar_amount
 from operational_provider_report_coverage import PLATFORMS
 
@@ -63,6 +64,7 @@ def _settlements(state, valuations):
 def _records(state, obligations, valuations):
     engine = state.get("engine", {})
     inputs = engine.get("provider_fee_inputs", {}).get("orders", {})
+    settings = engine.get("provider_fee_inputs", {}).get("settings", {})
     records = {}
     refunds = defaultdict(Decimal)
     captured = defaultdict(Decimal)
@@ -100,6 +102,11 @@ def _records(state, obligations, valuations):
             for provider, values in legs.items():
                 native.setdefault(provider, sum((Decimal(v["amount"]) for v in values), ZERO))
                 methods[provider] = values[0].get("method") if len(values) == 1 else None
+                if provider == "salla" and len(values) > 1:
+                    rails = {fee_rail(value.get("method")) for value in values}
+                    terms = {configured_terms(settings, provider, value.get("method")) for value in values}
+                    if len(rails) == 1 and None not in rails and len(terms) == 1 and None not in terms:
+                        methods[provider] = values[0].get("method")
         elif payment.get("provider") in PLATFORMS:
             provider = payment["provider"]
             page = payment.get("order_page_balance") or {}
@@ -113,7 +120,8 @@ def _records(state, obligations, valuations):
             identity = "provider:" + oid + (":" + provider if split else "")
             records[identity] = {"order_id": oid, "provider": provider, "currency": source["currency"],
                                  "gross": max(paid, captured[oid, provider]), "method": methods.get(provider),
-                                 "fx": fx, "multiple_legs": bool(split and len(legs[provider]) != 1)}
+                                 "fx": fx, "unresolved_split_fees": bool(
+                                     split and len(legs[provider]) != 1 and methods.get(provider) is None)}
     for identity, claim in claims.items():
         provider = claim["party_id"]
         oid = identity.removeprefix("provider:").removesuffix(":" + provider)
@@ -190,7 +198,7 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             projected_gross = number(projection.get("gross"))
             if projected_gross and row["gross"] < projected_gross:
                 fee = None
-        if fee is None and currency == "SAR" and not row.get("multiple_legs"):
+        if fee is None and currency == "SAR" and not row.get("unresolved_split_fees"):
             fee = estimate_fee(settings, provider, row["gross"], method=row["method"], refunded=row["refunded"])
         retained_uncaptured = (claim and claim.get("direction") == "payable"
                                and Decimal(claim.get("expected", "0")) > 0 and row["gross"] == 0)

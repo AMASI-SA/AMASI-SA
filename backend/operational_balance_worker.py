@@ -45,6 +45,14 @@ async def tick(db):
                         await acquire_missing(db, item["owner_id"], pending)
                     except Exception:
                         log.warning("Salla paid-SAR evidence acquisition deferred")
+                bank_issues = [issue for issue in refreshed.get("engine", {}).get("issues", [])
+                               if issue.get("code") == "operational_order_bank_binding_incomplete"]
+                if bank_issues:
+                    from salla_integration.bank_payment_sync import acquire_missing as acquire_bank
+                    try:
+                        await acquire_bank(db, item["owner_id"], bank_issues)
+                    except Exception:
+                        log.warning("Salla bank identity acquisition deferred")
 
 
 async def run(db, interval=30):

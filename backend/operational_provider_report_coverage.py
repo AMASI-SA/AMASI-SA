@@ -86,6 +86,8 @@ def provider_evidence_coverage(projection):
 
 def provider_customer_payments(projection):
     """Return the page breakdown and distinct evidenced gross payments in each native currency."""
+    from operational_provider_transaction_evidence import is_closed_tender_balance
+
     records = {}
     for key, row in projection["details"].get("facts", {}).items():
         if key.startswith("provider_order_balance:") and isinstance(row, dict) and key == "provider_order_balance:" + str(row.get("order_id")):
@@ -104,8 +106,10 @@ def provider_customer_payments(projection):
         if provider not in PLATFORMS or not isinstance(currency, str) or len(currency) != 3 or not currency.isascii() or not currency.isalpha() or not currency.isupper():
             continue
         try:
-            paid, due, gross = (Decimal(str(row[k])) for k in ("paid", "remaining", "gross"))
-            if not all(n.is_finite() and n >= 0 for n in (paid, due, gross)) or paid + due != gross:
+            paid, gross = (Decimal(str(row[k])) for k in ("paid", "gross"))
+            due = None if is_closed_tender_balance(row, currency) else Decimal(str(row["remaining"]))
+            if (not all(n.is_finite() and n >= 0 for n in (paid, gross))
+                    or (due is not None and (not due.is_finite() or due < 0 or paid + due != gross))):
                 continue
         except (KeyError, ValueError, InvalidOperation):
             continue
@@ -115,7 +119,7 @@ def provider_customer_payments(projection):
         totals = groups[currency, provider, status, reason]
         totals[0] += 1
         totals[1] += paid
-        totals[2] += due
+        totals[2] = None if due is None or totals[2] is None else totals[2] + due
     by_currency = defaultdict(list)
     for (currency, provider, status, reason), (orders, paid, due) in sorted(groups.items()):
         by_currency[currency].append({
@@ -124,7 +128,7 @@ def provider_customer_payments(projection):
                 "provider_historical_capture_review_required": "للمراجعة — طلب سابق لآخر احتساب",
                 "provider_settled_capture_review_required": "للمراجعة — سداد يحتاج مطابقة",
             }.get(reason, "للمراجعة قبل الاحتساب")),
-            "orders": orders, "paid": format(paid, ".2f"), "remaining": format(due, ".2f"),
+            "orders": orders, "paid": format(paid, ".2f"), "remaining": None if due is None else format(due, ".2f"),
         })
     # A later page can corroborate one or more captures for the same order.
     # Both observations describe the same customer money.
