@@ -95,6 +95,20 @@ def test_component_schedule_can_be_created_and_keeps_nonrefundable_fees_and_vat(
         saved(db, vat_rate=None)
 
 
+def test_component_contract_preserves_rounding_and_unverified_event_terms():
+    component = dict(id="capture", percentage="2", fixed_amount="1",
+                     vat_treatment="exclusive", vat_rate="15")
+    policy = saved(DB(), provider="tabby", components=[component])
+    assert policy["components"][0]["vat_rounding"] == "half_up"
+    assert "refund_fee_treatment" not in policy["components"][0]
+    assert "cancellation_fee_treatment" not in policy["components"][0]
+
+    even = saved(DB(), provider="tabby", components=[dict(component, vat_rounding="half_even")])
+    assert even["components"][0]["vat_rounding"] == "half_even"
+    with pytest.raises(ValidationError, match="vat_rounding"):
+        saved(DB(), provider="tabby", components=[dict(component, vat_rounding="truncate")])
+
+
 def test_preview_is_scoped_and_read_only_and_never_supplies_missing_default_or_duplicate_rate():
     class PreviewDB(DB):
         allowed = DB.allowed | {"settings"}

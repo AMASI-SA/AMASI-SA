@@ -5,7 +5,7 @@ and splits refundable/nonrefundable/fixed components with independent VAT.
 No merchant rates are hardcoded; statement fees still supersede estimates.
 """
 from datetime import date, datetime, timedelta
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, ROUND_HALF_UP
 
 CENT = Decimal('0.01')
 ZERO = Decimal('0')
@@ -93,15 +93,19 @@ def _select(payment, policies, transaction_date):
 
 
 def _tax_parts(raw_fee, component):
+    rounding_name = component.get('vat_rounding', 'half_up')
+    if rounding_name not in {'half_up', 'half_even'}:
+        raise ValueError('provider_fee_tax_rounding_invalid')
+    rounding = ROUND_HALF_EVEN if rounding_name == 'half_even' else ROUND_HALF_UP
     treatment = component.get('vat_treatment')
     if treatment in {'exclusive', 'inclusive'}:
         rate = money(component.get('vat_rate'))
         if rate > 100:
             raise ValueError('provider_fee_tax_rate_invalid')
         if treatment == 'inclusive':
-            net = _q(raw_fee / (1 + rate / 100))
+            net = (raw_fee / (1 + rate / 100)).quantize(CENT, rounding=rounding)
             return net, raw_fee - net
-        return raw_fee, _q(raw_fee * rate / 100)
+        return raw_fee, (raw_fee * rate / 100).quantize(CENT, rounding=rounding)
     if treatment in {'exempt', 'not_applicable'}:
         return raw_fee, ZERO
     raise ValueError('fee_tax_policy_incomplete')
@@ -160,9 +164,9 @@ def _components_projection(payment, policy):
             raise ValueError('provider_fee_rate_invalid')
         refund_rule = component.get('refund_fee_treatment')
         cancel_rule = component.get('cancellation_fee_treatment')
-        if refund_rule not in {'retain', 'recalculate', 'full_only'}:
+        if refunded and refund_rule not in {'retain', 'recalculate', 'full_only'}:
             raise ValueError('refund_fee_treatment_incomplete')
-        if cancel_rule not in {'retain', 'recalculate'}:
+        if cancelled and cancel_rule not in {'retain', 'recalculate'}:
             raise ValueError('cancellation_fee_treatment_incomplete')
         base = active if cancel_rule == 'recalculate' else gross
         percentage_fee = _q(base * rate / 100)

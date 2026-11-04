@@ -8,12 +8,23 @@ SALLA_RAILS = {
 }
 SALLA_RAILS.update({key.replace('_', ' '): key for key in SALLA_RAILS.values()})
 CREDIT_CARD_NAMES = {_normalize_arabic(name) for name, rail in SALLA_RAILS.items() if rail == 'credit_card'}
+CARD_NETWORKS = frozenset({'mada', 'visa', 'mastercard'})
+CARD_WRAPPERS = frozenset({'apple_pay', 'google_pay', 'credit_card', 'debit_card'})
+
+
+def _specific_rail(rails):
+    """A wallet and its evidenced card network describe one funding rail."""
+    known = rails - {None}
+    networks = known & CARD_NETWORKS
+    if networks:
+        known -= CARD_WRAPPERS
+    return known.pop() if len(known) == 1 else None
 
 
 def fee_rail(method):
     if isinstance(method, dict):
         rails = {fee_rail(method.get(k)) for k in ('code', 'slug') if method.get(k)}
-        return rails.pop() if len(rails) == 1 else None
+        return _specific_rail(rails)
     if not isinstance(method, str):
         return None
     name = method.strip().lower().replace('_', ' ')
@@ -29,5 +40,5 @@ def order_fee_rail(raw):
     for method in methods:
         fields = [method.get(key) for key in ('code', 'slug')] if isinstance(method, dict) else [method]
         rails.update(rail for value in fields if (rail := fee_rail(value)))
-    # Conflicting rails must never borrow a specific rate. Gross proof remains independent.
-    return rails.pop() if len(rails) == 1 else None
+    # Different card networks remain ambiguous. A wallet wrapper is not another network.
+    return _specific_rail(rails)

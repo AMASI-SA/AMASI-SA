@@ -61,3 +61,28 @@ test("non-owner never loads merchant settings or a confirmation form", async () 
     expect(host.querySelector("form")).toBeNull();
     expect(fees.listOnboardingFeeCandidates).not.toHaveBeenCalled();
 });
+
+test("component VAT rounding is explicit while unverified event terms stay empty", async () => {
+    await act(async () => root.render(<ProviderFeeSetup />));
+    await set("المنصة", "tabby");
+    await set("معرف خطة التقسيط إن خصّ العقد خطة بعينها", "fixture-plan");
+    await set("نسبة العمولة الإجمالية %", "4.5");
+    await set("الرسم الثابت الإجمالي", "2");
+    await set("تسري من", "2026-11-01");
+    await set("معالجة ضريبة العمولة", "exclusive");
+    await set("نسبة ضريبة العمولة %", "15");
+    await set("مرجع العقد أو كشف المنصة المثبت للتعرفة وفترتها", "synthetic component contract");
+    await act(async () => [...host.querySelectorAll("button")].find(b => b.textContent === "إضافة جزء مفصل للعمولة").click());
+    await set("النسبة للجزء 1", "4.5");
+    await set("المبلغ الثابت للجزء 1", "2");
+    expect(input("تقريب ضريبة الجزء 1").value).toBe("half_up");
+    await set("تقريب ضريبة الجزء 1", "half_even");
+    expect(host.querySelector("form").checkValidity()).toBe(true);
+    await act(async () => host.querySelector("button[type=submit]").click());
+    expect(fees.createOnboardingFeePolicy).toHaveBeenCalledWith(expect.objectContaining({
+        plan_id: "fixture-plan",
+        components: [{ id: "1", percentage: "4.5", fixed_amount: "2", vat_treatment: "exclusive",
+            vat_rate: "15", vat_rounding: "half_even", refund_fee_treatment: null,
+            cancellation_fee_treatment: null }],
+    }));
+});

@@ -55,8 +55,9 @@ class FeeComponent(Contract):
     fixed_amount: Decimal = Field(ge=0, le=999999999999, decimal_places=2, allow_inf_nan=False)
     vat_treatment: Literal["inclusive", "exclusive", "exempt", "not_applicable"]
     vat_rate: Decimal | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
-    refund_fee_treatment: Literal["retain", "recalculate", "full_only"]
-    cancellation_fee_treatment: Literal["retain", "recalculate"]
+    vat_rounding: Literal["half_up", "half_even"] = "half_up"
+    refund_fee_treatment: Literal["retain", "recalculate", "full_only"] | None = None
+    cancellation_fee_treatment: Literal["retain", "recalculate"] | None = None
 
     @model_validator(mode="after")
     def known_tax(self):
