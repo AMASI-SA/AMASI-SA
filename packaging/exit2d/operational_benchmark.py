@@ -44,6 +44,24 @@ def seed(database):
             'currency': 'SAR', 'total_amount': 100, 'total_product_cost': 10,
             'raw_by_source': {'salla_direct': {'id': index + 10000, 'reference_id': order,
                 'date': '2026-09-06T12:00:00Z', 'status': {'slug': 'reviewed'}, 'items': []}}})
+        # Real physical-piece Ready action, separate from supplier Ready. Two
+        # received units keep the order incomplete, so this measurement cannot
+        # initiate a Salla completion write. Default legacy inventory policy is
+        # exercised as-is; no stock plan, approval or finance guard is bypassed.
+        assembly_order = f'EXIT2D-ASSEMBLY-{index}'
+        database.unified_orders.insert_one({'user_id': owner, 'order_number': assembly_order,
+            'order_id': assembly_order, 'order_date': '2026-09-06', 'order_status': 'in_progress',
+            'currency': 'SAR', 'total_amount': 100, 'total_product_cost': 10,
+            'raw_by_source': {'salla_direct': {'id': index + 20000, 'reference_id': assembly_order,
+                'date': '2026-09-06T12:00:00Z', 'status': {'slug': 'in_progress'},
+                'items': [{'id': 'line', 'name': 'Synthetic received product', 'quantity': 2}]}}})
+        database.order_review_workflows.insert_one({'user_id': owner, 'order_number': assembly_order,
+            'stage': 'in_progress', 'assembly_status': 'in_progress'})
+        database.mezan_preparation_pieces_v1.insert_many([{'user_id': owner,
+            'piece_id': f'exit2d-assembly-{index}-{unit}', 'order_number': assembly_order,
+            'order_item_id': f'salla:{assembly_order}:line', 'unit_index': unit,
+            'status': 'ready_for_assembly', 'assembly_status': 'pending',
+            'product_name': 'Synthetic received product'} for unit in (1, 2)])
     number = 'EXIT2D-PRINT'
     database.order_review_workflows.insert_one({'user_id': owner, 'order_number': number,
         'stage': 'completed', 'assembly_status': 'completed',
@@ -92,8 +110,14 @@ async def run(owner_cookie, employee_cookie, database):
             for index in range(10):
                 workspace = await call('GET', '/api/supplier-dispatch-v1/workspace?grain=piece', employee_cookie, group='my_products')
                 assert workspace.get('files'), 'my-products fixture not visible'
-                await call('GET', '/api/preparation-work-v1/assembly/orders?state=in_progress', employee_cookie, group='assembly_labeling')
-                await call('GET', '/api/fulfillment-v2/ready-to-ship', employee_cookie, group='ready_board')
+                await call('GET', '/api/preparation-work-v1/assembly/orders?state=in_progress', employee_cookie, group='assembly_receiving_board')
+                await call('GET', '/api/fulfillment-v2/ready-to-ship', employee_cookie, group='assembly_labeling')
+                ready_path = f'/api/preparation-work-v1/assembly/pieces/exit2d-assembly-{index}-1/ready'
+                ready_payload = {'client_request_id': f'exit2d-assembly-ready-{index}'}
+                ready = await call('POST', ready_path, employee_cookie, payload=ready_payload, group='assembly_piece_ready')
+                assert ready['piece_ready_confirmed'] is True
+                replay = await call('POST', ready_path, employee_cookie, payload=ready_payload)
+                assert replay['idempotent'] is True
                 payload = {'client_request_id': f'exit2d-perf-dispatch-{index}',
                     'supplier_id': 'exit2d-perf-supplier', 'file_number': f'PF-EXIT2D-PERF-{index}',
                     'selections': [{'group_key': f'piece:PF-EXIT2D-PERF-{index}', 'quantity': 1}]}
@@ -104,7 +128,7 @@ async def run(owner_cookie, employee_cookie, database):
                     expected=201, payload=payload)
                 assert replay['dispatch']['id'] == dispatch, 'supplier file replay duplicated'
                 await call('POST', '/api/supplier-dispatch-v1/dispatches/' + dispatch + '/ready',
-                    employee_cookie, payload={}, group='mark_ready')
+                    employee_cookie, payload={}, group='mark_supplier_ready')
                 await call('POST', '/api/supplier-dispatch-v1/dispatches/' + dispatch + '/ready',
                     employee_cookie, payload={})
                 assert database.mezan_supplier_dispatch_events_v1.count_documents({
@@ -118,7 +142,7 @@ async def run(owner_cookie, employee_cookie, database):
             results = await asyncio.gather(*loads, return_exceptions=True)
             for result in results:
                 if isinstance(result, Exception): raise result
-    assert reports_completed >= 4 and overlap == 60
+    assert reports_completed >= 4 and overlap == 70
     assert database.mezan_supplier_dispatches_v1.count_documents({'supplier_id': 'exit2d-perf-supplier'}) == 10
     output = {name: {'requests': len(values), 'p50_ms': round(statistics.median(values), 3),
         'p95_ms': round(sorted(values)[-1], 3)} for name, values in times.items()}
