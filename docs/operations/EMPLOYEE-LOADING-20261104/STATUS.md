@@ -71,3 +71,13 @@ any retry. Do not record customer identifiers in this repository.
 Next: finish frozen-B CI and restore supported browser/terminal control;
 inspect isolated build state, run full adapter rehearsal, then fresh release
 status/prepare/prepublish and publication/verify. Publication still NOT complete.
+
+Frozen-B readiness41887012007 completed SUCCESS, including clean-clone adapters
+on Node20.20.2 and24.19.0. Mobile PR332 frontend-checks/session succeeded;
+branch-filtered combined bundle job skipped, with separate local staff-profile
+Android export already passed. No merge or production publication: supported
+browser/computer-control tools remain unavailable in this session. Resume from
+frozenB, inspect existing terminal before rerunning its unknown last command,
+and freshly check guard/remote base. ADB had no device after tooling restart;
+started existing Mezan-Operational-UAT without wipe, reconnected authorizing
+transport; device is visible but boot/shell readiness still pending.
