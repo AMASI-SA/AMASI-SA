@@ -46,21 +46,34 @@ def test_dated_order_transition_for_one_waybill_confirmed_once_without_cod(old, 
     assert first["openings"] == again["openings"] and first["movements"] == again["movements"] == []
 
 
-def test_prior_period_uses_review_not_automatic_debt():
+def test_poststart_transition_accrues_once_after_previous_calculation():
     data, source, raw, _ = fixture()
     raw["status_changed_at"] = DELIVERED
     prior = active()
     prior["engine"] = {"as_of": NOW}
     state = calculated(data, prior)
-    assert fee_total(state) == 0
-    held = next(i for i in state["engine"]["issues"] if i["code"] == "courier_fee_historical_review_required")
-    assert held["courier_fee_review"]["candidate_amount"] == "10.00"
+    assert fee_total(state) == 10
+    assert state["engine"]["facts"]["delivery_event:100"]["delivered_at"] == DELIVERED
+    assert "cod:100" not in state["engine"]["obligations"]
+    assert not any(i["code"] == "courier_fee_historical_review_required" for i in state["engine"]["issues"])
+    assert state["movements"] == prior["movements"] and state["openings"] == prior["openings"]
+    assert calculated(data, state) == state
+
+
+def test_order_transition_at_exact_start_accrues_once_without_cod():
+    data, _, _, _ = fixture()
+    data[COLLECTION] = [history(START)]
+    state = calculated(data)
+    assert fee_total(state) == 10
+    assert state["engine"]["facts"]["delivery_event:100"]["delivered_at"] == START
+    assert "cod:100" not in state["engine"]["obligations"]
+    assert calculated(data, state) == state
 
 
 @pytest.mark.parametrize("case", [
     "split", "superseded", "no_waybill", "cancelled", "pending_component", "stale_version",
     "wrong_status", "conflicting_order_status", "wrong_owner", "wrong_order", "duplicate_delivery",
-    "later_return", "history_updated_only", "ambiguous_timezone", "start", "shipment_after_delivery",
+    "later_return", "history_updated_only", "ambiguous_timezone", "before_start", "shipment_after_delivery",
     "direct_disagrees", "malformed_shipment",
 ])
 def test_conflicts_and_boundary_never_confirm_shipping(case):
@@ -94,8 +107,8 @@ def test_conflicts_and_boundary_never_confirm_shipping(case):
         data[COLLECTION] = [history(None, updated_at=DELIVERED)]
     elif case == "ambiguous_timezone":
         data[COLLECTION] = [history("2026-10-06 15:00:00")]
-    elif case == "start":
-        data[COLLECTION] = [history(START)]
+    elif case == "before_start":
+        data[COLLECTION] = [history("2026-10-04T23:59:59.999999+00:00")]
     elif case == "shipment_after_delivery":
         raw["shipments"][0]["created_at"] = NOW
     elif case == "direct_disagrees":

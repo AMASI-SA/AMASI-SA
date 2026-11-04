@@ -37,4 +37,10 @@ All report tables use 13 rows per page. The unconfirmed platform collection tabl
 
 ## Next action
 
-Run the combined checkpoint through the full existing operational CI, correct failures, review the exact candidate and prepare the governed release. Production has not changed in this task.
+The combined checkpoint `e0c2116a6095ce2051038195445782b07275162a` ran CI `41861464314` with 2306 passing backend cases and 10 failures. The new real-Mongo native bank-routing and provider settlement-authority regressions passed. All operational frontend tests passed. Seven failures identified an obsolete preview CLI dependency on the removed provider-fee table and old row identity. Three courier cases retained the previous hold policy expectations. The follow-up updates the CLI to the consolidated net provider contract and tests the inclusive operational-start behavior.
+
+Independent fee review additionally covered fully evidenced settlement without configured estimates, cumulative foreign settlement rounding, and a full refund after an already settled capture. A refund overlapping a partial payout retains an incomplete net when actual fee-credit attribution is unavailable.
+
+The governed Node v22.23.2 and Yarn v1.22.22 toolchain is installed. The shared deployment guard was checked inactive, and the current production health reports the earlier reviewed performance source `00374911cee75a11f5b5bbc56952df2ae0852a75`. The production branch remains the reviewed base `84bd03dcd585f57b2b08bf93c8ac0fd8beb58463`.
+
+Run the corrected checkpoint through the full operational CI, then bootstrap the governed build, freeze its intent-only commit and rehearse the actual Emergent adapter before the already authorized publication. Production has not changed in this task.

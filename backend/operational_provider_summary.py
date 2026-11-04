@@ -16,9 +16,12 @@ def _money(value):
 def _settlements(state, valuations):
     allocated = defaultdict(lambda: {"gross": ZERO, "fees": ZERO})
     scope_fees = defaultdict(Decimal)
+    scope_cash = defaultdict(Decimal)
+    native = defaultdict(lambda: {"gross": ZERO, "cash": ZERO, "returned": ZERO})
     for movement in state.get("movements", []):
-        if movement.get("party_type") != "provider" or movement.get("direction") != "incoming":
+        if movement.get("party_type") != "provider" or movement.get("kind") == "correction":
             continue
+        incoming = movement.get("direction") == "incoming"
         received = Decimal(movement["amount"])
         total = received + Decimal(movement.get("actual_fee_amount", "0"))
         if total <= 0:
@@ -30,20 +33,31 @@ def _settlements(state, valuations):
             gross = Decimal(line["amount"])
             cumulative += gross
             boundary = cash(received * cumulative / total)
-            fee = gross - (boundary - previous)
+            net = boundary - previous
+            fee = gross - net
             previous = boundary
             assigned_fees += fee
-            currency = movement["currency"]
-            basis = valuations.get(identity)
-            if basis:
-                gross, fee = sar_amount(gross, basis), sar_amount(fee, basis)
-                currency = "SAR"
-            allocated[identity]["gross"] += gross
-            allocated[identity]["fees"] += fee
-            scope_fees[currency, movement["party_id"]] += fee
+            row = native[identity, movement["currency"], movement["party_id"]]
+            if incoming:
+                row["gross"] += gross
+                row["cash"] += net
+            else:
+                row["returned"] += net
         remainder = Decimal(movement.get("actual_fee_amount", "0")) - assigned_fees
-        scope_fees[movement["currency"], movement["party_id"]] += remainder
-    return allocated, scope_fees
+        scope = movement["currency"], movement["party_id"]
+        if incoming:
+            scope_fees[scope] += remainder
+        scope_cash[scope] += (received - previous) * (1 if incoming else -1)
+    for (identity, currency, provider), values in native.items():
+        basis = valuations.get(identity.removeprefix("credit:"))
+        if basis:
+            values = {key: sar_amount(value, basis) for key, value in values.items()}
+            currency = "SAR"
+        fee = values["gross"] - values["cash"]
+        allocated[identity].update(gross=values["gross"], fees=fee)
+        scope_fees[currency, provider] += fee
+        scope_cash[currency, provider] += values["cash"] - values["returned"]
+    return allocated, scope_fees, scope_cash
 
 
 def _records(state, obligations, valuations):
@@ -142,7 +156,7 @@ def _records(state, obligations, valuations):
 def provider_balances(state, details, obligations, parties, valuations, *, sar_view=False):
     """Project fees once on the unpaid gross claim. Never change saved financial state."""
     records, claims = _records(state, obligations, valuations)
-    allocated, actual_fees = _settlements(state, valuations)
+    allocated, actual_fees, settled_cash = _settlements(state, valuations)
     settings = state.get("engine", {}).get("provider_fee_inputs", {}).get("settings", {})
     groups = {}
     resolved = set()
@@ -184,16 +198,24 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             fee = ZERO
         if retained_uncaptured:
             fee = None
+        applied = allocated[identity]["gross"]
+        fully_settled = not held and row["gross"] > 0 and applied >= row["gross"]
+        if row["refunded"] and applied > 0 and not fully_settled:
+            # A refund overlapping a partial payout needs an actual fee-credit
+            # allocation. The reduced principal cannot establish that split.
+            fee = None
+        if fee is None and fully_settled:
+            # The allocation proves its full cash/fee split. A missing estimate
+            # cannot turn an entirely settled actual fee back into uncertainty.
+            fee = ZERO
         if fee is None:
             total["complete"] = total["fees_complete"] = False
             continue
         if not held:
             resolved.add(identity)
         covered = ZERO
-        applied = allocated[identity]["gross"]
-        confirmed = number(claim.get("confirmed")) if claim else None
-        if not held and confirmed and applied > 0:
-            covered = cash(fee * min(applied, confirmed) / confirmed)
+        if not held and row["gross"] > 0 and applied > 0:
+            covered = cash(fee * min(applied, row["gross"]) / row["gross"])
         remaining = max(fee - covered, ZERO)
         total["fees"] += remaining
         if not held:
@@ -221,7 +243,7 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
         key = party["currency"], party["party_id"]
         total = group(*key)
         total["opening"] += party["opening"]
-        total["settled"] += party["settled"] - actual_fees[key]
+        total["settled"] = settled_cash[key]
         # Allocated settlement fees already reduced the gross debt. Only the
         # estimated fee on its remaining share is still owed to the platform.
         deduction = total["remaining_fees"]

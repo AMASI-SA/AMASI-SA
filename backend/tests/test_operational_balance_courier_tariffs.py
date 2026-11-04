@@ -61,8 +61,12 @@ def test_preview_then_pin_delivery_at_approved_price_and_replay_without_new_cash
             assert (await calculate(d, result))['engine']['obligations'] == result['engine']['obligations']
             assert result['movements'] == prior['movements'] and result['openings'] == prior['openings']
             historical = await calculate(d, {**prior, 'engine': {'as_of': NOW}})
-            assert fee_total(historical) == 0
-            assert any(i['code'] == 'courier_fee_historical_review_required' for i in historical['engine']['issues'])
+            assert fee_total(historical) == Decimal('21.85')
+            assert historical['engine']['obligations'] == result['engine']['obligations']
+            assert historical['engine']['facts'] == result['engine']['facts']
+            assert not any(i['code'] == 'courier_fee_historical_review_required' for i in historical['engine']['issues'])
+            assert historical['movements'] == prior['movements'] and historical['openings'] == prior['openings']
+            assert await calculate(d, historical) == historical
             # A later mutable setting change cannot reprice the old October delivery.
             await db.settings.update_one({'user_id':'owner'}, {'$set': {'shipping_companies.0.cost_per_order':30}})
             with pytest.raises(HTTPException):

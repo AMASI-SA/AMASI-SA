@@ -73,6 +73,20 @@ def test_actual_settlement_fee_replaces_covered_estimate():
     assert report(state)["summary"]["receivable"] == "50.00"
 
 
+@pytest.mark.parametrize("gross, cash_paid, fee, complete", [
+    ("100.00", "90.00", "10.00", True), ("50.00", "45.00", "5.00", False)])
+def test_complete_actual_settlement_needs_no_estimate_but_partial_settlement_does(gross, cash_paid, fee, complete):
+    state, _ = paid_state()
+    state["engine"]["provider_fee_inputs"]["settings"] = {}
+    state["movements"].append({"id": "payout", "kind": "settlement", "party_type": "provider", "party_id": "tamara",
+        "currency": "SAR", "amount": cash_paid, "actual_fee_amount": fee, "direction": "incoming",
+        "allocations": [{"obligation_id": "provider:one", "amount": gross}]})
+    row = platform(state)
+    assert row["complete"] is complete
+    assert row["fees"] == ("10.00" if complete else None)
+    assert row["net"] == ("0.00" if complete else None)
+
+
 @pytest.mark.parametrize("refunded, expected", [("40.00", "50.24"), ("100.00", "-9.76")])
 def test_tamara_refund_is_counted_once_and_keeps_capture_fee(refunded, expected):
     state, _ = paid_state(refunded=refunded)
@@ -91,6 +105,49 @@ def test_foreign_payment_uses_verified_sar_gross_and_keeps_fixed_fee_in_sar():
     row = platform(state, "salla", provider_balances_sar=True)
     assert (row["gross"], row["fees"], row["net"]) == ("100.00", "2.00", "98.00")
     assert state["engine"]["obligations"]["provider:one"]["currency"] == "KWD"
+
+
+def test_foreign_partial_and_full_payouts_conserve_cumulative_cash_and_fee_rounding():
+    state, order = paid_state("tamara", "12.00", currency="KWD", terms=settings(rate="10", fixed="0", vat="0"))
+    order["customer_payment_sar"] = {"currency": "KWD", "native": {"tamara": "12.00"},
+        "shares": {"tamara": "147.55"}, "paid": "147.55", "basis": "salla_list_paid"}
+    refresh_basis(state, [order], state["engine"]["issues"])
+    refresh_provider_fee_inputs(state, {"provider_fee_settings": settings(rate="10", fixed="0", vat="0"), "orders": [order]})
+    first = {"id": "first", "kind": "settlement", "party_type": "provider", "party_id": "tamara", "direction": "incoming",
+             "currency": "KWD", "amount": "0.83", "actual_fee_amount": "0.20",
+             "allocations": [{"obligation_id": "provider:one", "amount": "1.03"}]}
+    state["movements"].append(first)
+    row = platform(state, provider_balances_sar=True)
+    assert row["settled"] == "10.21"
+    assert Decimal(row["gross"]) - Decimal(row["fees"]) - Decimal(row["settled"]) == Decimal(row["net"])
+    state["movements"].append({**first, "id": "second", "amount": "10.00", "actual_fee_amount": "0.97",
+                               "allocations": [{"obligation_id": "provider:one", "amount": "10.97"}]})
+    row = platform(state, provider_balances_sar=True)
+    assert (row["settled"], row["fees"], row["net"]) == ("133.16", "14.39", "0.00")
+
+
+def test_fully_settled_refunded_capture_does_not_charge_another_estimated_fee():
+    state, _ = paid_state(refunded="100.00", terms=settings(rate="10", fixed="0", vat="0"))
+    state["movements"].append({"id": "payout", "kind": "settlement", "party_type": "provider", "party_id": "tamara",
+        "currency": "SAR", "amount": "100.00", "actual_fee_amount": "0.00", "direction": "incoming",
+        "allocations": [{"obligation_id": "provider:one", "amount": "100.00"}]})
+    row = platform(state)
+    assert (row["fees"], row["refunded"], row["net"]) == ("0.00", "100.00", "-100.00")
+    credit = "credit:provider:one"
+    state["movements"].append({"id": "repay", "kind": "settlement", "party_type": "provider", "party_id": "tamara",
+        "currency": "SAR", "amount": "100.00", "direction": "outgoing",
+        "allocations": [{"obligation_id": credit, "amount": "100.00"}]})
+    row = platform(state)
+    assert (row["fees"], row["settled"], row["net"]) == ("0.00", "0.00", "0.00")
+
+
+def test_refund_overlapping_partial_payout_keeps_fee_credit_attribution_unresolved():
+    state, _ = paid_state(refunded="40.00", terms=settings(rate="10", fixed="0", vat="0"))
+    state["movements"].append({"id": "payout", "kind": "settlement", "party_type": "provider", "party_id": "tamara",
+        "currency": "SAR", "amount": "45.00", "actual_fee_amount": "5.00", "direction": "incoming",
+        "allocations": [{"obligation_id": "provider:one", "amount": "50.00"}]})
+    row = platform(state)
+    assert row["fees"] is None and row["net"] is None and not row["complete"]
 
 
 def test_split_tenders_count_one_order_per_provider_and_fee_only_its_own_share():

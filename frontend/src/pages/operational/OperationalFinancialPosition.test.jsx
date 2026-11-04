@@ -181,7 +181,7 @@ test("USD advertising conversion uses supplied SAR fees and net balances above t
         { key: "payable", label: "علينا بالريال", type: "money", role: "payable" },
     ];
     report.currencies.SAR.tables.push({ id: "ads_currency_conversion", title: "الحسابات الإعلانية بالدولار", section: "actual", complete: true, columns,
-        rows: [{ id: "usd-ad", name: "حساب إعلان بالدولار", amount_usd: "-123.45", amount_sar: "-463.48", bank_commission: "10.66", bank_commission_vat: "1.60", receivable: "0.00", payable: "475.74" }] },
+        rows: [{ id: "usd-ad", name: "حساب إعلان بالدولار", amount_usd: "123.45", amount_sar: "463.48", bank_commission: "10.66", bank_commission_vat: "1.60", receivable: "0.00", payable: "475.74" }] },
         { id: "ads", title: "أرصدة الحسابات الإعلانية", section: "actual", complete: true, columns: report.currencies.SAR.tables[0].columns,
             rows: [{ id: "ad-balance", name: "حساب إعلان بالدولار", receivable: "0.00", payable: "475.74" }] });
     operationalApi.financialPosition.mockResolvedValueOnce(report);
@@ -191,7 +191,7 @@ test("USD advertising conversion uses supplied SAR fees and net balances above t
     expect(conversion.classList.contains("ofp-table-wide")).toBe(true);
     expect(conversion.compareDocumentPosition(balances) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect([...conversion.querySelector("tbody tr").cells].map(cell => cell.textContent)).toEqual([
-        "حساب إعلان بالدولار", "-123.45", "-463.48", "10.66", "1.60", "0.00", "475.74",
+        "حساب إعلان بالدولار", "123.45", "463.48", "10.66", "1.60", "0.00", "475.74",
     ]);
     expect(balances.textContent).toContain("475.74");
 });
