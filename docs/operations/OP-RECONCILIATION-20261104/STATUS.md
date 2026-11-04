@@ -48,3 +48,19 @@ The unconfirmed collection table now omits claims whose matching saved page or b
 The governed Node v22.23.2 and Yarn v1.22.22 toolchain is installed. The shared deployment guard was checked inactive, and the current production health reports the earlier reviewed performance source `00374911cee75a11f5b5bbc56952df2ae0852a75`. The production branch remains the reviewed base `84bd03dcd585f57b2b08bf93c8ac0fd8beb58463`.
 
 Run the corrected checkpoint through the full operational CI, then bootstrap the governed build, freeze its intent-only commit and rehearse the actual Emergent adapter before the already authorized publication. Production has not changed in this task.
+
+## Verified combined source and wallet follow-up
+
+The checkpoint `e6e067b830b8908dde442a5ee6bad8fae9c9589c`, tree `329ee71b123cbcef9d7c064225b8753d5afd4ce2`, passed 2356 backend tests and 16 shipping tests plus 18 subtests in both GitHub and the local isolated Mongo 8.0.12 replica set. Adding `--nounixsocket` resolved the local Mongo startup limitation. The local source remained clean before and after validation.
+
+GitHub job logs verify 372 frontend tests across 34 suites, 156 backend readiness tests, all 57 frontend release contracts and a reproducible governed A/B build. Stock eligibility passed 2400 tests plus seven subtests. Workflow status metadata is delayed and still reports queued jobs after their completed logs. The Node 24 dispatcher smoke test hit its 20-second Yarn process timeout and remains a release-readiness item for the next checkpoint.
+
+The owner clarified that unused customer wallet balances are an obligation to customers. Salla's native wallet report provides the current remaining balance in the verified store currency. Redeemed wallet tender amounts already describe order settlement and do not post new bank cash. They must not be treated as the remaining wallet balance or deducted again from an already-current closing balance.
+
+The wallet follow-up adds an owner-scoped, audited closing-balance snapshot with source reference and capture time. A later snapshot replaces the earlier liability. The report shows a dedicated customer-wallet payable and the dated evidence. This source is refreshed from a Salla wallet report, and an operational worker refresh alone does not advance its source date. No aggregate wallet-read route is being inferred for the existing Merchant OAuth integration.
+
+The owner UI collects the remaining SAR balance, report timestamp in Riyadh and report reference. It retains the same request identifier on an unchanged retry. The customer-payment heading now describes amounts settled for orders, and the wallet line describes the credit redeemed. Focused frontend validation passed 102 tests including snapshot session binding, retries, response-scope mismatch and late responses after an owner change.
+
+Publication remains pending this wallet follow-up. No release intent has been frozen and no lease has been opened for this task. Complete the wallet backend and HTTP regressions, verify the exact final source, then create the intent-only commit and perform the governed deployment rehearsal and authorized publication.
+
+The completed wallet backend passed 84 focused pure, financial-position and provider regressions. Two real-Mongo HTTP cases passed for owner access, store/currency/session binding, idempotency and replacement. Default wallet projection observes the operational report cutoff, so a newer saved statement becomes reportable when the worker advances that cutoff. Original order currency does not establish a separate wallet-account currency. The store-currency closing remains the liability authority. The frontend payable/source-date regression passed alongside all 23 financial-position tests.

@@ -23,6 +23,7 @@ PARTIES = (
     ("supplier", "suppliers", "الموردون", "actual"),
     ("employee", "employees", "الموظفون", "actual"),
     ("external_person", "external", "الجهات الخارجية", "actual"),
+    ("customer_wallet", "customer_wallets", "محافظ العملاء", "actual"),
     ("courier", "couriers", "شركات الشحن", "fulfillment"),
     ("store_driver", "drivers", "مناديب المتجر", "fulfillment"),
     ("provider", "providers", "منصات الدفع", "fulfillment"),
@@ -149,7 +150,7 @@ def _actual_tables(parties, complete):
     debt_columns = [_column("name", "الجهة", "text"), _column("receivable", "لنا", role="receivable"),
                     _column("payable", "علينا", role="payable")]
     for kind, identity, title, section in PARTIES:
-        if kind == "provider":
+        if kind in {"provider", "customer_wallet"}:
             continue
         rows = [{"id": _party_id(row), "name": _name(row),
                  "receivable": row["outstanding_receivable"], "payable": row["outstanding_payable"]}
@@ -560,10 +561,12 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     tender_coverage = projection["details"].get("customer_tender_coverage", {})
     payment_sar = tender_coverage.get("sar")
     other_tenders = tender_coverage.get("by_currency", {})
+    customer_wallets = projection["details"].get("customer_wallet_balances", {})
     currencies.update(page_payments)
     currencies.update(paid_totals)
     currencies.update(projection["details"]["provider_balances"])
     currencies.update(other_tenders)
+    currencies.update(customer_wallets)
     if payment_sar is not None:
         currencies.add("SAR")
     if cost_ready:
@@ -576,12 +579,24 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         tables = _actual_tables(parties, actual_complete)
         tables.append(_provider_table(projection["details"]["provider_balances"].get(currency, []),
                                       [row for row in projection["issues"] if row.get("currency") in {None, currency}]))
+        wallet = customer_wallets.get(currency)
+        if wallet is not None:
+            wallet_table = _table("customer_wallets", "محافظ العملاء المستحقة علينا", "actual", [
+                _column("name", "الجهة", "text"), _column("remaining", "الرصيد المستحق للعملاء", role="payable"),
+                _column("as_of", "تاريخ كشف سلة", "text"), _column("source_reference", "مرجع الكشف", "text")],
+                [{"id": "customer_wallet", **wallet}], complete=wallet["complete"],
+                notes=["الرصيد الختامي التزام علينا بتاريخ كشف سلة المحفوظ. يشمل الاستخدامات المثبتة فيه، وتحتفظ التحديثات التشغيلية بتاريخ هذا الكشف."])
+            wallet_table.update(show_totals=False, totals={})
+            tables.append(wallet_table)
         tables.append(_balance_origin(parties, obligations, actual_complete))
         if other_tenders.get(currency):
             rows = [{"id": row["method"], **row} for row in other_tenders[currency]]
+            for row in rows:
+                if row["method"] == "wallet":
+                    row["name"] = "المستخدم من أرصدة محافظ العملاء"
             tender_table = _table("customer_other_tenders", "تفصيل طرق الدفع الأخرى بعملة الطلب", "fulfillment",
                 [_column("name", "طريقة الدفع", "text"), _column("orders", "الطلبات", "count"),
-                 _column("paid", "مدفوع حسب سلة"), _column("remaining", "متبقٍ على العملاء"),
+                 _column("paid", "مسدد للطلبات حسب سلة"), _column("remaining", "متبقٍ على العملاء"),
                  _column("incomplete_orders", "طلبات تحتاج مطابقة", "count")], rows,
                 complete=not any(row["incomplete_orders"] for row in rows),
                 notes=["تعرض هذه المبالغ ما تثبته صفحة الطلب. يعتمد توريد الأموال للبنك على حركة البنك المطابقة."])
@@ -593,6 +608,10 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         categories = [("pos_receivable", "banks_network", "تسويات أجهزة الشبكة"),
                       *((kind, identity, title) for kind, identity, title, _ in PARTIES), ("ad_account", "ads", "حسابات الإعلانات")]
         for kind, identity, title in categories:
+            if kind == "customer_wallet":
+                if wallet is not None:
+                    debt_rows.append({"id": identity, "name": title, "receivable": "0.00", "payable": wallet["remaining"]})
+                continue
             selected = [row for row in parties if row["party_type"] == kind]
             debt_rows.append({"id": identity, "name": title,
                               "receivable": "0.00" if kind == "ad_account" else _money(_sum(row["outstanding_receivable"] for row in selected)),

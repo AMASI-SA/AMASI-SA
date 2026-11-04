@@ -50,6 +50,26 @@ class ProviderHistoryApproval(Request):
     confirmed_outstanding: bool
 
 
+class CustomerWalletFlow(Input):
+    period_start: str = Field(min_length=16, max_length=40)
+    opening_balance: str = Field(min_length=1, max_length=30)
+    added: str = Field(min_length=1, max_length=30)
+    used: str = Field(min_length=1, max_length=30)
+    other_deductions: str = Field(min_length=1, max_length=30)
+    opening_verified: Literal[True]
+
+
+class CustomerWalletSnapshot(Request):
+    expected_session_scope: str = Field(pattern=r"^[a-f0-9]{64}$")
+    merchant_id: str = Field(min_length=1, max_length=200)
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    as_of: str = Field(min_length=16, max_length=40)
+    remaining_balance: str = Field(min_length=1, max_length=30)
+    source_reference: str = Field(min_length=3, max_length=500)
+    source_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    flow: CustomerWalletFlow | None = None
+
+
 class Opening(Request):
     party_type: PartyType
     party_id: str = Field(min_length=1, max_length=200)
@@ -467,6 +487,19 @@ def make_operational_balance_router(db, current_user):
         actor, owner, _ = await scope(db, user, 'ad_selection_manage')
         from operational_ad_funding import save
         return await save(db, owner, actor['id'], payload.model_dump())
+
+    @router.get('/customer-wallet/context')
+    async def customer_wallet_context(user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, 'manage')
+        from operational_customer_wallet import context
+        return await context(db, owner, actor['id'])
+
+    @router.post('/customer-wallet/snapshot')
+    async def customer_wallet_snapshot(payload: CustomerWalletSnapshot, user=Depends(manage_guard)):
+        actor, owner, _ = await scope(db, user, 'manage')
+        from operational_customer_wallet import save
+        result = await save(db, owner, actor['id'], payload.model_dump())
+        return {**result, 'session_scope': digest([owner, actor['id']])}
 
     @router.get('/supplier-adjustments/entry/{supplier_id}/{invoice_number:path}')
     async def supplier_adjustment_entry(supplier_id:str, invoice_number:str, user=Depends(current_user)):

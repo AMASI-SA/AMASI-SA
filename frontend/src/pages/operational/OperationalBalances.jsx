@@ -10,6 +10,8 @@ import SalaryStart from './SalaryStart';
 import MovementHistory from './MovementHistory';
 import DomainDetails from './DomainDetails';
 import CustomerPaymentTotals from './CustomerPaymentTotals';
+import CustomerWalletBalance from './CustomerWalletBalance';
+import { formatRiyadhDateTime } from '../../lib/dates';
 import OperationalCostExposure from './OperationalCostExposure';
 import PaginatedReportTable from './PaginatedReportTable';
 import './operational.css';
@@ -76,7 +78,8 @@ function Reports({context,source}) {
   const [report, setReport] = useState(null),
     [audit, setAudit] = useState([]),
     [error, setError] = useState(''),
-    [kind, setKind] = useState('');
+    [kind, setKind] = useState(''),
+    [revision, setRevision] = useState(0);
   useEffect(() => {
     let alive = true;
     let running = false;
@@ -93,7 +96,7 @@ function Reports({context,source}) {
     const timer = setInterval(refresh, 30000);
     return () => { alive = false; clearInterval(timer); };
 
-  }, []);
+  }, [revision]);
   if (error) return <Notice error={error} />;
   if (!report) return <p role="status">جاري تحميل الأرصدة…</p>;
   const summaryEntries = Object.entries(report.summaries || {});
@@ -107,6 +110,10 @@ function Reports({context,source}) {
         </tr>)}</tbody>
       </table>{!report.parties.length && <p>لا توجد أرصدة مسجلة بعد.</p>}</div>
     }</PaginatedReportTable>
+    {Object.entries(report.details?.customer_wallet_balances || {}).map(([currency, balance]) => <p key={currency}>
+      رصيد محافظ العملاء المستحق علينا {balance.remaining ?? 'غير متاح'} {currency} · وفق كشف سلة حتى {formatRiyadhDateTime(balance.as_of)}
+    </p>)}
+    {context.permissions?.manage && context.status === 'active' && source !== 'employee_app' && <CustomerWalletBalance key={context.session_scope} sessionScope={context.session_scope} onSaved={() => setRevision(value => value + 1)} />}
     <OperationalCostExposure scopeKey={context.session_scope} enabled={context.status !== 'draft'} /><DomainDetails report={report}/><InventoryPurchases mode="reports" context={context} source={source}/><details className="op-card"><summary>سجل التدقيق</summary>{audit.length ? audit.map((a, i) => <p key={i}>{a.message || a.action_label || 'تم تسجيل عملية موثقة'} · {(a.at || a.created_at) ? new Date(a.at || a.created_at).toLocaleString('ar-SA') : ''} {a.reason || ''}</p>) : <p>لا توجد عمليات مسجلة.</p>}</details></section>;
 }
 export default function OperationalBalances({

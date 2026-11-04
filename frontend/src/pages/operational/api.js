@@ -2,6 +2,8 @@ import api from '../../lib/api';
 const base = '/operational-balances';
 const data = promise => promise.then(response => response.data);
 export const operationalApi = {
+  customerWalletContext: () => data(api.get(`${base}/customer-wallet/context`)),
+  saveCustomerWalletSnapshot: body => data(api.post(`${base}/customer-wallet/snapshot`, body)),
   receivingInvoiceCoverage: () => data(api.get(`${base}/supplier-invoice-review`, {params: {receiving_only: true}})),
   receivingCorrectionPreview: (invoiceId, asOf, revision) => data(api.get(
     `${base}/supplier-invoice-review/receiving/${encodeURIComponent(invoiceId)}/correction-preview`,

@@ -839,6 +839,17 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
                 issues.append({"code": "provider_net_balance_incomplete", "provider": provider["provider"],
                                "currency": currency, "source_id": "provider:" + provider["provider"],
                                "message": "صافي المنصة يحتاج إلى استكمال العمولة أو مطابقة المدفوع مع التسويات."})
+    from operational_customer_wallet import project as customer_wallet_balances
+    details["customer_wallet_balances"], wallet_issues = customer_wallet_balances(
+        state, cutoff=as_of or state.get("engine", {}).get("as_of"), require_cutoff=True)
+    issues.extend(wallet_issues)
+    for currency, balance in details["customer_wallet_balances"].items():
+        if balance["remaining"] is None:
+            continue
+        row = get("customer_wallet", "salla:" + balance["merchant_id"], currency, balance["name"])
+        row.update(confirmed_payable=Decimal(balance["remaining"]),
+                   outstanding_payable=Decimal(balance["remaining"]),
+                   read_only=True, balance_role="customer_wallet_liability", source_as_of=balance["as_of"])
     summaries = {}
     for row in parties.values():
         summary = summaries.setdefault(row["currency"], {key: Decimal(0) for key in (

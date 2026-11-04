@@ -55,6 +55,20 @@ test('SAR total uses the customer receipt including foreign orders and keeps ori
   expect(panel.querySelector('details:not([open])').textContent).toContain('9.00 KWD');
 });
 
+test('wallet redemption remains settled order value and is labeled as using a prior customer credit', async () => {
+  await render({ details: { customer_tender_coverage: { source_order_count: 1, sar: {
+    paid: '100.00', known_paid: '100.00', missing_orders: 0,
+    by_method: [
+      { method: 'tabby', name: 'تابي', orders: 1, paid: '85.00', remaining: '0.00' },
+      { method: 'wallet', name: 'محفظة العميل', orders: 1, paid: '15.00', remaining: '0.00' },
+    ],
+  } } } });
+  expect(host.querySelector('h3').textContent).toContain('إجمالي المبالغ المسددة للطلبات · 100.00');
+  const wallet = [...host.querySelectorAll('tbody tr')].find(row => row.textContent.includes('المستخدم من أرصدة محافظ العملاء'));
+  expect(wallet.cells[2].textContent).toBe('15.00');
+  expect(host.textContent).toContain('يخفض التزامنا له');
+});
+
 test('advertising keeps latest daily snapshot and groups month by account and currency using exact cents',async()=>{
  const obligations=[
   {id:'a1',party_type:'ad_account',party_id:'a',currency:'USD',business_date:'2026-10-05'},

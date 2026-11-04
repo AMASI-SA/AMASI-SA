@@ -16,6 +16,7 @@ import NativePurchaseReview from "./NativePurchaseReview";
 import HistoricalShippingFeeReview from "./HistoricalShippingFeeReview";
 import ProviderHistoryReview from "./ProviderHistoryReview";
 import PaginatedReportTable from "./PaginatedReportTable";
+import CustomerWalletBalance from "./CustomerWalletBalance";
 
 const emptyFilters = () => ({ order: "", party: "", payment: "" });
 const inactiveMessages = {
@@ -42,12 +43,13 @@ function SectionHeading({ id, number, title, children }) {
 function DataCell({ value, column }) {
     if (column.type === "money") return <Money value={value} role={column.role} />;
     if (column.type === "count") return <bdi className="ofp-count" dir="ltr">{formatPositionCount(value)}</bdi>;
+    if (column.key === "as_of" && value) return formatRiyadhDateTime(value);
     return positionText(value);
 }
 
 function ReportTable({ table, printing }) {
     const columns = table.columns || [];
-    return <article className={`ofp-table-card${["providers", "ads_currency_conversion"].includes(table.id) ? " ofp-table-wide" : ""}${table.kind === "forecast" ? " ofp-table-forecast" : ""}`} data-testid={`financial-table-${table.id}`}>
+    return <article className={`ofp-table-card${["providers", "ads_currency_conversion", "customer_wallets"].includes(table.id) ? " ofp-table-wide" : ""}${table.kind === "forecast" ? " ofp-table-forecast" : ""}`} data-testid={`financial-table-${table.id}`}>
         <div className="ofp-table-title"><h3>{table.title}</h3>{table.complete !== true && <span className="ofp-status">غير مكتمل</span>}</div>
         <PaginatedReportTable rows={table.rows || []} label={table.title} pageSize={table.id === "provider_collections_expected" ? 10 : 13} showAll={printing}>{rows => <div className="ofp-table-scroll"><table>
             <thead><tr>{columns.map(column => <th scope="col" key={column.key}>{column.label}</th>)}</tr></thead>
@@ -229,6 +231,7 @@ export default function OperationalFinancialPosition() {
         {report?.status === "active" && !data && <div className="ofp-page-notice" role="status">لا توجد بيانات عملة جاهزة للعرض حتى آخر احتساب.</div>}
         {data && user?.role === "owner" && <ProviderHistoryReview key={"history" + scope + report.session_scope} sessionScope={report.session_scope} />}
         {data && user?.role === "owner" && <NativePurchaseReview key={scope + report.session_scope} sessionScope={report.session_scope} onRefresh={refresh} />}
+        {data && user?.role === "owner" && <CustomerWalletBalance key={"wallet" + scope + report.session_scope} sessionScope={report.session_scope} onSaved={refresh} />}
         {data && user?.role === "owner" && <div className="ofp-no-print">
             <a className="ofp-button" href="/shipping-settings-v2">مراجعة تعرفة شركات الشحن</a>
             <HistoricalShippingFeeReview key={scope + report.session_scope + activeCurrency} orders={data.shipping_fee_review_orders} />

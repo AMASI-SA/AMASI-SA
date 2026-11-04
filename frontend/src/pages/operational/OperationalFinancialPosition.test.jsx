@@ -110,6 +110,28 @@ test("all three sections use server values, exact cents, and explicit missing-so
     expect(host.textContent).not.toContain("جميع الفروع");
 });
 
+test("customer wallet closing is displayed on the payable side with its own source date", async () => {
+    const report = fixture();
+    report.currencies.SAR.tables.push({
+        id: "customer_wallets", title: "محافظ العملاء المستحقة علينا", section: "actual", complete: true,
+        columns: [{ key: "name", label: "الجهة", type: "text" },
+            { key: "remaining", label: "الرصيد المستحق للعملاء", type: "money", role: "payable" },
+            { key: "as_of", label: "تاريخ كشف سلة", type: "text" }],
+        rows: [{ id: "wallet", name: "محافظ العملاء", remaining: "125.20", as_of: "2026-11-01T08:00:00Z" }],
+        show_totals: false,
+    });
+    report.currencies.SAR.debt_rows.push({ id: "customer_wallets", name: "محافظ العملاء", receivable: "0.00", payable: "125.20" });
+    operationalApi.financialPosition.mockResolvedValueOnce(report);
+    await render();
+    const walletTable = host.querySelector('[data-testid="financial-table-customer_wallets"]');
+    expect(walletTable.classList.contains('ofp-table-wide')).toBe(true);
+    expect(walletTable.querySelector('.ofp-negative').textContent).toBe('125.20');
+    expect(walletTable.textContent).not.toContain('T08:00:00Z');
+    const row = [...host.querySelectorAll('[data-testid="financial-debt-summary"] tbody tr')].find(item => item.textContent.includes('محافظ العملاء'));
+    expect(row.cells[1].textContent).toBe('0.00');
+    expect(row.cells[2].textContent).toBe('125.20');
+});
+
 test("report tables paginate independently with 13 rows and 10 unconfirmed platform collections", async () => {
     const report = fixture();
     const suppliers = report.currencies.SAR.tables[0];
