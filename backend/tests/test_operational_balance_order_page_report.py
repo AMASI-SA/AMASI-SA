@@ -49,3 +49,17 @@ def test_source_paid_total_counts_a_page_and_its_captures_once_and_keeps_opening
     totals = table(result, "provider_customer_paid")["rows"]
     assert [(row["orders"], row["paid"]) for row in totals] == [(2, "105.00")]
     assert result["currencies"]["SAR"]["debt_totals"]["receivable"] == "560.00"
+
+
+def test_foreign_order_is_reported_once_in_the_sar_customer_total():
+    state = state_for()
+    native = page("foreign", "9.00", "91.00", currency="KWD")
+    state["engine"]["facts"] = {"provider_order_balance:foreign": native}
+    state["engine"]["customer_tender_coverage"] = {"source_order_count": 1, "sar": {
+        "paid": "110.19", "by_method": [{"method": "tamara", "name": "تمارا",
+            "orders": 1, "paid": "110.19", "remaining": None}]}}
+    result = build_financial_position(state, generated_at=NOW)
+    paid = table(result, "provider_customer_paid")
+    assert paid["totals"]["paid"] == "110.19" and paid["rows"][0]["orders"] == 1
+    assert all(t["id"] != "provider_customer_paid" for t in result["currencies"]["KWD"]["tables"])
+    assert table(result, "provider_order_balances", currency="KWD")["rows"][0]["paid"] == "9.00"

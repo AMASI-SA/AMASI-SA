@@ -1,12 +1,13 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import DomainDetails from './DomainDetails';
+import CustomerPaymentTotals from './CustomerPaymentTotals';
 jest.mock('./api',()=>({operationalApi:{receiptContent:jest.fn()},messageFor:()=> 'تعذر تحميل المستند'}));
 let host,root;
 const section = title => [...host.querySelectorAll('details')].find(node => node.querySelector('summary').textContent === title);
 beforeEach(()=>{global.IS_REACT_ACT_ENVIRONMENT=true;host=document.createElement('div');document.body.appendChild(host);root=createRoot(host);});
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();});
-const render = async report => act(async()=>root.render(<DomainDetails report={report}/>));
+const render = async report => act(async()=>root.render(<><CustomerPaymentTotals report={report}/><DomainDetails report={report}/></>));
 test('empty detail sections explain absence instead of rendering blank panels',async()=>{
  await render({parties:[],obligations:[],summaries:{},details:{}});
  for(const node of host.querySelectorAll('details')) expect(node.textContent).toContain('لا توجد بيانات مسجلة لهذا القسم');
@@ -37,6 +38,18 @@ test('unassigned bank payments and customer balances stay visible without a bank
   expect([...coverage.querySelectorAll('tbody tr')].map(row => [...row.cells].map(cell => cell.textContent))).toEqual([
     ['تحويل بنكي', '1', '25.00', '0.00', '0'], ['الدفع عند الاستلام', '2', 'غير متاح', 'غير متاح', '2'],
   ]);
+});
+
+test('SAR total uses the customer receipt including foreign orders and keeps original currency in a disclosure', async () => {
+  const sar = {paid: '210.19', known_paid: '210.19', missing_orders: 0, by_method: [
+    {method: 'tabby', name: 'تابي', orders: 2, paid: '210.19', remaining: '0.00'},
+  ]};
+  await render({details: {customer_tender_coverage: {source_order_count: 2, sar},
+    provider_paid_totals: {KWD: [{provider: 'tabby', name: 'تابي', orders: 1, paid: '9.00'}]}}});
+  const panel = host.querySelector('section[aria-label="مدفوعات الطلبات منذ بداية التشغيل"]');
+  expect(panel.querySelector('h3').textContent).toContain('210.19 ر.س.');
+  expect([...panel.querySelector('tbody tr').cells].map(cell => cell.textContent)).toEqual(['تابي', '2', '210.19', '0.00', 'مكتمل']);
+  expect(panel.querySelector('details:not([open])').textContent).toContain('9.00 KWD');
 });
 
 test('advertising keeps latest daily snapshot and groups month by account and currency using exact cents',async()=>{

@@ -28,7 +28,6 @@ export default function DomainDetails({report}) {
   const facts = report.details?.facts || {};
   const orderPayments = Object.entries(report.details?.provider_order_payments || {});
   const paidTotals = Object.entries(report.details?.provider_paid_totals || {});
-  const tenderCoverage = report.details?.customer_tender_coverage;
   const providerFees = Object.entries(report.details?.provider_reports || {});
   const named = id => {
     const matches = obligations.filter(o => o.id === id || o.ad_day_id === id);
@@ -68,26 +67,6 @@ export default function DomainDetails({report}) {
     return {...p,covered:sum(covered),invoiceNet:sum([...evidence].map(id=>facts[id]?.net_amount)),invoiceTax:sum([...evidence].map(id=>facts[id]?.tax_amount)),invoiceGross:sum([...evidence].map(id=>facts[id]?.gross_amount)),acceptedReturns:sum(acceptedReturns)};
   });
   return <div className="op-domain-details">
-    {(tenderCoverage || paidTotals.length > 0) && <section className="op-card" aria-label="مدفوعات الطلبات منذ بداية التشغيل">
-      <h2>مدفوعات الطلبات منذ بداية التشغيل</h2>
-      {tenderCoverage && <p>عدد طلبات سلة في الفترة: {tenderCoverage.source_order_count}</p>}
-      {tenderCoverage?.uninspected_source_orders > 0 && <p className="op-muted">طلبات لم يكتمل فحص بيانات الدفع فيها: {tenderCoverage.uninspected_source_orders}</p>}
-      {tenderCoverage?.unknown_currency_orders > 0 && <p className="op-muted">طلبات تحتاج إلى تحديد العملة: {tenderCoverage.unknown_currency_orders}</p>}
-      {paidTotals.map(([currency, rows]) => <div key={currency}>
-        <h3>إجمالي ما دفعه العملاء عبر المنصات · {currency}</h3>
-        {rows.map(row => <p key={row.provider}>{row.name} · {row.paid} {currency} · عدد الطلبات المدفوعة {row.orders}</p>)}
-      </div>)}
-      {Object.entries(tenderCoverage?.by_currency || {}).map(([currency, rows]) => <div className="op-table" key={currency}>
-        <table><caption>طرق الدفع الأخرى · {currency}</caption>
-          <thead><tr><th>طريقة الدفع</th><th>الطلبات</th><th>المدفوع المثبت حسب سلة</th><th>المتبقي المثبت على العملاء</th><th>طلبات تحتاج مطابقة</th></tr></thead>
-          <tbody>{rows.map(row => <tr key={row.method}>
-            <td>{row.name}</td><td>{row.orders}</td><td>{row.paid ?? 'غير متاح'}</td>
-            <td>{row.remaining ?? 'غير متاح'}</td><td>{row.incomplete_orders}</td>
-          </tr>)}</tbody>
-        </table>
-      </div>)}
-      <p className="op-muted">يظهر كل طلب مرة في عدد طلبات الفترة. عند استخدام طريقتين، تُعرض حصة كل طريقة. المدفوع حسب سلة يشمل ما ينتظر مطابقة الحوالة؛ وتعرض حسابات البنوك المبالغ الموردة فعليًا.</p>
-    </section>}
     <details className="op-card"><summary>تفاصيل منصات الدفع</summary>
       {orderPayments.map(([currency, rows]) => <div className="op-table" key={currency}>
         <table><caption>مدفوعات العملاء منذ بداية التشغيل · {currency}</caption>

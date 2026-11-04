@@ -136,7 +136,8 @@ def provider_customer_payments(projection):
         oid, party = fact.get("order_id"), fact.get("provider")
         claim = claims.get("provider:" + str(oid))
         if claim and party in PLATFORMS and claim["party_id"] == party:
-            captured[(claim["currency"], party, oid)] += Decimal(fact["amount"])
+            native_currency = (claim.get("native_balance") or {}).get("currency", claim["currency"])
+            captured[(native_currency, party, oid)] += Decimal(fact["amount"])
     for identity, value in captured.items():
         paid_by_order[identity] = max(paid_by_order[identity], value)
 

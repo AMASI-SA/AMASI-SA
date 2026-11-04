@@ -704,6 +704,8 @@ def reconcile(state, sources, as_of):
     if (coverage.get("version") == 1 and instant(coverage.get("started_at")) == start
             and instant(coverage.get("as_of")) == now):
         engine["delivery_event_coverage"] = deepcopy(coverage)
+    from operational_provider_balance_sar import refresh_basis
+    refresh_basis(result, sources.get("orders", []), issues)
     engine["issues"] = issues
     reconcile_credits(result)
     before = state.get("engine", {}).get("obligations", {})

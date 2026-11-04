@@ -152,8 +152,46 @@ def approved_context(state, order, payment):
     return not preview["blocks"] and saved.get("preview_hash") == preview["preview_hash"]
 
 
+def _sar_payout_overlap(state, order, payment, key):
+    """An unbooked foreign sale may already be covered by its provider's SAR payout."""
+    fx, party = order.get("customer_payment_sar") or {}, payment.get("provider")
+    if order.get("currency") == "SAR" or party not in (fx.get("shares") or {}):
+        return False
+    oid, number = str(order["id"]), order.get("order_number")
+    created = _instant(order["created_at"])
+    claims = state.get("engine", {}).get("obligations", {})
+    for m in state.get("movements", []):
+        if (m.get("party_type"), m.get("party_id"), m.get("currency")) != ("provider", party, "SAR"):
+            continue
+        lines = m.get("allocations") or []
+        ids = [a.get("obligation_id") for a in lines]
+        if ((number and number in (m.get("order_number"), m.get("original_order_number")))
+                or m.get("order_id") == oid or key in ids or "credit:" + key in ids):
+            return True
+        if m.get("direction") != "incoming":
+            continue
+        try:
+            if m.get("occurred_at") and _instant(m["occurred_at"]) < created:
+                continue
+            total = sum((_amount(a["amount"], "SAR") for a in lines), Decimal(0))
+            if (not lines or len(set(ids)) != len(ids) or m.get("kind") != "settlement"
+                    or total != _amount(m["amount"], "SAR") + _amount(m.get("actual_fee_amount", "0"), "SAR")):
+                return True
+            # Only a valid allocation to a different specific order excludes overlap.
+            for identity in ids:
+                claim = claims.get(identity, {})
+                if (not isinstance(identity, str) or not identity.startswith("provider:")
+                        or (claim.get("kind"), claim.get("party_id"), claim.get("currency")) != ("provider", party, "SAR")):
+                    return True
+        except (KeyError, TypeError, ValueError, ArithmeticError):
+            return True
+    return False
+
+
 def late_payment_blocks(state, order, payment, *, obligation_key=None, through=None):
     """An older snapshot alone cannot hide post-start money. Check possible overlaps."""
+    if _sar_payout_overlap(state, order, payment, obligation_key or "provider:" + str(order["id"])):
+        return True
     if state.get(REVIEWS) and digest(str(order["id"])) in state[REVIEWS]:
         # Revalidate any pending owner decision against its original evidence.
         return not approved_context(state, order, payment)
