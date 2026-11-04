@@ -10,6 +10,7 @@ external supplier-account writes.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import uuid
@@ -1425,6 +1426,20 @@ def make_preparation_supplier_dispatch_router(
         tags=["Preparation Supplier Dispatch"],
     )
 
+    indexes_ready = False
+    indexes_lock = asyncio.Lock()
+
+    async def ensure_indexes_once() -> None:
+        # Mongo persists successful definitions. Share initialization only for
+        # this router/database; failed or cancelled setup must remain retryable.
+        nonlocal indexes_ready
+        if indexes_ready:
+            return
+        async with indexes_lock:
+            if not indexes_ready:
+                await ensure_supplier_dispatch_indexes(db)
+                indexes_ready = True
+
     @router.get("/workspace")
     async def workspace(
         limit: int = Query(100, ge=1, le=200),
@@ -1436,7 +1451,7 @@ def make_preparation_supplier_dispatch_router(
             user,
             permission="preparation.assigned.read",
         )
-        await ensure_supplier_dispatch_indexes(db)
+        await ensure_indexes_once()
         result = await _employee_workspace(
             db,
             user_id=_merchant_user_id(worker),
@@ -1458,7 +1473,7 @@ def make_preparation_supplier_dispatch_router(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         manager = _require_reviewer(user)
-        await ensure_supplier_dispatch_indexes(db)
+        await ensure_indexes_once()
         return {
             "ok": True,
             **await _unassigned_workspace(
@@ -1559,7 +1574,7 @@ def make_preparation_supplier_dispatch_router(
             selected_by_file[file_number] = file_selected
             selected.extend(file_selected)
         await require_current_under_review(db, user_id=user_id, pieces=selected)
-        await ensure_supplier_dispatch_indexes(db)
+        await ensure_indexes_once()
         for piece in selected:
             await enforce_stage_instructions(
                 db,
@@ -1812,7 +1827,7 @@ def make_preparation_supplier_dispatch_router(
         )
         user_id = _merchant_user_id(worker)
         employee_id = _actor_id(worker)
-        await ensure_supplier_dispatch_indexes(db)
+        await ensure_indexes_once()
         previous = await db[DISPATCH_EVENTS].find_one(
             {"user_id": user_id, "client_request_id": payload.client_request_id},
             {"_id": 0, "user_id": 0},
@@ -1936,7 +1951,7 @@ def make_preparation_supplier_dispatch_router(
     ) -> dict[str, Any]:
         manager = _require_reviewer(user)
         user_id = _merchant_user_id(manager)
-        await ensure_supplier_dispatch_indexes(db)
+        await ensure_indexes_once()
         previous = await db[DISPATCH_EVENTS].find_one(
             {"user_id": user_id, "client_request_id": payload.client_request_id},
             {"_id": 0, "user_id": 0},

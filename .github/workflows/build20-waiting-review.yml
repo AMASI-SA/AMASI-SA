@@ -6,6 +6,7 @@ on:
       - 'backend/preparation_supplier_dispatch.py'
       - 'backend/supplier_dispatch_waiting_policy.py'
       - 'backend/tests/test_supplier_dispatch_waiting_current_status.py'
+      - 'backend/tests/test_supplier_dispatch_index_lifecycle.py'
       - '.github/workflows/build20-waiting-review.yml'
 
 permissions:
@@ -51,6 +52,7 @@ jobs:
           git rev-parse HEAD HEAD^{tree} > "$RUNNER_TEMP/waiting-review-evidence/identity.txt"
           python -m pytest \
             tests/test_supplier_dispatch_waiting_current_status.py \
+            tests/test_supplier_dispatch_index_lifecycle.py \
             tests/test_preparation_supplier_dispatch.py \
             tests/test_supplier_dispatch_customer_options_guard.py \
             tests/test_supplier_dispatch_split_note_match.py \
