@@ -1,19 +1,19 @@
 {
   "task_id": "EXIT-2D-20261104",
-  "status": "REAL_LINUX_ACCEPTANCE_PASSED_PRIOR_SOURCE_FINAL_REPORT_CORS_RECHECK_PENDING",
+  "status": "DEVELOPMENT_RUNTIME_ACCEPTED_DRAFT_PR_FOR_REVIEW",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/exit-2d-resume-20261104",
   "base_source_sha": "cec4c3854031c357577f07568f91a44c082905fc",
   "historical_sha": "6f0884e98b8fddef4a884b1321a9a216b9d30498",
-  "checkpoint_commit_sha": "19fdb529f906db64b729704fc43071a49c4170e8",
-  "remote_checkpoint": "Normal branch checkpoints verified through 414cffa2d5419e20ab175b5629e5e0531760df1a; current source push pending",
+  "checkpoint_commit_sha": "3d03ff3b2985ddd0a826d2f18acdeea13cc0d66f",
+  "remote_checkpoint": "Tested source verified on GitHub; documentation delivery tip recorded in Issue #1006",
   "production_changed": false,
   "application_files_changed": true,
   "qoyod_behavior_changed": false,
   "production_connections": 0,
   "paid_resources_created": 0,
-  "ci_runs_started": 6,
-  "pr_created": false,
+  "ci_runs_started": 7,
+  "pr_created": true,
   "merged": false,
   "release_lease_created": false,
   "deployed": false,
@@ -49,16 +49,13 @@
     }
   ],
   "remaining": [
-    "Verify current-source Linux after preserving outer CORS/readiness around report proxy; create Draft PR",
-    "Current security/bootstrap and index-only migration adaptation",
-    "Actual role-specific runtime and legacy ownership bridge",
-    "Reports worker extraction preserving calculations",
-    "Linux isolated lifecycle and real supervisor acceptance",
-    "Authorized backup/files/decryption restore rehearsal",
-    "Capacity measurements and hosting approval",
-    "Separate release and production cutover approval"
+    "Independent Draft PR review; no merge/deploy authorization",
+    "Governed artifact identity and frontend/hosting wiring acceptance before any deployment",
+    "Authorized genuine Mongo/files/encryption restore and cutover rehearsal",
+    "Real-host capacity and active-provider supervisor escalation acceptance",
+    "Historical full preparation revision lifecycle acceptance remains separate"
   ],
-  "next_safe_action": "Review current security installers and prepare default-preserving lifecycle separation on the development branch only",
+  "next_safe_action": "Review Draft PR #1754 and the explicit acceptance limits; continue only approved development changes, never Production operations",
   "durable_local_checkpoint_directory": "C:/Users/amasi/.codex/checkpoints/EXIT-2D-20261104",
   "checkpoint_commit_sha_resolution": "Exact final checkpoint SHA is recorded in Issue #1006 and the verified remote branch head; this file cannot embed its own containing commit hash",
   "authorization": {
@@ -86,8 +83,8 @@
     "Independent report HTTP role and streaming Web boundary with explicit per-request cookies",
     "Synthetic replica-set Docker acceptance and process isolation benchmark prepared"
   ],
-  "runtime_acceptance": "Passed at a7ce77d812446fb1243a3ae93ecf6f839c53f7e3; latest CORS placement source will be verified separately",
-  "ci_state": "Final-source Linux pending with deterministic revocation fixture and stronger real-data count assertion",
+  "runtime_acceptance": "PASSED at 3d03ff3b2985ddd0a826d2f18acdeea13cc0d66f",
+  "ci_state": "Current-source Linux succeeded; source PR checks completed with success or explicit scope/manual skips",
   "ci_runs": [
     {
       "id": 41900254875,
@@ -150,8 +147,16 @@
     {
       "id": 41904647980,
       "source_sha": "69fb873491e7f9613f49fa09900a889cdf6bd8d6",
-      "result": "cancellation_requested_for_own_superseded_fixture_run",
+      "result": "cancelled",
       "reason": "Known test clock barrier repair; superseded by next source, no other task canceled"
+    },
+    {
+      "id": 41905085462,
+      "source_sha": "3d03ff3b2985ddd0a826d2f18acdeea13cc0d66f",
+      "result": "success",
+      "pytest_passed": 365,
+      "subtests_passed": 11,
+      "new_unittest_passed": 19
     }
   ],
   "local_performance": {
@@ -170,5 +175,10 @@
     "supplier_scan_attempts.install_reconciler",
     "product_google_taxonomy_ai_pilot.make_product_google_taxonomy_ai_pilot_router"
   ],
-  "local_final_new_unit_tests_passed": 19
+  "local_final_new_unit_tests_passed": 19,
+  "tested_source_sha": "3d03ff3b2985ddd0a826d2f18acdeea13cc0d66f",
+  "pr_number": 1754,
+  "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1754",
+  "draft": true,
+  "final_evidence": "docs/operations/EXIT-2D-20261104/RESULTS.json"
 }
