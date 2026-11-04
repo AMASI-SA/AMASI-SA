@@ -437,7 +437,7 @@ def test_employee_v2_router_page_and_navigation_are_wired_together():
     assert "make_employees_v2_router" in server
     assert "api.include_router(make_employees_v2_router(db, current_user))" in server
     assert "await ensure_employee_v2_indexes(db)" in server
-    assert 'import EmployeesV2 from "./pages/EmployeesV2";' in app
+    assert 'const EmployeesV2 = lazy(() => import("./pages/EmployeesV2"));' in app
     assert 'path="/employees-v2"' in app
     assert '{ to: "/employees-v2", label: "إدارة الموظفين", exactSearch: true }' in navigation
     assert '{ to: "/employees-v2?workspace=migration", label: "تقرير الترحيل والرواتب" }' in navigation

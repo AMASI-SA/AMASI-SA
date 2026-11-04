@@ -18,6 +18,7 @@ import {
     Warehouse,
 } from "@phosphor-icons/react";
 import Sidebar from "./Sidebar";
+import PageContentBoundary from "./PageContentBoundary";
 import GlobalSearch from "./GlobalSearch";
 import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
@@ -229,7 +230,7 @@ export default function Layout({ children }) {
                 )}
 
                 <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6 sm:py-6 lg:px-10 lg:py-8">
-                    {pageContent}
+                    <PageContentBoundary>{pageContent}</PageContentBoundary>
                     <DashboardAnalyticsPlacement active={showsDashboardAnalytics} />
                     <DashboardSnapchatAccountsPlacement active={showsDashboardAnalytics} />
                 </div>
