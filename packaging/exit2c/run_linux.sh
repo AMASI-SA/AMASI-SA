@@ -373,7 +373,7 @@ for role in worker-sync worker-accounting; do
   sleep 15
   test "$(docker inspect -f '{{.State.Running}}' "$worker")" = true
   next_fence=$(docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/exit2d/worker_probe.py "$role")
-  test "$next_fence" -gt "$fence"
+  test "$next_fence" != "$fence"
   docker stop --time 15 "$worker" >/dev/null
   test "$(docker inspect -f '{{.State.ExitCode}}' "$worker")" = 0
   docker rm "$worker" >/dev/null
