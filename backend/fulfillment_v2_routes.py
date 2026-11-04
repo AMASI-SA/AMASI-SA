@@ -2527,15 +2527,39 @@ def make_fulfillment_v2_router(
 
         number = _text(order_number)
         owner = await authorized_owner()
-        if mobile_v1:
-            from order_engine.shipping_label_service import _label_baseline
-            source_before = await _label_baseline(db, owner, number)
         try:
             workflow = await _require_print_completed_workflow(db, user_id=owner, order_number=number)
             if mobile_v1 and issue and workflow.get("stage") != "completed":
                 raise HTTPException(409, detail={"code": "assembly_completion_required"})
             if mobile_v1:
+                from operational_atomic import operational_owner
+                from order_engine.amasi_shipping_compat import local_mezan_courier_label, mezan_courier_name
+                from order_engine.shipping_label_service import _label_baseline
+
                 try:
+                    if await mezan_courier_name(db, owner, number):
+                        async def local_document(scoped):
+                            current = await _require_print_completed_workflow(scoped, user_id=owner, order_number=number)
+                            if issue and current.get("stage") != "completed":
+                                raise HTTPException(409, detail={"code": "assembly_completion_required"})
+                            document = await local_mezan_courier_label(scoped, owner, number, current)
+                            if document is None:
+                                return None
+                            if await authorized_owner() != owner:
+                                raise HTTPException(403, detail={"code": "completion_owner_changed"})
+                            patch = _workflow_patch(document, now=_now())
+                            # Reading a verified local order does not refresh the Salla verification clock.
+                            del patch["salla_order_status"], patch["salla_order_status_verified_at"]
+                            await scoped.order_review_workflows.update_one(
+                                {"user_id": owner, "order_number": number, "assembly_status": "completed"},
+                                {"$set": patch},
+                            )
+                            return document
+                        document = await operational_owner(db, owner, local_document)
+                        if document is not None:
+                            return document
+
+                    source_before = await _label_baseline(db, owner, number)
                     result = await carrier_label(db, owner, number, issue=False, completed_only=True)
                 except ShippingLabelError as exc:
                     if exc.code != "carrier_order_in_progress":

@@ -601,6 +601,108 @@ class MobileShippingV1Tests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(response.status_code, 409)
                 self.assertEqual(response.json()["detail"]["code"], "shipping_snapshot_changed")
 
+    async def seed_current_mezan_courier(self):
+        from salla_shipping import CURRENT_SHIPPING
+        number = self.key["order_number"]
+        raw = {"id": 42, "reference_id": number, "date": "2026-01-01", "status": {"slug": "completed"},
+               "delivery_method": "shipping", "receiver": {"name": "مستلم الاختبار"}}
+        await self.db.unified_orders.insert_one({
+            **self.key, "order_id": "local-assembly-42", "order_date": "2026-01-01", "order_status": "completed",
+            "raw_by_source": {"salla_direct": raw}, "shipping_company": "مندوب الرياض",
+            "salla_address_verified_at": "2026-01-01", "shipping_address_source_path": "shipping.address",
+            "shipping_address_raw": {"city": "الرياض", "street": "الشارع الحالي"},
+            CURRENT_SHIPPING: {"company_name": "SMSA", "shipment_id": "999", "label_url": "https://old.example/awb.pdf"},
+        })
+        await self.workflows.update_one(self.key, {"$set": {"salla_order_status_verified_at": "2026-01-01",
+            "shipping_status_epoch": 14, "carrier_name": "ناقل قديم"}})
+        return number
+
+    async def test_native_prints_current_mezan_courier_without_provider_or_previous_shipment(self):
+        number = await self.seed_current_mezan_courier()
+        with patch.object(compat, "call_salla", side_effect=AssertionError("unexpected carrier provider read")), \
+             patch.object(legacy, "call_salla", side_effect=AssertionError("unexpected store info / provider read")):
+            for path, city, street in [(self.path, "مندوب الرياض", "الشارع الحالي"),
+                                       (self.path + "/refresh", "مندوب جدة", "عنوان المندوب الحالي")]:
+                await self.db.unified_orders.update_one(self.key, {"$set": {"shipping_company": city,
+                    "shipping_address_raw.street": street}})
+                response = await self.client.post(path)
+                self.assertEqual(response.status_code, 200, response.text)
+                label = response.json()
+                self.assertEqual((label["label_type"], label["print_state"]), ("store_courier", "ready"))
+                self.assertEqual(label["courier_name"], city)
+                self.assertIsNone(label["shipment_id"])
+                self.assertIsNone(label["label_url"])
+                self.assertEqual(label["print_data"]["barcode_value"], number)
+                self.assertTrue(label["print_data"]["qr_code"].startswith("data:image/svg+xml;base64,"))
+                self.assertEqual(label["print_data"]["address"]["street"], street)
+                self.assertEqual(label["print_data"]["customer_name"], "مستلم الاختبار")
+        saved = await self.workflows.find_one(self.key)
+        self.assertEqual(saved["salla_order_status_verified_at"], "2026-01-01")
+        self.assertTrue(saved["carrier_label_ready"])
+        self.assertFalse(saved.get("carrier_label_print_confirmed"))
+
+    async def test_local_courier_final_read_accepts_new_city_epoch_and_tracking_but_not_external(self):
+        await self.seed_current_mezan_courier()
+        for name, local in [("مندوب جدة", True), ("SMSA", False)]:
+            await self.db.unified_orders.update_one(self.key, {"$set": {"shipping_company": "مندوب الرياض"}})
+            async def switch(db, owner, callback):
+                await db.unified_orders.update_one(self.key, {"$set": {
+                    "shipping_company": name, "tracking_number": "new-awb", "salla_shipment_id": "old",
+                    "shipping_address_raw.street": "عنوان حالي",
+                }})
+                await self.workflows.update_one(self.key, {"$inc": {"shipping_status_epoch": 1}})
+                return await self.local_owner(db, owner, callback)
+            with patch("operational_atomic.operational_owner", side_effect=switch), \
+                 patch.object(compat, "carrier_label", new_callable=AsyncMock, return_value=self.pdf) as external:
+                response = await self.client.post(self.path + "/refresh")
+                if local:
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.json()["print_data"]["courier_name"], name)
+                    self.assertEqual(response.json()["print_data"]["address"]["street"], "عنوان حالي")
+                    external.assert_not_awaited()
+                else:
+                    external.assert_awaited_once()
+                    self.assertNotEqual(response.json().get("label_type"), "store_courier")
+
+    async def test_local_document_uses_current_recipient_address_and_merchant_brand(self):
+        await self.seed_current_mezan_courier()
+        await self.db.salla_integrations.insert_one({"user_id": "merchant", "store_name": "متجر الاختبار"})
+        await self.db.unified_orders.update_one(self.key, {"$set": {
+            "raw_by_source.salla_direct.updated_at": "2026-02-01T00:00:00Z",
+            "raw_by_source.salla_direct.receiver.address": {"street": "عنوان المستلم الجديد"},
+            "raw_by_source.salla_direct.customer.shipping_address": {"street": "عنوان المشتري"},
+            "salla_address_provider_updated_at": "2026-01-01T00:00:00Z",
+        }})
+        response = await self.client.post(self.path + "/refresh")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["print_data"]
+        self.assertEqual(data["store_name"], "متجر الاختبار")
+        self.assertEqual(data["address"]["street"], "عنوان المستلم الجديد")
+        await self.db.unified_orders.update_one(self.key, {"$set": {
+            "salla_address_provider_updated_at": "2026-03-01T00:00:00Z",
+            "shipping_address_raw.name": "شخص آخر",
+        }})
+        response = await self.client.post(self.path + "/refresh")
+        self.assertEqual(response.json()["print_data"]["address"]["street"], "عنوان المستلم الجديد")
+
+    async def test_local_merchant_requires_correct_order_and_completed_assembly_and_status(self):
+        await self.seed_current_mezan_courier()
+        with patch.object(compat, "carrier_label", new_callable=AsyncMock, return_value=self.pdf) as engine:
+            await self.db.unified_orders.update_one(self.key, {"$set": {"raw_by_source.salla_direct.id": ""}})
+            rejected = await self.client.post(self.path)
+            self.assertEqual(rejected.status_code, 409)
+            engine.assert_not_awaited()
+            await self.db.unified_orders.update_one(self.key, {"$set": {
+                "raw_by_source.salla_direct.id": 42, "order_status": "cancelled", "raw_by_source.salla_direct.status.slug": "cancelled",
+            }})
+            response = await self.client.post(self.path + "/refresh")
+            self.assertEqual(response.status_code, 409)
+            engine.assert_not_awaited()
+            await self.workflows.update_one(self.key, {"$set": {"assembly_status": "pending"}})
+            self.assertEqual((await self.client.post(self.path)).status_code, 409)
+            await self.workflows.update_one(self.key, {"$set": {"assembly_status": "completed", "stage": "delivering"}})
+            self.assertEqual((await self.client.post(self.path)).status_code, 409)
+
     async def test_handoff_rejects_issue_and_only_fresh_in_progress_uses_existing_outbox(self):
         from assembly_completion_delivery import pending_operation
         journal = pending_operation("merchant", "test")
