@@ -3,13 +3,26 @@
   "branch": "codex/exit-2d-render-integration-20261105",
   "tested_reference": "3d03ff3b2985ddd0a826d2f18acdeea13cc0d66f",
   "prior_delivery": "c19bb28b8cb705132794d13e0e4df52d074873e2",
-  "production_integrated": "f1dfb844393bf86b8a82d1a1fb6eeeadff8f694f",
+  "production_integrated": "f1f8bba872c6b68cf5cf297a0caa379cc30db881",
   "integration_merge": "440c25ded463ae2a5be86d92e1772ade2142e72e",
   "state": "WIP_HOSTING_IMPLEMENTATION",
-  "verification": {"post_merge_unit_tests_passed": 19, "linux": "pending"},
+  "latest_integration_merge": "1a58d185ff5d849df48d29bec9d3fe1a74dd8fa2",
+  "code_checkpoint": "26d22fedbaa3951c54007a5d29c9fbb5e8cbe122",
+  "draft_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1757",
+  "verification": {
+    "post_merge_unit_tests_passed": 24,
+    "render_official_json_schema": "passed",
+    "bounded_28_entry_inventory": "passed; 18 registrations and148 launch candidates; runtime reachability remains separate",
+    "local_compatibility": {"passed":151,"skipped_real_replica_required":17,"subtests":59},
+    "earlier_host_image_job": {"source":"68d881623b314e10e1a976d73d82d2dfc132cec6","run":41922573450,"job":126899681962,"conclusion":"success"},
+    "latest_source_linux_run": 41923633021,
+    "linux": "pending; earlier host image success is not acceptance of latest source"
+  },
   "production_changed": false,
   "production_connections": 0,
   "paid_resources_created": 0,
-  "remaining": ["Render packaging", "current source Linux compatibility", "independent service crash/restart", "operational path performance", "cutover proof", "restore rehearsal plan", "resource approval proposal"],
-  "next_action": "Finish isolated staging images and Blueprint; preserve V5 Production guard unchanged"
+  "remaining": ["Latest-source combined Linux/image acceptance", "operational performance and genuine employee outage evidence", "synthetic restore evidence", "real Render resource approval and platform rehearsal", "future authorized Production stop/restore/V5 handoff"],
+  "next_action": "Inspect current candidate Linux jobs, repair only demonstrated failures and preserve exact source/run mapping",
+  "base_monthly_usd": {"hobby":127.50,"pro":152.50,"tax_and_overages_excluded":true},
+  "production_guard_or_intent_edited": false
 }
