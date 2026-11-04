@@ -10,6 +10,7 @@ import pytest
 names = ['test_fulfillment_assignment_scope_exit2d.py', 'test_operational_balance_courier_acquisition.py', 'test_provider_fee_source_terms.py',
     'test_employee_lifecycle_capability.py', 'test_employee_salary_contract_management.py',
     'test_review_session_fence.py',
+    'test_supplier_dispatch_waiting_current_status.py',
     'test_provider_fee_runtime_binding.py', 'test_bnpl_fee_completeness_boundaries.py',
     'test_preparation_supplier_dispatch.py', 'test_shipping_saved_label_print.py',
     'test_assembly_print_completion.py', 'test_amasi_shipping_compat.py']
