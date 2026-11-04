@@ -667,13 +667,14 @@ class MfaSecurityMiddleware:
         await response(scope, _replay_receive(request_messages), send)
 
 
-async def install_mfa_security(app, db) -> None:
+async def install_mfa_security(app, db, *, initialize_indexes: bool = True) -> None:
     """Install privileged MFA middleware once and prepare TTL indexes."""
     if getattr(app.state, "mezan_mfa_security_installed", False):
         return
 
     store = MfaChallengeStore(db)
-    await store.ensure_indexes()
+    if initialize_indexes:
+        await store.ensure_indexes()
     app.user_middleware.append(Middleware(MfaSecurityMiddleware, db=db))
     app.middleware_stack = app.build_middleware_stack()
     app.state.mezan_mfa_security_installed = True

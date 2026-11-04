@@ -351,15 +351,14 @@ async def get_current_user_from_db(request: Request, db) -> dict:
         raise_auth_dependency_unavailable(exc)
 
 
-async def install_process_local_auth_security(db) -> None:
+async def install_process_local_auth_security(db, *, initialize_indexes: bool = True, app=None) -> None:
     """Attach every auth guard to the FastAPI app in this process.
 
     ASGI middleware state is process-local, so every replica must run this
     function.  Each installer is guarded per app; its repeated Mongo
     ``create_index`` calls use identical definitions and are idempotent.
     """
-    app = None
-    for module_name in ("server", "backend.server"):
+    for module_name in (() if app is not None else ("server", "backend.server")):
         module = sys.modules.get(module_name)
         candidate = getattr(module, "app", None) if module else None
         if candidate is not None:
@@ -394,11 +393,26 @@ async def install_process_local_auth_security(db) -> None:
     # exact trusted device; MFA remains the Owner TOTP authority. Email OTP is
     # deliberately innermost so Admin/sensitive accounts return its 202 email
     # challenge to the outer MFA layer, while Owner still reaches MFA/TOTP.
-    await install_progressive_login_security(app, db)
-    await install_login_security(app, db)
-    await install_passkey_security(app, db)
-    await install_mfa_security(app, db)
-    await install_email_otp_security(app, db)
+    if initialize_indexes:
+        await install_progressive_login_security(app, db)
+    else:
+        await install_progressive_login_security(app, db, initialize_indexes=False)
+    if initialize_indexes:
+        await install_login_security(app, db)
+    else:
+        await install_login_security(app, db, initialize_indexes=False)
+    if initialize_indexes:
+        await install_passkey_security(app, db)
+    else:
+        await install_passkey_security(app, db, initialize_indexes=False)
+    if initialize_indexes:
+        await install_mfa_security(app, db)
+    else:
+        await install_mfa_security(app, db, initialize_indexes=False)
+    if initialize_indexes:
+        await install_email_otp_security(app, db)
+    else:
+        await install_email_otp_security(app, db, initialize_indexes=False)
 
 
 async def _install_login_security_for_loaded_app(db) -> None:
@@ -536,3 +550,10 @@ async def ensure_user_settings(db, user_id: str) -> dict:
             settings.update(update_fields)
     settings.pop("_id", None)
     return settings
+
+
+async def install_runtime_security(app, db, *, initialize_indexes=False):
+    """Explicit-app entry point reused by independent role lifespans."""
+    if app is None:
+        raise ValueError("independent security requires an explicit FastAPI app")
+    await install_process_local_auth_security(db, app=app, initialize_indexes=initialize_indexes)

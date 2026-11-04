@@ -1,0 +1,184 @@
+{
+  "task_id": "EXIT-2D-20261104",
+  "status": "DEVELOPMENT_RUNTIME_ACCEPTED_DRAFT_PR_FOR_REVIEW",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/exit-2d-resume-20261104",
+  "base_source_sha": "cec4c3854031c357577f07568f91a44c082905fc",
+  "historical_sha": "6f0884e98b8fddef4a884b1321a9a216b9d30498",
+  "checkpoint_commit_sha": "3d03ff3b2985ddd0a826d2f18acdeea13cc0d66f",
+  "remote_checkpoint": "Tested source verified on GitHub; documentation delivery tip recorded in Issue #1006",
+  "production_changed": false,
+  "application_files_changed": true,
+  "qoyod_behavior_changed": false,
+  "production_connections": 0,
+  "paid_resources_created": 0,
+  "ci_runs_started": 7,
+  "pr_created": true,
+  "merged": false,
+  "release_lease_created": false,
+  "deployed": false,
+  "inventory": {
+    "hooks": 18,
+    "launch_candidates": 137,
+    "classified_scope_entries": 28,
+    "parse_errors": 0,
+    "live_reachability_verified": false
+  },
+  "verification": [
+    {
+      "command": "python -B -m unittest discover -s packaging/exit2d -p test_inventory.py",
+      "exit_code": 0,
+      "passed": 8
+    },
+    {
+      "command": "python -B packaging/exit2d/inventory.py --plan docs/operations/EXIT-2D-20261104/role-plan.json",
+      "exit_code": 0,
+      "meaning": "Static bounded inventory coverage only; runtime_verified=false"
+    },
+    {
+      "command": "python -B -m unittest discover -s packaging/exit2d -p test_*.py",
+      "environment": "isolated local Python 3.13 venv",
+      "passed": 17,
+      "exit_code": 0
+    },
+    {
+      "scope": "Existing current auth, Mongo, startup guard and ASGI readiness contracts",
+      "passed": 40,
+      "exit_code": 0,
+      "environment": "isolated Windows venv; missing local dependencies and test JWT configuration supplied, no application fix required"
+    }
+  ],
+  "remaining": [
+    "Independent Draft PR review; no merge/deploy authorization",
+    "Governed artifact identity and frontend/hosting wiring acceptance before any deployment",
+    "Authorized genuine Mongo/files/encryption restore and cutover rehearsal",
+    "Real-host capacity and active-provider supervisor escalation acceptance",
+    "Historical full preparation revision lifecycle acceptance remains separate"
+  ],
+  "next_safe_action": "Review Draft PR #1754 and the explicit acceptance limits; continue only approved development changes, never Production operations",
+  "durable_local_checkpoint_directory": "C:/Users/amasi/.codex/checkpoints/EXIT-2D-20261104",
+  "checkpoint_commit_sha_resolution": "Exact final checkpoint SHA is recorded in Issue #1006 and the verified remote branch head; this file cannot embed its own containing commit hash",
+  "authorization": {
+    "commit_task_changes": true,
+    "push_task_branch": true,
+    "comment_issue_1006": true,
+    "merge": false,
+    "deploy": false,
+    "production_mutations": false,
+    "development_and_tests": true,
+    "draft_pr": true
+  },
+  "workflow_preflight": {
+    "checkpoint_workflow_files": 156,
+    "push_workflows_reviewed": 40,
+    "matching_push_branch_filters": 0,
+    "issue_comment_create_workflow_run_triggers_found": 0,
+    "default_branch_workflows_also_inspected": true,
+    "manual_workflow_dispatch": false
+  },
+  "issue_handoff": "Issue body updated preserving prior content; comment creation rejected by GitHub 2500-comment limit",
+  "implementation": [
+    "Default-preserving auth index initialization seam",
+    "Reused September fenced independent lifecycle with separate sync/accounting roles",
+    "Independent report HTTP role and streaming Web boundary with explicit per-request cookies",
+    "Synthetic replica-set Docker acceptance and process isolation benchmark prepared"
+  ],
+  "runtime_acceptance": "PASSED at 3d03ff3b2985ddd0a826d2f18acdeea13cc0d66f",
+  "ci_state": "Current-source Linux succeeded; source PR checks completed with success or explicit scope/manual skips",
+  "ci_runs": [
+    {
+      "id": 41900254875,
+      "source_sha": "54a99910111ca14b4c930ec647b262b3f70a67f0",
+      "result": "failure",
+      "cause": "Harness referenced two historical independent test modules not yet restored; no application acceptance reached"
+    },
+    {
+      "id": 41901395483,
+      "source_sha": "22da80b8d6cf8288257eee09a9a26745fc4c89ef",
+      "result": "failure",
+      "passed_tests": 363,
+      "failed_tests": 1,
+      "cause": "Restored EXIT-2A explicit rehearsal index guard not yet ported; fixed preserving default behavior",
+      "new_unit_tests_passed": 17,
+      "synthetic_isolation_p95_ms": {
+        "same_process": 611.115,
+        "independent_reports": 20.329
+      }
+    },
+    {
+      "id": 41902209887,
+      "source_sha": "8449a6c2bd62ef28f2c9f7474a1508640a84b969",
+      "result": "failure",
+      "cause": "Real preparation route exposed pre-existing wrapper permissions keyword mismatch; September two-line forwarding fix reused without policy changes",
+      "migration_retry_idempotence": "passed",
+      "web_lifecycle_profile_zero_writes": "passed"
+    },
+    {
+      "id": 41903198518,
+      "source_sha": "a7ce77d812446fb1243a3ae93ecf6f839c53f7e3",
+      "result": "success",
+      "focused_pytest_passed": 365,
+      "subtests_passed": 11,
+      "new_unittest_passed": 17,
+      "synthetic_process_isolation_p95_ms": {
+        "same_process": 608.191,
+        "independent_reports": 16.995
+      },
+      "real_api_synthetic_load": {
+        "orders": 5000,
+        "concurrent_reports": 4,
+        "employee_auth_requests": 20,
+        "employee_auth_p95_ms": 140.589,
+        "report_max_ms": 2694.675,
+        "all_statuses_200": true
+      },
+      "actual_role_ownership_and_shutdown": [
+        "worker-sync",
+        "worker-accounting"
+      ],
+      "migration_and_web_lifecycle_profile": "passed"
+    },
+    {
+      "id": 41904070279,
+      "source_sha": "414cffa2d5419e20ab175b5629e5e0531760df1a",
+      "result": "failure",
+      "cause": "Performance fixture minted employee session before intentional future password-revocation cutoff; fixed by bounded wait preserving guard and cutoff, not retrying requests"
+    },
+    {
+      "id": 41904647980,
+      "source_sha": "69fb873491e7f9613f49fa09900a889cdf6bd8d6",
+      "result": "cancelled",
+      "reason": "Known test clock barrier repair; superseded by next source, no other task canceled"
+    },
+    {
+      "id": 41905085462,
+      "source_sha": "3d03ff3b2985ddd0a826d2f18acdeea13cc0d66f",
+      "result": "success",
+      "pytest_passed": 365,
+      "subtests_passed": 11,
+      "new_unittest_passed": 19
+    }
+  ],
+  "local_performance": {
+    "kind": "synthetic_process_isolation_not_production_capacity",
+    "concurrent_employee_requests": 20,
+    "same_process_p95_ms": 609.395,
+    "independent_reports_p95_ms": 47.218
+  },
+  "historical_recheck": {
+    "passed": 47,
+    "failed": 0,
+    "scope": "Historical September source unchanged, cryptography supplied in isolated venv"
+  },
+  "actual_registered_worker_families": 6,
+  "unverified_registration_families": [
+    "supplier_scan_attempts.install_reconciler",
+    "product_google_taxonomy_ai_pilot.make_product_google_taxonomy_ai_pilot_router"
+  ],
+  "local_final_new_unit_tests_passed": 19,
+  "tested_source_sha": "3d03ff3b2985ddd0a826d2f18acdeea13cc0d66f",
+  "pr_number": 1754,
+  "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1754",
+  "draft": true,
+  "final_evidence": "docs/operations/EXIT-2D-20261104/RESULTS.json"
+}
