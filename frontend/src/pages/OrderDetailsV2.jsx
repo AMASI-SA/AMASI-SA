@@ -41,6 +41,7 @@ import OrderActivityPanel from "../components/orders/OrderActivityPanel";
 import BundleOperationalPanel from "../components/orders/BundleOperationalPanel";
 import FulfillmentExperimentPanel from "../components/fulfillment/FulfillmentExperimentPanel";
 import { printStoreCourierLabel } from "../lib/storeCourierLabelPrint";
+import { formatRiyadhDateTime } from "../lib/dates";
 
 const THREE_DECIMAL_CURRENCIES = new Set(["BHD", "KWD", "OMR"]);
 
@@ -384,7 +385,7 @@ export function ShippingCard({ shipping, customer, orderNumber, allowPrinting = 
     const tracking = shipping.tracking_number || shipping.shipment_number || shipping.waybill_number;
     const mapUrl = address.map_url || address.location_url || shipping.map_url;
     const companyLogo = shipping.company_logo || shipping.logo_url;
-    const shippingStatusLabel = shipping.status || "تتبع حالة الشحنة";
+    const shippingStatusLabel = shipping.status === "delivered" ? "تم التوصيل" : shipping.status || "تتبع حالة الشحنة";
 
     useEffect(() => {
         requestRef.current += 1;
@@ -497,6 +498,11 @@ export function ShippingCard({ shipping, customer, orderNumber, allowPrinting = 
                 <div className="mt-5 border-t border-slate-100 pt-4">
                     <div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-slate-600">رقم التتبع:</span><span className="num font-bold text-teal-800">{tracking || "—"}</span><CopyValueButton value={tracking} label="نسخ رقم التتبع" /></div>
                     <div className="mt-4 text-sm font-bold text-teal-800">{shippingStatusLabel}</div>
+                    {shipping.delivery_time_source === "salla_carrier_history" && shipping.delivery_recorded_at && (
+                        <div className="mt-2 text-xs font-bold text-slate-600" data-testid="order-v2-delivery-recorded">
+                            تسجيل التسليم في سلة <bdi>{formatRiyadhDateTime(shipping.delivery_recorded_at)}</bdi> بتوقيت الرياض
+                        </div>
+                    )}
                     {!allowPrinting && <div className="mt-3 rounded-lg bg-amber-50 p-2 text-xs font-bold leading-6 text-amber-800">إصدار وطباعة البوليصة مؤجلان إلى الخطوة الأخيرة بعد تأكيد تجهيز جميع قطع الطلب.</div>}
                     {issueMessage && <div className="mt-3 rounded-lg bg-amber-50 p-2 text-xs font-bold text-amber-800">{issueMessage}</div>}
                     {issueError && <div className="mt-3 rounded-lg bg-rose-50 p-2 text-xs font-bold text-rose-700">{issueError}</div>}

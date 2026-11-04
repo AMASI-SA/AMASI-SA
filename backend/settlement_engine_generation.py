@@ -155,6 +155,8 @@ async def _build_bnpl_periods(
                 "settlement_fee":         t.get("settlement_fee", 0),
                 "settlement_fee_vat":     t.get("settlement_fee_vat", 0),
                 "net_payable":            t.get("net_payable", 0),
+                "fees_complete":          s.get("fees_complete", True),
+                "fee_review_reasons":     s.get("fee_review_reasons", []),
                 "data_source":            s.get("data_source", "computed"),
             })
         # Mark rules snapshot with calendar provenance.
@@ -304,13 +306,28 @@ async def generate_for_provider(
         "invoices_new": 0, "invoices_reused": 0,
         "expected_transfers_new": 0, "expected_transfers_reused": 0,
         "skipped_zero_amount": 0,
+        "skipped_incomplete_fees": 0,
     }
     created_invoice_ids: list[str] = []
+    review_periods: list[dict] = []
 
     for r in rows:
         period_from = r.get("from")
         period_to   = r.get("to")
         if not period_from or not period_to:
+            continue
+        if not r.get("fees_complete", True) or any(r.get(key) is None for key in ("commission", "commission_vat", "net_payable")):
+            counts["skipped_incomplete_fees"] += 1
+            review_periods.append({
+                "from": period_from,
+                "to": period_to,
+                "gross_sales": r.get("gross_sales"),
+                "total_refunds": r.get("total_refunds"),
+                "transactions_count": r.get("transactions_count"),
+                "net_payable": None,
+                "fees_complete": False,
+                "fee_review_reasons": r.get("fee_review_reasons") or ["provider_fees_incomplete"],
+            })
             continue
         net_payable = _r(r.get("net_payable"))
         # We still record zero-amount periods so the merchant sees
@@ -477,6 +494,8 @@ async def generate_for_provider(
         "period_to":             date_to,
         "rows_considered":       len(rows),
         "counts":                counts,
+        "fees_complete":         not review_periods,
+        "review_periods":        review_periods,
         "default_bank": {
             "id":   bank_id, "name": bank_name,
             "configured": bool(bank_id),

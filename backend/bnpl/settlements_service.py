@@ -298,28 +298,10 @@ def _count_settlements_in_period(
 async def _merchant_fee_rates(
     db, user_id: str, provider: str,
 ) -> Dict[str, Any]:
-    """Load per-merchant fee rates with a UNIFIED SOURCE OF TRUTH.
+    """Read saved Settings terms before legacy BNPL values and code defaults.
 
-    Iter-126 — Resolution order:
-      1. `users.settings.payment_methods[name]` — the Settings page is the
-         SINGLE place merchants edit commission_percent / fixed_fee /
-         vat_percent for ALL payment methods (mada, visa, tabby, tamara,
-         إمكان…).  This is the canonical source.
-      2. `bnpl_settings.{mdr_percent, fixed_fee_per_order,
-         vat_on_fees_percent}` — legacy per-BNPL fields, kept as a
-         migration fallback for users whose payment_methods entry is
-         still missing.  When a user saves on either screen, both
-         locations get updated by the settings save hook.
-      3. Code defaults from `DEFAULT_FEE_RATES` — only used the very
-         first time the user opens the page (before any save).
-
-    Settlement-specific fields (`settlement_fee_per_invoice`,
-    `settlement_period_days`, `invoice_weekdays`, `transfer_weekdays`)
-    live exclusively in `bnpl_settings` since they have no analogue in
-    `payment_methods`.
-
-    Returns the rates as PERCENT (e.g. 5.0) — not fractions — so the
-    UI can display them directly.
+    Product-specific MZ2 policies are applied per transaction by the caller.
+    Calendar settings remain in bnpl_settings. Returned rates are percentages.
     """
     defaults = DEFAULT_FEE_RATES.get(provider, {
         "commission_pct": 0, "vat_pct": 0,
@@ -343,10 +325,6 @@ async def _merchant_fee_rates(
     rates["transfer_weekdays"] = list(wd.get("transfer_weekdays") or [])
     rates["fee_source"] = "code_default"
 
-    # Iter-137 — Read commission_mode FIRST so STEP 1 (payment_methods)
-    # can also be bypassed when the merchant is on auto.  Otherwise an
-    # outdated commission_percent in payment_methods would leak through
-    # even after the user toggled to "auto".
     doc = await db.bnpl_settings.find_one(
         {"user_id": user_id, "provider": provider}, {"_id": 0},
     )
@@ -358,11 +336,22 @@ async def _merchant_fee_rates(
         if commission_mode == "auto" else set()
     )
 
-    # Iter-126 — STEP 1: read from the unified payment_methods settings.
-    # Provider name → Arabic display label that matches `payment_methods`.
+    from operational_configured_provider_fees import configured_payment_setting, configured_terms
+    saved = await db.settings.find_one({'user_id': user_id}, {'_id': 0, 'payment_methods': 1})
+    selected = configured_payment_setting(saved or {}, provider)
+    rates['configured_terms_complete'] = True
+    if selected is not None:
+        terms = configured_terms(saved, provider)
+        rates['configured_terms_complete'] = terms is not None
+        rates['fee_source'] = 'payment_methods_settings'
+        if terms is not None:
+            rate, fixed, tax = terms
+            rates.update(commission_pct=float(rate * 100), fixed_fee_per_order=float(fixed), vat_pct=float(tax * 100))
+
+    # Read the historical embedded location only when canonical settings are absent.
     PROVIDER_AR_NAME = {"tabby": "تابي", "tamara": "تمارا", "emkan": "إمكان"}
     ar_name = PROVIDER_AR_NAME.get(provider)
-    if ar_name and commission_mode != "auto":
+    if saved is None and ar_name and commission_mode != "auto":
         user_doc = await db.users.find_one(
             {"id": user_id},
             {"_id": 0, "settings.payment_methods": 1},
@@ -377,7 +366,7 @@ async def _merchant_fee_rates(
             if match.get("fixed_fee") is not None:
                 rates["fixed_fee_per_order"] = float(match["fixed_fee"])
             rates["fee_source"] = "payment_methods_settings"
-    elif commission_mode == "auto":
+    elif selected is None and commission_mode == "auto":
         rates["fee_source"] = "auto_canonical_defaults"
 
     # Iter-126 — STEP 2: bnpl_settings legacy fallback / overrides for
@@ -461,6 +450,118 @@ async def _merchant_fee_rates(
     # KSA VAT applies to processor fees by default.
     rates.setdefault("settlement_fee_vat_applicable", True)
     return rates
+
+
+async def _configured_provider_fee_totals(db, user_id, provider, sales_match, refund_match):
+    """Estimate each source transaction with the owner's MZ2 product policy."""
+    from accounting_onboarding_ssot import get_fee_source_mode, list_fee_policies
+    from operational_configured_provider_fees import configured_projection, has_capture_policies
+    from provider_fee_sources import bind_statement_plan, load_statement_plans
+
+    policies = await list_fee_policies(db, user_id)
+    source_mode = await get_fee_source_mode(db, user_id)
+    if source_mode != 'mz2_policies' and not has_capture_policies(policies, provider):
+        return None
+    fields = {'_id': 0, 'amount': 1, 'currency': 1, 'provider_id': 1, 'order_number': 1,
+              'order_reference_id': 1, 'plan_id': 1, 'created_at_provider': 1,
+              'is_pre_accounting': 1, 'settlement_source': 1, 'same_week_netzero_exclusion': 1}
+    sales = await db.payment_transactions.find(sales_match, fields).to_list(20001)
+    refund_fields = {
+        '_id': 0, 'provider_payment_id': 1, 'provider_refund_id': 1,
+        'order_reference_id': 1, 'amount': 1, 'status': 1, 'refunded_at': 1,
+    }
+    refunds = await db.payment_refunds.find(refund_match, refund_fields).to_list(20001)
+    if max(len(sales), len(refunds)) > 20000:
+        return {'commission': 0.0, 'commission_vat': 0.0, 'fees_complete': False,
+                'fee_review_reasons': ['provider_fee_transaction_scope_too_large']}
+    originals = {row['provider_id']: row for row in sales if row.get('provider_id')}
+    for refund in refunds:
+        reference = refund.get('provider_payment_id')
+        if not reference or reference in originals:
+            continue
+        matches = await db.payment_transactions.find({
+            'user_id': user_id, 'provider': provider, 'provider_id': reference,
+        }, fields).to_list(2)
+        if len(matches) == 1:
+            originals[reference] = matches[0]
+            original = matches[0]
+            if (provider == 'tamara' and not original.get('is_pre_accounting')
+                    and not original.get('same_week_netzero_exclusion')
+                    and original.get('settlement_source') != 'settlement_entries_historical'
+                    and float(original.get('amount') or 0) > 0):
+                sales.append(original)
+    plans = await load_statement_plans(db, user_id, providers=[provider],
+        order_numbers=[row.get('order_number') or row.get('order_reference_id') for row in originals.values()]
+    ) if any(p.get('provider') == provider and p.get('plan_id') for p in policies) else {}
+    errors = set()
+    fee = tax = Decimal('0')
+
+    def price(row, events=()):
+        source = bind_statement_plan({'provider': provider, 'plan_id': row.get('plan_id')}, plans,
+                                     row.get('order_number') or row.get('order_reference_id'))
+        if row.get('currency', 'SAR') != 'SAR':
+            raise ValueError('provider_fee_currency_conversion_required')
+        result = configured_projection(policies, provider, row.get('amount'), payment=source,
+            created_at=row.get('created_at_provider'), source_mode=source_mode,
+            refunded=sum((Decimal(str(event['amount'])) for event in events), Decimal('0')), refunds=list(events),
+            as_of=(refund_match.get('refunded_at') or {}).get('$lte') or datetime.now(timezone.utc))
+        if result is None or result.get('estimated_fee_net') is None or result.get('estimated_fee_tax') is None:
+            raise ValueError('fee_tax_policy_incomplete')
+        return Decimal(result['estimated_fee_net']), Decimal(result['estimated_fee_tax'])
+
+    for sale in sales:
+        try:
+            charge, vat = price(sale)
+            fee += charge
+            tax += vat
+        except (ValueError, KeyError, TypeError, ArithmeticError) as exc:
+            errors.add(str(exc) if isinstance(exc, ValueError) else 'provider_fee_source_incomplete')
+    def group_events(rows):
+        groups, seen = {}, {}
+        for refund in rows:
+            identity = refund.get('provider_refund_id')
+            reference = refund.get('provider_payment_id')
+            if not identity or reference not in originals or refund.get('status') not in {'executed', 'settled', 'completed', 'succeeded'}:
+                raise ValueError('provider_refund_fee_source_incomplete')
+            event = {'id': identity, 'amount': refund['amount'], 'status': 'executed',
+                     'refunded_at': refund.get('refunded_at')}
+            signature = (reference, event)
+            if identity in seen:
+                if seen[identity] != signature:
+                    raise ValueError('provider_refund_identity_conflict')
+                continue
+            seen[identity] = signature
+            groups.setdefault(reference, []).append(event)
+        return groups
+
+    try:
+        current_events = group_events(refunds)
+        prior_rows = []
+        lower_bound = (refund_match.get('refunded_at') or {}).get('$gte')
+        references = sorted(current_events)
+        if lower_bound:
+            for start in range(0, len(references), 250):
+                prior_rows.extend(await db.payment_refunds.find({
+                    'user_id': user_id, 'provider': provider,
+                    'provider_payment_id': {'$in': references[start:start + 250]},
+                    'refunded_at': {'$lt': lower_bound},
+                    'status': {'$in': ['executed', 'settled', 'completed', 'succeeded']},
+                }, refund_fields).to_list(20001 - len(prior_rows)))
+                if len(prior_rows) > 20000:
+                    raise ValueError('provider_fee_transaction_scope_too_large')
+        prior_events = group_events(prior_rows)
+        for reference, events in current_events.items():
+            older = prior_events.get(reference, [])
+            if {row['id'] for row in older}.intersection(row['id'] for row in events):
+                raise ValueError('provider_refund_identity_conflict')
+            before_fee, before_tax = price(originals[reference], older)
+            after_fee, after_tax = price(originals[reference], [*older, *events])
+            fee += after_fee - before_fee
+            tax += after_tax - before_tax
+    except (ValueError, KeyError, TypeError, ArithmeticError) as exc:
+        errors.add(str(exc) if isinstance(exc, ValueError) else 'provider_refund_fee_source_incomplete')
+    return {'commission': float(fee), 'commission_vat': float(tax),
+            'fees_complete': not errors, 'fee_review_reasons': sorted(errors), 'fee_source_mode': source_mode}
 
 
 async def _compute_provider_totals(
@@ -1319,6 +1420,15 @@ async def compute_settlement_for_provider(
 
     commission     = _r(sales_commission - refund_rebate)
     commission_vat = _r(sales_vat        - refund_vat_rebate)
+    configured = await _configured_provider_fee_totals(db, user_id, provider, sales_match, refund_match)
+    fees_complete = fee_rates.get('configured_terms_complete', True)
+    fee_review_reasons = [] if fees_complete else ['provider_fee_settings_incomplete']
+    if configured is not None:
+        commission = _r(configured['commission'])
+        commission_vat = _r(configured['commission_vat'])
+        fees_complete = configured['fees_complete']
+        fee_review_reasons = configured['fee_review_reasons']
+        fee_rates['fee_source'] = 'mz2_provider_fee_policies'
 
     # Settlement fee — charged ONCE per provider invoice.  Iter-121:
     # use weekday-based count if the merchant configured invoice_weekdays.
@@ -1331,6 +1441,12 @@ async def compute_settlement_for_provider(
     settlement_fee_vat = (
         _r(settlement_fee * vat_rate) if settlement_fee_vat_applicable else 0.0
     )
+    if configured is not None and configured.get('fee_source_mode') == 'mz2_policies':
+        # Calendar dates do not prove that a chargeable transfer happened.
+        # The covered official statement below supplies actual payout fees.
+        settlement_fee = settlement_fee_vat = 0.0
+        settlement_invoices_count = 0
+        fee_rates['settlement_fee_source'] = 'actual_provider_events'
 
     net_payable = _r(
         totals["net_sales"] - commission - commission_vat
@@ -1402,6 +1518,8 @@ async def compute_settlement_for_provider(
                     official.get("reported_commission")
                 )
             data_source = "provider_official_file"
+            fees_complete = True
+            fee_review_reasons = []
 
     # Bank-side reconciliation
     account = await _find_provider_account(db, user_id, provider)
@@ -1428,8 +1546,13 @@ async def compute_settlement_for_provider(
             "is_linked": True,
         }
 
+    if not fees_complete:
+        bank_info['remaining_with_provider'] = None
+        bank_info['delta_overpayment'] = None
     return {
         "provider": provider,
+        "fees_complete": fees_complete,
+        "fee_review_reasons": fee_review_reasons,
         "totals": {
             "transactions_count": totals["transactions_count"],
             "refunds_count": totals.get("refunds_count", 0),
@@ -1438,16 +1561,17 @@ async def compute_settlement_for_provider(
             "gross_sales": totals["gross_sales"],
             "total_refunds": totals["total_refunds"],
             "net_sales": totals["net_sales"],
-            "commission": _r(commission),
+            "commission": _r(commission) if fees_complete else None,
             "reported_commission": official_reported_commission,
             "statement_rounding_adjustment": official_rounding_adjustment,
-            "commission_vat": _r(commission_vat),
+            "commission_vat": _r(commission_vat) if fees_complete else None,
             "settlement_fee": _r(settlement_fee),
             "settlement_fee_per_invoice": _r(settlement_fee_per_invoice),
             "settlement_invoices_count": settlement_invoices_count,
             # Iter-134 — settlement-fee VAT surfaces as its own line.
             "settlement_fee_vat": _r(settlement_fee_vat),
-            "net_payable": _r(net_payable),
+            "net_payable": _r(net_payable) if fees_complete else None,
+            "fees_complete": fees_complete,
         },
         "bank": bank_info,
         "fee_rates": fee_rates,
@@ -1637,8 +1761,8 @@ async def compute_weekly_settlements(
                 )
             else:
                 this_invoice_transfer = float(b.get("transferred_amount", 0) or 0)
-            net_payable_val = float(t.get("net_payable", 0) or 0)
-            row_remaining = round(net_payable_val - this_invoice_transfer, 2)
+            net_payable_val = t.get('net_payable')
+            row_remaining = round(float(net_payable_val) - this_invoice_transfer, 2) if net_payable_val is not None else None
             rows.append({
                 "invoice_no": invoice_no,
                 "from": period_start.isoformat(),
@@ -1659,6 +1783,8 @@ async def compute_weekly_settlements(
                 "settlement_fee": t.get("settlement_fee", 0),
                 "settlement_fee_vat": t.get("settlement_fee_vat", 0),
                 "net_payable": t.get("net_payable", 0),
+                "fees_complete": s.get('fees_complete', True),
+                "fee_review_reasons": s.get('fee_review_reasons', []),
                 "transferred_amount": _r(this_invoice_transfer),
                 "remaining_with_provider": row_remaining,
                 # Iter-147 v3 — per-row data source so UI can show
@@ -1699,6 +1825,8 @@ async def compute_weekly_settlements(
             "settlement_fee": t.get("settlement_fee", 0),
             "settlement_fee_vat": t.get("settlement_fee_vat", 0),
             "net_payable": t.get("net_payable", 0),
+            "fees_complete": s.get('fees_complete', True),
+            "fee_review_reasons": s.get('fee_review_reasons', []),
             "transferred_amount": b.get("transferred_amount", 0),
             "remaining_with_provider": b.get("remaining_with_provider", 0),
         })
@@ -1737,14 +1865,18 @@ async def compute_all_settlements(
         for k in ("gross_sales", "total_refunds", "net_sales",
                   "commission", "commission_vat", "settlement_fee",
                   "settlement_fee_vat", "net_payable"):
-            totals[k] += t.get(k, 0)
+            value = t.get(k, 0)
+            totals[k] = None if totals[k] is None or value is None else totals[k] + value
         totals["transferred_amount"] += b.get("transferred_amount", 0)
-        totals["remaining_with_provider"] += b.get("remaining_with_provider", 0)
+        remaining = b.get('remaining_with_provider', 0)
+        totals['remaining_with_provider'] = (None if totals['remaining_with_provider'] is None or remaining is None
+                                             else totals['remaining_with_provider'] + remaining)
     for k in totals:
-        totals[k] = _r(totals[k])
+        totals[k] = _r(totals[k]) if totals[k] is not None else None
 
     return {
         "providers": providers_out,
+        "fees_complete": all(row.get('fees_complete', True) for row in providers_out),
         "totals": totals,
         "period": {"from": date_from, "to": date_to},
         "computed_at": datetime.now(timezone.utc).isoformat(),

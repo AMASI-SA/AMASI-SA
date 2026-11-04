@@ -454,7 +454,7 @@ def reconcile(state, sources, as_of):
                             earliest_date = policy_day
                             policy_day = instant(page_fact["observed_at"]).astimezone(RIYADH).date()
                         projection = provider_projection(payment, sources.get("fee_policies", []), policy_day,
-                                                         earliest_date=earliest_date)
+                                                         earliest_date=earliest_date, as_of_date=now.astimezone(RIYADH).date())
                     except (KeyError, TypeError, ValueError, InvalidOperation, OverflowError) as exc:
                         if not page_mode and (not isinstance(exc, ValueError) or not independent_capture_without_fee_policy(
                                 payment, sources.get("fee_policies", []), policy_day, exc, created=created, as_of=now)):

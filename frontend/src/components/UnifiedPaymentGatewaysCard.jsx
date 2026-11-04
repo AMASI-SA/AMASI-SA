@@ -87,7 +87,7 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                     </div>
                 </div>
                 <div className="text-end shrink-0">
-                    <div className="text-[11px] text-muted-foreground">الصافي المؤكَّد (ر.س)</div>
+                    <div className="text-[11px] text-muted-foreground">الصافي بعد الرسوم (ر.س)</div>
                     <div className="num text-2xl sm:text-3xl font-extrabold text-brand" data-testid={`${testid}-net-total`}>
                         {displayMoney(t.net)}
                     </div>
@@ -103,6 +103,11 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
             {!conversionComplete && (
                 <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900" data-testid={`${testid}-currency-warning`}>
                     الأرقام المالية موقوفة مؤقتاً: يوجد {formatInt(t.unverified_orders_count)} طلب بعملة أجنبية من دون سعر صرف موثّق من سلة.
+                </div>
+            )}
+            {t.fees_complete === false && (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900" data-testid={`${testid}-fee-warning`}>
+                    بيانات رسوم بعض الطلبات غير مكتملة. يلزم مطابقة طريقة الدفع والخطة مع جدول رسوم ميزان2.
                 </div>
             )}
 
@@ -148,7 +153,9 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                                     </td>
                                     <td className="py-2.5 num font-extrabold text-emerald-700">{displayMoney(r.net)}</td>
                                     <td className="py-2.5">
-                                        {isActual ? (
+                                        {r.fees_complete === false ? (
+                                            <span className="text-xs font-bold text-amber-800">غير مكتمل</span>
+                                        ) : isActual ? (
                                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800" title={`${cov.toFixed(1)}% من الطلبات تم مطابقتها بملف تسوية`}>
                                                 فعلي {cov.toFixed(0)}%
                                             </span>

@@ -4,8 +4,8 @@ Version 1 preserves the existing aggregate-policy contract. Version 2 is opt-in
 and splits refundable/nonrefundable/fixed components with independent VAT.
 No merchant rates are hardcoded; statement fees still supersede estimates.
 """
-from datetime import date, datetime, timedelta
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, ROUND_HALF_UP
 
 CENT = Decimal('0.01')
 ZERO = Decimal('0')
@@ -66,17 +66,24 @@ def _events(rows, currency, kind):
         if identity in seen and seen[identity] != value:
             raise ValueError(kind + '_identity_conflict')
         seen[identity] = value
-    return sum(seen.values(), ZERO)
+    return {key: seen[key] for key in sorted(seen)}
 
 
 def _select(payment, policies, transaction_date):
+    if payment.get('fee_plan_issue'):
+        raise ValueError('provider_payment_plan_conflict')
     candidates = [p for p in policies if p.get('provider') == payment['provider']
         and p.get('currency') == payment['currency'] and p.get('status') == 'active'
+        and p.get('event_type', 'capture') == payment.get('event_type', 'capture')
         and day(p['effective_from']) <= transaction_date
         and (not p.get('effective_to') or transaction_date <= day(p['effective_to']))]
     qualifiers = ('payment_method', 'plan_id')
     for key in qualifiers:
         value = payment.get(key)
+        if key == 'plan_id':
+            plans = {str(p['plan_id']) for p in candidates if p.get('plan_id') not in (None, '')}
+            if plans and value not in (None, '') and str(value) not in plans:
+                raise ValueError('provider_fee_policy_incomplete_or_ambiguous')
         if value not in (None, ''):
             candidates = [p for p in candidates if p.get(key) in (None, '') or str(p[key]) == str(value)]
     for key, error in zip(qualifiers, ('provider_payment_method_required_for_fee', 'provider_payment_plan_required')):
@@ -92,16 +99,27 @@ def _select(payment, policies, transaction_date):
     return candidates[0]
 
 
-def _tax_parts(raw_fee, component):
+def _tax_parts(raw_fee, component, *, unrounded_fee=None):
+    rounding_name = component.get('vat_rounding', 'half_up')
+    if rounding_name not in {'half_up', 'half_even'}:
+        raise ValueError('provider_fee_tax_rounding_invalid')
+    rounding = ROUND_HALF_EVEN if rounding_name == 'half_even' else ROUND_HALF_UP
+    basis = component.get('vat_basis', 'rounded_fee')
+    if basis not in {'rounded_fee', 'unrounded_fee'}:
+        raise ValueError('provider_fee_tax_basis_invalid')
+    tax_base = unrounded_fee if basis == 'unrounded_fee' and unrounded_fee is not None else raw_fee
     treatment = component.get('vat_treatment')
     if treatment in {'exclusive', 'inclusive'}:
         rate = money(component.get('vat_rate'))
         if rate > 100:
             raise ValueError('provider_fee_tax_rate_invalid')
         if treatment == 'inclusive':
-            net = _q(raw_fee / (1 + rate / 100))
+            if basis == 'unrounded_fee':
+                tax = (tax_base * rate / (100 + rate)).quantize(CENT, rounding=rounding)
+                return raw_fee - tax, tax
+            net = (raw_fee / (1 + rate / 100)).quantize(CENT, rounding=rounding)
             return net, raw_fee - net
-        return raw_fee, _q(raw_fee * rate / 100)
+        return raw_fee, (tax_base * rate / 100).quantize(CENT, rounding=rounding)
     if treatment in {'exempt', 'not_applicable'}:
         return raw_fee, ZERO
     raise ValueError('fee_tax_policy_incomplete')
@@ -124,10 +142,11 @@ def _components_projection(payment, policy):
         raise ValueError('provider_fee_components_required')
     gross = _cash(payment['gross'])
     cancelled = _cash(payment.get('cancelled', '0'))
-    voided = _events(payment.get('cancellations', []), payment['currency'], 'cancellation')
+    voided = sum(_events(payment.get('cancellations', []), payment['currency'], 'cancellation').values(), ZERO)
     if cancelled != voided:
         raise ValueError('provider_cancellation_execution_evidence_required')
-    refunded = _events(payment.get('refunds', []), payment['currency'], 'refund')
+    refund_events = _events(payment.get('refunds', []), payment['currency'], 'refund')
+    refunded = sum(refund_events.values(), ZERO)
     if cancelled + refunded > gross:
         raise ValueError('cancellation_refund_overlap')
     captures = {}
@@ -160,27 +179,31 @@ def _components_projection(payment, policy):
             raise ValueError('provider_fee_rate_invalid')
         refund_rule = component.get('refund_fee_treatment')
         cancel_rule = component.get('cancellation_fee_treatment')
-        if refund_rule not in {'retain', 'recalculate', 'full_only'}:
+        if refunded and refund_rule not in {'retain', 'recalculate', 'full_only'}:
             raise ValueError('refund_fee_treatment_incomplete')
-        if cancel_rule not in {'retain', 'recalculate'}:
+        if cancelled and cancel_rule not in {'retain', 'recalculate'}:
             raise ValueError('cancellation_fee_treatment_incomplete')
         base = active if cancel_rule == 'recalculate' else gross
         percentage_fee = _q(base * rate / 100)
         fixed_fee = fixed if base else ZERO
         charged = percentage_fee + fixed_fee
-        credit = ZERO
+        unrounded_charged = base * rate / 100 + fixed_fee
+        charged_net, charged_tax = _tax_parts(charged, component, unrounded_fee=unrounded_charged)
+        credit_net = credit_tax = used_percentage = used_fixed = used_unrounded = ZERO
         if refunded and refund_rule != 'retain' and (refund_rule != 'full_only' or refunded == active):
-            percentage_credit = min(percentage_fee, _q(refunded * rate / 100))
-            fixed_credit = min(fixed_fee, _q(fixed_fee * refunded / active))
-            credit = percentage_credit + fixed_credit
+            for value in refund_events.values():
+                percentage_credit = min(percentage_fee - used_percentage, _q(value * rate / 100))
+                fixed_credit = min(fixed_fee - used_fixed, _q(fixed_fee * value / active))
+                raw_credit = min(unrounded_charged - used_unrounded, value * rate / 100 + fixed_fee * value / active)
+                net_credit, tax_credit = _tax_parts(percentage_credit + fixed_credit, component, unrounded_fee=raw_credit)
+                credit_net += min(net_credit, charged_net - credit_net)
+                credit_tax += min(tax_credit, charged_tax - credit_tax)
+                used_percentage += percentage_credit
+                used_fixed += fixed_credit
+                used_unrounded += raw_credit
             if refunded == active and base == active:
-                credit = charged  # Return the last cent exactly; never exceed the original fee.
-        charged_net, charged_tax = _tax_parts(charged, component)
-        credit_net, credit_tax = _tax_parts(credit, component)
-        if credit == charged:
-            credit_net, credit_tax = charged_net, charged_tax
-        if credit_net > charged_net or credit_tax > charged_tax:
-            raise ValueError('provider_fee_credit_exceeds_original')
+                # The final refund returns the remaining cent of the original fee and VAT.
+                credit_net, credit_tax = charged_net, charged_tax
         for k, v in (('charged_net', charged_net), ('charged_tax', charged_tax),
                      ('refunded_net', credit_net), ('refunded_tax', credit_tax)):
             totals[k] += v
@@ -231,13 +254,67 @@ def independent_capture_without_fee_policy(payment, policies, transaction_date, 
             and ZERO < _cash(c.get('amount')) <= _cash(payment.get('gross')))
 
 
-def provider_projection(payment, policies, transaction_date, *, earliest_date=None):
+def _refund_processing_fees(payment, policies, result, transaction_date, earliest_date, as_of_date):
+    """Price each executed refund once, separately from credits of capture fees."""
+    if payment.get('event_type', 'capture') != 'capture' or not any(
+            row.get('provider') == payment['provider'] and row.get('currency') == payment['currency']
+            and row.get('status') == 'active' and row.get('event_type') == 'refund' for row in policies):
+        return result
+    events = _events(payment.get('refunds', []), payment['currency'], 'refund')
+    charges = []
+    net_fee = tax_fee = total_fee = ZERO
+    for identity, value in events.items():
+        dates = set()
+        for row in payment['refunds']:
+            if str(row.get('id')) != identity or row.get('status') not in EXECUTED:
+                continue
+            stamp = row.get('refunded_at') or row.get('executed_at')
+            if stamp:
+                stamp = datetime.fromisoformat(str(stamp).replace('Z', '+00:00'))
+                if stamp.tzinfo is None:
+                    raise ValueError('provider_refund_fee_event_date_required')
+                dates.add(stamp.astimezone(timezone(timedelta(hours=3))).date())
+        if len(dates) > 1:
+            raise ValueError('provider_refund_fee_event_date_conflict')
+        first_day = earliest_date or transaction_date
+        if dates:
+            event_day = dates.pop()
+            if event_day < first_day or (as_of_date and event_day > as_of_date):
+                raise ValueError('provider_refund_fee_event_date_invalid')
+            first_day = event_day
+        elif as_of_date:
+            event_day = as_of_date
+        else:
+            raise ValueError('provider_refund_fee_event_date_required')
+        event_payment = {key: payment.get(key) for key in ('provider', 'currency', 'payment_method', 'plan_id', 'fee_plan_issue')}
+        event_payment.update(gross=amount(value), event_type='refund')
+        charge = provider_projection(event_payment, policies, event_day, earliest_date=first_day)
+        if charge.get('estimated_fee_net') is None or charge.get('estimated_fee_tax') is None:
+            raise ValueError('fee_tax_policy_incomplete')
+        net_fee += Decimal(charge['estimated_fee_net'])
+        tax_fee += Decimal(charge['estimated_fee_tax'])
+        total_fee += Decimal(charge['estimated_fees'])
+        charges.append({'refund_id': identity, 'policy_id': charge['policy_id'], 'fee_recognition': 'estimated',
+                        'fee_net': charge['estimated_fee_net'], 'fee_tax': charge['estimated_fee_tax']})
+    if charges:
+        result['estimated_fees'] = amount(Decimal(result['estimated_fees']) + total_fee)
+        result['expected_receivable'] = amount(Decimal(result['expected_receivable']) - total_fee)
+        for key, value in (('estimated_fee_net', net_fee), ('estimated_fee_tax', tax_fee)):
+            if result.get(key) is not None:
+                result[key] = amount(Decimal(result[key]) + value)
+        result['refund_processing_fees'] = charges
+    return result
+
+
+def provider_projection(payment, policies, transaction_date, *, earliest_date=None, as_of_date=None):
     """An undated cumulative proof needs the same applicable contract throughout its window."""
     policy = _select(payment, policies, transaction_date)
     if earliest_date and earliest_date < transaction_date:
         boundaries = {earliest_date}
         for row in policies:
-            if row.get("provider") != payment["provider"] or row.get("currency") != payment["currency"] or row.get("status") != "active":
+            if (row.get("provider") != payment["provider"] or row.get("currency") != payment["currency"]
+                    or row.get("status") != "active"
+                    or row.get('event_type', 'capture') != payment.get('event_type', 'capture')):
                 continue
             since = day(row["effective_from"])
             if earliest_date < since < transaction_date:
@@ -252,8 +329,22 @@ def provider_projection(payment, policies, transaction_date, *, earliest_date=No
     if type(version) is not int or version not in (1, 2):
         raise ValueError('provider_fee_model_version_unsupported')
     if version == 2:
-        return _components_projection(payment, policy)
-    return _legacy_projection(payment, [policy], transaction_date)
+        result = _components_projection(payment, policy)
+    else:
+        result = _legacy_projection(payment, [policy], transaction_date)
+    return _refund_processing_fees(payment, policies, result, transaction_date, earliest_date, as_of_date)
+
+
+def fee_policy_preview(policy, value, transaction_date):
+    """Calculate a saved tariff without creating or claiming an executed event."""
+    payment = {'provider': policy['provider'], 'currency': policy['currency'], 'gross': str(_cash(value)),
+               'payment_method': policy.get('payment_method'), 'plan_id': policy.get('plan_id'),
+               'event_type': policy.get('event_type', 'capture')}
+    result = provider_projection(payment, [policy], day(transaction_date))
+    return {'preview': True, 'event_type': payment['event_type'], 'policy_id': result['policy_id'],
+            'base_amount': result['gross'], 'fee_net': result.get('estimated_fee_net'),
+            'fee_vat': result.get('estimated_fee_tax'), 'fee_total': result['estimated_fees'],
+            'net_amount': result['expected_receivable'], 'currency': policy['currency']}
 
 
 def _legacy_projection(payment, policies, transaction_date):
@@ -295,21 +386,27 @@ def _legacy_projection(payment, policies, transaction_date):
         fees = max(fees, money(policy["minimum"]))
     if base and policy.get("maximum") is not None:
         fees = min(fees, money(policy["maximum"]))
+    fee_net = _q(fees)
     vat = policy.get("vat_treatment")
     if vat == "exclusive":
         fees *= 1 + money(policy.get("vat_rate")) / 100
     elif vat not in {"inclusive", "exempt", "not_applicable"}:
         raise ValueError("fee_tax_policy_incomplete")
+    if vat == 'inclusive':
+        fee_net = _q(fees / (1 + money(policy['vat_rate']) / 100)) if policy.get('vat_rate') is not None else None
+    fee_tax = _q(fees) - fee_net if fee_net is not None else None
     net = gross - cancelled - refunds
     # Fees exceeding the receivable are a payable; do not silently clamp debt.
     expected = net - Decimal(amount(fees))
     return {"gross": amount(gross), "cancelled": amount(cancelled), "refunded": amount(refunds),
             "net": amount(net), "estimated_fees": amount(fees), "expected_receivable": amount(expected),
+            "estimated_fee_net": amount(fee_net) if fee_net is not None else None,
+            "estimated_fee_tax": amount(fee_tax) if fee_tax is not None else None,
             "policy_id": policy["id"]}
 
 
 
-def with_recorded_refund(payment, snapshot, reference, value):
+def with_recorded_refund(payment, snapshot, reference, value, *, refunded_at=None):
     """Attach owner-recorded executed refund without treating Salla cancellation as a void.
 
     This is a pure source-normalization step, not a provider refund API call.
@@ -360,4 +457,10 @@ def with_recorded_refund(payment, snapshot, reference, value):
             raise ValueError('refund_identity_conflict')
     else:
         refunds.append({'id':reference, 'amount':amount(value), 'status':'executed'})
+    if refunded_at:
+        for refund in refunds:
+            if str(refund.get('id')) == reference:
+                if refund.get('refunded_at') not in (None, refunded_at):
+                    raise ValueError('provider_refund_fee_event_date_conflict')
+                refund['refunded_at'] = refunded_at
     return result

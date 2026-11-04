@@ -60,6 +60,7 @@ class _DB:
     def __init__(self):
         self.bnpl_settings = _Coll()
         self.users = _Coll()
+        self.settings = _Coll()
 
 
 @pytest_asyncio.fixture
@@ -108,6 +109,6 @@ def test_tabby_auto_preset_matches_invoice_contract():
 def test_tamara_auto_preset_uses_canonical_rates():
     tamara = DEFAULTS["tamara"]
     assert tamara["mdr_percent"] == pytest.approx(0.0699)
-    assert tamara["refundable_commission_percent"] == pytest.approx(0.0699)
+    assert tamara["refundable_commission_percent"] == 0.0
     assert tamara["fixed_fee_per_order"] == pytest.approx(1.50)
     assert tamara["settlement_fee_per_invoice"] == pytest.approx(0.0)

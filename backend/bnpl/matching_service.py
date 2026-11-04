@@ -112,10 +112,12 @@ async def compute_matches_for_provider(
     weekly = await compute_weekly_settlements(
         db, user_id, provider, date_from, date_to,
     )
+    fees_complete = all(r.get("fees_complete", True) and r.get("net_payable") is not None for r in weekly)
     account = await _find_provider_account(db, user_id, provider)
     if not account:
         return {
             "provider": provider,
+            "fees_complete": fees_complete,
             "invoices": [],
             "unmatched_transfers": [],
             "totals": {
@@ -125,7 +127,7 @@ async def compute_matches_for_provider(
                 "matched_amount":          0.0,
                 "unmatched_invoice_total": round(
                     sum(float(r.get("net_payable") or 0) for r in weekly), 2,
-                ),
+                ) if fees_complete else None,
                 "unmatched_transfer_total": 0.0,
             },
             "linked_account_id":   None,
@@ -139,6 +141,15 @@ async def compute_matches_for_provider(
 
     invoices_out: List[Dict[str, Any]] = []
     for r in weekly:
+        if not r.get("fees_complete", True) or r.get("net_payable") is None:
+            invoices_out.append({
+                **r,
+                "fees_complete": False,
+                "match_status": "review",
+                "matched_transfer": None,
+                "tolerance": None,
+            })
+            continue
         net_payable = round(float(r.get("net_payable") or 0), 2)
         try:
             window_floor = date.fromisoformat(r["to"])
@@ -252,7 +263,7 @@ async def compute_matches_for_provider(
         ),
         "unmatched_invoice_total":  round(
             sum(float(i.get("net_payable") or 0) for i in unmatched_inv), 2,
-        ),
+        ) if fees_complete else None,
         "unmatched_transfer_total": round(
             sum(t["amount"] for t in unmatched_transfers), 2,
         ),
@@ -260,6 +271,7 @@ async def compute_matches_for_provider(
 
     return {
         "provider":            provider,
+        "fees_complete":       fees_complete,
         "invoices":            invoices_out,
         "unmatched_transfers": unmatched_transfers,
         "totals":              totals,

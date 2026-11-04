@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import openpyxl
 import pytest
+from tests.provider_fee_test_helpers import legacy_fee_mode
 
 from bnpl.settlements_service import _capture_fee_components
 import payment_gateway_metrics as gateway_metrics
@@ -146,7 +147,7 @@ def test_tamara_parser_keeps_cancellation_fee_out_of_captured_gross():
 
 
 @pytest.mark.asyncio
-async def test_gateway_metrics_keep_tamara_refund_and_cancellation_fees(monkeypatch):
+async def test_gateway_metrics_keep_capture_fees_without_inventing_a_cancellation_event(monkeypatch, legacy_fee_mode):
     class AsyncRows:
         def __init__(self, rows):
             self.rows = iter(rows)
@@ -203,9 +204,8 @@ async def test_gateway_metrics_keep_tamara_refund_and_cancellation_fees(monkeypa
     result = await gateway_metrics.compute_metrics(FakeDb(), "merchant")
     tamara = next(row for row in result["rows"] if row["key"] == "tamara")
 
-    # Confirmed 19.10 + refunded capture 14.57 + cancellation fixed 1.50.
-    assert tamara["fees"] == 35.17
-    # 2.87 + 2.19 + 0.23.
-    assert tamara["fees_vat"] == 5.29
+    # The completed and refunded captures retain fees. A canceled status adds no event fee.
+    assert tamara["fees"] == 33.67
+    assert tamara["fees_vat"] == 5.06
     assert tamara["refund_full"] == 186.92
     assert tamara["cancelled_orders_count"] == 1

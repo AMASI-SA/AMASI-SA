@@ -65,9 +65,9 @@ DEFAULTS = {
         # both statement issue and Transfer Date on Monday.
         "invoice_weekdays":  ["monday"],
         "transfer_weekdays": ["monday"],
-        # No payout fee appears in any of the four reports. Their note says
-        # such a fee is conditional, so the default is zero and an explicit
-        # provider statement row remains authoritative when one is charged.
+        # Recorded payout-fee rows belong to their documented transfers.
+        # The general applicability condition is unverified, so no calendar
+        # charge is assumed and an actual statement row remains authoritative.
         "settlement_fee_per_invoice": 0.0,
         "settlement_fee_vat_applicable": True,
         "api_base_url": "https://api.tabby.sa",
@@ -464,41 +464,39 @@ async def save_settings(
         upsert=True,
     )
 
-    # Iter-126 — UNIFIED SOURCE OF TRUTH: also mirror fee fields into
-    # `users.settings.payment_methods` so the Settings → Payment Methods
-    # page reflects the same numbers.  This keeps both UIs in lockstep
-    # without forcing the merchant to update the rate in two places.
-    PROVIDER_AR_NAME = {"tabby": "تابي", "tamara": "تمارا"}
-    ar_name = PROVIDER_AR_NAME.get(provider)
-    if ar_name and any(
+    # Mirror edits into the collection used by GET/PUT Settings.
+    if provider in {'tabby', 'tamara', 'emkan'} and any(
         k in payload and payload.get(k) is not None
         for k in ("mdr_percent", "fixed_fee_per_order", "vat_on_fees_percent")
     ):
+        from operational_configured_provider_fees import configured_payment_setting
+        saved = await db.settings.find_one({'user_id': user_id}, {'_id': 0, 'payment_methods': 1})
+        selected = configured_payment_setting(saved or {}, provider)
         pm_update: dict = {}
         if payload.get("mdr_percent") is not None:
             try:
-                pm_update["settings.payment_methods.$.commission_percent"] = round(
+                pm_update["payment_methods.$.commission_percent"] = round(
                     float(payload["mdr_percent"]) * 100, 4,
                 )
             except (TypeError, ValueError):
                 pass
         if payload.get("vat_on_fees_percent") is not None:
             try:
-                pm_update["settings.payment_methods.$.vat_percent"] = round(
+                pm_update["payment_methods.$.vat_percent"] = round(
                     float(payload["vat_on_fees_percent"]) * 100, 4,
                 )
             except (TypeError, ValueError):
                 pass
         if payload.get("fixed_fee_per_order") is not None:
             try:
-                pm_update["settings.payment_methods.$.fixed_fee"] = float(
+                pm_update["payment_methods.$.fixed_fee"] = float(
                     payload["fixed_fee_per_order"],
                 )
             except (TypeError, ValueError):
                 pass
-        if pm_update:
-            await db.users.update_one(
-                {"id": user_id, "settings.payment_methods.name": ar_name},
+        if pm_update and selected is not None:
+            await db.settings.update_one(
+                {"user_id": user_id, "payment_methods.name": selected['name']},
                 {"$set": pm_update},
             )
 

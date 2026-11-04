@@ -731,13 +731,10 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
             summary = await compute_all_settlements(db, uid, None, None)
         except Exception:  # noqa: BLE001
             summary = {"providers": []}
-        expected_by_provider: dict = {}
-        for p in (summary.get("providers") or []):
-            prov = (p.get("provider") or "").lower()
-            tots = p.get("totals") or {}
-            expected_by_provider[prov] = round(
-                float(tots.get("net_payable") or 0), 2,
-            )
+        summaries_by_provider = {
+            (p.get("provider") or "").lower(): p
+            for p in (summary.get("providers") or [])
+        }
 
         out_providers = []
         for provider in PROVIDERS:
@@ -793,20 +790,25 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                     "bank_account_name": m.get("bank_account_name"),
                 }
 
-            expected_total = expected_by_provider.get(provider, 0.0)
+            provider_summary = summaries_by_provider.get(provider) or {}
+            provider_totals = provider_summary.get("totals") or {}
+            expected = provider_totals.get("net_payable")
+            fees_complete = provider_summary.get("fees_complete", True) and expected is not None
+            expected_total = round(float(expected), 2) if fees_complete else None
             # Clamp small negative pre-cutoff drift to 0 — these come
             # from legacy refunds the engine still sees but which the
             # bridge will never book. Avoids a misleading red status
             # for merchants who have nothing yet to settle.
-            if -1.0 < expected_total < 0:
+            if expected_total is not None and -1.0 < expected_total < 0:
                 expected_total = 0.0
-            difference = round(expected_total - received_total, 2)
+            difference = round(expected_total - received_total, 2) if expected_total is not None else None
 
             # Match status — tolerance: 0.5 SAR exact, then 5% bucket
-            abs_diff = abs(difference)
-            if abs_diff < 0.5:
+            if difference is None:
+                match_status = "review"
+            elif abs(difference) < 0.5:
                 match_status = "green"
-            elif expected_total > 0 and abs_diff / max(expected_total, 1) <= 0.05:
+            elif expected_total > 0 and abs(difference) / max(expected_total, 1) <= 0.05:
                 match_status = "yellow"
             else:
                 match_status = "red"
@@ -816,6 +818,9 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
             out_providers.append({
                 "provider": provider,
                 "current_receivable": current_receivable,
+                "gross_sales": provider_totals.get("gross_sales"),
+                "fees_complete": fees_complete,
+                "fee_review_reasons": provider_summary.get("fee_review_reasons", []),
                 "expected_total": expected_total,
                 "received_total": received_total,
                 "received_count": received_count,
@@ -969,6 +974,18 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
 
         tots = s.get("totals") or {}
         bank = s.get("bank") or {}
+        fee_fields = ("commission", "commission_vat", "settlement_fee", "settlement_fee_vat", "net_payable")
+        if not s.get("fees_complete", True) or any(tots.get(key) is None for key in fee_fields):
+            raise HTTPException(409, detail={
+                "code": "provider_fees_incomplete",
+                "message": "تعذّر تجهيز التسوية لأن رسوم الدفع تحتاج إلى استكمال. راجع جدول الرسوم وبيانات خطة الدفع.",
+                "fees_complete": False,
+                "fee_review_reasons": s.get("fee_review_reasons", []),
+                "provider": provider,
+                "period": s.get("period") or {"from": date_from, "to": date_to},
+                "breakdown": tots,
+                "bank_reconciliation": bank,
+            })
 
         # Pre-filled form values — clamp negatives to 0 because the
         # settlement bridge rejects negative amounts. A negative
@@ -1113,9 +1130,10 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
             s = await compute_settlement_for_provider(
                 db, uid, provider, date_from, date_to,
             )
-            expected = round(
-                float((s.get("totals") or {}).get("net_payable") or 0), 2,
-            )
+            totals = s.get("totals") or {}
+            net_payable = totals.get("net_payable")
+            fees_complete = s.get("fees_complete", True) and net_payable is not None
+            expected = round(float(net_payable), 2) if fees_complete else None
 
             match: dict = {
                 "user_id": uid,
@@ -1147,11 +1165,12 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 actual = round(float(row.get("total") or 0), 2)
                 count = int(row.get("count") or 0)
 
-            diff = round(expected - actual, 2)
-            abs_diff = abs(diff)
-            if abs_diff < 0.5:
+            diff = round(expected - actual, 2) if expected is not None else None
+            if diff is None:
+                status = "review"
+            elif abs(diff) < 0.5:
                 status = "green"
-            elif expected > 0 and abs_diff / max(expected, 1) <= 0.05:
+            elif expected > 0 and abs(diff) / max(expected, 1) <= 0.05:
                 status = "yellow"
             elif expected == 0 and actual == 0:
                 status = "green"
@@ -1160,6 +1179,9 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
 
             rows.append({
                 "provider": provider,
+                "gross_sales": totals.get("gross_sales"),
+                "fees_complete": fees_complete,
+                "fee_review_reasons": s.get("fee_review_reasons", []),
                 "expected": expected,
                 "actual": actual,
                 "difference": diff,
@@ -1215,7 +1237,7 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 db, user["id"], provider, from_date, to_date,
             )
             totals = {
-                k: round(sum(r.get(k, 0) for r in rows), 2)
+                k: None if any(r.get(k, 0) is None for r in rows) else round(sum(r.get(k, 0) for r in rows), 2)
                 for k in ("gross_sales", "total_refunds", "net_sales",
                          "commission", "commission_vat", "settlement_fee",
                          "settlement_fee_vat",   # Iter-134
@@ -1228,6 +1250,8 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 "provider": provider,
                 "rows": rows,
                 "totals": totals,
+                "fees_complete": all(r.get("fees_complete", True) and r.get("net_payable") is not None for r in rows),
+                "fee_review_reasons": sorted({reason for r in rows for reason in r.get("fee_review_reasons", [])}),
                 "range": {
                     "from": (rows[0]["from"] if rows else from_date),
                     "to":   (rows[-1]["to"] if rows else to_date),
