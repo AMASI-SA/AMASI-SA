@@ -365,3 +365,22 @@ async def test_empty_workspace_does_not_query_orders(db, monkeypatch):
     monkeypatch.setattr(policy.order_service, "get_orders", call)
     assert await policy.annotate_waiting_pieces(db, user_id=OWNER["id"], pieces=[]) == []
     call.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_warm_workspace_skips_index_commands_but_reads_changed_order_status(db):
+    await seed_order(db, current="reviewed")
+    await seed_piece(db)
+    app = FastAPI()
+    app.include_router(dispatch.make_preparation_supplier_dispatch_router(db, lambda: OWNER))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        first = await client.get("/supplier-dispatch-v1/workspace", params={"grain": "piece"})
+        assert first.status_code == 200
+        assert first.json()["summary"]["waiting_review_pieces"] == 1
+        assert len([write for write in db.writes if write[1] == "create_index"]) == 6
+        await seed_order(db, current="cancelled")
+        db.writes.clear()
+        second = await client.get("/supplier-dispatch-v1/workspace", params={"grain": "piece"})
+        assert second.status_code == 200
+        assert second.json()["summary"]["waiting_review_pieces"] == 0
+        assert db.writes == []
