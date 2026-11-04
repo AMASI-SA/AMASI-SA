@@ -1,5 +1,8 @@
 # System performance investigation — 2026-11-04
 
+## Authorized publication preparation
+User explicitly requested publication. Fresh /app status is inactive and tracked files are clean at 6e2ce52a7e6a2fe3c2e8e2f7a9fa20c76e979ff6. CI failures on 8da44fbb9384bae4a1a3d56a823ddea6fc5b8c43 were two obsolete eager-import assertions; 24 other employee tests and 461 fulfillment tests passed. Assertions now require the lazy route declarations while preserving route/navigation checks. Local navigation, fulfillment, protected route and deferred page suites pass: 5 suites, 48 tests. Next: full CI, governed candidate intent, intent-only B, reviewed clean-clone rehearsal, merge and guarded publication. No performance release has been published yet. This release scope is browser initial code loading; server contention and native Ready remain separate unresolved investigation items.
+
 Status: WIP; production unchanged by this task. User authorized performance fixes and verified deployment for web/backend and staff app.
 
 ## Verified source and baseline
