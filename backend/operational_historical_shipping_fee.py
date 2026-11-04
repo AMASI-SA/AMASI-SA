@@ -19,15 +19,17 @@ def register_candidate(out, review_numbers, event, *, rate=None, quote=None, ear
         return
     parts = [p for p in (quote or {}).get("fee_components", []) if p.get("id") == "base_shipping"]
     if earning:
-        n = amount(earning["candidate_amount"])
+        n, currency = amount(earning["candidate_amount"]), earning.get("currency")
     elif len(parts) == 1 and parts[0].get("complete") is True and rate and rate.get("id"):
-        n = amount(parts[0].get("amount"))
+        n, currency = amount(parts[0].get("amount")), quote.get("currency")
     else:
         return
-    if n <= 0:
+    # This approval surface supports SAR fees only. Delivery and COD evidence
+    # may be denominated in a different customer currency after startup.
+    if n <= 0 or currency != "SAR" or (rate and rate.get("currency") != currency):
         return
-    p = {k: event[k] for k in ("order_id", "order_number", "party_type", "party_id", "currency", "delivered_at")}
-    p.update(amount=format(n, ".2f"), obligation_id="shipping:" + event["order_id"] + ":base_shipping",
+    p = {k: event[k] for k in ("order_id", "order_number", "party_type", "party_id", "delivered_at")}
+    p.update(currency=currency, amount=format(n, ".2f"), obligation_id="shipping:" + event["order_id"] + ":base_shipping",
              delivery_hash=digest(event), source_hash=digest([event, rate, earning]))
     if rate and rate.get("id"):
         p["contract_id"] = rate["id"]
@@ -182,7 +184,7 @@ def apply_reviewed_fees(state, sources, put, fact, issue):
             continue
         put(p["obligation_id"], "shipping", p["party_id"], p["party_type"], p["currency"],
             confirmed=amount(p["amount"]), business_date=p["delivered_at"][:10], fee_component="base_shipping")
-        fact(p["obligation_id"], {"cost": p["amount"]})
+        fact(p["obligation_id"], {"cost": p["amount"], "currency": p["currency"]})
         fact("historical_base_fee:" + p["order_id"], {"source_hash": p["source_hash"]})
         resolved.add((reason, p["order_id"]))
     return resolved

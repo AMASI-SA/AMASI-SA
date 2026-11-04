@@ -172,12 +172,49 @@ def _event_collection_valid(collection, event, total, now):
         raise ValueError('driver_collection_custody_contract_invalid')
 
 
-def shipping_charge(rate, owner, party, at, cod_amount, setup=None, *, cod_incomplete=False):
+def _independent_cod_fixed(terms):
+    """Return the fixed fee only when no amount-based band must be selected."""
+    from courier_cod_fee_rules import split_tax_amount, validate_courier_cod_fee_tiers
+    tiers = terms.get('cod_fee_tiers') or []
+    if tiers:
+        tiers = validate_courier_cod_fee_tiers(tiers)
+        if len(tiers) != 1 or number(tiers[0]['min_amount']) != 0 or tiers[0].get('max_amount') is not None:
+            return None
+        rule = tiers[0]
+        percent, fixed, vat = (number(rule[k]) for k in ('commission_percent', 'fixed_fee', 'vat_percent'))
+        included = rule['vat_included']
+    elif all(terms.get(k) is not None for k in ('cod_fee_percent', 'cod_fee_fixed_per_order', 'cod_fee_vat_percent')):
+        percent = number(terms['cod_fee_percent'])
+        fixed, vat = number(terms['cod_fee_fixed_per_order']), number(terms['cod_fee_vat_percent'])
+        included = terms.get('cod_fee_vat_included', False)
+    else:
+        return None
+    return percent, split_tax_amount(fixed, vat, inclusive=included)['gross']
+
+
+def shipping_charge(rate, owner, party, at, cod_amount, setup=None, *, cod_incomplete=False, cod_currency=None):
     if not rate.get('confirmed_by') or not rate.get('confirmed_at'):
         raise ValueError('shipping_contract_approval_missing')
+    currency = rate.get('currency')
+    if not isinstance(currency, str) or not currency.strip():
+        raise ValueError('shipping_contract_currency_missing')
+    # A foreign sale is not a conversion basis for a percentage or tier in the
+    # courier contract. Keep the independently evidenced base fee available.
+    cod_issue = None
+    if cod_amount is not None and cod_amount > 0 and cod_currency != currency:
+        cod_issue = 'shipping_cod_currency_requires_review' if cod_currency else 'shipping_cod_currency_missing'
     if rate.get('kind') == 'operational_courier_tariff':
         from operational_courier_tariffs import charge
-        return charge(rate, cod_amount, cod_incomplete)
+        known = _independent_cod_fixed(rate['terms']) if cod_issue else None
+        if known and known[0] == 0:
+            cod_issue = None
+        quote = charge(rate, None if cod_issue else cod_amount, cod_incomplete or bool(cod_issue))
+        if cod_issue:
+            quote['component_issues'] = [{'code': cod_issue, 'component': 'cod_commission'}]
+            if known and known[1] > 0:
+                quote['fee_components'].insert(1, {'id': 'cod_fixed_commission', 'amount': str(known[1]), 'complete': True})
+                quote['cost'] = str(number(quote['cost']) + known[1])
+        return {**quote, 'currency': currency}
     parts, problems = [], []
     if rate.get('kind') == 'rich':
         # Pure Pydantic/Decimal calculators, no database or financial writers.
@@ -222,6 +259,16 @@ def shipping_charge(rate, owner, party, at, cod_amount, setup=None, *, cod_incom
         base = base_quote['calculation']['shipping_gross']
         parts.append({'id': 'base_shipping', 'amount': str(base), 'complete': True})
         try:
+            if cod_issue:
+                known = _independent_cod_fixed(base_quote['contract_snapshot'])
+                if known and known[1] > 0 and number(version['commission_vat_percent']) > 0:
+                    verify('commission_tax')
+                if known and known[0] == 0:
+                    cod_issue = None
+                elif known and known[1] > 0:
+                    parts.append({'id': 'cod_fixed_commission', 'amount': str(known[1]), 'complete': True})
+            if cod_issue:
+                raise ValueError(cod_issue)
             if cod_incomplete:
                 raise ValueError('shipping_cod_amount_unavailable')
             if cod_amount is not None and cod_amount > 0 and number(version['commission_vat_percent']) > 0 and any(number(t['commission_percent']) > 0 or number(t['fixed_fee']) > 0 for t in version['cod_fee_tiers']):
@@ -245,6 +292,14 @@ def shipping_charge(rate, owner, party, at, cod_amount, setup=None, *, cod_incom
         base = gross(base_net)
         parts.append({'id': 'base_shipping', 'amount': str(base), 'complete': True})
         try:
+            if cod_issue:
+                fixed = number(rate.get('cod_fixed_fee'))
+                if number(rate.get('cod_percent')) == 0:
+                    cod_issue = None
+                elif fixed > 0:
+                    parts.append({'id': 'cod_fixed_commission', 'amount': str(gross(base_net + fixed) - base), 'complete': True})
+            if cod_issue:
+                raise ValueError(cod_issue)
             if cod_incomplete:
                 raise ValueError('shipping_cod_amount_unavailable')
             cod_net = number(rate.get('cod_fixed_fee')) + cod_amount * number(rate.get('cod_percent')) / 100 if cod_amount is not None and cod_amount > 0 else Decimal(0)
@@ -253,7 +308,8 @@ def shipping_charge(rate, owner, party, at, cod_amount, setup=None, *, cod_incom
             parts.append({'id': 'cod_commission', 'amount': None, 'complete': False})
             problems.append({'code': str(exc), 'component': 'cod_commission'})
     total = sum((number(p['amount']) for p in parts if p['complete']), Decimal(0))
-    return {'cost': str(total), 'fee_components': parts, 'fee_complete': not problems, 'component_issues': problems}
+    return {'cost': str(total), 'currency': currency, 'fee_components': parts,
+            'fee_complete': not problems, 'component_issues': problems}
 
 
 def invoice_component_amounts(invoice):
@@ -798,12 +854,14 @@ def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, co
             and assignments[0].get('status') == 'delivered') else None
         quote = None
         if party_id and rate:
-            if (delivery_event or completed_assignment) and rate.get('currency') != order['currency']:
+            historical_delivery = delivery_event and instant(order['created_at']) <= instant(
+                out['delivery_event_coverage']['started_at'])
+            if (completed_assignment or historical_delivery or (delivery_event and party_kind == 'store_driver')) and rate.get('currency') != order['currency']:
                 raise ValueError('operational_delivery_fee_currency_conflict')
             cod_incomplete = cod and 'cod' not in order
             quote = shipping_charge(rate, owner, party_id, when,
                 number(order['cod'].get('collection_amount', order['cod']['outstanding'])) if cod and not cod_incomplete else None,
-                setup, cod_incomplete=cod_incomplete)
+                setup, cod_incomplete=cod_incomplete, cod_currency=order['currency'])
         if completed_assignment and data.get('_driver_fee_review'):
             checked = data['_driver_fee_review'].check(completed_assignment, order, quote, len(rates),
                 ambiguous_setup=len(data['mz2_shipping_setup_v2']) > 1)
@@ -827,7 +885,7 @@ def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, co
                     # The mobile delivery writer freezes the owner's driver price
                     # and earns it on delivery. It doesn't earn a separate COD fee.
                     base = evidence['candidate_amount']
-                    quote = {'cost': base, 'fee_complete': True, 'component_issues': [],
+                    quote = {'cost': base, 'currency': evidence['currency'], 'fee_complete': True, 'component_issues': [],
                              'fee_components': [{'id': 'base_shipping', 'amount': base, 'complete': True}]}
         if party_id and quote:
             if party_kind == 'courier' and delivery_event and order_number in data['_fee_review_numbers']:
@@ -963,6 +1021,10 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     shipment_conflicts=shipment_conflicts)
                 if event is None:
                     continue
+                # Historical fee approval still binds a SAR delivery and fee.
+                # Do not broaden that separate review contract in this repair.
+                if event['currency'] != 'SAR':
+                    raise ValueError('operational_delivery_currency_unsupported')
                 order = {'id': identity, 'order_number': order_number, 'created_at': created.isoformat(),
                     'updated_at': max(instant(raw.get('updated_at') or raw.get('date_updated') or created),
                                       instant(event['delivered_at'])).isoformat(),
@@ -998,7 +1060,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                                          delivery_event=event)
                 if hold_prior_courier_event(operational_state, event, order.get('carrier')):
                     courier_issue(out, 'courier_fee_historical_review_required', raw, source,
-                                 candidate=(order.get('carrier') or {}).get('cost'), event=event)
+                                 carrier=order.get('carrier'), event=event)
                 else:
                     out['delivery_events'].append(order)
                 continue
@@ -1139,9 +1201,14 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, cod, delivery_event=event)
                 if hold_prior_courier_event(operational_state, event, order.get('carrier')):
                     courier_issue(out, 'courier_fee_historical_review_required', raw, source,
-                                 candidate=(order.get('carrier') or {}).get('cost'), event=event)
-                    order.pop('carrier', None)
-                elif event and order.get('carrier'):
+                                 carrier=order.get('carrier'), event=event)
+                    # Hold only this courier payable. A current verified
+                    # delivery can still establish the customer's COD custody.
+                    carrier = order.get('carrier')
+                    if carrier:
+                        carrier.update(cost=None, fee_complete=False, fee_recognition_held=True)
+                        carrier.pop('fee_components', None)
+                if event and order.get('carrier'):
                     order['delivery_event'] = event
             out['orders'].append(order)
         except (ValueError, TypeError, KeyError, InvalidOperation) as exc:

@@ -200,7 +200,7 @@ class DriverEarnings:
             return info, code
 
 
-def courier_issue(out, code, raw, source, *, candidate=None, event=None):
+def courier_issue(out, code, raw, source, *, carrier=None, event=None):
     """Expose source identity for investigation, never infer the delivery date or debt."""
     current = source.get("salla_shipping_current") or raw.get("salla_shipping_current") or {}
     if not isinstance(current, dict):
@@ -211,8 +211,8 @@ def courier_issue(out, code, raw, source, *, candidate=None, event=None):
     if not (name and oid and number):
         return
     info = {"party_name":str(name), "order_number":number, "order_id":oid,
-            "delivered_at":(event or {}).get("delivered_at"), "candidate_amount":candidate,
-            "currency":(event or {}).get("currency") or ("SAR" if raw.get("currency") == "SAR" else None)}
+            "delivered_at":(event or {}).get("delivered_at"), "candidate_amount":(carrier or {}).get("cost"),
+            "currency":(carrier or {}).get("currency")}
     actions = {
         "operational_delivery_timestamp_missing":"طابق تاريخ تسليم البوليصة الحالية أو حدّث سجل حركة الطلب من سلة لإثبات وقت انتقاله إلى تم التوصيل.",
         "operational_delivery_order_waybill_unproven":"حركة التسليم بتاريخ الطلب تتطلب بوليصة واحدة مطابقة؛ طابق تاريخ البوليصة الفعلية عند الاستبدال أو تعدد الشحنات.",
@@ -248,16 +248,23 @@ def hold_prior_courier_event(state, event, carrier):
     # calculation time alone does not settle a newly discovered delivery.
     if any(amount(obs[k].get("confirmed", 0)) > 0 for k in keys if k in obs):
         return False
+    fee_currency = (carrier or {}).get("currency")
     def same_party(row):
-        return all(row.get(k) == event[k] for k in ("party_type", "party_id", "currency"))
-    payable_ids = {k for k, row in obs.items() if same_party(row) and row.get("direction") == "payable"}
+        return all(row.get(k) == event[k] for k in ("party_type", "party_id"))
+    def same_payable(row):
+        return same_party(row) and row.get("currency") == fee_currency
+    payable_ids = {k for k, row in obs.items() if same_payable(row) and row.get("direction") == "payable"}
     payable_ids.update(row["id"] for row in state.get("openings", {}).values()
-                       if same_party(row) and row.get("direction") == "for_party")
+                       if same_payable(row) and row.get("direction") == "for_party")
     for movement in state.get("movements", []):
         allocations = movement.get("allocations") or []
         if any(row.get("obligation_id") in keys for row in allocations):
             return True
         if not same_party(movement) or movement.get("direction") != "outgoing":
+            continue
+        # Without a priced contract, a pooled payment cannot be cleared by
+        # comparing it with the unrelated customer currency.
+        if fee_currency is not None and movement.get("currency") != fee_currency:
             continue
         try:
             if (movement.get("kind") != "payment" or not allocations
@@ -303,11 +310,11 @@ async def hold_native_fee_overlaps(db, owner, out, state, *, max_rows):
         else:
             code, field = "courier_fee_native_overlap", "courier_fee_review"
         if info is None:
-            info = {k: event[k] for k in ("order_id", "order_number", "party_id", "currency", "delivered_at")}
-            info.update(party_name=event.get("source_carrier_key") or event["party_id"],
+            info = {k: event[k] for k in ("order_id", "order_number", "party_id", "delivered_at")}
+            info.update(currency=carrier.get("currency"), party_name=event.get("source_carrier_key") or event["party_id"],
                         candidate_amount=carrier.get("cost"))
         out["issues"].append({"code": code, "source_id": order["id"], "status": "incomplete",
                               "component": "shipping_fee", "recognition_state": "confirmed",
                               field: info, "required_action": reason})
-        carrier.update(cost=None, fee_complete=False)
+        carrier.update(cost=None, fee_complete=False, fee_recognition_held=True)
         carrier.pop("fee_components", None)
