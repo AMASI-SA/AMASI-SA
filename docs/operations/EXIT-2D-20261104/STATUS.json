@@ -12,7 +12,7 @@
   "qoyod_behavior_changed": false,
   "production_connections": 0,
   "paid_resources_created": 0,
-  "ci_runs_started": 1,
+  "ci_runs_started": 2,
   "pr_created": false,
   "merged": false,
   "release_lease_created": false,
@@ -40,6 +40,12 @@
       "environment": "isolated local Python 3.13 venv",
       "passed": 17,
       "exit_code": 0
+    },
+    {
+      "scope": "Existing current auth, Mongo, startup guard and ASGI readiness contracts",
+      "passed": 40,
+      "exit_code": 0,
+      "environment": "isolated Windows venv; missing local dependencies and test JWT configuration supplied, no application fix required"
     }
   ],
   "remaining": [
@@ -81,13 +87,26 @@
     "Synthetic replica-set Docker acceptance and process isolation benchmark prepared"
   ],
   "runtime_acceptance": "NOT_YET_EXECUTED_ON_LINUX",
-  "ci_state": "First Linux run failed due to missing restored historical test files; corrected, second source run pending",
+  "ci_state": "Linux source run 3 pending after restoring historical explicit rehearsal index guard",
   "ci_runs": [
     {
       "id": 41900254875,
       "source_sha": "54a99910111ca14b4c930ec647b262b3f70a67f0",
       "result": "failure",
       "cause": "Harness referenced two historical independent test modules not yet restored; no application acceptance reached"
+    },
+    {
+      "id": 41901395483,
+      "source_sha": "22da80b8d6cf8288257eee09a9a26745fc4c89ef",
+      "result": "failure",
+      "passed_tests": 363,
+      "failed_tests": 1,
+      "cause": "Restored EXIT-2A explicit rehearsal index guard not yet ported; fixed preserving default behavior",
+      "new_unit_tests_passed": 17,
+      "synthetic_isolation_p95_ms": {
+        "same_process": 611.115,
+        "independent_reports": 20.329
+      }
     }
   ],
   "local_performance": {
@@ -95,5 +114,10 @@
     "concurrent_employee_requests": 20,
     "same_process_p95_ms": 609.395,
     "independent_reports_p95_ms": 47.218
+  },
+  "historical_recheck": {
+    "passed": 47,
+    "failed": 0,
+    "scope": "Historical September source unchanged, cryptography supplied in isolated venv"
   }
 }

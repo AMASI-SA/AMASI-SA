@@ -97,6 +97,7 @@ DELETE /api/bank-transfer-review/{id}           — only when pending
 """
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -199,7 +200,8 @@ def make_bank_transfer_review_router(db, current_user):
     # merchant can still re-test by hand.
     try:
         # Independent entrypoint owns this index in its explicit migration.
-        if __import__("os").environ.get("MEZAN_INDEPENDENT_RUNTIME") == "1":
+        if (os.environ.get("MEZAN_INDEPENDENT_RUNTIME") == "1"
+                or os.environ.get("MEZAN_EXIT2A_REHEARSAL") == "1"):
             pass
         else:
             db.bank_transfer_reviews.create_index(
