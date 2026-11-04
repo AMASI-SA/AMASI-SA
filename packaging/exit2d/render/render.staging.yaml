@@ -9,18 +9,14 @@ envVarGroups:
         value: '1'
       - key: DB_NAME
         value: mezan_exit2d_staging
-      - key: MONGO_URL
-        sync: false
-      - key: JWT_SECRET
-        generateValue: true
-      - key: ADMIN_PASSWORD
-        sync: false
-      - key: FRONTEND_URL
-        sync: false
-      - key: WEBAUTHN_ORIGIN
-        sync: false
-      - key: WEBAUTHN_RP_ID
-        sync: false
+      - key: EMAIL_OTP_SMTP_HOST
+        value: 127.0.0.1
+      - key: EMAIL_OTP_SMTP_PORT
+        value: '8025'
+      - key: EMAIL_OTP_SMTP_STARTTLS
+        value: 'false'
+      - key: EMAIL_OTP_FROM_EMAIL
+        value: otp@example.test
 services:
   - name: mezan-exit2d-mongo
     type: pserv
@@ -61,6 +57,7 @@ services:
     maxShutdownDelaySeconds: 30
     envVars:
       - fromGroup: mezan-exit2d-synthetic-config
+      - fromGroup: mezan-exit2d-synthetic-secrets
       - key: MEZAN_STAGING_MONGO_HOST
         fromService: {name: mezan-exit2d-mongo, type: pserv, property: host}
       - key: MEZAN_REPORT_WORKER_ADDRESS
@@ -79,6 +76,7 @@ services:
     maxShutdownDelaySeconds: 30
     envVars:
       - fromGroup: mezan-exit2d-synthetic-config
+      - fromGroup: mezan-exit2d-synthetic-secrets
       - key: PORT
         value: '8000'
       - key: MEZAN_STAGING_MONGO_HOST
@@ -97,6 +95,7 @@ services:
     maxShutdownDelaySeconds: 30
     envVars:
       - fromGroup: mezan-exit2d-synthetic-config
+      - fromGroup: mezan-exit2d-synthetic-secrets
       - key: MEZAN_STAGING_MONGO_HOST
         fromService: {name: mezan-exit2d-mongo, type: pserv, property: host}
       - key: MEZAN_WORKER_ENABLED
@@ -117,6 +116,7 @@ services:
     maxShutdownDelaySeconds: 30
     envVars:
       - fromGroup: mezan-exit2d-synthetic-config
+      - fromGroup: mezan-exit2d-synthetic-secrets
       - key: MEZAN_STAGING_MONGO_HOST
         fromService: {name: mezan-exit2d-mongo, type: pserv, property: host}
       - key: MEZAN_WORKER_ENABLED

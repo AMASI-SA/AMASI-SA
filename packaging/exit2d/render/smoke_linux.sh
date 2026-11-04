@@ -27,6 +27,7 @@ runtime=(--network "$network" --read-only --tmpfs /tmp --cap-drop ALL --security
   -e APP_ENV=staging -e MEZAN_SYNTHETIC_HOSTING=1 -e DB_NAME=mezan_exit2d_staging
   -e MONGO_URL=mongodb://fixture:synthetic-only-password@staging-mongo:27017
   -e MEZAN_STAGING_MONGO_HOST=staging-mongo -e JWT_SECRET=synthetic-hosting-public-key-not-for-production
+  -e EMAIL_OTP_SMTP_HOST=127.0.0.1 -e EMAIL_OTP_SMTP_PORT=8025 -e EMAIL_OTP_SMTP_STARTTLS=false -e EMAIL_OTP_FROM_EMAIL=otp@example.test
   -e ADMIN_PASSWORD=Synthetic-hosting-password-only! -e FRONTEND_URL=https://staging.example.test
   -e WEBAUTHN_ORIGIN=https://staging.example.test -e WEBAUTHN_RP_ID=staging.example.test)
 for attempt in $(seq 1 60); do

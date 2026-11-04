@@ -102,7 +102,7 @@ def main():
     if role == 'web':
         for name in ('nginx-client', 'nginx-proxy', 'nginx-fastcgi', 'nginx-uwsgi', 'nginx-scgi'):
             Path('/tmp', name).mkdir(exist_ok=True)
-        return supervise([command + ['--port', '8000'],
+        return supervise([[sys.executable, '/opt/render/smtp_capture.py'], command + ['--port', '8000'],
             ['nginx', '-c', '/opt/render/nginx.conf', '-g', 'daemon off;']])
     if role == 'worker-reports':
         command += ['--port', '8000']
