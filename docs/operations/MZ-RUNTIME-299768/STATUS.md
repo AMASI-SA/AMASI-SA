@@ -13,7 +13,7 @@ Goal: dashboard summary / reporting, advertising analytics / synchronization and
 - **Branch:** `codex/worker-isolation-299768-20261104`
 - **Branch baseline:** `a56dbacd36678566eec3b5a76406db7582c3e7f2` (must refresh before any proposed release)
 - **Production changed:** **NO**. No merges, deployments, release leases, Production env/config writes, provider writes, or operational data mutations.
-- **Status:** dashboard-only client admission mitigation implemented; complete backend/process isolation **BLOCKED pending written Emergent confirmation**. **Do not claim incident resolved.**
+- **Status:** Draft [#1726](https://github.com/AMASI-SA/AMASI-SA/pull/1726). Client admission and cooperative dashboard sales aggregation are implemented. Physical worker isolation awaits written confirmation from Emergent.
 
 ## Verification of previous work
 
@@ -32,10 +32,18 @@ Goal: dashboard summary / reporting, advertising analytics / synchronization and
 
 **Result:** This reduces redundant dashboard reads; **not** an independently managed dashboard worker or a solution for Cloudflare 520 itself.
 
-## Test evidence / limits
+## November 4 implementation checkpoint
+
+- The mounted dashboard regression holds a summary request open across a timer tick, focus and an explicit refresh. The previous page starts two requests on that first tick. The new page starts one and resumes polling after pending reads finish.
+- Both dashboard SAR aggregation passes now use the existing cooperative reducer and CPU budget. The current-month selection still computes the same order list once. Two new HTTP regression cases cover the monthly and distinct selected-range paths, exact sales totals, and the event loop getting a turn during each distinct sum.
+- Existing CI commands run locally on this change: profit/date race 51/51 and four-platform date 101/101. Backend bundle, currency, governor, source parity and observability suites: 90 tests and 5 subtests passed. Local seeded route tests used test-only cgroup settings to avoid sharing the executor's memory limit with unrelated jobs. Hosted CI status is tracked on the PR.
+- [Isolated local contention benchmark](LOCAL-BENCHMARK.md) and [raw results](local-contention.json) compare idle and loaded synthetic business routes. They establish local contention and do not replace branch-matched Preview before/after measurements.
+- [Workload inventory](WORKLOADS.md) traces the native and shadow reporting launchers and the campaign AI path that can dispatch live ad actions. No scheduler ownership has been changed.
+
+## Earlier test evidence and limits
 
 - `node --test /mnt/data/mezanscope-test/dashboardFetchAdmission.test.mjs` on a local *behaviorally identical pure-JS gate*: **5 PASS / 0 FAIL**. This proves helper state transitions only; it is **not** the repository Jest suite nor end-to-end/CI/Preview performance validation.
-- GitHub Jest/CI and Draft PR state: see PR once created. Baseline p95/p99 for employee supplier/label endpoints **not measured yet**. Do not invent them.
+- Initial commit evidence only. See the November 4 checkpoint and the current PR for the newer results. Baseline p95/p99 for employee supplier/label endpoints **not measured yet**. Do not invent them.
 - No Production or Preview runtime deployment occurred.
 
 ## Emergent platform capability gate
@@ -47,7 +55,7 @@ If unsupported: evaluate a dedicated separately managed analytics app/service wi
 ## Next safe steps
 
 1. Await/read written Emergent answer; confirm independent worker lifecycle in Preview, plan and cost.
-2. Complete inventory **only of live dashboard/ads workloads**, including work already disabled by #654, and classify analytics-only vs business-critical/ad accounting. Preserve all operational tasks.
+2. Compare the completed source inventory with the actual Preview job configuration once a branch-matched environment is available.
 3. Run repository Jest/CI on branch, inspect Draft PR test results. Investigate any failures before changing more.
 4. If supported, build separate **dashboard/ads-only** worker/service behind disabled-by-default Preview gate, never including Qoyod/finance/orders/shipping/employee providers. Demonstrate restart/2-replica isolation and no duplicate advertising analytics events.
 5. Benchmark dashboard and employee summary paths: /api/health, employee workspace, supplier assignment readback, label retrieval p95/p99 and event-loop lag under concurrent *synthetic* heavy dashboard jobs. No live provider writes.
