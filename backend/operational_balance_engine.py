@@ -446,7 +446,21 @@ def reconcile(state, sources, as_of):
                 engine["cod_reports"]["cod:" + oid] = {**cod_metadata, "order_id": oid, "currency": currency,
                     "party_id": frozen["id"] if frozen else (carrier or {}).get("id"),
                     "confirmed_custody": amount(confirmed_cod)}
-            if frozen and fee_currency:
+            # A verified current delivery ends the open shipping forecast. If
+            # prior payouts or a native fee hold recognition, retire only its
+            # mutable estimates. Leaving a zero foreign row would still block
+            # a later review of the contract-currency payable under that ID.
+            held_courier = (not delivery_only and (carrier or {}).get("fee_recognition_held") is True
+                            and (order.get("delivery_event") or {}).get("party_type") == "courier")
+            if frozen and held_courier:
+                aggregate_priced = frozen.get("cost") is not None or "shipping_fee:" + oid in facts
+                for key in shipping_keys.get(service_key, ()):
+                    row = obligations.get(key)
+                    if (row and row.get("kind") == "shipping" and not aggregate_priced
+                            and not (key != service_key and key in facts) and key not in shipping_allocations
+                            and money(row.get("confirmed", "0")) == ZERO):
+                        del obligations[key]
+            elif frozen and fee_currency:
                 if order.get("native_driver_earning"):
                     earning = order["native_driver_earning"]
                     if (earning["party_id"] != frozen["id"] or frozen["party_type"] != "store_driver"

@@ -87,8 +87,19 @@ fee. The only adapters allowed to supply this legacy SAR default are the
 already SAR-scoped return and open-cost readers. Current general-purpose
 shipping quotes continue to require an explicit contract currency.
 
-Fresh final local verification: **342 passed, 3 skipped, 1 deselected**, exit 0.
-This includes 37 shipping-currency cases and the neighboring source, reducer,
+Re-review of the preserved second checkpoint
+`2e630b7602b1e3903b35274284d4b22984d07995` identified an open estimate
+persisting after delivery while a courier fee was held. Reproduced for both
+old KWD and current SAR estimates with both pooled and native fee holds.
+When current courier delivery is proven and its fee is explicitly held,
+the reducer now retires unconfirmed, unallocated estimates without a
+saved fee fact. Removing the mutable row also prevents an old zero-valued
+foreign row from blocking a later SAR review under the same stable ID.
+Confirmed/allocated rows, saved fees, open orders, driver and pre-start
+policy, COD and cash movements are not changed by this cleanup.
+
+Fresh final local verification: **349 passed, 3 skipped, 1 deselected**, exit 0.
+This includes 44 shipping-currency cases and the neighboring source, reducer,
 delivery, tariff, verified-fee, open-cost, completeness, and financial-position
 contracts. `git diff --check` passed, exit 0.
 

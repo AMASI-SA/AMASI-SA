@@ -316,5 +316,5 @@ async def hold_native_fee_overlaps(db, owner, out, state, *, max_rows):
         out["issues"].append({"code": code, "source_id": order["id"], "status": "incomplete",
                               "component": "shipping_fee", "recognition_state": "confirmed",
                               field: info, "required_action": reason})
-        carrier.update(cost=None, fee_complete=False)
+        carrier.update(cost=None, fee_complete=False, fee_recognition_held=True)
         carrier.pop("fee_components", None)

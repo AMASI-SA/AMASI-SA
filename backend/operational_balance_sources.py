@@ -1206,7 +1206,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     # delivery can still establish the customer's COD custody.
                     carrier = order.get('carrier')
                     if carrier:
-                        carrier.update(cost=None, fee_complete=False)
+                        carrier.update(cost=None, fee_complete=False, fee_recognition_held=True)
                         carrier.pop('fee_components', None)
                 if event and order.get('carrier'):
                     order['delivery_event'] = event

@@ -398,3 +398,58 @@ def test_sar_return_quote_accepts_legacy_domestic_evidence_and_rejects_explicit_
         assert err.value.detail["code"] == "customer_return_shipping_incomplete"
     else:
         assert run(quote)["amount"] == expected
+
+
+@pytest.mark.parametrize("old_currency", ["KWD", "SAR"])
+@pytest.mark.parametrize("hold", ["pooled", "native"])
+def test_delivery_hold_removes_only_open_shipping_forecast_and_replays(monkeypatch, old_currency, hold):
+    prior = old_estimate() if old_currency == "KWD" else reconcile(
+        initial(), foreign_order_sources(cod=True, percent="0"), NOW)
+    if hold == "pooled":
+        prior["movements"] = [{**payment("unused", "SAR"), "allocations": []}]
+    else:
+        async def conflict(*args, **kwargs):
+            return {"10": "Native courier fee"}
+        monkeypatch.setattr("operational_historical_shipping_fee.native_conflicts", conflict)
+    key = "shipping:100:base_shipping"
+    assert prior["engine"]["obligations"][key]["expected"] == "17.25"
+    def read(state):
+        return foreign_order_sources(cod=True, percent="0", delivered=True, operational_state=state)
+    result = reconcile(prior, read(prior), NOW)
+    obs = result["engine"]["obligations"]
+    assert key not in obs
+    if hold == "native":
+        # An empty old KWD payable would itself reject a later SAR review,
+        # independently of the separately reported native conflict.
+        from operational_historical_shipping_fee import review
+        preview = foreign_order_sources(delivered=True, operational_state=result, historical_fee_order="10")
+        candidate, = preview["historical_fee_candidates"]
+        assert not review(result, candidate)[2]
+    assert key not in result["engine"]["facts"] and result["engine"]["facts"]["delivery_event:100"]["currency"] == "KWD"
+    assert (obs["cod:100"]["confirmed"], obs["cod:100"]["currency"]) == ("100.00", "KWD")
+    assert result["movements"] == prior["movements"] and result["openings"] == prior["openings"]
+    assert reconcile(result, read(result), NOW) == result
+
+
+@pytest.mark.parametrize("protected", ["allocated", "frozen", "confirmed"])
+def test_delivery_hold_preserves_each_protected_fee_row(protected):
+    prior = old_estimate()
+    key = "shipping:100:base_shipping"
+    if protected == "confirmed":
+        # Other components can already be confirmed while the base is still open.
+        key = "shipping:100:cod_fixed_commission"
+        prior["engine"]["obligations"][key] = {**prior["engine"]["obligations"]["shipping:100:base_shipping"],
+            "id": key, "currency": "SAR", "confirmed": "2.30", "expected": "0.00", "fee_component": "cod_fixed_commission"}
+    if protected == "frozen":
+        prior["engine"]["facts"][key] = {"cost": "17.25", "currency": "KWD"}
+    prior["movements"] = [payment(key)] if protected == "allocated" else [{**payment("unused", "SAR"), "allocations": []}]
+    previous = deepcopy(prior)
+    def read(state):
+        return foreign_order_sources(cod=True, percent="0", delivered=True, operational_state=state)
+    result = reconcile(prior, read(prior), NOW)
+    assert result["engine"]["obligations"][key] == previous["engine"]["obligations"][key]
+    if key in previous["engine"]["facts"]:
+        assert result["engine"]["facts"][key] == previous["engine"]["facts"][key]
+    assert result["movements"] == previous["movements"] and result["openings"] == previous["openings"]
+    assert result["engine"]["obligations"]["cod:100"]["currency"] == "KWD"
+    assert reconcile(result, read(result), NOW) == result
