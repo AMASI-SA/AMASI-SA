@@ -3872,6 +3872,22 @@ def make_qoyod_router(db, current_user) -> APIRouter:
 
 
     # ── طلبات لم تُرسل إلى قيود — READ-ONLY ────────────────────────
+    @router.get("/unsent-orders/header-count")
+    async def unsent_header_count(response: Response, user=Depends(current_user)):
+        from integrations.qoyod.unsent_header import read_header_count
+
+        owner = await require_qoyod_security_owner(db, user)
+        response.headers["Cache-Control"] = "private, no-store"
+        return await read_header_count(db, _tenant_id(owner), orders_owner_id(owner))
+
+    @router.post("/unsent-orders/header-count/refresh")
+    async def refresh_unsent_header_count(response: Response, user=Depends(current_user)):
+        from integrations.qoyod.unsent_header import refresh_header_count
+
+        owner = await require_qoyod_security_owner(db, user)
+        response.headers["Cache-Control"] = "private, no-store"
+        return await refresh_header_count(db, _tenant_id(owner), orders_owner_id(owner))
+
     @router.get("/unsent-orders")
     async def unsent_orders_endpoint(
         days: int = Query(30, ge=1, le=365),

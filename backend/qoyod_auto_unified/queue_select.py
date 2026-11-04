@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
+from dashboard_cpu_budget import CPUWorkBudget
 from integrations.qoyod.candidate_orders import API_STATUS_TO_KEY, build_candidate_audit
 from integrations.qoyod.eligible_orders import QOYOD_SYNC_START_DATE
 
@@ -72,6 +73,8 @@ async def _load_candidate_rows_oldest_first(
         lightweight=True,
         scope_unified_to_date_range=True,
         include_inbox_evidence=False,
+        checkpoint=CPUWorkBudget(milliseconds=5).checkpoint,
+        sender_snapshot_only=True,
     )
     all_candidates = sorted(
         (

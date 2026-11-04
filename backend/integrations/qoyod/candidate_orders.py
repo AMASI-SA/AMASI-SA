@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable, Optional
@@ -32,6 +33,8 @@ RIYADH_TZ = ZoneInfo("Asia/Riyadh")
 CANDIDATE_AUDIT_SCAN_LIMIT = 10_000
 CANDIDATE_AUDIT_BATCH_SIZE = 100
 CANDIDATE_AUDIT_MAX_TIME_MS = 8_000
+
+_Checkpoint = Callable[[], Awaitable[None]]
 
 
 class CandidateAuditScanLimitExceeded(RuntimeError):
@@ -540,6 +543,7 @@ async def load_unified_candidates(
     scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
     lightweight: bool = False,
     scope_to_date_range: bool = False,
+    checkpoint: Optional[_Checkpoint] = None,
 ) -> dict[str, Any]:
     """Load the authoritative eligible set keyed by Salla order number."""
     # Full report/reconciliation callers intentionally do not pre-filter on
@@ -643,6 +647,8 @@ async def load_unified_candidates(
         if scanned > scan_limit:
             scan_truncated = True
             break
+        if checkpoint is not None and scanned % 32 == 0:
+            await checkpoint()
         order_number = str(row.get("order_number") or "").strip()
         if not order_number:
             excluded["missing_order_number"] += 1
@@ -813,6 +819,7 @@ async def load_qoyod_reference_evidence(
     markers_user_id: str,
     order_numbers: Optional[Iterable[str]],
     scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
+    checkpoint: Optional[_Checkpoint] = None,
 ) -> dict[str, Any]:
     """Load bounded real local Qoyod invoices grouped by exact reference."""
     references = (
@@ -882,6 +889,8 @@ async def load_qoyod_reference_evidence(
         if scanned > scan_limit:
             scan_truncated = True
             break
+        if checkpoint is not None and scanned % 32 == 0:
+            await checkpoint()
         if not real_invoice_id(row.get("qoyod_invoice_id")):
             continue
         stored_reference = row.get("reference")
@@ -932,6 +941,8 @@ async def build_candidate_audit(
     require_complete: bool = True,
     scope_unified_to_date_range: bool = False,
     include_inbox_evidence: bool = True,
+    checkpoint: Optional[_Checkpoint] = None,
+    sender_snapshot_only: bool = False,
 ) -> dict[str, Any]:
     """Build exact eligible/sent/unsent reference sets and per-order proof."""
     captured = now or datetime.now(timezone.utc)
@@ -949,6 +960,7 @@ async def build_candidate_audit(
         scan_limit=scan_limit,
         lightweight=lightweight,
         scope_to_date_range=scope_unified_to_date_range,
+        checkpoint=checkpoint,
     )
     eligible_refs: set[str] = set(unified["references"])
     evidence_owners = list(marker_user_ids or (
@@ -969,6 +981,7 @@ async def build_candidate_audit(
         markers_user_id=str(markers_user_id),
         order_numbers=eligible_refs if lightweight else None,
         scan_limit=scan_limit,
+        checkpoint=checkpoint,
     )
     scan_metadata = {
         "scan_truncated": bool(
@@ -994,7 +1007,10 @@ async def build_candidate_audit(
     qoyod_only_refs = invoice_refs - eligible_refs
 
     rows: list[dict[str, Any]] = []
-    for reference, order in unified["by_reference"].items():
+    accounted_facts = []
+    for index, (reference, order) in enumerate(unified["by_reference"].items()):
+        if checkpoint is not None and index % 32 == 0:
+            await checkpoint()
         inbox_row = inbox["newest"].get(reference)
         inbox_markers = inbox["markers"].get(reference, {})
         inbox_rows = [inbox_markers] if inbox_markers else []
@@ -1003,6 +1019,18 @@ async def build_candidate_audit(
         has_inbox = inbox_row is not None
         has_qoyod_reference = invoice is not None
         payment_key = order.get("qoyod_payment_eligibility")
+        if has_qoyod_reference and sender_snapshot_only:
+            # Exact matches affect the snapshot identity but cannot become
+            # send candidates; only the report needs their full proof.
+            accounted_facts.append({
+                "order_number": reference, "order_date": order.get("order_date"),
+                "current_status": order.get("order_status_native") or order.get("order_status") or order.get("order_status_slug"),
+                "current_status_key": order.get("qoyod_status_key"),
+                "total_amount": order.get("total_amount"), "currency": order.get("currency"),
+                "payment_eligibility": payment_key,
+                "worker_candidate": False, "has_qoyod_reference_match": True,
+            })
+            continue
         if has_qoyod_reference:
             before_fix_reason = "already_in_qoyod_by_exact_reference"
             candidate_reason = "excluded_already_in_qoyod"
@@ -1084,6 +1112,27 @@ async def build_candidate_audit(
         reverse=True,
     )
 
+    if sender_snapshot_only:
+        if checkpoint is not None:
+            await checkpoint()
+        fingerprint = candidate_snapshot_fingerprint(
+            [*accounted_facts, *rows], orders_user_id=orders_user_id,
+            from_date=date_range.from_date, to_date=date_range.to_date,
+        )
+        worker_status_counts = dict.fromkeys(ELIGIBLE_STATUS_KEYS, 0)
+        display_counts: dict[str, int] = {}
+        for row in rows:
+            worker_status_counts[row["current_status_key"]] += 1
+            display = str(row.get("current_status") or row.get("current_status_key") or "").strip()
+            if display:
+                display_counts[display] = display_counts.get(display, 0) + 1
+        return {
+            "source_authority": "unified_orders", "orders": rows, "captured_at": captured_at,
+            **date_range.as_dict(), **scan_metadata,
+            "snapshot_fingerprint": fingerprint,
+            "worker_candidate_status_counts": worker_status_counts,
+            "worker_candidate_status_display_counts": display_counts,
+        }
     by_reference = {row["order_number"]: row for row in rows}
     total_amount = round(sum(
         float(row.get("total_amount") or 0.0) for row in rows
@@ -1117,6 +1166,8 @@ async def build_candidate_audit(
             worker_candidate_status_display_counts[display] = (
                 worker_candidate_status_display_counts.get(display, 0) + 1
             )
+    if checkpoint is not None:
+        await checkpoint()
     return {
         "ok": True,
         "read_only": True,
