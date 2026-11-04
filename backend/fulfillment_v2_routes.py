@@ -30,7 +30,7 @@ from fulfillment_batch_pdf import generate_shipping_batch_pdf
 from fulfillment_carrier_label import sync_completed_carrier_label, _require_print_completed_workflow
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
-from order_engine.shipping_label_service import ShippingLabelError, refresh_shipping_label, refresh_saved_shipping_label
+from order_engine.shipping_label_service import ShippingLabelError
 from order_option_cost_snapshot_routes import binding_matches, selected_option_tokens
 from product_fulfillment_rules import (
     FULFILLMENT_DECISIONS,
@@ -2424,83 +2424,27 @@ def make_fulfillment_v2_router(
             },
         }
 
-    async def _carrier_label_action(
-        *,
-        order_number: str,
-        user: dict[str, Any],
-        action: str,
-    ) -> dict[str, Any]:
-        context = await _actor_context(db, user)
-        _require_permission(context, "fulfillment.labels.print")
-        if not _can_operate_completed_carrier_label(context):
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "code": "fulfillment_responsibility_required",
-                    "responsibility": "shipping_labeling",
-                },
-            )
-        actor_name = _text(user.get("name") or user.get("email")) or "مستخدم ميزان"
-        try:
-            if action in {"refresh", "refresh_saved"}:
-                # Printing reads only; retain the existing access/completion
-                # checks without writing a label snapshot to the workflow.
-                await _require_print_completed_workflow(
-                    db, user_id=context["merchant_id"], order_number=_text(order_number),
-                )
-                reader = refresh_saved_shipping_label if action == "refresh_saved" else refresh_shipping_label
-                result = await reader(db, context["merchant_id"], _text(order_number))
-                return {**result, "assembly_completion_confirmed": True}
-            from fulfillment_carrier_label import prepare_completed_carrier_label
-            async def authorize():
-                current_context = await _actor_context(db, user)
-                _require_permission(current_context, "fulfillment.labels.print")
-                if (current_context["merchant_id"] != context["merchant_id"]
-                        or not _can_operate_completed_carrier_label(current_context)):
-                    raise HTTPException(403, detail={"code": "completion_owner_changed"})
-            return await prepare_completed_carrier_label(
-                db, user_id=context["merchant_id"], order_number=_text(order_number),
-                actor_id=context["actor_id"], actor_name=actor_name, authorize=authorize)
-        except ShippingLabelError as exc:
-            raise HTTPException(
-                status_code=exc.status_code,
-                detail={
-                    "code": "shipping_snapshot_changed" if action == "refresh" else exc.code,
-                    "reason_code": exc.code,
-                    "message": str(exc),
-                    "order_number": _text(order_number),
-                },
-            ) from exc
-
     @router.post("/completed/{order_number}/carrier-label")
-    async def issue_completed_order_carrier_label(
-        order_number: str,
-        user: dict = Depends(current_user),
-    ) -> dict[str, Any]:
-        return await _carrier_label_action(
-            order_number=order_number,
-            user=user,
-            action="issue",
-        )
-
     @router.post("/completed/{order_number}/carrier-label/refresh")
-    async def refresh_completed_order_carrier_label(
-        order_number: str,
-        user: dict = Depends(current_user),
-    ) -> dict[str, Any]:
-        return await _carrier_label_action(
-            order_number=order_number,
-            user=user,
-            action="refresh",
-        )
-
     @router.post("/completed/{order_number}/carrier-label/refresh-saved")
-    async def refresh_saved_completed_order_carrier_label(
-        order_number: str,
-        user: dict = Depends(current_user),
-    ) -> dict[str, Any]:
-        """Opt-in Android candidate; the legacy refresh route stays unchanged."""
-        return await _carrier_label_action(order_number=order_number, user=user, action="refresh_saved")
+    @router.post("/completed/{order_number}/carrier-label/amasi")
+    @router.post("/completed/{order_number}/carrier-label/amasi/refresh")
+    async def retired_carrier_label(order_number: str, user: dict = Depends(current_user)):
+        if user.get("_session_client") == "amasi_mobile":
+            from assembly_mobile_settings import _scope
+            await _scope(db, user)
+        else:
+            context = await _actor_context(db, user)
+            _require_permission(context, "fulfillment.labels.print")
+            if not _can_operate_completed_carrier_label(context):
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "code": "fulfillment_responsibility_required",
+                        "responsibility": "shipping_labeling",
+                    },
+                )
+        raise HTTPException(410, detail={"code": "shipping_label_route_retired"})
 
     async def _amasi_compatible_label_action(
         *, order_number: str, user: dict[str, Any], issue: bool, mobile_v1: bool = False,
@@ -2629,24 +2573,6 @@ def make_fulfillment_v2_router(
             **result, "order_number": number,
             "assembly_completion_confirmed": True,
         }
-
-    @router.post("/completed/{order_number}/carrier-label/amasi")
-    async def issue_amasi_compatible_carrier_label(
-        order_number: str,
-        user: dict = Depends(current_user),
-    ) -> dict[str, Any]:
-        return await _amasi_compatible_label_action(
-            order_number=order_number, user=user, issue=True,
-        )
-
-    @router.post("/completed/{order_number}/carrier-label/amasi/refresh")
-    async def refresh_amasi_compatible_carrier_label(
-        order_number: str,
-        user: dict = Depends(current_user),
-    ) -> dict[str, Any]:
-        return await _amasi_compatible_label_action(
-            order_number=order_number, user=user, issue=False,
-        )
 
     async def _mobile_carrier_label_v1(order_number: str, user: dict, *, issue: bool):
         try:
