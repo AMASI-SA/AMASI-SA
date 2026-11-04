@@ -269,6 +269,29 @@ def test_no_standalone_or_non_snapshot_fallback():
     assert e.value.status_code==503 and e.value.detail['code']=='supplier_preview_snapshot_unavailable'
 
 
+def test_snapshot_audit_page_only_allows_an_exact_owner_key_in_the_same_session():
+    from operational_balance_store import AUDIT_PAGES
+
+    calls = []
+    session = object()
+
+    class PageStore:
+        async def find_one(self, query, **kwargs):
+            calls.append((query, kwargs))
+            return {'events': []}
+
+    pages = SnapshotReads({AUDIT_PAGES: PageStore()}, 'owner', session)[AUDIT_PAGES]
+    key = {'_id': 'a' * 64, 'owner_id': 'owner'}
+    assert run(pages.find_one(key)) == {'events': []}
+    for bad in ({'owner_id': 'owner'}, {**key, 'owner_id': 'other'},
+                {**key, '_id': {'$ne': None}}, {**key, '$or': [{}]}):
+        with pytest.raises(ValueError, match='owner_scope'):
+            run(pages.find_one(bad))
+    for method in ('find', 'aggregate', 'insert_one', 'replace_one'):
+        assert not hasattr(pages, method)
+    assert calls == [(key, {'session': session})]
+
+
 def test_source_change_cannot_reprice_saved_receipt():
     async def test():
         async with database() as db:

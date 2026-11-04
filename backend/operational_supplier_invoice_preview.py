@@ -14,10 +14,10 @@ from pymongo.errors import PyMongoError
 
 from operational_balance_engine import reconcile
 from operational_balance_sources import ALLOWED_COLLECTIONS, collect_sources, instant, rows
-from operational_balance_store import STATES, digest, fail, read
+from operational_balance_store import AUDIT_PAGES, STATES, digest, fail, read
 from operational_supplier_reconciliation import compare_supplier_invoices
 
-READS = ALLOWED_COLLECTIONS | {STATES, 'mz2_atomic_owners'}
+READS = ALLOWED_COLLECTIONS | {STATES, AUDIT_PAGES, 'mz2_atomic_owners'}
 NATIVE_LIMIT = 20000
 ACTION = 'طابق الفاتورة واستلامها وسدادها وتغطيتها في الافتتاحي قبل اعتماد أي فرق؛ لا تعِد إنشاء الفاتورة'
 
@@ -31,6 +31,15 @@ class SnapshotReads:
         if name not in READS:
             raise ValueError('supplier_preview_source_not_allowed')
         collection, owner, session = self.db[name], self.owner, self.session
+        if name == AUDIT_PAGES:
+            class AuditPage:
+                async def find_one(self, query):
+                    if (not isinstance(query, dict) or set(query) != {'_id', 'owner_id'}
+                            or query['owner_id'] != owner or not isinstance(query['_id'], str) or not query['_id']):
+                        raise ValueError('supplier_preview_owner_scope_required')
+                    return await collection.find_one(query, session=session)
+            return AuditPage()
+
         def check(query):
             field = 'owner_id' if name == STATES else '_id' if name == 'mz2_atomic_owners' else 'user_id'
             if not isinstance(query, dict) or query.get(field) != owner:

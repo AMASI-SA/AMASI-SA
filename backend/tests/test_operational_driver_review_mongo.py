@@ -42,6 +42,45 @@ async def snapshot(db):
             for name in await db.list_collection_names() if not name.startswith('system.')}
 
 
+def test_driver_approval_and_replay_require_intact_archived_history():
+    from operational_balance_archive import AUDIT_PAGES, MARKER, content_key, manifest
+
+    async def scenario(db):
+        assignment, payload = await seed(db, 'bank_transfer')
+        events = [{'id': 'existing-reconciliation'}]
+        key = content_key('owner', 0, events)
+        pointer = manifest(1, [{'id': key, 'count': 1}])
+        page = {'_id': key, 'owner_id': 'owner', 'start': 0, 'events': events}
+        await db[STATES].update_one({'_id': 'owner'}, {'$set': {MARKER: pointer, 'engine.audit': {'tail': []}}})
+        await db.mz2_atomic_owners.update_one({'_id': 'owner'}, {'$set': {'revision': 0}}, upsert=True)
+        await db.create_collection(EVENTS)
+
+        async def approve():
+            return await service.review_payment(db, owner='owner', actor='owner',
+                                                assignment_id=assignment, payload=payload, clock=NOW)
+
+        async def must_refuse():
+            before = await snapshot(db)
+            with pytest.raises(HTTPException) as exc:
+                await service.options(db, owner='owner', actor='owner', assignment_id=assignment, clock=NOW)
+            assert exc.value.detail['code'] == 'operational_audit_archive_invalid'
+            with pytest.raises(HTTPException) as exc:
+                await approve()
+            assert exc.value.detail['code'] == 'operational_audit_archive_invalid'
+            assert await snapshot(db) == before
+
+        await must_refuse()
+        await db[AUDIT_PAGES].insert_one(page)
+        result = await approve()
+        assert await approve() == result
+        saved = await db[STATES].find_one({'_id': 'owner'})
+        assert saved[MARKER] == pointer and saved['engine']['audit'] == {'tail': []}
+        assert sum(m.get('id') == result['movement_id'] for m in saved['movements']) == 1
+        await db[AUDIT_PAGES].update_one({'_id': key}, {'$set': {'events.0.id': 'corrupt'}})
+        await must_refuse()
+    run(scenario)
+
+
 @pytest.mark.parametrize('method', ['bank_transfer', 'card_terminal'])
 def test_real_concurrent_approval_is_exactly_once_and_preserves_old_order_fees(method):
     async def scenario(db):

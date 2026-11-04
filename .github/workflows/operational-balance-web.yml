@@ -100,7 +100,7 @@ jobs:
                         'test_operational_balance_provider_settlement_guard'):
               assert any(suite in c.get('classname', '') for c in cases), suite + ' not collected'
           assert len([c for c in cases if 'test_operational_balance_salary_start_mongo' in c.get('classname', '')]) == 5
-          assert len([c for c in cases if 'test_operational_driver_review_mongo' in c.get('classname', '')]) == 13
+          assert len([c for c in cases if 'test_operational_driver_review_mongo' in c.get('classname', '')]) == 14
           assert not any(c.find(tag) is not None for c in cases for tag in ('skipped', 'failure', 'error'))
           PY
       - uses: actions/upload-artifact@v4
