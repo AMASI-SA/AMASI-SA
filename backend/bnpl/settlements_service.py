@@ -466,10 +466,11 @@ async def _configured_provider_fee_totals(db, user_id, provider, sales_match, re
               'order_reference_id': 1, 'plan_id': 1, 'created_at_provider': 1,
               'is_pre_accounting': 1, 'settlement_source': 1, 'same_week_netzero_exclusion': 1}
     sales = await db.payment_transactions.find(sales_match, fields).to_list(20001)
-    refunds = await db.payment_refunds.find(refund_match, {
+    refund_fields = {
         '_id': 0, 'provider_payment_id': 1, 'provider_refund_id': 1,
-        'order_reference_id': 1, 'amount': 1, 'status': 1,
-    }).to_list(20001)
+        'order_reference_id': 1, 'amount': 1, 'status': 1, 'refunded_at': 1,
+    }
+    refunds = await db.payment_refunds.find(refund_match, refund_fields).to_list(20001)
     if max(len(sales), len(refunds)) > 20000:
         return {'commission': 0.0, 'commission_vat': 0.0, 'fees_complete': False,
                 'fee_review_reasons': ['provider_fee_transaction_scope_too_large']}
@@ -495,15 +496,15 @@ async def _configured_provider_fee_totals(db, user_id, provider, sales_match, re
     errors = set()
     fee = tax = Decimal('0')
 
-    def price(row, refund=None):
+    def price(row, events=()):
         source = bind_statement_plan({'provider': provider, 'plan_id': row.get('plan_id')}, plans,
                                      row.get('order_number') or row.get('order_reference_id'))
         if row.get('currency', 'SAR') != 'SAR':
             raise ValueError('provider_fee_currency_conversion_required')
         result = configured_projection(policies, provider, row.get('amount'), payment=source,
             created_at=row.get('created_at_provider'), source_mode=source_mode,
-            refunded=refund['amount'] if refund else Decimal('0'),
-            refunds=[{'id': refund['provider_refund_id'], 'amount': refund['amount'], 'status': 'executed'}] if refund else [])
+            refunded=sum((Decimal(str(event['amount'])) for event in events), Decimal('0')), refunds=list(events),
+            as_of=(refund_match.get('refunded_at') or {}).get('$lte') or datetime.now(timezone.utc))
         if result is None or result.get('estimated_fee_net') is None or result.get('estimated_fee_tax') is None:
             raise ValueError('fee_tax_policy_incomplete')
         return Decimal(result['estimated_fee_net']), Decimal(result['estimated_fee_tax'])
@@ -515,31 +516,50 @@ async def _configured_provider_fee_totals(db, user_id, provider, sales_match, re
             tax += vat
         except (ValueError, KeyError, TypeError, ArithmeticError) as exc:
             errors.add(str(exc) if isinstance(exc, ValueError) else 'provider_fee_source_incomplete')
-    seen_refunds = {}
-    refunded_principal = {}
-    for refund in refunds:
-        try:
+    def group_events(rows):
+        groups, seen = {}, {}
+        for refund in rows:
             identity = refund.get('provider_refund_id')
-            original = originals.get(refund.get('provider_payment_id'))
-            if not identity or not original or refund.get('status') not in {'executed', 'settled', 'completed', 'succeeded'}:
+            reference = refund.get('provider_payment_id')
+            if not identity or reference not in originals or refund.get('status') not in {'executed', 'settled', 'completed', 'succeeded'}:
                 raise ValueError('provider_refund_fee_source_incomplete')
-            value = Decimal(str(refund['amount']))
-            signature = (refund.get('provider_payment_id'), value)
-            if identity in seen_refunds:
-                if seen_refunds[identity] != signature:
+            event = {'id': identity, 'amount': refund['amount'], 'status': 'executed',
+                     'refunded_at': refund.get('refunded_at')}
+            signature = (reference, event)
+            if identity in seen:
+                if seen[identity] != signature:
                     raise ValueError('provider_refund_identity_conflict')
                 continue
-            seen_refunds[identity] = signature
-            reference = refund['provider_payment_id']
-            refunded_principal[reference] = refunded_principal.get(reference, Decimal('0')) + value
-            if refunded_principal[reference] > Decimal(str(original['amount'])):
-                raise ValueError('provider_refund_exceeds_capture')
-            capture_fee, capture_tax = price(original)
-            remaining_fee, remaining_tax = price(original, refund)
-            fee -= capture_fee - remaining_fee
-            tax -= capture_tax - remaining_tax
-        except (ValueError, KeyError, TypeError, ArithmeticError) as exc:
-            errors.add(str(exc) if isinstance(exc, ValueError) else 'provider_refund_fee_source_incomplete')
+            seen[identity] = signature
+            groups.setdefault(reference, []).append(event)
+        return groups
+
+    try:
+        current_events = group_events(refunds)
+        prior_rows = []
+        lower_bound = (refund_match.get('refunded_at') or {}).get('$gte')
+        references = sorted(current_events)
+        if lower_bound:
+            for start in range(0, len(references), 250):
+                prior_rows.extend(await db.payment_refunds.find({
+                    'user_id': user_id, 'provider': provider,
+                    'provider_payment_id': {'$in': references[start:start + 250]},
+                    'refunded_at': {'$lt': lower_bound},
+                    'status': {'$in': ['executed', 'settled', 'completed', 'succeeded']},
+                }, refund_fields).to_list(20001 - len(prior_rows)))
+                if len(prior_rows) > 20000:
+                    raise ValueError('provider_fee_transaction_scope_too_large')
+        prior_events = group_events(prior_rows)
+        for reference, events in current_events.items():
+            older = prior_events.get(reference, [])
+            if {row['id'] for row in older}.intersection(row['id'] for row in events):
+                raise ValueError('provider_refund_identity_conflict')
+            before_fee, before_tax = price(originals[reference], older)
+            after_fee, after_tax = price(originals[reference], [*older, *events])
+            fee += after_fee - before_fee
+            tax += after_tax - before_tax
+    except (ValueError, KeyError, TypeError, ArithmeticError) as exc:
+        errors.add(str(exc) if isinstance(exc, ValueError) else 'provider_refund_fee_source_incomplete')
     return {'commission': float(fee), 'commission_vat': float(tax),
             'fees_complete': not errors, 'fee_review_reasons': sorted(errors), 'fee_source_mode': source_mode}
 

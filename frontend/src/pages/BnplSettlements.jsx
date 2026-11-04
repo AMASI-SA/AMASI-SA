@@ -63,10 +63,11 @@ function ProviderCard({ data, onShowWeekly }) {
     const b = data.bank || {};
     const fees = data.fee_rates || {};
     const usesPolicyTable = fees.fee_source === "mz2_provider_fee_policies";
-    const delta = b.delta_overpayment || 0;
+    const delta = b.delta_overpayment;
 
     const tone =
-        Math.abs(delta) < 0.5 ? "emerald"
+        delta == null ? "amber"
+        : Math.abs(delta) < 0.5 ? "emerald"
         : delta > 0 ? "amber"      // bank received more than due
         : "rose";                  // shortfall
 
@@ -298,7 +299,8 @@ export default function BnplSettlements() {
             (p) => (p.bank?.remaining_with_provider || 0) > 0.5,
         );
         const allLinked = (data.providers || []).every((p) => p.bank?.is_linked);
-        return { allLinked, anyShortfall };
+        const feesComplete = data.fees_complete !== false && (data.providers || []).every(p => p.fees_complete !== false);
+        return { allLinked, anyShortfall, feesComplete };
     }, [data]);
 
     return (
@@ -352,18 +354,19 @@ export default function BnplSettlements() {
                     {/* Global reconciliation banner */}
                     <div
                         className={`rounded-2xl border-2 p-4 flex items-center gap-3 ${
-                            !reconcStatus?.anyShortfall
+                            reconcStatus?.feesComplete && !reconcStatus?.anyShortfall
                                 ? "bg-emerald-50 border-emerald-300"
                                 : "bg-amber-50 border-amber-300"
                         }`}
                         data-testid="bnpl-settle-banner"
                     >
-                        {!reconcStatus?.anyShortfall
+                        {reconcStatus?.feesComplete && !reconcStatus?.anyShortfall
                             ? <CheckCircle size={28} weight="fill" className="text-emerald-700 flex-shrink-0" />
                             : <WarningCircle size={28} weight="fill" className="text-amber-700 flex-shrink-0" />}
                         <div>
                             <div className="font-extrabold text-slate-900">
-                                {!reconcStatus?.anyShortfall
+                                {!reconcStatus?.feesComplete ? "بيانات الرسوم والصافي تحتاج إلى استكمال"
+                                    : !reconcStatus?.anyShortfall
                                     ? "✓ كل التسويات مكتملة — لا توجد مبالغ متبقية لدى المزودين"
                                     : "📌 توجد مبالغ متبقية لدى المزودين بانتظار التحويل"}
                             </div>
@@ -423,7 +426,7 @@ export default function BnplSettlements() {
                             <div className="text-sm text-end">
                                 <span className="text-slate-500">المتبقي لدى المزودين:</span>{" "}
                                 <span className={`font-bold num ${
-                                    Math.abs(data.totals?.remaining_with_provider || 0) < 0.5
+                                    data.totals?.remaining_with_provider != null && Math.abs(data.totals.remaining_with_provider) < 0.5
                                         ? "text-emerald-700" : "text-amber-700"
                                 }`}>
                                     {fmt(data.totals?.remaining_with_provider)}
@@ -511,6 +514,7 @@ export default function BnplSettlements() {
                                                 matched:   { txt: "✅ مطابق",   cls: "bg-emerald-100 text-emerald-800" },
                                                 over:      { txt: "⚠ زيادة",    cls: "bg-amber-100 text-amber-800" },
                                                 under:     { txt: "⚠ نقص",      cls: "bg-rose-100 text-rose-800" },
+                                                review:    { txt: "الرسوم تحتاج استكمال", cls: "bg-amber-100 text-amber-800" },
                                                 unmatched: { txt: "—",          cls: "bg-slate-100 text-slate-500" },
                                             }[status] || { txt: status, cls: "bg-slate-100 text-slate-600" };
                                             // Iter-131 — show the SPECIFIC matched transfer (not the
@@ -524,8 +528,8 @@ export default function BnplSettlements() {
                                             const effTransferred = mt
                                                 ? Number(mt.amount || 0)
                                                 : 0;
-                                            const effRemaining = Number(
-                                                ((r.net_payable || 0) - effTransferred).toFixed(2),
+                                            const effRemaining = r.net_payable == null ? null : Number(
+                                                (r.net_payable - effTransferred).toFixed(2),
                                             );
                                             const expKey = `${weeklyOpen}:${r.invoice_no}`;
                                             const isExpanded = expandedInv === expKey;
@@ -575,7 +579,7 @@ export default function BnplSettlements() {
                                                     {effTransferred ? fmt(effTransferred) : "—"}
                                                 </td>
                                                 <td
-                                                    className={`p-2 num font-bold ${Math.abs(effRemaining) < 0.5 ? "text-emerald-700" : "text-amber-700"}`}
+                                                    className={`p-2 num font-bold ${effRemaining != null && Math.abs(effRemaining) < 0.5 ? "text-emerald-700" : "text-amber-700"}`}
                                                     data-testid={`bnpl-weekly-remaining-${r.invoice_no}`}
                                                 >
                                                     {fmt(effRemaining)}
@@ -648,9 +652,9 @@ export default function BnplSettlements() {
                                             </td>
                                             <td className="p-2 num" data-testid="bnpl-weekly-remaining-total">
                                                 {fmt(
-                                                    Number(
+                                                    weekly[weeklyOpen].totals?.net_payable == null ? null : Number(
                                                         (
-                                                            Number(weekly[weeklyOpen].totals?.net_payable || 0)
+                                                            Number(weekly[weeklyOpen].totals.net_payable)
                                                             - (weekly[weeklyOpen].rows || []).reduce((s, r) => {
                                                                 const m = weekly[weeklyOpen].matchByInv?.[r.invoice_no];
                                                                 return s + Number(m?.matched_transfer?.amount || 0);

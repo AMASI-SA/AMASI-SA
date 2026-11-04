@@ -144,3 +144,41 @@ async def test_statement_plan_query_is_scoped_bounded_and_does_not_write():
     await db.settlement_entries.insert_one(duplicate)
     with pytest.raises(ValueError, match='provider_fee_product_scope_too_large'):
         await load_statement_plans(db, 'owner', providers=['tabby'], order_numbers=['order-a'], max_rows=1)
+
+
+@pytest.mark.asyncio
+async def test_bnpl_cumulative_refunds_keep_the_original_tax_cap_across_periods():
+    component = {'id': 'refundable', 'percentage': '5', 'fixed_amount': '0', 'vat_rate': '17',
+                 'vat_treatment': 'exclusive', 'vat_rounding': 'half_even', 'refund_fee_treatment': 'recalculate'}
+    fixed = {**component, 'id': 'fixed', 'percentage': '0', 'fixed_amount': '0.75', 'refund_fee_treatment': 'retain'}
+    db = await database(policies=[policy(components=[component, fixed])])
+    await capture(db)
+    await db.payment_transactions.update_one({'provider_id': 'tx-a'}, {'$set': {'amount': 20.10}})
+    for index, day in enumerate(('2026-06-11', '2026-06-12')):
+        await db.payment_refunds.insert_one({'user_id': 'owner', 'provider': 'tabby', 'provider_payment_id': 'tx-a',
+            'provider_refund_id': f'refund-{index}', 'amount': 10.05, 'status': 'executed', 'refunded_at': day + 'T12:00:00Z'})
+    complete = await compute_settlement_for_provider(db, 'owner', 'tabby', '2026-06-10', '2026-06-12')
+    second = await compute_settlement_for_provider(db, 'owner', 'tabby', '2026-06-12', '2026-06-12')
+    assert complete['fees_complete'] is True
+    assert (complete['totals']['commission'], complete['totals']['commission_vat']) == (0.75, 0.13)
+    assert (second['totals']['commission'], second['totals']['commission_vat']) == (-0.51, -0.09)
+    await db.payment_refunds.insert_one({'user_id': 'owner', 'provider': 'tabby', 'provider_payment_id': 'tx-a',
+        'provider_refund_id': 'pending-attempt', 'amount': 2, 'status': 'pending', 'refunded_at': '2026-06-10T15:00:00Z'})
+    second_after_pending = await compute_settlement_for_provider(db, 'owner', 'tabby', '2026-06-12', '2026-06-12')
+    assert second_after_pending['fees_complete'] is True
+    assert second_after_pending['totals'] == second['totals']
+
+
+@pytest.mark.asyncio
+async def test_bnpl_adds_refund_processing_tariff_once_per_current_event():
+    capture_policy = policy()
+    capture_policy['components'][0]['refund_fee_treatment'] = 'retain'
+    processing = policy(id='refund-processing', event_type='refund')
+    processing['components'][0]['fixed_amount'] = '0.50'
+    db = await database(policies=[capture_policy, processing])
+    await capture(db)
+    await db.payment_refunds.insert_one({'user_id': 'owner', 'provider': 'tabby', 'provider_payment_id': 'tx-a',
+        'provider_refund_id': 'refund-a', 'amount': 10, 'status': 'executed', 'refunded_at': '2026-06-11T12:00:00Z'})
+    result = await compute_settlement_for_provider(db, 'owner', 'tabby', '2026-06-11', '2026-06-11')
+    assert result['fees_complete'] is True
+    assert (result['totals']['commission'], result['totals']['commission_vat']) == (0.5, 0.08)

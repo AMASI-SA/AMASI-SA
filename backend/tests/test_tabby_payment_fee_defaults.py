@@ -151,8 +151,10 @@ def test_tabby_parser_uses_type_column_and_refund_gross():
         "net": -137.09,
         "refund_full": 301.99,
         "refund_partial": 247.0,
-        "refunded_fees": 27.40,
-        "refunded_fees_vat": 4.11,
+        "refunded_fees": -27.40,
+        "refunded_fees_vat": -4.11,
+        "fee_credits": -27.40,
+        "fee_vat_credits": -4.11,
         "settlement_fee": 0.0,
         "settlement_fee_vat": 0.0,
     }

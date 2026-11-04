@@ -112,6 +112,16 @@ def test_unknown_or_missing_product_never_falls_back_to_generic_rate():
             provider_projection(payment(plan_id=plan), [specific, generic], date(2026, 6, 10))
 
 
+def test_plan_requirement_stays_with_its_card_network_scope():
+    mada = policy(id='mada-policy', provider='salla', payment_method='mada', plan_id=None)
+    visa = policy(id='visa-policy', provider='salla', payment_method='visa', plan_id='visa-product')
+    source = payment(provider='salla', payment_method='mada', plan_id='other-product')
+    result = provider_projection(source, [mada, visa], date(2026, 6, 10))
+    assert result['policy_id'] == 'mada-policy'
+    with pytest.raises(ValueError, match='provider_fee_policy_incomplete_or_ambiguous'):
+        provider_projection({**source, 'payment_method': 'visa'}, [mada, visa], date(2026, 6, 10))
+
+
 def statement_fixture():
     entry = {'id': 'entry-a', 'file_id': 'file-a', 'user_id': 'owner', 'provider': 'tabby',
              'order_number': 'order-a', 'raw_product_type': 'synthetic-long-product'}
@@ -194,3 +204,49 @@ def test_saved_policy_preview_is_calculation_only_for_each_event_type(event):
     assert result['event_type'] == event
     assert (result['fee_net'], result['fee_vat'], result['fee_total']) == ('2.50', '0.42', '2.92')
     assert terms == before
+
+
+def test_refund_processing_fee_is_per_executed_identity_and_separate_from_capture_credit():
+    capture = policy()
+    capture['components'][0]['refund_fee_treatment'] = 'retain'
+    processing = policy(id='processing', event_type='refund')
+    processing['components'][0]['fixed_amount'] = '0.50'
+    events = [{'id': 'refund-a', 'amount': '10.00', 'status': 'executed', 'refunded_at': '2026-06-11T12:00:00Z'},
+              {'id': 'refund-b', 'amount': '10.00', 'status': 'settled', 'refunded_at': '2026-06-12T12:00:00Z'}]
+    source = payment(refunds=[*events, events[0]])
+    result = provider_projection(source, [capture, processing], date(2026, 6, 10), as_of_date=date(2026, 6, 13))
+    assert (result['estimated_fee_net'], result['estimated_fee_tax']) == ('3.50', '0.58')
+    assert result['expected_receivable'] == '15.92'
+    assert len(result['refund_processing_fees']) == 2
+    assert result['refunded_fee_net'] == '0.00'
+    pending = payment(refunds=[{**events[0], 'status': 'requested'}])
+    assert 'refund_processing_fees' not in provider_projection(pending, [capture, processing], date(2026, 6, 10))
+
+
+def test_refund_processing_policy_uses_riyadh_event_day_and_unknown_date_blocks_a_rate_change():
+    capture = policy()
+    capture['components'][0]['refund_fee_treatment'] = 'retain'
+    old = policy(id='old-refund', event_type='refund', effective_to='2026-06-11')
+    new = policy(id='new-refund', event_type='refund', effective_from='2026-06-12')
+    new['components'][0]['fixed_amount'] = '0.80'
+    event = {'id': 'refund', 'amount': '5.00', 'status': 'executed', 'refunded_at': '2026-06-11T22:30:00Z'}
+    result = provider_projection(payment(refunds=[event]), [capture, old, new], date(2026, 6, 10), as_of_date=date(2026, 6, 13))
+    assert result['refund_processing_fees'][0]['policy_id'] == 'new-refund'
+    event.pop('refunded_at')
+    with pytest.raises(ValueError, match='provider_fee_transaction_date_required'):
+        provider_projection(payment(refunds=[event]), [capture, old, new], date(2026, 6, 10), as_of_date=date(2026, 6, 13))
+
+
+def test_settled_actual_fee_covers_refund_processing_estimates_once():
+    from test_operational_balance_configured_provider_fees import paid_state, platform
+    state, order = paid_state('tabby', '40.00', '20.00')
+    capture = policy(plan_id=None)
+    capture['components'][0]['refund_fee_treatment'] = 'retain'
+    processing = policy(id='processing', event_type='refund', plan_id=None)
+    order['payment']['refunds'] = [{'id': 'refund', 'amount': '20.00', 'status': 'executed', 'refunded_at': order['updated_at']}]
+    refresh_provider_fee_inputs(state, {'orders': [order], 'provider_fee_settings': {},
+        'fee_policies': [capture, processing], 'provider_fee_source_mode': 'mz2_policies'})
+    state['movements'].append({'id': 'payout', 'kind': 'settlement', 'party_type': 'provider', 'party_id': 'tabby',
+        'direction': 'incoming', 'currency': 'SAR', 'amount': '39.00', 'actual_fee_amount': '1.00',
+        'allocations': [{'obligation_id': 'provider:one', 'amount': '40.00'}]})
+    assert platform(state, 'tabby')['fees'] == '1.00'

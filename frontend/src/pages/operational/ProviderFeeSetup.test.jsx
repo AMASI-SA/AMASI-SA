@@ -235,6 +235,31 @@ test("failed source activation keeps the current source and permits a retry", as
     expect(host.textContent).toContain("مصدر احتساب الرسوم المعتمد هو جدول ميزان 2");
 });
 
+test("failed legacy suggestions do not block the central table, source mode or editing", async () => {
+    const saved = componentPolicy();
+    fees.listOnboardingFeeCandidates.mockRejectedValueOnce(new Error("legacy suggestions unavailable"));
+    await renderPolicies([saved], "mz2_policies");
+    expect(host.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(host.textContent).toContain("مصدر احتساب الرسوم المعتمد هو جدول ميزان 2");
+    await click("تعديل");
+    await set("مرجع العقد أو كشف المنصة المثبت للتعرفة وفترتها", "updated source evidence");
+    await click("حفظ تعديل التعرفة");
+    expect(fees.updateOnboardingFeePolicy).toHaveBeenCalledWith(saved.id, expect.objectContaining({
+        expected_version: 3, components: saved.components, evidence: "updated source evidence",
+    }));
+    expect(fees.saveOnboardingFeeSourceMode).not.toHaveBeenCalled();
+});
+
+test("failure to read the central policies remains visible without asserting a source mode", async () => {
+    fees.listOnboardingFeePolicies.mockRejectedValueOnce(new Error("policy source unavailable"));
+    await act(async () => root.render(<ProviderFeeSetup />));
+    expect(host.textContent).toContain("تعذرت قراءة التعرفات");
+    expect(host.querySelectorAll("tbody tr")).toHaveLength(0);
+    expect(host.textContent).not.toContain("المصدر الحالي هو إعدادات طرق الدفع القديمة");
+    expect(host.textContent).not.toContain("مصدر احتساب الرسوم المعتمد هو جدول ميزان 2");
+    expect(fees.saveOnboardingFeeSourceMode).not.toHaveBeenCalled();
+});
+
 test.each(["capture", "payout", "refund", "cancellation"])("%s preview displays its fee and the applicable net only", async eventType => {
     const saved = policy({ event_type: eventType });
     await renderPolicies([saved]);

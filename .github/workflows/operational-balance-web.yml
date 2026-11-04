@@ -70,6 +70,9 @@ jobs:
           backend/tests/test_operational_supplier_invoice_cutover.py
           backend/tests/test_store_delivery_noncash_review.py
           backend/tests/test_operational_driver_review_mongo.py
+          backend/tests/test_provider_fee_source_terms.py
+          backend/tests/test_provider_fee_runtime_binding.py
+          backend/tests/test_bnpl_fee_completeness_boundaries.py
           --tb=short --junitxml=operational-backend.xml
       - name: Preserve shipping summary and calculator contracts
         run: python -B -m pytest --noconftest -q backend/tests/test_dashboard_shipping_ssot.py backend/tests/test_mz2_shipping_calculator.py --tb=short
@@ -144,6 +147,9 @@ jobs:
           --testMatch '**/src/pages/operational/**/*.test.{js,jsx,ts,tsx}'
           '**/MezanV2NavigationShell.employees.test.jsx'
           '**/MezanV2NavigationShell.test.jsx'
+          '**/MezanV2NavigationShell.accountingFirstRun.test.jsx'
+          '**/OrderDetailsV2.shippingIdentity.test.jsx'
+          '**/ProviderFeeCompleteness.test.jsx'
           '**/ShippingCompanySettings.test.jsx'
           '**/MezanSuppliersV2.test.jsx'
           '**/OperationalSupplierAccount.test.jsx'
@@ -160,7 +166,8 @@ jobs:
           for (const suffix of ['SalaryStart.test.jsx', 'OperationalSupplierAccount.test.jsx',
                                 'OperationalFinancialPosition.test.jsx', 'DriverPaymentReview.test.jsx',
                                 'NativePurchaseReview.test.jsx', 'nativePurchaseLinkApi.test.js',
-                                'ExternalOperationControls.test.jsx']) {
+                                'ExternalOperationControls.test.jsx', 'ProviderFeeSetup.test.jsx',
+                                'ProviderFeeCompleteness.test.jsx', 'OrderDetailsV2.shippingIdentity.test.jsx']) {
             const suite = r.testResults.find(s => s.name.endsWith('/' + suffix));
             if (!suite || !suite.assertionResults.length || suite.assertionResults.some(t => t.status !== 'passed'))
               throw Error('Combined UI suite missing or incomplete: ' + suffix);

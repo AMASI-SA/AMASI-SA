@@ -77,12 +77,13 @@ def _select(payment, policies, transaction_date):
         and p.get('event_type', 'capture') == payment.get('event_type', 'capture')
         and day(p['effective_from']) <= transaction_date
         and (not p.get('effective_to') or transaction_date <= day(p['effective_to']))]
-    plans = {str(p['plan_id']) for p in candidates if p.get('plan_id') not in (None, '')}
-    if plans and payment.get('plan_id') not in (None, '') and str(payment['plan_id']) not in plans:
-        raise ValueError('provider_fee_policy_incomplete_or_ambiguous')
     qualifiers = ('payment_method', 'plan_id')
     for key in qualifiers:
         value = payment.get(key)
+        if key == 'plan_id':
+            plans = {str(p['plan_id']) for p in candidates if p.get('plan_id') not in (None, '')}
+            if plans and value not in (None, '') and str(value) not in plans:
+                raise ValueError('provider_fee_policy_incomplete_or_ambiguous')
         if value not in (None, ''):
             candidates = [p for p in candidates if p.get(key) in (None, '') or str(p[key]) == str(value)]
     for key, error in zip(qualifiers, ('provider_payment_method_required_for_fee', 'provider_payment_plan_required')):

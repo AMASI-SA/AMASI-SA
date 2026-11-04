@@ -379,7 +379,10 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
                 try:
                     if any(instant(c['captured_at']) > instant(stamp) for c in payment.get('captures', [])):
                         raise ValueError('provider_capture_date_invalid')
-                    projection = provider_projection(payment, policies, instant(case['order_created_at']).astimezone(RIYADH).date(),
+                    capture_days = [instant(c['captured_at']).astimezone(RIYADH).date() for c in payment.get('captures', [])]
+                    if not capture_days:
+                        capture_days = [instant(case['order_created_at']).astimezone(RIYADH).date()]
+                    projection = provider_projection(payment, policies, max(capture_days), earliest_date=min(capture_days),
                                                      as_of_date=instant(stamp).astimezone(RIYADH).date())
                     policy = next(p for p in policies if p['id'] == projection['policy_id'])
                     # Preserve legacy confirmation rules; explicitly evidenced component

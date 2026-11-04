@@ -106,12 +106,15 @@ function FeeForm() {
     const [conflicts, setConflicts] = useState([]);
     const [form, setForm] = useState(initial), [parts, setParts] = useState([]), [busy, setBusy] = useState(true), [message, setMessage] = useState("");
     const [editing, setEditing] = useState(null);
-    const [sourceMode, setSourceMode] = useState("legacy_settings");
+    const [sourceMode, setSourceMode] = useState(null);
     const [previewPolicy, setPreviewPolicy] = useState(null);
     const formRef = useRef(null);
     useEffect(() => {
         let current = true;
-        Promise.all([listOnboardingFeePolicies(), listOnboardingFeeCandidates()]).then(([saved, stored]) => {
+        Promise.all([
+            listOnboardingFeePolicies(),
+            listOnboardingFeeCandidates().catch(() => ({ items: [], conflicts: [] })),
+        ]).then(([saved, stored]) => {
             if (current) { setPolicies(saved.items); setSourceMode(saved.source_mode || "legacy_settings"); setSuggestions(stored.items); setConflicts(stored.conflicts || []); }
         }).catch(() => { if (current) setMessage("تعذرت قراءة التعرفات. أعد تحميل الصفحة."); })
             .finally(() => { if (current) setBusy(false); });
@@ -176,7 +179,7 @@ function FeeForm() {
         <a href="/operational-balances/financial-position">العودة إلى المركز المالي التشغيلي</a>
         <h1 className="text-2xl font-bold">رسوم طرق الدفع في ميزان 2</h1>
         <p>يعرض الجدول تعرفات الرسوم وفترات سريانها، ويُحفظ كل تعديل مع إصدار التعرفة السابق. تعتمد الرسوم الفعلية عند توثيق كشف التسوية.</p>
-        {sourceMode === "mz2_policies" ? <p role="status">مصدر احتساب الرسوم المعتمد هو جدول ميزان 2.</p> : <div className="space-y-2">
+        {sourceMode === "mz2_policies" ? <p role="status">مصدر احتساب الرسوم المعتمد هو جدول ميزان 2.</p> : sourceMode === "legacy_settings" && <div className="space-y-2">
             <p>المصدر الحالي هو إعدادات طرق الدفع القديمة. احفظ التعرفات ثم اربط الأرصدة بجدول ميزان 2.</p>
             <button type="button" className="ofp-button" disabled={busy || !policies.length} onClick={activate}>ربط الأرصدة التشغيلية بهذا الجدول</button>
         </div>}

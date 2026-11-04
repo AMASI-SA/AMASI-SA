@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import MezanV2NavigationShell from "./MezanV2NavigationShell";
 import { getAccountingAccess } from "../services/accountingModule";
+import { useOptionalAuth } from "../context/AuthContext";
 import AccountingFirstRunGate from "../pages/accounting/AccountingFirstRunGate";
 import { getOnboardingSession, listOnboardingSessions } from "../services/accountingOnboarding";
 
@@ -21,7 +22,7 @@ jest.mock("react-router/dom", () => {
 }, { virtual: true });
 
 jest.mock("../context/AuthContext", () => ({
-    useOptionalAuth: () => ({ user: { id: "owner-fixture", role: "owner" } }),
+    useOptionalAuth: jest.fn(),
 }));
 jest.mock("../services/accountingModule", () => ({
     getAccountingAccess: jest.fn(async () => ({ user_id: "owner-fixture", is_owner: true, permissions: [] })),
@@ -41,6 +42,7 @@ function Harness() {
 let root, node;
 beforeEach(() => {
     jest.clearAllMocks();
+    useOptionalAuth.mockReturnValue({ user: { id: "owner-fixture", role: "owner" } });
     getAccountingAccess.mockResolvedValue({ user_id: "owner-fixture", is_owner: true, permissions: [] });
     global.IS_REACT_ACT_ENVIRONMENT = true;
     node = document.createElement("div"); document.body.appendChild(node); root = createRoot(node);
@@ -84,4 +86,17 @@ test("a handed-off reviewed session remains complete without querying financial 
     getOnboardingSession.mockResolvedValue({ status: "handed_off", reviewed_by: "owner", reviewed_at: "date", reviewed_hash: "a", preview: { hash: "a" } });
     await act(async () => root.render(<MemoryRouter initialEntries={["/integrations-v2?workspace=financial"]}><Harness /></MemoryRouter>));
     expect(node.querySelector("output").textContent).toContain("page=home");
+});
+
+test.each([true, false])("the Mezan 2 payment-fee table is linked for owner access %s", async isOwner => {
+    useOptionalAuth.mockReturnValue({ user: { id: "owner-fixture", role: isOwner ? "owner" : "employee" } });
+    getAccountingAccess.mockResolvedValue({ user_id: "owner-fixture", is_owner: isOwner, permissions: [] });
+    await act(async () => root.render(<MemoryRouter initialEntries={["/operational-balances/financial-position"]}><Harness /></MemoryRouter>));
+    const feeLink = node.querySelector('a[href="/operational-balances/provider-fees"]');
+    expect(Boolean(feeLink)).toBe(isOwner);
+    if (isOwner) {
+        expect(feeLink.textContent).toBe("رسوم طرق الدفع");
+        await act(async () => feeLink.click());
+        expect(node.querySelector("output").textContent).toBe("/operational-balances/provider-fees");
+    }
 });
