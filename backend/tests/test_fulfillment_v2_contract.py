@@ -41,7 +41,7 @@ def test_new_workspace_route_sidebar_and_v2_navigation_are_wired():
         encoding="utf-8"
     )
 
-    assert 'import FulfillmentV2 from "./pages/FulfillmentV2";' in app_source
+    assert 'const FulfillmentV2 = lazy(() => import("./pages/FulfillmentV2"));' in app_source
     assert 'path="/fulfillment-v2"' in app_source
     assert (
         '<Navigate to="/fulfillment-v2?stage=pending_review" replace />'
