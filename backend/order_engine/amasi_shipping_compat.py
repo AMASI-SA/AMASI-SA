@@ -237,7 +237,7 @@ def _order_status(order: dict[str, Any]) -> str | None:
     return next(iter(values)) if len(values) == 1 else None
 
 
-async def _with_verified_destination(
+async def _with_order_destination(
     db: Any, owner: str, number: str, internal_id: str, order: dict[str, Any],
     shipment: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -278,7 +278,8 @@ async def _with_verified_destination(
         address = saved.get("shipping_address_raw")
         source = legacy._text(saved.get("shipping_address_source_path")).split(".")
         if (saved.get("salla_address_verified_at") and saved_id == internal_id and isinstance(address, dict)
-                and not any(part in {"customer", "buyer", "sender", "ship_from"} for part in source)):
+                and not any(part in {"customer", "buyer", "sender", "ship_from"} for part in source)
+                and (not _separate(order, recipient) or _recipient_address_path(source))):
             destination = legacy._delivery_address(address)
             if destination and compatible(destination, address):
                 saved_destination = destination
@@ -310,7 +311,152 @@ async def mezan_courier_name(db, owner: str, number: str) -> str | None:
     return None
 
 
-async def local_mezan_courier_label(db, owner: str, number: str, workflow: dict) -> dict | None:
+class _RecipientShipmentNeeded(Exception):
+    """Request a read outside the Mongo transaction, before any document is saved."""
+
+
+async def with_courier_destination(db, owner, callback):
+    from operational_atomic import operational_owner
+
+    try:
+        return await operational_owner(db, owner, lambda scoped: callback(scoped, None))
+    except _RecipientShipmentNeeded as missing:
+        internal_id = missing.args[0]
+    rows = await _outgoing_address_rows(db, owner, internal_id)
+    return await operational_owner(db, owner, lambda scoped: callback(scoped, rows))
+
+
+async def _outgoing_address_rows(db, owner, internal_id):
+    response = await _get(db, owner, "/shipments", params={"order_id": internal_id, "per_page": 50})
+    if not isinstance(response, dict):
+        return []
+    rows = _rows(response)
+    page = response.get("pagination") or {}
+    if not isinstance(page, dict):
+        return []
+    links = page.get("links") or {}
+    if (len(rows) >= 50 or not isinstance(links, dict) or links.get("next")
+            or any(str(page.get(k, 1)) != "1" for k in ("totalPages", "total_pages", "last_page"))):
+        return []
+    return rows
+
+
+def _shipment_destination(rows, internal_id, number, courier, recipient):
+    from store_delivery_domain import normalize_shipping_carrier
+    from .customer_history import normalize_saudi_mobile
+
+    current = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        nested = row.get("order") if isinstance(row.get("order"), dict) else {}
+        order_id = row.get("order_id") or nested.get("id")
+        if legacy._text(order_id) != internal_id or legacy._text(row.get("order_reference_id")) not in {"", number}:
+            continue
+        if normalize_shipping_carrier(row.get("courier_name")) != normalize_shipping_carrier(courier):
+            continue
+        if legacy._status(row.get("type") or row.get("shipment_type")) not in {"shipment", "outbound", "outgoing"}:
+            continue
+        if _current([row], internal_id) and legacy._status(row.get("status")) not in {"", "delivered", "returned", "refunded"}:
+            current.append(row)
+    if len(current) != 1:
+        return {}
+    ship_to = current[0].get("ship_to")
+    if not isinstance(ship_to, dict):
+        return {}
+    known_phone = legacy._text(recipient.get("mobile") or recipient.get("phone"))
+    phone = legacy._text(ship_to.get("phone") or ship_to.get("mobile"))
+    if known_phone and phone:
+        if (normalize_saudi_mobile(known_phone) or known_phone) != (normalize_saudi_mobile(phone) or phone):
+            return {}
+    known_name = legacy._text(recipient.get("name"))
+    shipment_name = legacy._text(ship_to.get("name") or ship_to.get("full_name"))
+    if known_name and shipment_name and known_name.casefold() != shipment_name.casefold():
+        return {}
+    if (known_name or known_phone) and not ((known_phone and phone) or (known_name and shipment_name)):
+        return {}
+    return {**legacy._delivery_address(ship_to), "name": shipment_name,
+            "phone": ship_to.get("phone") or ship_to.get("mobile")}
+
+
+_STREET_FIELDS = ("address_line", "address_line_two", "formatted", "street")
+_NATIONAL_FIELDS = ("short_address", "national_address")
+
+
+def _needs_shipment_destination(address, independent):
+    if not any(address.get(key) for key in _STREET_FIELDS):
+        return True
+    country = legacy._text(address.get("country_code") or address.get("country")).casefold()
+    saudi = country in {"", "sa", "sau", "saudi arabia", "السعودية", "المملكة العربية السعودية"}
+    return independent and saudi and not any(address.get(key) for key in _NATIONAL_FIELDS)
+
+
+def _separate(order, recipient):
+    return legacy.recipient_is_independent(order, recipient) or order.get("source") == "buy_as_gift"
+
+
+def _prefer_destination(local, ship_to):
+    # Choose one destination as a unit. Never attach an old short code to
+    # another street, or use a city comparison to veto the current ship_to.
+    def completeness(destination):
+        return (any(destination.get(k) for k in _STREET_FIELDS),
+                any(destination.get(k) for k in _NATIONAL_FIELDS))
+    return ship_to if completeness(ship_to) > completeness(local) else local
+
+
+def _apply_recipient_destination(order, recipient, address):
+    if not legacy._street_destination(address):
+        raise legacy.ShippingLabelError("recipient_address_unavailable", "تعذّر جلب عنوان مستلم الطلب من سلة.")
+    updated = {**order, "_mezan_current_shipping_address": address}
+    name = recipient.get("name") or address.get("name")
+    if not name:
+        raise legacy.ShippingLabelError("recipient_address_unavailable", "تعذّر جلب بيانات مستلم الطلب من سلة.")
+    if not recipient.get("name") or not recipient.get("mobile"):
+        updated["recipient"] = {**recipient, "name": name, "mobile": recipient.get("mobile") or address.get("phone")}
+    return updated
+
+
+def _independent_recipient_order(order, saved_address, saved_path):
+    # The generic root address has no recipient role. Refresh can also copy
+    # a buyer-derived address into shipping.address or shipping_address.
+    shipping = dict(order["shipping"]) if isinstance(order.get("shipping"), dict) else {}
+    order = {**order, "shipping": shipping}
+    order.pop("address", None)
+    buyer = order.get("customer")
+    excluded = [buyer.get(k) for k in ("address", "shipping_address")] if isinstance(buyer, dict) else []
+    if not _recipient_address_path(saved_path):
+        excluded.append(saved_address)
+    for container, key in ((order, "shipping_address"), (shipping, "address")):
+        if container.get(key) in excluded:
+            container.pop(key, None)
+    return order
+
+
+def _recipient_address_path(path):
+    # Only named order-delivery or recipient containers have positive provenance.
+    parts = {part.split("[")[0] for part in path}
+    return bool(parts & {"recipient", "receiver", "consignee", "ship_to", "shipping", "shipping_address"}
+                and not parts & {"customer", "buyer", "sender", "ship_from", "shipment", "shipments"})
+
+
+async def _with_verified_destination(db, owner, number, internal_id, order, shipment=None, *, courier=None):
+    # A sparse Salla order can take the provider path when Mezan does not yet
+    # project its courier. Resolve exactly the same delivery role in this case.
+    current = {**order, "shipments": [], "shipment": None}
+    recipient = legacy.resolve_salla_recipient(current) or {}
+    if not courier or not _separate(current, recipient):
+        return await _with_order_destination(db, owner, number, internal_id, order, shipment)
+    current = _independent_recipient_order(current, None, ())
+    current = await _with_order_destination(db, owner, number, internal_id, current)
+    address = current.get("_mezan_current_shipping_address") or legacy._order_delivery_address(current)
+    if _needs_shipment_destination(address, True) or not recipient.get("name"):
+        rows = [shipment] if shipment else await _outgoing_address_rows(db, owner, internal_id)
+        incoming = _shipment_destination(rows, internal_id, number, courier, recipient)
+        address = _prefer_destination(address, incoming)
+    return _apply_recipient_destination(current, recipient, address)
+
+
+async def local_mezan_courier_label(db, owner: str, number: str, workflow: dict, shipment_rows=None) -> dict | None:
     """Generate a merchant QR from the same transaction's current order and recipient."""
     from assembly_status_policy import canonical_status
 
@@ -320,6 +466,7 @@ async def local_mezan_courier_label(db, owner: str, number: str, workflow: dict)
     source = await db.unified_orders.find_one({"user_id": owner, "order_number": number}, {
         "_id": 0, "order_status": 1, "order_status_slug": 1, "g47_salla_snapshot": 1,
         "raw_by_source.salla_direct": 1, "shipping_address_raw": 1,
+        "salla_shipment_id": 1, "salla_shipment_snapshot": 1, legacy.CURRENT_SHIPPING: 1,
         "shipping_address_source_path": 1, "salla_address_verified_at": 1, "salla_address_provider_updated_at": 1,
     }) or {}
     by_source = source.get("raw_by_source")
@@ -338,25 +485,55 @@ async def local_mezan_courier_label(db, owner: str, number: str, workflow: dict)
     if not legacy._text(raw.get("id")) or legacy._text(raw.get("reference_id")) != number:
         raise legacy.ShippingLabelError("salla_order_reference_mismatch", "تعذّر تأكيد هوية الطلب في ميزان.")
 
-    # A prior AWB, shipment address or cached print document never supplies this QR.
+    # Ignore embedded shipment history and any previously rendered document.
     order = {**raw, "shipments": [], "shipment": None}
     order.pop("_mezan_current_shipping_address", None)
+    recipient = legacy.resolve_salla_recipient(order) or {}
+    separate = _separate(order, recipient)
+    path = legacy._text(source.get("shipping_address_source_path")).split(".")
+    if separate:
+        order = _independent_recipient_order(order, source.get("shipping_address_raw"), path)
+        recipient = legacy.resolve_salla_recipient(order) or {}
     order_at = legacy.provider_time(raw.get("updated_at"))
     saved_at = legacy.provider_time(source.get("salla_address_provider_updated_at") or source.get("salla_address_verified_at"))
     newer_recipient_street = (order_at and saved_at and order_at > saved_at
                               and legacy._street_destination(legacy._order_delivery_address(order)))
-    path = legacy._text(source.get("shipping_address_source_path")).split(".")
     if (source.get("salla_address_verified_at") and not newer_recipient_street
+            and (not separate or _recipient_address_path(path))
             and not any(part in {"customer", "buyer", "sender", "ship_from"} for part in path)):
         address = source.get("shipping_address_raw")
         address = address if isinstance(address, dict) else {}
-        recipient = legacy.resolve_salla_recipient(order) or {}
         same_recipient = all(not current or not saved or legacy._text(current).casefold() == legacy._text(saved).casefold()
                              for current, saved in ((recipient.get("name"), address.get("name") or address.get("full_name")),
                                                     (recipient.get("mobile"), address.get("mobile") or address.get("phone"))))
         destination = legacy._delivery_address(address)
         if destination and same_recipient:
             order["_mezan_current_shipping_address"] = destination
+    # In gift deliveries Salla may expose only the recipient contact in the
+    # order and keep the destination exclusively in its outgoing shipment.
+    address = (order.get("_mezan_current_shipping_address") or legacy._order_delivery_address(order)
+               or legacy._order_delivery_address(recipient))
+    if (recipient or separate) and (_needs_shipment_destination(address, separate) or (separate and not recipient.get("name"))):
+        internal_id = legacy._text(raw["id"])
+        snapshot = source.get("salla_shipment_snapshot")
+        stored = {}
+        current = legacy._label_metadata(source)
+        stored_id = legacy._text(source.get("salla_shipment_id"))
+        if (not legacy._street_destination(address) and isinstance(snapshot, dict) and stored_id
+                and legacy._text(snapshot.get("id")) == stored_id
+                and legacy._text(current.get("shipment_id")) in {"", stored_id}
+                and stored_id not in {str(value) for value in current.get("superseded_shipment_ids") or []}):
+            stored = _shipment_destination([snapshot], internal_id, number, name, recipient)
+        local = _prefer_destination(address, stored)
+        if _needs_shipment_destination(local, separate) or (separate and not (recipient.get("name") or local.get("name"))):
+            if shipment_rows is None:
+                raise _RecipientShipmentNeeded(internal_id)
+            incoming = _shipment_destination(shipment_rows, internal_id, number, name, recipient)
+            local = _prefer_destination(address, incoming)
+        if separate:
+            order = _apply_recipient_destination(order, recipient, local)
+        elif local:
+            order["_mezan_current_shipping_address"] = local
     store = raw.get("store") if isinstance(raw.get("store"), dict) else {}
     if not store.get("name"):
         integration = await db.salla_integrations.find_one({"user_id": owner}, {"_id": 0, "store_name": 1}) or {}
@@ -465,7 +642,7 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, 
             elif not order_internal:
                 raise legacy._stale_label()
             document_order = await _with_verified_destination(
-                db, owner, number, internal_id, order, result if row_internal else None,
+                db, owner, number, internal_id, order, result if row_internal else None, courier=provider_carrier["name"],
             )
             return await legacy._internal_delivery_document(db, owner, number, document_order, baseline, provider_carrier)
         if (row_internal or order_internal) and (local_carrier["name"] or local_carrier["code"] not in {"", "0"}):
@@ -487,7 +664,7 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, 
         })
         if merchant_courier:
             store = await legacy._store_identity(db, owner)
-            print_order = await _with_verified_destination(db, owner, number, internal_id, order)
+            print_order = await _with_verified_destination(db, owner, number, internal_id, order, courier=carrier.get("company_name"))
             print_data = legacy._store_courier_print_data(number, print_order, {}, store)
             print_data["courier_name"] = carrier.get("company_name") or "مندوب المتجر"
             return {**observed, "ok": True, "source": "mezan", "ready": True,
@@ -500,7 +677,7 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, 
 
     if result and (row_internal if completed_only else legacy._is_store_courier(result)):
         store = await legacy._store_identity(db, owner)
-        print_order = await _with_verified_destination(db, owner, number, internal_id, order, result)
+        print_order = await _with_verified_destination(db, owner, number, internal_id, order, result, courier=result.get("courier_name"))
         print_data = legacy._store_courier_print_data(number, print_order, result, store)
         return {**observed, "ok": True, "source": "mezan", "ready": True,
                 "label_type": "store_courier", "order_status_completed": True,
