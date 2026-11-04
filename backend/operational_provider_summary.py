@@ -94,6 +94,7 @@ def _records(state, obligations, valuations):
         native = {key: Decimal(value) for key, value in fx.get("native", {}).items() if key in PLATFORMS}
         split = payment.get("split")
         methods = {}
+        pricing = {}
         if split:
             legs = defaultdict(list)
             for leg in split.get("tenders", []):
@@ -102,6 +103,7 @@ def _records(state, obligations, valuations):
             for provider, values in legs.items():
                 native.setdefault(provider, sum((Decimal(v["amount"]) for v in values), ZERO))
                 methods[provider] = values[0].get("method") if len(values) == 1 else None
+                pricing[provider] = values[0] if len(values) == 1 else {}
                 if provider == "salla" and len(values) > 1:
                     rails = {fee_rail(value.get("method")) for value in values}
                     terms = {configured_terms(settings, provider, value.get("method")) for value in values}
@@ -116,10 +118,13 @@ def _records(state, obligations, valuations):
             if paid is not None:
                 native.setdefault(provider, paid)
             methods[provider] = payment.get("payment_method")
+            pricing[provider] = payment
         for provider, paid in native.items():
             identity = "provider:" + oid + (":" + provider if split else "")
             records[identity] = {"order_id": oid, "provider": provider, "currency": source["currency"],
                                  "gross": max(paid, captured[oid, provider]), "method": methods.get(provider),
+                                 "payment": pricing.get(provider, {}), "created_at": source.get("created_at"),
+                                 "observed_at": source.get("updated_at"),
                                  "fx": fx, "unresolved_split_fees": bool(
                                      split and len(legs[provider]) != 1 and methods.get(provider) is None)}
     for identity, claim in claims.items():
@@ -166,6 +171,7 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
     records, claims = _records(state, obligations, valuations)
     allocated, actual_fees, settled_cash = _settlements(state, valuations)
     settings = state.get("engine", {}).get("provider_fee_inputs", {}).get("settings", {})
+    policies = state.get("engine", {}).get("provider_fee_inputs", {}).get("policies", [])
     groups = {}
     resolved = set()
 
@@ -199,7 +205,9 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             if projected_gross and row["gross"] < projected_gross:
                 fee = None
         if fee is None and currency == "SAR" and not row.get("unresolved_split_fees"):
-            fee = estimate_fee(settings, provider, row["gross"], method=row["method"], refunded=row["refunded"])
+            fee = estimate_fee(settings, provider, row["gross"], method=row["method"], refunded=row["refunded"],
+                policies=policies, payment=row.get("payment"), created_at=row.get("created_at"),
+                observed_at=row.get("observed_at"))
         retained_uncaptured = (claim and claim.get("direction") == "payable"
                                and Decimal(claim.get("expected", "0")) > 0 and row["gross"] == 0)
         if row["gross"] == 0 and not retained_uncaptured:

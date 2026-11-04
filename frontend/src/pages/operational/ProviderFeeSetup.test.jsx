@@ -5,7 +5,7 @@ import { useOptionalAuth } from "../../context/AuthContext";
 import * as fees from "../../services/accountingOnboarding";
 
 jest.mock("../../context/AuthContext", () => ({ useOptionalAuth: jest.fn() }));
-jest.mock("../../services/accountingOnboarding", () => ({ listOnboardingFeePolicies: jest.fn(), listOnboardingFeeCandidates: jest.fn(), createOnboardingFeePolicy: jest.fn() }));
+jest.mock("../../services/accountingOnboarding", () => ({ listOnboardingFeePolicies: jest.fn(), listOnboardingFeeCandidates: jest.fn(), createOnboardingFeePolicy: jest.fn(), updateOnboardingFeePolicy: jest.fn() }));
 let root, host;
 const input = key => host.querySelector(`[aria-label="${key}"]`);
 async function set(key, value) {
@@ -22,6 +22,7 @@ beforeEach(() => {
     fees.listOnboardingFeePolicies.mockResolvedValue({ items: [] });
     fees.listOnboardingFeeCandidates.mockResolvedValue({ items: [{ provider: "salla", payment_method: "mada", label: "مدى", percentage: "1.25", fixed_amount: "1", vat_rate: "15" }] });
     fees.createOnboardingFeePolicy.mockImplementation(async payload => ({ ...payload, id: "saved" }));
+    fees.updateOnboardingFeePolicy.mockImplementation(async (id, payload) => ({ ...payload, id, version: payload.expected_version + 1 }));
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
@@ -82,7 +83,31 @@ test("component VAT rounding is explicit while unverified event terms stay empty
     expect(fees.createOnboardingFeePolicy).toHaveBeenCalledWith(expect.objectContaining({
         plan_id: "fixture-plan",
         components: [{ id: "1", percentage: "4.5", fixed_amount: "2", vat_treatment: "exclusive",
-            vat_rate: "15", vat_rounding: "half_even", refund_fee_treatment: null,
+            vat_rate: "15", vat_rounding: "half_even", vat_basis: "rounded_fee", refund_fee_treatment: null,
             cancellation_fee_treatment: null }],
     }));
+});
+
+test("the Mezan 2 fee table paginates thirteen rows and edits with the saved version", async () => {
+    fees.listOnboardingFeePolicies.mockResolvedValue({ items: Array.from({ length: 14 }, (_, index) => ({
+        id: `policy-${index}`, version: 2, status: "active", provider: "tabby", event_type: "payout",
+        plan_id: `fixture-${index}`, percentage: "0", fixed_amount: "2", currency: "SAR",
+        vat_treatment: "exclusive", vat_rate: "15", effective_from: "2026-11-01", evidence: "fixture policy",
+        confirmed_at: "2026-11-01T00:00:00Z",
+    })) });
+    await act(async () => root.render(<ProviderFeeSetup />));
+    expect(host.querySelectorAll("tbody tr")).toHaveLength(13);
+    expect(host.querySelector("nav[aria-label='صفحات رسوم طرق الدفع']")).not.toBeNull();
+    expect(host.querySelector("tbody").textContent).toContain("رسوم التحويل");
+    await act(async () => host.querySelector("tbody button").click());
+    expect(input("نوع الرسم").value).toBe("payout");
+    expect(input("نوع الرسم").disabled).toBe(true);
+    expect(input("المنصة").disabled).toBe(true);
+    await set("الرسم الثابت الإجمالي", "3");
+    await act(async () => host.querySelector("button[type=submit]").click());
+    expect(fees.updateOnboardingFeePolicy).toHaveBeenCalledWith("policy-0", expect.objectContaining({
+        expected_version: 2, event_type: "payout", fixed_amount: "3", plan_id: "fixture-0",
+    }));
+    expect(fees.createOnboardingFeePolicy).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("حُفظت التعرفة");
 });

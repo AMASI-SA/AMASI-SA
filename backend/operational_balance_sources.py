@@ -64,7 +64,9 @@ from operational_provider_transaction_evidence import (COLLECTION as TXN_COLLECT
     load_transaction_rows, normalize_operational_payment)
 from operational_courier_transitions import COLLECTION as DELIVERY_HISTORY, load_delivery_history
 from operational_historical_shipping_fee import NATIVE_EVENTS as SHIPPING_EVENT_BLOCKERS, NATIVE_V2 as SHIPPING_V2_BLOCKERS
+from provider_fee_sources import STATEMENT_COLLECTIONS, bind_statement_plan, load_statement_plans
 ALLOWED_COLLECTIONS = ALLOWED_COLLECTIONS | {TXN_COLLECTION, DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS}
+ALLOWED_COLLECTIONS = ALLOWED_COLLECTIONS | STATEMENT_COLLECTIONS
 
 MAX_ROWS = 20000
 # Existing MZ2 daily-movement codes plus explicitly requested operational types.
@@ -855,7 +857,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     out['ad_balance_sar_basis'] = {}
     # No service with side effects is called: collection access is allowlisted.
     # The inventory catalogue is read on demand, not on each financial sync.
-    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - {TXN_COLLECTION, DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})}
+    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - STATEMENT_COLLECTIONS - {TXN_COLLECTION, DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})}
     fee_settings = await db['settings'].find({'user_id': owner}, {
         '_id': 0, 'user_id': 1, 'payment_methods': 1, 'updated_at': 1}).to_list(2)
     out['provider_fee_settings'] = {}
@@ -889,6 +891,17 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     order_numbers = {}
     raw_orders = [(r.get('raw_by_source') or {}).get('salla_direct') for r in data['unified_orders']]
     raw_orders = [r for r in raw_orders if isinstance(r, dict)]
+    from operational_payment_evidence import provider_for
+    plan_providers = {policy.get('provider') for document in data['mz2_provider_fee_policies_v2']
+        for policy in document.get('policies', []) if policy.get('status') == 'active'
+        and policy.get('event_type', 'capture') == 'capture' and policy.get('plan_id')
+        and policy.get('user_id') in (None, owner)}
+    plan_orders = [r.get('reference_id') or r.get('order_number') for r in raw_orders
+        if plan_providers.intersection(provider_for(method) for method in [
+            (r.get('payment') or {}).get('method'), r.get('payment_method'),
+            *(leg.get('payment_method') for leg in r.get('payment_methods') or [] if isinstance(leg, dict))])]
+    statement_plans = await load_statement_plans(db, owner, providers=plan_providers,
+        max_rows=MAX_ROWS, order_numbers=plan_orders) if plan_orders else {}
     from operational_delivery_evidence import conflicting_shipments
     shipment_conflicts = conflicting_shipments(data['unified_orders'], operational_state)
     delivery_history = await load_delivery_history(db, owner, data['unified_orders'], max_rows=MAX_ROWS)
@@ -1078,7 +1091,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 except (ValueError, TypeError):
                     issue(out, 'cod_collection_contract_incomplete', identity)
             if normalized_payment is not None:
-                order['payment'] = normalized_payment
+                order['payment'] = bind_statement_plan(normalized_payment, statement_plans, order_number)
             for payment_issue in payment_issues:
                 issue(out, payment_issue['code'], identity, order_number=order_number,
                       scope='provider_payment',

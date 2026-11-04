@@ -16,7 +16,11 @@ Repair acquisition of delivered courier shipments and their native delivery hist
 
 The component contract and owner form preserve an explicit VAT rounding mode. Existing components default to half-up. Capture-only policies can retain unknown refund and cancellation treatment until the corresponding executed event requires it. An evidenced card network resolves an enclosing wallet label while conflicting networks remain unresolved.
 
-The focused owner-form suite passed four tests. The schema regression passed one test. The fee implementation and its integration tests continue in the task branch. Private source documents, identifiers, pricing and comparison reports remain outside Git.
+The current owner-form suite passed five tests, including pagination and versioned edits. The schema regression passed one test. The core fee suite passed 97 tests before the newest BNPL integration layer. The shipment suite passed 263 tests. An independent replay of native shipment evidence confirmed stable event identities and source timestamps across repeated and reordered observations.
+
+The latest BNPL integration remains work in progress. Its preliminary run passed 87 tests and exposed six outdated DB stubs plus a pre-existing refund-default expectation. Independent shipment review found a later customized activity status that must invalidate a delivery promotion. That correction and the requested delivery-time DTO projection remain pending in this checkpoint.
+
+The owner expanded the scope to an editable Mezan 2 fee table, including per-event transfer and refund charges, as the source for operational balance estimates. The table and versioned update route are present. Explicit source-mode activation and event-fee integration are still pending. Private source documents, identifiers, pricing and comparison reports remain outside Git.
 
 ## Pending work
 

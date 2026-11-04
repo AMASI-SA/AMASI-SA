@@ -137,7 +137,7 @@ def _share_projection(party, legs, paid, currency, policies, first_day, last_day
         return None
     payment = {"provider": party, "currency": currency, "gross": paid,
                "payment_method": fee_rail(legs[0]["method"]) if party == "salla" else None,
-               "plan_id": legs[0].get("plan_id")}
+               "plan_id": legs[0].get("plan_id"), "fee_plan_issue": legs[0].get("fee_plan_issue")}
     try:
         result = provider_projection(payment, policies, last_day, earliest_date=first_day)
     except (KeyError, TypeError, ValueError, InvalidOperation, OverflowError):

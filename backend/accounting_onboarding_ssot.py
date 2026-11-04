@@ -56,6 +56,7 @@ class FeeComponent(Contract):
     vat_treatment: Literal["inclusive", "exclusive", "exempt", "not_applicable"]
     vat_rate: Decimal | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
     vat_rounding: Literal["half_up", "half_even"] = "half_up"
+    vat_basis: Literal["rounded_fee", "unrounded_fee"] = "rounded_fee"
     refund_fee_treatment: Literal["retain", "recalculate", "full_only"] | None = None
     cancellation_fee_treatment: Literal["retain", "recalculate"] | None = None
 
@@ -68,6 +69,7 @@ class FeeComponent(Contract):
 
 class FeePolicyCreate(Contract):
     provider: Literal["salla", "tamara", "tabby", "emkan"]
+    event_type: Literal["capture", "refund", "payout", "cancellation"] = "capture"
     percentage: Decimal = Field(ge=0, le=100, allow_inf_nan=False)
     fixed_amount: Decimal = Field(ge=0, allow_inf_nan=False)
     payment_method: str | None = Field(default=None, min_length=1, max_length=80)
@@ -103,12 +105,18 @@ class FeePolicyCreate(Contract):
         return self
 
 
+class FeePolicyUpdate(FeePolicyCreate):
+    expected_version: int = Field(ge=1)
+
+
 def _overlap(a, b):
     # Both effective boundaries are inclusive.
     return a["effective_from"] <= (b.get("effective_to") or "9999-12-31") and b["effective_from"] <= (a.get("effective_to") or "9999-12-31")
 
 
 def _conflicting_scope(left, right):
+    if left.get("event_type", "capture") != right.get("event_type", "capture"):
+        return False
     keys = ("payment_method", "plan_id")
     # Equally specific overlapping scopes (e.g. rail-only and plan-only) would
     # give the same payment two different rates. A more specific override is safe.
@@ -140,6 +148,43 @@ async def create_fee_policy(db, owner, actor_id, payload: FeePolicyCreate):
                 continue
         result = await db[POLICIES].update_one({"_id": key, "user_id": owner, "version": old["version"]},
             {"$push": {"policies": candidate, "audit": audit}, "$inc": {"version": 1}})
+        if result.modified_count == 1:
+            return candidate
+    _fail("provider_fee_policy_concurrent_update")
+
+
+async def update_fee_policy(db, owner, actor_id, policy_id, payload: FeePolicyUpdate):
+    key = _key(owner, payload.provider, payload.currency)
+    values = payload.model_dump(mode="json", exclude_none=True, exclude={"expected_version"})
+    if payload.components:
+        values["fee_model_version"] = 2
+    identity_fields = ("provider", "currency", "payment_method", "plan_id")
+    for _ in range(8):
+        old = await db[POLICIES].find_one({"_id": key, "user_id": owner})
+        policies = (old or {}).get("policies", [])
+        matches = [row for row in policies if row.get("id") == policy_id]
+        if len(matches) != 1:
+            _fail("provider_fee_policy_missing")
+        previous = matches[0]
+        if previous.get("version", 1) != payload.expected_version:
+            _fail("provider_fee_policy_version_conflict")
+        if (previous.get("status") != "active"
+                or any(previous.get(field) != values.get(field) for field in identity_fields)
+                or previous.get("event_type", "capture") != payload.event_type):
+            _fail("provider_fee_policy_scope_change")
+        candidate = {**values, "id": policy_id, "user_id": owner, "status": "active",
+                     "version": payload.expected_version + 1, "confirmed_by": actor_id, "confirmed_at": _now(),
+                     "revisions": [*previous.get("revisions", []),
+                                   {k: v for k, v in previous.items() if k != "revisions"}]}
+        if any(_overlap(row, candidate) for row in policies if row.get("id") != policy_id
+               and row.get("status") == "active" and _conflicting_scope(row, candidate)):
+            _fail("provider_fee_policy_overlap", provider=payload.provider)
+        audit = {"action": "policy_updated", "actor_id": actor_id, "at": candidate["confirmed_at"],
+                 "policy_id": policy_id, "previous_version": payload.expected_version,
+                 "version": candidate["version"]}
+        updated = [candidate if row.get("id") == policy_id else row for row in policies]
+        result = await db[POLICIES].update_one({"_id": key, "user_id": owner, "version": old["version"]},
+            {"$set": {"policies": updated}, "$push": {"audit": audit}, "$inc": {"version": 1}})
         if result.modified_count == 1:
             return candidate
     _fail("provider_fee_policy_concurrent_update")
@@ -199,6 +244,7 @@ async def resolve_fee_policy(db, owner, provider, transaction_date, currency="SA
     day = date.fromisoformat(str(transaction_date)).isoformat()
     matches = [row for row in await list_fee_policies(db, owner)
                if row.get("provider") == provider and row.get("currency") == currency
+               and row.get("event_type", "capture") == "capture"
                and not row.get("payment_method") and not row.get("plan_id")
                and row.get("status") == "active" and row["effective_from"] <= day
                and day <= (row.get("effective_to") or "9999-12-31")]

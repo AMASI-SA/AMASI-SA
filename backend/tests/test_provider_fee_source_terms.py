@@ -1,11 +1,13 @@
 """Synthetic fee contracts exercise source selection without merchant pricing."""
 from datetime import date
-from decimal import Decimal
+from copy import deepcopy
 
 import pytest
 
 from operational_fee_methods import fee_rail, order_fee_rail
 from operational_provider_fees import provider_projection
+from operational_configured_provider_fees import estimate_fee, refresh_provider_fee_inputs
+from provider_fee_sources import bind_statement_plan, statement_plan_index
 
 
 def policy(**changes):
@@ -78,3 +80,80 @@ def test_wallet_wrapper_does_not_resolve_two_conflicting_networks():
 
 def test_wallet_without_network_preserves_its_explicit_legacy_estimate_key():
     assert order_fee_rail({'payment_method': 'applepay'}) == 'apple_pay'
+
+
+def test_unrounded_tax_basis_preserves_saved_salla_per_order_rounding():
+    component = {'id': 'legacy-salla', 'percentage': '1.3', 'fixed_amount': '0.80',
+                 'vat_treatment': 'exclusive', 'vat_rate': '17', 'vat_basis': 'unrounded_fee'}
+    terms = policy(provider='salla', plan_id=None, payment_method='mada', components=[component])
+    source = payment(provider='salla', plan_id=None, payment_method='mada', gross='237.53', captures=[])
+    result = project(source, terms)
+    assert (result['estimated_fee_net'], result['estimated_fee_tax'], result['estimated_fees']) == ('3.89', '0.66', '4.55')
+    # Choose a boundary where rounding the taxable fee first changes the VAT.
+    source['gross'] = '231.98'
+    component['vat_rate'] = '19'
+    raw = project(source, terms)
+    component['vat_basis'] = 'rounded_fee'
+    rounded = project(source, terms)
+    assert raw['estimated_fee_tax'] == '0.72'
+    assert rounded['estimated_fee_tax'] == '0.73'
+
+
+def test_capture_selection_ignores_payout_rows():
+    capture = policy()
+    payout = policy(id='synthetic-payout', event_type='payout')
+    assert provider_projection(payment(), [capture, payout], date(2026, 6, 10))['policy_id'] == capture['id']
+
+
+def test_unknown_or_missing_product_never_falls_back_to_generic_rate():
+    specific, generic = policy(), policy(id='generic', plan_id=None)
+    for plan in (None, 'another-product'):
+        with pytest.raises(ValueError):
+            provider_projection(payment(plan_id=plan), [specific, generic], date(2026, 6, 10))
+
+
+def statement_fixture():
+    entry = {'id': 'entry-a', 'file_id': 'file-a', 'user_id': 'owner', 'provider': 'tabby',
+             'order_number': 'order-a', 'raw_product_type': 'synthetic-long-product'}
+    document = {'id': 'file-a', 'user_id': 'owner', 'provider': 'tabby',
+                'filename': 'example-statement.xlsx', 'file_hash': 'synthetic-content-hash'}
+    return entry, document
+
+
+def test_statement_product_requires_same_owner_provider_and_file():
+    entry, document = statement_fixture()
+    index = statement_plan_index([entry], [document], 'owner')
+    source = payment(plan_id=None)
+    before = deepcopy(source)
+    bound = bind_statement_plan(source, index, 'order-a')
+    assert bound['plan_id'] == 'synthetic-long-product'
+    assert bound['plan_evidence']['entry_ids'] == ['entry-a']
+    assert source == before
+    for changed in ({'user_id': 'other'}, {'provider': 'tamara'}, {'file_hash': ''},
+                    {'filename': 'SYN-P01-test.xlsx'}):
+        assert statement_plan_index([entry], [{**document, **changed}], 'owner') == {}
+
+
+def test_conflicting_statement_product_keeps_paid_amount_and_blocks_pricing():
+    entry, document = statement_fixture()
+    index = statement_plan_index([entry, {**entry, 'id': 'entry-b', 'raw_product_type': 'other-product'}],
+                                 [document], 'owner')
+    bound = bind_statement_plan(payment(), index, 'order-a')
+    assert bound['gross'] == '40.00'
+    assert bound['fee_plan_issue'] == 'provider_payment_plan_conflict'
+    with pytest.raises(ValueError, match='provider_payment_plan_conflict'):
+        project(bound)
+
+
+def test_operational_estimate_uses_saved_product_policy_before_legacy_flat_rate():
+    settings = {'payment_methods': [{'name': 'تابي', 'commission_percent': '3', 'fixed_fee': '8', 'vat_percent': '5'}]}
+    kwargs = {'policies': [policy()], 'payment': payment(), 'created_at': '2026-06-10T12:00:00Z'}
+    assert str(estimate_fee(settings, 'tabby', '40.00', **kwargs)) == '2.92'
+    kwargs['payment'] = payment(plan_id=None)
+    assert estimate_fee(settings, 'tabby', '40.00', **kwargs) is None
+
+
+def test_operational_inputs_retain_active_policies_for_the_balance_report():
+    state = {'engine': {}}
+    refresh_provider_fee_inputs(state, {'orders': [], 'provider_fee_settings': {}, 'fee_policies': [policy()]})
+    assert state['engine']['provider_fee_inputs']['policies'] == [policy()]

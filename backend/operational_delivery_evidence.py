@@ -252,9 +252,10 @@ def _shipment_time(raw, current, shipment, waybill, *, include_nested=True, orde
         if any(value != waybill for value in references if value is not None):
             _fail("shipment_waybill_conflict")
         delivered_waybill |= waybill in references and status in DELIVERED
-        if row.get("delivered_at") is not None:
-            timestamps.append(_instant(row["delivered_at"]))
-            dated_waybill = dated_waybill or waybill in references
+        for key in ("delivered_at", "actual_delivered_at"):
+            if row.get(key) is not None:
+                timestamps.append(_instant(row[key]))
+                dated_waybill = dated_waybill or waybill in references
     if not timestamps and order_transition is not None:
         # Order status has no shipment ID. Only the sole original, delivered
         # waybill can inherit that transition. Never pick one of several legs.
@@ -274,6 +275,8 @@ def _shipment_time(raw, current, shipment, waybill, *, include_nested=True, orde
         _fail("timestamp_missing")
     if len(set(timestamps)) != 1:
         _fail("timestamp_ambiguous")
+    if any(_instant(row["created_at"]) > timestamps[0] for row in selected if row.get("created_at") is not None):
+        _fail("timestamp_before_shipment")
     return timestamps[0], False
 
 
@@ -366,14 +369,35 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
     current, shipment, waybill = _current_shipping(raw, source)
     if ("shipment", shipment) in shipment_conflicts or ("waybill", waybill) in shipment_conflicts:
         _fail("shipment_shared_by_orders")
-    from operational_courier_transitions import order_delivery_time
-    at, from_order = _shipment_time(raw, current, shipment, waybill,
-        order_transition=lambda: order_delivery_time(raw, source, history, end))
+    from operational_courier_transitions import CARRIER_HISTORY, WEBHOOK_PROOF, order_delivery_time
+    provenance = {}
+    evidence_raw = raw
+    observation = current.get(WEBHOOK_PROOF) or {}
+    if observation.get("source") == CARRIER_HISTORY:
+        # The separately fetched shipment is newer than an order-only payload.
+        # Its complete native history and binding are checked before use.
+        order_delivery_time(raw, source, history, end, provenance=provenance)
+        native_shipment = observation.get("shipment")
+        if (not isinstance(native_shipment, dict) or _text(native_shipment.get("order_id")) != order_id
+                or _text(native_shipment.get("id")) != shipment
+                or native_shipment.get("order_reference_id") is not None
+                and _text(native_shipment["order_reference_id"]) != number):
+            _fail("order_waybill_unproven")
+        evidence_raw = {**raw, "shipping": {}, "shipment": None, "shipments": [native_shipment]}
+    at, from_order = _shipment_time(evidence_raw, current, shipment, waybill,
+        order_transition=lambda: order_delivery_time(raw, source, history, end, provenance=provenance))
+    if provenance and _instant(provenance["at"]) != at:
+        _fail("timestamp_ambiguous")
     delivered = _window(at, created, start, end)
     if delivered is None:
         return None
     if from_order:
         base["timestamp_source"] = "order_status_transition"
+    if provenance:
+        event = provenance["event"]
+        base.update(timestamp_source="salla_carrier_history", source_history_id=event["history_id"],
+                    source_actor_id=event["actor"]["id"], source_actor_name=event["actor"]["name"],
+                    source_native_type=event["native_type"], source_dispatch_history_id=provenance["dispatch"]["history_id"])
     party, carrier_key = _courier(setup, owner, current)
     identity = sha256(json.dumps([order_id, shipment], ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
     return {**base, "id": "courier-delivery:" + identity, "delivered_at": delivered.isoformat(),

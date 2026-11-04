@@ -1,15 +1,18 @@
 """Read-only fee estimates using the owner's saved legacy payment-method terms."""
 from copy import deepcopy
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, ROUND_HALF_UP
 
 from bnpl.settlements_service import _capture_fee_components
 from excel_parser import normalize_name, resolve_payment_setting
 from operational_fee_methods import fee_rail
+from operational_provider_fees import provider_projection
 from payment_methods import KNOWN_PAYMENT_SUB_KEYS, normalize_payment_method
 
 CENT = Decimal(".01")
 ZERO = Decimal(0)
 PROVIDERS = {"salla", "tamara", "tabby", "emkan"}
+RIYADH = timezone(timedelta(hours=3))
 
 
 def number(value):
@@ -26,8 +29,8 @@ def cash(value):
     return value.quantize(CENT, rounding=ROUND_HALF_UP)
 
 
-def configured_terms(settings, provider, method=None):
-    """Use the legacy row precedence, retaining strict validation of saved values."""
+def configured_payment_setting(settings, provider, method=None):
+    """Use the same exact-name and canonical precedence as the settings export."""
     key = fee_rail(method) if provider == "salla" else provider
     if key is None:
         return None
@@ -40,7 +43,12 @@ def configured_terms(settings, provider, method=None):
         if subkey in KNOWN_PAYMENT_SUB_KEYS:
             canonical_rows.setdefault(subkey, row)
     lookup = method if provider == "salla" and isinstance(method, str) else key
-    row = resolve_payment_setting(lookup, exact_rows, canonical_rows)
+    return resolve_payment_setting(lookup, exact_rows, canonical_rows)
+
+
+def configured_terms(settings, provider, method=None):
+    """Validate every term of the selected row before using its saved values."""
+    row = configured_payment_setting(settings, provider, method)
     if row is None:
         return None
     values = [number(row.get(k)) for k in ("commission_percent", "fixed_fee", "vat_percent")]
@@ -52,11 +60,65 @@ def configured_terms(settings, provider, method=None):
     return rate / 100, fixed, vat / 100
 
 
-def estimate_fee(settings, provider, gross, *, method=None, refunded=ZERO):
+def has_capture_policies(policies, provider, currency="SAR"):
+    return any(row.get('provider') == provider and row.get('currency') == currency
+               and row.get('status') == 'active' and row.get('event_type', 'capture') == 'capture'
+               for row in policies)
+
+
+def _policy_day(value):
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    text = str(value or '')
+    if len(text) == 10:
+        return date.fromisoformat(text)
+    stamp = value if isinstance(value, datetime) else datetime.fromisoformat(text.replace('Z', '+00:00'))
+    if stamp.tzinfo is None:
+        raise ValueError('provider_fee_transaction_date_required')
+    return stamp.astimezone(RIYADH).date()
+
+
+def configured_projection(policies, provider, gross, *, currency="SAR", method=None,
+                          refunded=ZERO, payment=None, created_at=None, observed_at=None):
+    """Price a known amount with the existing policy engine, without posting facts."""
+    if not has_capture_policies(policies, provider, currency):
+        return None
+    source = payment or {}
+    captures = source.get('captures') or []
+    try:
+        dates = [_policy_day(row['captured_at']) for row in captures]
+        if not dates:
+            dates = [_policy_day(created_at)]
+            if observed_at:
+                dates.append(_policy_day(observed_at))
+    except (ValueError, TypeError, KeyError):
+        raise ValueError('provider_fee_transaction_date_required') from None
+    calculation = {
+        'provider': provider, 'currency': currency, 'gross': str(gross),
+        'payment_method': fee_rail(method) if provider == 'salla' else None,
+        'plan_id': source.get('plan_id'), 'fee_plan_issue': source.get('fee_plan_issue'),
+        # This aggregate is a read-only pricing input, never a persisted refund event.
+        'refunds': [{'id': 'priced-refund-total', 'amount': str(refunded), 'status': 'executed'}]
+                   if number(refunded) else [],
+    }
+    return provider_projection(calculation, policies, max(dates), earliest_date=min(dates))
+
+
+def estimate_fee(settings, provider, gross, *, method=None, refunded=ZERO, policies=(),
+                 payment=None, created_at=None, observed_at=None):
     """Apply the existing per-order rounding contract to evidenced SAR payments."""
     gross, refunded = number(gross), number(refunded)
+    if gross is None or refunded is None or refunded > gross:
+        return None
+    try:
+        projection = configured_projection(policies, provider, gross, method=method, refunded=refunded,
+            payment=payment, created_at=created_at, observed_at=observed_at)
+    except (ValueError, TypeError, KeyError, InvalidOperation):
+        return None
+    if projection is not None:
+        return number(projection['estimated_fees'])
     terms = configured_terms(settings, provider, method)
-    if gross is None or refunded is None or refunded > gross or terms is None:
+    if terms is None:
         return None
     if gross == 0:
         return ZERO
@@ -100,4 +162,5 @@ def refresh_provider_fee_inputs(state, sources):
             "currency", "created_at", "updated_at", "payment", "customer_payment_sar") if k in order}
     state["engine"]["provider_fee_inputs"] = {
         "settings": deepcopy(sources["provider_fee_settings"]), "orders": orders,
+        "policies": deepcopy(sources.get("fee_policies", [])),
     }

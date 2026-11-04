@@ -53,6 +53,14 @@ async def tick(db):
                         await acquire_bank(db, item["owner_id"], bank_issues)
                     except Exception:
                         log.warning("Salla bank identity acquisition deferred")
+                from salla_integration.courier_delivery_sync import ISSUE_CODES, acquire_missing as acquire_courier
+                courier_issues = [issue for issue in refreshed.get("engine", {}).get("issues", [])
+                                  if issue.get("code") in ISSUE_CODES]
+                if courier_issues:
+                    try:
+                        await acquire_courier(db, item["owner_id"], courier_issues, started_at=refreshed["started_at"])
+                    except Exception:
+                        log.warning("Salla courier delivery evidence acquisition deferred")
 
 
 async def run(db, interval=30):
