@@ -66,8 +66,29 @@ KWD. The regression failed before implementation. Independent review also
 identified and reproduced the actual courier delivery rejection and the
 open-partial to delivered-complete duplicate estimate; both were then repaired.
 
-Fresh final local verification: **332 passed, 3 skipped, 1 deselected**, exit 0.
-This includes 27 shipping-currency cases and the neighboring source, reducer,
+The initial source checkpoint `3b14b1b1ba0ecc3b8672efe8e92a59a00ae7e934`
+passed 332 local cases. Independent review then reproduced missed SAR pooled
+payouts, an incorrectly labelled native-overlap candidate, a post-start
+historical approval borrowing the sale currency, and rejection of a legacy
+SAR return contract. The additive correction keeps this first checkpoint
+in history.
+
+A current courier fee is checked against payouts and known payable openings
+in its own currency. Fee holds keep independently validated delivery and COD
+custody evidence. The nonposting review row and the one-order historical
+approval candidate take their amount and currency from the same fee source.
+The historical approval surface remains limited to SAR fees; pre-start
+admission and native driver restrictions remain unchanged. A replay confirms
+the approved fee once in SAR and does not create a cash movement.
+
+The existing SAR-only customer return path accepts historical domestic rates
+that omitted currency, but rejects an explicit foreign rate or confirmed base
+fee. The only adapters allowed to supply this legacy SAR default are the
+already SAR-scoped return and open-cost readers. Current general-purpose
+shipping quotes continue to require an explicit contract currency.
+
+Fresh final local verification: **342 passed, 3 skipped, 1 deselected**, exit 0.
+This includes 37 shipping-currency cases and the neighboring source, reducer,
 delivery, tariff, verified-fee, open-cost, completeness, and financial-position
 contracts. `git diff --check` passed, exit 0.
 

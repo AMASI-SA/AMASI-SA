@@ -1060,7 +1060,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                                          delivery_event=event)
                 if hold_prior_courier_event(operational_state, event, order.get('carrier')):
                     courier_issue(out, 'courier_fee_historical_review_required', raw, source,
-                                 candidate=(order.get('carrier') or {}).get('cost'), event=event)
+                                 carrier=order.get('carrier'), event=event)
                 else:
                     out['delivery_events'].append(order)
                 continue
@@ -1201,9 +1201,14 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, cod, delivery_event=event)
                 if hold_prior_courier_event(operational_state, event, order.get('carrier')):
                     courier_issue(out, 'courier_fee_historical_review_required', raw, source,
-                                 candidate=(order.get('carrier') or {}).get('cost'), event=event)
-                    order.pop('carrier', None)
-                elif event and order.get('carrier'):
+                                 carrier=order.get('carrier'), event=event)
+                    # Hold only this courier payable. A current verified
+                    # delivery can still establish the customer's COD custody.
+                    carrier = order.get('carrier')
+                    if carrier:
+                        carrier.update(cost=None, fee_complete=False)
+                        carrier.pop('fee_components', None)
+                if event and order.get('carrier'):
                     order['delivery_event'] = event
             out['orders'].append(order)
         except (ValueError, TypeError, KeyError, InvalidOperation) as exc:

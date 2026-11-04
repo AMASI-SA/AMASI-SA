@@ -17,7 +17,7 @@ def initial():
 
 
 def foreign_order_sources(*, cod=False, rate_kind="simple", fixed="0", percent="1", bounded=False,
-                          delivered=False, operational_state=None):
+                          delivered=False, operational_state=None, historical_fee_order=None):
     data = shipping_data(rich_rate() if rate_kind == "rich" else None,
                          currency="KWD", total={"amount": "100", "currency": "KWD"},
                          payment={"method": "cod" if cod else "mada"}, paid_amount="0",
@@ -35,7 +35,8 @@ def foreign_order_sources(*, cod=False, rate_kind="simple", fixed="0", percent="
     elif rate_kind == "rich":
         rate["contract_version"].update(shipping_cost="15", shipping_cost_vat_inclusive=False,
             commission_vat_inclusive=False, cod_fee_tiers=[tier])
-    return run(collect_sources(HardBoundaryDB(data), "owner", START, NOW, operational_state=operational_state))
+    return run(collect_sources(HardBoundaryDB(data), "owner", START, NOW,
+                               operational_state=operational_state, historical_fee_order=historical_fee_order))
 
 
 def test_foreign_sale_uses_sar_shipping_contract_currency_and_keeps_sale_currency():
@@ -297,3 +298,103 @@ def test_new_delivery_freezes_contract_currency_and_keeps_foreign_cod_separate()
     assert rechecked["engine"]["facts"] == result["engine"]["facts"]
     assert rechecked["engine"]["obligations"] == result["engine"]["obligations"]
     assert any(row["code"] == "shipping_confirmed_currency_conflict" for row in rechecked["engine"]["issues"])
+
+
+@pytest.mark.parametrize("paid_currency,opening_currency,held", [
+    ("SAR", None, True), ("SAR", "KWD", True), ("KWD", None, False), ("SAR", "SAR", False)])
+def test_mixed_currency_payout_guard_checks_the_fee_and_its_payables(paid_currency, opening_currency, held):
+    prior = initial()
+    allocations = []
+    if opening_currency:
+        prior["openings"]["old"] = dict(id="old", party_type="courier", party_id="carrier",
+            currency=opening_currency, direction="for_party", name="Carrier", amount="10.00")
+        allocations = [{"obligation_id": "old", "amount": "10.00"}]
+    prior["movements"] = [dict(id="paid", party_type="courier", party_id="carrier", kind="payment",
+        currency=paid_currency, direction="outgoing", amount="10.00", allocations=allocations)]
+    sources = foreign_order_sources(cod=True, percent="0", delivered=True, operational_state=prior)
+    result = reconcile(prior, sources, NOW)
+    obs = result["engine"]["obligations"]
+    if held:
+        assert "shipping:100:base_shipping" not in obs
+        candidate = next(i["courier_fee_review"] for i in sources["issues"]
+                         if i["code"] == "courier_fee_historical_review_required")
+        assert (candidate["candidate_amount"], candidate["currency"]) == ("17.25", "SAR")
+    else:
+        assert (obs["shipping:100:base_shipping"]["confirmed"], obs["shipping:100:base_shipping"]["currency"]) == ("17.25", "SAR")
+    assert (obs["cod:100"]["confirmed"], obs["cod:100"]["currency"]) == ("100.00", "KWD")
+    assert result["engine"]["facts"]["delivery_event:100"]["currency"] == "KWD"
+    assert result["movements"] == prior["movements"] and result["openings"] == prior["openings"]
+
+
+def test_native_courier_overlap_shows_sar_fee_for_foreign_customer_and_preserves_cod(monkeypatch):
+    from operational_financial_position import build_financial_position
+    async def native_postings(db, owner, candidates, *, max_rows):
+        assert owner == "owner" and [p["order_number"] for p in candidates] == ["10"]
+        return {"10": "Existing native courier fee"}
+    monkeypatch.setattr("operational_historical_shipping_fee.native_conflicts", native_postings)
+    sources = foreign_order_sources(cod=True, percent="0", delivered=True)
+    result = reconcile(initial(), sources, NOW)
+    info = next(i["courier_fee_review"] for i in sources["issues"] if i["code"] == "courier_fee_native_overlap")
+    assert (info["candidate_amount"], info["currency"]) == ("17.25", "SAR")
+    table = next(t for t in build_financial_position(result)["currencies"]["SAR"]["tables"] if t["id"] == "courier_fee_review")
+    assert table["rows"][0]["samples"] == "10"
+    obs = result["engine"]["obligations"]
+    assert "shipping:100:base_shipping" not in obs and obs["cod:100"]["currency"] == "KWD"
+
+
+def test_poststart_historical_fee_preview_and_approved_replay_keep_contract_currency():
+    from operational_balance_store import digest
+    from operational_historical_shipping_fee import APPROVALS, review
+    prior = initial()
+    sources = foreign_order_sources(delivered=True, historical_fee_order="10")
+    candidate, = sources["historical_fee_candidates"]
+    assert (candidate["amount"], candidate["currency"]) == ("17.25", "SAR")
+    assert sources["orders"][0]["delivery_event"]["currency"] == "KWD"
+    openings, payouts, issues = review(prior, candidate)
+    assert not issues
+    prior[APPROVALS] = {digest("10"): {"candidate": candidate, "approved_by": "owner",
+        "opening_payout_hash": digest([openings, payouts])}}
+    reread = foreign_order_sources(delivered=True, operational_state=prior)
+    result = reconcile(prior, reread, NOW)
+    row = result["engine"]["obligations"][candidate["obligation_id"]]
+    assert (row["confirmed"], row["currency"]) == ("17.25", "SAR")
+    assert "historical_base_fee:100" in result["engine"]["facts"]
+    assert result["movements"] == [] and reconcile(result, reread, NOW) == result
+
+
+@pytest.mark.parametrize("rate_currency,fact_currency,expected", [
+    ("legacy", None, "28.75"), ("KWD", None, None),
+    ("legacy", "legacy", "23.00"), ("legacy", "KWD", None)])
+def test_sar_return_quote_accepts_legacy_domestic_evidence_and_rejects_explicit_foreign_amount(
+        monkeypatch, rate_currency, fact_currency, expected):
+    import operational_customer_returns as returns
+    from fastapi import HTTPException
+    setup = shipping_data()["mz2_shipping_setup_v2"][0]
+    rate = setup["contracts"][0]
+    rate.update(delivery_fee="25", vat_included=False)
+    if rate_currency == "legacy":
+        rate.pop("currency")
+    else:
+        rate["currency"] = rate_currency
+    facts = {}
+    if fact_currency:
+        facts = {"shipping:100": {"id": "carrier", "party_type": "courier"},
+                 "shipping:100:base_shipping": {"cost": "23.00"}}
+        if fact_currency != "legacy":
+            facts["shipping:100:base_shipping"]["currency"] = fact_currency
+
+    def reply(value):
+        async def read_only(*args):
+            return value
+        return read_only
+    monkeypatch.setattr(returns, "entity", reply({"name": "Carrier"}))
+    monkeypatch.setattr(returns, "order_view", reply({"id": "100", "currency": "SAR", "shipping_at": NOW}))
+    monkeypatch.setattr(returns, "read", reply({"engine": {"facts": facts}}))
+    monkeypatch.setattr(returns, "rows", reply([setup]))
+    quote = returns.shipping_quote(None, "owner", "courier", "carrier", NOW, "10")
+    if expected is None:
+        with pytest.raises(HTTPException) as err:
+            run(quote)
+        assert err.value.detail["code"] == "customer_return_shipping_incomplete"
+    else:
+        assert run(quote)["amount"] == expected

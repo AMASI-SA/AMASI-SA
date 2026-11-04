@@ -110,10 +110,18 @@ async def shipping_quote(db, owner, kind, identity, at, order_number):
     if kind == 'store_driver':
         return {'kind': kind, 'id': identity, 'name': party['name'], 'amount': '0.00'}
     order = await order_view(db, owner, order_number)
-    facts = (await read(db, owner)).get('engine', {}).get('facts', {})
+    engine = (await read(db, owner)).get('engine', {})
+    facts = engine.get('facts', {})
     original = facts.get('shipping:' + order['id'], {})
-    component = facts.get('shipping:' + order['id'] + ':base_shipping')
+    key = 'shipping:' + order['id'] + ':base_shipping'
+    component = facts.get(key)
     if original.get('id') == identity and original.get('party_type') == 'courier' and component is not None:
+        # Returns currently accept SAR orders only. Legacy snapshots predate
+        # explicit fee currency; never relabel an explicitly foreign charge.
+        obligation = engine.get('obligations', {}).get(key, {})
+        if any(row.get(field, 'SAR') != 'SAR' for row, field in
+               ((component, 'currency'), (original, 'fee_currency'), (obligation, 'currency'))):
+            fail('customer_return_shipping_incomplete', 'عملة أجرة الشحن الأصلية لا تطابق عملة الاسترجاع')
         return {'kind': kind, 'id': identity, 'name': party['name'], 'amount': fmt(money(component['cost'], zero=True)),
                 'order_id': order['id'], 'source': 'confirmed_original_shipping'}
     # Reconstruct the original base service price only from dated MZ2 evidence.
@@ -129,8 +137,11 @@ async def shipping_quote(db, owner, kind, identity, at, order_number):
              and instant(r['effective_from']) <= instant(at) and (not r.get('effective_to') or instant(at) < instant(r['effective_to']))]
     if len(rates) != 1:
         fail('customer_return_shipping_incomplete', 'لا يوجد عقد شحن واحد معتمد وساري')
+    rate = rates[0]
+    if rate.get('currency', 'SAR') != 'SAR':
+        fail('customer_return_shipping_incomplete', 'عملة عقد الشحن لا تطابق عملة الاسترجاع')
     try:
-        quote = shipping_charge(rates[0], owner, identity, instant(at), None, setups[0])
+        quote = shipping_charge({**rate, 'currency': 'SAR'}, owner, identity, instant(at), None, setups[0])
         base = next(p for p in quote['fee_components'] if p['id'] == 'base_shipping' and p['complete'])
     except (ValueError, KeyError, StopIteration):
         fail('customer_return_shipping_incomplete', 'تكلفة الشحن المعتمدة غير مكتملة')
