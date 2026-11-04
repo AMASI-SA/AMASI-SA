@@ -2,6 +2,7 @@
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, ROUND_HALF_UP
+from zoneinfo import ZoneInfo
 
 from bnpl.settlements_service import _capture_fee_components
 from excel_parser import normalize_name, resolve_payment_setting
@@ -67,6 +68,11 @@ def has_capture_policies(policies, provider, currency="SAR"):
 
 
 def _policy_day(value):
+    if isinstance(value, dict):
+        stamp = datetime.fromisoformat(str(value.get('date') or '').replace('Z', '+00:00'))
+        if stamp.tzinfo is None and value.get('timezone'):
+            stamp = stamp.replace(tzinfo=ZoneInfo(value['timezone']))
+        value = stamp
     if isinstance(value, date) and not isinstance(value, datetime):
         return value
     text = str(value or '')
@@ -79,9 +85,12 @@ def _policy_day(value):
 
 
 def configured_projection(policies, provider, gross, *, currency="SAR", method=None,
-                          refunded=ZERO, payment=None, created_at=None, observed_at=None):
+                          refunded=ZERO, refunds=None, payment=None, created_at=None, observed_at=None,
+                          source_mode="legacy_settings", as_of=None):
     """Price a known amount with the existing policy engine, without posting facts."""
     if not has_capture_policies(policies, provider, currency):
+        if source_mode == 'mz2_policies':
+            raise ValueError('provider_fee_policy_incomplete_or_ambiguous')
         return None
     source = payment or {}
     captures = source.get('captures') or []
@@ -97,22 +106,25 @@ def configured_projection(policies, provider, gross, *, currency="SAR", method=N
         'provider': provider, 'currency': currency, 'gross': str(gross),
         'payment_method': fee_rail(method) if provider == 'salla' else None,
         'plan_id': source.get('plan_id'), 'fee_plan_issue': source.get('fee_plan_issue'),
-        # This aggregate is a read-only pricing input, never a persisted refund event.
-        'refunds': [{'id': 'priced-refund-total', 'amount': str(refunded), 'status': 'executed'}]
-                   if number(refunded) else [],
+        'refunds': refunds if refunds is not None else source.get('refunds', []),
     }
-    return provider_projection(calculation, policies, max(dates), earliest_date=min(dates))
+    result = provider_projection(calculation, policies, max(dates), earliest_date=min(dates),
+                                 as_of_date=_policy_day(as_of or observed_at) if as_of or observed_at else None)
+    if number(result['refunded']) != number(refunded):
+        raise ValueError('provider_refund_fee_source_incomplete')
+    return result
 
 
 def estimate_fee(settings, provider, gross, *, method=None, refunded=ZERO, policies=(),
-                 payment=None, created_at=None, observed_at=None):
+                 refunds=None, payment=None, created_at=None, observed_at=None, source_mode="legacy_settings", as_of=None):
     """Apply the existing per-order rounding contract to evidenced SAR payments."""
     gross, refunded = number(gross), number(refunded)
     if gross is None or refunded is None or refunded > gross:
         return None
     try:
         projection = configured_projection(policies, provider, gross, method=method, refunded=refunded,
-            payment=payment, created_at=created_at, observed_at=observed_at)
+            refunds=refunds, payment=payment, created_at=created_at, observed_at=observed_at,
+            source_mode=source_mode, as_of=as_of)
     except (ValueError, TypeError, KeyError, InvalidOperation):
         return None
     if projection is not None:
@@ -163,4 +175,5 @@ def refresh_provider_fee_inputs(state, sources):
     state["engine"]["provider_fee_inputs"] = {
         "settings": deepcopy(sources["provider_fee_settings"]), "orders": orders,
         "policies": deepcopy(sources.get("fee_policies", [])),
+        "source_mode": sources.get("provider_fee_source_mode", "legacy_settings"),
     }

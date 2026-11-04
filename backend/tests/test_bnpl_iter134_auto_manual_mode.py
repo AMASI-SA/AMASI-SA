@@ -60,6 +60,7 @@ class _DB:
     def __init__(self):
         self.bnpl_settings = _Coll()
         self.users = _Coll()
+        self.settings = _Coll()
 
 
 @pytest_asyncio.fixture

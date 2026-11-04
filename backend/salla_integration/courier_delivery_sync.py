@@ -68,6 +68,8 @@ def verified_delivery(source, shipments, histories, owner, now):
             or _status(shipment.get("status")) not in DELIVERED
             or _text(shipment.get("id")) != current.get("shipment_id")):
         raise ValueError("courier_native_shipment_mismatch")
+    if any(row.get("order_id") is not None and _text(row["order_id"]) != identity for row in histories):
+        raise ValueError("courier_native_history_order_mismatch")
     events = [proof for row in histories if (proof := native_status_transition(row, identity)) is not None]
     activity = [row for row in events if row.get("source") == "salla_carrier_activity"]
     transition = carrier_activity_transition(activity, current, identity)
@@ -78,6 +80,8 @@ def verified_delivery(source, shipments, histories, owner, now):
     version = _instant(source["g47_salla_snapshot"]["source_updated_at"])
     created = _instant(raw.get("date") or raw.get("created_at") or raw.get("order_date"))
     shipment_created = _instant(shipment.get("created_at"))
+    if shipment.get("updated_at") is not None and _instant(shipment["updated_at"]) > now:
+        raise ValueError("courier_native_clock_in_future")
     if not created <= shipment_created <= _instant(transition["dispatch"]["at"]) < at <= version <= now:
         raise ValueError("courier_native_timeline_conflict")
     incoming = extract_shipping(shipment, event_name="shipment.snapshot", event_time=at)
@@ -127,7 +131,8 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
         try:
             status = raw.get("status")
             effective = status.get("customized") or status if isinstance(status, dict) else status
-            version = _instant(raw.get("updated_at") or (raw.get("date") or {}).get("updated") or raw.get("date_updated"))
+            date = raw.get("date") if isinstance(raw.get("date"), dict) else {}
+            version = _instant(raw.get("updated_at") or date.get("updated") or raw.get("date_updated"))
             if (source.get("user_id") != owner or not identity or not number
                     or _text(raw.get("reference_id") or raw.get("order_number")) != number
                     or any(source.get(key) is not None and _text(source[key]) != identity for key in ("order_id", "salla_order_id"))

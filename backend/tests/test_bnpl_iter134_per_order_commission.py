@@ -22,6 +22,7 @@ invoice for 4 → 10 May 2026:
                                                             within ±0.10
 """
 import pytest
+from provider_fee_test_helpers import legacy_fee_mode
 
 
 class _Cursor:
@@ -75,6 +76,7 @@ class _DB:
     def __init__(self, transactions, refunds):
         self.payment_transactions = _Coll(transactions)
         self.payment_refunds      = _Coll(refunds)
+        self.settlement_files     = _Coll([])
 
     async def find_one(self, *_a, **_kw):
         return None
@@ -206,7 +208,7 @@ def test_settlement_fee_vat_disabled_returns_zero():
 
 
 @pytest.mark.asyncio
-async def test_compute_provider_settlement_uses_per_order_math(monkeypatch):
+async def test_compute_provider_settlement_uses_per_order_math(monkeypatch, legacy_fee_mode):
     """Run the actual `compute_provider_settlement` against an in-memory
     DB and prove that the totals dict includes the new
     `settlement_fee_vat` line AND that commission is computed per-order

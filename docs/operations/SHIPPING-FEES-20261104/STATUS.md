@@ -16,18 +16,19 @@ Repair acquisition of delivered courier shipments and their native delivery hist
 
 The component contract and owner form preserve an explicit VAT rounding mode. Existing components default to half-up. Capture-only policies can retain unknown refund and cancellation treatment until the corresponding executed event requires it. An evidenced card network resolves an enclosing wallet label while conflicting networks remain unresolved.
 
-The current owner-form suite passed five tests, including pagination and versioned edits. The schema regression passed one test. The core fee suite passed 97 tests before the newest BNPL integration layer. The shipment suite passed 263 tests. An independent replay of native shipment evidence confirmed stable event identities and source timestamps across repeated and reordered observations.
+The fee-table API suite passed eleven tests against isolated Mongo, covering versioned edits, concurrency, scope restrictions, source activation, preview and financial-state fingerprints. The owner form has thirteen-row pagination, editing and revision history. Its component metadata roundtrip and event-preview display are undergoing final focused verification.
 
-The latest BNPL integration remains work in progress. Its preliminary run passed 87 tests and exposed six outdated DB stubs plus a pre-existing refund-default expectation. Independent shipment review found a later customized activity status that must invalidate a delivery promotion. That correction and the requested delivery-time DTO projection remain pending in this checkpoint.
+Shipment acquisition and delivery-recording DTO work passed 355 backend tests with Mongo and eleven frontend tests. Two additional clock regressions passed in a final 143-test pure slice. Independent replay confirmed source identities, timezone semantics and repeat-run stability, including forty rejected ambiguous or contradictory observations. The combined final Mongo run is pending.
 
-The owner expanded the scope to an editable Mezan 2 fee table, including per-event transfer and refund charges, as the source for operational balance estimates. The table and versioned update route are present. Explicit source-mode activation and event-fee integration are still pending. Private source documents, identifiers, pricing and comparison reports remain outside Git.
+The owner expanded the scope to an editable Mezan 2 fee table, including per-event transfer and refund charges, as the source for operational balance estimates. Explicit source-mode activation is implemented. Provider estimates and affected readers use the same saved policies, with actual statement fees taking precedence. Final integration of additional executed-refund charges and cumulative refund rounding is in progress. Transfer fees use the actual recorded settlement amount, because historical movement defaults cannot distinguish an omitted fee from an explicit zero.
+
+Independent arithmetic replay passed all supplied authentic BNPL events and the separately retrieved stored settlement rows. The source review identified unavailable current installment-plan evidence, incomplete provider pricing evidence and a rejected provider authentication probe. Operational adoption dates and these coverage gaps require explicit disclosure in the completion report. Private analysis records preserve the source provenance and arithmetic comparisons.
 
 ## Pending work
 
-- Finish source-scoped product mapping and reuse of saved fee policies across affected estimates.
-- Finish shipment acquisition and carrier-event validation, including replay and identity fences.
+- Finish executed-refund event fees, cumulative refund rounding and the component-edit roundtrip.
 - Run independent source replay, integration and regression tests.
 - Review all source changes, complete CI, freeze the v5 A/B contract and use the authorized release workflow.
 - Save supported merchant fee policies through the owner UI and verify live reconciliation and repeat-run stability.
 
-This checkpoint is work in progress. Production has not changed for this task. The next safe step is to finish the assigned implementation slices in this checkout and run their focused tests before release preparation.
+This checkpoint is work in progress. Production release and owner fee configuration are pending. The next step is to finish the assigned implementation slices in this checkout and run the combined regression suite before release preparation.

@@ -3,7 +3,8 @@ from datetime import date
 from fastapi import Depends
 from accounting_onboarding_domains import ExternalPersonIn, create_external_person
 from accounting_onboarding_ssot import (
-    FeePolicyCreate, FeePolicyUpdate, PrepaidSelection, TypedFactCreate, create_fee_policy, update_fee_policy,
+    FeePolicyCreate, FeePolicyUpdate, FeePolicyPreview, FeeSourceMode, PrepaidSelection, TypedFactCreate,
+    create_fee_policy, update_fee_policy, get_fee_source_mode, save_fee_source_mode, preview_fee_policy,
     list_fee_candidates, list_fee_policies, list_prepaid_candidates, save_prepaid_selection,
     create_typed_fact, list_typed_facts,
 )
@@ -18,7 +19,17 @@ def install_setup_contract_routes(router, raw, current_user, actor_for, base):
     @router.get(base + "/fee-policies")
     async def policies(user: dict = Depends(current_user)):
         _, owner = await actor_for(user)
-        return {"items": await list_fee_policies(raw, owner)}
+        return {"items": await list_fee_policies(raw, owner), "source_mode": await get_fee_source_mode(raw, owner)}
+
+    @router.put(base + "/fee-source-mode")
+    async def fee_source(payload: FeeSourceMode, user: dict = Depends(current_user)):
+        actor, owner = await actor_for(user, "drafts_manage")
+        return await save_fee_source_mode(raw, owner, actor["id"], payload)
+
+    @router.post(base + "/fee-policies/{policy_id}/preview")
+    async def fee_preview(policy_id: str, payload: FeePolicyPreview, user: dict = Depends(current_user)):
+        _, owner = await actor_for(user, "drafts_manage")
+        return await preview_fee_policy(raw, owner, policy_id, payload)
 
     @router.get(base + "/fee-policy-candidates")
     async def fee_candidates(user: dict = Depends(current_user)):

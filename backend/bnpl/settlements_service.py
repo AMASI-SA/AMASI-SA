@@ -454,12 +454,13 @@ async def _merchant_fee_rates(
 
 async def _configured_provider_fee_totals(db, user_id, provider, sales_match, refund_match):
     """Estimate each source transaction with the owner's MZ2 product policy."""
-    from accounting_onboarding_ssot import list_fee_policies
+    from accounting_onboarding_ssot import get_fee_source_mode, list_fee_policies
     from operational_configured_provider_fees import configured_projection, has_capture_policies
     from provider_fee_sources import bind_statement_plan, load_statement_plans
 
     policies = await list_fee_policies(db, user_id)
-    if not has_capture_policies(policies, provider):
+    source_mode = await get_fee_source_mode(db, user_id)
+    if source_mode != 'mz2_policies' and not has_capture_policies(policies, provider):
         return None
     fields = {'_id': 0, 'amount': 1, 'currency': 1, 'provider_id': 1, 'order_number': 1,
               'order_reference_id': 1, 'plan_id': 1, 'created_at_provider': 1,
@@ -494,13 +495,15 @@ async def _configured_provider_fee_totals(db, user_id, provider, sales_match, re
     errors = set()
     fee = tax = Decimal('0')
 
-    def price(row, refunded=Decimal('0')):
+    def price(row, refund=None):
         source = bind_statement_plan({'provider': provider, 'plan_id': row.get('plan_id')}, plans,
                                      row.get('order_number') or row.get('order_reference_id'))
         if row.get('currency', 'SAR') != 'SAR':
             raise ValueError('provider_fee_currency_conversion_required')
         result = configured_projection(policies, provider, row.get('amount'), payment=source,
-            created_at=row.get('created_at_provider'), refunded=refunded)
+            created_at=row.get('created_at_provider'), source_mode=source_mode,
+            refunded=refund['amount'] if refund else Decimal('0'),
+            refunds=[{'id': refund['provider_refund_id'], 'amount': refund['amount'], 'status': 'executed'}] if refund else [])
         if result is None or result.get('estimated_fee_net') is None or result.get('estimated_fee_tax') is None:
             raise ValueError('fee_tax_policy_incomplete')
         return Decimal(result['estimated_fee_net']), Decimal(result['estimated_fee_tax'])
@@ -513,6 +516,7 @@ async def _configured_provider_fee_totals(db, user_id, provider, sales_match, re
         except (ValueError, KeyError, TypeError, ArithmeticError) as exc:
             errors.add(str(exc) if isinstance(exc, ValueError) else 'provider_fee_source_incomplete')
     seen_refunds = {}
+    refunded_principal = {}
     for refund in refunds:
         try:
             identity = refund.get('provider_refund_id')
@@ -526,14 +530,18 @@ async def _configured_provider_fee_totals(db, user_id, provider, sales_match, re
                     raise ValueError('provider_refund_identity_conflict')
                 continue
             seen_refunds[identity] = signature
+            reference = refund['provider_payment_id']
+            refunded_principal[reference] = refunded_principal.get(reference, Decimal('0')) + value
+            if refunded_principal[reference] > Decimal(str(original['amount'])):
+                raise ValueError('provider_refund_exceeds_capture')
             capture_fee, capture_tax = price(original)
-            remaining_fee, remaining_tax = price(original, value)
+            remaining_fee, remaining_tax = price(original, refund)
             fee -= capture_fee - remaining_fee
             tax -= capture_tax - remaining_tax
         except (ValueError, KeyError, TypeError, ArithmeticError) as exc:
             errors.add(str(exc) if isinstance(exc, ValueError) else 'provider_refund_fee_source_incomplete')
     return {'commission': float(fee), 'commission_vat': float(tax),
-            'fees_complete': not errors, 'fee_review_reasons': sorted(errors)}
+            'fees_complete': not errors, 'fee_review_reasons': sorted(errors), 'fee_source_mode': source_mode}
 
 
 async def _compute_provider_totals(
@@ -1413,6 +1421,12 @@ async def compute_settlement_for_provider(
     settlement_fee_vat = (
         _r(settlement_fee * vat_rate) if settlement_fee_vat_applicable else 0.0
     )
+    if configured is not None and configured.get('fee_source_mode') == 'mz2_policies':
+        # Calendar dates do not prove that a chargeable transfer happened.
+        # The covered official statement below supplies actual payout fees.
+        settlement_fee = settlement_fee_vat = 0.0
+        settlement_invoices_count = 0
+        fee_rates['settlement_fee_source'] = 'actual_provider_events'
 
     net_payable = _r(
         totals["net_sales"] - commission - commission_vat
@@ -1727,8 +1741,8 @@ async def compute_weekly_settlements(
                 )
             else:
                 this_invoice_transfer = float(b.get("transferred_amount", 0) or 0)
-            net_payable_val = float(t.get("net_payable", 0) or 0)
-            row_remaining = round(net_payable_val - this_invoice_transfer, 2)
+            net_payable_val = t.get('net_payable')
+            row_remaining = round(float(net_payable_val) - this_invoice_transfer, 2) if net_payable_val is not None else None
             rows.append({
                 "invoice_no": invoice_no,
                 "from": period_start.isoformat(),
@@ -1749,6 +1763,8 @@ async def compute_weekly_settlements(
                 "settlement_fee": t.get("settlement_fee", 0),
                 "settlement_fee_vat": t.get("settlement_fee_vat", 0),
                 "net_payable": t.get("net_payable", 0),
+                "fees_complete": s.get('fees_complete', True),
+                "fee_review_reasons": s.get('fee_review_reasons', []),
                 "transferred_amount": _r(this_invoice_transfer),
                 "remaining_with_provider": row_remaining,
                 # Iter-147 v3 — per-row data source so UI can show
@@ -1789,6 +1805,8 @@ async def compute_weekly_settlements(
             "settlement_fee": t.get("settlement_fee", 0),
             "settlement_fee_vat": t.get("settlement_fee_vat", 0),
             "net_payable": t.get("net_payable", 0),
+            "fees_complete": s.get('fees_complete', True),
+            "fee_review_reasons": s.get('fee_review_reasons', []),
             "transferred_amount": b.get("transferred_amount", 0),
             "remaining_with_provider": b.get("remaining_with_provider", 0),
         })
@@ -1827,14 +1845,18 @@ async def compute_all_settlements(
         for k in ("gross_sales", "total_refunds", "net_sales",
                   "commission", "commission_vat", "settlement_fee",
                   "settlement_fee_vat", "net_payable"):
-            totals[k] += t.get(k, 0)
+            value = t.get(k, 0)
+            totals[k] = None if totals[k] is None or value is None else totals[k] + value
         totals["transferred_amount"] += b.get("transferred_amount", 0)
-        totals["remaining_with_provider"] += b.get("remaining_with_provider", 0)
+        remaining = b.get('remaining_with_provider', 0)
+        totals['remaining_with_provider'] = (None if totals['remaining_with_provider'] is None or remaining is None
+                                             else totals['remaining_with_provider'] + remaining)
     for k in totals:
-        totals[k] = _r(totals[k])
+        totals[k] = _r(totals[k]) if totals[k] is not None else None
 
     return {
         "providers": providers_out,
+        "fees_complete": all(row.get('fees_complete', True) for row in providers_out),
         "totals": totals,
         "period": {"from": date_from, "to": date_to},
         "computed_at": datetime.now(timezone.utc).isoformat(),

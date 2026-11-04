@@ -1,11 +1,15 @@
 """Owner-confirmed native fees from the settings preview through operational recognition."""
+import asyncio
 from datetime import date
 
 import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from accounting_onboarding_ssot import FeePolicyCreate, create_fee_policy, list_fee_candidates, list_fee_policies
+from accounting_onboarding_ssot import (
+    FeePolicyCreate, FeePolicyUpdate, create_fee_policy, list_fee_candidates,
+    list_fee_policies, update_fee_policy,
+)
 from operational_balance_engine import reconcile
 from operational_payment_evidence import normalize_payment
 from operational_provider_fees import provider_projection
@@ -193,3 +197,69 @@ def test_refund_uses_rail_on_original_approved_payment_snapshot():
     legacy_snapshot = {k: v for k,v in original.items() if k != "payment_method"}
     historical = with_recorded_refund(original, legacy_snapshot, "one", "10")
     assert "payment_method" not in historical
+
+
+@pytest.mark.asyncio
+async def test_fee_table_edits_preserve_history_scope_and_metadata_only(api):
+    config = dict(provider="tabby", percentage="2", fixed_amount="1", vat_rate="15",
+                  vat_treatment="exclusive", currency="SAR", effective_from="2026-11-01",
+                  evidence="synthetic merchant contract")
+    capture = await request(api, "POST", "/fee-policies", config)
+    payout = await request(api, "POST", "/fee-policies", {**config, "event_type": "payout"})
+    assert capture["event_type"] == "capture" and payout["event_type"] == "payout"
+    before = await fingerprint(api, exclude=("mz2_provider_fee_policies_v2",))
+    edit = {**config, "fixed_amount": "3", "expected_version": 1}
+    path = f"/fee-policies/{capture['id']}"
+    await request(api, "PUT", path, edit, user="viewer", status=403)
+    updated = await request(api, "PUT", path, edit)
+    assert updated["version"] == 2 and updated["fixed_amount"] == "3"
+    assert updated["revisions"] == [capture]
+    stale = await request(api, "PUT", path, edit, status=409)
+    assert stale["detail"]["code"] == "provider_fee_policy_version_conflict"
+    changed_scope = await request(api, "PUT", path,
+        {**edit, "expected_version": 2, "event_type": "refund"}, status=409)
+    assert changed_scope["detail"]["code"] == "provider_fee_policy_scope_change"
+    saved_rows = (await request(api, "GET", "/fee-policies"))["items"]
+    assert next(row for row in saved_rows if row["id"] == payout["id"]) == payout
+    assert await fingerprint(api, exclude=("mz2_provider_fee_policies_v2",)) == before
+
+
+@pytest.mark.asyncio
+async def test_concurrent_fee_table_edits_have_one_winner_and_keep_the_prior_version(api):
+    config = dict(provider="tamara", percentage="3", fixed_amount="1", vat_rate="15",
+                  vat_treatment="exclusive", currency="SAR", effective_from="2026-11-01",
+                  evidence="synthetic concurrent contract")
+    created = await request(api, "POST", "/fee-policies", config)
+    edits = [FeePolicyUpdate(**config, expected_version=1),
+             FeePolicyUpdate(**{**config, "fixed_amount": "2"}, expected_version=1)]
+    results = await asyncio.gather(*(update_fee_policy(api.db, OWNER, "full", created["id"], edit)
+                                    for edit in edits), return_exceptions=True)
+    assert sum(isinstance(row, dict) for row in results) == 1
+    assert all(isinstance(row, dict) or isinstance(row, HTTPException)
+               and row.detail["code"] == "provider_fee_policy_version_conflict" for row in results)
+    stored = (await request(api, "GET", "/fee-policies"))["items"][0]
+    assert stored["version"] == 2 and stored["revisions"] == [created]
+
+
+@pytest.mark.asyncio
+async def test_fee_source_activation_and_event_preview_are_scoped_metadata(api):
+    assert (await request(api, "GET", "/fee-policies"))["source_mode"] == "legacy_settings"
+    await request(api, "PUT", "/fee-source-mode", {"mode": "mz2_policies"}, status=409)
+    config = dict(provider="tabby", event_type="payout", percentage="0", fixed_amount="2", vat_rate="15",
+                  vat_treatment="exclusive", currency="SAR", effective_from="2026-11-01",
+                  evidence="synthetic payout contract")
+    policy = await request(api, "POST", "/fee-policies", config)
+    before = await fingerprint(api, exclude=())
+    preview = await request(api, "POST", f"/fee-policies/{policy['id']}/preview",
+                            {"amount": "100.00", "transaction_date": "2026-11-02"})
+    assert preview["preview"] is True and preview["event_type"] == "payout"
+    assert preview["fee_total"] == "2.30" and preview["net_amount"] == "97.70"
+    assert await fingerprint(api, exclude=()) == before
+    await request(api, "PUT", "/fee-source-mode", {"mode": "mz2_policies"}, user="viewer", status=403)
+    financial_before = await fingerprint(api, exclude=("mz2_provider_fee_policies_v2",))
+    await request(api, "PUT", "/fee-source-mode", {"mode": "mz2_policies"})
+    first = await fingerprint(api, exclude=())
+    await request(api, "PUT", "/fee-source-mode", {"mode": "mz2_policies"})
+    assert await fingerprint(api, exclude=()) == first
+    assert (await request(api, "GET", "/fee-policies"))["source_mode"] == "mz2_policies"
+    assert await fingerprint(api, exclude=("mz2_provider_fee_policies_v2",)) == financial_before

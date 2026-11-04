@@ -91,6 +91,8 @@ def test_native_activity_recovers_current_delivery_and_fee_once_with_provenance(
     "later-return", "duplicate-delivery", "shipment-after-dispatch", "shipment-after-delivery",
     "event-after-source", "naive-event", "updated-only", "superseded", "different-direct-time",
     "different-native-time", "two-direct-times", "dispatch-missing", "wrong-history-order", "another-actor-return",
+    "custom-return", "custom-cancel", "return-note", "custom-delivery",
+    "future-shipment-clock", "naive-shipment-clock",
 ])
 def test_unproven_native_source_cannot_become_a_delivery(fault):
     _, source, shipment, histories = fixture()
@@ -121,6 +123,15 @@ def test_unproven_native_source_cannot_become_a_delivery(fault):
     elif fault == "dispatch-missing": histories.pop()
     elif fault == "wrong-history-order": event["order_id"] = "another-order"
     elif fault == "another-actor-return": histories.append({**deepcopy(event), "id": "return", "status": "returned", "note": "returned", "created_at": NOW, "created_by": {"id": "merchant", "name": "Merchant"}})
+    elif fault in {"custom-return", "custom-cancel", "return-note"}:
+        later = {**deepcopy(event), "id": "later", "status": "returned", "note": "returned", "created_at": NOW}
+        if fault == "custom-return": later["customized"] = {"id": 1, "slug": "returned", "name": "مرتجع"}
+        elif fault == "custom-cancel": later["customized"] = {"id": 2, "slug": "cancelled", "name": "ملغي"}
+        else: later["note"] = "The carrier returned this shipment"
+        histories.append(later)
+    elif fault == "custom-delivery": event["customized"] = {"slug": "delivered", "name": "تم التوصيل"}
+    elif fault == "future-shipment-clock": shipment["updated_at"] = "2026-10-08T00:00:00+00:00"
+    elif fault == "naive-shipment-clock": shipment["updated_at"] = "2026-10-06 15:00:00"
     original = deepcopy(source)
     with pytest.raises(ValueError):
         accept(source, shipment, histories)
@@ -341,3 +352,38 @@ def test_concurrent_acquisition_is_bounded_owner_scoped_and_has_no_financial_eff
                 assert saved["g47_salla_snapshot"] == original["g47_salla_snapshot"]
                 assert saved[CURRENT_SHIPPING]["status"] == "delivered"
     run(scenario)
+
+
+@pytest.mark.parametrize("fault", [None, "owner", "waybill", "native-order", "source-version", "pending", "reopened"])
+def test_order_dto_projects_the_bound_salla_recording_time_with_its_source(fault):
+    from order_engine.mapper import map_salla_order
+    from order_engine.repository import MongoOrderRepository
+    from test_order_engine_repository import FakeDB
+
+    _, source, shipment, histories = fixture()
+    accept(source, shipment, histories)
+    source["order_date"] = "2026-10-01"
+    current = source[CURRENT_SHIPPING]
+    proof = current[WEBHOOK_PROOF]
+    if fault == "owner": proof["owner"] = "other"
+    elif fault == "waybill": source["tracking_number"] = "another-waybill"
+    elif fault == "native-order": proof["shipment"]["order_id"] = "another-order"
+    elif fault == "source-version": source["g47_salla_snapshot"]["source_updated_at"] = START
+    elif fault == "pending": source["g47_salla_snapshot"]["requires_authoritative_refresh"] = True
+    elif fault == "reopened": source["order_status_slug"] = "returned"
+    original = deepcopy(source)
+    db = FakeDB([source])
+    loaded = asyncio.run(MongoOrderRepository(db).get_salla_order(user_id="owner", order_number="10"))
+    dto = map_salla_order(loaded.salla_raw)
+    if fault is None:
+        assert dto.shipping.status == "delivered"
+        assert dto.shipping.delivery_recorded_at == datetime.fromisoformat(DELIVERED)
+        assert dto.shipping.delivery_time_source == "salla_carrier_history"
+        assert dto.shipping.delivery_history_id == "delivered-100"
+    else:
+        assert dto.shipping.delivery_recorded_at is None
+        assert dto.shipping.delivery_time_source is None
+        assert dto.shipping.delivery_history_id is None
+    assert dto.shipping.delivered_at is None
+    assert source == original and db.unified_orders.write_calls == 0
+    assert db.unified_orders.last_projection["user_id"] == 1

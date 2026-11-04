@@ -31,14 +31,22 @@ def native_status_transition(row, provider_id):
         # User comments have a current-status label too, but are not transitions.
         status, note = _status(row.get("status")), _status(row.get("note"))
         actor = row.get("created_by")
-        if (row.get("type") != "activity" or not status or status != note
-                or row.get("customized") or not isinstance(actor, dict)
-                or not _text(actor.get("id")) or not isinstance(actor.get("name"), str) or not _text(actor.get("name"))):
+        if row.get("type") != "activity" or not status:
             return None
         try:
             at = _instant(row.get("created_at")).isoformat()
         except ValueError:
             at = None
+        if (status != note or row.get("customized") or not isinstance(actor, dict)
+                or not _text(actor.get("id")) or not isinstance(actor.get("name"), str) or not _text(actor.get("name"))):
+            # A later native non-delivered observation still conflicts with a
+            # proposed delivery. It cannot establish a delivery or dispatch.
+            observed = _state(row.get("customized") or row.get("status"))
+            if observed is True:
+                return None
+            if row.get("order_id") is not None and _text(row["order_id"]) != provider_id:
+                observed = None
+            return {"delivered": observed, "at": at, "source": "salla_activity_status_observation"}
         return {"delivered": status in DELIVERED, "at": at, "source": "salla_carrier_activity",
                 "history_id": _text(row.get("id") or row.get("history_id")), "native_type": "activity",
                 "status": status, "created_at": row.get("created_at"),
@@ -141,7 +149,7 @@ def order_delivery_time(raw, source, history, end, *, provenance=None):
     date = raw.get("date") if isinstance(raw.get("date"), dict) else {}
     version = raw.get("updated_at") or date.get("updated") or raw.get("date_updated")
     watermark = source.get("g47_salla_snapshot") or {}
-    if watermark.get("cancelled") or watermark.get("component_pending") or (
+    if watermark.get("cancelled") or watermark.get("component_pending") or watermark.get("requires_authoritative_refresh") or (
             watermark.get("source_updated_at") is not None and
             _instant(watermark["source_updated_at"]) != _instant(version)):
         _fail("canonical_source_stale")
@@ -202,6 +210,19 @@ def order_delivery_time(raw, source, history, end, *, provenance=None):
     if version is not None and not at <= _instant(version) <= end:
         _fail("canonical_source_stale")
     return at
+
+
+def carrier_history_snapshot(raw, current):
+    """Read the separately acquired shipment only for its bound native order."""
+    observation = current.get(WEBHOOK_PROOF) or {}
+    shipment = observation.get("shipment")
+    order_id, number = _text(raw.get("id")), _text(raw.get("reference_id") or raw.get("order_number"))
+    if (observation.get("source") != CARRIER_HISTORY or not isinstance(shipment, dict)
+            or _text(shipment.get("order_id")) != order_id
+            or _text(shipment.get("id")) != current.get("shipment_id")
+            or shipment.get("order_reference_id") is not None and _text(shipment["order_reference_id"]) != number):
+        _fail("order_waybill_unproven")
+    return {**raw, "shipping": {}, "shipment": None, "shipments": [shipment]}
 
 
 async def load_delivery_history(db, owner, sources, *, max_rows):

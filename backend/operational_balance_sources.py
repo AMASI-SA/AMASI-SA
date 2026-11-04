@@ -861,6 +861,10 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     fee_settings = await db['settings'].find({'user_id': owner}, {
         '_id': 0, 'user_id': 1, 'payment_methods': 1, 'updated_at': 1}).to_list(2)
     out['provider_fee_settings'] = {}
+    modes = {row.get('fee_source_mode') for row in data['mz2_provider_fee_policies_v2'] if row.get('fee_source_mode')}
+    out['provider_fee_source_mode'] = 'mz2_policies' if 'mz2_policies' in modes else 'legacy_settings'
+    if len(modes) > 1:
+        issue(out, 'provider_fee_source_mode_ambiguous')
     if len(fee_settings) == 1 and fee_settings[0].get('user_id') == owner:
         out['provider_fee_settings'] = {key: fee_settings[0].get(key) for key in ('payment_methods', 'updated_at')}
     elif fee_settings:
@@ -896,10 +900,14 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
         for policy in document.get('policies', []) if policy.get('status') == 'active'
         and policy.get('event_type', 'capture') == 'capture' and policy.get('plan_id')
         and policy.get('user_id') in (None, owner)}
-    plan_orders = [r.get('reference_id') or r.get('order_number') for r in raw_orders
-        if plan_providers.intersection(provider_for(method) for method in [
-            (r.get('payment') or {}).get('method'), r.get('payment_method'),
-            *(leg.get('payment_method') for leg in r.get('payment_methods') or [] if isinstance(leg, dict))])]
+    plan_orders = []
+    for raw in raw_orders:
+        payment = raw.get('payment') if isinstance(raw.get('payment'), dict) else {}
+        methods = [payment.get('method'), raw.get('payment_method')]
+        if isinstance(raw.get('payment_methods'), list):
+            methods.extend(leg.get('payment_method') for leg in raw['payment_methods'] if isinstance(leg, dict))
+        if plan_providers.intersection(provider_for(method) for method in methods):
+            plan_orders.append(raw.get('reference_id') or raw.get('order_number'))
     statement_plans = await load_statement_plans(db, owner, providers=plan_providers,
         max_rows=MAX_ROWS, order_numbers=plan_orders) if plan_orders else {}
     from operational_delivery_evidence import conflicting_shipments

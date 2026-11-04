@@ -369,7 +369,7 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
     current, shipment, waybill = _current_shipping(raw, source)
     if ("shipment", shipment) in shipment_conflicts or ("waybill", waybill) in shipment_conflicts:
         _fail("shipment_shared_by_orders")
-    from operational_courier_transitions import CARRIER_HISTORY, WEBHOOK_PROOF, order_delivery_time
+    from operational_courier_transitions import CARRIER_HISTORY, WEBHOOK_PROOF, carrier_history_snapshot, order_delivery_time
     provenance = {}
     evidence_raw = raw
     observation = current.get(WEBHOOK_PROOF) or {}
@@ -377,13 +377,7 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
         # The separately fetched shipment is newer than an order-only payload.
         # Its complete native history and binding are checked before use.
         order_delivery_time(raw, source, history, end, provenance=provenance)
-        native_shipment = observation.get("shipment")
-        if (not isinstance(native_shipment, dict) or _text(native_shipment.get("order_id")) != order_id
-                or _text(native_shipment.get("id")) != shipment
-                or native_shipment.get("order_reference_id") is not None
-                and _text(native_shipment["order_reference_id"]) != number):
-            _fail("order_waybill_unproven")
-        evidence_raw = {**raw, "shipping": {}, "shipment": None, "shipments": [native_shipment]}
+        evidence_raw = carrier_history_snapshot(raw, current)
     at, from_order = _shipment_time(evidence_raw, current, shipment, waybill,
         order_transition=lambda: order_delivery_time(raw, source, history, end, provenance=provenance))
     if provenance and _instant(provenance["at"]) != at:

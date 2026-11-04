@@ -109,6 +109,15 @@ class FeePolicyUpdate(FeePolicyCreate):
     expected_version: int = Field(ge=1)
 
 
+class FeeSourceMode(Contract):
+    mode: Literal["legacy_settings", "mz2_policies"]
+
+
+class FeePolicyPreview(Contract):
+    amount: Decimal = Field(gt=0, le=999999999999, decimal_places=2, allow_inf_nan=False)
+    transaction_date: date
+
+
 def _overlap(a, b):
     # Both effective boundaries are inclusive.
     return a["effective_from"] <= (b.get("effective_to") or "9999-12-31") and b["effective_from"] <= (a.get("effective_to") or "9999-12-31")
@@ -195,6 +204,51 @@ async def list_fee_policies(db, owner):
     if len(rows) > 1000:
         _fail("provider_fee_policy_scope_too_large")
     return [policy for row in rows for policy in row.get("policies", [])]
+
+
+async def get_fee_source_mode(db, owner):
+    row = await db[POLICIES].find_one({"_id": _key(owner, "fee_source_mode"), "user_id": owner})
+    mode = (row or {}).get("fee_source_mode", "legacy_settings")
+    if mode not in {"legacy_settings", "mz2_policies"}:
+        _fail("provider_fee_source_mode_invalid")
+    return mode
+
+
+async def save_fee_source_mode(db, owner, actor_id, payload: FeeSourceMode):
+    if payload.mode == "mz2_policies" and not any(row.get("status") == "active" for row in await list_fee_policies(db, owner)):
+        _fail("provider_fee_policy_missing")
+    key = _key(owner, "fee_source_mode")
+    for _ in range(8):
+        old = await db[POLICIES].find_one({"_id": key, "user_id": owner})
+        previous = (old or {}).get("fee_source_mode", "legacy_settings")
+        if old and previous == payload.mode:
+            return {"source_mode": payload.mode}
+        audit = {"action": "fee_source_changed", "actor_id": actor_id, "at": _now(),
+                 "previous_mode": previous, "mode": payload.mode}
+        if old is None:
+            try:
+                await db[POLICIES].insert_one({"_id": key, "user_id": owner,
+                    "fee_source_mode": payload.mode, "version": 1, "audit": [audit]})
+                return {"source_mode": payload.mode}
+            except DuplicateKeyError:
+                continue
+        result = await db[POLICIES].update_one({"_id": key, "user_id": owner, "version": old["version"]},
+            {"$set": {"fee_source_mode": payload.mode}, "$push": {"audit": audit}, "$inc": {"version": 1}})
+        if result.modified_count == 1:
+            return {"source_mode": payload.mode}
+    _fail("provider_fee_policy_concurrent_update")
+
+
+async def preview_fee_policy(db, owner, policy_id, payload: FeePolicyPreview):
+    from operational_provider_fees import fee_policy_preview
+    matches = [row for row in await list_fee_policies(db, owner) if row.get("id") == policy_id
+               and row.get("user_id") == owner]
+    if len(matches) != 1:
+        _fail("provider_fee_policy_missing")
+    try:
+        return fee_policy_preview(matches[0], payload.amount, payload.transaction_date)
+    except ValueError as exc:
+        _fail(str(exc))
 
 
 async def list_fee_candidates(db, owner, *, include_conflicts=False):

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import openpyxl
 import pytest
+from provider_fee_test_helpers import legacy_fee_mode
 
 from bnpl import settlements_service as settlements
 from bnpl.config_store import (
@@ -230,7 +231,7 @@ async def test_tabby_legacy_cycle_and_fee_defaults_migrate_safely():
 
 
 @pytest.mark.asyncio
-async def test_gateway_metrics_keep_tabby_nonrefundable_fee_on_refund(monkeypatch):
+async def test_gateway_metrics_keep_tabby_nonrefundable_fee_on_refund(monkeypatch, legacy_fee_mode):
     class AsyncRows:
         def __init__(self, rows):
             self.rows = iter(rows)

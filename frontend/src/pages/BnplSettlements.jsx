@@ -29,7 +29,7 @@ const errMsg = (e, fb) =>
     || fb;
 
 const fmt = (n) =>
-    (Number(n) || 0).toLocaleString("en-US", {
+    n == null ? "غير متاح" : (Number(n) || 0).toLocaleString("en-US", {
         minimumFractionDigits: 2, maximumFractionDigits: 2,
     });
 const fmtInt = (n) => (Number(n) || 0).toLocaleString("en-US");
@@ -62,6 +62,7 @@ function ProviderCard({ data, onShowWeekly }) {
     const t = data.totals || {};
     const b = data.bank || {};
     const fees = data.fee_rates || {};
+    const usesPolicyTable = fees.fee_source === "mz2_provider_fee_policies";
     const delta = b.delta_overpayment || 0;
 
     const tone =
@@ -91,13 +92,18 @@ function ProviderCard({ data, onShowWeekly }) {
                         📅 عرض الفواتير الأسبوعية
                     </button>
                     <div className="text-xs text-slate-600 bg-white px-2 py-1 rounded-lg border border-slate-200">
-                        عمولة: <span className="font-bold num">{fmt(fees.commission_pct)}%</span>
-                        {" · "} VAT: <span className="font-bold num">{fmt(fees.vat_pct)}%</span>
+                        {usesPolicyTable ? (data.data_source === "provider_official_file" ? "رسوم الكشف الفعلية" : "رسوم جدول ميزان2") : <>
+                            عمولة <span className="font-bold num">{fmt(fees.commission_pct)}%</span>
+                            {" · "} VAT <span className="font-bold num">{fmt(fees.vat_pct)}%</span>
+                        </>}
                     </div>
                 </div>
             </div>
 
             {/* Settlement breakdown */}
+            {data.fees_complete === false && <p className="mb-3 text-sm text-amber-800" role="status">
+                بيانات رسوم بعض العمليات غير مكتملة. يلزم تحديد سياسة الرسوم وخطة الدفع من المصدر.
+            </p>}
             <div className="bg-white rounded-xl border border-slate-200 p-4 mb-3">
                 <div className="text-xs font-bold text-slate-500 mb-1 flex items-center gap-1">
                     <Calculator size={14} weight="duotone" /> حساب التسوية
@@ -110,21 +116,23 @@ function ProviderCard({ data, onShowWeekly }) {
                         <span>
                             عمولة المزوّد
                             <span className="text-[10px] text-slate-400 ms-1">
-                                ({fmt(fees.commission_pct)}% + {fmt(fees.fixed_fee_per_order || 0)} ر.س لكل طلب × {fmtInt(t.transactions_count)})
+                                {usesPolicyTable ? "بحسب طريقة الدفع والخطة" : <>
+                                    ({fmt(fees.commission_pct)}% + {fmt(fees.fixed_fee_per_order || 0)} ر.س لكل طلب × {fmtInt(t.transactions_count)})
+                                </>}
                             </span>
                         </span>
                     }
                     value={`(${fmt(t.commission)})`}
                     tone="rose"
                 />
-                <Row label={`ضريبة العمولة (${fmt(fees.vat_pct)}%)`} value={`(${fmt(t.commission_vat)})`} tone="rose" />
+                <Row label={usesPolicyTable ? "ضريبة العمولة" : `ضريبة العمولة (${fmt(fees.vat_pct)}%)`} value={`(${fmt(t.commission_vat)})`} tone="rose" />
                 <Row
                     label={
                         <span>
                             رسوم التسوية{" "}
-                            <span className="text-[10px] text-slate-400">
+                            {!usesPolicyTable && <span className="text-[10px] text-slate-400">
                                 ({fmt(t.settlement_fee_per_invoice)} ر.س × {fmtInt(t.settlement_invoices_count)} فاتورة)
-                            </span>
+                            </span>}
                         </span>
                     }
                     value={`(${fmt(t.settlement_fee)})`}
@@ -389,10 +397,11 @@ export default function BnplSettlements() {
                             <div className="rounded-xl border border-slate-300 bg-white p-3">
                                 <div className="text-[10px] font-bold text-slate-500 uppercase">عمولات + ضريبة + رسوم تسوية</div>
                                 <div className="text-xl font-extrabold text-slate-900 num">
-                                    {fmt(
+                                    {data.fees_complete === false ? "غير متاح" : fmt(
                                         (data.totals?.commission || 0)
                                         + (data.totals?.commission_vat || 0)
-                                        + (data.totals?.settlement_fee || 0),
+                                        + (data.totals?.settlement_fee || 0)
+                                        + (data.totals?.settlement_fee_vat || 0),
                                     )}
                                 </div>
                                 <div className="text-[10px] text-slate-400">ر.س</div>

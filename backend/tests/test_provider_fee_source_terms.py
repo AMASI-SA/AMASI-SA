@@ -5,7 +5,7 @@ from copy import deepcopy
 import pytest
 
 from operational_fee_methods import fee_rail, order_fee_rail
-from operational_provider_fees import provider_projection
+from operational_provider_fees import fee_policy_preview, provider_projection
 from operational_configured_provider_fees import estimate_fee, refresh_provider_fee_inputs
 from provider_fee_sources import bind_statement_plan, statement_plan_index
 
@@ -157,3 +157,40 @@ def test_operational_inputs_retain_active_policies_for_the_balance_report():
     state = {'engine': {}}
     refresh_provider_fee_inputs(state, {'orders': [], 'provider_fee_settings': {}, 'fee_policies': [policy()]})
     assert state['engine']['provider_fee_inputs']['policies'] == [policy()]
+
+
+def test_central_mode_does_not_fall_back_when_the_provider_has_no_policy():
+    settings = {'payment_methods': [{'name': 'تابي', 'commission_percent': '3', 'fixed_fee': '8', 'vat_percent': '5'}]}
+    assert estimate_fee(settings, 'tabby', '40.00', source_mode='mz2_policies') is None
+
+
+def test_refund_vat_rounds_per_unique_event_with_an_original_fee_cap():
+    component = {'id': 'refundable', 'percentage': '5', 'fixed_amount': '0',
+                 'vat_treatment': 'exclusive', 'vat_rate': '17', 'vat_rounding': 'half_even',
+                 'refund_fee_treatment': 'recalculate'}
+    terms = policy(components=[component])
+    refunds = [{'id': 'refund-a', 'amount': '10.00', 'status': 'executed'},
+               {'id': 'refund-b', 'amount': '10.00', 'status': 'executed'}]
+    result = project(payment(refunds=refunds), terms)
+    assert result['refunded_fee_net'] == '1.00'
+    assert result['refunded_fee_tax'] == '0.16'
+    assert result == project(payment(refunds=[*refunds, refunds[0]]), terms)
+    full = project(payment(refunds=[*refunds, {'id': 'refund-c', 'amount': '20.00', 'status': 'settled'}]), terms)
+    assert (full['estimated_fee_net'], full['estimated_fee_tax'], full['estimated_fees']) == ('0.00', '0.00', '0.00')
+
+
+def test_policy_estimate_requires_refund_identities_for_refundable_components():
+    terms = policy()
+    terms['components'][0]['refund_fee_treatment'] = 'recalculate'
+    assert estimate_fee({}, 'tabby', '40.00', refunded='10.00', policies=[terms], payment=payment()) is None
+
+
+@pytest.mark.parametrize('event', ['capture', 'refund', 'payout', 'cancellation'])
+def test_saved_policy_preview_is_calculation_only_for_each_event_type(event):
+    terms = policy(event_type=event)
+    before = deepcopy(terms)
+    result = fee_policy_preview(terms, '40.00', '2026-06-10')
+    assert result['preview'] is True
+    assert result['event_type'] == event
+    assert (result['fee_net'], result['fee_vat'], result['fee_total']) == ('2.50', '0.42', '2.92')
+    assert terms == before

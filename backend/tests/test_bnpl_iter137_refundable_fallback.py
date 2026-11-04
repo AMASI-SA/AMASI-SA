@@ -32,6 +32,7 @@ class _StubColl:
 class _StubDB:
     def __init__(self, user_doc=None, bnpl_doc=None):
         self.users = _StubColl([user_doc] if user_doc else [])
+        self.settings = _StubColl()
         self.bnpl_settings = _StubColl([bnpl_doc] if bnpl_doc else [])
 
 

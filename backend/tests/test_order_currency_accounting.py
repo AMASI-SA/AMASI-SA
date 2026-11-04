@@ -1,4 +1,5 @@
 import pytest
+from provider_fee_test_helpers import legacy_fee_mode
 
 import payment_gateway_metrics
 from accounts_routes import _order_expected_amount_sar
@@ -286,7 +287,7 @@ class _GatewayOrders:
 
 
 @pytest.mark.asyncio
-async def test_payment_gateway_metrics_estimate_from_exact_sar_total(monkeypatch):
+async def test_payment_gateway_metrics_estimate_from_exact_sar_total(monkeypatch, legacy_fee_mode):
     raw = _salla_order(
         total="302.20",
         currency="QAR",
@@ -329,7 +330,7 @@ async def test_payment_gateway_metrics_estimate_from_exact_sar_total(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_payment_gateway_metrics_do_not_zero_an_unverified_rate(monkeypatch):
+async def test_payment_gateway_metrics_do_not_zero_an_unverified_rate(monkeypatch, legacy_fee_mode):
     db = type("Db", (), {
         "unified_orders": _GatewayOrders([{
             "order_number": "missing-rate",

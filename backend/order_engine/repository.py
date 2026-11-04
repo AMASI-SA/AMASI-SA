@@ -120,6 +120,8 @@ _ATTRIBUTION_FIELDS = (
 # pages or mutating storage.
 _V2_CANONICAL_ROOT_FIELDS = tuple(dict.fromkeys((
     *_ATTRIBUTION_FIELDS,
+    "user_id",
+    "order_status_slug",
     "g47_salla_snapshot",
     "salla_order_id",
     CURRENT_SHIPPING,
@@ -141,6 +143,7 @@ _V2_CANONICAL_ROOT_FIELDS = tuple(dict.fromkeys((
     "shipping_status",
     "shipment_status",
     "tracking_number",
+    "shipping_number",
     "tracking_url",
     "shipping_label_url",
     "shipping_address",
@@ -210,6 +213,24 @@ def _apply_v2_root_fallbacks(raw: dict[str, Any], row: dict[str, Any]) -> dict[s
     if current_shipping:
         # Projection only: archived shipments remain unchanged in storage.
         hydrated[CURRENT_SHIPPING] = current_shipping
+        for key in ("delivery_recorded_at", "delivery_time_source", "delivery_history_id"):
+            current_shipping.pop(key, None)
+        from operational_courier_transitions import CARRIER_HISTORY, WEBHOOK_PROOF, carrier_history_snapshot, order_delivery_time
+        proof = current_shipping.get(WEBHOOK_PROOF) or {}
+        if proof.get("source") == CARRIER_HISTORY:
+            from operational_delivery_evidence import _current_shipping, _instant, _shipment_time
+            try:
+                current, shipment, waybill = _current_shipping(raw, row)
+                provenance = {}
+                version = _instant((row.get("g47_salla_snapshot") or {}).get("source_updated_at"))
+                at = order_delivery_time(raw, row, (), version, provenance=provenance)
+                observed, _ = _shipment_time(carrier_history_snapshot(raw, current), current, shipment, waybill,
+                                             order_transition=lambda: at)
+                if observed == at:
+                    current_shipping.update(delivery_recorded_at=at.isoformat(), delivery_time_source="salla_carrier_history",
+                                            delivery_history_id=provenance["event"]["history_id"])
+            except (KeyError, TypeError, ValueError):
+                pass
 
     for field in _ATTRIBUTION_FIELDS:
         _fill_missing(hydrated, field, row.get(field))

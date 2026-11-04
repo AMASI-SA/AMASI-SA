@@ -156,6 +156,9 @@ class ShippingDTO(CanonicalDTO):
     label_url: Optional[str] = None
     shipped_at: Optional[datetime] = None
     delivered_at: Optional[datetime] = None
+    delivery_recorded_at: Optional[datetime] = None
+    delivery_time_source: Optional[Literal["salla_carrier_history"]] = None
+    delivery_history_id: Optional[str] = None
     address: Optional[AddressDTO] = None
     # Independent recipient selected by the buyer. Kept separate from customer
     # so gift orders and deliveries to another person remain operationally safe.

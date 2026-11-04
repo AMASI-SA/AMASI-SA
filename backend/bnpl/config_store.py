@@ -65,9 +65,9 @@ DEFAULTS = {
         # both statement issue and Transfer Date on Monday.
         "invoice_weekdays":  ["monday"],
         "transfer_weekdays": ["monday"],
-        # No payout fee appears in any of the four reports. Their note says
-        # such a fee is conditional, so the default is zero and an explicit
-        # provider statement row remains authoritative when one is charged.
+        # Recorded payout-fee rows belong to their documented transfers.
+        # The general applicability condition is unverified, so no calendar
+        # charge is assumed and an actual statement row remains authoritative.
         "settlement_fee_per_invoice": 0.0,
         "settlement_fee_vat_applicable": True,
         "api_base_url": "https://api.tabby.sa",

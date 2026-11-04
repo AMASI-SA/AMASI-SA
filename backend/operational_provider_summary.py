@@ -67,6 +67,7 @@ def _records(state, obligations, valuations):
     settings = engine.get("provider_fee_inputs", {}).get("settings", {})
     records = {}
     refunds = defaultdict(Decimal)
+    refund_events = defaultdict(list)
     captured = defaultdict(Decimal)
     pages = {}
     page_rows = {}
@@ -74,6 +75,8 @@ def _records(state, obligations, valuations):
         oid = str(fact.get("order_id") or (fact.get("evidence") or {}).get("order_id") or "")
         if key.startswith("refund:") and oid:
             refunds[oid, key.split(":", 2)[1]] += Decimal(fact["amount"])
+            refund_events[oid, key.split(':', 2)[1]].append({
+                'id': key.split(':', 2)[2], 'amount': fact['amount'], 'status': 'executed'})
         elif key.startswith("capture:") and oid and fact.get("provider"):
             captured[oid, fact["provider"]] += Decimal(fact["amount"])
         elif key == "provider_order_balance:" + oid:
@@ -152,6 +155,11 @@ def _records(state, obligations, valuations):
     for identity, row in records.items():
         original_currency, native_paid = row["currency"], row["gross"]
         row["refunded"] = refunds[row["order_id"], row["provider"]]
+        row['refund_events'] = sorted(refund_events[row['order_id'], row['provider']], key=lambda event: event['id'])
+        source_refunds = {str(event.get('id')): event for event in (row.get('payment') or {}).get('refunds', [])}
+        row['refund_events'] = [{**event, **{key: source_refunds.get(event['id'], {}).get(key)
+            for key in ('refunded_at', 'executed_at') if source_refunds.get(event['id'], {}).get(key)}}
+            for event in row['refund_events']]
         row["native_gross"] = native_paid
         row["native_refunded"] = row["refunded"]
         basis = valuations.get(identity)
@@ -163,6 +171,14 @@ def _records(state, obligations, valuations):
                 basis = {"native_paid": str(paid), "sar_paid": str(sar)}
         if original_currency != "SAR" and basis:
             row.update(currency="SAR", gross=sar_amount(native_paid, basis), refunded=sar_amount(row["refunded"], basis))
+            cumulative = previous = ZERO
+            converted = []
+            for event in row['refund_events']:
+                cumulative += Decimal(event['amount'])
+                boundary = sar_amount(cumulative, basis)
+                converted.append({**event, 'amount': str(boundary - previous)})
+                previous = boundary
+            row['refund_events'] = converted
     return records, claims
 
 
@@ -172,6 +188,7 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
     allocated, actual_fees, settled_cash = _settlements(state, valuations)
     settings = state.get("engine", {}).get("provider_fee_inputs", {}).get("settings", {})
     policies = state.get("engine", {}).get("provider_fee_inputs", {}).get("policies", [])
+    source_mode = state.get('engine', {}).get('provider_fee_inputs', {}).get('source_mode', 'legacy_settings')
     groups = {}
     resolved = set()
 
@@ -207,7 +224,8 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
         if fee is None and currency == "SAR" and not row.get("unresolved_split_fees"):
             fee = estimate_fee(settings, provider, row["gross"], method=row["method"], refunded=row["refunded"],
                 policies=policies, payment=row.get("payment"), created_at=row.get("created_at"),
-                observed_at=row.get("observed_at"))
+                observed_at=row.get("observed_at"), refunds=row.get('refund_events'), source_mode=source_mode,
+                as_of=state.get('engine', {}).get('as_of'))
         retained_uncaptured = (claim and claim.get("direction") == "payable"
                                and Decimal(claim.get("expected", "0")) > 0 and row["gross"] == 0)
         if row["gross"] == 0 and not retained_uncaptured:
