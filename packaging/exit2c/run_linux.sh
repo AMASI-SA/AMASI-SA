@@ -356,6 +356,29 @@ docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/
 docker kill "$reports" >/dev/null
 docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/exit2d/fault_probe.py reports-down
 docker start "$reports" >/dev/null
+for role in worker-sync worker-accounting; do
+  docker run -d --name "$worker" "${runtime[@]}" -e MEZAN_WORKER_ENABLED=1 mezan-exit2c:candidate "$role"
+  held=false
+  for attempt in $(seq 1 45); do
+    if fence=$(docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/exit2d/worker_probe.py "$role" 2>/dev/null); then held=true; break; fi
+    sleep 1
+  done
+  test "$held" = true
+  sleep 8
+  test "$(docker inspect -f '{{.State.Running}}' "$worker")" = true
+  docker kill "$worker" >/dev/null
+  docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/exit2d/fault_probe.py
+  sleep 16
+  docker start "$worker" >/dev/null
+  sleep 15
+  test "$(docker inspect -f '{{.State.Running}}' "$worker")" = true
+  next_fence=$(docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/exit2d/worker_probe.py "$role")
+  test "$next_fence" -gt "$fence"
+  docker stop --time 15 "$worker" >/dev/null
+  test "$(docker inspect -f '{{.State.ExitCode}}' "$worker")" = 0
+  docker rm "$worker" >/dev/null
+  echo "PASS $role SIGKILL, genuine employee availability, fenced restart and TERM"
+done
 life profile
 stop_webs
 life no-writes
