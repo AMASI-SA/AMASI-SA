@@ -177,31 +177,86 @@ def normalize_transaction_payment(raw, currency, total, created_at, as_of, *, ow
         return withheld("provider_transaction_binding_conflict")
 
 
+def _closed_foreign_tender(raw, payment, *, owner, order_number, provider_order_id, source, created_at, as_of):
+    """Keep independently paid money visible when Salla closes an FX order with a small gross difference."""
+    from decimal import Decimal
+    from salla_payment_collection import provider_order_page_current
+
+    ccy = payment["currency"]
+    methods = raw.get("payment_methods")
+    if (ccy == "SAR" or not isinstance(methods, list) or len(methods) != 1
+            or not provider_order_page_current(source, raw, owner=owner, order_number=order_number,
+                                               provider_order_id=provider_order_id)):
+        return None
+    actions = raw.get("payment_actions") or {}
+    closed, refund = actions.get("remaining_action") or {}, actions.get("refund_action") or {}
+    status = raw.get("status")
+    order_status = status.get("slug") if isinstance(status, dict) else status
+    if (closed.get("has_remaining_amount") is not False or raw.get("is_pending_payment")
+            or order_status not in {"under_review", "reviewed", "in_progress", "processing", "completed",
+                                    "delivering", "delivered", "shipped"}
+            or any(v not in (None, "", "paid", "captured", "مدفوع", "تم الدفع") for v in
+                   (raw.get("payment_status"), raw.get("payment_collection_status"),
+                    (raw.get("payment") or {}).get("status"), (raw.get("payment") or {}).get("collection_status")))):
+        return None
+    try:
+        paid = _amount(closed.get("paid_amount"), ccy)
+        gross = _amount(payment["gross"], ccy)
+        if (not 0 < gross - paid <= Decimal(".02") or paid <= 0
+                or not all(isinstance(a.get("paid_amount"), dict) for a in (closed, refund))
+                or _amount(refund.get("paid_amount"), ccy) != paid or _amount(refund.get("refund_amount"), ccy) != 0
+                or _amount(payment.get("cancelled", 0), ccy) != 0 or payment.get("refunds") or payment.get("cancellations")
+                or _amount(methods[0]["amount"], ccy) != paid
+                or any(_amount(v, ccy) != 0 for v in
+                       (closed.get("remaining_amount"), refund.get("pending_refund_amount"))
+                       if v is not None)
+                or not _instant(created_at) <= _instant(raw.get("updated_at") or raw.get("date_updated")) <= _instant(as_of)):
+            return None
+        reference = _identity(methods[0].get("transaction_reference"), "provider_payment_reference_missing")
+    except (ValueError, KeyError, TypeError):
+        return None
+    return {"order_id":provider_order_id, "provider":payment["provider"], "currency":ccy, "reference":reference,
+            "paid":format(paid, ".2f"), "gross":format(gross, ".2f")}
+
+
 def normalize_operational_payment(raw, currency, total, created_at, as_of, *, owner, order_number,
                                   provider_order_id, rows, source):
     """Use the order detail's final documented amounts, retaining transaction conflicts."""
-    from salla_payment_collection import order_page_source_current, provider_order_page_balance, settled_payment_snapshot
+    from salla_payment_collection import provider_order_page_current, provider_order_page_balance, settled_payment_snapshot
 
     payment_raw = raw.get("payment") or {}
     provider = provider_for(raw.get("payment_method") or (payment_raw.get("method") if isinstance(payment_raw, dict) else None))
     if not provider:
+        methods = raw.get("payment_methods")
+        if isinstance(methods, list) and any(isinstance(m, dict) and provider_for(m.get("payment_method")) for m in methods):
+            return None, [{"code": "provider_split_payment_review_required"}]
         return normalize_transaction_payment(raw, currency, total, created_at, as_of, owner=owner,
             order_number=order_number, provider_order_id=provider_order_id, rows=rows)
     try:
         amounts = provider_order_page_balance(raw, currency, total)
     except ValueError as exc:
         return None, [{"code": str(exc), "provider": provider}]
+    from operational_split_payment import split_payment_evidence
+    split = split_payment_evidence(raw, currency, total, amounts, owner=owner, order_number=order_number,
+        provider_order_id=provider_order_id, rows=rows, source=source, created_at=created_at, as_of=as_of)
+    if split is not None:
+        return split
     canonical = settled_payment_snapshot(raw) if amounts else raw
     if amounts and (canonical.get("payment") or {}).get("paid_amount") is None:
         # Bind a root-only paid amount to any available transaction for this order.
         canonical = {**canonical, "payment": {**(canonical.get("payment") or {}), "paid_amount": amounts["paid"]}}
     payment, issues = normalize_transaction_payment(canonical, currency, total, created_at, as_of, owner=owner,
         order_number=order_number, provider_order_id=provider_order_id, rows=rows, page_balance=amounts)
+    if not amounts and payment is not None and issues and all(
+            i["code"] == "provider_capture_evidence_incomplete" for i in issues):
+        observation = _closed_foreign_tender(raw, payment, owner=owner, order_number=order_number,
+            provider_order_id=provider_order_id, source=source, created_at=created_at, as_of=as_of)
+        if observation is not None:
+            return None, [{"code":"provider_closed_tender_total_mismatch", "provider":provider,
+                           "paid_tender_observation":observation}]
     if not amounts or payment is None or any(i["code"] != "provider_capture_evidence_incomplete" for i in issues):
         return payment, issues
-    if (not owner or source.get("user_id") != owner or not order_number or not provider_order_id
-            or str(raw.get("id")) != provider_order_id or str(raw.get("reference_id") or raw.get("order_number")) != order_number
-            or not order_page_source_current(source, raw)):
+    if not provider_order_page_current(source, raw, owner=owner, order_number=order_number, provider_order_id=provider_order_id):
         return None, [{"code": "provider_order_page_identity_conflict", "provider": provider}]
     source_stamp = raw.get("updated_at") or raw.get("date_updated")
     try:
@@ -216,6 +271,8 @@ def normalize_operational_payment(raw, currency, total, created_at, as_of, *, ow
     payment["order_page_balance"] = {**amounts, "source": "canonical_salla_order_page", "owner_id": owner,
         "order_id": provider_order_id, "order_number": order_number, "provider": provider, "currency": currency,
         "gross": format(_amount(total, currency), ".2f"), "source_updated_at": source_stamp}
+    if "order_page_reference" in payment:
+        payment["order_page_balance"]["transaction_reference"] = payment.pop("order_page_reference")
     return payment, []
 
 

@@ -116,12 +116,13 @@ def test_optional_transaction_may_corroborate_or_block_but_never_add_to_page(cha
         assert payment is None and issues
 
 
-def test_unwitnessed_older_order_is_review_only_even_after_a_later_nonpayment_edit():
-    s=state();s["engine"]={"as_of":T1}
-    r=apply(s,raw_document(),T2)
-    issue=next(i for i in r["engine"]["issues"] if i["code"]=="provider_historical_capture_review_required")
-    assert issue["order_page_balance_review"]["paid"]=="45.00" and issue["order_page_balance_review"]["remaining"]=="55.00"
-    assert FACT not in r["engine"]["facts"] and KEY not in r["engine"]["obligations"]
+def test_post_start_payment_discovered_after_a_later_snapshot_is_recognized_once():
+    s = state()
+    s["engine"] = {"as_of": T1}
+    result = apply(s, raw_document(), T2)
+    assert result["engine"]["facts"][FACT]["paid"] == "45.00"
+    assert result["engine"]["obligations"][KEY]["confirmed"] == "45.00"
+    assert apply(result, raw_document(), T2) == result
 
 
 @pytest.mark.parametrize("source_changes", [{"user_id":"other"},{"order_number":"999"},{"salla_order_id":"999"},
@@ -182,3 +183,57 @@ def test_corroborating_transaction_cannot_make_a_proved_order_balance_depend_on_
     assert s["engine"]["facts"]["capture:capture-A"]["amount"] == "45.00"
     assert FACT not in s["engine"]["facts"] or s["engine"]["facts"][FACT]["paid"] == "45.00"
     assert s["engine"]["obligations"][KEY]["fee_estimate_complete"] is False and s["movements"] == []
+
+
+@pytest.mark.parametrize("dated", [True, False])
+def test_saved_split_reference_prevents_single_claim_on_a_later_different_order(dated):
+    from test_operational_balance_split_tenders import normalized, source
+    doc, _ = source("tamara_installment", "customer_wallet")
+    mixed = normalized(doc)
+    mixed["payment"]["split"]["owner_id"] = "shop"
+    previous = reconcile(state(), {"orders": [mixed]}, T1)
+    previous_claim = previous["engine"]["obligations"]["provider:" + mixed["id"] + ":tamara"]
+    assert previous_claim["confirmed"] == "65.00"
+
+    raw = raw_document("65", "35")
+    raw["payment_methods"] = [{"payment_method": "tamara", "amount": "65", "transaction_reference": "ref-A"}]
+    if dated:
+        raw["payment"] = {"method": "tamara", "status": "paid", "paid_at": BORN, "reference": "ref-A"}
+    current = apply(previous, raw, T2)
+    assert any(i["code"] == "provider_capture_identity_conflict" for i in current["engine"]["issues"])
+    assert KEY not in current["engine"]["obligations"]
+    assert previous_claim == current["engine"]["obligations"]["provider:" + mixed["id"] + ":tamara"]
+    assert current["engine"]["facts"] == previous["engine"]["facts"]
+
+
+def test_reference_learned_after_page_booking_enriches_only_the_existing_fact():
+    first = apply(state(), raw_document("65", "35"), T1)
+    raw = raw_document("65", "35")
+    raw["payment_methods"] = [{"payment_method": "tamara", "amount": "65", "transaction_reference": "page-A"}]
+    second = apply(first, raw, T2)
+    assert second["engine"]["facts"][FACT] == {**first["engine"]["facts"][FACT], "transaction_reference": "page-A"}
+    assert second["engine"]["obligations"] == first["engine"]["obligations"]
+    assert apply(second, raw, T2) == second
+
+
+@pytest.mark.parametrize("dated", [True, False])
+@pytest.mark.parametrize("stamp,number,allowed", [
+    (START, "different", True),
+    (START, "123", False),
+    (T1, "different", False),
+    (T1, "123", False),
+])
+def test_first_claim_checks_target_and_pooled_payout_even_after_last_snapshot(dated, stamp, number, allowed):
+    start = state()
+    start["engine"] = {"as_of": START}
+    start["movements"] = [{"party_type": "provider", "party_id": "tamara", "currency": "SAR",
+                           "kind": "settlement", "direction": "incoming", "amount": "45.00",
+                           "order_number": number, "occurred_at": stamp, "allocations": []}]
+    doc = raw_document()
+    if dated:
+        doc["payment"] = {"method": "tamara", "status": "paid", "paid_at": BORN, "reference": "ref"}
+    result = apply(start, doc, T2)
+    assert (KEY in result["engine"]["obligations"]) == allowed
+    if not allowed:
+        assert any(i["code"] == "provider_settled_capture_review_required" for i in result["engine"]["issues"])
+    assert result["movements"] == start["movements"]

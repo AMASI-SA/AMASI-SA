@@ -109,7 +109,7 @@ def test_unpaid_then_partial_then_fully_paid_credits_the_delta_and_settlement_on
     run(scenario)
 
 
-def test_prestart_purchase_and_unseen_historical_amount_do_not_recreate_opening_money():
+def test_unseen_post_start_payment_joins_balance_once_while_prestart_order_stays_in_opening():
     async def scenario(db):
         initial = await start(db, "salla")
         await refresh(db, "owner", clock=T2)
@@ -117,9 +117,12 @@ def test_prestart_purchase_and_unseen_historical_amount_do_not_recreate_opening_
                 for created, id_ in (("2026-10-04T12:00:00+00:00", "8102"), (CREATED, "8103"))]
         await db.unified_orders.insert_many(docs)
         state = await refresh(db, "owner", clock=T3)
-        assert provider_view(state, "salla")["outstanding_receivable"] == "500.00"
-        assert state["movements"] == [] and state["openings"] == initial
-        assert any(i["code"] == "provider_historical_capture_review_required" for i in state["engine"]["issues"])
+        assert provider_view(state, "salla")["outstanding_receivable"] == "600.00"
+        assert "provider:518102" not in state["engine"]["obligations"]
+        assert state["engine"]["obligations"]["provider:518103"]["confirmed"] == "100.00"
+        repeated = await refresh(db, "owner", clock=T4)
+        assert provider_view(repeated, "salla")["outstanding_receivable"] == "600.00"
+        assert repeated["movements"] == [] and repeated["openings"] == initial
     run(scenario)
 
 

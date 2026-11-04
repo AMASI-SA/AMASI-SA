@@ -51,6 +51,19 @@ def test_duplicate_order_state_and_atomic_carrier_replacement_freeze_after_deliv
     assert final["cod:o1"]["confirmed"] == "500.00"
 
 
+def test_order_rollback_restores_existing_expectations_after_a_late_failure():
+    first = reconcile(initial(), {"orders": [order()]}, NOW)
+    previous = deepcopy(first)
+    # Removing the item and its carrier rate clears two existing expectations
+    # before the malformed COD amount rejects the whole order.
+    invalid = order(items=[], carrier={"id": "imile", "cost": None}, cod_amount="bad")
+    failed = reconcile(first, {"orders": [invalid]}, NOW)
+    assert failed["engine"]["issues"]
+    for field in ("obligations", "facts", "provider_reports", "cod_reports", "order_versions"):
+        assert failed["engine"][field] == previous["engine"][field]
+    assert first == previous
+
+
 def test_partial_supplier_receipt_and_accepted_return_are_not_customer_refunds():
     sources = {"orders": [order()], "supplier_receipts": [{"id": "r1", "order_id": "o1", "item_id": "i1", "supplier_id": "s1", "amount": "80", "accepted_at": NOW}]}
     first = reconcile(initial(), sources, NOW)

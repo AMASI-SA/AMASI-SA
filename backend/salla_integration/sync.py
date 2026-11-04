@@ -985,6 +985,7 @@ async def run_orders_sync(
 
             for raw in data:
                 try:
+                    list_row = raw
                     if (
                         recover_marketing_attribution
                         and attribution_details_fetched
@@ -1027,6 +1028,8 @@ async def run_orders_sync(
                     if res.get("stale") or res.get("blocked"):
                         skipped += 1
                         continue
+                    from .paid_sar_sync import observe_list_evidence
+                    await observe_list_evidence(db, user_id, list_row)
                     await _refresh_plan_b_status_snapshot(
                         db, user_id, doc["order_number"], doc
                     )

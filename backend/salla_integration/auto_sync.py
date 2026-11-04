@@ -142,6 +142,8 @@ async def _sync_light_order(db, user_id: str, light_order: dict) -> bool:
         },
     )
     if existing:
+        from .paid_sar_sync import observe_list_evidence
+        await observe_list_evidence(db, user_id, light_order)
         return True
 
     items = await _fetch_salla_order_items(db, user_id, internal_id)
@@ -161,6 +163,8 @@ async def _sync_light_order(db, user_id: str, light_order: dict) -> bool:
         source="salla_direct",
         raw=raw,
     )
+    from .paid_sar_sync import observe_list_evidence
+    await observe_list_evidence(db, user_id, light_order)
     await _refresh_plan_b_status_snapshot(
         db,
         user_id,
