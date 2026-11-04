@@ -136,3 +136,78 @@ def test_unknown_foreign_payment_stays_unknown_and_requests_backfill():
     bank, = summary["by_method"]
     assert bank["paid"] is None and bank["known_paid"] == "0.00" and bank["remaining"] == "0.00"
     assert "customer_payment_sar" not in order
+
+
+@pytest.mark.parametrize(("method", "paid", "expected_due"), [
+    ("bank", "100.00", "0.00"), ("cash_on_delivery", "0.00", "100.00"),
+])
+def test_exact_customer_payment_snapshot_survives_pending_fulfillment(method, paid, expected_due):
+    from operational_customer_tender_coverage import new_coverage, observe_nonprovider, finish_coverage
+    from salla_payment_collection import provider_order_page_current
+    doc = tender("8130", method, paid)
+    raw = doc["raw_by_source"]["salla_direct"]
+    doc["g47_salla_snapshot"] = {"component_pending": True, "source_updated_at": raw["updated_at"]}
+    order = {"id": raw["id"], "order_number": doc["order_number"], "currency": "SAR"}
+    before = deepcopy(doc)
+    coverage = new_coverage(START, NOW)
+    coverage.update(source_order_count=1, uninspected_source_orders=1)
+    observe_nonprovider(coverage, raw, doc, order, raw["total"], None, "owner")
+    finish_coverage(coverage)
+    assert coverage["sar"]["paid"] == paid and coverage["sar"]["missing_orders"] == 0
+    assert coverage["sar"]["by_method"][0]["remaining"] == expected_due
+    assert doc == before and "bank_credit" not in order
+    assert not provider_order_page_current(doc, raw, owner="owner", order_number=doc["order_number"], provider_order_id=raw["id"])
+
+
+@pytest.mark.parametrize("fault", ["owner", "order-id", "reference", "watermark", "status-version", "refresh", "cancelled", "amount", "future-version"])
+def test_pending_fulfillment_never_masks_conflicting_payment_identity_or_amount(fault):
+    from operational_customer_tender_coverage import new_coverage, observe_nonprovider, finish_coverage
+    doc = tender("8131", "bank", "100.00")
+    raw = doc["raw_by_source"]["salla_direct"]
+    doc["g47_salla_snapshot"] = {"component_pending": True, "source_updated_at": raw["updated_at"]}
+    order = {"id": raw["id"], "order_number": doc["order_number"], "currency": "SAR"}
+    if fault == "owner":
+        doc["user_id"] = "another-owner"
+    elif fault == "order-id":
+        doc["salla_order_id"] = "different-order"
+    elif fault == "reference":
+        doc["order_number"] = "different-reference"
+    elif fault == "watermark":
+        doc["g47_salla_snapshot"]["source_updated_at"] = START
+    elif fault == "status-version":
+        doc["last_salla_direct_status_source_updated_at"] = NOW
+    elif fault == "refresh":
+        doc["g47_salla_snapshot"]["requires_authoritative_refresh"] = True
+    elif fault == "cancelled":
+        doc["order_status_slug"] = "cancelled"
+    elif fault == "future-version":
+        raw["updated_at"] = doc["g47_salla_snapshot"]["source_updated_at"] = "2026-10-08T09:00:00Z"
+    else:
+        raw["payment_methods"][0]["amount"] = "50.00"
+    coverage = new_coverage(START, NOW)
+    coverage.update(source_order_count=1, uninspected_source_orders=1)
+    observe_nonprovider(coverage, raw, doc, order, raw["total"], None, "owner")
+    finish_coverage(coverage)
+    assert coverage["sar"]["paid"] is None and coverage["sar"]["missing_orders"] == 1
+
+
+@pytest.mark.parametrize(("bank_paid", "remaining", "paid"), [("85.00", "0.00", "100.00"), ("55.00", "30.00", "70.00")])
+def test_verified_bank_wallet_split_reports_all_customer_money_once(bank_paid, remaining, paid):
+    from operational_customer_tender_coverage import new_coverage, observe_nonprovider, finish_coverage
+    doc = tender("8132", "bank", paid, remaining)
+    raw = doc["raw_by_source"]["salla_direct"]
+    raw["payment_methods"] = [
+        {"payment_method": "bank", "amount": bank_paid, "transaction_reference": "bank-payment"},
+        {"payment_method": "customer_wallet", "amount": "15.00", "transaction_reference": "wallet-payment"},
+    ]
+    doc["g47_salla_snapshot"] = {"component_pending": True, "source_updated_at": raw["updated_at"]}
+    order = {"id": raw["id"], "order_number": doc["order_number"], "currency": "SAR"}
+    coverage = new_coverage(START, NOW)
+    coverage.update(source_order_count=1, uninspected_source_orders=1)
+    observe_nonprovider(coverage, raw, doc, order, raw["total"], None, "owner")
+    finish_coverage(coverage)
+    assert coverage["sar"]["paid"] == paid and coverage["sar"]["missing_orders"] == 0
+    methods = {row["method"]: row for row in coverage["sar"]["by_method"]}
+    assert (methods["bank"]["paid"], methods["wallet"]["paid"]) == (bank_paid, "15.00")
+    assert (methods["bank"]["remaining"], methods["wallet"]["remaining"]) == (remaining, "0.00")
+    assert "bank_credit" not in order

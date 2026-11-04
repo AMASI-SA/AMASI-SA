@@ -38,11 +38,15 @@ def test_one_merchant_comparison_is_nonposting_and_replayable():
             assert sum(result['bank_preclaim_candidates'].values()) == 0
             old, new = (result[k]['SAR'] for k in ('saved','proposed'))
             assert old['providers']['parties']['tamara']['receivable'] == '250.00'
-            assert new['providers']['parties']['tamara']['receivable'] == '273.00'
+            provider = new['providers']['parties']['tamara']
+            assert provider['known_net'] == '273.00'
+            assert provider['gross'] == '23.00' and provider['orders'] == 1
+            assert provider['receivable'] is None and provider['fees'] is None
+            assert not provider['complete']
             assert old['cod_expected']['known_subtotal'] is None
             assert new['cod_expected']['known_subtotal'] == '77.00'
             assert new['cod_expected']['reported_total'] is None
-            assert new['provider_fees_expected']['known_subtotal'] is None
+            assert 'provider_fees_expected' not in new
             for private in ('PRIVATE-', 'Secret customer', 'Private account', 'secret@example'):
                 assert private not in json.dumps(result)
             with pytest.raises(HTTPException):
@@ -91,6 +95,22 @@ def test_bank_candidates_distinguish_existing_conflicts_and_repeated_rows():
     assert bank_candidates(orders, recorded) == {'already_recorded':1,'conflicting':3,'prospective_new':1,
                                                 'repeated_candidate':1,'unknown':1}
     assert len(recorded) == 3
+
+
+def test_preview_uses_consolidated_provider_net_without_order_identity_or_fee_table():
+    from test_operational_balance_configured_provider_fees import paid_state, settings
+
+    state, _ = paid_state(terms=settings(rate='10', fixed='0', vat='0'))
+    state['movements'].append(dict(id='private-payout', party_type='provider', party_id='tamara',
+        currency='SAR', direction='incoming', kind='settlement', amount='47.00', actual_fee_amount='3.00',
+        allocations=[dict(obligation_id='provider:one', amount='50.00')]))
+    result = cli['summary']('owner', state, None)['SAR']
+    row = result['providers']['parties']['tamara']
+    assert (row['orders'], row['gross'], row['fees'], row['refunded'], row['net']) == (
+        1, '100.00', '8.00', '0.00', '45.00')
+    assert row['receivable'] == '45.00' and row['payable'] == '0.00'
+    assert 'provider_fees_expected' not in result
+    assert 'private-payout' not in json.dumps(result) and 'provider:one' not in json.dumps(result)
 
 
 @pytest.mark.parametrize('role,expected', [('read', 0), ('readWrite', 1)])
@@ -143,7 +163,10 @@ def test_aggregate_provider_estimate_and_actual_settlement_fee_are_distinct():
             result = cli['summary']('shop',s,None)['SAR']
             assert result['actual_fees_on_recorded_provider_settlements'] == {
                 'tamara': {'known_subtotal':'2.00','settlements_without_fee_amount':0}}
-            assert result['provider_fees_expected']['known_by_platform']['tamara'] == '1.90'
+            provider = result['providers']['parties']['tamara']
+            assert provider['fees'] == '3.90'
+            assert provider['settled'] == '43.00' and provider['net'] == '53.10'
+            assert 'provider_fees_expected' not in result
     run(scenario())
 
 

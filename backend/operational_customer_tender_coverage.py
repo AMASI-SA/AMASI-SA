@@ -174,12 +174,31 @@ def observe_nonprovider(summary, raw, source, order, total, payment, owner, *, b
             if all(created <= _instant(c["captured_at"]) <= _instant(summary["as_of"]) for c in captures):
                 values = {c["id"]: _amount(c["amount"], currency) for c in captures}
                 native[payment["provider"]] = sum(values.values(), Decimal(0))
+    elif not blocked and kinds == {"bank", "wallet"}:
+        from operational_balance_bank_orders import native_paid_amount
+        try:
+            bank_paid = native_paid_amount(raw, source, owner=owner, order_number=order["order_number"],
+                provider_order_id=order["id"], currency=currency, total=total, as_of=summary["as_of"])
+            wallet = next(leg for leg in methods if leg["payment_method"] == "customer_wallet")
+            native = {"bank": bank_paid, "wallet": _amount(wallet["amount"], currency)}
+            due = {"bank": _amount(total, currency) - sum(native.values(), Decimal(0)), "wallet": Decimal(0)}
+        except (KeyError, TypeError, ValueError, ArithmeticError, AttributeError, StopIteration):
+            pass
+        for group in sorted(groups):
+            _add(summary, currency, group, native.get(group), due.get(group))
     else:
         amounts = None
         try:
-            if (not blocked and len(kinds) == 1 and provider_order_page_current(source, raw, owner=owner,
-                    order_number=order["order_number"], provider_order_id=order["id"])):
-                amounts = _single_balance(raw, header, currency, _amount(total, currency), methods)
+            if not blocked and len(kinds) == 1:
+                checked = _single_balance(raw, header, currency, _amount(total, currency), methods)
+                created = _instant(raw.get("date") or raw.get("created_at") or raw.get("order_date"))
+                updated = _instant(raw.get("updated_at") or raw.get("date_updated") or raw.get("date")
+                                   or raw.get("created_at") or raw.get("order_date"))
+                if (checked and created <= updated <= _instant(summary["as_of"])
+                        and provider_order_page_current(source, raw, owner=owner,
+                        order_number=order["order_number"], provider_order_id=order["id"],
+                        customer_balance_verified=True)):
+                    amounts = checked
         except (KeyError, TypeError, ValueError, ArithmeticError, AttributeError):
             pass
         if amounts:

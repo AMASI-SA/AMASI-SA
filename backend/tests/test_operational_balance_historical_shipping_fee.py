@@ -39,7 +39,7 @@ def test_review_approval_and_reread_release_only_base_fee(kind):
     async def scenario(db):
         original = await prepare(db, kind)
         baseline = await refreshed(db, original)
-        assert fee_total(baseline) == 0
+        assert fee_total(baseline) == (12 if kind == "courier" else 10)
         p = await preview(db, "owner", "owner", "10", clock=NOW)
         assert p["can_approve"], p
         assert p["candidate"]["amount"] == "10.00" and p["candidate"]["party_type"] == kind
@@ -56,9 +56,14 @@ def test_review_approval_and_reread_release_only_base_fee(kind):
         assert not (await preview(db, "owner", "owner", "10", clock=NOW))["can_approve"]
         current = await refreshed(db, after)
         assert fee_total(current) == 10, current["engine"].get("issues")
-        ids = {"shipping:100:base_shipping"}
-        assert {k:v for k,v in current["engine"]["obligations"].items() if k not in ids} == baseline["engine"]["obligations"]
-        assert current["engine"]["cod_reports"] == baseline["engine"]["cod_reports"]
+        assert current["engine"]["obligations"]["shipping:100:base_shipping"]["confirmed"] == "10.00"
+        assert "shipping:100:cod_commission" not in current["engine"]["obligations"]
+        if kind == "store_driver":
+            assert current["engine"]["obligations"] == baseline["engine"]["obligations"]
+            assert current["engine"]["cod_reports"] == baseline["engine"]["cod_reports"]
+        else:
+            assert set(current["engine"]["obligations"]) == {"shipping:100:base_shipping"}
+            assert current["engine"]["cod_reports"] == {}
         again = await refreshed(db, current)
         assert again["engine"]["obligations"] == current["engine"]["obligations"]
         assert again["movements"] == after["movements"] and again["openings"] == original["openings"]
@@ -147,4 +152,27 @@ def test_v2_shipping_posting_or_settlement_blocks_same_fee(e):
         await prepare(db,"courier")
         await db.mz2_shipping_native_events_v2.insert_one({**e,"user_id":"owner"})
         assert not (await preview(db,"owner","owner","10",clock=NOW))["can_approve"]
+    run(scenario)
+
+
+@pytest.mark.parametrize('kind', ['courier', 'store_driver'])
+def test_unapproved_poststart_fee_checks_native_postings_and_recovers_once(kind):
+    async def scenario(db):
+        state = await prepare(db, kind)
+        original = await db.mz2_shipping_native_events_v2.insert_one({
+            'user_id':'owner', 'kind':'fee', 'order_number':'10', 'party_type':kind,
+            'party_id':'carrier' if kind == 'courier' else 'driver'})
+        held = await refreshed(db, state)
+        assert fee_total(held) == 0
+        assert held['engine']['obligations']['cod:100']['confirmed'] == '200.00'
+        code = 'courier_fee_native_overlap' if kind == 'courier' else 'driver_fee_native_overlap'
+        assert any(issue['code'] == code for issue in held['engine']['issues'])
+        assert await db.mz2_shipping_native_events_v2.count_documents({'user_id':'owner'}) == 1
+        await db.mz2_shipping_native_events_v2.delete_one({'_id':original.inserted_id})
+        current = await refreshed(db, held)
+        assert fee_total(current) == (12 if kind == 'courier' else 10)
+        assert current['movements'] == [] and current['openings'] == state['openings']
+        again = await refreshed(db, current)
+        assert again['engine']['obligations'] == current['engine']['obligations']
+        assert again['engine']['facts'] == current['engine']['facts']
     run(scenario)

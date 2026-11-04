@@ -1,7 +1,8 @@
 import React, {useState} from 'react';
 import {operationalApi as api, messageFor} from './api';
+import PaginatedReportTable from './PaginatedReportTable';
+import {formatPositionCount, formatPositionMoney} from './financialPositionPresentation';
 
-const feeLabels = {gross:'المبيعات',cancelled:'الإلغاءات',refunded:'الاستردادات',net:'الصافي',estimated_fees:'العمولة التقديرية',actual_fees:'العمولة الفعلية المسوّاة',expected_receivable:'المتوقع بعد التسوية',settled:'الوارد الفعلي من التسويات',outstanding:'المتبقي'};
 const cents = value => {
   const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(String(value ?? ''));
   return match ? (match[1] ? -1n : 1n) * (BigInt(match[2]) * 100n + BigInt((match[3] || '').padEnd(2, '0'))) : null;
@@ -26,9 +27,8 @@ export default function DomainDetails({report}) {
   const obligations = unique(report.obligations || []);
   const parties = report.parties || [];
   const facts = report.details?.facts || {};
-  const orderPayments = Object.entries(report.details?.provider_order_payments || {});
-  const paidTotals = Object.entries(report.details?.provider_paid_totals || {});
-  const providerFees = Object.entries(report.details?.provider_reports || {});
+  const providerBalances = Object.entries(report.details?.provider_balances || {});
+  const hasProviderPayments = Object.keys(report.details?.provider_order_payments || {}).length || Object.keys(report.details?.provider_paid_totals || {}).length;
   const named = id => {
     const matches = obligations.filter(o => o.id === id || o.ad_day_id === id);
     const obligation = matches[0];
@@ -68,21 +68,24 @@ export default function DomainDetails({report}) {
   });
   return <div className="op-domain-details">
     <details className="op-card"><summary>تفاصيل منصات الدفع</summary>
-      {orderPayments.map(([currency, rows]) => <div className="op-table" key={currency}>
-        <table><caption>مدفوعات العملاء منذ بداية التشغيل · {currency}</caption>
-          <thead><tr><th>المنصة</th><th>حالة الإثبات</th><th>الطلبات</th><th>دفعه العملاء قبل الرسوم</th><th>متبقٍ على العملاء</th></tr></thead>
-          <tbody>{rows.map(row => <tr key={row.id}>
-            <td>{row.name}</td><td>{row.status}</td><td>{row.orders}</td><td>{row.paid}</td><td>{row.remaining}</td>
+      {providerBalances.map(([currency, rows]) => <PaginatedReportTable key={currency} rows={rows} label={`منصات الدفع · ${currency}`}>{pageRows => <div className="op-table">
+        <table><caption>منصات الدفع · {currency}</caption>
+          <thead><tr><th>المنصة</th><th>عدد الطلبات</th><th>إجمالي المبالغ</th><th>العمولات</th><th>الاستردادات</th><th>صافي المتبقي لنا</th></tr></thead>
+          <tbody>{pageRows.map(row => <tr key={row.provider}>
+            <td><strong>{row.name}</strong>
+              {row.opening != null && <div><small>رصيد البداية <bdi>{formatPositionMoney(row.opening)}</bdi></small></div>}
+              {row.settled != null && <div><small>المحول للبنك <bdi>{formatPositionMoney(row.settled)}</bdi></small></div>}
+              {row.complete !== true && <div><small>بيانات غير مكتملة</small></div>}
+            </td>
+            <td><bdi>{formatPositionCount(row.orders)}</bdi></td>
+            {['gross','fees','refunded','net'].map(key => <td key={key}><bdi>{formatPositionMoney(row[key])}</bdi></td>)}
           </tr>)}</tbody>
         </table>
-      </div>)}
-      {!providerFees.length && <p className="op-muted">{orderPayments.length || paidTotals.length
-        ? 'تظهر مدفوعات الطلبات أعلاه. لم تتوفر تفاصيل رسوم المنصة وتسوياتها لهذه اللقطة.'
+      </div>}</PaginatedReportTable>)}
+      {!providerBalances.length && <p className="op-muted">{hasProviderPayments
+        ? 'تظهر مدفوعات الطلبات أعلاه. لم تتوفر أرصدة منصات الدفع وعمولاتها لهذه اللقطة.'
         : 'لا توجد بيانات مسجلة لهذا القسم حتى الآن؛ يبدأ الاحتساب بعد إنهاء الافتتاحيات وتوفر العمليات المؤهلة.'}</p>}
-      {providerFees.map(([id,row]) => {
-      const p = named(id);
-      return <article key={id}><h3>{p.name} · {p.currency}</h3><dl>{Object.entries(feeLabels).map(([key,label]) => <div key={key}>{label}: {row[key] ?? p.obligation?.[key] ?? 'غير مكتمل'}</div>)}</dl></article>;
-    })}</details>
+    </details>
     <details className="op-card"><summary>الشحن ومناديب المتجر</summary>{!carriers.length && <p className="op-muted">لا توجد بيانات مسجلة لهذا القسم حتى الآن؛ يبدأ الاحتساب بعد إنهاء الافتتاحيات وتوفر العمليات المؤهلة.</p>}{carriers.map(p => <article key={`${p.party_type}:${p.party_id}:${p.currency}`}><h3>{p.name} · {p.currency}</h3><p>عدد الطلبات: {p.orderCount} · التوصيلات المؤكدة: {p.deliveredCount}</p><p>أجرة التوصيل المؤكدة: {amount(p.shippingConfirmed)} · المسدد: {p.settled ?? 'غير مكتمل'} · المتبقي: {p.outstanding_payable ?? 'غير مكتمل'}</p><p>التحصيل المستحق لنا: {p.outstanding_receivable ?? 'غير مكتمل'}</p>{p.codTotals&&<div>{Object.entries(codLabels).map(([key,label])=><p key={key}>{label}: {amount(p.codTotals[key])} {p.currency}</p>)}</div>}</article>)}</details>
     <details className="op-card"><summary>تغطية الموردين والمرتجعات والمدفوعات</summary>{!suppliers.length && <p className="op-muted">لا توجد بيانات مسجلة لهذا القسم حتى الآن؛ يبدأ الاحتساب بعد إنهاء الافتتاحيات وتوفر العمليات المؤهلة.</p>}{suppliers.map(p => <article key={`${p.party_id}:${p.currency}`}><h3>{p.name} · {p.currency}</h3><p>قيمة الفواتير المغطاة: {amount(p.covered)} · المرتجعات المقبولة: {amount(p.acceptedReturns)}</p><p>صافي الفواتير: {amount(p.invoiceNet)} · ضريبة الفواتير المثبتة: {amount(p.invoiceTax)} · إجمالي الفواتير بالضريبة: {amount(p.invoiceGross)}</p><p>التقديري المتبقي: {p.expected_payable ?? 'غير مكتمل'}</p><p>المدفوع المخصص: {p.settled ?? 'غير مكتمل'} · المتبقي علينا: {p.outstanding_payable ?? 'غير مكتمل'} · المستحق لنا: {p.outstanding_receivable ?? 'غير مكتمل'}</p></article>)}</details>
     <details className="op-card"><summary>عهد الموظفين</summary>{!(report.details?.employee_custody || []).length && <p className="op-muted">لا توجد بيانات مسجلة لهذا القسم حتى الآن؛ يبدأ الاحتساب بعد إنهاء الافتتاحيات وتوفر العمليات المؤهلة.</p>}{(report.details?.employee_custody || []).map(p => <article key={`${p.party_id}:${p.currency}`}><h3>{p.name} · {p.currency}</h3><p>الممول: {p.custody_funded ?? 'غير مكتمل'} · المصروف: {p.custody_spent ?? 'غير مكتمل'} · المرتجع: {p.custody_returned ?? 'غير مكتمل'}</p><p>الرصيد المتبقي في العهدة: {p.custody_remaining ?? 'غير مكتمل'}</p>{(p.receipts || []).filter(r=>r.receipt_id).map((r,index)=><p key={r.id}><ReceiptDocument id={r.receipt_id} label={`إيصال ${index+1} · ${r.amount} ${p.currency}`}/>{r.occurred_at ? ` · ${new Date(r.occurred_at).toLocaleString('ar-SA')}` : ''}</p>)}</article>)}</details>

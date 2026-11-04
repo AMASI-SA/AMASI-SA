@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { ArrowClockwise, CalendarBlank, Info, MagnifyingGlass, MicrosoftExcelLogo, Printer, WarningCircle } from "@phosphor-icons/react";
 import { useReactToPrint } from "react-to-print";
 import { useOptionalAuth } from "../../context/AuthContext";
@@ -14,6 +15,8 @@ import "./financialPosition.css";
 import NativePurchaseReview from "./NativePurchaseReview";
 import HistoricalShippingFeeReview from "./HistoricalShippingFeeReview";
 import ProviderHistoryReview from "./ProviderHistoryReview";
+import PaginatedReportTable from "./PaginatedReportTable";
+import CustomerWalletBalance from "./CustomerWalletBalance";
 
 const emptyFilters = () => ({ order: "", party: "", payment: "" });
 const inactiveMessages = {
@@ -40,45 +43,46 @@ function SectionHeading({ id, number, title, children }) {
 function DataCell({ value, column }) {
     if (column.type === "money") return <Money value={value} role={column.role} />;
     if (column.type === "count") return <bdi className="ofp-count" dir="ltr">{formatPositionCount(value)}</bdi>;
+    if (column.key === "as_of" && value) return formatRiyadhDateTime(value);
     return positionText(value);
 }
 
-function ReportTable({ table }) {
+function ReportTable({ table, printing }) {
     const columns = table.columns || [];
-    return <article className={`ofp-table-card${table.kind === "forecast" ? " ofp-table-forecast" : ""}`} data-testid={`financial-table-${table.id}`}>
+    return <article className={`ofp-table-card${["providers", "ads_currency_conversion", "customer_wallets"].includes(table.id) ? " ofp-table-wide" : ""}${table.kind === "forecast" ? " ofp-table-forecast" : ""}`} data-testid={`financial-table-${table.id}`}>
         <div className="ofp-table-title"><h3>{table.title}</h3>{table.complete !== true && <span className="ofp-status">غير مكتمل</span>}</div>
-        <div className="ofp-table-scroll"><table>
+        <PaginatedReportTable rows={table.rows || []} label={table.title} pageSize={table.id === "provider_collections_expected" ? 10 : 13} showAll={printing}>{rows => <div className="ofp-table-scroll"><table>
             <thead><tr>{columns.map(column => <th scope="col" key={column.key}>{column.label}</th>)}</tr></thead>
-            <tbody>{(table.rows || []).map((row, index) => <tr key={row.id || index}>{columns.map(column =>
+            <tbody>{rows.map((row, index) => <tr key={row.id || index}>{columns.map(column =>
                 <td key={column.key} className={column.type === "text" ? "ofp-label-cell" : "ofp-value-cell"}><DataCell value={row[column.key]} column={column} /></td>)}</tr>)}
                 {!table.rows?.length && <tr><td className="ofp-empty-cell" colSpan={Math.max(columns.length, 1)}>{table.complete === true ? "لا توجد أرصدة مسجلة لهذا القسم." : "لم تتوفر بيانات مكتملة لهذا القسم."}</td></tr>}
             </tbody>
             {table.show_totals !== false && table.totals && Object.keys(table.totals).length > 0 && <tfoot><tr>{columns.map((column, index) => <td key={column.key}>
                 {index === 0 && column.type === "text" ? "الإجمالي" : <DataCell value={table.totals[column.key]} column={column} />}
             </td>)}</tr></tfoot>}
-        </table></div>
+        </table></div>}</PaginatedReportTable>
         <Notes items={table.notes} />
     </article>;
 }
 
-function DebtTable({ data }) {
+function DebtTable({ data, printing }) {
     return <article className="ofp-table-card ofp-debts" data-testid="financial-debt-summary"><div className="ofp-table-title"><h3>إجمالي الديون والمستحقات</h3>{data.completeness?.actual !== true && <span className="ofp-status">الأرصدة المسجّلة فقط</span>}</div>
-        <table><thead><tr><th scope="col">الجهة</th><th scope="col">لنا</th><th scope="col">علينا</th></tr></thead>
-            <tbody>{(data.debt_rows || []).map(row => <tr key={row.id}><td className="ofp-label-cell">{row.name}</td><td><Money value={row.receivable} role="receivable" /></td><td><Money value={row.payable} role="payable" /></td></tr>)}</tbody>
+        <PaginatedReportTable rows={data.debt_rows || []} label="إجمالي الديون والمستحقات" showAll={printing}>{rows => <table><thead><tr><th scope="col">الجهة</th><th scope="col">لنا</th><th scope="col">علينا</th></tr></thead>
+            <tbody>{rows.map(row => <tr key={row.id}><td className="ofp-label-cell">{row.name}</td><td><Money value={row.receivable} role="receivable" /></td><td><Money value={row.payable} role="payable" /></td></tr>)}</tbody>
             <tfoot><tr><td>الإجمالي</td><td><Money value={data.debt_totals?.receivable} role="receivable" /></td><td><Money value={data.debt_totals?.payable} role="payable" /></td></tr></tfoot>
-        </table><Notes items={["السيولة والأرصدة الإعلانية المقدمة وعهد الموظفين تظهر مستقلة عن الديون."]} />
+        </table>}</PaginatedReportTable><Notes items={["السيولة والأرصدة الإعلانية المقدمة وعهد الموظفين تظهر مستقلة عن الديون."]} />
     </article>;
 }
 
-function AmountTable({ title, rows = [], className = "", complete }) {
+function AmountTable({ title, rows = [], className = "", complete, printing }) {
     return <article className={`ofp-table-card ${className}`}><div className="ofp-table-title"><h3>{title}</h3>{complete === false && <span className="ofp-status">غير مكتمل</span>}</div>
-        <table><thead><tr><th scope="col">البند</th><th scope="col">المبلغ</th></tr></thead><tbody>
-            {rows.map(row => <tr key={row.id} className={["total", "positive", "negative"].includes(row.emphasis) ? `ofp-row-${row.emphasis}` : ""}>
+        <PaginatedReportTable rows={rows} label={title} showAll={printing}>{pageRows => <table><thead><tr><th scope="col">البند</th><th scope="col">المبلغ</th></tr></thead><tbody>
+            {pageRows.map(row => <tr key={row.id} className={["total", "positive", "negative"].includes(row.emphasis) ? `ofp-row-${row.emphasis}` : ""}>
                 <td className="ofp-label-cell">{row.label}{row.reason && <small className="ofp-row-reason">{row.reason}</small>}</td>
                 <td><Money value={row.amount} role={row.emphasis === "positive" ? "receivable" : row.emphasis === "negative" ? "payable" : "neutral"} /></td>
             </tr>)}
             {!rows.length && <tr><td className="ofp-empty-cell" colSpan="2">لم تتوفر بيانات مكتملة لهذا القسم.</td></tr>}
-        </tbody></table>
+        </tbody></table>}</PaginatedReportTable>
     </article>;
 }
 
@@ -101,16 +105,16 @@ function DeliveryDetails({ delivery, filters, onFiltersChange, currency }) {
             <button type="button" className="ofp-button" onClick={() => onFiltersChange(emptyFilters())}>مسح الفلاتر</button>
         </div>
         <p className="ofp-detail-scope">السجلات المعروضة: <bdi>{rows.length}</bdi> من <bdi>{allRows.length}</bdi>. فلاتر التفاصيل لا تغيّر إجماليات التقرير، ويشمل التصدير التفاصيل المعروضة.</p>
-        <div className="ofp-table-scroll ofp-delivery-screen"><table className="ofp-delivery-table"><thead><tr>
+        <div className="ofp-delivery-screen"><PaginatedReportTable rows={rows} label="تفاصيل الشحن والتحصيل لكل طلب" resetKey={JSON.stringify(filters)}>{pageRows => <div className="ofp-table-scroll"><table className="ofp-delivery-table"><thead><tr>
             <th scope="col">الطلب والتسليم</th><th scope="col">جهة التنفيذ</th><th scope="col">الدفع وجهة التحصيل</th><th scope="col">حالة التحصيل</th>
             {DELIVERY_MONEY_COLUMNS.map(column => <th scope="col" key={column.key}>{column.label}</th>)}
-        </tr></thead><tbody>{rows.map(row => <tr key={row.id} data-testid="financial-delivery-row">
+        </tr></thead><tbody>{pageRows.map(row => <tr key={row.id} data-testid="financial-delivery-row">
             <td><strong>{deliveryOrderLabel(row)}</strong><small>{formatRiyadhDateTime(row.delivered_at)}</small></td>
             <td><strong>{positionText(row.party_name)}</strong><small>{PARTY_LABELS[row.party_type] || UNAVAILABLE}</small></td>
             <td><strong>{paymentLabel(row.payment_method)}</strong><small>{destinationLabel(row.collection_destination)}</small>{row.destination_name && <small>{row.destination_name}</small>}</td>
             <td><CollectionStatus value={row.collection_status} /></td>
             {DELIVERY_MONEY_COLUMNS.map(column => <td key={column.key}><Money value={row[column.key]} role={column.role} /></td>)}
-        </tr>)}</tbody></table></div>
+        </tr>)}</tbody></table></div>}</PaginatedReportTable></div>
         <div className="ofp-delivery-print">{rows.map(row => <section key={row.id} className="ofp-print-order">
             <h4>{positionText(row.order_number) !== UNAVAILABLE ? "الطلب " : ""}{deliveryOrderLabel(row)} · {positionText(row.party_name)}</h4>
             <p>{formatRiyadhDateTime(row.delivered_at)} · {paymentLabel(row.payment_method)} · {destinationLabel(row.collection_destination)} · {collectionLabel(row.collection_status)}{row.destination_name ? ` · ${row.destination_name}` : ""}</p>
@@ -144,6 +148,7 @@ export default function OperationalFinancialPosition() {
     const [filters, setFilters] = useState(emptyFilters);
     const [exporting, setExporting] = useState(false);
     const [exportError, setExportError] = useState("");
+    const [printing, setPrinting] = useState(false);
     const printRef = useRef(null);
 
     useEffect(() => {
@@ -176,7 +181,7 @@ export default function OperationalFinancialPosition() {
         return () => { current = false; };
     }, [scope, authLoading, authMissing, revision]);
 
-    useEffect(() => { setFilters(emptyFilters()); setCurrency(""); }, [scope]);
+    useEffect(() => { setFilters(emptyFilters()); setCurrency(""); setPrinting(false); }, [scope]);
 
     // Hide the old scope synchronously, before the replacement request's effect.
     const report = state.scope === scope && state.phase === "ready" ? state.report : null;
@@ -188,8 +193,15 @@ export default function OperationalFinancialPosition() {
         contentRef: printRef,
         documentTitle: `المركز المالي التشغيلي${activeCurrency ? ` - ${activeCurrency}` : ""}`,
         pageStyle: "@page { size: A4 landscape; margin: 10mm; }",
+        onAfterPrint: () => setPrinting(false),
+        onPrintError: () => setPrinting(false),
     });
+    const printReport = () => {
+        flushSync(() => setPrinting(true));
+        handlePrint();
+    };
     const refresh = () => {
+        setPrinting(false);
         setState({ scope, phase: "loading", report: null, error: "" });
         setRevision(value => value + 1);
     };
@@ -209,7 +221,7 @@ export default function OperationalFinancialPosition() {
         <div className="ofp-toolbar ofp-no-print"><div><span className="ofp-eyebrow">الأرصدة التشغيلية / التقارير</span><h1>المركز المالي التشغيلي</h1></div><div className="ofp-actions">
             {data && user?.role === "owner" && <a className="ofp-button" href="/operational-balances/provider-fees">مراجعة تعرفات منصات الدفع</a>}
             <button type="button" className="ofp-button" onClick={refresh} disabled={loading || authMissing}><ArrowClockwise size={19} aria-hidden="true" />تحديث التقرير</button>
-            <button type="button" className="ofp-button" onClick={() => handlePrint()} disabled={!data}><Printer size={20} aria-hidden="true" />طباعة التقرير</button>
+            <button type="button" className="ofp-button" onClick={printReport} disabled={!data}><Printer size={20} aria-hidden="true" />طباعة التقرير</button>
             <button type="button" className="ofp-button ofp-export" onClick={exportReport} disabled={!data || exporting}><MicrosoftExcelLogo size={20} aria-hidden="true" />{exporting ? "جارٍ التصدير…" : "تصدير Excel"}</button>
         </div></div>
         {loading && <div className="ofp-page-notice" role="status">جارٍ تحميل التقرير المالي التشغيلي…</div>}
@@ -219,6 +231,7 @@ export default function OperationalFinancialPosition() {
         {report?.status === "active" && !data && <div className="ofp-page-notice" role="status">لا توجد بيانات عملة جاهزة للعرض حتى آخر احتساب.</div>}
         {data && user?.role === "owner" && <ProviderHistoryReview key={"history" + scope + report.session_scope} sessionScope={report.session_scope} />}
         {data && user?.role === "owner" && <NativePurchaseReview key={scope + report.session_scope} sessionScope={report.session_scope} onRefresh={refresh} />}
+        {data && user?.role === "owner" && <CustomerWalletBalance key={"wallet" + scope + report.session_scope} sessionScope={report.session_scope} onSaved={refresh} />}
         {data && user?.role === "owner" && <div className="ofp-no-print">
             <a className="ofp-button" href="/shipping-settings-v2">مراجعة تعرفة شركات الشحن</a>
             <HistoricalShippingFeeReview key={scope + report.session_scope + activeCurrency} orders={data.shipping_fee_review_orders} />
@@ -235,22 +248,22 @@ export default function OperationalFinancialPosition() {
 
             <section className="ofp-section" aria-labelledby="ofp-actual-heading">
                 <SectionHeading id="ofp-actual-heading" number="01" title="الأرصدة الفعلية والحسابات"><span className="ofp-positive">لنا: مستحق للمنشأة</span><span className="ofp-negative">علينا: مستحق للغير</span></SectionHeading>
-                <div className="ofp-table-grid">{tables.filter(table => table.section === "actual").map(table => <ReportTable key={table.id} table={table} />)}</div>
+                <div className="ofp-table-grid">{tables.filter(table => table.section === "actual").map(table => <ReportTable key={`${activeCurrency}:${table.id}`} table={table} printing={printing} />)}</div>
             </section>
 
             <section className="ofp-section" aria-labelledby="ofp-fulfillment-heading">
                 <SectionHeading id="ofp-fulfillment-heading" number="02" title="الشحن والتحصيل والمبالغ المتوقعة"><span>أزرق: أرصدة فعلية</span><span className="ofp-forecast-label">أصفر: مبالغ تقديرية</span></SectionHeading>
-                <div className="ofp-table-grid">{tables.filter(table => table.section === "fulfillment" || table.section === "forecast").map(table => <ReportTable key={table.id} table={table} />)}</div>
-                <DeliveryDetails delivery={data.deliveries} filters={filters} onFiltersChange={setFilters} currency={activeCurrency} />
+                <div className="ofp-table-grid">{tables.filter(table => table.section === "fulfillment" || table.section === "forecast").map(table => <ReportTable key={`${activeCurrency}:${table.id}`} table={table} printing={printing} />)}</div>
+                <DeliveryDetails key={activeCurrency} delivery={data.deliveries} filters={filters} onFiltersChange={setFilters} currency={activeCurrency} />
             </section>
 
             <section className="ofp-section" aria-labelledby="ofp-summary-heading">
                 <SectionHeading id="ofp-summary-heading" number="03" title="الإجماليات والصافي والربح المتوقع"><span>العملة: {activeCurrency}</span></SectionHeading>
                 <div className="ofp-summary-grid">
-                    <DebtTable data={data} />
-                    <AmountTable title="حساب الربح المتوقع" rows={data.profit_rows} className="ofp-profit" complete={data.completeness?.profit === true} />
-                    <AmountTable title="صافي الأرصدة الحالية" rows={data.current_rows} className="ofp-current" complete={data.completeness?.actual === true} />
-                    <AmountTable title="التغير المتوقع من الطلبات المفتوحة" rows={data.forecast_rows} className="ofp-forecast-summary" complete={data.completeness?.forecast === true} />
+                    <DebtTable key={`debt:${activeCurrency}`} data={data} printing={printing} />
+                    <AmountTable key={`profit:${activeCurrency}`} title="حساب الربح المتوقع" rows={data.profit_rows} className="ofp-profit" complete={data.completeness?.profit === true} printing={printing} />
+                    <AmountTable key={`current:${activeCurrency}`} title="صافي الأرصدة الحالية" rows={data.current_rows} className="ofp-current" complete={data.completeness?.actual === true} printing={printing} />
+                    <AmountTable key={`forecast:${activeCurrency}`} title="التغير المتوقع من الطلبات المفتوحة" rows={data.forecast_rows} className="ofp-forecast-summary" complete={data.completeness?.forecast === true} printing={printing} />
                 </div>
                 <div className="ofp-final-metrics">
                     <div data-testid="financial-forecast-position"><h3>صافي السيولة والمستحقات المتوقع</h3><strong><Money value={data.metrics?.forecast_monetary_position} role="receivable" /><span>{activeCurrency}</span></strong></div>

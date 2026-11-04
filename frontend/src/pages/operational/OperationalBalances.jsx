@@ -10,7 +10,10 @@ import SalaryStart from './SalaryStart';
 import MovementHistory from './MovementHistory';
 import DomainDetails from './DomainDetails';
 import CustomerPaymentTotals from './CustomerPaymentTotals';
+import CustomerWalletBalance from './CustomerWalletBalance';
+import { formatRiyadhDateTime } from '../../lib/dates';
 import OperationalCostExposure from './OperationalCostExposure';
+import PaginatedReportTable from './PaginatedReportTable';
 import './operational.css';
 const labels = {
   actual_liquidity: 'السيولة الفعلية',
@@ -75,7 +78,8 @@ function Reports({context,source}) {
   const [report, setReport] = useState(null),
     [audit, setAudit] = useState([]),
     [error, setError] = useState(''),
-    [kind, setKind] = useState('');
+    [kind, setKind] = useState(''),
+    [revision, setRevision] = useState(0);
   useEffect(() => {
     let alive = true;
     let running = false;
@@ -92,12 +96,25 @@ function Reports({context,source}) {
     const timer = setInterval(refresh, 30000);
     return () => { alive = false; clearInterval(timer); };
 
-  }, []);
+  }, [revision]);
   if (error) return <Notice error={error} />;
   if (!report) return <p role="status">جاري تحميل الأرصدة…</p>;
   const summaryEntries = Object.entries(report.summaries || {});
   if (!summaryEntries.length && Object.keys(report.summary || {}).length) summaryEntries.push(['SAR', report.summary]);
-  return <section><h2>الأرصدة والتقارير التشغيلية</h2><p className="op-muted">آخر تحديث: {report.as_of ? new Date(report.as_of).toLocaleString('ar-SA') : context.status === 'draft' ? 'لم يبدأ الاحتساب بعد؛ أنهِ الأرصدة الافتتاحية أولًا.' : 'لم تكتمل قراءة التقرير بعد'}</p><CustomerPaymentTotals report={report} /><OperationalIssueAlerts items={report.issues} /><div className="op-summary">{Object.entries(labels).map(([key, label]) => <article key={key}><span>{label}</span><strong>{summaryEntries.map(([currency, summary]) => `${summary[key] ?? 'غير مكتمل'} ${currency}`).join(' / ') || (context.status === 'draft' ? 'لم يبدأ الاحتساب' : 'لا توجد بيانات محسوبة')}</strong></article>)}</div><label className="op-field">نوع الجهة<select value={kind} onChange={e => setKind(e.target.value)}><option value="">جميع الجهات</option>{entityKinds.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label><div className="op-table"><table><thead><tr>{['الجهة', 'العملة', 'الابتدائي', 'التقديري لنا', 'التقديري علينا', 'المؤكد لنا', 'المؤكد علينا', 'المسدد', 'الفعلي', 'المتبقي لنا', 'المتبقي علينا'].map(l => <th key={l}>{l}</th>)}</tr></thead><tbody>{report.parties.filter(p => !['operating_expense','owner_withdrawal'].includes(p.party_type) && (!kind || p.party_type === kind)).map(p => <tr key={`${p.party_type}:${p.party_id}:${p.currency}`}>{['name', 'currency', 'opening', 'expected_receivable', 'expected_payable', 'confirmed_receivable', 'confirmed_payable', 'settled', 'actual', 'outstanding_receivable', 'outstanding_payable'].map(key => <td key={key}>{p[key] ?? 'غير مكتمل'}</td>)}</tr>)}</tbody></table>{!report.parties.length && <p>لا توجد أرصدة مسجلة بعد.</p>}</div><OperationalCostExposure scopeKey={context.session_scope} enabled={context.status !== 'draft'} /><DomainDetails report={report}/><InventoryPurchases mode="reports" context={context} source={source}/><details className="op-card"><summary>سجل التدقيق</summary>{audit.length ? audit.map((a, i) => <p key={i}>{a.message || a.action_label || 'تم تسجيل عملية موثقة'} · {(a.at || a.created_at) ? new Date(a.at || a.created_at).toLocaleString('ar-SA') : ''} {a.reason || ''}</p>) : <p>لا توجد عمليات مسجلة.</p>}</details></section>;
+  return <section><h2>الأرصدة والتقارير التشغيلية</h2><p className="op-muted">آخر تحديث: {report.as_of ? new Date(report.as_of).toLocaleString('ar-SA') : context.status === 'draft' ? 'لم يبدأ الاحتساب بعد؛ أنهِ الأرصدة الافتتاحية أولًا.' : 'لم تكتمل قراءة التقرير بعد'}</p><CustomerPaymentTotals report={report} /><OperationalIssueAlerts items={report.issues} /><div className="op-summary">{Object.entries(labels).map(([key, label]) => <article key={key}><span>{label}</span><strong>{summaryEntries.map(([currency, summary]) => `${summary[key] ?? 'غير مكتمل'} ${currency}`).join(' / ') || (context.status === 'draft' ? 'لم يبدأ الاحتساب' : 'لا توجد بيانات محسوبة')}</strong></article>)}</div><label className="op-field">نوع الجهة<select value={kind} onChange={e => setKind(e.target.value)}><option value="">جميع الجهات</option>{entityKinds.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+    <PaginatedReportTable label="أرصدة الجهات" resetKey={kind} rows={report.parties.filter(p => !['operating_expense','owner_withdrawal'].includes(p.party_type) && (!kind || p.party_type === kind))}>{rows =>
+      <div className="op-table"><table>
+        <thead><tr>{['الجهة', 'العملة', 'الابتدائي', 'التقديري لنا', 'التقديري علينا', 'المؤكد لنا', 'المؤكد علينا', 'المسدد', 'الفعلي', 'المتبقي لنا', 'المتبقي علينا'].map(label => <th key={label}>{label}</th>)}</tr></thead>
+        <tbody>{rows.map(party => <tr key={`${party.party_type}:${party.party_id}:${party.currency}`}>
+          {['name', 'currency', 'opening', 'expected_receivable', 'expected_payable', 'confirmed_receivable', 'confirmed_payable', 'settled', 'actual', 'outstanding_receivable', 'outstanding_payable'].map(key => <td key={key}>{party[key] ?? 'غير مكتمل'}</td>)}
+        </tr>)}</tbody>
+      </table>{!report.parties.length && <p>لا توجد أرصدة مسجلة بعد.</p>}</div>
+    }</PaginatedReportTable>
+    {Object.entries(report.details?.customer_wallet_balances || {}).map(([currency, balance]) => <p key={currency}>
+      رصيد محافظ العملاء المستحق علينا {balance.remaining ?? 'غير متاح'} {currency} · وفق كشف سلة حتى {formatRiyadhDateTime(balance.as_of)}
+    </p>)}
+    {context.permissions?.manage && context.status === 'active' && source !== 'employee_app' && <CustomerWalletBalance key={context.session_scope} sessionScope={context.session_scope} onSaved={() => setRevision(value => value + 1)} />}
+    <OperationalCostExposure scopeKey={context.session_scope} enabled={context.status !== 'draft'} /><DomainDetails report={report}/><InventoryPurchases mode="reports" context={context} source={source}/><details className="op-card"><summary>سجل التدقيق</summary>{audit.length ? audit.map((a, i) => <p key={i}>{a.message || a.action_label || 'تم تسجيل عملية موثقة'} · {(a.at || a.created_at) ? new Date(a.at || a.created_at).toLocaleString('ar-SA') : ''} {a.reason || ''}</p>) : <p>لا توجد عمليات مسجلة.</p>}</details></section>;
 }
 export default function OperationalBalances({
   source = 'mezan2'

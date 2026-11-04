@@ -38,6 +38,27 @@ class Cursor:
 class Collection:
     def __init__(self, db, name): self.db, self.name = db, name
     def find(self, query, projection=None):
+        if self.name in {'mz2_shipping_accounting_events', 'mz2_shipping_native_events_v2'}:
+            assert set(query) == {'user_id', '$or'} and query['user_id'] == 'owner' and len(query['$or']) == 2
+            assert projection and projection['_id'] == 0 and projection['user_id'] == 1
+            fees, settlements = query['$or']
+            if self.name == 'mz2_shipping_accounting_events':
+                assert fees['kind'] == {'$in': ['courier_fee', 'store_driver_cod']}
+                assert settlements['kind'] == 'shipping_settlement'
+                for ref in fees['$or']:
+                    assert len(ref) == 1
+                    field, value = next(iter(ref.items()))
+                    assert field in {'facts.order_number', 'facts.waybill', 'facts.assignment_id'}
+                    assert set(value) == {'$in'} and 0 < len(value['$in']) <= 250
+                parties = settlements['facts.counterparty_id']
+            else:
+                assert fees['kind'] == 'fee' and settlements['kind'] == 'settlement'
+                assert set(fees['order_number']) == {'$in'} and 0 < len(fees['order_number']['$in']) <= 250
+                parties = settlements['party_id']
+            assert set(parties) == {'$in'} and 0 < len(parties['$in']) <= 250
+            assert not self.db.data.get(self.name), 'Use a real Mongo fixture for populated native shipping postings'
+            self.db.reads.append(self.name)
+            return Cursor([])
         if self.name == "order_activity_events_v2":
             numbers = query["order_number"]["$in"]
             assert query == {"user_id":"owner", "source":"salla_history",
@@ -65,11 +86,17 @@ class Collection:
             self.db.reads.append(self.name)
             return Cursor([])
         if self.name in {'accounts', 'mz2_operational_bank_accounts'}:
-            assert projection == {'_id': 0, **{k: 1 for k in ('id', 'user_id', 'name', 'display_name', 'currency', 'account_type', 'status', 'active', 'is_active', 'archived', 'deleted', 'is_archived', 'is_deleted')}}
+            identity_projection = {'_id': 0, **{k: 1 for k in ('id', 'user_id', 'name', 'display_name', 'currency', 'account_type', 'status', 'active', 'is_active', 'archived', 'deleted', 'is_archived', 'is_deleted')}}
+            allowed = [identity_projection]
+            if self.name == 'accounts':
+                allowed.append({**identity_projection, 'bank_transfer_aliases': 1})
+            assert projection in allowed
         if self.name == 'settings':
             assert projection and projection.get('_id') == 0
-            assert set(projection) == {'_id', 'user_id', 'shipping_companies.name',
+            identity_fields = {'_id', 'user_id', 'shipping_companies.name',
                 *('shipping_companies.' + key for key in ('status', 'active', 'is_active', 'archived', 'deleted', 'is_deleted', 'is_archived'))}
+            fee_fields = {'_id', 'user_id', 'payment_methods', 'updated_at'}
+            assert set(projection) in (identity_fields, fee_fields)
         if self.name == 'users':
             assert query == {'$or': [{'id': 'owner', 'role': 'owner'}, {'created_by': 'owner', 'role': 'admin'}]}
             self.db.reads.append(self.name)
@@ -399,11 +426,11 @@ def test_ad_baseline_stale_snapshot_is_preserved_but_not_verified():
 # production developer also adds it to ALLOWED_COLLECTIONS.
 HARD_SOURCE_ALLOWLIST = frozenset({'mz2_bank_transfer_bindings',
     'accounts', 'mz2_operational_bank_accounts',  # Explicit identity-only reads; never legacy financial values.
-    'settings',  # Owner-scoped courier identity projection only; generic reader rejects it.
+    'settings',  # Scoped courier identities and owner-authorized configured payment fees.
     'users', 'expense_categories', 'mz2_ad_automation_policies_v2',
     'mezan_employees_v2', 'mezan_suppliers_v2', 'store_drivers', 'mz2_external_persons_v2', 'mz2_financial_accounts',
     'mz2_shipping_setup_v2', 'mz2_provider_fee_policies_v2', 'mz2_ad_account_bindings_v2', 'mezan_integration_accounts_v2',
-    'mz2_ad_fx_snapshots_v2',
+    'mz2_ad_fx_snapshots_v2', 'mezan_ad_account_cost_settings_v2',
     'unified_orders', 'mezan_products_v2', 'mezan_product_cost_profiles_v2', 'mezan_product_resource_bindings_v2',
     'mezan_product_option_cost_bindings_v2', 'mezan_cost_resources_v2', 'mezan_preparation_pieces_v1',
     'mezan_supplier_invoices_v2', 'store_delivery_assignments', 'store_delivery_collections',
@@ -414,7 +441,8 @@ HARD_SOURCE_ALLOWLIST = frozenset({'mz2_bank_transfer_bindings',
     'mezan_tiktok_performance_daily_v2', 'mezan_google_ads_performance_daily_v2',
 })
 
-HARD_SCOPED_TXN_READS = {"order_payment_transactions_v2", "order_activity_events_v2"}
+HARD_SCOPED_TXN_READS = {"order_payment_transactions_v2", "order_activity_events_v2",
+                         "mz2_shipping_accounting_events", "mz2_shipping_native_events_v2"}
 
 class HardBoundaryDB(DB):
     def __getitem__(self, name):

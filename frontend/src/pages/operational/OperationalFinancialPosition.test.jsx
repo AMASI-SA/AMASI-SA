@@ -110,6 +110,114 @@ test("all three sections use server values, exact cents, and explicit missing-so
     expect(host.textContent).not.toContain("جميع الفروع");
 });
 
+test("customer wallet closing is displayed on the payable side with its own source date", async () => {
+    const report = fixture();
+    report.currencies.SAR.tables.push({
+        id: "customer_wallets", title: "محافظ العملاء المستحقة علينا", section: "actual", complete: true,
+        columns: [{ key: "name", label: "الجهة", type: "text" },
+            { key: "remaining", label: "الرصيد المستحق للعملاء", type: "money", role: "payable" },
+            { key: "as_of", label: "تاريخ كشف سلة", type: "text" }],
+        rows: [{ id: "wallet", name: "محافظ العملاء", remaining: "125.20", as_of: "2026-11-01T08:00:00Z" }],
+        show_totals: false,
+    });
+    report.currencies.SAR.debt_rows.push({ id: "customer_wallets", name: "محافظ العملاء", receivable: "0.00", payable: "125.20" });
+    operationalApi.financialPosition.mockResolvedValueOnce(report);
+    await render();
+    const walletTable = host.querySelector('[data-testid="financial-table-customer_wallets"]');
+    expect(walletTable.classList.contains('ofp-table-wide')).toBe(true);
+    expect(walletTable.querySelector('.ofp-negative').textContent).toBe('125.20');
+    expect(walletTable.textContent).not.toContain('T08:00:00Z');
+    const row = [...host.querySelectorAll('[data-testid="financial-debt-summary"] tbody tr')].find(item => item.textContent.includes('محافظ العملاء'));
+    expect(row.cells[1].textContent).toBe('0.00');
+    expect(row.cells[2].textContent).toBe('125.20');
+});
+
+test("report tables paginate independently with 13 rows and 10 unconfirmed platform collections", async () => {
+    const report = fixture();
+    const suppliers = report.currencies.SAR.tables[0];
+    suppliers.rows = Array.from({ length: 27 }, (_, index) => ({ ...suppliers.rows[0], id: `supplier-${index}`, name: `مورد ${index + 1}` }));
+    report.currencies.SAR.tables.push({ ...suppliers, id: "provider_collections_expected", title: "تحصيل المنصات غير المؤكد", section: "forecast" });
+    report.currencies.SAR.debt_rows = Array.from({ length: 14 }, (_, index) => ({ id: `debt-${index}`, name: `جهة ${index + 1}`, receivable: "1.00", payable: "2.00" }));
+    report.currencies.SAR.profit_rows = Array.from({ length: 14 }, (_, index) => ({ id: `profit-${index}`, label: `بند ${index + 1}`, amount: "3.00" }));
+    operationalApi.financialPosition.mockResolvedValueOnce(report);
+    await render();
+    const supplierTable = host.querySelector('[data-testid="financial-table-suppliers"]');
+    const pendingTable = host.querySelector('[data-testid="financial-table-provider_collections_expected"]');
+    expect(supplierTable.querySelectorAll("tbody tr")).toHaveLength(13);
+    expect(pendingTable.querySelectorAll("tbody tr")).toHaveLength(10);
+    expect(host.querySelectorAll('[data-testid="financial-debt-summary"] tbody tr')).toHaveLength(13);
+    expect(host.querySelectorAll(".ofp-profit tbody tr")).toHaveLength(13);
+    await act(async () => supplierTable.querySelector('[aria-label="الصفحة التالية — الموردون"]').click());
+    expect(supplierTable.querySelector("tbody tr").textContent).toContain("مورد 14");
+    expect(supplierTable.querySelector("tfoot").textContent).toContain("9,007,199,254,740,993.25");
+    expect(pendingTable.querySelector("tbody tr").textContent).toContain("مورد 1");
+    await act(async () => pendingTable.querySelector('[aria-label="الصفحة التالية — تحصيل المنصات غير المؤكد"]').click());
+    expect(pendingTable.querySelector("tbody tr").textContent).toContain("مورد 11");
+    await change(field("عملة التقرير"), "USD");
+    await change(field("عملة التقرير"), "SAR");
+    expect(host.querySelector('[data-testid="financial-table-suppliers"] tbody tr').textContent).toContain("مورد 1");
+});
+
+test("print and Excel include off-page records while delivery filters reset the selected page", async () => {
+    const report = fixture();
+    const suppliers = report.currencies.SAR.tables[0];
+    suppliers.rows = Array.from({ length: 27 }, (_, index) => ({ ...suppliers.rows[0], id: `supplier-${index}`, name: `مورد التصدير ${index + 1}` }));
+    const delivery = report.currencies.SAR.deliveries;
+    delivery.rows = Array.from({ length: 27 }, (_, index) => ({ ...delivery.rows[0], id: `delivery-${index}`, order_number: `900${String(index + 1).padStart(2, "0")}` }));
+    operationalApi.financialPosition.mockResolvedValueOnce(report);
+    await render();
+    await act(async () => field("الصفحة التالية — الموردون").click());
+    await act(async () => field("الصفحة التالية — تفاصيل الشحن والتحصيل لكل طلب").click());
+    expect(visibleOrders()).toHaveLength(13);
+    expect(visibleOrders()[0]).toContain("90014");
+    print.mockImplementation(() => {
+        expect(host.querySelectorAll('[data-testid="financial-table-suppliers"] tbody tr')).toHaveLength(27);
+        expect(host.querySelectorAll(".ofp-print-order")).toHaveLength(27);
+    });
+    await click("طباعة التقرير");
+    await act(async () => useReactToPrint.mock.calls.at(-1)[0].onAfterPrint());
+    expect(host.querySelectorAll('[data-testid="financial-table-suppliers"] tbody tr')).toHaveLength(13);
+    expect(host.querySelector('[data-testid="financial-table-suppliers"] tbody tr').textContent).toContain("مورد التصدير 14");
+    await click("طباعة التقرير");
+    await act(async () => useReactToPrint.mock.calls.at(-1)[0].onPrintError("print", new Error("print unavailable")));
+    expect(host.querySelectorAll('[data-testid="financial-table-suppliers"] tbody tr')).toHaveLength(13);
+    await click("تصدير Excel");
+    const workbook = XLSX.writeFile.mock.calls[0][0];
+    expect(JSON.stringify(workbook.worksheets.map(sheet => sheet.getSheetValues()))).toContain("مورد التصدير 27");
+    expect(JSON.stringify(workbook.getWorksheet("تفاصيل الطلبات").getSheetValues())).toContain("90027");
+    await change(field("البحث برقم الطلب"), "90001");
+    expect(visibleOrders()).toHaveLength(1);
+    expect(visibleOrders()[0]).toContain("90001");
+    expect(field("الصفحة السابقة — تفاصيل الشحن والتحصيل لكل طلب").disabled).toBe(true);
+});
+
+test("USD advertising conversion uses supplied SAR fees and net balances above the account balances", async () => {
+    const report = fixture();
+    const columns = [
+        { key: "name", label: "الحساب", type: "text" },
+        { key: "amount_usd", label: "الرصيد بالدولار", type: "money" },
+        { key: "amount_sar", label: "المعادل بالريال", type: "money" },
+        { key: "bank_commission", label: "العمولة البنكية", type: "money" },
+        { key: "bank_commission_vat", label: "ضريبة العمولة", type: "money" },
+        { key: "receivable", label: "لنا بالريال", type: "money", role: "receivable" },
+        { key: "payable", label: "علينا بالريال", type: "money", role: "payable" },
+    ];
+    report.currencies.SAR.tables.push({ id: "ads_currency_conversion", title: "الحسابات الإعلانية بالدولار", section: "actual", complete: true, columns,
+        rows: [{ id: "usd-ad", name: "حساب إعلان بالدولار", amount_usd: "123.45", amount_sar: "463.48", bank_commission: "10.66", bank_commission_vat: "1.60", receivable: "0.00", payable: "475.74" }] },
+        { id: "ads", title: "أرصدة الحسابات الإعلانية", section: "actual", complete: true, columns: report.currencies.SAR.tables[0].columns,
+            rows: [{ id: "ad-balance", name: "حساب إعلان بالدولار", receivable: "0.00", payable: "475.74" }] });
+    operationalApi.financialPosition.mockResolvedValueOnce(report);
+    await render();
+    const conversion = host.querySelector('[data-testid="financial-table-ads_currency_conversion"]');
+    const balances = host.querySelector('[data-testid="financial-table-ads"]');
+    expect(conversion.classList.contains("ofp-table-wide")).toBe(true);
+    expect(conversion.compareDocumentPosition(balances) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect([...conversion.querySelector("tbody tr").cells].map(cell => cell.textContent)).toEqual([
+        "حساب إعلان بالدولار", "123.45", "463.48", "10.66", "1.60", "0.00", "475.74",
+    ]);
+    expect(balances.textContent).toContain("475.74");
+});
+
 test("currency selection renders only that currency and resets detail filters", async () => {
     await render();
     await change(field("البحث برقم الطلب"), "1001");
