@@ -176,7 +176,7 @@
     "Unreachable or disabled definitions are not activated",
     "Coverage is static and bounded; it does not prove live registered callbacks"
   ],
-  "review_note": "Original 28 bounded assignments preserved; new independent runtime and callback classifier reviewed as added orchestration sources. Eighteen registrations unchanged; launch candidates148 include11 new orchestration tasks. Not proof of live registration.",
+  "review_note": "Original28 assignments preserved.18 hooks/148 launch candidates unchanged. Added independent orchestrators reviewed; operational_atomic hash updated only for owner-proven employee assignment read repair, no launch/financial-write capability change. Production2d73a2a employee paging integrated. Runtime reachability separate.",
   "source_git_sha": "cec4c3854031c357577f07568f91a44c082905fc",
   "source_sha256": {
     "accounting_advertising_setup.py": "f3834a64332082d17f6360c5928f5dbfbd72331c022920d6be507a694220bd93",
@@ -222,7 +222,7 @@
     "integrations_control_center/tiktok_creator_accounts.py": "b4e5ce21ef928a042135f1f69a09ae2a1f21d34413b1524fa9db0414bcd9b516",
     "integrations_control_center/tiktok_native_reporting_routes.py": "70275ad42f4ab272ce4f3d14d3d7936c3b82731649927b8634725f59f2c9d175",
     "mobile_reviewed_preparation_routes.py": "ab67846385751a8f48ee693e9ac792ba0c1cdb9a8b9767aea9ce9784374c2c93",
-    "operational_atomic.py": "a825453fbca42082da226620f32bb77db08acd7e77c90ce70cfaae9359efdca7",
+    "operational_atomic.py": "7892008299f0e0d7756ee5fb08a1b2cd5f24983fac365a7b8ed57098a92c433c",
     "operational_balance_service.py": "b2313fe0109047ef46ffad7a72d1943d3cab5deeb6cf986d9d302ab3e05a3041",
     "operational_driver_review_store.py": "729865d8724790dbbf65cc62003bea2dc5fb060d722ae4b255de93efe6eb8bc2",
     "operational_historical_shipping_service.py": "80f0748178f5d3a269564ee60c76b4e872a4fecef855801d91dff8c80f39d659",

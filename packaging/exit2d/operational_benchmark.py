@@ -108,6 +108,8 @@ async def run(owner_cookie, employee_cookie, database):
         try:
             await asyncio.sleep(.05)
             for index in range(10):
+                page = await call('GET', '/api/supplier-dispatch-v1/waiting-page', employee_cookie, group='my_products_waiting_page')
+                assert page.get('files'), 'paged my-products fixture not visible'
                 workspace = await call('GET', '/api/supplier-dispatch-v1/workspace?grain=piece', employee_cookie, group='my_products')
                 assert workspace.get('files'), 'my-products fixture not visible'
                 await call('GET', '/api/preparation-work-v1/assembly/orders?state=in_progress', employee_cookie, group='assembly_receiving_board')
@@ -142,7 +144,7 @@ async def run(owner_cookie, employee_cookie, database):
             results = await asyncio.gather(*loads, return_exceptions=True)
             for result in results:
                 if isinstance(result, Exception): raise result
-    assert reports_completed >= 4 and overlap == 70
+    assert reports_completed >= 4 and overlap == 80
     assert database.mezan_supplier_dispatches_v1.count_documents({'supplier_id': 'exit2d-perf-supplier'}) == 10
     output = {name: {'requests': len(values), 'p50_ms': round(statistics.median(values), 3),
         'p95_ms': round(sorted(values)[-1], 3)} for name, values in times.items()}
