@@ -25,5 +25,7 @@ RUN test ! -e backend/.env && test ! -e backend/release_identity.json \
     && chmod -R a+rX /opt/mezan /opt/frontend /opt/render
 USER 65532:65532
 EXPOSE 10000
-ENTRYPOINT ["python", "/opt/render/start.py"]
-CMD ["web"]
+# Render dockerCommand/preDeployCommand are full commands. Do not prepend a
+# role entrypoint to them; the exact Blueprint argv is exercised by smoke CI.
+ENTRYPOINT []
+CMD ["python", "/opt/render/start.py", "web"]

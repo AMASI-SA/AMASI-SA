@@ -15,6 +15,15 @@ spec.loader.exec_module(staging)
 
 
 class HostingBoundary(unittest.TestCase):
+    def test_blueprint_full_commands_do_not_receive_duplicate_entrypoint(self):
+        render = Path(__file__).parent / 'render'
+        dockerfile = (render / 'Dockerfile').read_text('utf-8')
+        self.assertIn('ENTRYPOINT []', dockerfile)
+        blueprint = (render / 'render.staging.yaml').read_text('utf-8')
+        for role in ('web', 'worker-reports', 'worker-sync', 'worker-accounting'):
+            self.assertIn('dockerCommand: python /opt/render/start.py ' + role, blueprint)
+        self.assertIn('preDeployCommand: python /opt/render/start.py migration', blueprint)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

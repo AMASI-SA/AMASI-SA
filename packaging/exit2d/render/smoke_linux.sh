@@ -34,12 +34,12 @@ for attempt in $(seq 1 60); do
   if docker exec "$mongo" mongosh --quiet -u fixture -p synthetic-only-password --authenticationDatabase admin --eval 'quit(db.adminCommand({ping:1}).ok?0:1)' >/dev/null 2>&1; then break; fi
   sleep 1
 done
-docker run --rm "${runtime[@]}" mezan-host:staging migration
-docker run -d --name "$reports" --network-alias staging-reports "${runtime[@]}" mezan-host:staging worker-reports
-docker run -d --name "$web" --network-alias staging-web "${runtime[@]}" -e MEZAN_REPORT_WORKER_ADDRESS=staging-reports:8000 mezan-host:staging web
+docker run --rm "${runtime[@]}" mezan-host:staging python /opt/render/start.py migration
+docker run -d --name "$reports" --network-alias staging-reports "${runtime[@]}" mezan-host:staging python /opt/render/start.py worker-reports
+docker run -d --name "$web" --network-alias staging-web "${runtime[@]}" -e MEZAN_REPORT_WORKER_ADDRESS=staging-reports:8000 mezan-host:staging python /opt/render/start.py web
 for role in sync accounting; do
   name="$sync"; if test "$role" = accounting; then name="$accounting"; fi
-  docker run -d --name "$name" "${runtime[@]}" -e MEZAN_WORKER_ENABLED=1 -e MEZAN_LEGACY_WORKERS_STOPPED=1 mezan-host:staging "worker-$role"
+  docker run -d --name "$name" "${runtime[@]}" -e MEZAN_WORKER_ENABLED=1 -e MEZAN_LEGACY_WORKERS_STOPPED=1 mezan-host:staging python /opt/render/start.py "worker-$role"
 done
 probe() {
   docker run --rm "${runtime[@]}" --entrypoint python mezan-host:staging -c \
