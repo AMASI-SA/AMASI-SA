@@ -12,6 +12,7 @@ import pytest_asyncio
 from mongomock_motor import AsyncMongoMockClient
 from motor.motor_asyncio import AsyncIOMotorClient
 
+from order_engine import amasi_shipping_compat as compat
 import order_engine.shipping_label_service as shipping
 from salla_shipping import CURRENT_SHIPPING
 from test_shipping_label_current_guard import seed, OWNER, ORDER
@@ -59,6 +60,11 @@ async def providers(monkeypatch, *, rows=None, order=None, resync=None, number=O
         return (await shipping._resolve_order(db, owner, number))[1]
 
     monkeypatch.setattr(shipping, "_read_resolved_order", read_resolved)
+    async def current_provider(_db, owner, method, path, **_kwargs):
+        assert owner == OWNER and method == "GET", "no provider mutation allowed"
+        assert path == "/orders/salla-synthetic/shipments", "only the scoped provider list is expected"
+        return {"data": await shipments()}
+    monkeypatch.setattr(compat, "call_salla", current_provider)
     monkeypatch.setattr(shipping, "_shipment_rows", shipments)
     monkeypatch.setattr(shipping, "_print_shipment_rows", shipments)
     monkeypatch.setattr(shipping, "_best_effort_resync", resync or noop)
@@ -150,15 +156,18 @@ async def test_store_switch_during_document_fetch_is_blocked(database, monkeypat
     await seed(database, company="مندوب المتجر", code="0")
     await providers(monkeypatch, order={"status": "completed",
         "shipping": {"company_name": "مندوب المتجر", "company_code": "0"}})
+    switched = []
     async def store(*args):
+        switched.append(True)
         await database.unified_orders.update_one({"user_id": OWNER}, {"$set": {
             f"{CURRENT_SHIPPING}.company_code": "imile", f"{CURRENT_SHIPPING}.company_name": "iMile"}})
         return {}
     monkeypatch.setattr(shipping, "_store_identity", store)
     result = await shipping.issue_shipping_label(database, OWNER, ORDER)
-    assert result["ready"] is False
+    assert switched == [True]
+    assert result["ready"] is False and not result.get("print_data")
     assert result["requires_attention"] is True
-    assert result["error_code"] == "shipping_readback_rejected"
+    assert result["error_code"] == "shipping_snapshot_changed"
 
 
 @pytest.mark.asyncio

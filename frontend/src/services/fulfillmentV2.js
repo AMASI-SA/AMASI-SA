@@ -56,29 +56,27 @@ export async function listCompletedFulfillmentOrders({ limit = 100 } = {}) {
     }
 }
 
-export async function issueCompletedOrderCarrierLabel(orderNumber) {
+async function currentCarrierLabel(orderNumber, refresh) {
     const normalized = String(orderNumber || "").trim();
     if (!normalized) throw new Error("رقم الطلب مطلوب.");
+    const suffix = refresh ? "/refresh" : "";
     try {
-        return (await api.post(
-            `/fulfillment-v2/completed/${encodeURIComponent(normalized)}/carrier-label/amasi`,
-        )).data;
+        const { data } = await api.post(
+            `/fulfillment-v2/completed/${encodeURIComponent(normalized)}/carrier-label/v1${suffix}`,
+        );
+        if (data?.contract_version !== 1 || data.order_number !== normalized
+            || !["ready", "pending"].includes(data.print_state)
+            || (data.print_state === "ready") !== (data.ready === true)) {
+            throw new Error("تعذّر التحقق من بوليصة هذا الطلب.");
+        }
+        return data;
     } catch (error) {
-        throw new Error(detailMessage(error, "تعذر تحويل الطلب في سلة وإصدار البوليصة."));
+        throw new Error(detailMessage(error, "تعذّر جلب بوليصة الشحن الحالية."));
     }
 }
 
-export async function refreshCompletedOrderCarrierLabel(orderNumber) {
-    const normalized = String(orderNumber || "").trim();
-    if (!normalized) throw new Error("رقم الطلب مطلوب.");
-    try {
-        return (await api.post(
-            `/fulfillment-v2/completed/${encodeURIComponent(normalized)}/carrier-label/amasi/refresh`,
-        )).data;
-    } catch (error) {
-        throw new Error(detailMessage(error, "تعذر التحقق من رابط البوليصة في سلة."));
-    }
-}
+export const issueCompletedOrderCarrierLabel = orderNumber => currentCarrierLabel(orderNumber, false);
+export const refreshCompletedOrderCarrierLabel = orderNumber => currentCarrierLabel(orderNumber, true);
 
 export async function confirmCompletedCarrierLabelPrint(orderNumber, barcode) {
     const normalized = String(orderNumber || "").trim();

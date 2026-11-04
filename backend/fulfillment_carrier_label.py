@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
 
+from order_engine import amasi_shipping_compat as compat
 from order_engine.shipping_label_service import (
     ShippingLabelError,
     issue_shipping_label,
@@ -193,6 +194,26 @@ async def sync_completed_carrier_label(
 __all__ = ["sync_completed_carrier_label"]
 
 
+async def read_current_carrier_label(db, owner, number, *, publish=None):
+    """Read the same local QR or official provider document used by carrier-label/v1."""
+    from operational_atomic import operational_owner
+
+    if await compat.mezan_courier_name(db, owner, number):
+        async def local(scoped):
+            workflow = await _require_print_completed_workflow(scoped, user_id=owner, order_number=number)
+            document = await compat.local_mezan_courier_label(scoped, owner, number, workflow)
+            if document is not None and publish is not None:
+                await publish(scoped, document)
+            return document
+        document = await operational_owner(db, owner, local)
+        if document is not None:
+            return document
+    document = await compat.carrier_label(db, owner, number, issue=False, completed_only=True)
+    if publish is not None:
+        await publish(db, document)
+    return document
+
+
 async def recover_store_courier_label_for_handover(db, *, user_id, order_number):
     """Persist freshly verified courier proof when a print-only read left it absent."""
     from operational_atomic import operational_owner
@@ -201,11 +222,6 @@ async def recover_store_courier_label_for_handover(db, *, user_id, order_number)
 
     number = _text(order_number)
     fence = await shipping._assert_current_print_status(db, user_id, number)
-    result = await shipping.refresh_shipping_label(db, user_id, number)
-    if not (result.get("ready") is True and result.get("order_status_completed") is True
-            and result.get("label_type") == "store_courier"):
-        return False
-
     async def persist(scoped):
         workflow = await _require_completed_workflow(scoped, user_id=user_id, order_number=number)
         assignment = {key: workflow.get(key) for key in (
@@ -215,9 +231,16 @@ async def recover_store_courier_label_for_handover(db, *, user_id, order_number)
                    "assignment": assignment}
         if current != fence or any(assignment.values()) or await source_status(scoped, user_id, number) not in {"in_progress", "completed"}:
             raise ShippingLabelError("shipping_snapshot_changed", "تغيرت بيانات الشحنة؛ أعد المحاولة.")
+        result = await compat.local_mezan_courier_label(scoped, user_id, number, workflow)
+        if not (result and result.get("ready") is True and result.get("order_status_completed") is True
+                and result.get("label_type") == "store_courier"):
+            return False
+        patch = _workflow_patch(result, now=_now())
+        # A local document cannot refresh the Salla observation clock.
+        del patch["salla_order_status"], patch["salla_order_status_verified_at"]
         await scoped[WORKFLOWS].update_one(
             {"user_id": user_id, "order_number": number},
-            {"$set": _workflow_patch(result, now=_now())},
+            {"$set": patch},
         )
         return True
 
@@ -231,13 +254,12 @@ async def prepare_completed_carrier_label(db, *, user_id, order_number, actor_id
     Only a confirmed not-completed response may enter durable status delivery.
     Network/identity/shipment failures never trigger a status POST fallback.
     """
-    from order_engine import shipping_label_service as shipping
     from assembly_completion_delivery import resume
     await _require_print_completed_workflow(db, user_id=user_id, order_number=order_number)
     try:
-        result = await shipping.refresh_shipping_label(db, user_id, order_number)
+        result = await read_current_carrier_label(db, user_id, order_number)
     except ShippingLabelError as exc:
-        if exc.code != "order_status_not_completed":
+        if exc.code != "carrier_order_in_progress":
             raise
         await authorize()
         result = await resume(db, user_id=user_id, order_number=order_number,
