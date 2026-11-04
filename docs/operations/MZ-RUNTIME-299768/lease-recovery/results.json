@@ -1,0 +1,13 @@
+{
+  "mongo": "8.0.12",
+  "test_ttl_seconds": 2.5,
+  "test_heartbeat_seconds": 0.1,
+  "original_fast_client_stole_live_lease": true,
+  "first_acquisition_winners_of_15": 1,
+  "date_shape_parity": "rejected ISO strings and explicit null next_due; accepted legacy null expiry and missing next_due",
+  "healthy_long_cycle": "renewed past original deadline; rival denied",
+  "new_clock_skew": "first acquisition uses server time; fast client denied",
+  "crash_recovery": "SIGKILL, denied before expiry; newly spawned slow-clock process acquired after expiry and completed",
+  "stale_renewal_and_release": "expired owner denied; successor document preserved",
+  "actual_long_process_completion": "original owner recorded own result after original TTL"
+}

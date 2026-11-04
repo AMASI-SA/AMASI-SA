@@ -1,0 +1,34 @@
+{
+  "source_sha": "188b1c5b0515d081ad4ebef3f6b7a44998a9fe0e",
+  "native_build_sha": "eea242896f3001234b30cf6d552b0e3f394af02a",
+  "validated": [
+    {
+      "path": "/api/order-reviews-v1/reviewed?page=1&limit=1",
+      "http": 200,
+      "order": "202"
+    },
+    {
+      "path": "/api/order-reviews-v1/reviewed?page=1&limit=50",
+      "http": 200,
+      "order": "202"
+    },
+    {
+      "path": "/api/preparation-work-v1/assembly/orders?state=in_progress&limit=1&offset=0",
+      "http": 200,
+      "order": "303"
+    },
+    {
+      "path": "/api/product-costs/product-sales?from_date=2026-08-01&to_date=2026-11-04",
+      "reviewed_only_http": 403,
+      "reviewed_and_products_http": 200,
+      "units_sold": 2,
+      "sales": 160
+    },
+    {
+      "path": "/api/fulfillment-v2/ready-to-ship?limit=100",
+      "web_shipping_employee_http": 200,
+      "ungranted_http": 403,
+      "order": "404"
+    }
+  ]
+}
