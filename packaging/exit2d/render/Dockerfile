@@ -2,6 +2,7 @@
 FROM node:22.23.2-bookworm-slim AS frontend
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/yarn.lock ./
+COPY frontend/vendor ./vendor
 RUN corepack enable && corepack prepare yarn@1.22.22 --activate && yarn install --frozen-lockfile --non-interactive
 COPY frontend/ ./
 # Explicit same-origin API. Never dispatch the Emergent release adapter here.
