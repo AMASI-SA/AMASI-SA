@@ -20,13 +20,14 @@ import { toast } from "sonner";
 import api from "../lib/api";
 
 const errMsg = (e, fb) =>
-    e?.response?.data?.detail
+    e?.response?.data?.detail?.message
+    || e?.response?.data?.detail
     || e?.response?.data?.error
     || e?.message
     || fb;
 
 const fmt = (n) =>
-    (Number(n) || 0).toLocaleString("en-US", {
+    n == null ? "غير متاح" : (Number(n) || 0).toLocaleString("en-US", {
         minimumFractionDigits: 2, maximumFractionDigits: 2,
     });
 
@@ -58,6 +59,8 @@ const STATUS_COLORS = {
               text: "text-amber-700", label: "فرق بسيط" },
     red:    { bg: "bg-rose-50",    border: "border-rose-200",
               text: "text-rose-700", label: "يحتاج مراجعة" },
+    review: { bg: "bg-amber-50",   border: "border-amber-200",
+              text: "text-amber-700", label: "الرسوم تحتاج استكمال" },
 };
 
 
@@ -102,7 +105,8 @@ function ProviderOverviewCard({ row, onOpenAdd, onOpenAuto }) {
     const meta = PROVIDERS[row.provider] || { name: row.provider, badge: "💳" };
     const last = row.last_settlement;
     const diffTone =
-        Math.abs(row.difference) < 0.5 ? "emerald"
+        row.difference == null ? "amber"
+        : Math.abs(row.difference) < 0.5 ? "emerald"
         : row.match_status === "yellow" ? "amber"
         : "rose";
     return (
@@ -171,11 +175,15 @@ function ProviderOverviewCard({ row, onOpenAdd, onOpenAuto }) {
                 />
                 <MetricCell
                     label="الفرق"
-                    value={`${row.difference >= 0 ? "" : "−"}${fmt(Math.abs(row.difference))} ر.س`}
+                    value={row.difference == null ? "غير متاح" : `${row.difference >= 0 ? "" : "−"}${fmt(Math.abs(row.difference))} ر.س`}
                     tone={diffTone}
                     testid={`metric-diff-${row.provider}`}
                 />
             </div>
+
+            {row.fees_complete === false && <p className="mb-3 text-xs text-amber-800" role="status">
+                إجمالي المبيعات {fmt(row.gross_sales)} ر.س. يلزم استكمال رسوم الدفع لحساب صافي المستحق والمطابقة.
+            </p>}
 
             <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
                 <div className="text-[10px] font-bold text-slate-500 mb-1">
@@ -1224,12 +1232,14 @@ export default function BnplSettlementsRegister() {
                                             {fmt(r.actual)}
                                         </td>
                                         <td className={`py-2 px-2 num text-left
-                                                        font-bold ${Math.abs(r.difference) < 0.5
+                                                        font-bold ${r.difference == null
+                                            ? "text-amber-700"
+                                            : Math.abs(r.difference) < 0.5
                                             ? "text-emerald-700"
                                             : r.match_status === "yellow"
                                                 ? "text-amber-700"
                                                 : "text-rose-700"}`}>
-                                            {r.difference >= 0 ? "+" : "−"}{fmt(Math.abs(r.difference))}
+                                            {r.difference == null ? "غير متاح" : `${r.difference >= 0 ? "+" : "−"}${fmt(Math.abs(r.difference))}`}
                                         </td>
                                         <td className="py-2 px-2 text-center num">
                                             {r.count}

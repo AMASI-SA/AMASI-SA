@@ -1428,6 +1428,9 @@ def map_salla_order(raw_order: dict[str, Any], *, native_payment_source: Optiona
                     shipping_raw.get("delivered_at"),
                 )
             ),
+            delivery_recorded_at=_parse_datetime(current_shipping.get("delivery_recorded_at")),
+            delivery_time_source=current_shipping.get("delivery_time_source"),
+            delivery_history_id=_text(current_shipping.get("delivery_history_id")),
             address=_address_from(shipping_address_raw),
         ),
         totals=MoneyTotalsDTO(

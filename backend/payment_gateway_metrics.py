@@ -22,6 +22,7 @@ The canonical method list is the one the user enumerated:
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_EVEN, ROUND_HALF_UP
 from typing import Optional
 
@@ -30,6 +31,9 @@ from fastapi import APIRouter, Depends, Query, Request
 from auth import ensure_user_settings, get_current_user_from_db
 from order_currency import order_total_sar
 from payment_methods import normalize_payment_method
+from operational_configured_provider_fees import configured_projection, configured_terms, has_capture_policies
+from operational_fee_methods import fee_rail, order_fee_rail
+from provider_fee_sources import bind_statement_plan, load_statement_plans
 
 
 # ── Canonical registry ────────────────────────────────────────────────
@@ -233,6 +237,9 @@ _SALLA_METRIC_KEYS = frozenset({
 
 _TAMARA_METRIC_KEYS = frozenset({"tamara"})
 _TABBY_METRIC_KEYS = frozenset({"tabby"})
+_PROVIDER_BY_METRIC = {key: 'salla' for key in _SALLA_METRIC_KEYS - {'salla_wallet'}}
+_PROVIDER_BY_METRIC.update({key: key for key in ('tabby', 'tamara', 'emkan')})
+_FEE_DEPENDENT_FIELDS = frozenset({'fees', 'fees_vat', 'net', 'expected_in_assets'})
 
 
 def _configured_fee_rules(settings_doc: dict) -> dict[str, dict]:
@@ -299,7 +306,23 @@ async def compute_metrics(
     # Profit Summary uses, so the two cards report the SAME order
     # universe. Empty list ⇒ no filter (count everything).
     settings_doc = await ensure_user_settings(db, user_id)
-    configured_fee_rules = _configured_fee_rules(settings_doc)
+    from accounting_onboarding_ssot import get_fee_source_mode, list_fee_policies
+    fee_policies = await list_fee_policies(db, user_id)
+    fee_source_mode = await get_fee_source_mode(db, user_id)
+    configured_fee_rules = _configured_fee_rules(settings_doc) if fee_source_mode == 'legacy_settings' else {}
+    plan_providers = {policy.get('provider') for policy in fee_policies if policy.get('status') == 'active'
+                      and policy.get('event_type', 'capture') == 'capture' and policy.get('plan_id')}
+    statement_plans = {}
+    if plan_providers:
+        pricing_orders = await db.unified_orders.find(match, {
+            '_id': 0, 'order_number': 1, 'payment_method': 1, 'actual_payment_method': 1, 'payment_fee_status': 1,
+        }).to_list(20001)
+        if len(pricing_orders) > 20000:
+            raise ValueError('provider_fee_transaction_scope_too_large')
+        numbers = [row.get('order_number') for row in pricing_orders
+            if row.get('payment_fee_status') != 'actual' and _PROVIDER_BY_METRIC.get(
+                resolve_canonical(row.get('actual_payment_method') or row.get('payment_method'))) in plan_providers]
+        statement_plans = await load_statement_plans(db, user_id, providers=plan_providers, order_numbers=numbers)
     included_statuses = [
         (s or "").strip().lower()
         for s in (settings_doc.get("report_included_statuses") or [])
@@ -311,6 +334,7 @@ async def compute_metrics(
         {"$project": {
             "_id": 0,
             "order_number": 1,
+            "order_date": 1,
             "order_status": 1,
             "total_amount": 1,
             "currency": 1,
@@ -324,6 +348,12 @@ async def compute_metrics(
             "raw_by_source.salla_direct.currency": 1,
             "raw_by_source.salla_direct.total_amount": 1,
             "raw_by_source.salla_direct.exchange_rate": 1,
+            "raw_by_source.salla_direct.payment": 1,
+            "raw_by_source.salla_direct.payment_method": 1,
+            "raw_by_source.salla_direct.payment_methods": 1,
+            "raw_by_source.salla_direct.created_at": 1,
+            "raw_by_source.salla_direct.date": 1,
+            "raw_by_source.salla_direct.updated_at": 1,
             "payment_method": {"$ifNull": ["$payment_method", ""]},
             "actual_payment_method": {"$ifNull": ["$actual_payment_method", ""]},
             "payment_fee_status": {"$ifNull": ["$payment_fee_status", "estimated"]},
@@ -366,6 +396,8 @@ async def compute_metrics(
             "net": 0.0,           # gross − fees − vat − refunds
             "expected_in_assets": 0.0,  # net  (settles into the gateway account)
             "currency_conversion_complete": True,
+            "fees_complete": True,
+            "fee_review_reasons": set(),
             "unverified_orders_count": 0,
             "unverified_order_numbers": [],
         }
@@ -406,6 +438,12 @@ async def compute_metrics(
                 continue
         raw_method = row.get("actual_payment_method") or row.get("payment_method")
         canon = resolve_canonical(raw_method) or "_other"
+        provider = _PROVIDER_BY_METRIC.get(canon)
+        raw_sources = row.get('raw_by_source') if isinstance(row.get('raw_by_source'), dict) else {}
+        raw_order = raw_sources.get('salla_direct') if isinstance(raw_sources.get('salla_direct'), dict) else {}
+        raw_payment = raw_order.get('payment') if isinstance(raw_order.get('payment'), dict) else {}
+        raw_has_method = raw_payment.get('method') or raw_order.get('payment_method') or raw_order.get('payment_methods')
+        pricing_method = order_fee_rail(raw_order) if raw_has_method else fee_rail(raw_method)
         bkt = buckets.setdefault(canon, _zero())
         if not conversion_verified:
             bkt["currency_conversion_complete"] = False
@@ -423,33 +461,12 @@ async def compute_metrics(
             # Iter-207c — cancelled rows count toward "excluded".
             excluded_orders_count += 1
             excluded_gross += row_amount
-            # Five cancellation rows in the merchant's verified Tamara
-            # statements each charged the fixed SAR 1.50 only, plus SAR 0.23
-            # VAT, and did not count as captured gross.  Preserve that expense
-            # even though the cancelled order itself is excluded from sales.
-            if canon in _TAMARA_METRIC_KEYS:
-                if row.get("payment_fee_status") == "actual":
-                    fee = float(row.get("actual_payment_fee") or 0)
-                    vat = float(row.get("actual_payment_vat") or 0)
-                    actual_net = row.get("actual_net_amount")
-                    net = (
-                        float(actual_net)
-                        if actual_net is not None else -(fee + vat)
-                    )
-                else:
-                    meta = PAYMENT_METHOD_REGISTRY.get(canon) or {}
-                    fee_rule = configured_fee_rules.get(canon) or meta
-                    fixed_fee = Decimal(str(
-                        fee_rule.get("estimated_fixed_fee", 0.0),
-                    ))
-                    vat_rate = Decimal(str(
-                        fee_rule.get("estimated_vat_rate", 0.0),
-                    ))
-                    fee = _round_sar(fixed_fee)
-                    vat = _round_sar(
-                        fixed_fee * vat_rate / Decimal("100"),
-                    )
-                    net = -(fee + vat)
+            # A canceled order status does not prove a fee-bearing provider event.
+            if row.get("payment_fee_status") == "actual":
+                fee = float(row.get("actual_payment_fee") or 0)
+                vat = float(row.get("actual_payment_vat") or 0)
+                actual_net = row.get("actual_net_amount")
+                net = float(actual_net) if actual_net is not None else -(fee + vat)
                 bkt["fees"] += fee
                 bkt["fees_vat"] += vat
                 bkt["net"] += net
@@ -496,6 +513,10 @@ async def compute_metrics(
             # Iter-118 — fixed per-order fee (e.g. Tabby charges 1 SAR
             # per order in addition to the percentage MDR).
             fixed_fee = fee_rule.get("estimated_fixed_fee", 0.0)
+            saved_terms = configured_terms(settings_doc, provider, pricing_method or raw_method) if provider else None
+            if saved_terms is not None:
+                saved_rate, saved_fixed, saved_vat = saved_terms
+                rate, fixed_fee, vat_rate = float(saved_rate * 100), float(saved_fixed), float(saved_vat * 100)
             if category == "refunded":
                 # Tamara does not rebate the captured-order commission.  Its
                 # refund rows carry zero *new* fee but deduct the refund gross;
@@ -624,6 +645,25 @@ async def compute_metrics(
                 rpart = 0.0
                 net = gross - fee - vat
 
+        if not is_actual and provider and (fee_source_mode == 'mz2_policies' or has_capture_policies(fee_policies, provider)):
+            try:
+                payment = bind_statement_plan({**raw_payment, 'provider': provider}, statement_plans, row.get('order_number'))
+                projection = configured_projection(fee_policies, provider, gross, method=pricing_method,
+                    payment=payment, refunded=rfull + rpart, source_mode=fee_source_mode,
+                    created_at=raw_order.get('created_at') or raw_order.get('date') or row.get('order_date'),
+                    as_of=to_date or datetime.now(timezone.utc))
+                fee = float(projection['estimated_fee_net'])
+                vat = float(projection['estimated_fee_tax'])
+                net = gross - rfull - rpart - fee - vat
+            except (ValueError, TypeError, KeyError, ArithmeticError) as exc:
+                bkt['fees_complete'] = False
+                bkt['fee_review_reasons'].add(str(exc) if isinstance(exc, ValueError) else 'provider_fee_source_incomplete')
+                fee = vat = net = 0.0
+        elif not is_actual and canon == '_other' and fee_source_mode == 'mz2_policies':
+            bkt['fees_complete'] = False
+            bkt['fee_review_reasons'].add('provider_payment_method_required_for_fee')
+            fee = vat = net = 0.0
+
         if rfull > 0 or rpart > 0:
             bkt["refunded_orders_count"] += 1
 
@@ -660,10 +700,12 @@ async def compute_metrics(
             "expected_in_assets": round(b["expected_in_assets"], 2),
         }
         safe_monetary = (
-            monetary
+            monetary.copy()
             if b["currency_conversion_complete"]
             else {key: None for key in monetary}
         )
+        if not b['fees_complete']:
+            safe_monetary.update({key: None for key in _FEE_DEPENDENT_FIELDS})
         rows.append({
             "key": key,
             "name_ar": meta["name_ar"],
@@ -677,6 +719,8 @@ async def compute_metrics(
             "known_amounts_sar": monetary,
             "accounting_currency": "SAR",
             "currency_conversion_complete": b["currency_conversion_complete"],
+            "fees_complete": b['fees_complete'],
+            "fee_review_reasons": sorted(b['fee_review_reasons']),
             "unverified_orders_count": b["unverified_orders_count"],
             "unverified_order_numbers": b["unverified_order_numbers"],
             "coverage_pct": round(
@@ -700,10 +744,12 @@ async def compute_metrics(
             "expected_in_assets": round(other["expected_in_assets"], 2),
         }
         safe_monetary = (
-            monetary
+            monetary.copy()
             if other["currency_conversion_complete"]
             else {key: None for key in monetary}
         )
+        if not other['fees_complete']:
+            safe_monetary.update({key: None for key in _FEE_DEPENDENT_FIELDS})
         rows.append({
             "key": "_other",
             "name_ar": "أخرى",
@@ -717,12 +763,15 @@ async def compute_metrics(
             "known_amounts_sar": monetary,
             "accounting_currency": "SAR",
             "currency_conversion_complete": other["currency_conversion_complete"],
+            "fees_complete": other['fees_complete'],
+            "fee_review_reasons": sorted(other['fee_review_reasons']),
             "unverified_orders_count": other["unverified_orders_count"],
             "unverified_order_numbers": other["unverified_order_numbers"],
             "coverage_pct": 0.0,
         })
 
     conversion_complete = not unverified_order_numbers
+    fees_complete = all(row['fees_complete'] for row in rows)
     known_totals = {
         field: round(sum(
             float((r.get("known_amounts_sar") or {}).get(field) or 0)
@@ -735,7 +784,7 @@ async def compute_metrics(
     }
     totals = {
         **{
-            field: value if conversion_complete else None
+            field: value if conversion_complete and (fees_complete or field not in _FEE_DEPENDENT_FIELDS) else None
             for field, value in known_totals.items()
         },
         "orders_count": sum(r["orders_count"] for r in rows),
@@ -756,6 +805,9 @@ async def compute_metrics(
         ),
         "accounting_currency": "SAR",
         "currency_conversion_complete": conversion_complete,
+        "fees_complete": fees_complete,
+        "fee_source_mode": fee_source_mode,
+        "fee_review_reasons": sorted({reason for row in rows for reason in row['fee_review_reasons']}),
         "unverified_orders_count": unverified_orders_count,
         "unverified_order_numbers": unverified_order_numbers,
         "known_amounts_sar": {

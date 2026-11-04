@@ -114,6 +114,23 @@ test("printing remains unavailable without permission", async () => {
     expect(verifyShippingLabel).not.toHaveBeenCalled();
 });
 
+test("shipping shows the Salla delivery recording time with its Riyadh source label", async () => {
+    await render({ ...carrier, status: "delivered", delivery_recorded_at: "2026-10-06T12:00:00Z",
+        delivery_time_source: "salla_carrier_history", delivery_history_id: "native-event" });
+    expect(host.textContent).toContain("تم التوصيل");
+    const recorded = host.querySelector('[data-testid="order-v2-delivery-recorded"]');
+    expect(recorded.textContent).toContain("تسجيل التسليم في سلة");
+    expect(recorded.textContent).toContain("15:00");
+    expect(recorded.textContent).toContain("بتوقيت الرياض");
+    expect(verifyShippingLabel).not.toHaveBeenCalled();
+});
+
+test("shipping does not invent a recording time from a delivery label", async () => {
+    await render({ ...carrier, status: "delivered" });
+    expect(host.textContent).toContain("تم التوصيل");
+    expect(host.querySelector('[data-testid="order-v2-delivery-recorded"]')).toBeNull();
+});
+
 test("rapid repeated clicks start one read", async () => {
     const pending = deferred();
     verifyShippingLabel.mockReturnValueOnce(pending.promise);

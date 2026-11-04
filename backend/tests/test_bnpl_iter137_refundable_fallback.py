@@ -32,6 +32,7 @@ class _StubColl:
 class _StubDB:
     def __init__(self, user_doc=None, bnpl_doc=None):
         self.users = _StubColl([user_doc] if user_doc else [])
+        self.settings = _StubColl()
         self.bnpl_settings = _StubColl([bnpl_doc] if bnpl_doc else [])
 
 
@@ -115,7 +116,7 @@ async def test_auto_mode_ignores_stale_doc_values():
 
 
 @pytest.mark.asyncio
-async def test_tamara_canonical_default_is_full_seven_percent():
+async def test_tamara_canonical_default_retains_the_original_capture_fee():
     """Iter-145 — Tamara's official invoice contract is 6.99% MDR +
     1.50 SAR fixed/order, NOT 7% with no fixed fee.  Refundable rate
     equals full MDR (Tamara doesn't split refundable like Tabby)."""
@@ -133,7 +134,7 @@ async def test_tamara_canonical_default_is_full_seven_percent():
         },
     )
     rates = await svc._merchant_fee_rates(db, "u1", "tamara")
-    assert rates["refundable_commission_pct"] == pytest.approx(6.99)
+    assert rates["refundable_commission_pct"] == 0.0
 
 
 def test_default_fee_rates_dict_is_in_sync_with_config_store():

@@ -151,7 +151,7 @@ def attach_returns(state, sources):
             payment['refund_allocation_unresolved'] = True
             continue
         order['payment'] = with_recorded_refund(payment, case['payment_snapshot'],
-                                               case['refund_reference'], case['amount'])
+                                               case['refund_reference'], case['amount'], refunded_at=case.get('refunded_at'))
     return sources
 
 
@@ -370,14 +370,20 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
                     fail('customer_return_original_capture_basis_required',
                          'تعذر إثبات أصل التحصيل بعد تعديل الطلب؛ طابق عملية الدفع والاستردادات قبل تأكيد رد آخر')
                 payment = deepcopy(current_order['payment_snapshot'])
-                payment['refunds'] = [{'id': r['refund_reference'], 'amount': r['amount'], 'status': 'executed'}
+                payment['refunds'] = [{'id': r['refund_reference'], 'amount': r['amount'], 'status': 'executed',
+                                      'refunded_at': r.get('refunded_at')}
                     for r in cases if r.get('status') == 'refunded' and r['order_id'] == case['order_id']
                     and r.get('refund_source_type') == 'provider' and r.get('refund_source_id') == identity]
-                payment['refunds'].append({'id': ref, 'amount': fmt(value), 'status': 'executed'})
+                payment['refunds'].append({'id': ref, 'amount': fmt(value), 'status': 'executed',
+                                          'refunded_at': refunded_at.isoformat()})
                 try:
                     if any(instant(c['captured_at']) > instant(stamp) for c in payment.get('captures', [])):
                         raise ValueError('provider_capture_date_invalid')
-                    projection = provider_projection(payment, policies, instant(case['order_created_at']).astimezone(RIYADH).date())
+                    capture_days = [instant(c['captured_at']).astimezone(RIYADH).date() for c in payment.get('captures', [])]
+                    if not capture_days:
+                        capture_days = [instant(case['order_created_at']).astimezone(RIYADH).date()]
+                    projection = provider_projection(payment, policies, max(capture_days), earliest_date=min(capture_days),
+                                                     as_of_date=instant(stamp).astimezone(RIYADH).date())
                     policy = next(p for p in policies if p['id'] == projection['policy_id'])
                     # Preserve legacy confirmation rules; explicitly evidenced component
                     # policies support independent refundable/nonrefundable charges.

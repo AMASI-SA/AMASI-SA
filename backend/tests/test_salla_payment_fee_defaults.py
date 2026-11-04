@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pytest
+from tests.provider_fee_test_helpers import legacy_fee_mode
 
 from excel_parser import match_settings
 import payment_gateway_metrics as gateway_metrics
@@ -62,7 +63,7 @@ def test_central_gateway_metrics_use_the_same_unified_defaults():
 
 
 @pytest.mark.asyncio
-async def test_central_metrics_apply_salla_rounding_and_configured_rules(monkeypatch):
+async def test_central_metrics_apply_salla_rounding_and_configured_rules(monkeypatch, legacy_fee_mode):
     class AsyncRows:
         def __init__(self, rows):
             self._rows = iter(rows)

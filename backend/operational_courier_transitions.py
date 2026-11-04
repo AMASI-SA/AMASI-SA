@@ -6,6 +6,8 @@ from operational_delivery_evidence import DELIVERED, _fail, _instant, _status, _
 
 COLLECTION = "order_activity_events_v2"
 WEBHOOK_PROOF = "verified_order_delivery_transition"
+CARRIER_HISTORY = "verified_salla_carrier_history"
+IN_TRANSIT = {"delivering", "out_for_delivery", "جاري التوصيل", "قيد التوصيل"}
 
 
 def _state(value):
@@ -25,7 +27,31 @@ def native_status_transition(row, provider_id):
                           for k in ("event", "type")):
         states.append(_state(row.get("customized") or row.get("status")))
     if not states:
-        return None
+        # Carrier integrations publish their status timeline as activity rows.
+        # User comments have a current-status label too, but are not transitions.
+        status, note = _status(row.get("status")), _status(row.get("note"))
+        actor = row.get("created_by")
+        if row.get("type") != "activity" or not status:
+            return None
+        try:
+            at = _instant(row.get("created_at")).isoformat()
+        except ValueError:
+            at = None
+        if (status != note or row.get("customized") or not isinstance(actor, dict)
+                or not _text(actor.get("id")) or not isinstance(actor.get("name"), str) or not _text(actor.get("name"))):
+            # A later native non-delivered observation still conflicts with a
+            # proposed delivery. It cannot establish a delivery or dispatch.
+            observed = _state(row.get("customized") or row.get("status"))
+            if observed is True:
+                return None
+            if row.get("order_id") is not None and _text(row["order_id"]) != provider_id:
+                observed = None
+            return {"delivered": observed, "at": at, "source": "salla_activity_status_observation"}
+        return {"delivered": status in DELIVERED, "at": at, "source": "salla_carrier_activity",
+                "history_id": _text(row.get("id") or row.get("history_id")), "native_type": "activity",
+                "status": status, "created_at": row.get("created_at"),
+                "actor": {"id": _text(actor["id"]), "name": actor["name"]},
+                "order_id": _text(row["order_id"]) if row.get("order_id") is not None else provider_id}
     delivered = states[0] if None not in states and len(set(states)) == 1 else None
     if row.get("order_id") is not None and _text(row["order_id"]) != provider_id:
         delivered = None
@@ -34,6 +60,50 @@ def native_status_transition(row, provider_id):
     except ValueError:
         dates = set()
     return {"delivered": delivered, "at": dates.pop() if len(dates) == 1 else None}
+
+
+def carrier_activity_transition(observations, current, provider_id):
+    """Bind an explicit native carrier timeline to the current carrier identity."""
+    from shipping_companies import SHIPPING_ALIASES, normalize_shipping_company
+
+    if not isinstance(observations, list) or any(not isinstance(row, dict) for row in observations):
+        _fail("courier_history_ambiguous")
+    key = normalize_shipping_company(current.get("company_name"))[0]
+    if key in {"unknown", "mandoob", "mandoob_riyadh", "pickup"} or key.startswith("other:"):
+        _fail("courier_history_actor_unproven")
+    # Match complete native publisher labels, never an arbitrary substring in
+    # a user's name. The same publisher ID must supply dispatch and delivery.
+    labels = {" ".join(label.casefold().split()) for carrier, display, alias in SHIPPING_ALIASES if carrier == key
+              for label in (display, alias, alias + " delivery", alias + " express", alias + " للتوصيل", alias + " للشحن")}
+    selected = {}
+    for observation in observations:
+        actor = observation.get("actor") or {}
+        identity = _text(observation.get("history_id"))
+        if (not identity or observation.get("native_type") != "activity"
+                or observation.get("source") != "salla_carrier_activity"
+                or observation.get("order_id") != provider_id or not isinstance(actor, dict)
+                or not _text(actor.get("id")) or not isinstance(actor.get("name"), str) or not _text(actor.get("name"))
+                or type(observation.get("delivered")) is not bool
+                or observation["delivered"] != (_status(observation.get("status")) in DELIVERED)):
+            _fail("courier_history_ambiguous")
+        if _instant(observation.get("at")) != _instant(observation.get("created_at")):
+            _fail("courier_history_ambiguous")
+        if " ".join(actor["name"].casefold().split()) not in labels:
+            continue
+        if identity in selected and selected[identity] != observation:
+            _fail("courier_history_ambiguous")
+        selected[identity] = observation
+    delivered = [row for row in selected.values() if row["delivered"]]
+    if len(delivered) != 1:
+        _fail("courier_history_ambiguous")
+    event = delivered[0]
+    at = _instant(event["at"])
+    dispatch = [row for row in selected.values() if _status(row.get("status")) in IN_TRANSIT
+                and row["actor"] == event["actor"] and _instant(row["at"]) < at]
+    if not dispatch or any(_instant(row["at"]) >= at for row in observations if row.get("delivered") is not True):
+        _fail("courier_history_ambiguous")
+    previous = max(dispatch, key=lambda row: _instant(row["at"]))
+    return {"at": event["at"], "event": event, "dispatch": previous}
 
 
 def verified_webhook_transition(body, raw, current, owner):
@@ -70,7 +140,7 @@ def verified_webhook_transition(body, raw, current, owner):
             "shipment_id": shipment, "waybill": waybill, "at": at.isoformat()}
 
 
-def order_delivery_time(raw, source, history, end):
+def order_delivery_time(raw, source, history, end, *, provenance=None):
     """Require agreement of authoritative order status, explicit dates and history."""
     order_id, number = _text(raw.get("id")), _text(raw.get("reference_id") or raw.get("order_number"))
     if any(source.get(k) is not None and _text(source[k]) != value
@@ -79,7 +149,7 @@ def order_delivery_time(raw, source, history, end):
     date = raw.get("date") if isinstance(raw.get("date"), dict) else {}
     version = raw.get("updated_at") or date.get("updated") or raw.get("date_updated")
     watermark = source.get("g47_salla_snapshot") or {}
-    if watermark.get("cancelled") or watermark.get("component_pending") or (
+    if watermark.get("cancelled") or watermark.get("component_pending") or watermark.get("requires_authoritative_refresh") or (
             watermark.get("source_updated_at") is not None and
             _instant(watermark["source_updated_at"]) != _instant(version)):
         _fail("canonical_source_stale")
@@ -96,13 +166,22 @@ def order_delivery_time(raw, source, history, end):
     observation = current.get(WEBHOOK_PROOF)
     if observation is not None:
         if (not isinstance(observation, dict) or observation.get("ambiguous")
-                or observation.get("source") != "verified_order_status_update"
+                or observation.get("source") not in {"verified_order_status_update", CARRIER_HISTORY}
                 or observation.get("owner") != source.get("user_id") or observation.get("order_id") != order_id
                 or observation.get("order_number") != number or observation.get("shipment_id") != current.get("shipment_id")
                 or observation.get("waybill") != current.get("tracking_number")):
             _fail("order_waybill_unproven")
+        if observation["source"] == CARRIER_HISTORY:
+            transition = carrier_activity_transition(observation.get("events") or [], current, order_id)
+            if (observation.get("history_complete") is not True
+                    or _instant(transition["at"]) != _instant(observation.get("at"))
+                    or _instant(observation.get("source_updated_at")) > _instant(version)):
+                _fail("courier_history_ambiguous")
+            if provenance is not None:
+                provenance.update(transition)
         times.add(_instant(observation.get("at")))
     other_times = set()
+    activities = []
     for row in history:
         if row.get("provider_order_id") != order_id or row.get("order_number") != number:
             _fail("order_identity_conflict")
@@ -112,7 +191,17 @@ def order_delivery_time(raw, source, history, end):
         obs = proofs[0]
         if not isinstance(obs, dict) or type(obs.get("delivered")) is not bool:
             _fail("timestamp_ambiguous")
+        if obs.get("source") == "salla_carrier_activity":
+            if obs.get("history_id") != row["source_event_id"]:
+                _fail("courier_history_ambiguous")
+            activities.append(obs)
+            continue
         (times if obs["delivered"] else other_times).add(_instant(obs.get("at")))
+    if activities:
+        transition = carrier_activity_transition(activities, current, order_id)
+        times.add(_instant(transition["at"]))
+        if provenance is not None:
+            provenance.update(transition)
     if not times:
         _fail("timestamp_missing")
     if len(times) != 1 or other_times and max(other_times) >= min(times):
@@ -121,6 +210,19 @@ def order_delivery_time(raw, source, history, end):
     if version is not None and not at <= _instant(version) <= end:
         _fail("canonical_source_stale")
     return at
+
+
+def carrier_history_snapshot(raw, current):
+    """Read the separately acquired shipment only for its bound native order."""
+    observation = current.get(WEBHOOK_PROOF) or {}
+    shipment = observation.get("shipment")
+    order_id, number = _text(raw.get("id")), _text(raw.get("reference_id") or raw.get("order_number"))
+    if (observation.get("source") != CARRIER_HISTORY or not isinstance(shipment, dict)
+            or _text(shipment.get("order_id")) != order_id
+            or _text(shipment.get("id")) != current.get("shipment_id")
+            or shipment.get("order_reference_id") is not None and _text(shipment["order_reference_id"]) != number):
+        _fail("order_waybill_unproven")
+    return {**raw, "shipping": {}, "shipment": None, "shipments": [shipment]}
 
 
 async def load_delivery_history(db, owner, sources, *, max_rows):

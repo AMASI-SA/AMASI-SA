@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import openpyxl
 import pytest
+from tests.provider_fee_test_helpers import legacy_fee_mode
 
 from bnpl import settlements_service as settlements
 from bnpl.config_store import (
@@ -150,8 +151,10 @@ def test_tabby_parser_uses_type_column_and_refund_gross():
         "net": -137.09,
         "refund_full": 301.99,
         "refund_partial": 247.0,
-        "refunded_fees": 27.40,
-        "refunded_fees_vat": 4.11,
+        "refunded_fees": -27.40,
+        "refunded_fees_vat": -4.11,
+        "fee_credits": -27.40,
+        "fee_vat_credits": -4.11,
         "settlement_fee": 0.0,
         "settlement_fee_vat": 0.0,
     }
@@ -230,7 +233,7 @@ async def test_tabby_legacy_cycle_and_fee_defaults_migrate_safely():
 
 
 @pytest.mark.asyncio
-async def test_gateway_metrics_keep_tabby_nonrefundable_fee_on_refund(monkeypatch):
+async def test_gateway_metrics_keep_tabby_nonrefundable_fee_on_refund(monkeypatch, legacy_fee_mode):
     class AsyncRows:
         def __init__(self, rows):
             self.rows = iter(rows)
