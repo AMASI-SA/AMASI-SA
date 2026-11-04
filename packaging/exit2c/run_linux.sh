@@ -351,6 +351,7 @@ wait "$accept_pid"
 exec {accept_out}<&-
 unset accept_in accept_out accept_pid
 docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/exit2d/http_benchmark.py
+docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/exit2d/operational_benchmark.py
 life profile
 stop_webs
 life no-writes
