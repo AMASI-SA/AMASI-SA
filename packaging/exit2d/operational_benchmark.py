@@ -105,6 +105,10 @@ async def run(owner_cookie, employee_cookie, database):
                 assert replay['dispatch']['id'] == dispatch, 'supplier file replay duplicated'
                 await call('POST', '/api/supplier-dispatch-v1/dispatches/' + dispatch + '/ready',
                     employee_cookie, payload={}, group='mark_ready')
+                await call('POST', '/api/supplier-dispatch-v1/dispatches/' + dispatch + '/ready',
+                    employee_cookie, payload={})
+                assert database.mezan_supplier_dispatch_events_v1.count_documents({
+                    'dispatch_id': dispatch, 'event_type': 'supplier_dispatch_marked_ready'}) == 1
                 label = await call('POST', '/api/fulfillment-v2/completed/EXIT2D-PRINT/carrier-label/v1',
                     employee_cookie, group='shipping_label_print')
                 assert label['print_state'] == 'ready' and label['label_type'] == 'store_courier'
