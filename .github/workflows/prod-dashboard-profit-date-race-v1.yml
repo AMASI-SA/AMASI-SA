@@ -6,11 +6,14 @@ on:
       - hotfix/prod-snap-meta-final
     paths:
       - "frontend/src/lib/api.js"
+      - "frontend/src/lib/dashboardFetchAdmission.js"
+      - "frontend/src/lib/dashboardFetchAdmission.test.js"
       - "frontend/src/lib/dashboardLatestResponseBroker.js"
       - "frontend/src/lib/dashboardLatestResponseBroker.test.js"
       - "frontend/src/lib/dashboardMezanV2Adapter.js"
       - "frontend/src/pages/Dashboard.jsx"
       - "frontend/src/pages/AdvancedDashboard.jsx"
+      - "frontend/src/pages/AdvancedDashboard.cartFreeze.test.jsx"
       - "frontend/src/components/DashboardAnalyticsPlacement.jsx"
       - "frontend/src/components/DashboardAnalyticsPlacement.test.js"
       - ".github/workflows/prod-dashboard-profit-date-race-v1.yml"
@@ -38,6 +41,8 @@ jobs:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
+          src/lib/dashboardFetchAdmission.test.js
+          src/pages/AdvancedDashboard.cartFreeze.test.jsx
           src/lib/dashboardLatestResponseBroker.test.js
           src/lib/dashboardMezanV2Adapter.adsExecutive.test.js
           src/components/DashboardAdsSpendCard.test.jsx

@@ -13,7 +13,7 @@ import asyncio
 import functools
 import latency_evidence
 from copy import deepcopy
-from dashboard_cpu_budget import CPUWorkBudget, COST_PROFIT_BUDGET_MS
+from dashboard_cpu_budget import CPUWorkBudget, COST_PROFIT_BUDGET_MS, PARSER_BUDGET_MS
 import logging
 import re
 import unicodedata
@@ -43,9 +43,10 @@ from order_cost_authority import (
 from order_currency import (
     SALLA_RAW_CURRENCY_PROJECTION,
     hydrate_order_currency_fields,
+    hydrate_order_currency_fields_cooperative,
     order_amount_to_sar,
     order_total_sar,
-    summarize_orders_sar,
+    summarize_orders_sar_cooperative,
 )
 from order_status_policy import effective_product_cost, get_policy_map
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
@@ -475,7 +476,9 @@ async def _filtered_orders(
             db.unified_orders.find(query, raw_projection),
             100000,
         )
-        hydrate_order_currency_fields(orders, projected_rows)
+        await hydrate_order_currency_fields_cooperative(
+            orders, projected_rows, checkpoint=CPUWorkBudget(PARSER_BUDGET_MS).checkpoint,
+        )
         if include_marketing_attribution:
             attach_projected_salla_attribution(orders, projected_rows)
     pm_list = [part.strip() for part in (payment_methods or "").split(",") if part.strip()]
@@ -1778,8 +1781,13 @@ def make_dashboard_v2_router(
             month_orders = orders
         else:
             month_orders = initial_results[2]
-        with latency_evidence.phase("computation_wall"):
-            month_sales = summarize_orders_sar(month_orders)
+        budget = CPUWorkBudget(PARSER_BUDGET_MS)
+        with latency_evidence.phase("cooperative_computation_wall"):
+            month_sales = await summarize_orders_sar_cooperative(month_orders, checkpoint=budget.checkpoint)
+            if month_orders is orders:
+                sales_currency = deepcopy(month_sales)
+            else:
+                sales_currency = await summarize_orders_sar_cooperative(orders, checkpoint=budget.checkpoint)
         month_kpis = {
             "from_date": month_start,
             "to_date": today_s,
@@ -1793,8 +1801,6 @@ def make_dashboard_v2_router(
         # count and gross sales.  The legacy dashboard can under-report fresh
         # Salla Direct orders when payment-collection fields are still empty,
         # even though each normalized order already has a valid total_amount.
-        with latency_evidence.phase("computation_wall"):
-            sales_currency = deepcopy(month_sales) if month_orders is orders else summarize_orders_sar(orders)
         authoritative_sales = sales_currency["total_sar"]
         previous_sales = _float(totals.get("total_sales"))
         sales_delta = (

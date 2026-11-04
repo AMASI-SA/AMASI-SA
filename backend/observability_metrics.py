@@ -15,14 +15,30 @@ from pathlib import Path
 BOUNDS = (.001, .005, .01, .025, .05, .1, .25, .5, 1., 2., 5., 10., 30., 60., 300.)
 KINDS = ("snapchat", "ads", "dashboard", "startup", "other")
 GROUPS = ("ready", "supplier_invoice", "shipping", "other")
+EMPLOYEE_ROUTES = {
+    ("GET", "/order-reviews-v1/pages"): "pending_reviews",
+    ("GET", "/reviewed-products-v1/catalog"): "reviewed_products",
+    ("GET", "/order-reviews-v1/reviewed"): "reviewed_orders",
+    ("GET", "/preparation-work-v1/assembly/orders"): "assembly_orders",
+    ("GET", "/fulfillment-v2/ready-to-ship"): "ready_to_ship",
+    ("POST", "/operational-notifications/devices/register"): "push_registration",
+    ("GET", "/supplier-dispatch-v1/workspace"): "supplier_workspace",
+    ("POST", "/supplier-dispatch-v1/dispatches"): "supplier_dispatch_create",
+}
+STATUS_BUCKETS = ("1xx", "2xx", "3xx", "4xx", "500", "502", "503", "504", "5xx", "cancelled")
 NAMES = frozenset(
     ["event_loop.lag"] + [f"api.duration.{g}" for g in GROUPS]
+    + [f"employee_route.duration.{route}" for route in EMPLOYEE_ROUTES.values()]
     + [f"mongo.command.{c}.{o}" for c in ("find", "aggregate", "getMore", "write", "commitTransaction", "other") for o in ("ok", "error")]
     + [f"mongo.pool.wait.{o}" for o in ("ok", "error")]
     + [f"governor.wait.{gate}.{k}" for gate in ("kind", "global") for k in KINDS]
     + [f"governor.hold.{k}" for k in KINDS]
 )
-COUNTERS = frozenset(["rejected_metric"] + [f"api.status.{s}" for s in ("1xx", "2xx", "3xx", "4xx", "500", "502", "503", "504", "5xx", "cancelled")])
+COUNTERS = frozenset(
+    ["rejected_metric"] + [f"api.status.{s}" for s in STATUS_BUCKETS]
+    + [f"employee_route.status.{route}.{s}" for route in EMPLOYEE_ROUTES.values()
+       for s in (*STATUS_BUCKETS, "401", "403")]
+)
 
 
 class Metrics:

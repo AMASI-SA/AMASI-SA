@@ -18,7 +18,15 @@ MAX_FILES = 8
 FILE_BYTES = 4 * 1024 * 1024
 RETENTION_SECONDS = 7 * 86400
 MAX_TARGETS = 16
+EMPLOYEE_ROUTES = ("pending_reviews", "reviewed_products", "reviewed_orders",
+                   "assembly_orders", "ready_to_ship", "push_registration",
+                   "supplier_workspace", "supplier_dispatch_create")
+STATUS_BUCKETS = ("1xx", "2xx", "3xx", "4xx", "500", "502", "503", "504", "5xx", "cancelled")
+COUNTERS = {"rejected_metric"} | {f"api.status.{s}" for s in STATUS_BUCKETS}
+COUNTERS.update(f"employee_route.status.{route}.{s}" for route in EMPLOYEE_ROUTES
+                for s in (*STATUS_BUCKETS, "401", "403"))
 HISTOGRAMS = {"event_loop.lag"}
+HISTOGRAMS.update(f"employee_route.duration.{route}" for route in EMPLOYEE_ROUTES)
 HISTOGRAMS.update(f"api.duration.{kind}" for kind in ("ready", "supplier_invoice", "shipping", "other"))
 HISTOGRAMS.update(f"mongo.command.{kind}.{outcome}" for kind in ("find", "aggregate", "getMore", "write", "commitTransaction", "other") for outcome in ("ok", "error"))
 HISTOGRAMS.update(f"mongo.pool.wait.{outcome}" for outcome in ("ok", "error"))
@@ -44,7 +52,7 @@ def sanitize(payload):
     allowed = {
         "worker": {"pid", "started_at", "cpu_seconds", "rss_bytes", "uptime_seconds", "restart_count"},
         "api": {"active", "oldest_seconds", "overflow"},
-        "counters": {"rejected_metric"} | {f"api.status.{code}" for code in ("1xx", "2xx", "3xx", "4xx", "500", "502", "503", "504", "5xx", "cancelled")},
+        "counters": COUNTERS,
     }
     for section, keys in allowed.items():
         raw = phase.get(section, {})

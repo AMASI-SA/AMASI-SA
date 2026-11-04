@@ -136,3 +136,83 @@ async def test_health_not_ready_operation_and_background_not_api(monkeypatch):
     await middleware.DiagnosticsMiddleware(app)({'type':'http', 'method':'GET'}, None, send)
     assert 'api.duration.ready' not in m.snapshot()['histograms']
     assert m.snapshot()['histograms']['api.duration.other']['count'] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method,template,label", [
+    ("GET", "/api/order-reviews-v1/pages", "pending_reviews"),
+    ("GET", "/reviewed-products-v1/catalog", "reviewed_products"),
+    ("GET", "/api/order-reviews-v1/reviewed", "reviewed_orders"),
+    ("GET", "/api/preparation-work-v1/assembly/orders", "assembly_orders"),
+    ("GET", "/api/fulfillment-v2/ready-to-ship", "ready_to_ship"),
+    ("POST", "/api/operational-notifications/devices/register", "push_registration"),
+    ("GET", "/api/supplier-dispatch-v1/workspace", "supplier_workspace"),
+    ("POST", "/supplier-dispatch-v1/dispatches", "supplier_dispatch_create"),
+    ("GET", "/api/operational-notifications/devices/register", None),
+    ("GET", "/api/order-reviews-v1/{order_number}", None),
+    ("GET", None, None),
+])
+@pytest.mark.parametrize("enabled,status", [(True, 200), (True, 403), (True, 504), (False, 200)])
+async def test_employee_route_metrics_use_only_declared_template_and_method(
+    method, template, label, enabled, status, monkeypatch,
+):
+    m = registry.Metrics(enabled)
+    monkeypatch.setattr(middleware, "metrics", m)
+
+    async def app(scope, receive, send):
+        if template:
+            scope["route"] = SimpleNamespace(path=template)
+        await send({"type": "http.response.start", "status": status})
+        await send({"type": "http.response.body", "body": b"sensitive"})
+
+    async def send(_):
+        pass
+
+    scope = {"type": "http", "method": method, "path": "/api/order-reviews-v1/pages",
+             "query_string": b"sensitive", "headers": [(b"authorization", b"sensitive")]}
+    await middleware.DiagnosticsMiddleware(app)(scope, None, send)
+    snapshot = m.snapshot()
+    hist, counts = snapshot["histograms"], snapshot["counters"]
+    assert "sensitive" not in json.dumps(snapshot)
+    if not enabled:
+        assert not hist and not counts
+        return
+    global_status = {200: "2xx", 403: "4xx", 504: "504"}[status]
+    legacy_group = "supplier_invoice" if label in ("supplier_workspace", "supplier_dispatch_create") else "other"
+    expected_hist = {"api.duration." + legacy_group}
+    expected_counts = {"api.status." + global_status: 1}
+    if label:
+        expected_hist.add("employee_route.duration." + label)
+        expected_counts[f"employee_route.status.{label}.{403 if status == 403 else global_status}"] = 1
+    assert set(hist) == expected_hist
+    assert all(row["count"] == 1 for row in hist.values())
+    assert counts == expected_counts
+
+
+@pytest.mark.asyncio
+async def test_real_fastapi_permission_denial_counts_both_route_groups(monkeypatch):
+    from fastapi import APIRouter, Depends, FastAPI, HTTPException
+    import httpx
+
+    recorder = registry.Metrics(True)
+    monkeypatch.setattr(middleware, "metrics", recorder)
+    app = FastAPI()
+    app.add_middleware(middleware.DiagnosticsMiddleware)
+    router = APIRouter(prefix="/supplier-dispatch-v1")
+
+    async def deny():
+        raise HTTPException(status_code=403, detail="synthetic-private-detail")
+
+    @router.post("/dispatches", dependencies=[Depends(deny)])
+    async def create_dispatch():
+        pytest.fail("the permission dependency must stop execution")
+
+    app.include_router(router, prefix="/api")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/supplier-dispatch-v1/dispatches?probe=synthetic-private",
+                                     json={"id": "synthetic-private-id"})
+    assert response.status_code == 403
+    snapshot = recorder.snapshot()
+    assert "synthetic-private" not in json.dumps(snapshot)
+    assert set(snapshot["histograms"]) == {"employee_route.duration.supplier_dispatch_create", "api.duration.supplier_invoice"}
+    assert snapshot["counters"] == {"employee_route.status.supplier_dispatch_create.403": 1, "api.status.4xx": 1}

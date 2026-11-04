@@ -40,6 +40,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
+from dashboard_cpu_budget import COST_PROFIT_BUDGET_MS, CPUWorkBudget
 from security_public_errors import public_error
 from security_sensitive_routes import require_product_permission
 
@@ -1190,35 +1191,52 @@ def _build_router(db, current_user_dep) -> APIRouter:
         if not from_date:
             from_date = (today_d - timedelta(days=1)).isoformat()
 
-        # Pre-load catalogue (for image_url + cost_pending lookup).
+        budget = CPUWorkBudget(COST_PROFIT_BUDGET_MS)
+        # The report uses the catalogue for image lookup only.
         cat_by_sku: dict[str, dict] = {}
         cat_by_pid: dict[str, dict] = {}
         async for c in db.product_costs.find(
             {"user_id": uid, "is_active": True},
-            {"_id": 0, "sku_normalized": 1, "product_id": 1,
-             "image_url": 1, "product_name": 1, "cost_pending": 1,
-             "cost_price": 1, "sku": 1},
+            {"_id": 0, "sku_normalized": 1, "product_id": 1, "image_url": 1},
         ):
+            await budget.checkpoint()
             if c.get("sku_normalized"):
                 cat_by_sku[c["sku_normalized"]] = c
             if c.get("product_id"):
                 cat_by_pid[c["product_id"]] = c
 
+        # Dotted projections drop scalar entries of mixed legacy arrays, which
+        # could silently turn an invalid order into a partial sales total.
+        product_fields = ("sku", "product_id", "id", "name", "quantity", "price", "image_url", "image")
+        projected_products = {"$cond": [
+            {"$isArray": "$products"},
+            {"$map": {"input": "$products", "as": "line", "in": {"$cond": [
+                {"$eq": [{"$type": "$$line"}, "object"]},
+                {key: f"$$line.{key}" for key in product_fields},
+                "$$line",
+            ]}}},
+            "$products",
+        ]}
         agg: dict[str, dict] = {}
         async for o in db.unified_orders.find(
             {"user_id": uid,
              "order_date": {"$gte": from_date, "$lte": to_date}},
-            {"_id": 0, "products": 1, "cost_items": 1,
-             "missing_product_cost_lines": 1, "total_amount": 1,
-             "total": 1, "order_date": 1, "order_number": 1,
-             "profit_status": 1},
+            # Matching tests whole cost-item documents for truthiness.
+            {"_id": 0, "products": projected_products, "cost_items": 1},
         ):
+            await budget.checkpoint()
             products = o.get("products") or []
-            cost_items = {((_norm_sku(it.get("sku")) or
-                            _norm_product_id(it.get("product_id")))
-                           or (it.get("name") or "")): it
-                          for it in (o.get("cost_items") or [])}
-            for p in products:
+            cost_items = {}
+            # Large orders can spend an entire budget inside either inner loop.
+            for index, cost_item in enumerate(o.get("cost_items") or []):
+                if index % 64 == 0:
+                    await budget.checkpoint()
+                key = (_norm_sku(cost_item.get("sku")) or _norm_product_id(cost_item.get("product_id"))
+                       or cost_item.get("name") or "")
+                cost_items[key] = cost_item
+            for index, p in enumerate(products):
+                if index % 64 == 0:
+                    await budget.checkpoint()
                 sku = _norm_sku(p.get("sku"))
                 pid = _norm_product_id(p.get("product_id") or p.get("id"))
                 name = (p.get("name") or "").strip()
@@ -1261,6 +1279,7 @@ def _build_router(db, current_user_dep) -> APIRouter:
 
         rows: list[dict] = []
         for r in agg.values():
+            await budget.checkpoint()
             sold = r["units_sold"]
             matched = r["matched_units"]
             complete = sold > 0 and matched >= sold - 0.0001

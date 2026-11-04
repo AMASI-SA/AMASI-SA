@@ -1,0 +1,125 @@
+{
+  "source_sha": "9a81449aa56a393f78a0ee8bf16c2a58edd24b7f",
+  "native_build_sha": "eea242896f3001234b30cf6d552b0e3f394af02a",
+  "mongo_version": "8.0.12",
+  "screen_paths": {
+    "pending": [
+      "app.page.pending_review",
+      "/api/order-reviews-v1/pages?page=1&limit=10"
+    ],
+    "reviewed": [
+      "app.page.reviewed_preparation",
+      "/api/reviewed-products-v1/catalog?limit=2000"
+    ],
+    "assembly": [
+      "app.page.assembly_shipping",
+      "/api/preparation-work-v1/assembly/orders?state=in_progress&limit=20&offset=0"
+    ]
+  },
+  "expected_fixture": {
+    "pending_queue": [
+      "101"
+    ],
+    "reviewed_catalog_remaining_units_for_202": 1,
+    "assembly_in_progress_order": "303",
+    "ungranted_employee_status": 403
+  },
+  "blocks": [
+    {
+      "arm": "shared",
+      "validated_dashboard_jobs": 10,
+      "probes": {
+        "pending": {
+          "n": 20,
+          "p95_ms": 13.25,
+          "p99_ms": 17.75,
+          "max_ms": 17.75
+        },
+        "reviewed": {
+          "n": 20,
+          "p95_ms": 53.63,
+          "p99_ms": 75.09,
+          "max_ms": 75.09
+        },
+        "assembly": {
+          "n": 20,
+          "p95_ms": 29.98,
+          "p99_ms": 50.56,
+          "max_ms": 50.56
+        }
+      }
+    },
+    {
+      "arm": "isolated",
+      "validated_dashboard_jobs": 10,
+      "probes": {
+        "pending": {
+          "n": 20,
+          "p95_ms": 12.06,
+          "p99_ms": 14.43,
+          "max_ms": 14.43
+        },
+        "reviewed": {
+          "n": 20,
+          "p95_ms": 21.82,
+          "p99_ms": 24.17,
+          "max_ms": 24.17
+        },
+        "assembly": {
+          "n": 20,
+          "p95_ms": 28.49,
+          "p99_ms": 33.45,
+          "max_ms": 33.45
+        }
+      }
+    },
+    {
+      "arm": "isolated",
+      "validated_dashboard_jobs": 10,
+      "probes": {
+        "pending": {
+          "n": 20,
+          "p95_ms": 9.95,
+          "p99_ms": 11.59,
+          "max_ms": 11.59
+        },
+        "reviewed": {
+          "n": 20,
+          "p95_ms": 10.99,
+          "p99_ms": 11.14,
+          "max_ms": 11.14
+        },
+        "assembly": {
+          "n": 20,
+          "p95_ms": 13.56,
+          "p99_ms": 27.19,
+          "max_ms": 27.19
+        }
+      }
+    },
+    {
+      "arm": "shared",
+      "validated_dashboard_jobs": 10,
+      "probes": {
+        "pending": {
+          "n": 20,
+          "p95_ms": 11.86,
+          "p99_ms": 15.49,
+          "max_ms": 15.49
+        },
+        "reviewed": {
+          "n": 20,
+          "p95_ms": 59.03,
+          "p99_ms": 65.74,
+          "max_ms": 65.74
+        },
+        "assembly": {
+          "n": 20,
+          "p95_ms": 40.25,
+          "p99_ms": 43.65,
+          "max_ms": 43.65
+        }
+      }
+    }
+  ]
+}
