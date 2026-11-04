@@ -8,9 +8,14 @@ on:
     paths:
       - "backend/integrations/qoyod/candidate_orders.py"
       - "backend/integrations/qoyod/unsent_orders.py"
+      - "backend/integrations/qoyod/unsent_header.py"
+      - "backend/integrations/qoyod/routes.py"
+      - "backend/qoyod_auto_unified/queue_select.py"
       - "backend/qoyod_auto_unified/queue_api.py"
       - "backend/qoyod_auto_unified/queue_counts.py"
       - "backend/tests/test_qoyod_unsent_memory_bounds.py"
+      - "backend/tests/test_qoyod_unsent_header_snapshot.py"
+      - "backend/tests/test_qoyod_background_scan_fairness.py"
       - "backend/tests/qoyod_unsent_memory_benchmark.py"
       - "frontend/src/components/QoyodUnsentHeaderAlert.jsx"
       - "frontend/src/pages/QoyodUnsentOrders.jsx"
@@ -50,6 +55,12 @@ jobs:
           status=$?
           cat /tmp/qoyod-memory-tests.log
           exit $status
+      - name: Check passive header and background selection
+        run: >-
+          python -m pytest -q
+          tests/test_qoyod_unsent_header_snapshot.py
+          tests/test_qoyod_background_scan_fairness.py
+          tests/test_qoyod_unified_backlog_20260822.py
       - name: Run isolated before/after benchmark
         if: success()
         shell: bash
