@@ -21,7 +21,7 @@ def seed(database):
     database.mezan_role_assignments_v2.replace_one({'owner_user_id': owner, 'user_id': employee}, {
         'owner_user_id': owner, 'user_id': employee, 'enabled': True, 'role_key': 'preparation_operator',
         'extra_permissions': ['preparation.assigned.read', 'preparation.assigned.work',
-            'fulfillment.ready.read', 'fulfillment.labels.print'],
+            'fulfillment.ready.read', 'fulfillment.labels.print', 'fulfillment.pack.confirm'],
         'fulfillment_responsibilities': ['instant_ready', 'shipping_labeling']}, upsert=True)
     database.mezan_suppliers_v2.insert_one({'user_id': owner, 'id': 'exit2d-perf-supplier',
         'name': 'Synthetic supplier', 'status': 'active', 'service_ids': ['synthetic-service']})
