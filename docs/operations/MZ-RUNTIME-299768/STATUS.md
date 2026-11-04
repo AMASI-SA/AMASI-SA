@@ -11,9 +11,15 @@ Goal: dashboard summary / reporting, advertising analytics / synchronization and
 - **Repository:** `AMASI-SA/AMASI-SA`
 - **Issue:** https://github.com/AMASI-SA/AMASI-SA/issues/1724
 - **Branch:** `codex/worker-isolation-299768-20261104`
-- **Branch baseline:** `a56dbacd36678566eec3b5a76406db7582c3e7f2` (must refresh before any proposed release)
-- **Production changed:** **NO**. No merges, deployments, release leases, Production env/config writes, provider writes, or operational data mutations.
-- **Status:** Draft [#1726](https://github.com/AMASI-SA/AMASI-SA/pull/1726). Client admission and cooperative dashboard sales aggregation are implemented. Physical worker isolation awaits written confirmation from Emergent.
+- The original [task PR #1726](https://github.com/AMASI-SA/AMASI-SA/pull/1726) started from `a56dbacd36678566eec3b5a76406db7582c3e7f2`. [Release PR #1732](https://github.com/AMASI-SA/AMASI-SA/pull/1732) integrated the employee and dashboard performance fixes onto the published #1728 base.
+- The web release is live. Issue [#1724](https://github.com/AMASI-SA/AMASI-SA/issues/1724) stays open while Emergent confirms whether the project can run a separately managed dashboard/ads worker.
+
+### Verified production release on November 4, 2026
+
+- Emergent run `382d49e` started at 05:29 and completed at 05:39 Riyadh time. Production merge `251565f7ad40dd464b22dad638ecc9ab7b4029fa` contains source `562f9c14de27058dbdd9a6d067b0054928a2fe3f`. The official v5 guard passed all three verification probes against release `rg5-d8ef5a9e08e75decdec4c25baac60da016726d7cf006748642551550088bf7e0`. The shared release lock was inactive afterward.
+- Five requests sampled after deployment returned HTTP 200. Their elapsed times, in order, were 0.433, 0.259, 0.219, 0.803 and 0.586 seconds. This sample describes the verification window. Long-term incident recurrence remains under investigation.
+- The official employee Android release is Build 65 (1.0.50). [Android release #330](https://github.com/AMASI-SA/amasi-mobile/pull/330)
+- Verification made no provider writes. No separate dashboard/ads worker was activated. Qoyod remained outside the release scope.
 
 ## Verification of previous work
 
@@ -69,7 +75,7 @@ In a separate routed test, all 32 full dashboard reads across `ABBA` and `BAAB` 
 
 - `node --test /mnt/data/mezanscope-test/dashboardFetchAdmission.test.mjs` on a local *behaviorally identical pure-JS gate*: **5 PASS / 0 FAIL**. This proves helper state transitions only; it is **not** the repository Jest suite nor end-to-end/CI/Preview performance validation.
 - Initial commit evidence only. See the November 4 checkpoint and the current PR for the newer results. Baseline p95/p99 for employee supplier/label endpoints **not measured yet**. Do not invent them.
-- No Production or Preview runtime deployment occurred.
+- These benchmark runs used local infrastructure. The later production web release and its verification are recorded above.
 
 ## Emergent platform capability gate
 
@@ -81,10 +87,10 @@ If unsupported: evaluate a dedicated separately managed analytics app/service wi
 
 1. Await/read written Emergent answer; confirm independent worker lifecycle in Preview, plan and cost.
 2. Compare the completed source inventory with the actual Preview job configuration once a branch-matched environment is available.
-3. Run repository Jest/CI on branch, inspect Draft PR test results. Investigate any failures before changing more.
+3. For any worker proposal, run fresh repository and integration checks on its own candidate.
 4. If supported, build separate **dashboard/ads-only** worker/service behind disabled-by-default Preview gate, never including Qoyod/finance/orders/shipping/employee providers. Demonstrate restart/2-replica isolation and no duplicate advertising analytics events.
 5. Benchmark dashboard and employee summary paths: /api/health, employee workspace, supplier assignment readback, label retrieval p95/p99 and event-loop lag under concurrent *synthetic* heavy dashboard jobs. No live provider writes.
-6. Prepare documented rollback and revised guarded V5 release review. **Never merge or publish Production without separate explicit approval.**
+6. Prepare a separate rollback and governed v5 release review if an independent worker becomes available.
 
 ## Prior checkpoint
 
