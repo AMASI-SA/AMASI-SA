@@ -12,7 +12,7 @@
   "qoyod_behavior_changed": false,
   "production_connections": 0,
   "paid_resources_created": 0,
-  "ci_runs_started": 5,
+  "ci_runs_started": 6,
   "pr_created": false,
   "merged": false,
   "release_lease_created": false,
@@ -87,7 +87,7 @@
     "Synthetic replica-set Docker acceptance and process isolation benchmark prepared"
   ],
   "runtime_acceptance": "Passed at a7ce77d812446fb1243a3ae93ecf6f839c53f7e3; latest CORS placement source will be verified separately",
-  "ci_state": "Run 4 pending after existing preparation wrapper compatibility repair; real API synthetic-load benchmark added",
+  "ci_state": "Final-source Linux pending with deterministic revocation fixture and stronger real-data count assertion",
   "ci_runs": [
     {
       "id": 41900254875,
@@ -144,7 +144,14 @@
     {
       "id": 41904070279,
       "source_sha": "414cffa2d5419e20ab175b5629e5e0531760df1a",
-      "result": "in_progress_at_checkpoint"
+      "result": "failure",
+      "cause": "Performance fixture minted employee session before intentional future password-revocation cutoff; fixed by bounded wait preserving guard and cutoff, not retrying requests"
+    },
+    {
+      "id": 41904647980,
+      "source_sha": "69fb873491e7f9613f49fa09900a889cdf6bd8d6",
+      "result": "cancellation_requested_for_own_superseded_fixture_run",
+      "reason": "Known test clock barrier repair; superseded by next source, no other task canceled"
     }
   ],
   "local_performance": {
