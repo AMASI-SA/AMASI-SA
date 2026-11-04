@@ -43,7 +43,7 @@ def seed(database):
             'order_id': file, 'order_status': 'reviewed', 'order_date': '2026-09-06',
             'currency': 'SAR', 'total_amount': 100, 'total_product_cost': 10,
             'raw_by_source': {'salla_direct': {'id': index + 10000, 'reference_id': order,
-                'status': {'slug': 'reviewed'}, 'items': []}}})
+                'date': '2026-09-06T12:00:00Z', 'status': {'slug': 'reviewed'}, 'items': []}}})
     number = 'EXIT2D-PRINT'
     database.order_review_workflows.insert_one({'user_id': owner, 'order_number': number,
         'stage': 'completed', 'assembly_status': 'completed',
