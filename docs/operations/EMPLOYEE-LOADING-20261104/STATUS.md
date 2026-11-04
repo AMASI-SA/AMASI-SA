@@ -43,3 +43,31 @@ source9c4491e5294a3353591ae44f26a4559e0c465fe1 real-Mongo CI41875021940
 passed161 tests. Its readiness failed because Production advanced, not a build
 execution failure. New exact-source CI required. Issue1006 rejects comments at
 GitHub2500-comment limit; continuation is retained in PR1749 and this document.
+
+## Frozen release checkpoint
+Current release PR is1750 (1749 superseded/closed). Branch
+codex/employee-loading-release-20261104 starts directly from972777b46;
+source A e725e3baf4575327d8c3bbfab578b9b1afbdebbd;
+intent-only B bf6ee3d22e05924c4694416ddec823f4cce36106.
+A..B changes only release/release-intent-v5.json. CI source readiness41878411004
+succeeded; downloaded intent SHA256 de41dacf2a4ab913dc1c1dba13918b56c8a92449fed383f1041124a5e7fe227c.
+Frozen-B checks remain outstanding; requested explicit readiness workflow.
+
+Actual Emergent source A governed A/B build succeeded in isolated
+/tmp/performance-1750-rehearsal. Initial /root clone installation failed ENOSPC:
+/root shares the9.8GB /app volume. Moved only this task's324MB clone to/tmp,
+removed its partial node_modules there and repeated successfully. /app free
+space320MB afterward. No production source edits. Terminal last freeze/verify
+command outcome is unknown because browser tool timed out then disappeared
+from available tools. Must inspect terminal before retrying. No lease prepared,
+no merge, no publish. Current /app lease last observed inactive; recheck fresh.
+
+Mobile source d48ae44e7b00da151e4cb1366cdd9a4fbf8e4ed0 is Draft PR332,
+based on exact staff65. Android bundle export passed; no new APK/OTA/install.
+User separately authorized one specific review-completion attempt after current
+work; handle through ADB with exact-order verification and GET/readback before
+any retry. Do not record customer identifiers in this repository.
+
+Next: finish frozen-B CI and restore supported browser/terminal control;
+inspect isolated build state, run full adapter rehearsal, then fresh release
+status/prepare/prepublish and publication/verify. Publication still NOT complete.
