@@ -65,3 +65,32 @@ test("frozen card never loads on mount, period, timers, focus, visibility or con
 test("release configuration defaults to frozen", () => {
     expect(jest.requireActual("../lib/dashboardLiveRefresh").ABANDONED_CARTS_DASHBOARD_AUTO_SYNC).toBe(false);
 });
+
+test("automatic summary refresh waits for active reads while manual refresh can proceed", async () => {
+    const summaryReads = [];
+    api.get.mockImplementation((url) => {
+        if (!url.startsWith("/dashboard-v2?")) return Promise.resolve({ data: {} });
+        return new Promise((resolve) => summaryReads.push(() => resolve({ data: {} })));
+    });
+
+    await act(async () => root.render(<AdvancedDashboard />));
+    expect(summaryReads).toHaveLength(1);
+    await tick(refreshConfig.DASHBOARD_AUTO_REFRESH_MS);
+    expect(summaryReads).toHaveLength(1);
+
+    await act(async () => summaryReads[0]());
+    await tick(refreshConfig.DASHBOARD_AUTO_REFRESH_MS);
+    expect(summaryReads).toHaveLength(2);
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(summaryReads).toHaveLength(2);
+
+    await act(async () => host.querySelector('[aria-label="تحديث بيانات الفترة"]').click());
+    expect(summaryReads).toHaveLength(3);
+    await act(async () => summaryReads[1]());
+    await tick(refreshConfig.DASHBOARD_AUTO_REFRESH_MS);
+    expect(summaryReads).toHaveLength(3);
+    await act(async () => summaryReads[2]());
+    await tick(refreshConfig.DASHBOARD_AUTO_REFRESH_MS);
+    expect(summaryReads).toHaveLength(4);
+    await act(async () => summaryReads[3]());
+});

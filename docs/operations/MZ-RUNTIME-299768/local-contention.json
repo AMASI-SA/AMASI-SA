@@ -1,0 +1,120 @@
+{
+  "dashboard_orders": 350,
+  "dashboard_v2_routes_sha256": "5f68548a623052b9a85dab88db1d1e0b9082ade8843c66d7919af46a1c17cbb6",
+  "deadline_ms": 1000,
+  "interval_per_endpoint_ms": 80,
+  "lines_per_order": 4,
+  "loop_tick_ms": 10,
+  "mongo": "8.0.12",
+  "phases": {
+    "dashboard": {
+      "dashboard_jobs": {
+        "max_ms": 134.16,
+        "n": 105,
+        "p95_ms": 85.85,
+        "p99_ms": 99.4
+      },
+      "governed_route_preflight": {
+        "code": "resource_pressure",
+        "http_status": 503
+      },
+      "loop_lag": {
+        "max_ms": 58.86,
+        "n": 800,
+        "p95_ms": 10.46,
+        "p99_ms": 11.58
+      },
+      "probes": {
+        "health_control": {
+          "failures": {},
+          "max_ms": 31.01,
+          "n": 100,
+          "over_deadline": 0,
+          "p95_ms": 10.84,
+          "p99_ms": 11.59
+        },
+        "saved_label": {
+          "failures": {},
+          "max_ms": 56.32,
+          "n": 100,
+          "over_deadline": 0,
+          "p95_ms": 49.09,
+          "p99_ms": 53.91
+        },
+        "supplier_create": {
+          "failures": {},
+          "max_ms": 144.33,
+          "n": 100,
+          "over_deadline": 0,
+          "p95_ms": 123.44,
+          "p99_ms": 139.9
+        },
+        "workspace": {
+          "failures": {},
+          "max_ms": 92.79,
+          "n": 100,
+          "over_deadline": 0,
+          "p95_ms": 75.06,
+          "p99_ms": 88.77
+        }
+      },
+      "verified_sent_dispatches_and_events_including_two_warmups": 102
+    },
+    "idle": {
+      "dashboard_jobs": {
+        "max_ms": null,
+        "n": 0,
+        "p95_ms": null,
+        "p99_ms": null
+      },
+      "governed_route_preflight": {
+        "code": "resource_pressure",
+        "http_status": 503
+      },
+      "loop_lag": {
+        "max_ms": 3.39,
+        "n": 800,
+        "p95_ms": 2.39,
+        "p99_ms": 2.83
+      },
+      "probes": {
+        "health_control": {
+          "failures": {},
+          "max_ms": 3.35,
+          "n": 100,
+          "over_deadline": 0,
+          "p95_ms": 2.05,
+          "p99_ms": 3.31
+        },
+        "saved_label": {
+          "failures": {},
+          "max_ms": 5.68,
+          "n": 100,
+          "over_deadline": 0,
+          "p95_ms": 4.48,
+          "p99_ms": 4.89
+        },
+        "supplier_create": {
+          "failures": {},
+          "max_ms": 20.2,
+          "n": 100,
+          "over_deadline": 0,
+          "p95_ms": 17.28,
+          "p99_ms": 20.07
+        },
+        "workspace": {
+          "failures": {},
+          "max_ms": 15.1,
+          "n": 100,
+          "over_deadline": 0,
+          "p95_ms": 13.94,
+          "p99_ms": 15.06
+        }
+      },
+      "verified_sent_dispatches_and_events_including_two_warmups": 102
+    }
+  },
+  "python": "3.12.14",
+  "samples_per_endpoint_per_phase": 100,
+  "workload": "summary-cost-stage"
+}

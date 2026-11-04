@@ -324,3 +324,60 @@ async def test_executive_http_replaces_old_cost_and_decreases_profit_by_140_once
             assert result["totals"]["net_profit"] - baseline_response["totals"]["net_profit"] == -140
             assert result["accounting_write_reached"] is False
             assert result["qoyod_write_reached"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("period_start, expected_sizes, expected_total", [
+    ("2026-11-01", [3], 37.5),
+    ("2026-11-02", [3, 2], 22.5),
+])
+async def test_executive_sales_yields_for_each_distinct_order_range(
+    monkeypatch, period_start, expected_sizes, expected_total,
+):
+    import asyncio
+    from datetime import date
+    import dashboard_v2_routes as dashboard
+    from order_currency import hydrate_order_currency_fields_cooperative, summarize_orders_sar_cooperative
+
+    db = AsyncMongoMockClient().executive_sales
+    await db.unified_orders.insert_many([
+        sale("one", order_date="2026-11-01", total_amount=15),
+        sale("two", total_amount=17.5), sale("three", total_amount=5),
+    ])
+    monkeypatch.setattr(dashboard, "_today_riyadh", lambda: date(2026, 11, 2))
+    # Exhaust the CPU budget at every checkpoint without timing assertions.
+    monkeypatch.setattr(dashboard, "PARSER_BUDGET_MS", 0, raising=False)
+    sizes = []
+    hydrated_sizes = []
+
+    async def observe_hydration(orders, projected_rows, *, checkpoint):
+        hydrated_sizes.append(len(orders))
+        return await hydrate_order_currency_fields_cooperative(orders, projected_rows, checkpoint=checkpoint)
+
+    async def observe_summary(orders, *, checkpoint):
+        sizes.append(len(orders))
+        marker = asyncio.Event()
+        asyncio.get_running_loop().call_soon(marker.set)
+        result = await summarize_orders_sar_cooperative(orders, checkpoint=checkpoint)
+        assert marker.is_set(), "the event loop did not get a turn during the SAR pass"
+        return result
+
+    monkeypatch.setattr(dashboard, "summarize_orders_sar_cooperative", observe_summary, raising=False)
+    monkeypatch.setattr(dashboard, "hydrate_order_currency_fields_cooperative", observe_hydration)
+
+    async def user():
+        return {"id": OWNER, "role": "owner"}
+
+    async def legacy(**kwargs):
+        return {"totals": {}}
+
+    app = FastAPI()
+    app.include_router(make_dashboard_v2_router(db, user, legacy, lambda current: None))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/dashboard-v2", params={"from_date": period_start, "to_date": "2026-11-02"})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["month_kpis"]["total_sales"] == 37.5
+    assert payload["totals"]["total_sales"] == expected_total
+    assert sizes == expected_sizes
+    assert sorted(hydrated_sizes) == sorted(expected_sizes)

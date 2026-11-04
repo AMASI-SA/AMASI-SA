@@ -1,0 +1,122 @@
+{
+  "dashboard_interval_ms": 160,
+  "dashboard_orders": 350,
+  "dashboard_v2_routes_sha256": "5f68548a623052b9a85dab88db1d1e0b9082ade8843c66d7919af46a1c17cbb6",
+  "deadline_ms": 1000,
+  "interval_per_endpoint_ms": 80,
+  "lines_per_order": 4,
+  "loop_tick_ms": 10,
+  "mongo": "8.0.12",
+  "phase_order": ["1_idle", "1_shared", "1_isolated", "2_isolated", "2_shared", "2_idle"],
+  "phases": {
+    "1_idle": {
+      "fixed_dashboard_jobs": null,
+      "governed_route_preflight": {"code": "resource_pressure", "http_status": 503},
+      "loop_lag": {"max_ms": 2.51, "n": 800, "p95_ms": 1.88, "p99_ms": 2.02},
+      "probes": {
+        "health_control": {"failures": {}, "max_ms": 2.49, "n": 100, "over_deadline": 0, "p95_ms": 1.87, "p99_ms": 2.2},
+        "order_read": {"failures": {}, "max_ms": 7.07, "n": 100, "over_deadline": 0, "p95_ms": 5.67, "p99_ms": 6.28},
+        "saved_label": {"failures": {}, "max_ms": 5.17, "n": 100, "over_deadline": 0, "p95_ms": 4.14, "p99_ms": 4.45},
+        "supplier_create": {"failures": {}, "max_ms": 18.36, "n": 100, "over_deadline": 0, "p95_ms": 14.48, "p99_ms": 16.29},
+        "workspace": {"failures": {}, "max_ms": 13.1, "n": 100, "over_deadline": 0, "p95_ms": 10.78, "p99_ms": 11.12}
+      },
+      "verified_sent_dispatches_and_events_including_two_warmups": 102
+    },
+    "1_isolated": {
+      "fixed_dashboard_jobs": {
+        "arrival_to_finish": {"max_ms": 142.89, "n": 50, "p95_ms": 67.06, "p99_ms": 142.89},
+        "completed_in_probe_window": 50,
+        "planned": 50,
+        "service": {"max_ms": 139.1, "n": 50, "p95_ms": 64.93, "p99_ms": 139.1},
+        "total_per_job": 12600,
+        "validated": 50
+      },
+      "governed_route_preflight": {"code": "resource_pressure", "http_status": 503},
+      "loop_lag": {"max_ms": 4.62, "n": 800, "p95_ms": 1.9, "p99_ms": 2.1},
+      "probes": {
+        "health_control": {"failures": {}, "max_ms": 4.61, "n": 100, "over_deadline": 0, "p95_ms": 2.03, "p99_ms": 2.23},
+        "order_read": {"failures": {}, "max_ms": 37.57, "n": 100, "over_deadline": 0, "p95_ms": 5.97, "p99_ms": 8.65},
+        "saved_label": {"failures": {}, "max_ms": 28.81, "n": 100, "over_deadline": 0, "p95_ms": 5.61, "p99_ms": 19.11},
+        "supplier_create": {"failures": {}, "max_ms": 78.76, "n": 100, "over_deadline": 0, "p95_ms": 24.75, "p99_ms": 36.2},
+        "workspace": {"failures": {}, "max_ms": 87.91, "n": 100, "over_deadline": 0, "p95_ms": 19.13, "p99_ms": 37.59}
+      },
+      "verified_sent_dispatches_and_events_including_two_warmups": 102
+    },
+    "1_shared": {
+      "fixed_dashboard_jobs": {
+        "arrival_to_finish": {"max_ms": 130.35, "n": 50, "p95_ms": 118.61, "p99_ms": 130.35},
+        "completed_in_probe_window": 50,
+        "planned": 50,
+        "service": {"max_ms": 128.42, "n": 50, "p95_ms": 116.94, "p99_ms": 128.42},
+        "total_per_job": 12600,
+        "validated": 50
+      },
+      "governed_route_preflight": {"code": "resource_pressure", "http_status": 503},
+      "loop_lag": {"max_ms": 58.16, "n": 800, "p95_ms": 10.18, "p99_ms": 11.53},
+      "probes": {
+        "health_control": {"failures": {}, "max_ms": 49.13, "n": 100, "over_deadline": 0, "p95_ms": 9.18, "p99_ms": 12.1},
+        "order_read": {"failures": {}, "max_ms": 82.68, "n": 100, "over_deadline": 0, "p95_ms": 33.86, "p99_ms": 75.66},
+        "saved_label": {"failures": {}, "max_ms": 88.92, "n": 100, "over_deadline": 0, "p95_ms": 43.53, "p99_ms": 72.76},
+        "supplier_create": {"failures": {}, "max_ms": 157.69, "n": 100, "over_deadline": 0, "p95_ms": 103.14, "p99_ms": 140.99},
+        "workspace": {"failures": {}, "max_ms": 147.87, "n": 100, "over_deadline": 0, "p95_ms": 96.52, "p99_ms": 139.97}
+      },
+      "verified_sent_dispatches_and_events_including_two_warmups": 102
+    },
+    "2_idle": {
+      "fixed_dashboard_jobs": null,
+      "governed_route_preflight": {"code": "resource_pressure", "http_status": 503},
+      "loop_lag": {"max_ms": 16.72, "n": 800, "p95_ms": 2.08, "p99_ms": 3.13},
+      "probes": {
+        "health_control": {"failures": {}, "max_ms": 13.96, "n": 100, "over_deadline": 0, "p95_ms": 2.71, "p99_ms": 8.71},
+        "order_read": {"failures": {}, "max_ms": 34.23, "n": 100, "over_deadline": 0, "p95_ms": 10.35, "p99_ms": 11.67},
+        "saved_label": {"failures": {}, "max_ms": 22.13, "n": 100, "over_deadline": 0, "p95_ms": 8.41, "p99_ms": 15.7},
+        "supplier_create": {"failures": {}, "max_ms": 58.22, "n": 100, "over_deadline": 0, "p95_ms": 31.21, "p99_ms": 44.8},
+        "workspace": {"failures": {}, "max_ms": 26.06, "n": 100, "over_deadline": 0, "p95_ms": 19.89, "p99_ms": 24.43}
+      },
+      "verified_sent_dispatches_and_events_including_two_warmups": 102
+    },
+    "2_isolated": {
+      "fixed_dashboard_jobs": {
+        "arrival_to_finish": {"max_ms": 76.56, "n": 50, "p95_ms": 63.82, "p99_ms": 76.56},
+        "completed_in_probe_window": 50,
+        "planned": 50,
+        "service": {"max_ms": 75.82, "n": 50, "p95_ms": 62.19, "p99_ms": 75.82},
+        "total_per_job": 12600,
+        "validated": 50
+      },
+      "governed_route_preflight": {"code": "resource_pressure", "http_status": 503},
+      "loop_lag": {"max_ms": 2.43, "n": 800, "p95_ms": 1.94, "p99_ms": 2.1},
+      "probes": {
+        "health_control": {"failures": {}, "max_ms": 2.42, "n": 100, "over_deadline": 0, "p95_ms": 2.07, "p99_ms": 2.2},
+        "order_read": {"failures": {}, "max_ms": 7.52, "n": 100, "over_deadline": 0, "p95_ms": 6.14, "p99_ms": 6.92},
+        "saved_label": {"failures": {}, "max_ms": 6.85, "n": 100, "over_deadline": 0, "p95_ms": 4.74, "p99_ms": 6.84},
+        "supplier_create": {"failures": {}, "max_ms": 23.61, "n": 100, "over_deadline": 0, "p95_ms": 20.44, "p99_ms": 21.55},
+        "workspace": {"failures": {}, "max_ms": 16.1, "n": 100, "over_deadline": 0, "p95_ms": 13.22, "p99_ms": 15.82}
+      },
+      "verified_sent_dispatches_and_events_including_two_warmups": 102
+    },
+    "2_shared": {
+      "fixed_dashboard_jobs": {
+        "arrival_to_finish": {"max_ms": 145.01, "n": 50, "p95_ms": 80.62, "p99_ms": 145.01},
+        "completed_in_probe_window": 50,
+        "planned": 50,
+        "service": {"max_ms": 143.57, "n": 50, "p95_ms": 79.08, "p99_ms": 143.57},
+        "total_per_job": 12600,
+        "validated": 50
+      },
+      "governed_route_preflight": {"code": "resource_pressure", "http_status": 503},
+      "loop_lag": {"max_ms": 90.39, "n": 800, "p95_ms": 10.08, "p99_ms": 15.03},
+      "probes": {
+        "health_control": {"failures": {}, "max_ms": 67.5, "n": 100, "over_deadline": 0, "p95_ms": 1.94, "p99_ms": 9.8},
+        "order_read": {"failures": {}, "max_ms": 101.53, "n": 100, "over_deadline": 0, "p95_ms": 14.25, "p99_ms": 42.26},
+        "saved_label": {"failures": {}, "max_ms": 112.39, "n": 100, "over_deadline": 0, "p95_ms": 27.15, "p99_ms": 55.15},
+        "supplier_create": {"failures": {}, "max_ms": 206.01, "n": 100, "over_deadline": 0, "p95_ms": 68.74, "p99_ms": 93.76},
+        "workspace": {"failures": {}, "max_ms": 164.44, "n": 100, "over_deadline": 0, "p95_ms": 70.68, "p99_ms": 99.96}
+      },
+      "verified_sent_dispatches_and_events_including_two_warmups": 102
+    }
+  },
+  "python": "3.12.14",
+  "samples_per_endpoint_per_phase": 100,
+  "workload": "summary-cost-stage"
+}

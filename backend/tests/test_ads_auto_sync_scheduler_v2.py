@@ -2335,3 +2335,134 @@ def test_status_never_exposes_global_results_from_another_tenant():
     assert "failure_line" not in sanitized["error"]
     assert owner_secret not in repr(sanitized)
     assert token_shaped_exception_type not in repr(sanitized)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("target_count", [1, 8], ids=["draining", "enqueue-blocked"])
+@pytest.mark.parametrize("stop", ["ownership_lost", "shutdown"])
+async def test_interrupted_leased_cycle_joins_all_native_reporting_workers(monkeypatch, target_count, stop):
+    from contextlib import asynccontextmanager
+    from unittest.mock import AsyncMock
+
+    db = _DB({})
+    owner = "test-acquisition"
+    entered, stopped, renewed = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    observed = []
+
+    async def refresh(*args, **kwargs):
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            stopped.set()
+
+    @asynccontextmanager
+    async def admit(*args, **kwargs):
+        yield
+
+    async def renew(_db, token, valid_until=None):
+        assert token == owner
+        observed.append(valid_until)
+        if valid_until is not None and entered.is_set():
+            renewed.set()
+            if stop == "ownership_lost":
+                raise scheduler._SchedulerLeaseUnconfirmed("competitor took over")
+        return asyncio.get_running_loop().time() + 60
+
+    monkeypatch.setenv("HEAVY_ADS_CONCURRENCY", "1")
+    monkeypatch.setattr(scheduler, "HEARTBEAT_SECONDS", 0.01)
+    monkeypatch.setattr(scheduler, "_targets", AsyncMock(return_value=[
+        (f"user-{i}", scheduler.META_PROVIDER_ID) for i in range(target_count)
+    ]))
+    monkeypatch.setattr(scheduler.governor, "heavy", admit)
+    monkeypatch.setattr(scheduler, "_refresh_meta", refresh)
+    monkeypatch.setattr(scheduler, "_renew_lease", renew)
+    task = asyncio.create_task(scheduler._run_leased_cycle(db, owner))
+    try:
+        await asyncio.wait_for(renewed.wait(), 3)
+        if stop == "shutdown":
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            with pytest.raises(scheduler._SchedulerLeaseUnconfirmed):
+                await task
+        assert observed[0] is None
+        assert stopped.is_set()
+        assert not any(t.get_name().startswith("ads-auto-sync-") for t in asyncio.all_tasks())
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure,seconds_remaining,expected_attempts,should_succeed", [
+    ("transient", 120, 2, True), ("transient", 1, 1, False),
+    ("repeated", 120, 2, False), ("lost", 120, 1, False),
+])
+async def test_heartbeat_retries_only_transient_failure_with_time_in_confirmed_lease(
+    failure, seconds_remaining, expected_attempts, should_succeed,
+):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from pymongo.errors import ConnectionFailure
+
+    result = SimpleNamespace(matched_count=0 if failure == "lost" else 1)
+    network_failure = ConnectionFailure("synthetic")
+    responses = [result] if failure == "lost" else [network_failure, network_failure if failure == "repeated" else result]
+    update = AsyncMock(side_effect=responses)
+    db = {scheduler.SCHEDULER_COLLECTION: SimpleNamespace(update_one=update)}
+    now = asyncio.get_running_loop().time()
+    if should_succeed:
+        assert await scheduler._renew_lease(db, "owner", now + seconds_remaining) > now
+    else:
+        with pytest.raises(scheduler._SchedulerLeaseUnconfirmed):
+            await scheduler._renew_lease(db, "owner", now + seconds_remaining)
+    assert update.await_count == expected_attempts
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stuck", [False, True])
+async def test_cycle_renews_on_target_progress_but_not_indefinitely_on_a_wedged_target(monkeypatch, stuck):
+    from contextlib import asynccontextmanager
+    from unittest.mock import AsyncMock
+
+    db = _DB({})
+    clock = 0.0
+    ticks = asyncio.Queue()
+    targets = [(f"t-{i}", scheduler.META_PROVIDER_ID) for i in range(4)]
+
+    async def renew(_db, _owner, valid_until=None):
+        nonlocal clock
+        if valid_until is not None:
+            clock += scheduler.ACTIVE_JOB_TTL.total_seconds() / 2
+            ticks.put_nowait(clock)
+        return clock + scheduler.LEASE_TTL.total_seconds()
+
+    @asynccontextmanager
+    async def admit(*args, **kwargs):
+        yield
+
+    async def work(*args, **kwargs):
+        if stuck:
+            await asyncio.Event().wait()
+        await ticks.get()
+        return {"status": "complete"}
+
+    monkeypatch.setattr(scheduler, "monotonic", lambda: clock)
+    monkeypatch.setattr(scheduler, "HEARTBEAT_SECONDS", 0.005)
+    monkeypatch.setenv("HEAVY_ADS_CONCURRENCY", "1")
+    monkeypatch.setattr(scheduler, "_targets", AsyncMock(return_value=targets))
+    monkeypatch.setattr(scheduler.governor, "heavy", admit)
+    monkeypatch.setattr(scheduler, "_refresh_meta", work)
+    monkeypatch.setattr(scheduler, "_renew_lease", renew)
+    cycle = scheduler._run_leased_cycle(db, "owner")
+    if stuck:
+        with pytest.raises(scheduler._SchedulerCycleStalled):
+            await asyncio.wait_for(cycle, 3)
+        assert clock == scheduler.ACTIVE_JOB_TTL.total_seconds()
+    else:
+        result = await asyncio.wait_for(cycle, 3)
+        assert result["succeeded"] == 4
+        assert clock > scheduler.ACTIVE_JOB_TTL.total_seconds()
+    assert not any(t.get_name().startswith("ads-auto-sync-") for t in asyncio.all_tasks())
