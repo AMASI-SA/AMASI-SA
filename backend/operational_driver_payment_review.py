@@ -11,7 +11,7 @@ from typing import Literal
 from pydantic import Field, StrictInt
 
 from accounting_driver_payment_review import DriverReviewInput as NativeInput
-from operational_balance_store import STATES, digest, fail, audit, now
+from operational_balance_store import STATES, digest, fail, audit, logical_state, now, read
 from operational_salary_start import instant, RIYADH
 from operational_driver_review_store import EVENTS, transact
 
@@ -215,9 +215,9 @@ async def _bank_proof(db, owner, bank_id, movement_id, value, state, stamp):
 
 async def options(db, *, owner, actor, assignment_id, clock=None):
     await authorize(db, owner, actor)
-    state = await db[STATES].find_one({'_id': owner, 'owner_id': owner}) or {}
     if await financial_source(db, owner) != 'operational':
         fail('operational_driver_review_phase_changed')
+    state = await read(db, owner)
     stamp = clock or now()
     review = await single(db, REVIEWS, {'user_id': owner, 'assignment_id': assignment_id}, 'driver_payment_review_required')
     value = exact_money(review.get('amount'))
@@ -269,7 +269,7 @@ async def review_payment(db, *, owner, actor, assignment_id, payload, clock=None
             # A receipt alone is not success if its saved monetary effect is missing.
             if prior.get('decision') == 'approved':
                 from operational_driver_review_report import validated_review_facts
-                saved = await scoped[STATES].find_one({'_id': owner, 'owner_id': owner}) or {}
+                saved = await read(scoped, owner)
                 verified, _ = validated_review_facts(saved)
                 if not any(r == prior.get('fact') and r.get('id') == key for r in verified):
                     fail('operational_driver_review_effect_conflict')
@@ -278,6 +278,9 @@ async def review_payment(db, *, owner, actor, assignment_id, payload, clock=None
         if await financial_source(scoped, owner) != 'operational':
             fail('operational_driver_review_phase_changed')
         state = await single(scoped, STATES, {'_id': owner, 'owner_id': owner}, 'operational_not_active')
+        # Check the history in this transaction, and retain its compact representation
+        # for the revision update. This decision writes only present-day monetary fields.
+        await logical_state(scoped, owner, state)
         original_revision = state['revision']
         review, assignment, collection, order, event, value = await _evidence(scoped, owner, assignment_id, state, stamp)
         receipt = movement = None

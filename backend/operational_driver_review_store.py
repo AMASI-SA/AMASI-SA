@@ -9,10 +9,10 @@ from pymongo import ReadPreference
 from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
 
-from operational_balance_store import STATES, MAX_STATE_BYTES, fail
+from operational_balance_store import AUDIT_PAGES, STATES, MAX_STATE_BYTES, fail
 
 EVENTS = 'operational_driver_review_events_v1'
-READS = frozenset({STATES, EVENTS, 'users', 'settings', 'mz2_atomic_owners',
+READS = frozenset({STATES, AUDIT_PAGES, EVENTS, 'users', 'settings', 'mz2_atomic_owners',
     'store_delivery_payment_reviews', 'store_delivery_collections', 'store_delivery_receipts',
     'store_delivery_assignments', 'unified_orders', 'store_drivers', 'mz2_financial_accounts',
     'mz2_opening_facts_v2', 'mz2_daily_movements', 'mz2_daily_movement_files', 'accounting_source_files',
@@ -62,6 +62,9 @@ class _Collection:
             self.__db.reject()
         if name == 'users':
             valid = isinstance(query.get('id'), str) and bool(query['id'])
+        elif name == AUDIT_PAGES:
+            valid = (set(query) == {'_id', 'owner_id'} and query['owner_id'] == self.__owner
+                     and isinstance(query['_id'], str) and bool(query['_id']))
         elif name in {STATES, 'mz2_atomic_owners'}:
             valid = query.get('_id') == self.__owner
         else:
@@ -71,13 +74,13 @@ class _Collection:
 
     def find(self, query, *args, **kwargs):
         self._check(query)
-        if 'session' in kwargs:
+        if 'session' in kwargs or self.__collection.name == AUDIT_PAGES:
             self.__db.reject()
         return self.__collection.find(query, *args, session=self.__session, **kwargs)
 
     async def find_one(self, query, *args, **kwargs):
         self._check(query)
-        if 'session' in kwargs:
+        if 'session' in kwargs or (self.__collection.name == AUDIT_PAGES and (args or kwargs)):
             self.__db.reject()
         return await self.__collection.find_one(query, *args, session=self.__session, **kwargs)
 
