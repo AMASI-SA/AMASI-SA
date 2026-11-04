@@ -36,3 +36,7 @@ governed v5 release intent/rehearsal before authorized publication. Shared /app
 guard last read inactive; no source changes or lease created. Untracked shared
 files and original Qoyod checkout preserved. Production changed by this
 follow-up: NO.
+## Assignment page only (2026-11-05)
+User narrowed the change to the waiting supplier assignment list within My Products. This branch starts from production f1f8bba872c6b68cf5cf297a0caa379cc30db881, without the WIP overview redesign. Keep the existing summary and other stage routes. The old 47-second observation measured the overview, not isolated assignment latency.
+New authenticated waiting-page handler returns up to ten eligible physical pieces and a continuation cursor. Bounded cursor batches are checked against current order status. Tenant, responsible employee and operational eligibility are enforced. Existing write routes remain authoritative. No customer records or production writes used for these tests.
+Mobile companion on staff65 only requests a further page on user action and retains selection across visited pages. Focused backend tests: 38 passed. Mobile type check, waiting contract (32 checks) and on-demand screen harness passed. Production has not changed. Exact Mongo HTTP test, governed release rehearsal, signed APK and exclusive assignment latency measurement pending.
