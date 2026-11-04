@@ -417,6 +417,7 @@ docker run --rm "${runtime[@]}" -e MEZAN_WORKER_ENABLED=1 --entrypoint python me
 # All application processes have drained; both namespaces belong solely to this
 # network-none disposable Mongo. Never pass a URI, host path or Production dump.
 docker stop --time 10 "$reports" >/dev/null
+docker exec "$mongo" mongosh --quiet --eval 'db.getSiblingDB("mezan_exit2c").setProfilingLevel(0); db.getSiblingDB("mezan_exit2c").system.profile.drop(); db.adminCommand({setParameter:1,ttlMonitorEnabled:false})' >/dev/null
 docker run --rm "${runtime[@]}" --entrypoint python mezan-exit2c:candidate /opt/exit2d/restore_acceptance.py seed
 docker exec "$mongo" mongodump --host 127.0.0.1 --db mezan_exit2c --archive=/tmp/synthetic.archive --quiet
 docker exec "$mongo" mongorestore --host 127.0.0.1 --archive=/tmp/synthetic.archive --nsFrom='mezan_exit2c.*' --nsTo='mezan_exit2d_restore.*' --quiet
