@@ -85,6 +85,14 @@ whole Web service and terminates siblings; SIGTERM drains for <=20s then kills
 remaining children, inside Render's configured30s. Workers retain existing15s
 role leases,3s heartbeat and bounded6s drain. A SIGKILL keeps its lease until TTL;
 an immediate replacement correctly refuses ownership and supervisor retry waits.
+Render can overlap old/new instances during deployment even with numInstances=1.
+Do not treat that setting as proof of a singleton writer. For writer updates,
+stop/suspend the existing writer through the control plane, prove its entire
+process tree is gone, then deploy/resume its replacement. A new instance may
+correctly refuse the existing role claim; do not delete that claim to force a
+rolling deploy. Active provider calls require reconciliation and supervisor
+termination evidence, not merely lease expiry. This is a controlled writer
+handoff with a pause, not a claim of zero-downtime/exactly-once provider execution.
 
 Requested resource approval (not resource creation)
   Exact Blueprint quantities: five instances, each plan1c-2g (1CPU/2GB),

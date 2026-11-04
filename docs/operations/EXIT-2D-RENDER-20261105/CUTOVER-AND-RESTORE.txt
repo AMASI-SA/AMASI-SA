@@ -86,6 +86,11 @@ Backup/restore plan, before any real export
      Qoyod/OAuth encryption dependencies, JWT-derived MFA/session encryption and
      any old-key/fallback configuration from actual source/config names. Preserve
      signing/session keys if sessions must survive. Never rotate while relocating.
+     Exact current source names include SALLA_TOKEN_ENC_KEY and its _OLD fallback
+     (Salla tokens, customer identity and BNPL crypto), QOYOD_TOKEN_ENC_KEY and
+     QOYOD_TOKEN_ENC_KEY_OLD (Qoyod encrypted tokens), MFA_ENCRYPTION_KEY if supplied,
+     and JWT_SECRET (sessions plus security/OAuth HMAC and MFA fallback derivation).
+     Names were inspected offline; no actual key values or Production data read.
      Hosting secret manager receives values through approved secure channels,
      not Git, tickets, CI artifacts, shell history or chat. Record names/versions
      and success/failure only, never plaintext, ciphertext samples or key hashes
