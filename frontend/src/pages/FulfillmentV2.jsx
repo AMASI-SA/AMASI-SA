@@ -1,6 +1,6 @@
 import "../fulfillmentMobile.css";
 // Mezan OS V2 governed preparation workspace.
-import { useEffect, useMemo } from "react";
+import { lazy, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
     ArrowRight,
@@ -16,19 +16,21 @@ import {
     WarningCircle,
 } from "@phosphor-icons/react";
 
-import OrderReview from "./OrderReview";
-import ReviewedOrders from "./ReviewedOrders";
-import CompletedFulfillmentOrders from "../components/fulfillment/CompletedFulfillmentOrders";
-import DeliveryTrackingOrders from "../components/fulfillment/DeliveryTrackingOrders";
-import PreparationEmployeeReceivingWorkspace from "../components/fulfillment/PreparationEmployeeReceivingWorkspace";
-import PreparationFilesRegistry from "../components/fulfillment/PreparationFilesRegistry";
-import PreparationWorkDashboard from "../components/fulfillment/PreparationWorkDashboard";
-import ReadyToShipOrders from "../components/fulfillment/ReadyToShipOrders";
-import StoreCourierDispatchWorkspace from "../components/fulfillment/StoreCourierDispatchWorkspace";
-import StoreCourierMyShipments from "../components/fulfillment/StoreCourierMyShipments";
-import SupplierReceivingWorkspace from "../components/fulfillment/SupplierReceivingWorkspace";
+import PageContentBoundary from "../components/PageContentBoundary";
 import { userHasPermission } from "../components/PermissionRoute";
 import { useAuth } from "../context/AuthContext";
+
+const OrderReview = lazy(() => import("./OrderReview"));
+const ReviewedOrders = lazy(() => import("./ReviewedOrders"));
+const CompletedFulfillmentOrders = lazy(() => import("../components/fulfillment/CompletedFulfillmentOrders"));
+const DeliveryTrackingOrders = lazy(() => import("../components/fulfillment/DeliveryTrackingOrders"));
+const PreparationEmployeeReceivingWorkspace = lazy(() => import("../components/fulfillment/PreparationEmployeeReceivingWorkspace"));
+const PreparationFilesRegistry = lazy(() => import("../components/fulfillment/PreparationFilesRegistry"));
+const PreparationWorkDashboard = lazy(() => import("../components/fulfillment/PreparationWorkDashboard"));
+const ReadyToShipOrders = lazy(() => import("../components/fulfillment/ReadyToShipOrders"));
+const StoreCourierDispatchWorkspace = lazy(() => import("../components/fulfillment/StoreCourierDispatchWorkspace"));
+const StoreCourierMyShipments = lazy(() => import("../components/fulfillment/StoreCourierMyShipments"));
+const SupplierReceivingWorkspace = lazy(() => import("../components/fulfillment/SupplierReceivingWorkspace"));
 
 
 const STORE_COURIER_ASSIGN_PERMISSION = "fulfillment.store_courier.assign";
@@ -365,7 +367,7 @@ export default function FulfillmentV2() {
                     <small>{index + 1}</small><item.Icon size={30} /><strong>{item.label}</strong><p>{item.description}</p>
                 </button>)}</div>
             </section>}
-            <div className={mobileHome ? "fulfillment-desktop-content" : "fulfillment-stage-content"}>{stageContent}</div>
+            <div className={mobileHome ? "fulfillment-desktop-content" : "fulfillment-stage-content"}><PageContentBoundary>{stageContent}</PageContentBoundary></div>
         </div>
     );
 }

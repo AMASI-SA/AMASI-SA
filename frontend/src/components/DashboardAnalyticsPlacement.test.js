@@ -60,9 +60,10 @@ test("the advanced dashboard retains governed date refresh and latest-snapshot b
     expect(advancedDashboardSource).toContain("requestSequenceRef");
     expect(advancedDashboardSource).toContain("DASHBOARD_AUTO_REFRESH_MS");
     expect(advancedDashboardSource).toContain("Keep the last good cart snapshot");
-    expect(advancedDashboardSource).toContain(
+    expect(advancedDashboardSource).not.toContain(
         "/dashboard-v2/unified-marketing-shadow",
     );
+    expect(advancedDashboardSource).toContain("/ads-manager/ai-monitor/unified-shadow");
     expect(advancedDashboardSource).toContain("القرارات غير مفعلة");
     expect(advancedDashboardSource).toContain("التغطية غير مكتملة");
     expect(advancedDashboardSource).toContain("مصالح مباشرة مع Snapchat");

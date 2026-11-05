@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -29,20 +29,22 @@ import OrderUiEnhancements from "./OrderUiEnhancements";
 import DashboardAnalyticsPlacement from "./DashboardAnalyticsPlacement";
 import DashboardSnapchatAccountsPlacement from "./DashboardSnapchatAccountsPlacement";
 import GoogleAdsAllPlatformsCard from "./GoogleAdsAllPlatformsCard";
-import WarehouseHierarchyWorkspace from "../pages/WarehouseHierarchyWorkspace";
-import ProductIntakeWorkspace from "../pages/ProductIntakeWorkspace";
-import StoreOperationsAccessWorkspace from "../pages/StoreOperationsAccessWorkspace";
-import StoreDrivers from "../pages/StoreDrivers";
-import StoreDriverHandover from "../pages/StoreDriverHandover";
-import StoreDeliveryCustomerService from "../pages/StoreDeliveryCustomerService";
-import StoreDeliveryPaymentReview from "../pages/StoreDeliveryPaymentReview";
-import StoreDeliverySettlements from "../pages/StoreDeliverySettlements";
-import MarketingPlatformWorkspace, {
-    isMarketingPlatformProvider,
-} from "../pages/MarketingPlatformWorkspace";
+import { isMarketingPerformanceProvider as isMarketingPlatformProvider } from "../services/marketingPerformance";
 import MezanV2NavigationShell, {
     isMezanV2Route,
 } from "./MezanV2NavigationShell";
+
+// Query-string workspaces must be deferred too: eager imports here would pull
+// their charts, scanners and editors into every route despite App's lazy pages.
+const WarehouseHierarchyWorkspace = lazy(() => import("../pages/WarehouseHierarchyWorkspace"));
+const ProductIntakeWorkspace = lazy(() => import("../pages/ProductIntakeWorkspace"));
+const StoreOperationsAccessWorkspace = lazy(() => import("../pages/StoreOperationsAccessWorkspace"));
+const StoreDrivers = lazy(() => import("../pages/StoreDrivers"));
+const StoreDriverHandover = lazy(() => import("../pages/StoreDriverHandover"));
+const StoreDeliveryCustomerService = lazy(() => import("../pages/StoreDeliveryCustomerService"));
+const StoreDeliveryPaymentReview = lazy(() => import("../pages/StoreDeliveryPaymentReview"));
+const StoreDeliverySettlements = lazy(() => import("../pages/StoreDeliverySettlements"));
+const MarketingPlatformWorkspace = lazy(() => import("../pages/MarketingPlatformWorkspace"));
 
 // Compatibility contract for focused V2 workflows. The visible navigation is
 // now rendered by MezanV2NavigationShell; these definitions remain only so

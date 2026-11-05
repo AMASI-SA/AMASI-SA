@@ -1,0 +1,240 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vite.config.js:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+vite v8.2.4 building client environment for production...
+transforming...
+[vite:css][postcss] @import statements must precede all other statements (besides @charset or empty @layer) and be consecutive
+4  |
+5  |  /* Arabic fonts */
+6  |  @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&family=Cairo:wght@300;400;500;...
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+7  |
+8  |  /* Defensive — hide the "Made with Emergent" platform badge on every page.
+✓ 7712 modules transformed.
+rendering chunks...
+computing gzip size...
+build/index.html                                                       3.94 kB │ gzip:   1.37 kB
+build/.vite/manifest.json                                             76.31 kB │ gzip:   8.16 kB
+build/assets/Dashboard-Bkv7xAVh.css                                    0.12 kB │ gzip:   0.11 kB
+build/assets/OperationalFinancialPosition-Dfvfj_1P.css                 0.74 kB │ gzip:   0.29 kB
+build/assets/PaginatedReportTable-D1E2cggY.css                         1.01 kB │ gzip:   0.44 kB
+build/assets/OpeningBalances-DCLn7_GR.css                              8.03 kB │ gzip:   2.02 kB
+build/assets/AppsIntegrationsControlCenter-D5PN5fDE.css                8.46 kB │ gzip:   2.43 kB
+build/assets/FulfillmentV2-CtZ_T0Pu.css                                8.48 kB │ gzip:   2.02 kB
+build/assets/MarketingReports-Ogo07Vt8.css                            11.01 kB │ gzip:   2.90 kB
+build/assets/financialPosition-C_9vXtch.css                           12.20 kB │ gzip:   3.05 kB
+build/assets/index-BZyx-UTm.css                                      209.56 kB │ gzip:  33.98 kB
+build/assets/Dashboard-CXv6c8R_.js                                     0.18 kB │ gzip:   0.16 kB
+build/assets/triangle-alert-16mIraqn.js                                0.26 kB │ gzip:   0.21 kB
+build/assets/format-BmuT15Y2.js                                        0.32 kB │ gzip:   0.19 kB
+build/assets/refresh-cw-DUC5sMPL.js                                    0.32 kB │ gzip:   0.22 kB
+build/assets/chart-column-6jAEdJb7.js                                  0.36 kB │ gzip:   0.24 kB
+build/assets/clsx-DB0hHKMi.js                                          0.36 kB │ gzip:   0.23 kB
+build/assets/SupplierReceivingWorkspace-BJcPsvqr.js                    0.38 kB │ gzip:   0.24 kB
+build/assets/orderCampaignAttribution-C4aBVWk4.js                      0.69 kB │ gzip:   0.42 kB
+build/assets/PaymentModeBadge-BG55ua-d.js                              0.70 kB │ gzip:   0.46 kB
+build/assets/ExternalsLedger-C8zlen2r.js                               0.70 kB │ gzip:   0.47 kB
+build/assets/CouriersLedger-L5uIe6gx.js                                0.73 kB │ gzip:   0.48 kB
+build/assets/orderActivity-SmFpeeSG.js                                 0.77 kB │ gzip:   0.43 kB
+build/assets/rolldown-runtime-Dd_uD5pT.js                              1.10 kB │ gzip:   0.62 kB
+build/assets/createLucideIcon-DyCuMj-5.js                              1.23 kB │ gzip:   0.71 kB
+build/assets/orderTrackingNotes-CJMKjFZl.js                            1.33 kB │ gzip:   0.44 kB
+build/assets/FinancialMovementNewPage-BeokXmzN.js                      1.41 kB │ gzip:   0.75 kB
+build/assets/OrderCurrencyAmount-B80nJAcY.js                           1.49 kB │ gzip:   0.79 kB
+build/assets/PaginatedReportTable-CjewUbdZ.js                          1.54 kB │ gzip:   0.70 kB
+build/assets/SuppliersLedger-CpoI9os1.js                               1.59 kB │ gzip:   0.78 kB
+build/assets/DotsThreeVertical.es-6huxMCaa.js                          1.76 kB │ gzip:   0.58 kB
+build/assets/CopySimple.es-FuEs8wN-.js                                 1.80 kB │ gzip:   0.66 kB
+build/assets/FunnelSimple.es-Cn7ZUUjf.js                               1.87 kB │ gzip:   0.64 kB
+build/assets/ArrowUUpLeft.es-mT1fjYUG.js                               1.93 kB │ gzip:   0.74 kB
+build/assets/TrendUp.es-T_XElRSl.js                                    1.98 kB │ gzip:   0.75 kB
+build/assets/DeviceMobile.es-DRr-sX1t.js                               2.07 kB │ gzip:   0.70 kB
+build/assets/ShoppingBag.es-B_4hfUni.js                                2.10 kB │ gzip:   0.70 kB
+build/assets/label-TSErxBQ5.js                                         2.12 kB │ gzip:   0.83 kB
+build/assets/ArrowCounterClockwise.es-DxpPMIO2.js                      2.18 kB │ gzip:   0.82 kB
+build/assets/Lock.es-Dwwk9odS.js                                       2.25 kB │ gzip:   0.78 kB
+build/assets/mezanV2CostLinks-BktwNvdM.js                              2.33 kB │ gzip:   0.90 kB
+build/assets/CreditCard.es-yS2Ry8ye.js                                 2.44 kB │ gzip:   0.79 kB
+build/assets/ListBullets.es-cSMggtCB.js                                2.52 kB │ gzip:   0.75 kB
+build/assets/Paperclip.es-_yr-nfmZ.js                                  2.59 kB │ gzip:   1.03 kB
+build/assets/ImageSquare.es-DtCBbx6l.js                                2.61 kB │ gzip:   0.90 kB
+build/assets/EntityLedgerByIdPage-CLlR1mcp.js                          2.62 kB │ gzip:   1.14 kB
+build/assets/UserMinus.es-D1vuwGrw.js                                  2.62 kB │ gzip:   0.99 kB
+build/assets/Percent.es--lvuvEJC.js                                    2.73 kB │ gzip:   1.00 kB
+build/assets/NotePencil.es-BGmExTit.js                                 2.83 kB │ gzip:   0.97 kB
+build/assets/UserCheck.es-2DavkcRX.js                                  2.86 kB │ gzip:   1.03 kB
+build/assets/Download.es-CA0FIDAf.js                                   2.90 kB │ gzip:   0.97 kB
+build/assets/UserPlus.es-CYTS3-j-.js                                   2.93 kB │ gzip:   1.09 kB
+build/assets/ChatCircleDots.es-yyaflJD7.js                             2.97 kB │ gzip:   1.14 kB
+build/assets/FloppyDisk.es-IWcKFjE9.js                                 2.99 kB │ gzip:   0.94 kB
+build/assets/Stack.es-MviWYiZM.js                                      3.07 kB │ gzip:   0.93 kB
+build/assets/Hourglass.es-BUD8kc6V.js                                  3.10 kB │ gzip:   1.05 kB
+build/assets/Users.es-DhN9SFBR.js                                      3.22 kB │ gzip:   1.16 kB
+build/assets/Ghost.es-CY4IUst3.js                                      3.25 kB │ gzip:   1.06 kB
+build/assets/Stethoscope.es-BpvyP6BS.js                                3.34 kB │ gzip:   1.23 kB
+build/assets/ShoppingCart.es-DTf2SA21.js                               3.35 kB │ gzip:   1.08 kB
+build/assets/Warning.es-BY_lPnkU.js                                    3.41 kB │ gzip:   1.12 kB
+build/assets/ListChecks.es-8s3pxblm.js                                 3.46 kB │ gzip:   0.91 kB
+build/assets/Calculator.es-BblthQH2.js                                 3.55 kB │ gzip:   0.93 kB
+build/assets/react-dom-5PB_EGoG.js                                     3.59 kB │ gzip:   1.36 kB
+build/assets/Calendar.es-QucCeJGl.js                                   3.81 kB │ gzip:   1.21 kB
+build/assets/Spinner.es-DMEzL5Wt.js                                    3.96 kB │ gzip:   1.27 kB
+build/assets/Scales.es-smf1rs7e.js                                     4.23 kB │ gzip:   1.39 kB
+build/assets/FilePdf.es-D00N9ORH.js                                    4.23 kB │ gzip:   1.40 kB
+build/assets/LinkBreak.es-BIcsLVSU.js                                  4.32 kB │ gzip:   1.39 kB
+build/assets/CampaignAccountAnalysis-DxV-Mcfo.js                       4.34 kB │ gzip:   2.00 kB
+build/assets/ApiPermissionsDiagnostic-B8X6CdiI.js                      4.36 kB │ gzip:   1.72 kB
+build/assets/fulfillmentV2-Ci0H1OxX.js                                 4.55 kB │ gzip:   1.71 kB
+build/assets/api-Bb_jcAHz.js                                           4.59 kB │ gzip:   1.61 kB
+build/assets/ImageBroken.es-B_YrzAGC.js                                4.73 kB │ gzip:   1.61 kB
+build/assets/AdvancedFilters-Ccc4pJKa.js                               4.86 kB │ gzip:   2.01 kB
+build/assets/HandCoins.es-D_6qjo7u.js                                  5.07 kB │ gzip:   1.88 kB
+build/assets/SnapchatPeriodDiagnosticsPage-BFxqArpm.js                 5.21 kB │ gzip:   2.22 kB
+build/assets/ExcludedOrdersModal-Bv47uBQs.js                           5.31 kB │ gzip:   1.93 kB
+build/assets/AccountingCutoffs-zRyJN4nQ.js                             5.34 kB │ gzip:   2.36 kB
+build/assets/History-BnOqFaEH.js                                       5.74 kB │ gzip:   2.22 kB
+build/assets/UploadExcel-G0353Qeu.js                                   6.03 kB │ gzip:   2.49 kB
+build/assets/FileXls.es-58nP-k6z.js                                    6.39 kB │ gzip:   2.40 kB
+build/assets/LegacyUsageReportPage-BJ3yNH_o.js                         6.53 kB │ gzip:   2.35 kB
+build/assets/FinancialPositionLedger-BY3MqStA.js                       6.60 kB │ gzip:   2.15 kB
+build/assets/ShippingLedgerStub-DTtieWVf.js                            6.63 kB │ gzip:   2.29 kB
+build/assets/AdvertisingExpensesReport-BskWiQE7.js                     6.68 kB │ gzip:   2.37 kB
+build/assets/OperationsDashboard-DuYpNija.js                           7.14 kB │ gzip:   2.48 kB
+build/assets/BnplBalancesDiagnostic-BDPc8XZF.js                        7.14 kB │ gzip:   2.62 kB
+build/assets/Coins.es-D0m38Var.js                                      7.23 kB │ gzip:   2.59 kB
+build/assets/dashboardAdsSpend-B9_SBZbI.js                             7.85 kB │ gzip:   2.89 kB
+build/assets/jsx-runtime-BpzPEenQ.js                                   7.89 kB │ gzip:   2.99 kB
+build/assets/SuppliersReportPage-DaRkd7zd.js                           8.05 kB │ gzip:   2.65 kB
+build/assets/ReconciliationDetail-BBgyrK0v.js                          8.22 kB │ gzip:   2.25 kB
+build/assets/EntityLedgerPage-BZB0amgL.js                              8.31 kB │ gzip:   3.05 kB
+build/assets/IntegrationPlaceholder-DdTpzBaL.js                        8.52 kB │ gzip:   2.93 kB
+build/assets/AlertsPage-bTqJcJsK.js                                    8.59 kB │ gzip:   2.80 kB
+build/assets/SettlementsOverview-C0eCGUzb.js                           8.80 kB │ gzip:   3.13 kB
+build/assets/SallaSourceComparison-Cdl4nnIF.js                         8.81 kB │ gzip:   2.74 kB
+build/assets/Profile-3P7jsQb1.js                                       8.92 kB │ gzip:   2.82 kB
+build/assets/ExpenseReversals-C4AHD66p.js                              8.93 kB │ gzip:   2.81 kB
+build/assets/LedgerTransactionsPage-De6Sp0yw.js                        9.04 kB │ gzip:   2.87 kB
+build/assets/Reconciliation-CSD2YYra.js                                9.13 kB │ gzip:   2.71 kB
+build/assets/react-to-print-EoKsSM60.js                                9.39 kB │ gzip:   3.67 kB
+build/assets/DailyProductCostModal-BPJgwLzc.js                         9.41 kB │ gzip:   3.12 kB
+build/assets/AdDebtDiagnostic-DNX_NTga.js                              9.46 kB │ gzip:   2.68 kB
+build/assets/SoldProducts-D2s91bjO.js                                  9.56 kB │ gzip:   3.65 kB
+build/assets/metaIntegrationsV2-BmJpXnZN.js                            9.68 kB │ gzip:   3.03 kB
+build/assets/SallaSettlements-D8Ia0fAP.js                             10.09 kB │ gzip:   3.22 kB
+build/assets/SalaryReversals-rs4ljarP.js                              10.13 kB │ gzip:   3.08 kB
+build/assets/MigrationWizard-CE2Ie7E3.js                              10.26 kB │ gzip:   3.41 kB
+build/assets/ShippingTransfers-D3_smqVl.js                            10.32 kB │ gzip:   3.01 kB
+build/assets/OperationAccountBindings-DkZMY5NA.js                     10.55 kB │ gzip:   3.75 kB
+build/assets/EmployeeBalanceCard-BAZUK9n0.js                          10.57 kB │ gzip:   3.04 kB
+build/assets/AnalysisResult-B8uvBLfD.js                               10.84 kB │ gzip:   3.02 kB
+build/assets/Counterparties-CHPSuKx2.js                               10.91 kB │ gzip:   3.46 kB
+build/assets/Advances-C07O-T6C.js                                     11.20 kB │ gzip:   3.42 kB
+build/assets/DailyCosts-B9pMkB8_.js                                   11.35 kB │ gzip:   3.50 kB
+build/assets/CustomerReturns-C-gZdMNf.js                              11.38 kB │ gzip:   3.80 kB
+build/assets/LedgerHealthDiagnostic-lRPAg12R.js                       11.51 kB │ gzip:   3.54 kB
+build/assets/accountingOnboarding-DArCg8FL.js                         11.71 kB │ gzip:   3.99 kB
+build/assets/useOrders-BIJreWFA.js                                    11.74 kB │ gzip:   4.37 kB
+build/assets/EmployeesLedger-C-hEp3sx.js                              11.80 kB │ gzip:   3.69 kB
+build/assets/EmployeeCorrections-E7D4ZVWU.js                          11.89 kB │ gzip:   3.47 kB
+build/assets/FinancialMovementsListPage-BLafuh4c.js                   11.92 kB │ gzip:   3.62 kB
+build/assets/CustomerWalletBalance-WrWYOaPT.js                        13.01 kB │ gzip:   4.99 kB
+build/assets/OperationalReports-C1-8MO4r.js                           13.26 kB │ gzip:   3.09 kB
+build/assets/ImportJobs-DJztTa93.js                                   13.34 kB │ gzip:   4.27 kB
+build/assets/PostMigrationAudit-B1gRchZ_.js                           13.67 kB │ gzip:   3.37 kB
+build/assets/OpeningBalances-BIglq2XW.js                              13.71 kB │ gzip:   4.43 kB
+build/assets/TeamManagement-B_9eLGwA.js                               13.73 kB │ gzip:   4.06 kB
+build/assets/ShippingAccounts-CId2kM07.js                             13.95 kB │ gzip:   4.05 kB
+build/assets/AdsReport-DWz5Gfk2.js                                    14.33 kB │ gzip:   4.48 kB
+build/assets/Legend-QiOfKA3U.js                                       14.34 kB │ gzip:   4.81 kB
+build/assets/CustomerExchanges-DP2lwBTg.js                            14.62 kB │ gzip:   4.86 kB
+build/assets/CustodyOpenBalances-DPxwcHCn.js                          14.84 kB │ gzip:   4.05 kB
+build/assets/Transfers-CJUh-nPU.js                                    15.11 kB │ gzip:   4.44 kB
+build/assets/AdsCostSettingsV2-DK0B58Ey.js                            15.15 kB │ gzip:   4.54 kB
+build/assets/fulfillmentExperiment-BVKifGgq.js                        15.59 kB │ gzip:   5.66 kB
+build/assets/BalanceDriftDiagnostic-4lNLhQXh.js                       15.76 kB │ gzip:   4.52 kB
+build/assets/CustomerCohortReport-_xhgTT7X.js                         15.95 kB │ gzip:   4.62 kB
+build/assets/ImageCatalog-Cii6Jj5U.js                                 16.08 kB │ gzip:   4.48 kB
+build/assets/Orders-B6Y0kWds.js                                       16.13 kB │ gzip:   4.76 kB
+build/assets/tabs-D1Covi2h.js                                         16.82 kB │ gzip:   5.78 kB
+build/assets/ProductsPage-iXISwVYg.js                                 16.91 kB │ gzip:   4.82 kB
+build/assets/InstagramCustomerIntelligenceIntegration-r-hgUHIG.js     17.27 kB │ gzip:   5.60 kB
+build/assets/RefundAudit-zDrP0TFJ.js                                  17.28 kB │ gzip:   4.62 kB
+build/assets/Receivables-CJAs2s49.js                                  17.31 kB │ gzip:   4.81 kB
+build/assets/PieChart-ccm8Zpt9.js                                     17.44 kB │ gzip:   5.55 kB
+build/assets/Settlements-Ca8PjCcC.js                                  17.54 kB │ gzip:   4.69 kB
+build/assets/ProviderFeeSetup-oMn7WwBA.js                             17.58 kB │ gzip:   5.60 kB
+build/assets/ShippingLedger-BPHT3O1T.js                               18.38 kB │ gzip:   4.75 kB
+build/assets/FinancialPosition-BYNNcmxU.js                            18.41 kB │ gzip:   5.10 kB
+build/assets/api-Cn6ediUw.js                                          19.01 kB │ gzip:   6.21 kB
+build/assets/OrdersDiagnostics-_m0JDADN.js                            19.03 kB │ gzip:   5.14 kB
+build/assets/customerIntelligence-BRbOQD8F.js                         19.30 kB │ gzip:   6.33 kB
+build/assets/ChartDashboard-BA6FeH61.js                               19.41 kB │ gzip:   6.96 kB
+build/assets/ExpenseCategoryTreePage-CYBv369W.js                      19.72 kB │ gzip:   5.78 kB
+build/assets/AccountDetails-CF2D-Ucx.js                               19.89 kB │ gzip:   5.21 kB
+build/assets/ReconciliationReport-ClaX_j82.js                         19.90 kB │ gzip:   5.31 kB
+build/assets/MarketingReports-BnIiQe0t.js                             21.88 kB │ gzip:   7.11 kB
+build/assets/MakeWebhook-CG1wfpmr.js                                  21.92 kB │ gzip:   6.13 kB
+build/assets/CODDiagnostic-DwA0CU1l.js                                22.34 kB │ gzip:   5.37 kB
+build/assets/ShippingCompanySettings-DQBebNYr.js                      22.61 kB │ gzip:   6.41 kB
+build/assets/AIControlCenter-BQ5cLI1u.js                              24.32 kB │ gzip:   8.05 kB
+build/assets/EmployeeOrphanDiagnostic-Ce-G3pJO.js                     24.92 kB │ gzip:   5.45 kB
+build/assets/PaymentSettlements-CLPJ8kGi.js                           25.50 kB │ gzip:   7.13 kB
+build/assets/AdsV2Report-DehUVSRM.js                                  25.74 kB │ gzip:   6.75 kB
+build/assets/dist-BV6cjxMc.js                                         26.23 kB │ gzip:  10.20 kB
+build/assets/BnplIntegrations-BkGv0s74.js                             27.21 kB │ gzip:   7.55 kB
+build/assets/BankTransferReview-krg2GUlx.js                           28.17 kB │ gzip:   6.72 kB
+build/assets/OrderTrackingNotes-CjXGAME9.js                           29.22 kB │ gzip:   7.81 kB
+build/assets/BnplSettlements-BwmS042z.js                              30.98 kB │ gzip:   7.21 kB
+build/assets/ProductCosts-CQbYzCSj.js                                 32.23 kB │ gzip:   7.83 kB
+build/assets/AdsManager-DNQ945yk.js                                   32.46 kB │ gzip:   8.19 kB
+build/assets/SuppliersPage-DVKvddlA.js                                33.42 kB │ gzip:   7.96 kB
+build/assets/dist-DkmaBlUn.js                                         33.60 kB │ gzip:   9.37 kB
+build/assets/RecurringObligations-CiRkTG62.js                         33.64 kB │ gzip:   8.46 kB
+build/assets/OrdersV2-DL3to-Lp.js                                     35.04 kB │ gzip:  10.05 kB
+build/assets/CustomAppIntegration-MM7bnVzi.js                         35.95 kB │ gzip:   9.36 kB
+build/assets/ProductPreparation-B4G8KTJe.js                           36.86 kB │ gzip:  10.36 kB
+build/assets/BnplSettlementsRegister-DLglviE1.js                      38.37 kB │ gzip:   8.52 kB
+build/assets/PurchaseInvoices-DhnE_Z_c.js                             39.51 kB │ gzip:  10.36 kB
+build/assets/OperatingExpenses-DHYNOtDg.js                            40.09 kB │ gzip:  10.17 kB
+build/assets/MezanComponents-Bc878966.js                              41.57 kB │ gzip:  10.20 kB
+build/assets/SettlementDashboard-3JhR7SNA.js                          41.63 kB │ gzip:   9.60 kB
+build/assets/Accounts-DLBbnaWK.js                                     41.97 kB │ gzip:  10.44 kB
+build/assets/BnplDiagnostics-Cs37AdRN.js                              43.23 kB │ gzip:  11.26 kB
+build/assets/SupplierLedgerDetailPage-BrLJTsu_.js                     44.10 kB │ gzip:   9.42 kB
+build/assets/MezanSuppliersV2-CwKVrofH.js                             45.76 kB │ gzip:  11.13 kB
+build/assets/Reports-CZmlW3hu.js                                      48.62 kB │ gzip:  11.16 kB
+build/assets/InventoryReceivingWorkspace-tlHmVFKt.js                  49.93 kB │ gzip:  12.74 kB
+build/assets/axios-CRBZr4vS.js                                        49.96 kB │ gzip:  18.75 kB
+build/assets/SallaIntegration-BEQQTvKK.js                             52.26 kB │ gzip:  13.76 kB
+build/assets/CampaignRecommendations-Bc_wJpPE.js                      53.10 kB │ gzip:  14.26 kB
+build/assets/OperationalFinancialPosition-FFPlrszU.js                 55.34 kB │ gzip:  15.19 kB
+build/assets/AdsV2Settings-BQj7IS1X.js                                57.91 kB │ gzip:  16.31 kB
+build/assets/AdAccountForensic-5fmLTM4R.js                            58.21 kB │ gzip:   9.76 kB
+build/assets/SnapchatV2Page-Bdd_UpUh.js                               63.79 kB │ gzip:  16.85 kB
+build/assets/FinancialInputHub-B4ljCo-X.js                            71.96 kB │ gzip:  15.76 kB
+build/assets/CustomerIntelligenceCenter-xD4OVXPs.js                   76.05 kB │ gzip:  17.91 kB
+build/assets/AdAccounts-Bo8-N86b.js                                   82.40 kB │ gzip:  17.41 kB
+build/assets/AdvancedDashboard-CQQCCUsv.js                            94.53 kB │ gzip:  26.34 kB
+build/assets/Settings-rOg_2D4m.js                                     96.30 kB │ gzip:  22.39 kB
+build/assets/EmployeesV2-Rs3NvOz-.js                                  97.14 kB │ gzip:  22.21 kB
+build/assets/UnifiedEntryScreen-D45Lu4dk.js                          111.22 kB │ gzip:  25.48 kB
+build/assets/OrderDetailsV2-BR3qNc2S.js                              122.20 kB │ gzip:  30.68 kB
+build/assets/OperationalBalances-D4lAcKax.js                         125.40 kB │ gzip:  31.57 kB
+build/assets/MezanProducts-dd6buCv_.js                               133.56 kB │ gzip:  32.91 kB
+build/assets/QoyodControlCenter-B-Xi9fX0.js                          155.75 kB │ gzip:  40.78 kB
+build/assets/FulfillmentV2-D4ib7k5F.js                               395.34 kB │ gzip:  95.56 kB
+build/assets/esm-Ca61H3iQ.js                                         435.69 kB │ gzip: 115.13 kB
+build/assets/AppsIntegrationsControlCenter-C_8N99G1.js               511.08 kB │ gzip: 123.98 kB
+build/assets/safeSpreadsheet-wIFS0C7q.js                             930.14 kB │ gzip: 256.78 kB
+build/assets/index-BdpXyp8C.js                                     2,353.43 kB │ gzip: 617.07 kB
+
+[INEFFECTIVE_DYNAMIC_IMPORT] src/lib/sidebarVisibility.js is dynamically imported by src/components/Sidebar.jsx but also statically imported by src/components/Sidebar.jsx, src/components/SidebarVisibilityDialog.jsx, dynamic import will not move module into another chunk.
+
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[INEFFECTIVE_DYNAMIC_IMPORT] src/components/fulfillment/SupplierReceivingWorkspace.jsx is dynamically imported by src/components/fulfillment/PreparationSupplierDispatchWorkspace.jsx but also statically imported by src/pages/FulfillmentV2.jsx, dynamic import will not move module into another chunk.
+
+✓ built in 5.36s

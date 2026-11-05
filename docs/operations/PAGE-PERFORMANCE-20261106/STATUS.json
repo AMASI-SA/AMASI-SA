@@ -1,0 +1,76 @@
+{
+  "task_id": "PAGE-PERFORMANCE-20261106",
+  "state": "source_candidate_on_current_production_ci_pending",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/mezan-page-performance-release-20261106",
+  "base_sha": "ae2fe9ce01c003ff139e22dd54f4641be48c8e38",
+  "source_commit": null,
+  "production_changed_by_this_task": false,
+  "remote_checkpoint": "8d65e6c0742979c7afe9d5c1a4b8c08390d85c80",
+  "pr": null,
+  "ci": "Fresh source-candidate checks and governed candidate intent required; no A/B frozen yet",
+  "release_guard": "no lease or /app mutation performed",
+  "verification": {
+    "backend": {
+      "exit_code": 0,
+      "passed": 689,
+      "subtests_passed": 93,
+      "skipped": 0,
+      "real_loopback_mongo": true,
+      "scope": "Original performance source 8d65e6c on ae2fe9c"
+    },
+    "frontend": {
+      "exit_code": 0,
+      "passed": 323,
+      "suites": 29,
+      "scope": "Original performance source 8d65e6c on ae2fe9c; integrated focused evidence is listed separately"
+    },
+    "build": {
+      "exit_code": 0,
+      "kind": "ordinary_local_vite_build",
+      "governed_release": false,
+      "scope": "Original ordinary local build; integrated ordinary build also passed"
+    },
+    "overall_live_80_percent_target": "unverified",
+    "installed_employee_device": "unverified",
+    "integration": {
+      "runtime_and_test_files_equal_to_tested_combination": 3596,
+      "fresh_frontend_tests": 40,
+      "fresh_frontend_suites": 6,
+      "build_exit_code": 0,
+      "additional_backend_progress": "138 passed and 46 subtests in two completed runs (55/41 plus 83/5); initial fixture connection failure resolved using the existing private Mongo URL",
+      "first_broad_local_run": "interrupted after repeated fixture connection errors; no product safety read removed",
+      "remaining_backend_exit_code": 0
+    }
+  },
+  "source_sha256": {
+    "backend/fulfillment_v2_routes.py": "54cbe258e190ff36c25229fe5d34eabdd54175134cc375a28cf223968366656f",
+    "backend/preparation_piece_operations.py": "6e0dce162b1f59d3e90245f397f1716f186a958e037b8f9f033cde3bd48d119c",
+    "backend/purchase_invoices_routes.py": "69e19be91f7296f9bbe6cb0bfa9379581bf554a4ab52093864d178a0646ec2d6",
+    "backend/purchase_receiving_service.py": "36587947328d8ffe4a3fc793f71da8c9338d4ebf8f647eb244457218d37879a0",
+    "frontend/src/components/Layout.jsx": "f584beaede9f92da1a299517b385d443e6d2609e30155b723d2a167f50d0a52c",
+    "frontend/src/components/fulfillment/PreparationWorkDashboard.jsx": "e3b9583a302b793fe013ba48d08365421b17518ae1f5046bbffeab5311281364",
+    "frontend/src/pages/AdvancedDashboard.jsx": "5421c95cdae18b341644da318654e07ebfaaa409efcfb7fccc87034efb5f1974",
+    "frontend/src/pages/FulfillmentV2.jsx": "652140c0e49e3782d875c799a3429c0abb6ab1c91f41bcad666b7d3ee611075f"
+  },
+  "next_safe_action": "Push the source branch based on merged PR1779, complete exact-head CI and current-tree regression checks, then freeze intent-only B and verify clean-clone rehearsals. Wait for the ongoing companion deployment and official lease closure before any /app update or our publication.",
+  "user_authorization": "Explicit approval: push and review, then publish after release checks; later request preserves the new native grouped loading.",
+  "native_coordination": {
+    "thread_id": "01a1ad29-d640-7b20-81c6-4d2ff90e6d58",
+    "thread_title": "إكمال التطبيق",
+    "send_message_delivered": false,
+    "tool_error": "Invalid app tool request",
+    "active_branch_observed": "codex/android71-supplier-receiving-fast-20261106",
+    "mobile_checkout_written_by_this_task": false,
+    "user_relay_requested": false,
+    "companion_server_pr": 1779,
+    "companion_merged_sha": "00e716fb3bcb391f05e8a75602aa68ae305798b9",
+    "companion_runtime_source": "c0b2a71eb0d50d66e766fc1a66e967bc7ef12aa1",
+    "user_confirmed_relay": true,
+    "companion_publication": "User reports publication in progress; its existing lease must be verified and closed by the owner before our deployment"
+  },
+  "initial_task_branch": "codex/mezan-page-performance-20261106",
+  "previous_pr": 1780,
+  "release_base_sha": "00e716fb3bcb391f05e8a75602aa68ae305798b9",
+  "source_hash_basis": "Git staged blob bytes (LF) on the current production base"
+}
