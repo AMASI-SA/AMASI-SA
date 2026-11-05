@@ -508,6 +508,14 @@ async def ensure_qoyod_indexes(db) -> None:
     )
 
     # --- qoyod_invoices ---
+    for field, name in (
+        ('reference', 'qoyod_invoice_reference'),
+        ('qoyod_official_reference', 'qoyod_invoice_official_reference'),
+        ('raw_response.reference', 'qoyod_invoice_raw_reference'),
+    ):
+        await db.qoyod_invoices.create_index(
+            [('user_id', 1), (field, 1)], name=name,
+        )
     await db.qoyod_invoices.create_index(
         [("user_id", pymongo.ASCENDING),
          ("salla_order_id", pymongo.ASCENDING)],

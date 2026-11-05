@@ -833,6 +833,7 @@ async def load_qoyod_reference_evidence(
     order_numbers: Optional[Iterable[str]],
     scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
     full_scan: bool = False,
+    indexed_reference_lookup: bool = False,
 ) -> dict[str, Any]:
     """Load bounded real local Qoyod invoices grouped by exact reference."""
     references = (
@@ -889,6 +890,14 @@ async def load_qoyod_reference_evidence(
             {"raw_response.reference": reference_match},
             {"salla_order_number": reference_match},
         ]
+        if indexed_reference_lookup:
+            # Worker discovery needs only the three authoritative reference
+            # forms accepted by official_qoyod_reference, never external aliases.
+            query['$or'] = [
+                {'qoyod_official_reference': reference_match, 'reference_provenance': 'qoyod.reference'},
+                {'raw_response.reference': reference_match},
+                {'reference': reference_match, 'source': 'plan_b_send'},
+            ]
     cursor = db.qoyod_invoices.find(query, projection).sort(
         [("issue_date", -1), ("created_at", -1)]
     )
@@ -955,6 +964,7 @@ async def build_candidate_audit(
     include_inbox_evidence: bool = True,
     order_numbers: Optional[Iterable[str]] = None,
     full_scan: bool = False,
+    indexed_reference_lookup: bool = False,
 ) -> dict[str, Any]:
     """Build exact eligible/sent/unsent reference sets and per-order proof."""
     captured = now or datetime.now(timezone.utc)
@@ -996,6 +1006,7 @@ async def build_candidate_audit(
         order_numbers=eligible_refs if lightweight and not full_scan else None,
         scan_limit=scan_limit,
         full_scan=full_scan,
+        indexed_reference_lookup=indexed_reference_lookup,
     )
     scan_metadata = {
         "scan_truncated": bool(

@@ -103,6 +103,7 @@ async def discover(db, owner, audit_builder, *, clock=None):
         marker_user_ids=('main', str(owner)), from_date='2026-07-01',
         lightweight=True, include_inbox_evidence=False,
         order_numbers=references,
+        indexed_reference_lookup=True,
     )
     candidate_refs = {row['order_number'] for row in audit['orders'] if row.get('worker_candidate')}
     operations = []

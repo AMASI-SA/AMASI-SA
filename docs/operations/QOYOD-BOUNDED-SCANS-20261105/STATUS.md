@@ -74,3 +74,11 @@ Fresh results: real-mongo-worker.txt/XML:8 passed in39.60s, including two OS pro
 Diagnostic limitation: this Windows Mongo build emitted malformed UTF-8 only in explain.serverInfo.host. Only diagnostic explain decoding uses replacement, verifies that no plan/value field was replaced, and omits host from published evidence. Application data decoding remains strict.
 
 Pending: real-Mongo timing/count/profile comparison, representative invoice lookup plans, final regressions, published report and final PR review checkpoint. Next safe action: run bounded synthetic benchmarking on this isolated server, then publish measured results to this draft.
+
+## Indexed lookup milestone
+
+The bounded worker lookup now uses only the three invoice-reference forms already accepted by official_qoyod_reference, backed by three compound indexes. Interactive/full diagnostic behavior is unchanged. Real-Mongo parity checks retained plan_b, attested official and raw references and rejected unproven external aliases. With1004 invoice rows, the winning plan used all3 new indexes and examined6 documents (including residual-filter/duplicate fetch accounting) to return3 proven matches. No production indexes were created.
+
+A combined invocation covered312 backend cases:311 passed; one diagnostic assertion failed only because BSON Timestamp metadata could not be JSON-encoded. The diagnostic assertion was corrected without weakening application codecs; its focused rerun passed. Primary timing will use no profiling. Earlier exploratory profiler files remain explicitly labeled and are not the primary timing evidence.
+
+Current remote checkpoint before this milestone: afaf78ba60f8df120420b6cd8281d2f98c372b91. Next: serial paired real-Mongo baseline/candidate timing at1000 and5000 orders, then final full regression and remote report. No merge or production change.

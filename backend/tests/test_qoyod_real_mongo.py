@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import uuid
+import json
 
 import pytest
 import pytest_asyncio
@@ -211,7 +212,86 @@ async def test_committed_intake_hint_is_acknowledged_only_after_queue_persistenc
         await incremental.drain_dirty_page(db, 'owner')
     assert (await db.unified_orders.find_one({'order_number': 'committed'}))['qoyod_followup_dirty'] is True
     assert await db.qoyod_order_followup.count_documents({}) == 1
+
     monkeypatch.setattr(incremental, 'write_batch', original)
     assert await incremental.drain_dirty_page(db, 'owner') == 1
     assert (await db.unified_orders.find_one({'order_number': 'committed'}))['qoyod_followup_dirty'] is False
     assert await db.qoyod_order_followup.count_documents({}) == 1
+
+
+@pytest.mark.asyncio
+async def test_canonical_hint_commits_or_rolls_back_with_restricted_order_transaction(real_db):
+    from orders_db import upsert_order
+    from operational_atomic import operational_owner
+    db, _ = real_db
+    await db.mz2_atomic_owners.insert_one({'_id': 'owner', 'revision': 0, 'writes_paused': True, 'control_revision': 0})
+    async def aborted(scoped):
+        await upsert_order(scoped, 'owner', 'atomic', canonical('atomic'), source='make')
+        raise RuntimeError('synthetic transaction rollback')
+    with pytest.raises(RuntimeError):
+        await operational_owner(db, 'owner', aborted)
+    assert await db.unified_orders.count_documents({}) == 0
+    assert await db.qoyod_order_followup.count_documents({}) == 0
+    async def committed(scoped):
+        return await upsert_order(scoped, 'owner', 'atomic', canonical('atomic'), source='make')
+    await operational_owner(db, 'owner', committed)
+    stored = await db.unified_orders.find_one({'order_number': 'atomic'})
+    assert stored['qoyod_followup_dirty'] is True
+    assert await db.qoyod_order_followup.count_documents({}) == 0
+    await incremental.drain_dirty_page(db, 'owner')
+    assert await db.qoyod_order_followup.count_documents({}) == 1
+
+
+@pytest.mark.asyncio
+async def test_indexed_invoice_lookup_preserves_proof_and_avoids_history_scan(real_db):
+    db, _ = real_db
+    refs = ['plan-b', 'official', 'raw', 'alias-only']
+    await db.unified_orders.insert_many([canonical(ref) for ref in refs])
+    invoices = [
+        {'reference': 'plan-b', 'source': 'plan_b_send'},
+        {'qoyod_official_reference': 'official', 'reference_provenance': 'qoyod.reference'},
+        {'raw_response': {'reference': 'raw'}},
+        {'external_reference': 'alias-only', 'reference': 'alias-only', 'source': 'synced_from_qoyod'},
+    ]
+    invoices += [{'reference': f'history-{i}', 'source': 'plan_b_send'} for i in range(1000)]
+    await db.qoyod_invoices.insert_many([
+        {'user_id': 'main', 'qoyod_invoice_id': str(i + 1), 'salla_order_id': str(i), **row}
+        for i, row in enumerate(invoices)
+    ])
+    captured = []
+    class Invoices:
+        def find(self, query, projection):
+            captured.append(query)
+            return db.qoyod_invoices.find(query, projection)
+    class TracedDB:
+        qoyod_invoices = Invoices()
+        def __getattr__(self, name):
+            return getattr(db, name)
+    args = dict(orders_user_id='owner', markers_user_id='main', order_numbers=refs,
+                lightweight=True, include_inbox_evidence=False)
+    before = await build_candidate_audit(db, **args)
+    after = await build_candidate_audit(TracedDB(), **args, indexed_reference_lookup=True)
+    assert before['sent_references'] == after['sent_references'] == {'plan-b', 'official', 'raw'}
+    assert before['unsent_references'] == after['unsent_references'] == {'alias-only'}
+    plan = await db.command('explain', {'find': 'qoyod_invoices', 'filter': captured[0],
+        'sort': {'issue_date': -1, 'created_at': -1}}, verbosity='executionStats',
+        codec_options=CodecOptions(unicode_decode_error_handler='replace'))
+    def indexes(value):
+        if isinstance(value, dict):
+            return ([value['indexName']] if 'indexName' in value else []) + [x for v in value.values() for x in indexes(v)]
+        return [x for v in value for x in indexes(v)] if isinstance(value, list) else []
+    assert '\ufffd' not in json.dumps({k: v for k, v in plan.items() if k != 'serverInfo'}, ensure_ascii=False, default=str)
+    names = set(indexes(plan['queryPlanner']['winningPlan']))
+    assert names == {'qoyod_invoice_reference', 'qoyod_invoice_official_reference', 'qoyod_invoice_raw_reference'}
+    assert plan['executionStats']['totalDocsExamined'] <= 2 * len(refs)
+    assert plan['executionStats']['nReturned'] == 3
+    target = os.environ.get('QOYOD_EVIDENCE_DIR')
+    if target:
+        (Path(target) / 'real-mongo-indexes.json').write_text(json.dumps({
+            'invoice_history_rows': 1004, 'lookup_references': 4,
+            'winning_indexes': sorted(names),
+            'docs_examined': plan['executionStats']['totalDocsExamined'],
+            'keys_examined': plan['executionStats']['totalKeysExamined'],
+            'returned': plan['executionStats']['nReturned'],
+            'diagnostic_host_omitted': True,
+        }, indent=2) + '\n', encoding='utf-8')
