@@ -8,6 +8,7 @@ from datetime import date, datetime
 from typing import Any, Awaitable, Callable, Optional
 
 from integrations.qoyod.unsent_orders import DUPLICATE, FAILED, SENT, UNSENT
+from integrations.qoyod.invoice_presence import verified_unsent_summary
 
 from .common import RETRYABLE_SYNC_FAILURE_CODES
 from .queue_counts import _proof_classification, _queue_audit
@@ -129,7 +130,19 @@ async def _execute_list(
     proof_by_reference = {
         str(proof.get("order_number") or ""): proof
         for proof in audit.get("orders") or []
+        if not salla_status or salla_status in (
+            proof.get("current_status"), proof.get("current_status_key")
+        )
     }
+    settings_collection = getattr(db, "qoyod_settings", None)
+    settings = (await settings_collection.find_one(
+        {"user_id": str(user_id)}, {"_id": 0, "invoice_presence_snapshot": 1},
+    ) or {}) if settings_collection is not None else {}
+    presence = verified_unsent_summary(
+        proof_by_reference.values(), settings.get("invoice_presence_snapshot"),
+        now=now, scan_truncated=audit.get("scan_truncated", False),
+    )
+    absent_references = set(presence["order_numbers"])
 
     counts = {SENT: 0, UNSENT: 0, FAILED: 0, DUPLICATE: 0}
     classification_by_reference: dict[str, dict[str, Any]] = {}
@@ -163,16 +176,22 @@ async def _execute_list(
                     proof_by_reference.get(reference) or {}
                 ).get("payment_eligibility"),
             }
-        if status and entry.get("status") != status:
+        if status == "verified_absent":
+            if reference not in absent_references:
+                continue
+        elif status and entry.get("status") != status:
             continue
         rows.append(entry)
 
     matched = sum(
         1
-        for classification in classification_by_reference.values()
-        if not status or classification["status"] == status
+        for reference, classification in classification_by_reference.items()
+        if (reference in absent_references if status == "verified_absent"
+            else not status or classification["status"] == status)
     )
+    rows = rows[:max(1, min(int(limit), 5000))]
     result.update({
+        "invoice_presence": presence,
         "counts": counts,
         "total": sum(counts.values()),
         "queue_counts": queue,
