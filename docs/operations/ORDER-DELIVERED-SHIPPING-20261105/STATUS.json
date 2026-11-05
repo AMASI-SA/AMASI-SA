@@ -1,5 +1,10 @@
 {
   "task_id": "ORDER-DELIVERED-SHIPPING-20261105",
+  "latest_continuation": {
+    "status_document": "docs/operations/PREPAID-SHIPMENT-CHRONOLOGY-20261105/STATUS.json",
+    "date": "2026-11-05",
+    "note": "PR1765 was merged, published and verified; the owner cashbox configuration was saved. Its original source-checkpoint fields below remain historical. The follow-up document supersedes the old pending release and Emkan approval states. Emkan is now explicitly approved and saved. Actual automatic Aramex posting remains under verification; the follow-up fixes the independently reproduced prepaid label chronology defect."
+  },
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/shipping-manual-cashbox-20261105",
   "base_commit": "a67da7816f24befb09fb713b294dea70e9517100",
