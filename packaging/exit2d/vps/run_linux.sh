@@ -43,7 +43,7 @@ cleanup() {
   sudo umount "$scratch/disk" 2>/dev/null || true
   sudo umount "$scratch/restore-disk" 2>/dev/null || true
   # Exact, newly-created runner files only; do not upload archives/secret files.
-  rm -f "$scratch/mongo.img" "$scratch/restore.img" "$scratch/synthetic.archive"
+  rm -f "$scratch/mongo.img" "$scratch/restore.img" "$scratch/synthetic.archive" "$scratch/synthetic.enc" "$scratch/archive.key"
   printf '{"exit_code":%s}\n' "$result" > "$root/outcome.json"
 }
 trap cleanup EXIT
@@ -83,6 +83,9 @@ fixture() {
     --entrypoint python "mezan-vps:$GITHUB_SHA" /opt/vps/entry.py test /evidence/tools/render/economy_acceptance.py "$1"
 }
 fixture setup | tee "$root/setup.jsonl"
+compose exec -T web python /opt/vps/entry.py test - < packaging/exit2d/vps/security_probe.py | tee "$root/security.jsonl"
+network_id=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.NetworkID}}{{end}}' "$web")
+test "$(docker network inspect -f '{{.Internal}}' "$network_id")" = true
 compose exec -T sync python /opt/vps/entry.py test - < packaging/exit2d/render/economy_snap.py > "$root/snap.jsonl" 2>&1 & snap_pid=$!
 fixture load | tee "$root/operations.jsonl"
 wait "$snap_pid"
@@ -131,6 +134,11 @@ docker exec "$snapshot_id" python /opt/vps/entry.py test /opt/vps/restore.py see
 docker exec "$snapshot_id" python /opt/vps/entry.py test /opt/vps/restore.py snapshot /tmp/receipt.json
 docker exec "$snapshot_id" cat /tmp/receipt.json > "$root/restore-expected.json"
 compose exec -T mongo bash -c 'mongodump --host 127.0.0.1 -u "$(cat /run/secrets/mongo_username)" -p "$(cat /run/secrets/mongo_password)" --authenticationDatabase admin --db mezan_exit2d_staging --archive --quiet' > "$scratch/synthetic.archive"
+docker exec -i "$snapshot_id" sh -c 'cat > /tmp/synthetic.archive' < "$scratch/synthetic.archive"
+docker exec "$snapshot_id" python /opt/vps/archive_crypt.py encrypt /tmp/synthetic.archive /tmp/synthetic.enc /tmp/archive.key | tee "$root/archive-encrypt.jsonl"
+docker exec "$snapshot_id" cat /tmp/synthetic.enc > "$scratch/synthetic.enc"
+docker exec "$snapshot_id" cat /tmp/archive.key > "$scratch/archive.key"
+rm -f "$scratch/synthetic.archive"
 docker rm -f "$snapshot_id" >/dev/null
 compose down --volumes --remove-orphans
 sudo umount "$scratch/disk"
@@ -144,9 +152,12 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 compose exec -T mongo mongosh --quiet --eval "$mongo_eval db.adminCommand({setParameter:1,ttlMonitorEnabled:false})" >/dev/null
-compose exec -T mongo bash -c 'mongorestore --host 127.0.0.1 -u "$(cat /run/secrets/mongo_username)" -p "$(cat /run/secrets/mongo_password)" --authenticationDatabase admin --archive --quiet' < "$scratch/synthetic.archive"
 compose run --no-deps -d --name "$project-verify" --entrypoint python web -c 'import time; time.sleep(600)' >/dev/null
 verify_id=$(docker inspect -f '{{.Id}}' "$project-verify")
+docker exec -i "$verify_id" sh -c 'cat > /tmp/synthetic.enc' < "$scratch/synthetic.enc"
+docker exec -i "$verify_id" sh -c 'umask 077; cat > /tmp/archive.key' < "$scratch/archive.key"
+docker exec "$verify_id" python /opt/vps/archive_crypt.py decrypt /tmp/synthetic.enc /tmp/synthetic.archive /tmp/archive.key | tee "$root/archive-decrypt.jsonl"
+docker exec "$verify_id" cat /tmp/synthetic.archive | compose exec -T mongo bash -c 'mongorestore --host 127.0.0.1 -u "$(cat /run/secrets/mongo_username)" -p "$(cat /run/secrets/mongo_password)" --authenticationDatabase admin --archive --quiet'
 docker exec -i "$verify_id" sh -c 'cat > /tmp/receipt.json' < "$root/restore-expected.json"
 docker exec "$verify_id" python /opt/vps/entry.py test /opt/vps/restore.py verify /tmp/receipt.json | tee "$root/restore.jsonl"
 docker rm -f "$verify_id" >/dev/null

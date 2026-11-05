@@ -11,6 +11,7 @@ services:
       - ..:/evidence/tools:ro
       - ../../exit2c:/evidence/acceptance:ro
       - ./restore.py:/opt/vps/restore.py:ro
+      - ./archive_crypt.py:/opt/vps/archive_crypt.py:ro
   reports:
     restart: 'no'
   sync:
