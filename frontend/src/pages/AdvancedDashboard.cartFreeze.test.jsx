@@ -66,6 +66,36 @@ test("release configuration defaults to frozen", () => {
     expect(jest.requireActual("../lib/dashboardLiveRefresh").ABANDONED_CARTS_DASHBOARD_AUTO_SYNC).toBe(false);
 });
 
+test("dashboard does not fetch a shadow comparison without a visible consumer", async () => {
+    await act(async () => root.render(<AdvancedDashboard />));
+    expect(api.get.mock.calls.filter(([url]) => url.startsWith("/dashboard-v2/unified-marketing-shadow"))).toHaveLength(0);
+    expect(api.get.mock.calls.some(([url]) => url.startsWith("/dashboard-v2?"))).toBe(true);
+});
+
+test("realtime polling pauses while hidden or offline and never overlaps a pending read", async () => {
+    let resolveGa;
+    api.get.mockImplementation(url => url.endsWith("/realtime-dashboard")
+        ? new Promise(resolve => { resolveGa = resolve; })
+        : Promise.resolve({ data: {} }));
+    const gaCalls = () => api.get.mock.calls.filter(([url]) => url.endsWith("/realtime-dashboard"));
+    await act(async () => root.render(<AdvancedDashboard />));
+    expect(gaCalls()).toHaveLength(1);
+    await tick(120_000);
+    expect(gaCalls()).toHaveLength(1);
+    await act(async () => resolveGa({ data: {} }));
+    Object.defineProperty(document, "hidden", { configurable: true, value: true });
+    await tick(120_000);
+    expect(gaCalls()).toHaveLength(1);
+    Object.defineProperty(document, "hidden", { configurable: true, value: false });
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+    await tick(60_000);
+    expect(gaCalls()).toHaveLength(1);
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+    await tick(60_000);
+    expect(gaCalls()).toHaveLength(2);
+    await act(async () => resolveGa({ data: {} }));
+});
+
 test("automatic summary refresh waits for active reads while manual refresh can proceed", async () => {
     const summaryReads = [];
     api.get.mockImplementation((url) => {

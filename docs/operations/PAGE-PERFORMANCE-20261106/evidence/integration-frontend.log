@@ -1,0 +1,15 @@
+yarn run v1.22.22
+$ react-scripts test --watchAll=false --runInBand --testMatch "**/src/**/*.test.[jt]s?(x)" --runTestsByPath src/components/Layout.deferredWorkspaces.test.jsx src/pages/FulfillmentV2.test.jsx src/components/fulfillment/PreparationWorkDashboard.loading.test.jsx src/pages/AdvancedDashboard.cartFreeze.test.jsx src/lib/dashboardMezanV2Adapter.adsExecutive.test.js src/components/DashboardAnalyticsPlacement.test.js
+PASS src/pages/AdvancedDashboard.cartFreeze.test.jsx
+PASS src/pages/FulfillmentV2.test.jsx
+PASS src/components/fulfillment/PreparationWorkDashboard.loading.test.jsx
+PASS src/components/Layout.deferredWorkspaces.test.jsx
+PASS src/lib/dashboardMezanV2Adapter.adsExecutive.test.js
+PASS src/components/DashboardAnalyticsPlacement.test.js
+
+Test Suites: 6 passed, 6 total
+Tests:       40 passed, 40 total
+Snapshots:   0 total
+Time:        6.5 s
+Ran all test suites within paths "src/components/Layout.deferredWorkspaces.test.jsx", "src/pages/FulfillmentV2.test.jsx", "src/components/fulfillment/PreparationWorkDashboard.loading.test.jsx", "src/pages/AdvancedDashboard.cartFreeze.test.jsx", "src/lib/dashboardMezanV2Adapter.adsExecutive.test.js", "src/components/DashboardAnalyticsPlacement.test.js".
+Done in 7.78s.

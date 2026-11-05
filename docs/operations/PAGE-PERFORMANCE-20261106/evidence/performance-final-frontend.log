@@ -1,0 +1,38 @@
+yarn run v1.22.22
+$ react-scripts test --watchAll=false --runInBand --testMatch "**/src/**/*.test.[jt]s?(x)" --runTestsByPath src/components/Layout.deferredWorkspaces.test.jsx src/pages/FulfillmentV2.test.jsx src/components/MezanV2NavigationShell.test.jsx src/components/MezanV2NavigationShell.fulfillment.test.jsx src/components/MezanV2NavigationShell.employees.test.jsx src/components/ProtectedRoute.test.jsx src/components/PageContentBoundary.test.jsx src/components/AppCrashBoundary.test.jsx src/context/authBootstrap.test.js src/components/fulfillment/PreparationWorkDashboard.loading.test.jsx src/components/fulfillment/PreparationWorkDashboard.test.jsx src/pages/AdvancedDashboard.cartFreeze.test.jsx src/pages/AdvancedDashboard.latestOrders.test.jsx src/lib/dashboardFetchAdmission.test.js src/lib/dashboardLatestResponseBroker.test.js src/components/fulfillment/SupplierReceivingWorkspace.test.jsx src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx src/components/fulfillment/CompletedFulfillmentOrders.test.jsx src/components/fulfillment/ReadyToShipOrders.test.jsx src/components/fulfillment/DeliveryTrackingOrders.test.jsx src/components/fulfillment/PreparationEmployeeReceivingWorkspace.test.jsx src/pages/OrderReview.test.jsx src/pages/OrderReview.gift.test.jsx src/pages/MarketingPlatformWorkspace.test.jsx src/lib/dashboardMezanV2Adapter.adsExecutive.test.js src/components/DashboardAdsSpendCard.test.jsx src/components/DashboardAnalyticsPlacement.test.js src/defaultDashboardRoute.test.js src/mezanUnifiedHeader.test.js
+PASS src/components/fulfillment/SupplierReceivingWorkspace.test.jsx (14.228 s)
+PASS src/pages/MarketingPlatformWorkspace.test.jsx
+PASS src/components/fulfillment/ReadyToShipOrders.test.jsx
+PASS src/pages/AdvancedDashboard.latestOrders.test.jsx
+PASS src/pages/AdvancedDashboard.cartFreeze.test.jsx
+PASS src/components/DashboardAdsSpendCard.test.jsx
+PASS src/components/Layout.deferredWorkspaces.test.jsx
+PASS src/components/ProtectedRoute.test.jsx
+PASS src/pages/OrderReview.test.jsx
+PASS src/defaultDashboardRoute.test.js
+PASS src/components/DashboardAnalyticsPlacement.test.js
+PASS src/components/MezanV2NavigationShell.employees.test.jsx
+PASS src/components/fulfillment/CompletedFulfillmentOrders.test.jsx
+PASS src/components/fulfillment/PreparationWorkDashboard.test.jsx
+PASS src/components/fulfillment/PreparationEmployeeReceivingWorkspace.test.jsx
+PASS src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx
+PASS src/pages/FulfillmentV2.test.jsx
+PASS src/components/MezanV2NavigationShell.test.jsx
+PASS src/components/fulfillment/PreparationWorkDashboard.loading.test.jsx
+PASS src/pages/OrderReview.gift.test.jsx
+PASS src/components/MezanV2NavigationShell.fulfillment.test.jsx
+PASS src/mezanUnifiedHeader.test.js
+PASS src/components/AppCrashBoundary.test.jsx
+PASS src/lib/dashboardMezanV2Adapter.adsExecutive.test.js
+PASS src/context/authBootstrap.test.js
+PASS src/components/fulfillment/DeliveryTrackingOrders.test.jsx
+PASS src/components/PageContentBoundary.test.jsx
+PASS src/lib/dashboardLatestResponseBroker.test.js
+PASS src/lib/dashboardFetchAdmission.test.js
+
+Test Suites: 29 passed, 29 total
+Tests:       323 passed, 323 total
+Snapshots:   0 total
+Time:        32.162 s, estimated 38 s
+Ran all test suites within paths "src/components/Layout.deferredWorkspaces.test.jsx", "src/pages/FulfillmentV2.test.jsx", "src/components/MezanV2NavigationShell.test.jsx", "src/components/MezanV2NavigationShell.fulfillment.test.jsx", "src/components/MezanV2NavigationShell.employees.test.jsx", "src/components/ProtectedRoute.test.jsx", "src/components/PageContentBoundary.test.jsx", "src/components/AppCrashBoundary.test.jsx", "src/context/authBootstrap.test.js", "src/components/fulfillment/PreparationWorkDashboard.loading.test.jsx", "src/components/fulfillment/PreparationWorkDashboard.test.jsx", "src/pages/AdvancedDashboard.cartFreeze.test.jsx", "src/pages/AdvancedDashboard.latestOrders.test.jsx", "src/lib/dashboardFetchAdmission.test.js", "src/lib/dashboardLatestResponseBroker.test.js", "src/components/fulfillment/SupplierReceivingWorkspace.test.jsx", "src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx", "src/components/fulfillment/CompletedFulfillmentOrders.test.jsx", "src/components/fulfillment/ReadyToShipOrders.test.jsx", "src/components/fulfillment/DeliveryTrackingOrders.test.jsx", "src/components/fulfillment/PreparationEmployeeReceivingWorkspace.test.jsx", "src/pages/OrderReview.test.jsx", "src/pages/OrderReview.gift.test.jsx", "src/pages/MarketingPlatformWorkspace.test.jsx", "src/lib/dashboardMezanV2Adapter.adsExecutive.test.js", "src/components/DashboardAdsSpendCard.test.jsx", "src/components/DashboardAnalyticsPlacement.test.js", "src/defaultDashboardRoute.test.js", "src/mezanUnifiedHeader.test.js".
+Done in 33.71s.

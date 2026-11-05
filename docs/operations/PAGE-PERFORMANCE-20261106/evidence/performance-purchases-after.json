@@ -1,0 +1,23 @@
+{
+  "kind": "local_synthetic_read_only",
+  "simulated_order_query_rtt_ms": 8,
+  "repeats_after_warmup": 5,
+  "limitations": "Mongomock and in-process ASGI; excludes deployed middleware, real Mongo, device, network, and production contention.",
+  "workloads": {
+    "purchases": {
+      "synthetic_orders": 100,
+      "response_sha256": "7b0a24e405741908b953fbba9796048d8989caed7fa9ebd8a1e681b3090c159e",
+      "median_ms": 62.839,
+      "max_ms": 63.237,
+      "samples_ms": [
+        61.927,
+        62.839,
+        62.99,
+        63.237,
+        59.468
+      ],
+      "order_query_count": 0,
+      "modeled_query_count": 2
+    }
+  }
+}

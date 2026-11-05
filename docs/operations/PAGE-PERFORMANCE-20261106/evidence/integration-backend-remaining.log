@@ -1,0 +1,21 @@
+........................................................................ [ 86%]
+...........                                                         [100%]
+============================== warnings summary ===============================
+..\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12
+  C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+..\mezan-page-performance-20261106\.venv\Lib\site-packages\fitz\__init__.py:17
+  C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\fitz\__init__.py:17: FutureWarning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+    warnings.warn(
+
+backend/tests/test_report_raw_option_recovery.py::test_dashboard_and_sold_http_read_provider_choices_without_writes
+  C:\Users\amasi\.codex\worktrees\mezan-page-performance-release-20261106\backend\recurring_obligations_routes.py:292: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @root_validator(skip_on_failure=True)
+
+backend/tests/test_report_raw_option_recovery.py::test_dashboard_and_sold_http_read_provider_choices_without_writes
+  C:\Users\amasi\.codex\worktrees\mezan-page-performance-release-20261106\backend\recurring_obligations_routes.py:316: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @root_validator(skip_on_failure=True)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+83 passed, 4 warnings, 5 subtests passed in 45.82s

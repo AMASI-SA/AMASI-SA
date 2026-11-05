@@ -72,6 +72,15 @@ jest.mock("../components/fulfillment/SupplierReceivingWorkspace", () => function
 
 import FulfillmentV2, { FULFILLMENT_NAVIGATION_ITEMS, FULFILLMENT_STAGES } from "./FulfillmentV2";
 
+async function renderFulfillment() {
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    await act(async () => root.render(<FulfillmentV2 />));
+    const markup = host.innerHTML;
+    await act(async () => root.unmount());
+    return markup;
+}
+
 const EXPECTED_STAGE_KEYS = [
     "pending_review",
     "reviewed",
@@ -104,7 +113,7 @@ beforeEach(() => {
     mockSetSearchParams.mockClear();
 });
 
-test("fulfillment workspace keeps the governed stage order", () => {
+test("fulfillment workspace keeps the governed stage order", async () => {
     expect(FULFILLMENT_STAGES.map((stage) => stage.key)).toEqual(EXPECTED_STAGE_KEYS);
     expect(new Set(FULFILLMENT_STAGES.map((stage) => stage.key)).size).toBe(FULFILLMENT_STAGES.length);
     expect(FULFILLMENT_STAGES.map((stage) => stage.label)).toEqual([
@@ -121,7 +130,7 @@ test("fulfillment workspace keeps the governed stage order", () => {
     ]);
 });
 
-test("my products is a navigation stop immediately before supplier receiving", () => {
+test("my products is a navigation stop immediately before supplier receiving", async () => {
     expect(FULFILLMENT_NAVIGATION_ITEMS.map((item) => item.key)).toEqual([
         "pending_review",
         "reviewed",
@@ -141,8 +150,8 @@ test("my products is a navigation stop immediately before supplier receiving", (
     });
 });
 
-test("preparation is the Mezan OS parent with eleven nested navigation tabs", () => {
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+test("preparation is the Mezan OS parent with eleven nested navigation tabs", async () => {
+    const markup = await renderFulfillment();
 
     expect(markup).toContain("إدارة التجهيز");
     expect(markup).not.toContain("إدارة رفع الطلبات");
@@ -163,9 +172,9 @@ test("preparation is the Mezan OS parent with eleven nested navigation tabs", ()
     );
 });
 
-test("opening fulfillment without a stage starts at pending review", () => {
+test("opening fulfillment without a stage starts at pending review", async () => {
     mockSearchParams = new URLSearchParams("");
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+    const markup = await renderFulfillment();
 
     expect(markup).toContain('data-testid="pending-review-queue"');
     expect(markup).toContain("قائمة انتظار المراجعة");
@@ -174,9 +183,9 @@ test("opening fulfillment without a stage starts at pending review", () => {
     expect(markup).not.toContain("إدارة منتجاتي المستقلة");
 });
 
-test("my products workspace is standalone and separate from fulfillment stages", () => {
+test("my products workspace is standalone and separate from fulfillment stages", async () => {
     mockSearchParams = new URLSearchParams("workspace=my-products");
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+    const markup = await renderFulfillment();
 
     expect(markup).toContain('data-testid="preparation-work-dashboard"');
     expect(markup).toContain("إدارة منتجاتي المستقلة");
@@ -185,7 +194,7 @@ test("my products workspace is standalone and separate from fulfillment stages",
     expect(markup).not.toContain('data-testid="pending-review-queue"');
 });
 
-test("clicking my products opens its standalone workspace route", () => {
+test("clicking my products opens its standalone workspace route", async () => {
     const container = document.createElement("div");
     const root = createRoot(container);
 
@@ -201,17 +210,17 @@ test("clicking my products opens its standalone workspace route", () => {
     act(() => root.unmount());
 });
 
-test("pending review is embedded under the organized preparation tabs", () => {
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+test("pending review is embedded under the organized preparation tabs", async () => {
+    const markup = await renderFulfillment();
 
     expect(markup).toContain("قائمة انتظار المراجعة");
     expect(markup).toContain("النافذة الحالية");
     expect(markup).toContain("بانتظار المراجعة");
 });
 
-test("reviewed products window does not render the preparation files registry", () => {
+test("reviewed products window does not render the preparation files registry", async () => {
     mockSearchParams = new URLSearchParams("stage=reviewed&view=products");
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+    const markup = await renderFulfillment();
 
     expect(markup).toContain('data-testid="reviewed-products-window"');
     expect(markup).toContain("منتجات تمت مراجعتها");
@@ -219,9 +228,9 @@ test("reviewed products window does not render the preparation files registry", 
     expect(markup).not.toContain("سجل ملفات التجهيز المستقل");
 });
 
-test("preparation files window does not render reviewed products", () => {
+test("preparation files window does not render reviewed products", async () => {
     mockSearchParams = new URLSearchParams("stage=reviewed&view=files");
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+    const markup = await renderFulfillment();
 
     expect(markup).toContain('data-testid="preparation-files-registry-window"');
     expect(markup).toContain("سجل ملفات التجهيز المستقل");
@@ -230,9 +239,9 @@ test("preparation files window does not render reviewed products", () => {
     expect(markup).not.toContain("منتجات تمت مراجعتها");
 });
 
-test("in progress stage renders the employee work dashboard instead of a placeholder", () => {
+test("in progress stage renders the employee work dashboard instead of a placeholder", async () => {
     mockSearchParams = new URLSearchParams("stage=in_progress");
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+    const markup = await renderFulfillment();
 
     expect(markup).toContain('data-testid="preparation-work-dashboard"');
     expect(markup).toContain("تفاصيل قيد التنفيذ وإدارة الموظفين");
@@ -241,9 +250,9 @@ test("in progress stage renders the employee work dashboard instead of a placeho
     expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
 });
 
-test("preparation stage exposes warehouse supplier manufacturing and shortage tracks", () => {
+test("preparation stage exposes warehouse supplier manufacturing and shortage tracks", async () => {
     mockSearchParams = new URLSearchParams("stage=preparation");
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+    const markup = await renderFulfillment();
 
     [
         "من المستودع",
@@ -260,9 +269,9 @@ test("preparation stage exposes warehouse supplier manufacturing and shortage tr
     expect(markup).not.toContain("قائمة انتظار المراجعة");
 });
 
-test("assembly stage opens the simple employee receiving workspace", () => {
+test("assembly stage opens the simple employee receiving workspace", async () => {
     mockSearchParams = new URLSearchParams("stage=assembly");
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+    const markup = await renderFulfillment();
 
     expect(markup).toContain('data-testid="preparation-employee-receiving-workspace"');
     expect(markup).toContain("بحث برقم الطلب");
@@ -271,9 +280,9 @@ test("assembly stage opens the simple employee receiving workspace", () => {
     expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
 });
 
-test("completed stage keeps the carrier label action available", () => {
+test("completed stage keeps the carrier label action available", async () => {
     mockSearchParams = new URLSearchParams("stage=completed");
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+    const markup = await renderFulfillment();
 
     expect(markup).toContain('data-testid="completed-fulfillment-orders"');
     expect(markup).toContain("تم التنفيذ");
@@ -281,9 +290,9 @@ test("completed stage keeps the carrier label action available", () => {
     expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
 });
 
-test("courier dispatch is a governed stage after completed for managers", () => {
+test("courier dispatch is a governed stage after completed for managers", async () => {
     mockSearchParams = new URLSearchParams("stage=courier_dispatch");
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+    const markup = await renderFulfillment();
 
     expect(markup).toContain('data-testid="store-courier-dispatch-workspace"');
     expect(markup).toContain("اختيار الموصل ثم تصوير الشحنة لإسنادها");
@@ -291,9 +300,9 @@ test("courier dispatch is a governed stage after completed for managers", () => 
     expect(markup).not.toContain('data-testid="store-courier-my-shipments-waiting"');
 });
 
-test("delivering stage renders the external carrier tracking board for managers", () => {
+test("delivering stage renders the external carrier tracking board for managers", async () => {
     mockSearchParams = new URLSearchParams("stage=delivering");
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+    const markup = await renderFulfillment();
 
     expect(markup).toContain('data-testid="delivery-tracking-delivering"');
     expect(markup).toContain("جاري التوصيل");
@@ -301,16 +310,16 @@ test("delivering stage renders the external carrier tracking board for managers"
     expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
 });
 
-test("delivered stage renders the completed external carrier board for managers", () => {
+test("delivered stage renders the completed external carrier board for managers", async () => {
     mockSearchParams = new URLSearchParams("stage=delivered");
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+    const markup = await renderFulfillment();
 
     expect(markup).toContain('data-testid="delivery-tracking-delivered"');
     expect(markup).toContain("تم التوصيل");
     expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
 });
 
-test("store courier sees only assignment pickup delivering and delivered tabs", () => {
+test("store courier sees only assignment pickup delivering and delivered tabs", async () => {
     mockUser = {
         id: "courier-1",
         role: "viewer",
@@ -318,7 +327,7 @@ test("store courier sees only assignment pickup delivering and delivered tabs", 
         permissions: ["fulfillment.store_courier.deliver"],
     };
     mockSearchParams = new URLSearchParams("stage=courier_dispatch");
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+    const markup = await renderFulfillment();
 
     expect(markup).toContain('data-testid="store-courier-my-shipments-waiting"');
     expect(markup).toContain("توصيل مندوب المتجر");
@@ -331,7 +340,7 @@ test("store courier sees only assignment pickup delivering and delivered tabs", 
     expect(markup).not.toContain('data-testid="store-courier-dispatch-workspace"');
 });
 
-test("store courier delivering tab shows only the courier own shipment queue", () => {
+test("store courier delivering tab shows only the courier own shipment queue", async () => {
     mockUser = {
         id: "courier-1",
         role: "viewer",
@@ -339,13 +348,13 @@ test("store courier delivering tab shows only the courier own shipment queue", (
         permissions: ["fulfillment.store_courier.deliver"],
     };
     mockSearchParams = new URLSearchParams("stage=delivering");
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+    const markup = await renderFulfillment();
 
     expect(markup).toContain('data-testid="store-courier-my-shipments-delivering"');
     expect(markup).not.toContain('data-testid="delivery-tracking-delivering"');
 });
 
-test("store courier delivered tab shows only the courier completed history", () => {
+test("store courier delivered tab shows only the courier completed history", async () => {
     mockUser = {
         id: "courier-1",
         role: "viewer",
@@ -353,13 +362,13 @@ test("store courier delivered tab shows only the courier completed history", () 
         permissions: ["fulfillment.store_courier.deliver"],
     };
     mockSearchParams = new URLSearchParams("stage=delivered");
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+    const markup = await renderFulfillment();
 
     expect(markup).toContain('data-testid="store-courier-my-shipments-delivered"');
     expect(markup).not.toContain('data-testid="delivery-tracking-delivered"');
 });
 
-test("store courier is forced back to its assignment queue from unrelated stages", () => {
+test("store courier is forced back to its assignment queue from unrelated stages", async () => {
     mockUser = {
         id: "courier-1",
         role: "viewer",
@@ -367,7 +376,7 @@ test("store courier is forced back to its assignment queue from unrelated stages
         permissions: ["fulfillment.store_courier.deliver"],
     };
     mockSearchParams = new URLSearchParams("stage=pending_review");
-    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+    const markup = await renderFulfillment();
 
     expect(markup).toContain('data-testid="store-courier-my-shipments-waiting"');
     expect(markup).not.toContain('data-testid="pending-review-queue"');
@@ -388,7 +397,7 @@ test("phone home exposes six reference destinations using existing stage navigat
     await act(async () => root.unmount());
 });
 
-test("phone home does not appear on a direct stage link or in courier-only access", () => {
+test("phone home does not appear on a direct stage link or in courier-only access", async () => {
     expect(renderToStaticMarkup(<FulfillmentV2 />)).not.toContain('class="fulfillment-home"');
     mockSearchParams = new URLSearchParams();
     mockUser = { role: "viewer", permissions: ["fulfillment.store_courier.deliver"] };

@@ -359,6 +359,7 @@ export default function PreparationWorkDashboard({ initialView = "my-work", stan
         } catch (error) {
             if (error.forbidden) {
                 setManagerAllowed(false);
+                setActiveView("my-work");
             } else {
                 setManagerError(error.message || "تعذّر تحميل التقرير.");
             }
@@ -367,10 +368,12 @@ export default function PreparationWorkDashboard({ initialView = "my-work", stan
         }
     }, [date]);
 
-    useEffect(() => { loadWork(); }, [loadWork]);
     useEffect(() => {
-        loadManager();
-    }, [loadManager]);
+        if (!standalone && activeView === "my-work") loadWork();
+    }, [activeView, standalone, loadWork]);
+    useEffect(() => {
+        if (!standalone && activeView === "employees" && managerAllowed) loadManager();
+    }, [activeView, standalone, managerAllowed, loadManager]);
 
     const tabs = useMemo(() => [
         { id: "my-work", label: "تفاصيل القطع", Icon: Storefront, visible: true },
@@ -379,11 +382,10 @@ export default function PreparationWorkDashboard({ initialView = "my-work", stan
     ].filter((item) => item.visible), [managerAllowed]);
 
     const reloadOperationalViews = useCallback(async () => {
-        await Promise.all([
-            loadWork(),
-            managerAllowed ? loadManager() : Promise.resolve(),
-        ]);
-    }, [loadManager, loadWork, managerAllowed]);
+        if (standalone) return;
+        if (activeView === "my-work") await loadWork();
+        if (activeView === "employees" && managerAllowed) await loadManager();
+    }, [activeView, standalone, loadManager, loadWork, managerAllowed]);
 
     if (standalone || activeView === "my-products") {
         return (
