@@ -1,5 +1,46 @@
 # QOYOD-VERIFIED-UNSENT-20261105
 
+## Lightweight banner follow-up (2026-11-05)
+
+User explicitly requested protecting fulfillment performance and authorized merge/publish.
+Branch: fix/qoyod-lightweight-header-20261105. Supersedes unmerged PR #1764;
+includes its observational pagination compatibility fix without its frozen intent.
+Base production: a67da7816f24befb09fb713b294dea70e9517100.
+The first publication is verified: three consecutive Release Guard probes passed
+for source 4b8709f2448995302477d9125708b14ce757d7de, release
+rg5-de4f90c9aa5b48797c7235ddc5cac1404f9ecd58b09bcbcff99cb500330c6767;
+status reports active=false. Production changed: yes (first fix only).
+
+The previous header called the full unsent report every minute on every Layout.
+The follow-up uses GET /unsent-summary: authenticated owner actor lookup plus
+one indexed settings read with a compact projection. No order/invoice scans,
+provider requests, queue work, or cache refill on a miss. Owner UI polls every
+five minutes, skips hidden tabs, prevents overlap and aborts on unmount.
+Employees do not render or request the banner; server rejects employee actors
+including native owner-shaped sessions. Full explicitly requested reports reuse
+existing proof to cache a summary, bound to the pre-audit sync generation and
+orders owner. Incomplete, stale, different-owner or superseded evidence is unknown.
+No production load generator or worker changes were run.
+
+Validation: affected backend suites plus reconciliation and seven new summary
+checks pass (89 tests total); actual Jest passes six tests, including mounted
+employee zero requests, owner interval/hidden tab behavior and request overlap.
+A 20,000-proof fixture with 100 summary reads demonstrates one settings read per
+call and <300-byte JSON payload, no order collection or provider access. The
+unrelated iter164 accounting integration suite requires a local Mongo service and
+was not run (collection failed due to absent MONGO_URL); no production DB used.
+Next: checkpoint source A, governed A/B build/freeze, intent-only B, clean server
+adapter rehearsal, CI/review, merge and publish under a fresh lease; verify3.
+
+Known operational limits: live owner session reports qoyod_security_owner_required
+on provider reconciliation; actual provider-verified unsent count is unknown.
+Existing automatic sender logs show CandidateAuditScanLimitExceeded, a separate
+worker issue. Do not claim successful sending or increase scan limits in this patch.
+Issue #1006 has reached GitHub's comment limit; task PR conversation is the ledger.
+
+## Prior checkpoint history
+
+
 Follow-up compatibility checkpoint: PR #1762 merged as
 a67da7816f24befb09fb713b294dea70e9517100 and its first publish is running.
 Keep evidence gathering observational: invalid/repeated pages invalidate the

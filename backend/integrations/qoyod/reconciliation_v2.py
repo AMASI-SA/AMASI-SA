@@ -34,6 +34,7 @@ from integrations.qoyod.eligible_orders import (
     QOYOD_SYNC_START_DATE, _parse_iso_date,
 )
 from integrations.qoyod.unsent_orders import _is_real
+from integrations.qoyod.header_summary import cache_report_summary
 from integrations.qoyod.candidate_orders import (
     build_candidate_audit,
     load_qoyod_reference_evidence,
@@ -332,6 +333,10 @@ async def run_reconciliation_v2(
         days=days,
         now=now,
     )
+    settings_collection = getattr(db, "qoyod_settings", None)
+    header_settings = (await settings_collection.find_one(
+        {"user_id": str(markers_user_id)}, {"_id": 0, "invoice_presence_snapshot": 1},
+    ) or {}) if settings_collection is not None else {}
     audit = await build_candidate_audit(
         db,
         orders_user_id=str(orders_user_id),
@@ -341,6 +346,12 @@ async def run_reconciliation_v2(
         to_date=date_range.to_date,
         days=days,
         now=now,
+    )
+    await cache_report_summary(
+        db, user_id=markers_user_id, orders_user_id=orders_user_id,
+        proofs=audit.get("orders") or [], from_date=date_range.from_date,
+        to_date=date_range.to_date, now=now, settings=header_settings,
+        scan_truncated=audit.get("scan_truncated", False),
     )
     unified = {
         row["order_number"]: {
