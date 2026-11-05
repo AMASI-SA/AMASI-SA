@@ -1,5 +1,10 @@
 {
   "task_id": "ORDER-DELIVERED-SHIPPING-20261105",
+  "latest_continuation": {
+    "status_document": "docs/operations/PREPAID-SHIPMENT-CHRONOLOGY-20261105/STATUS.json",
+    "date": "2026-11-05",
+    "note": "PR1765 was merged, published and verified; the owner cashbox configuration was saved. Its original source-checkpoint fields below remain historical. The follow-up document supersedes the old pending release and Emkan approval states. Emkan is now explicitly approved and saved. Actual automatic Aramex posting remains under verification; the follow-up fixes the independently reproduced prepaid label chronology defect."
+  },
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/shipping-manual-cashbox-20261105",
   "base_commit": "a67da7816f24befb09fb713b294dea70e9517100",
@@ -130,15 +135,14 @@
     "reason": "This task has made no production application, provider, database or financial mutation. The user instructed continuation of the proposed release and manual courier cashbox configuration. The independent Qoyod release currently owns the production lease; this task will neither clear nor reuse it."
   },
   "remaining": [
-    "Complete fresh CI on the continuation source, including real Mongo. Prior E-head CI cannot certify the new slices.",
-    "After the existing release owner closes its lease, follow Protocol V5 for the authorized shipping release: clean source build, intent-only B, clean-clone adapter rehearsal, governed publish and three verified runtime probes.",
-    "After verified deployment, bind Aramex to the exact intended Salla cash account through the owner UI and verify one paid charge/debit at completed with no duplicate at delivered.",
-    "Emkan fee save remains blocked pending explicit numeric/effective-date approval. Provider payment-evidence and Tabby fee-matching gaps remain visible; no assertion that every financial table is complete."
+    "Final successor Protocol V5 release and exact-head CI for capture recovery and translated operating-cost correction.",
+    "Actual automatic Aramex debit and no-duplicate live acceptance; do not create a manual expense or new opening.",
+    "Provider payment-evidence/fee and unresolved product-cost gaps remain visible; no assertion that every financial table is complete."
   ],
-  "next_safe_action": "Verify the continuation source against the latest base and collect exact-head CI. Re-read /app Release Guard status before any release rehearsal; continue only after the Qoyod owner reports inactive. Emkan save remains blocked.",
+  "next_safe_action": "Push the fresh single-parent source checkpoint and successor Draft PR, verify exact remote/local tree and J intent history; build governed source A and freeze intent-only B. Fresh inactive shared guard is required before clean-clone adapter rehearsal. Obtain exact-head CI, then authorized merge/publish with own V5 lease and three probes. Finally verify live Aramex paid/cash/no-duplicate movements and operating cost completeness. Never repeat saved Emkan or Aramex approvals.",
   "previous_remote_checkpoint": "eee6b4d95ac2efc6028f3b43bbbae387a6e6fa64",
   "checkpoint_identity": "The containing Git commit and branch ref identify this source checkpoint. Its full head SHA, independent review result and exact-head CI outcome are recorded in PR 1760 and Issue 1006 without another source change.",
-  "updated_at_utc": "2026-11-05T15:43:36.477545+00:00",
+  "updated_at_utc": "2026-11-05T20:42:20.194632+00:00",
   "pull_request": {
     "number": null,
     "draft": true,
@@ -252,13 +256,14 @@
   },
   "payment_fee_approval_block": {
     "provider": "emkan",
-    "saved": false,
+    "saved": true,
     "effective_from": "2026-11-01",
     "percent": "6.99",
     "fixed_sar": "1.50",
     "vat_percent": "15",
     "vat_treatment": "exclusive",
-    "reason": "Automatic approval review rejected saving these persistent retroactive financial settings because generic continuation did not explicitly approve the numeric rates and effective date. No alternate save or database route was attempted. Explicit confirmation remains required."
+    "reason": "Earlier automatic approval block was resolved by explicit user approval of the exact rate and date. One owner-UI save succeeded. Saved preview219.32 gives19.36fee including VAT and199.96net. Do not save again.",
+    "resolved": true
   },
   "cost_correction_scope": {
     "proven_defect": "Label-only English Yes could omit an Arabic-bound embroidery service. Flattened ID/name observations could also charge the wrong service. The corrected parser preserves observation origin and rejects ambiguity.",
@@ -272,5 +277,16 @@
     "production_advance": "a67da7816f24befb09fb713b294dea70e9517100",
     "reason": "Production advanced with an intent-only Qoyod release while shipping source was under review. A merge would touch the intent in full path history and fail Protocol V5. Continue from the new base in a new branch with the exact combined source tree; retain PR 1760 and its history without force-push, rebase or rewriting the predecessor history.",
     "intent_invariant": "Carry the new base intent bytes unchanged; no intent edit in the source checkpoint."
+  },
+  "current_authoritative_continuation": {
+    "task": "PREPAID-SHIPMENT-CHRONOLOGY-20261105",
+    "status_path": "docs/operations/PREPAID-SHIPMENT-CHRONOLOGY-20261105/STATUS.json",
+    "branch": "codex/prepaid-cost-release-20261105",
+    "base": "4b336e2a8bb8288dae50505e8eca33147744f441",
+    "previous_wip_pr": 1771,
+    "previous_wip_head": "370fb366152ce30525f03d0dc8ef50394dafddb9",
+    "completed": "Original PR1765 was published and verified. Emkan6.99%+1.50SAR+15%feeVAT effectiveNov1 and Aramex30SAR+15%prepaid/Salla wallet fromNov1 00:30Riyadh were explicitly approved and saved once. No reapproval.",
+    "followup": "Verified original completed-capture/label recovery and catalog-translated operating cost correction independently reviewed; final combined922passed/20subtests,0skips on latestJ. Fresh single-parent A/B, CI, publish and live cash acceptance remain.",
+    "production_application_changed_by_followup": false
   }
 }

@@ -15,7 +15,7 @@ ISSUE_CODES = {"operational_delivery_shipment_not_delivered", "operational_deliv
                "operational_delivery_shipment_source_missing", "operational_prepaid_shipping_completion_timestamp_missing"}
 _RETRY = "salla_courier_delivery_retry_after"
 _RAW = "raw_by_source.salla_direct"
-_FENCED = ("order_id", "salla_order_id", "g47_salla_snapshot", "order_status", "order_status_slug",
+_FENCED = ("order_id", "salla_order_id", "merchant", "merchant_id", "store_id", "g47_salla_snapshot", "order_status", "order_status_slug",
            "last_salla_direct_status_source_updated_at", CURRENT_SHIPPING, *sorted(SHIPPING_FIELDS))
 _PROJECTION = {"_id": 0, "user_id": 1, "order_number": 1, _RAW: 1, **dict.fromkeys(_FENCED, 1)}
 _SHIPMENT_FIELDS = ("id", "order_id", "order_reference_id", "type", "status", "created_at", "updated_at",
@@ -166,6 +166,7 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
         current, watermark = source.get(CURRENT_SHIPPING) or {}, source.get("g47_salla_snapshot") or {}
         identity, number = _text(raw.get("id")), _text(source.get("order_number"))
         completed = identity in completed_targets
+        capture_binding = None
         try:
             status = raw.get("status")
             effective = status.get("customized") or status if isinstance(status, dict) else status
@@ -183,16 +184,24 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
                     or any(source[key] != value for key, value in shipping_root_fields(current).items() if key in source)
                     or current.get("superseded_shipment_ids")):
                 continue
-            histories = await _complete_pages(db, owner, "/orders/" + identity + "/histories", {})
             if completed:
-                from operational_order_completed_evidence import verified_completed_history
-                accepted = verified_completed_history(source, histories, owner, now)
-                try:
-                    delivery = verified_order_delivery(source, histories, owner, now)
-                    accepted[WEBHOOK_PROOF] = delivery[WEBHOOK_PROOF]
-                except ValueError:
-                    pass
+                from operational_completed_capture import recover_completed_capture
+                async def load_shipments():
+                    return await _complete_pages(db, owner, '/shipments', {'order_id': identity}, max_pages=1)
+                recovered = await recover_completed_capture(db, owner, source, now, load_shipments=load_shipments)
+                if recovered is not None:
+                    accepted, capture_binding, capture_scope = recovered
+                else:
+                    from operational_order_completed_evidence import verified_completed_history
+                    histories = await _complete_pages(db, owner, "/orders/" + identity + "/histories", {})
+                    accepted = verified_completed_history(source, histories, owner, now)
+                    try:
+                        delivery = verified_order_delivery(source, histories, owner, now)
+                        accepted[WEBHOOK_PROOF] = delivery[WEBHOOK_PROOF]
+                    except ValueError:
+                        pass
             else:
+                histories = await _complete_pages(db, owner, "/orders/" + identity + "/histories", {})
                 try:
                     accepted = verified_order_delivery(source, histories, owner, now)
                 except ValueError:
@@ -204,6 +213,14 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
         # must all survive the network reads. No source or delivery hook runs.
         selector = {"user_id": owner, "order_number": number, _RAW: raw,
                     **{key: source.get(key) for key in _FENCED}}
+        if capture_binding is not None:
+            from operational_completed_capture import owner_binding, recheck_capture_set
+            try:
+                await recheck_capture_set(db, owner, source, now, capture_binding, capture_scope)
+                if await owner_binding(db, owner) != capture_binding:
+                    continue
+            except (ValueError, KeyError, TypeError, AttributeError):
+                continue
         await db.unified_orders.update_one(selector, {"$set": {
             CURRENT_SHIPPING: accepted, **shipping_root_fields(accepted),
         }})

@@ -5,8 +5,8 @@ from zoneinfo import ZoneInfo
 
 from courier_cod_fee_rules import split_tax_amount
 from operational_courier_transitions import COMPLETED_PROOF
-from operational_delivery_evidence import _courier, _current_shipping, _instant, _order_waybill, _status, recorded_courier_fee
-from operational_order_completed_evidence import completion_time
+from operational_delivery_evidence import _courier, _current_shipping, _instant, _status, recorded_courier_fee
+from operational_order_completed_evidence import bind_completed_waybill, completion_time
 
 SCHEMA = 'operational_prepaid_shipping_v1'
 
@@ -44,7 +44,7 @@ def source_event(data, setup, source, raw, state, owner, start, end, history, sh
     if ('shipment', shipment) in shipment_conflicts or ('waybill', waybill) in shipment_conflicts:
         raise ValueError('operational_prepaid_shipping_shipment_shared_by_orders')
     at = completion_time(raw, source, history, end)
-    _order_waybill(raw, current, shipment, waybill, at)
+    bind_completed_waybill(raw, current, shipment, waybill, at)
     rates = [rate for rate in prepaid if rate.get('party_id') == party and rate.get('status') == 'approved'
              and _instant(rate['effective_from']) <= at
              and (not rate.get('effective_to') or at < _instant(rate['effective_to']))]
