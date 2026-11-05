@@ -188,12 +188,19 @@ async def sync_qoyod_invoices(
     skipped = 0
     row_errors = 0
     prepared_rows: list[dict] = []
+    evidence = {"complete": False, "started_at": started_at.isoformat(),
+                "sync_start": sync_start.isoformat()}
+    await db.qoyod_settings.update_one(
+        {"user_id": user_id}, {"$set": {"invoice_presence_snapshot": evidence}},
+        upsert=True,
+    )
 
     try:
         items = await _paginate(
             api_client.list_invoices,
             page_size=page_size, max_pages=max_pages,
             extract_keys=("invoices", "data", "items"),
+            evidence=evidence,
         )
     except Exception as e:  # noqa: BLE001
         return {
@@ -333,6 +340,14 @@ async def sync_qoyod_invoices(
     row_errors += write_summary["row_errors"]
 
     finished_at = datetime.now(timezone.utc)
+    # Skipped malformed/undated invoices cannot prove an order is absent.
+    invalid_rows = any(not isinstance(it, dict) or not it.get("id")
+                       or _parse_iso_date(it.get("issue_date")) is None for it in items)
+    evidence["complete"] = bool(evidence["complete"] and not row_errors and not invalid_rows)
+    await db.qoyod_settings.update_one(
+        {"user_id": user_id, "invoice_presence_snapshot.started_at": started_at.isoformat()},
+        {"$set": {"invoice_presence_snapshot": evidence}},
+    )
     return {
         "ok":          True,
         "fetched":     fetched,

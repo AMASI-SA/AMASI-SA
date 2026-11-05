@@ -107,6 +107,7 @@ def _coerce_float(v: Any) -> float:
 async def _paginate(
     fetch, *, page_size: int, max_pages: int,
     extract_keys: tuple[str, ...],
+    evidence: Optional[dict] = None,
 ) -> list:
     """Generic paginator. Stops on empty page or when `max_pages` reached.
     Sleeps briefly between calls to be polite to Qoyod.
@@ -121,6 +122,9 @@ async def _paginate(
     instead of bubbling a failure.
     """
     out: list = []
+    seen_ids = set()
+    if evidence is not None:
+        evidence["complete"] = False
     for page in range(1, max_pages + 1):
         try:
             resp = await fetch(page=page, limit=page_size)
@@ -130,10 +134,30 @@ async def _paginate(
                 break
             raise
         items = _extract_list(resp, extract_keys)
+        if evidence is not None:
+            # A malformed response, repeated page, or bare 404 cannot prove
+            # absence. Legacy callers keep their historical read behavior.
+            containers = [resp]
+            if isinstance(resp, dict):
+                containers.append(resp.get("data"))
+            recognized = any(isinstance(c, list) or (
+                isinstance(c, dict) and any(isinstance(c.get(k), list)
+                                            for k in extract_keys)
+            ) for c in containers)
+            ids = [str(item.get("id") or "") if isinstance(item, dict) else ""
+                   for item in items]
+            if (not recognized or any(not value for value in ids)
+                    or len(set(ids)) != len(ids) or seen_ids.intersection(ids)):
+                break
+            seen_ids.update(ids)
         if not items:
+            if evidence is not None:
+                evidence["complete"] = True
             break
         out.extend(items)
         if len(items) < page_size:
+            if evidence is not None:
+                evidence["complete"] = True
             break
         # 100ms cushion between pages — keeps us under most rate limits.
         await asyncio.sleep(0.1)

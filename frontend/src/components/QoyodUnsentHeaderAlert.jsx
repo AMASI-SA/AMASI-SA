@@ -10,14 +10,18 @@ import {
 const QOYOD_SYNC_START_DATE = "2026-07-01";
 const REFRESH_INTERVAL_MS = 60_000;
 
-export function eligibleQoyodUnsentCount(payload) {
-    const value = Number(payload?.counts?.["لم يُرسل"] ?? 0);
-    if (!Number.isFinite(value) || value <= 0) return 0;
-    return Math.floor(value);
+export function eligibleQoyodUnsentCount(payload, now = Date.now()) {
+    const evidence = payload?.invoice_presence;
+    if (payload?.scan_truncated || evidence?.complete !== true
+        || !Number.isFinite(Date.parse(evidence.expires_at))
+        || Date.parse(evidence.expires_at) <= now) return null;
+    const value = evidence.count;
+    return Number.isInteger(value) && value >= 0 ? value : null;
 }
 
 export default function QoyodUnsentHeaderAlert() {
-    const [count, setCount] = useState(0);
+    const [payload, setPayload] = useState(null);
+    const count = eligibleQoyodUnsentCount(payload);
 
     const refresh = useCallback(async (signal) => {
         try {
@@ -25,17 +29,18 @@ export default function QoyodUnsentHeaderAlert() {
                 {
                     from_date: QOYOD_SYNC_START_DATE,
                     limit: 5000,
-                    status: "لم يُرسل",
+                    status: "verified_absent",
                 },
                 { signal },
             );
             if (!signal.aborted) {
-                setCount(eligibleQoyodUnsentCount(payload));
+                setPayload(payload);
             }
         } catch (error) {
             if (isQoyodRequestAbort(error)) return;
             // This owner-only check must never break the store header.
-            // Keep the last confirmed count until the next successful refresh.
+            // Never retain a numeric claim when the refresh fails.
+            setPayload(null);
         }
     }, []);
 
@@ -60,7 +65,7 @@ export default function QoyodUnsentHeaderAlert() {
         };
     }, [refresh]);
 
-    if (count === 0) return null;
+    if (count === 0 && !payload?.invoice_presence?.verification_required) return null;
 
     return (
         <div
@@ -77,17 +82,16 @@ export default function QoyodUnsentHeaderAlert() {
                     className="shrink-0 text-amber-600"
                 />
                 <div className="min-w-0 flex-1 text-sm font-extrabold">
-                    تنبيه قيود: يوجد{" "}
-                    <span
-                        className="inline-flex min-w-7 items-center justify-center rounded-full bg-amber-500 px-2 py-0.5 text-sm font-black text-slate-950"
-                        data-testid="qoyod-unsent-header-alert-count"
-                    >
-                        {count.toLocaleString("ar-SA")}
-                    </span>{" "}
-                    طلب مؤهل منذ 1 يوليو 2026 لم يُرسل إلى قيود
+                    {count === null ? "قيود: يلزم تحديث المطابقة للتحقق من الطلبات غير المرسلة" : <>
+                        قيود: <span data-testid="qoyod-unsent-header-alert-count">{count.toLocaleString("ar-SA")}</span>{" "}
+                        طلب مؤهل دون فاتورة مطابقة في آخر تحقق، منذ 1 يوليو 2026
+                        <span className="mr-2 text-xs">({new Date(payload.invoice_presence.verified_at).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" })})</span>
+                        {payload.invoice_presence.verification_required > 0 && <span className="mr-2">· {payload.invoice_presence.verification_required} طلب يحتاج تحققًا</span>}
+                    </>}
+
                 </div>
                 <Link
-                    to="/integrations-v2/qoyod?tab=exceptions"
+                    to={count === null ? "/integrations-v2/qoyod?tab=reconciliation" : "/integrations-v2/qoyod?tab=exceptions&verified_absent=1"}
                     className="rounded-lg border border-amber-600 bg-white px-3 py-1.5 text-xs font-black text-amber-900 transition hover:bg-amber-50"
                     data-testid="qoyod-unsent-header-alert-link"
                 >
