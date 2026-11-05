@@ -1,0 +1,50 @@
+{
+  "kind": "local_synthetic_read_only",
+  "simulated_order_query_rtt_ms": 8,
+  "repeats_after_warmup": 5,
+  "limitations": "Mongomock and in-process ASGI; excludes deployed middleware, real Mongo, device, network, and production contention.",
+  "workloads": {
+    "ready": {
+      "synthetic_orders": 100,
+      "response_sha256": "2c4c4f764ecce8d72d936d8825b5bd89aa3a116e87583207e58c351b41711705",
+      "median_ms": 1609.945,
+      "max_ms": 1719.816,
+      "samples_ms": [
+        1609.945,
+        1684.54,
+        1719.816,
+        1609.365,
+        1595.865
+      ],
+      "order_query_count": 100
+    },
+    "delivery": {
+      "synthetic_orders": 100,
+      "response_sha256": "3200071d787d15870c5e6464f5d6b53024fb33e980ebf99978665f7b802ec16a",
+      "median_ms": 1608.944,
+      "max_ms": 1655.758,
+      "samples_ms": [
+        1655.758,
+        1631.364,
+        1608.944,
+        1582.069,
+        1596.243
+      ],
+      "order_query_count": 100
+    },
+    "assembly": {
+      "synthetic_orders": 205,
+      "response_sha256": "0463fc8d64c214810530609aa9812920d867cb3a0192043355df92dc13f7f971",
+      "median_ms": 3361.778,
+      "max_ms": 3634.569,
+      "samples_ms": [
+        3519.72,
+        3361.778,
+        3348.857,
+        3334.25,
+        3634.569
+      ],
+      "order_query_count": 205
+    }
+  }
+}

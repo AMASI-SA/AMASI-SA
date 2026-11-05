@@ -1,6 +1,7 @@
 """G47 purchase drafts and full atomic approval. Historical invoices are read-only."""
 from __future__ import annotations
 import hashlib
+import asyncio
 import uuid
 from datetime import date
 from typing import Literal
@@ -14,7 +15,7 @@ from supplier_identity_service import require_supplier_v2
 from supplier_payment_service import SupplierPaymentRequest, payment_context, pay_supplier, supplier_statement_balance
 from purchase_receiving_service import (
     SCHEMA, PRODUCTS, RESOURCES, OPERATIONS, actor_scope, approve_and_receive,
-    approved_account_mappings, fail, invoice_public, now, purchase_amounts, resolve_line, stable_id, stored_number,
+    approved_account_mappings, fail, invoice_public, invoice_public_projection, now, purchase_amounts, resolve_line, stable_id, stored_number,
 )
 
 class StrictModel(BaseModel):
@@ -93,17 +94,43 @@ async def _draft_values(db, owner, payload):
 
 async def _public(db, owner, doc):
     row = await invoice_public(db, owner, doc)
+    liab = None
     if doc.get("liability_id"):
         liab = await db.liabilities.find_one({"user_id": owner, "id": doc["liability_id"]})
-        if liab:
-            row["paid_amount"] = float(liab.get("paid_amount") or 0)
-            row["remaining_amount"] = max(0, round(float(liab["expected_amount"]) - row["paid_amount"], 2))
-            row["payment_status"] = liab.get("status")
-            if row.get("legacy_read_only"):
-                row["status"] = liab.get("status", "unpaid")
+    return _invoice_with_liability(row, liab)
+
+
+def _invoice_with_liability(row, liab):
+    if liab:
+        row["paid_amount"] = float(liab.get("paid_amount") or 0)
+        row["remaining_amount"] = max(0, round(float(liab["expected_amount"]) - row["paid_amount"], 2))
+        row["payment_status"] = liab.get("status")
+        if row.get("legacy_read_only"):
+            row["status"] = liab.get("status", "unpaid")
     row.setdefault("paid_amount", 0)
     row.setdefault("remaining_amount", 0)
     return row
+
+
+async def _public_invoice_rows(db, owner, documents):
+    """Same detail projection with fresh, tenant-scoped evidence per batch."""
+    for start in range(0, len(documents), 100):
+        batch = documents[start:start + 100]
+        operation_ids = list({doc["approval_operation_id"] for doc in batch if doc.get("schema_version") == SCHEMA})
+        liability_ids = list({doc["liability_id"] for doc in batch if doc.get("liability_id")})
+        operations = (await db[OPERATIONS].find({"user_id": owner, "_id": {"$in": operation_ids}}).to_list(len(operation_ids))
+                      if operation_ids else [])
+        liabilities = (await db.liabilities.find({"user_id": owner, "id": {"$in": liability_ids}},
+                                                {"_id": 0, "id": 1, "expected_amount": 1, "paid_amount": 1, "status": 1}).to_list(len(liability_ids))
+                       if liability_ids else [])
+        operation_by_id = {row["_id"]: {k: v for k, v in row.items() if k != "_id"} for row in operations}
+        liability_by_id = {row["id"]: row for row in liabilities}
+        for doc in batch:
+            yield _invoice_with_liability(
+                invoice_public_projection(doc, operation_by_id.get(doc.get("approval_operation_id"))),
+                liability_by_id.get(doc.get("liability_id")),
+            )
+        await asyncio.sleep(0)
 
 async def ensure_purchase_invoices_indexes(db):
     await db.purchase_invoices.create_index([("user_id", 1), ("id", 1)], unique=True, name="pinv_pk")
@@ -202,8 +229,8 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db):
         if to_date:
             query.setdefault("invoice_date", {})["$lte"] = to_date
         rows = []
-        for doc in await db.purchase_invoices.find(query).sort([("invoice_date", -1), ("created_at", -1)]).to_list(limit):
-            row = await _public(db, owner, doc)
+        documents = await db.purchase_invoices.find(query).sort([("invoice_date", -1), ("created_at", -1)]).to_list(limit)
+        async for row in _public_invoice_rows(db, owner, documents):
             if not status or row.get("status") == status or row.get("payment_status") == status:
                 rows.append(row)
         return {"items": rows, "total": len(rows)}

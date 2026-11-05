@@ -1,0 +1,78 @@
+{
+  "method": "Transitive static JavaScript imports; gzip per file. Excludes CSS, API time, and device execution.",
+  "initial": {
+    "files": [
+      "assets/api-Cn6ediUw.js",
+      "assets/axios-CRBZr4vS.js",
+      "assets/clsx-DB0hHKMi.js",
+      "assets/createLucideIcon-DyCuMj-5.js",
+      "assets/dist-DkmaBlUn.js",
+      "assets/index-BdpXyp8C.js",
+      "assets/jsx-runtime-BpzPEenQ.js",
+      "assets/react-dom-5PB_EGoG.js",
+      "assets/rolldown-runtime-Dd_uD5pT.js"
+    ],
+    "bytes": 2470208,
+    "gzip_bytes": 652946
+  },
+  "dashboard": {
+    "files": [
+      "assets/AdvancedDashboard-CQQCCUsv.js",
+      "assets/AdvancedFilters-Ccc4pJKa.js",
+      "assets/Calendar.es-QucCeJGl.js",
+      "assets/CampaignAccountAnalysis-DxV-Mcfo.js",
+      "assets/Coins.es-D0m38Var.js",
+      "assets/DailyProductCostModal-BPJgwLzc.js",
+      "assets/ExcludedOrdersModal-Bv47uBQs.js",
+      "assets/Legend-QiOfKA3U.js",
+      "assets/NotePencil.es-BGmExTit.js",
+      "assets/OrderCurrencyAmount-B80nJAcY.js",
+      "assets/Warning.es-BY_lPnkU.js",
+      "assets/api-Cn6ediUw.js",
+      "assets/axios-CRBZr4vS.js",
+      "assets/chart-column-6jAEdJb7.js",
+      "assets/clsx-DB0hHKMi.js",
+      "assets/createLucideIcon-DyCuMj-5.js",
+      "assets/dashboardAdsSpend-B9_SBZbI.js",
+      "assets/dist-DkmaBlUn.js",
+      "assets/format-BmuT15Y2.js",
+      "assets/fulfillmentV2-Ci0H1OxX.js",
+      "assets/index-BdpXyp8C.js",
+      "assets/jsx-runtime-BpzPEenQ.js",
+      "assets/mezanV2CostLinks-BktwNvdM.js",
+      "assets/orderCampaignAttribution-C4aBVWk4.js",
+      "assets/react-dom-5PB_EGoG.js",
+      "assets/refresh-cw-DUC5sMPL.js",
+      "assets/rolldown-runtime-Dd_uD5pT.js",
+      "assets/triangle-alert-16mIraqn.js",
+      "assets/useOrders-BIJreWFA.js"
+    ],
+    "bytes": 2650261,
+    "gzip_bytes": 710912
+  },
+  "fulfillment_shell": {
+    "files": [
+      "assets/DotsThreeVertical.es-6huxMCaa.js",
+      "assets/FilePdf.es-D00N9ORH.js",
+      "assets/FloppyDisk.es-IWcKFjE9.js",
+      "assets/FulfillmentV2-D4ib7k5F.js",
+      "assets/Stack.es-MviWYiZM.js",
+      "assets/UserCheck.es-2DavkcRX.js",
+      "assets/UserMinus.es-D1vuwGrw.js",
+      "assets/api-Cn6ediUw.js",
+      "assets/axios-CRBZr4vS.js",
+      "assets/clsx-DB0hHKMi.js",
+      "assets/createLucideIcon-DyCuMj-5.js",
+      "assets/dist-DkmaBlUn.js",
+      "assets/fulfillmentExperiment-BVKifGgq.js",
+      "assets/fulfillmentV2-Ci0H1OxX.js",
+      "assets/index-BdpXyp8C.js",
+      "assets/jsx-runtime-BpzPEenQ.js",
+      "assets/orderTrackingNotes-CJMKjFZl.js",
+      "assets/react-dom-5PB_EGoG.js",
+      "assets/rolldown-runtime-Dd_uD5pT.js"
+    ],
+    "bytes": 2904588,
+    "gzip_bytes": 761891
+  }
+}

@@ -1,0 +1,117 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106
+plugins: anyio-4.16.0, asyncio-1.4.1.post1
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 138 items
+
+backend/tests/test_assembly_board_groups.py::test_direct_and_mixed_are_exclusive_and_do_not_require_employee_receipt PASSED [  0%]
+backend/tests/test_assembly_board_groups.py::test_missing_partial_duplicate_and_contradictory_receipts_do_not_complete PASSED [  1%]
+backend/tests/test_monitoring_assignment_projection.py::test_employee_assignment_date_is_not_supplier_or_file_date PASSED [  2%]
+backend/tests/test_monitoring_assignment_projection.py::test_missing_employee_date_does_not_invent_a_date PASSED [  2%]
+backend/tests/test_review_completion_409_observability.py::ReviewCompletion409ObservabilityTests::test_allowlisted_fields_only PASSED [  3%]
+backend/tests/test_review_completion_409_observability.py::ReviewCompletion409ObservabilityTests::test_nested_snapshot_diagnostic_survives_without_raw_source PASSED [  4%]
+backend/tests/test_review_completion_409_observability.py::ReviewCompletion409ObservabilityTests::test_non_409_returns_none PASSED [  5%]
+backend/tests/test_review_completion_409_observability.py::ReviewCompletion409ObservabilityTests::test_stage_identity_revision PASSED [  5%]
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_acceptance_change_specific_code PASSED [  6%]
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_alias_equivalence_and_immutable_inputs PASSED [  7%]
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_balance_projection_is_versioned_and_keeps_native_payment_guarded PASSED [  7%]
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_business_mutations
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_business_mutations PASSED [  8%]
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_conflicting_alias_and_null_alias_fail_closed PASSED [  9%]
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_documented_dto_options_are_business_changes PASSED [ 10%]
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_documented_dto_projection_changes_are_not_approval_changes PASSED [ 10%]
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_exact_address_duplicate_only_and_company_metadata_preserved PASSED [ 11%]
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_exact_decimal_preserves_beyond_float_precision PASSED [ 12%]
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_integrity_and_version_tamper_rejected PASSED [ 13%]
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_missing_null_empty_and_types_are_distinct PASSED [ 13%]
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_proven_company_scalar_spellings_and_provider_date_clock PASSED [ 14%]
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_status_transition_only_permitted_with_separate_guards PASSED [ 15%]
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_unknown_root_nested_and_status_fail_closed
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_unknown_root_nested_and_status_fail_closed PASSED [ 15%]
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_unknown_shapes_cannot_hide_in_transport_fields PASSED [ 16%]
+backend/tests/test_review_completion_business_snapshot.py::BusinessSnapshotTests::test_unproven_aliases_empty_ids_and_array_order_not_erased PASSED [ 17%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_all_supplier_partial_then_complete_allocation_keeps_existing_semantics PASSED [ 18%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_assignment_timeout_keeps_committed_pieces_and_reports_reconciliation PASSED [ 18%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_concurrent_duplicate_receipt_commits_custody_and_event_once PASSED [ 19%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_custody_is_independent_but_ready_keeps_component_review_payment_guards
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_custody_is_independent_but_ready_keeps_component_review_payment_guards PASSED [ 20%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_direct_finished_before_partial_supplier_receipts PASSED [ 21%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_direct_queue_membership_count_and_no_ready_write PASSED [ 21%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_invalid_local_proofs_and_unknown_modes_block_both_write_paths
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_invalid_local_proofs_and_unknown_modes_block_both_write_paths PASSED [ 22%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_local_assignment_safety_reads_are_batched_and_projection_only PASSED [ 23%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_missing_address_retains_ready_work_and_retry_finishes_once PASSED [ 23%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_mixed_assignment_rechecks_payment_cancellation_and_unknown_contract PASSED [ 24%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_mixed_catalog_and_assignment_recheck_local_proof_source_and_components
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_mixed_catalog_and_assignment_recheck_local_proof_source_and_components PASSED [ 25%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_mixed_concurrent_supplier_assignment_reserves_each_unit_once PASSED [ 26%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_mixed_history_and_legacy_assignment_scope_remain_unchanged PASSED [ 26%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_mixed_mobile_assignment_retains_in_progress_and_assignment_metadata PASSED [ 27%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_mixed_order_requires_every_supplier_unit_before_completion PASSED [ 28%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_mixed_unassigned_units_survive_direct_start_and_supplier_assignment PASSED [ 28%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_operational_last_piece_observes_source_fence PASSED [ 29%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_paid_review_commits_when_its_component_ack_enables_display_balance PASSED [ 30%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_partial_receipt_preserves_mixed_remaining_units_then_completes PASSED [ 31%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_physical_ready_retry_preserves_new_mandatory_instructions
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_physical_ready_retry_preserves_new_mandatory_instructions PASSED [ 31%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_physical_reviewed_and_unreceived_pieces_remain_blocked PASSED [ 32%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_ready_retry_rechecks_proof_payment_cancellation_and_source_fence PASSED [ 33%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_real_local_review_direct_assembly_starts_then_completes PASSED [ 34%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_receipt_transaction_failure_rolls_back_custody_and_progress PASSED [ 34%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_receipt_waits_for_required_operational_work PASSED [ 35%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_receiving_concurrently_with_remaining_assignment PASSED [ 36%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_supplier_only_partial_quantity_receipt_and_duplicate PASSED [ 36%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_supplier_queue_includes_mixed_after_supplier_receipt_before_employee_receipt PASSED [ 37%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_tabby_review_commits_when_its_component_ack_enables_display_balance PASSED [ 38%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_tamara_review_commits_when_its_component_ack_enables_display_balance PASSED [ 39%]
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_virtual_ready_retry_preserves_new_mandatory_instructions
+backend/tests/test_review_local_assembly.py::LocalAssemblyTests::test_virtual_ready_retry_preserves_new_mandatory_instructions PASSED [ 39%]
+backend/tests/test_supplier_dispatch_waiting_current_status.py::test_workspace_current_status_only_not_piece_snapshot[reviewed] ERROR [ 40%]
+
+=================================== ERRORS ====================================
+_ ERROR at setup of test_workspace_current_status_only_not_piece_snapshot[reviewed] _
+backend\tests\test_supplier_dispatch_waiting_current_status.py:63: in db
+    await client.admin.command("ping")
+..\..\..\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pymongo\_csot.py:107: in csot_wrapper
+    return func(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pymongo\database.py:890: in command
+    with self.__client._conn_for_reads(read_preference, session) as (
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pymongo\mongo_client.py:1346: in _conn_for_reads
+    server = self._select_server(read_preference, session)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pymongo\mongo_client.py:1303: in _select_server
+    server = topology.select_server(server_selector)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pymongo\topology.py:302: in select_server
+    server = self._select_server(selector, server_selection_timeout, address)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pymongo\topology.py:286: in _select_server
+    servers = self.select_servers(selector, server_selection_timeout, address)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pymongo\topology.py:237: in select_servers
+    server_descriptions = self._select_servers_loop(selector, server_timeout, address)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pymongo\topology.py:259: in _select_servers_loop
+    raise ServerSelectionTimeoutError(
+E   pymongo.errors.ServerSelectionTimeoutError: 127.0.0.1:27017: [WinError 10061] No connection could be made because the target machine actively refused it (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms), Timeout: 5.0s, Topology Description: <TopologyDescription id: 6aed066c7a63d376292db286, topology_type: Unknown, servers: [<ServerDescription ('127.0.0.1', 27017) server_type: Unknown, rtt: None, error=AutoReconnect('127.0.0.1:27017: [WinError 10061] No connection could be made because the target machine actively refused it (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>]>
+============================== warnings summary ===============================
+.venv\Lib\site-packages\starlette\formparsers.py:12
+  C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+.venv\Lib\site-packages\fitz\__init__.py:17
+  C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\fitz\__init__.py:17: FutureWarning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+ERROR backend/tests/test_supplier_dispatch_waiting_current_status.py::test_workspace_current_status_only_not_piece_snapshot[reviewed] - pymongo.errors.ServerSelectionTimeoutError: 127.0.0.1:27017: [WinError 10061] No connection could be made because the target machine actively refused it (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms), Timeout: 5.0s, Topology Description: <TopologyDescription id: 6aed066c7a63d376292db286, topology_type: Unknown, servers: [<ServerDescription ('127.0.0.1', 27017) server_type: Unknown, rtt: None, error=AutoReconnect('127.0.0.1:27017: [WinError 10061] No connection could be made because the target machine actively refused it (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>]>
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!
+=== 55 passed, 2 warnings, 1 error, 41 subtests passed in 145.80s (0:02:25) ===

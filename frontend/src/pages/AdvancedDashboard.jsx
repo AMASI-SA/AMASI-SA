@@ -780,7 +780,7 @@ export async function loadDashboardPeriodSnapshot({
 
 export default function AdvancedDashboard() {
     const [filters, setFilters] = useState(() => defaultFilters("today"));
-    const [data, setData] = useState(null); const [carts, setCarts] = useState([]); const [cartSummary, setCartSummary] = useState({ abandoned_count: 0, recovered_count: 0 }); const [ga, setGa] = useState(null); const [unifiedShadow, setUnifiedShadow] = useState(null); const [loading, setLoading] = useState(true); const [loadError, setLoadError] = useState(null);
+    const [data, setData] = useState(null); const [carts, setCarts] = useState([]); const [cartSummary, setCartSummary] = useState({ abandoned_count: 0, recovered_count: 0 }); const [ga, setGa] = useState(null); const [loading, setLoading] = useState(true); const [loadError, setLoadError] = useState(null);
     const { orders, hasMore: hasMoreOrders, loading: ordersLoading, loadMore: loadMoreOrders } = useOrders();
     const dashboardDataRef = useRef(null);
     const requestSequenceRef = useRef(0);
@@ -870,30 +870,15 @@ export default function AdvancedDashboard() {
     }, [filters.from, filters.to]);
     useEffect(() => {
         let active = true;
-        setUnifiedShadow(null);
-        const query = new URLSearchParams({
-            from_date: filters.from || "",
-            to_date: filters.to || filters.from || "",
-        }).toString();
-        api.get(`/dashboard-v2/unified-marketing-shadow?${query}`)
-            .then((result) => {
-                if (active) setUnifiedShadow(result.data || null);
-            })
-            .catch(() => {
-                if (active) setUnifiedShadow({
-                    shadow_passed: false,
-                    reason: "تعذر تحميل المقارنة",
-                });
-            });
-        return () => { active = false; };
-    }, [filters.from, filters.to]);
-    useEffect(() => {
-        let active = true;
+        let inFlight = false;
         const loadGa = async () => {
+            if (!active || inFlight || document.hidden || !navigator.onLine) return;
+            inFlight = true;
             try {
                 const result = await api.get("/integrations-v2/google_analytics_4/realtime-dashboard");
                 if (active) setGa(result.data);
             } catch { /* Preserve the last successful realtime snapshot. */ }
+            finally { inFlight = false; }
         };
         loadGa();
         const timer = window.setInterval(loadGa, 60_000);
