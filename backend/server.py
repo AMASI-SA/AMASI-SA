@@ -469,6 +469,9 @@ class PaymentMethod(BaseModel):
 
 class ShippingCompany(BaseModel):
     name: str
+    # The owner may bind a carrier's original Salla code before approving its
+    # operational tariff. A display name never supplies this identity.
+    salla_carrier_key: Optional[str] = Field(default=None, min_length=1, max_length=200)
     cost_per_order: float = Field(ge=0)
     vat_percent: float = Field(ge=0, le=100, default=0.0)
     # Iter-189 — `payment_mode` is the new merchant-facing label that
@@ -500,6 +503,9 @@ class ShippingCompany(BaseModel):
         `payment_mode` is the merchant-facing label; `is_deferred` is the
         persisted SSOT. If both are provided, `payment_mode` wins.
         """
+        carrier = values.get("salla_carrier_key")
+        if carrier is not None and (carrier != carrier.strip() or any(ord(c) < 32 for c in carrier)):
+            raise ValueError("salla_carrier_key must be the exact original carrier code")
         pm = values.get("payment_mode")
         if isinstance(pm, str):
             pm = pm.strip().lower()

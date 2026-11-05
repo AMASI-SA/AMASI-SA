@@ -333,6 +333,7 @@ def test_multiple_shipping_setups_cannot_silently_hide_a_conflicting_driver_rate
 @pytest.mark.parametrize('old',[True,False])
 def test_no_carrier_confirmation_from_order_updated_or_workflow_timestamp(old):
     d=courier_data(); r=d['unified_orders'][0]['raw_by_source']['salla_direct']
+    r.pop('status_changed_at')
     if not old:
         r['created_at']='2026-10-06T01:00:00+00:00'
     r['shipments'][0].pop('delivered_at'); r['shipping'].pop('delivered_at')
@@ -437,7 +438,7 @@ def test_old_order_delivery_on_or_after_riyadh_start_accrues_native_driver_fee(d
 
 
 @pytest.mark.parametrize('bad', ['wrong_waybill','timezone','conflicting_dates','other_shipment','status'])
-def test_nested_shipment_invalid_never_recognizes_fees(bad):
+def test_nested_shipment_cannot_replace_order_identity_or_supply_unproved_cod(bad):
     d=courier_data(); raw=d['unified_orders'][0]['raw_by_source']['salla_direct']
     nested=raw.pop('shipments')[0]
     for name in ('delivered_at','tracking_number','shipment_id'):
@@ -448,7 +449,11 @@ def test_nested_shipment_invalid_never_recognizes_fees(bad):
     if bad=='conflicting_dates': raw['shipping']['delivered_at']=NOW
     if bad=='other_shipment': nested['id']='replaced'
     if bad=='status': nested['status']='shipped'
-    assert fee_total(calculated(d))==0
+    result = calculated(d)
+    # A valid order transition can earn the service independently of a lagging
+    # label or its invalid timestamp, but never assign another waybill's fee.
+    assert fee_total(result) == (0 if bad in {'wrong_waybill', 'other_shipment'} else 10)
+    assert 'cod:100' not in result['engine']['obligations']
 
 
 def test_orphan_or_duplicate_native_earning_cannot_fall_back_to_a_courier():

@@ -501,6 +501,22 @@ test("unknown canonical order number remains distinct from its identifier in scr
     expect(visibleOrders()).toHaveLength(1);
 });
 
+test("prepaid execution shows the cashbox and execution date without claiming delivery", async () => {
+    const payload = fixture();
+    payload.currencies.SAR.deliveries.rows = [{ id: "prepaid-fixture", order_id: "prepaid-order", order_number: "P-100",
+        party_type: "courier", party_name: "شركة الدفع المقدم", payment_mode: "prepaid", recognition_event: "order_completed",
+        completed_at: "2026-11-01T07:00:00Z", delivered_at: null, cash_account_name: "صندوق سلة التجريبي",
+        shipping_confirmed: "34.50", shipping_settled: "34.50", shipping_outstanding: "0.00" }];
+    operationalApi.financialPosition.mockResolvedValue(payload);
+    await render();
+    const row = host.querySelector('[data-testid="financial-delivery-row"]');
+    expect(row.cells[0].textContent).toContain("تم التنفيذ:");
+    expect(row.cells[0].textContent).toContain("10:00");
+    expect(row.cells[0].textContent).toContain("التسليم: غير متاح");
+    expect(row.cells[1].textContent).toContain("مدفوع مقدمًا عند تم التنفيذ");
+    expect(row.cells[1].textContent).toContain("صندوق الخصم: صندوق سلة التجريبي");
+});
+
 
 test.each(["confirmed", "courier_collection_unverified"])("courier %s renders booked debt apart from receipt on screen and Excel", async status => {
     const response = fixture();

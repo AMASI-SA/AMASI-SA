@@ -185,8 +185,13 @@ async def item(db, owner, attachment, *, replayed=False):
 
 
 async def submit(db, actor_id, payload, content, content_type, filename):
-    from store_delivery_payment_evidence_routes import DELIVERY_PROOFS
+    from store_delivery_payment_evidence_routes import DELIVERY_PROOFS, ensure_store_delivery_receipt_indexes
     owner, _ = await driver_actor(db, actor_id)
+    # Concurrent first uploads must not create these namespaces inside the
+    # owner transaction, where collection creation can conflict at commit.
+    await ensure_store_delivery_receipt_indexes(db)
+    await db[EVENTS].create_index([("user_id", 1), ("assignment_id", 1)],
+        name="late_evidence_owner_assignment")
     at, proof_hash = now(), hashlib.sha256(content).hexdigest()
     request_hash = digest([payload.model_dump(), actor_id, proof_hash, content_type])
     key = digest([owner, "late-attachment", payload.request_id])

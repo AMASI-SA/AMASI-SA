@@ -18,6 +18,7 @@ const fmt = (v) => Number(v || 0).toLocaleString("en-US", { minimumFractionDigit
 export default function ShippingCompanySettings({ mezan2 = false }) {
     const [settings, setSettings] = useState(null);
     const [busy, setBusy] = useState(false);
+    const [settingsRevision, setSettingsRevision] = useState(0);
 
     useEffect(() => {
         api.get("/settings").then(({ data }) => setSettings(data)).catch(() => { });
@@ -85,6 +86,7 @@ export default function ShippingCompanySettings({ mezan2 = false }) {
         }
         const next = [...companies, {
             name,
+            salla_carrier_key: null,
             cost_per_order: 0.0,
             vat_percent: 15.0,
             is_deferred: true,
@@ -116,6 +118,7 @@ export default function ShippingCompanySettings({ mezan2 = false }) {
                 ...settings,
                 shipping_companies: (settings.shipping_companies || []).map((c) => ({
                     ...c,
+                    salla_carrier_key: c.salla_carrier_key?.trim() || null,
                     cod_fee_percent: Math.max(
                         0, Math.min(1, Number(c.cod_fee_percent) || 0)),
                     cod_fee_fixed_per_order: Math.max(
@@ -136,6 +139,7 @@ export default function ShippingCompanySettings({ mezan2 = false }) {
                 })),
             };
             await api.put("/settings", payload);
+            setSettingsRevision(value => value + 1);
             toast.success("تم حفظ الإعدادات");
         } catch (e) {
             const detail = e?.response?.data?.detail;
@@ -162,7 +166,7 @@ export default function ShippingCompanySettings({ mezan2 = false }) {
             <div className="rounded-xl bg-blue-50 border-2 border-blue-200 text-blue-900 text-[12px] p-3" data-testid="settings-help">
                 <strong>نوع الشركة:</strong>
                 <span className="me-3"><span className="px-1.5 py-0.5 bg-emerald-200 rounded text-emerald-900 text-[10px] font-bold mx-1">آجلة</span> تدخل أرصدة شركات الشحن (دائن/مدين/COD/رسوم).</span>
-                <span><span className="px-1.5 py-0.5 bg-slate-200 rounded text-slate-700 text-[10px] font-bold mx-1">فورية</span> تكلفة الشحن مصروف مباشر — لا يدخل الـ ledger.</span>
+                <span><span className="px-1.5 py-0.5 bg-slate-200 rounded text-slate-700 text-[10px] font-bold mx-1">دفع مقدم</span> {mezan2 ? 'تُخصم الأجرة من الصندوق المعتمد عند «تم التنفيذ».' : 'تكلفة الشحن مصروف مباشر.'}</span>
                 <div className="mt-2 pt-2 border-t border-blue-200">
                     <strong>رسوم COD:</strong> اكتب النسبة كرقم عادي مثل <code className="bg-white px-1 rounded">5</code> لتعني 5%. الحقل الثاني للرسوم الثابتة بالريال لكل طلب موصَّل.
                 </div>
@@ -171,7 +175,10 @@ export default function ShippingCompanySettings({ mezan2 = false }) {
                 </div>
             </div>
 
-            {mezan2 && <CourierTariffApproval />}
+            {mezan2 && <>
+                <p className="text-sm text-slate-600">لربط أي شركة جديدة، أدخل رمزها الأصلي في سلة كما يظهر في بيانات الشحنة، وحدد طريقة السداد والتعرفة ثم احفظ الإعدادات. راجع التعرفة لاعتماد الربط واختيار صندوق الدفع المقدم. يُثبت رمز الشركة عند أول اعتماد، ويمكن بعدها تغيير التعرفة أو الصندوق لفترة جديدة.</p>
+                <CourierTariffApproval key={settingsRevision} />
+            </>}
             <div className="bg-white border-2 border-slate-200 rounded-xl overflow-hidden">
                 <table className="w-full text-xs" data-testid="settings-table">
                     <thead className="bg-slate-50 text-slate-700">
@@ -188,7 +195,16 @@ export default function ShippingCompanySettings({ mezan2 = false }) {
                     <tbody>
                         {companies.map((c, idx) => (
                             <tr key={c.name + idx} className="border-t border-slate-100" data-testid={`settings-row-${c.name}`}>
-                                <td className="p-2 font-bold">{c.name}</td>
+                                <td className="p-2 font-bold">{c.name}
+                                    {mezan2 && <label className="block mt-2 text-[10px] font-normal text-slate-600">
+                                        رمز الشركة الأصلي في سلة
+                                        <input type="text" dir="ltr" maxLength={200}
+                                            aria-label={`رمز الشركة الأصلي في سلة — ${c.name}`}
+                                            value={c.salla_carrier_key || ''}
+                                            onChange={event => updateCompany(idx, {salla_carrier_key: event.target.value})}
+                                            className="mt-1 block w-40 rounded border border-slate-300 p-1 text-xs" />
+                                    </label>}
+                                </td>
                                 <td className="p-2">
                                     {/* Iter-189 — Prominent payment-mode picker.
                                         Replaces the old "آجلة / فورية" pill with
@@ -220,7 +236,9 @@ export default function ShippingCompanySettings({ mezan2 = false }) {
                                     <div className="text-[10px] text-slate-500 mt-1 leading-tight max-w-[180px]">
                                         {c.is_deferred
                                             ? "تكلفة الشحن مستحقة على الشركة (ذمة)."
-                                            : "مخصومة مسبقاً من مستحقات سلة."}
+                                            : mezan2
+                                                ? "تُخصم من الصندوق عند تم التنفيذ بعد اعتماد التعرفة وربط الصندوق."
+                                                : "أجرة الشحن مدفوعة مقدمًا."}
                                     </div>
                                 </td>
                                 <td className="p-2"><input type="number" step="0.01" value={c.cost_per_order ?? c.cost ?? 0} onChange={(e) => updateCompany(idx, { cost_per_order: Number(e.target.value), cost: Number(e.target.value) })} className="w-24 border border-slate-300 rounded px-1 py-1 text-xs num text-right" data-testid={`cost-${c.name}`} /></td>
