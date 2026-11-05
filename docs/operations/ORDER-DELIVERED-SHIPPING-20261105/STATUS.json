@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/order-delivered-shipping-20261105",
   "base_commit": "d80661fd27ef88bf639fa43d8f969f4d62239a61",
-  "phase": "Implementation verified locally and in isolated real-Mongo CI; awaiting explicit production release authorization",
+  "phase": "Shipping implementation and cold-start proof correction complete; current CI and publication state are recorded in PR 1760",
   "requirements": [
     "Deferred courier fees use an authoritative order transition to delivered after operational start; a lagging waybill does not block the fee.",
     "Aramex prepaid shipping is recognized at the authoritative completed order transition after operational start, with one debit to an explicitly approved cashbox.",
@@ -19,7 +19,8 @@
     "Recorded payments and confirmed shipping charges require matching review before any new automatic debit. Replay, concurrent refresh, later delivery and cancellation preserve the original paid fact.",
     "Paid shipping is included in expense reporting and removed from overlapping open shipping estimates.",
     "Reports and Excel retain separate execution and delivery dates and the cashbox; a replacement carrier has a separate row and cannot inherit the original charge or COD.",
-    "Native driver behavior, independent COD proof and original opening balances remain protected by the regression suite."
+    "Native driver behavior, independent COD proof and original opening balances remain protected by the regression suite.",
+    "Concurrent first late-delivery uploads initialize the standard proof storage and non-unique event index after driver authorization, before the owner transaction. One proof and event are retained under replay; financial state remains unchanged."
   ],
   "changed_files": [
     "backend/operational_balance_engine.py",
@@ -56,7 +57,9 @@
     "frontend/src/pages/operational/OperationalFinancialPosition.jsx",
     "frontend/src/pages/operational/OperationalFinancialPosition.test.jsx",
     "frontend/src/pages/operational/financialPositionPresentation.js",
-    "frontend/src/pages/operational/financialPositionPresentation.test.js"
+    "frontend/src/pages/operational/financialPositionPresentation.test.js",
+    "backend/store_delivery_late_evidence.py",
+    "backend/tests/test_mz2_late_delivery_evidence.py"
   ],
   "verification": [
     {
@@ -84,9 +87,15 @@
       "command": "git diff --check",
       "exit_status": 0,
       "result": "Clean."
+    },
+    {
+      "command": "PYTHONPATH=.:backend:backend/tests .test-venv/bin/python -B -m pytest --noconftest -q --tb=short -o asyncio_mode=auto backend/tests/test_mz2_late_delivery_evidence.py",
+      "cwd": ".",
+      "exit_status": 0,
+      "result": "38 skipped in 0.75s due to unavailable local real Mongo; source review and AST checks passed. CI is the required runtime verification for the cold-start fix."
     }
   ],
-  "review_state": "Independent reviews accepted the order transition producer/consumer chain, prepaid financial effects, tariff binding, carrier-separated reports and UI. Identified defects were reproduced and fixed with regressions.",
+  "review_state": "Independent reviews accepted the order transition producer/consumer chain, prepaid financial effects, tariff binding, carrier-separated reports and UI. Identified defects were reproduced and fixed with regressions. The additional cold-start proof correction is independently reviewed before checkpointing; the current exact-head CI outcome is maintained in PR 1760.",
   "release_state": {
     "source_only": true,
     "release_intent_frozen": false,
@@ -97,15 +106,13 @@
     "reason": "No production commands, provider mutations, live database writes or financial postings were performed for this source task. The prior production approval rejection has not been bypassed."
   },
   "remaining": [
-    "Obtain explicit production release authorization before preparing a release lease or publishing; the earlier automatic approval rejection remains respected.",
-    "After authorization, follow repository Protocol V5 for the reviewed source, verify the published runtime, explicitly approve the intended Salla cashbox and tariff effective period through the normal owner UI, then verify live balances."
+    "Production publication and live cashbox/tariff approval remain outstanding. They require successful current-head CI and explicit production release authorization; the earlier automatic approval rejection remains respected.",
+    "After authorization, follow repository Protocol V5, verify the published runtime, approve the intended Salla cashbox and tariff effective period through the normal owner UI, then verify live balances."
   ],
-  "next_safe_action": "Request explicit authorization to publish PR 1760 to Mezan and configure the intended Salla cashbox binding. Continue only after authorization; do not create a production lease or publish before it.",
-  "previous_remote_checkpoint": "ca2420fb0c24dbb78523cd4dcec9a05426aad9e9",
-  "checkpoint_identity": "The containing Git commit and branch ref identify this documentation checkpoint. The exact full head SHA and final CI state are also recorded in the Draft PR and Issue 1006 handoff.",
-  "updated_at_utc": "2026-11-05T14:14:46.538137+00:00",
-  "verified_implementation_commit": "ca2420fb0c24dbb78523cd4dcec9a05426aad9e9",
-  "verified_implementation_tree": "370d8bd218ea48901e7038f71d87f99184290aa5",
+  "next_safe_action": "Inspect PR 1760 exact-head checks. Resolve any remaining task-related failure; when green, request explicit authorization to publish and configure the intended Salla cashbox. Do not create a production lease or publish before authorization.",
+  "previous_remote_checkpoint": "3c138746c371766dcbe2c055c802850f59347dd4",
+  "checkpoint_identity": "The containing Git commit and branch ref identify this source checkpoint. Its full head SHA, independent review result and exact-head CI outcome are recorded in PR 1760 and Issue 1006 without another source change.",
+  "updated_at_utc": "2026-11-05T14:33:42.503552+00:00",
   "pull_request": {
     "number": 1760,
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1760",
@@ -192,6 +199,20 @@
       "result": "26 passed; then 578 passed, 1 skipped.",
       "skip": "Only transaction rollback [memory] case is skipped because rollback requires real Mongo. The [mongo] case passed."
     },
-    "note": "The local real-Mongo limitations are resolved by successful isolated CI. This handoff changes only this status document; executable source is unchanged. Consult the PR for checks on the containing documentation checkpoint."
+    "note": "This section records the earlier implementation verification. The documentation-only successor then exposed the cold-start race recorded below. No failing gate was waived. Consult PR 1760 for exact-head verification of the corrected source."
+  },
+  "previous_verified_implementation_commit": "ca2420fb0c24dbb78523cd4dcec9a05426aad9e9",
+  "previous_verified_implementation_tree": "370d8bd218ea48901e7038f71d87f99184290aa5",
+  "cold_start_correction": {
+    "reproduction_head": "3c138746c371766dcbe2c055c802850f59347dd4",
+    "run_id": 42043201000,
+    "job_id": 127299118402,
+    "test": "test_mz2_late_delivery_evidence.py::test_concurrent_identical_upload_and_approval_have_one_event_each",
+    "failure": "Mongo WriteConflict code 112 at transaction commit: store_delivery_delivery_proofs namespace already in use during concurrent first uploads. The earlier documentation checkpoint changed no executable source.",
+    "root_cause": "The late-proof route first-created proof and late-event collections inside simultaneous owner transactions instead of initializing schema beforehand.",
+    "fix": "Reuse standard proof index initialization and a non-unique owner/assignment late-event index after driver authorization, before operational_owner. Existing transaction, authorization, replay and financial rules are preserved.",
+    "regression": "Strengthened the actual fresh-collection concurrent upload/approval test: one proof, one attachment event, one review event, unchanged financial records. Added rejection of disabled drivers before collection/index or owner-control changes.",
+    "local_verification": "AST parsing and git diff --check passed. The module collected 38 tests, all skipped locally because MZ2_TEST_MONGO_URI is not configured; no local real-Mongo pass is claimed. The corrected cases must run in isolated CI.",
+    "current_gate_authority": "https://github.com/AMASI-SA/AMASI-SA/pull/1760"
   }
 }
