@@ -1,0 +1,276 @@
+{
+  "task_id": "ORDER-DELIVERED-SHIPPING-20261105",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/shipping-manual-cashbox-20261105",
+  "base_commit": "a67da7816f24befb09fb713b294dea70e9517100",
+  "phase": "Reviewed generic courier cashbox configuration and operational cost correction; current-head CI and release state are maintained in the continuation PR",
+  "requirements": [
+    "Deferred courier fees use an authoritative order transition to delivered after operational start; a lagging waybill does not block the fee.",
+    "Any owner-configured prepaid courier is recognized at the authoritative completed order transition after operational start, with one debit to an explicitly approved cashbox. Aramex and international carriers can be manually bound to the Salla cashbox without company-specific code changes.",
+    "Prepaid shipping remains fully paid, never an unpaid courier liability or an unallocated advance; later delivery and replay do not debit again.",
+    "Preserve frozen existing facts, opening balances, native driver rules, independent COD evidence, and distinct fee/customer currencies.",
+    "Do not infer prepaid settlement or cashbox from destination country or sale currency; the owner explicitly selects the company mode and cashbox.",
+    "Operational estimated product costs retain repeated line quantities and correctly match Yes/No with Arabic equivalents within a verified option identity; conflicting identities remain visibly incomplete."
+  ],
+  "completed_in_this_checkpoint": [
+    "Deferred courier fees use the authenticated order delivered transition; a lagging waybill no longer blocks the fee. Carrier identity, cancellation and replacement safeguards remain.",
+    "Historical order creation does not exclude a post-start delivery fee with an independently known contract currency; old sale and supplier records are not recreated.",
+    "Native order history and verified status webhooks retain explicit completed evidence and its original timestamp, including later shipping or delivered order states.",
+    "Approved prepaid tariffs carry immutable dated owner cashbox bindings; missing, stale, foreign, inactive or unready accounts never authorize a new debit.",
+    "A completed prepaid order creates one confirmed shipping charge and one fully allocated cashbox movement atomically; it leaves no unpaid courier liability or advance.",
+    "Recorded payments and confirmed shipping charges require matching review before any new automatic debit. Replay, concurrent refresh, later delivery and cancellation preserve the original paid fact.",
+    "Paid shipping is included in expense reporting and removed from overlapping open shipping estimates.",
+    "Reports and Excel retain separate execution and delivery dates and the cashbox; a replacement carrier has a separate row and cannot inherit the original charge or COD.",
+    "Native driver behavior, independent COD proof and original opening balances remain protected by the regression suite.",
+    "Concurrent first late-delivery uploads initialize the standard proof storage and non-unique event index after driver authorization, before the owner transaction. One proof and event are retained under replay; financial state remains unchanged.",
+    "Shipping settings persist an optional exact original Salla carrier code. Tariff review binds that identity, payment mode, price, effective period and selected cashbox without creating a movement merely by saving settings.",
+    "Explicit carrier recognition requires the original code, never a display-name fallback. Duplicate codes, old approved identities and subsequent identity reassignment are rejected; prior catalog party IDs, opening balances and movements remain unchanged.",
+    "Operational cost selection retains each raw observation with its IDs and labels, supports Yes/Arabic yes and No/Arabic no within the same trusted option, and does not flatten unrelated options into one match.",
+    "Ambiguous or conflicting option observations report incomplete costs and preserve the preceding estimate and confirmed facts. Repeated item lines, quantity multiplication, partial receipts, bundles and confirmed supplier expenses remain protected."
+  ],
+  "changed_files": [
+    "backend/operational_balance_engine.py",
+    "backend/operational_balance_routes.py",
+    "backend/operational_balance_service.py",
+    "backend/operational_balance_sources.py",
+    "backend/operational_courier_tariffs.py",
+    "backend/operational_courier_transitions.py",
+    "backend/operational_delivery_evidence.py",
+    "backend/operational_financial_position_core.py",
+    "backend/operational_open_cost_exposure.py",
+    "backend/operational_order_completed_evidence.py",
+    "backend/operational_prepaid_shipping.py",
+    "backend/salla_integration/courier_delivery_sync.py",
+    "backend/salla_integration/webhook_order_sync.py",
+    "backend/salla_shipping.py",
+    "backend/server.py",
+    "backend/store_delivery_late_evidence.py",
+    "backend/tests/test_mz2_late_delivery_evidence.py",
+    "backend/tests/test_operational_balance_courier_acquisition.py",
+    "backend/tests/test_operational_balance_courier_identity.py",
+    "backend/tests/test_operational_balance_courier_order_transition.py",
+    "backend/tests/test_operational_balance_courier_tariffs.py",
+    "backend/tests/test_operational_balance_delivery_cutover.py",
+    "backend/tests/test_operational_balance_delivery_evidence.py",
+    "backend/tests/test_operational_balance_order_delivery_status.py",
+    "backend/tests/test_operational_balance_prepaid_position.py",
+    "backend/tests/test_operational_balance_prepaid_shipping.py",
+    "backend/tests/test_operational_balance_prepaid_tariffs.py",
+    "backend/tests/test_operational_balance_shipping_currency.py",
+    "backend/tests/test_operational_balance_source_fixes.py",
+    "backend/tests/test_operational_balance_sources.py",
+    "backend/tests/test_operational_balance_verified_shipping_fees.py",
+    "backend/tests/test_operational_open_cost_exposure.py",
+    "frontend/src/pages/ShippingCompanySettings.jsx",
+    "frontend/src/pages/ShippingCompanySettings.test.jsx",
+    "frontend/src/pages/operational/CourierTariffApproval.jsx",
+    "frontend/src/pages/operational/DeliveryFeeReview.test.jsx",
+    "frontend/src/pages/operational/DomainDetails.jsx",
+    "frontend/src/pages/operational/DomainDetails.test.jsx",
+    "frontend/src/pages/operational/OperationalFinancialPosition.jsx",
+    "frontend/src/pages/operational/OperationalFinancialPosition.test.jsx",
+    "frontend/src/pages/operational/financialPositionPresentation.js",
+    "frontend/src/pages/operational/financialPositionPresentation.test.js"
+  ],
+  "verification": [
+    {
+      "command": "CI=true node node_modules/react-scripts/scripts/test.js --watchAll=false --runInBand --runTestsByPath src/pages/operational/DeliveryFeeReview.test.jsx src/pages/operational/DomainDetails.test.jsx src/pages/ShippingCompanySettings.test.jsx src/pages/operational/OperationalFinancialPosition.test.jsx src/pages/operational/financialPositionPresentation.test.js",
+      "cwd": "frontend",
+      "node_version": "22.23.2",
+      "exit_status": 0,
+      "result": "Root integrated verification: 5 suites, 61 passed; independently reviewed UI and projection behavior."
+    },
+    {
+      "command": "PYTHONPATH=backend:backend/tests .test-venv/bin/python -B -m pytest --noconftest -q backend/tests/test_operational_balance_order_delivery_status.py backend/tests/test_operational_balance_prepaid_shipping.py backend/tests/test_operational_balance_prepaid_tariffs.py backend/tests/test_operational_balance_prepaid_position.py backend/tests/test_operational_balance_financial_position.py --tb=short",
+      "cwd": ".",
+      "python_version": "3.12.14",
+      "exit_status": 0,
+      "result": "Root final integrated contract verification: 130 passed, no skips or deselections."
+    },
+    {
+      "command": "PYTHONPATH=.:backend:backend/tests .test-venv/bin/python -B -m pytest --noconftest -q backend/tests/test_operational_balance_sources.py backend/tests/test_operational_balance_shipping_currency.py backend/tests/test_operational_balance_engine.py backend/tests/test_operational_balance_engine_fixes.py backend/tests/test_operational_balance_source_fixes.py backend/tests/test_operational_balance_delivery_cutover.py backend/tests/test_operational_balance_delivery_evidence.py backend/tests/test_operational_balance_courier_tariffs.py backend/tests/test_operational_balance_verified_shipping_fees.py backend/tests/test_operational_open_cost_exposure.py backend/tests/test_operational_balance_cost_completeness.py backend/tests/test_operational_balance_financial_position.py backend/tests/test_operational_balance_prepaid_shipping.py backend/tests/test_operational_balance_prepaid_tariffs.py backend/tests/test_operational_balance_prepaid_position.py backend/tests/test_operational_balance_order_delivery_status.py backend/tests/test_operational_balance_courier_order_transition.py backend/tests/test_operational_balance_courier_acquisition.py -k 'not test_real_refresh_preserves_old_delivery_custody_and_bank_settlement_once and not authenticated_history_refresh and not worker_recovers_seven and not network_read and not ineligible_existing and not concurrent_acquisition' --tb=short",
+      "cwd": ".",
+      "python_version": "3.12.14",
+      "exit_status": 0,
+      "result": "Integrated affected regression run: 599 passed, 3 skipped, 19 deselected. The skipped/deselected existing tests require an isolated real Mongo replica set; CI remains required and no test gate was modified."
+    },
+    {
+      "command": "git diff --check",
+      "exit_status": 0,
+      "result": "Clean."
+    },
+    {
+      "command": "PYTHONPATH=.:backend:backend/tests .test-venv/bin/python -B -m pytest --noconftest -q --tb=short -o asyncio_mode=auto backend/tests/test_mz2_late_delivery_evidence.py",
+      "cwd": ".",
+      "exit_status": 0,
+      "result": "38 skipped in 0.75s due to unavailable local real Mongo; source review and AST checks passed. CI is the required runtime verification for the cold-start fix."
+    },
+    {
+      "command": "PYTHONPATH=.:backend:backend/tests .test-venv/bin/python -B -m pytest --noconftest -q backend/tests/test_operational_balance_sources.py backend/tests/test_operational_open_cost_exposure.py backend/tests/test_operational_balance_cost_completeness.py backend/tests/test_operational_bundle_cost_projection.py backend/tests/test_operational_supplier_invoice_cutover.py backend/tests/test_operational_balance_courier_identity.py backend/tests/test_operational_balance_prepaid_tariffs.py backend/tests/test_operational_balance_prepaid_shipping.py backend/tests/test_operational_balance_prepaid_position.py backend/tests/test_operational_balance_order_delivery_status.py backend/tests/test_operational_balance_financial_position.py backend/tests/test_operational_balance_shipping_currency.py backend/tests/test_operational_balance_courier_tariffs.py --tb=short",
+      "cwd": ".",
+      "exit_status": 0,
+      "result": "Fresh root combined verification: 432 passed, 3 skipped, no deselections. The three existing courier tariff cases need real Mongo; current-head CI remains required."
+    },
+    {
+      "command": "CI=true node node_modules/react-scripts/scripts/test.js --watchAll=false --runInBand --runTestsByPath src/pages/operational/DeliveryFeeReview.test.jsx src/pages/operational/DomainDetails.test.jsx src/pages/ShippingCompanySettings.test.jsx src/pages/operational/OperationalFinancialPosition.test.jsx src/pages/operational/financialPositionPresentation.test.js",
+      "cwd": "frontend",
+      "node_version": "22.23.2",
+      "exit_status": 0,
+      "result": "Fresh root combined verification after both new slices: 5 suites / 67 passed."
+    }
+  ],
+  "review_state": "Independent reviewer accepted generic exact carrier identity and cost matching after reproducing and closing three option-origin/conflict cases. Independent affected cost checks: 199 passed. Carrier checks: 84 passed / 3 local Mongo skips; frontend 13 passed. Root combined source checks: 432 passed / 3 Mongo skips, frontend 67 passed. Exact-head CI and latest-base integration evidence remain in the continuation PR.",
+  "release_state": {
+    "source_only": true,
+    "release_intent_frozen": false,
+    "merged": false,
+    "lease_created": false,
+    "published": false,
+    "production_changed": "no",
+    "reason": "This task has made no production application, provider, database or financial mutation. The user instructed continuation of the proposed release and manual courier cashbox configuration. The independent Qoyod release currently owns the production lease; this task will neither clear nor reuse it."
+  },
+  "remaining": [
+    "Complete fresh CI on the continuation source, including real Mongo. Prior E-head CI cannot certify the new slices.",
+    "After the existing release owner closes its lease, follow Protocol V5 for the authorized shipping release: clean source build, intent-only B, clean-clone adapter rehearsal, governed publish and three verified runtime probes.",
+    "After verified deployment, bind Aramex to the exact intended Salla cash account through the owner UI and verify one paid charge/debit at completed with no duplicate at delivered.",
+    "Emkan fee save remains blocked pending explicit numeric/effective-date approval. Provider payment-evidence and Tabby fee-matching gaps remain visible; no assertion that every financial table is complete."
+  ],
+  "next_safe_action": "Verify the continuation source against the latest base and collect exact-head CI. Re-read /app Release Guard status before any release rehearsal; continue only after the Qoyod owner reports inactive. Emkan save remains blocked.",
+  "previous_remote_checkpoint": "eee6b4d95ac2efc6028f3b43bbbae387a6e6fa64",
+  "checkpoint_identity": "The containing Git commit and branch ref identify this source checkpoint. Its full head SHA, independent review result and exact-head CI outcome are recorded in PR 1760 and Issue 1006 without another source change.",
+  "updated_at_utc": "2026-11-05T15:43:36.477545+00:00",
+  "pull_request": {
+    "number": null,
+    "draft": true,
+    "merged": false,
+    "predecessor_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1760",
+    "note": "The continuation PR number, exact containing commit and current-head checks are recorded in Issue 1006 and the PR after creation."
+  },
+  "ci_verification": {
+    "commit_sha": "ca2420fb0c24dbb78523cd4dcec9a05426aad9e9",
+    "workflow_count": 13,
+    "all_success": true,
+    "runs": [
+      {
+        "id": 42041551203,
+        "name": "Qoyod Payment Freshness",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551296,
+        "name": "Snapchat Settings Management V2",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551418,
+        "name": "Snapchat Direct Active Publication",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551273,
+        "name": "Mobile Order Tracking",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551231,
+        "name": "Mezan Release Readiness",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551322,
+        "name": "Shipping Print Boundary",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551177,
+        "name": "MZ2 Track F native shipping",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551659,
+        "name": "G47 Focused Integration",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551404,
+        "name": "Security Gate",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551141,
+        "name": "Operational Stock Eligibility",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551248,
+        "name": "CodeQL",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551312,
+        "name": "Operational Balance Web",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551213,
+        "name": "MZ2 Employee Salary and Password",
+        "conclusion": "success"
+      }
+    ],
+    "operational_backend": {
+      "job_id": 127293365822,
+      "result": "2776 passed, 5 warnings; then 16 passed, 18 subtests passed. No skips."
+    },
+    "shipping_mongo": {
+      "job_id": 127293559820,
+      "result": "26 passed; then 578 passed, 1 skipped.",
+      "skip": "Only transaction rollback [memory] case is skipped because rollback requires real Mongo. The [mongo] case passed."
+    },
+    "note": "This section records the earlier implementation verification. The documentation-only successor then exposed the cold-start race recorded below. No failing gate was waived. Consult PR 1760 for exact-head verification of the corrected source. The corrected E-head later completed all 15 workflows, including Track F 866 passed / 549 subtests without skips. New manual-identity and cost changes require fresh CI."
+  },
+  "previous_verified_implementation_commit": "ca2420fb0c24dbb78523cd4dcec9a05426aad9e9",
+  "previous_verified_implementation_tree": "370d8bd218ea48901e7038f71d87f99184290aa5",
+  "cold_start_correction": {
+    "reproduction_head": "3c138746c371766dcbe2c055c802850f59347dd4",
+    "run_id": 42043201000,
+    "job_id": 127299118402,
+    "test": "test_mz2_late_delivery_evidence.py::test_concurrent_identical_upload_and_approval_have_one_event_each",
+    "failure": "Mongo WriteConflict code 112 at transaction commit: store_delivery_delivery_proofs namespace already in use during concurrent first uploads. The earlier documentation checkpoint changed no executable source.",
+    "root_cause": "The late-proof route first-created proof and late-event collections inside simultaneous owner transactions instead of initializing schema beforehand.",
+    "fix": "Reuse standard proof index initialization and a non-unique owner/assignment late-event index after driver authorization, before operational_owner. Existing transaction, authorization, replay and financial rules are preserved.",
+    "regression": "Strengthened the actual fresh-collection concurrent upload/approval test: one proof, one attachment event, one review event, unchanged financial records. Added rejection of disabled drivers before collection/index or owner-control changes.",
+    "local_verification": "AST parsing and git diff --check passed. The module collected 38 tests, all skipped locally because MZ2_TEST_MONGO_URI is not configured; no local real-Mongo pass is claimed. The corrected cases must run in isolated CI.",
+    "current_gate_authority": "https://github.com/AMASI-SA/AMASI-SA/pull/1760"
+  },
+  "other_release_gate": {
+    "active": true,
+    "actor": "qoyod-1762",
+    "deployment_git_sha": "a67da7816f24befb09fb713b294dea70e9517100",
+    "prepared_at": "2026-11-05T15:25:14.469853+00:00",
+    "required_action": "Re-read /app Release Guard status. Do not start a release rehearsal or mutate /app until the current owner closes its lease.",
+    "observed_during": "2026-11-05 task continuation, before the source checkpoint"
+  },
+  "payment_fee_approval_block": {
+    "provider": "emkan",
+    "saved": false,
+    "effective_from": "2026-11-01",
+    "percent": "6.99",
+    "fixed_sar": "1.50",
+    "vat_percent": "15",
+    "vat_treatment": "exclusive",
+    "reason": "Automatic approval review rejected saving these persistent retroactive financial settings because generic continuation did not explicitly approve the numeric rates and effective date. No alternate save or database route was attempted. Explicit confirmation remains required."
+  },
+  "cost_correction_scope": {
+    "proven_defect": "Label-only English Yes could omit an Arabic-bound embroidery service. Flattened ID/name observations could also charge the wrong service. The corrected parser preserves observation origin and rejects ambiguity.",
+    "synthetic_acceptance": "28 pieces across 21 orders, unit product 15 + service 8 + bag 1.20, total 677.60 SAR; repeated lines and Arabic/English boolean values pass.",
+    "limits": "No claim that the whole historical best-seller difference is caused by this operational path. Dashboard/best-seller code and live order history were not changed. Fixtures contain synthetic data only."
+  },
+  "continuation_integration": {
+    "previous_branch": "codex/order-delivered-shipping-20261105",
+    "previous_pr": 1760,
+    "previous_head": "eee6b4d95ac2efc6028f3b43bbbae387a6e6fa64",
+    "production_advance": "a67da7816f24befb09fb713b294dea70e9517100",
+    "reason": "Production advanced with an intent-only Qoyod release while shipping source was under review. A merge would touch the intent in full path history and fail Protocol V5. Continue from the new base in a new branch with the exact combined source tree; retain PR 1760 and its history without force-push, rebase or rewriting the predecessor history.",
+    "intent_invariant": "Carry the new base intent bytes unchanged; no intent edit in the source checkpoint."
+  }
+}

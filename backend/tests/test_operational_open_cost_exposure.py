@@ -1,5 +1,7 @@
 """Historical open-work reporting is a read-only supplement to operational finance."""
 from copy import deepcopy
+from decimal import Decimal
+import pytest
 from test_operational_balance_sources import DB, row, run
 from operational_open_cost_exposure import project
 
@@ -319,3 +321,187 @@ def test_received_order_split_between_suppliers_counts_once_in_the_report():
     exposure["bucket_completeness"]["products_received_uninvoiced"] = False
     partial = build_financial_position(snapshot, cost_exposure=exposure)["currencies"]["SAR"]
     assert next(t for t in partial["tables"] if t["id"] == table["id"])["totals"]["orders"] is None
+
+
+def embroidery_db(*, old=False, with_ids=False, binding_value="نعم"):
+    """28 synthetic units in 21 orders, including two repeated-product lines."""
+    db = DB({
+        "unified_orders": [],
+        "mezan_product_cost_profiles_v2": [row(salla_product_id="p1", base_cost="15", cost_currency="SAR")],
+        "mezan_product_resource_bindings_v2": [row(id="bag-link", salla_product_id="p1", resource_id="bag", quantity="1")],
+        "mezan_product_option_cost_bindings_v2": [row(id="name-link", salla_product_id="p1",
+            option_id="embroidery", value_id="yes", option_name="تطريز اسم", value_name=binding_value,
+            mode="resource", resource_id="name-service", quantity="1")],
+        "mezan_cost_resources_v2": [row(id="bag", kind="component", unit_cost="1.20", cost_currency="SAR"),
+            row(id="name-service", kind="service", unit_cost="8", cost_currency="SAR")],
+        "mezan_suppliers_v2": [row(id="gulf-supplier", name="Synthetic Gulf supplier", currency="KWD")],
+    })
+    for index, quantities in enumerate([[1]] * 19 + [[2, 2], [3, 2]], 1):
+        items = []
+        for line, quantity in enumerate(quantities, 1):
+            choice = {"name": "تطريز اسم", "value": {"name": "Yes" if index <= 4 else "نعم"}}
+            if with_ids:
+                choice["id"], choice["value"]["id"] = "embroidery", "yes"
+            items.append({"id": f"line{line}", "product_id": "p1", "quantity": quantity, "options": [choice]})
+        created = BEFORE if old else "2026-11-01T01:00:00+00:00"
+        raw = {"id": f"order-{index}", "reference_id": f"SYN-{index}", "created_at": created,
+            "updated_at": created, "status": "in_progress", "currency": "KWD", "payment_method": "mada",
+            "amounts": {"total": {"amount": "1000", "currency": "KWD"}}, "items": items}
+        db.data["unified_orders"].append(row(order_number=raw["reference_id"], raw_by_source={"salla_direct": raw}))
+    return db
+
+
+def embroidery_line(db, quantity=1):
+    db.data["unified_orders"] = db.data["unified_orders"][:1]
+    item = db.data["unified_orders"][0]["raw_by_source"]["salla_direct"]["items"][0]
+    item["quantity"] = quantity
+    return item
+
+
+def estimate_embroidery(db, previous=None):
+    from operational_balance_sources import collect_sources
+    from operational_balance_engine import reconcile
+    from operational_balance_store import initial
+    state = previous or {**initial("owner"), **operating_state()}
+    before, original_state = deepcopy(db.data), deepcopy(state)
+    sources = run(collect_sources(db, "owner", START, NOW, operational_state=state))
+    updated = reconcile(state, sources, NOW)
+    exposure = preview(db, updated)
+    assert db.data == before and state == original_state
+    assert reconcile(updated, sources, NOW) == updated
+    return sources, updated, exposure
+
+
+@pytest.mark.parametrize("old", [False, True])
+@pytest.mark.parametrize("with_ids", [False, True])
+@pytest.mark.parametrize("binding_value", ["نعم", "Yes"])
+def test_yes_name_cost_counts_all_28_units_and_repeated_product_lines(old, with_ids, binding_value):
+    db = embroidery_db(old=old, with_ids=with_ids, binding_value=binding_value)
+    _, updated, exposure = estimate_embroidery(db)
+    period = "prestart" if old else "poststart"
+    assert exposure["currencies"]["SAR"][period + "_supplier_unreceived"] == "677.60"
+    assert exposure["distinct_order_counts"]["SAR"]["products_unreceived"] == 21
+    assert exposure["bucket_completeness"]["products_unreceived"] is True
+    assert {g["currency"] for g in exposure["groups"] if g["kind"] == "supplier"} == {"SAR"}
+    assert all(r["confirmed"] == "0.00" for r in updated["engine"]["obligations"].values() if r["kind"] == "supplier")
+
+
+@pytest.mark.parametrize("with_ids", [False, True])
+def test_raw_and_normalized_yes_apply_service_quantity_once(with_ids):
+    db = embroidery_db(with_ids=with_ids)
+    item = embroidery_line(db, 4)
+    item["options_normalized"] = {"تطريز_اسم": ["نعم", " YES "]}
+    db.data["mezan_product_option_cost_bindings_v2"][0]["quantity"] = "2"
+    _, _, exposure = estimate_embroidery(db)
+    assert exposure["currencies"]["SAR"]["poststart_supplier_unreceived"] == "128.80"
+    assert exposure["bucket_completeness"]["products_unreceived"] is True
+
+
+@pytest.mark.parametrize("value", ["No", "لا", " NO "])
+def test_no_does_not_apply_yes_service(value):
+    db = embroidery_db()
+    embroidery_line(db)["options"][0]["value"]["name"] = value
+    _, _, exposure = estimate_embroidery(db)
+    assert exposure["currencies"]["SAR"]["poststart_supplier_unreceived"] == "16.20"
+    assert exposure["bucket_completeness"]["products_unreceived"] is True
+
+
+def test_unrelated_option_name_is_not_translated_or_treated_as_a_missing_service():
+    db = embroidery_db()
+    embroidery_line(db)["options"][0]["name"] = "تغليف هدية"
+    _, _, exposure = estimate_embroidery(db)
+    assert exposure["currencies"]["SAR"]["poststart_supplier_unreceived"] == "16.20"
+    assert exposure["bucket_completeness"]["products_unreceived"] is True
+
+
+@pytest.mark.parametrize("problem", ["unknown_boolean", "unknown_service", "option_id_conflict", "value_id_conflict",
+    "normalized_conflict", "normalized_conflict_without_raw_labels", "native_value_conflict_without_raw_labels"])
+def test_uncertain_yes_cost_is_visible_and_preserves_previous_estimate(problem):
+    db = embroidery_db(with_ids=True)
+    item = embroidery_line(db)
+    _, prior, _ = estimate_embroidery(db)
+    choice = item["options"][0]
+    if problem == "unknown_boolean":
+        choice.pop("id"); choice["value"] = {"name": "غير محدد"}
+    elif problem == "unknown_service":
+        choice.pop("id"); choice["value"].pop("id")
+        db.data["mezan_cost_resources_v2"] = db.data["mezan_cost_resources_v2"][:1]
+    elif problem == "option_id_conflict":
+        choice["id"] = "different-option"
+    elif problem == "value_id_conflict":
+        choice["value"]["id"] = "different-value"
+    elif problem == "normalized_conflict_without_raw_labels":
+        choice.pop("name"); choice["value"].pop("name")
+        item["options_normalized"] = {"تطريز اسم": "لا"}
+    elif problem == "native_value_conflict_without_raw_labels":
+        choice.pop("name"); choice["value"] = {"id": "different-value"}
+        item["options_normalized"] = {"تطريز اسم": "نعم"}
+    else:
+        item["options_normalized"] = {"تطريز اسم": "لا"}
+    sources, updated, exposure = estimate_embroidery(db, prior)
+    assert sources["orders"][0]["items_complete"] is False
+    assert "mz2_product_cost_incomplete" in {r["code"] for r in sources["issues"]}
+    assert exposure["bucket_completeness"]["products_unreceived"] is False
+    assert sum(Decimal(r["expected"]) for r in updated["engine"]["obligations"].values()
+               if r["kind"] == "supplier") == Decimal("24.20")
+
+
+@pytest.mark.parametrize("with_ids,extra_raw", [(False, False), (True, False), (True, True)])
+def test_aliases_do_not_combine_distinct_option_identities(with_ids, extra_raw):
+    db = embroidery_db(with_ids=with_ids)
+    item = embroidery_line(db)
+    item["options_normalized"] = {"تطريز اسم": "نعم"}
+    if extra_raw:
+        item["options"].append({"name": "تطريز اسم", "value": {"name": "نعم"}})
+    first = db.data["mezan_product_option_cost_bindings_v2"][0]
+    db.data["mezan_product_option_cost_bindings_v2"].append(dict(first, id="other-link",
+        option_id="different-option", value_id="different-yes", value_name="Yes", resource_id="other-service"))
+    db.data["mezan_cost_resources_v2"].append(row(id="other-service", kind="service", unit_cost="30"))
+    sources, _, exposure = estimate_embroidery(db)
+    if with_ids and not extra_raw:
+        assert exposure["currencies"]["SAR"]["poststart_supplier_unreceived"] == "24.20"
+        assert exposure["bucket_completeness"]["products_unreceived"] is True
+    else:
+        assert sources["orders"][0]["items_complete"] is False
+        assert exposure["bucket_completeness"]["products_unreceived"] is False
+
+
+def embroidery_pieces(db, *, received=4, service_done=True):
+    embroidery_line(db, 4)
+    db.data["mezan_preparation_pieces_v1"] = [row(id=f"piece-{i}", order_number="SYN-1",
+        order_item_id="salla:SYN-1:line1", unit_index=i, supplier_id="gulf-supplier",
+        supplier_dispatch_status="received" if i <= received else "sent",
+        execution_status="received_from_supplier" if i <= received else "assigned", received_at="2026-11-01T10:00:00+00:00",
+        services=[{"service_id": "name-service", "required_quantity": "1", "reference_unit_cost": "8",
+            "status": "completed" if i <= received and service_done else "pending",
+            "completed_by_supplier_id": "gulf-supplier" if i <= received and service_done else None}],
+        supplier_service_ids=["name-service"]) for i in range(1, 5)]
+
+
+@pytest.mark.parametrize("old", [False, True])
+@pytest.mark.parametrize("received,service_done,remaining,done", [(2, True, "48.40", "48.40"),
+    (4, True, "0.00", "96.80"), (4, False, "32.00", "64.80")])
+def test_receipt_removes_only_received_product_and_completed_service(old, received, service_done, remaining, done):
+    db = embroidery_db(old=old)
+    embroidery_pieces(db, received=received, service_done=service_done)
+    _, _, exposure = estimate_embroidery(db)
+    period = "prestart" if old else "poststart"
+    assert exposure["currencies"]["SAR"].get(period + "_supplier_unreceived", "0.00") == remaining
+    assert exposure["currencies"]["SAR"][period + "_supplier_received_uninvoiced"] == done
+
+
+def test_confirmed_product_and_service_are_not_repriced_or_estimated_twice():
+    db = embroidery_db()
+    embroidery_pieces(db)
+    db.data["mezan_supplier_invoices_v2"] = [row(id="confirmed-invoice", supplier_id="gulf-supplier",
+        approved_at="2026-11-01T11:00:00+00:00", lines=[{"piece_ids": [f"piece-{i}" for i in range(1, 5)],
+            "product_price_authority": "mezan_v2", "product_unit_price_halalas": 1620,
+            "services": [{"service_id": "name-service", "unit_price_halalas": 800, "quantity_per_piece": "1"}]}])]
+    _, prior, first = estimate_embroidery(db)
+    assert first["currencies"]["SAR"]["current_supplier_confirmed"] == "96.80"
+    db.data["mezan_product_cost_profiles_v2"][0]["base_cost"] = "99"
+    db.data["mezan_cost_resources_v2"][1]["unit_cost"] = "99"
+    _, updated, exposure = estimate_embroidery(db, prior)
+    assert exposure["currencies"]["SAR"]["current_supplier_confirmed"] == "96.80"
+    assert exposure["currencies"]["SAR"].get("poststart_supplier_unreceived", "0.00") == "0.00"
+    assert updated["engine"]["facts"] == prior["engine"]["facts"]

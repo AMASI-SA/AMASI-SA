@@ -17,6 +17,7 @@ def fixture(identity="100", number="10"):
     data = courier_data()
     source = data["unified_orders"][0]
     raw = source["raw_by_source"]["salla_direct"]
+    raw.pop("status_changed_at", None)
     raw.update(id=identity, reference_id=number, payment={"method": "mada"}, paid_amount="300")
     source.update(order_id=identity, salla_order_id=identity, order_number=number,
                   order_status="تم التوصيل", order_status_slug="delivered",

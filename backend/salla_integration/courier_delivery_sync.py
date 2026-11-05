@@ -3,15 +3,16 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 
 from operational_courier_transitions import (
-    CARRIER_HISTORY, WEBHOOK_PROOF, _state, carrier_activity_transition, native_status_transition,
+    CARRIER_HISTORY, ORDER_HISTORY, WEBHOOK_PROOF, _state, carrier_activity_transition, native_status_transition,
+    order_delivery_time,
 )
-from operational_delivery_evidence import DELIVERED, _inactive, _instant, _shipment_time, _status, _text
+from operational_delivery_evidence import DELIVERED, _inactive, _instant, _order_waybill, _shipment_time, _status, _text
 from salla_shipping import CURRENT_SHIPPING, SHIPPING_FIELDS, accept_shipping, extract_shipping, same_carrier, shipping_root_fields
 from .service import call_salla
 
 
 ISSUE_CODES = {"operational_delivery_shipment_not_delivered", "operational_delivery_timestamp_missing",
-               "operational_delivery_shipment_source_missing"}
+               "operational_delivery_shipment_source_missing", "operational_prepaid_shipping_completion_timestamp_missing"}
 _RETRY = "salla_courier_delivery_retry_after"
 _RAW = "raw_by_source.salla_direct"
 _FENCED = ("order_id", "salla_order_id", "g47_salla_snapshot", "order_status", "order_status_slug",
@@ -109,9 +110,45 @@ def verified_delivery(source, shipments, histories, owner, now):
     return accepted
 
 
+def verified_order_delivery(source, histories, owner, now):
+    """Attach an order timeline without turning an in-transit label into delivered."""
+    raw = (source.get("raw_by_source") or {}).get("salla_direct") or {}
+    current = source.get(CURRENT_SHIPPING) or {}
+    identity, number = _text(raw.get("id")), _text(source.get("order_number"))
+    if source.get("user_id") != owner or not identity or not number:
+        raise ValueError("courier_native_order_mismatch")
+    events = []
+    for row in histories:
+        if row.get("order_id") is not None and _text(row["order_id"]) != identity:
+            raise ValueError("courier_native_history_order_mismatch")
+        proof = native_status_transition(row, identity)
+        if proof is not None:
+            events.append({"provider_order_id": identity, "order_number": number,
+                           "source_event_id": _text(row.get("id") or row.get("history_id")),
+                           "native_status_transition": [proof]})
+    # Carrier activity has its separate authenticated shipment+actor contract.
+    # This path accepts a typed order transition, independently of shipment state.
+    if not any(e["native_status_transition"][0].get("delivered") is True
+               and not e["native_status_transition"][0].get("source") for e in events):
+        raise ValueError("courier_native_order_transition_missing")
+    at = order_delivery_time(raw, source, events, now)
+    _order_waybill(raw, current, current.get("shipment_id"), current.get("tracking_number"), at)
+    created = _instant(raw.get("date") or raw.get("created_at") or raw.get("order_date"))
+    if created > at:
+        raise ValueError("courier_native_timeline_conflict")
+    result = deepcopy(current)
+    result[WEBHOOK_PROOF] = {"source": ORDER_HISTORY, "owner": owner, "order_id": identity, "order_number": number,
+        "shipment_id": current["shipment_id"], "waybill": current["tracking_number"], "at": at.isoformat(),
+        "source_updated_at": source["g47_salla_snapshot"]["source_updated_at"], "history_complete": True,
+        "events": sorted(events, key=lambda row: row["source_event_id"])}
+    return result
+
+
 async def acquire_missing(db, owner, issues, *, started_at, limit=4):
     """Refresh identified post-opening delivery gaps, without financial/workflow hooks."""
     targets = {str(row["source_id"]) for row in issues if row.get("code") in ISSUE_CODES and row.get("source_id")}
+    completed_targets = {str(row['source_id']) for row in issues
+                         if row.get('code') == 'operational_prepaid_shipping_completion_timestamp_missing' and row.get('source_id')}
     if not targets:
         return
     identities = list(targets) + [int(value) for value in targets if value.isascii() and value.isdigit()]
@@ -119,7 +156,7 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
     for _ in range(min(limit, 4)):
         source = await db.unified_orders.find_one_and_update(
             {"user_id": owner, _RAW + ".id": {"$in": identities},
-             "order_status_slug": {"$in": ["delivered", "تم التوصيل"]},
+             **({} if completed_targets else {"order_status_slug": {"$in": ["delivered", "تم التوصيل"]}}),
              "g47_salla_snapshot.source_updated_at": {"$gte": start.isoformat()},
              "$or": [{_RETRY: {"$exists": False}}, {_RETRY: {"$lte": now}}]},
             {"$set": {_RETRY: now + timedelta(minutes=15)}}, projection=_PROJECTION)
@@ -128,6 +165,7 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
         raw = (source.get("raw_by_source") or {}).get("salla_direct") or {}
         current, watermark = source.get(CURRENT_SHIPPING) or {}, source.get("g47_salla_snapshot") or {}
         identity, number = _text(raw.get("id")), _text(source.get("order_number"))
+        completed = identity in completed_targets
         try:
             status = raw.get("status")
             effective = status.get("customized") or status if isinstance(status, dict) else status
@@ -136,8 +174,8 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
             if (source.get("user_id") != owner or not identity or not number
                     or _text(raw.get("reference_id") or raw.get("order_number")) != number
                     or any(source.get(key) is not None and _text(source[key]) != identity for key in ("order_id", "salla_order_id"))
-                    or _state(effective) is not True
-                    or any(_state(source[key]) is not True for key in ("order_status", "order_status_slug") if source.get(key) is not None)
+                    or not completed and _state(effective) is not True
+                    or not completed and any(_state(source[key]) is not True for key in ("order_status", "order_status_slug") if source.get(key) is not None)
                     or any(watermark.get(key) for key in ("cancelled", "component_pending", "requires_authoritative_refresh"))
                     or not start <= version <= now or _instant(watermark.get("source_updated_at")) != version
                     or current.get("source_kind") not in {"order", "shipment"} or _inactive(current)
@@ -145,9 +183,21 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
                     or any(source[key] != value for key, value in shipping_root_fields(current).items() if key in source)
                     or current.get("superseded_shipment_ids")):
                 continue
-            shipments = await _complete_pages(db, owner, "/shipments", {"order_id": identity}, max_pages=1)
             histories = await _complete_pages(db, owner, "/orders/" + identity + "/histories", {})
-            accepted = verified_delivery(source, shipments, histories, owner, now)
+            if completed:
+                from operational_order_completed_evidence import verified_completed_history
+                accepted = verified_completed_history(source, histories, owner, now)
+                try:
+                    delivery = verified_order_delivery(source, histories, owner, now)
+                    accepted[WEBHOOK_PROOF] = delivery[WEBHOOK_PROOF]
+                except ValueError:
+                    pass
+            else:
+                try:
+                    accepted = verified_order_delivery(source, histories, owner, now)
+                except ValueError:
+                    shipments = await _complete_pages(db, owner, "/shipments", {"order_id": identity}, max_pages=1)
+                    accepted = verified_delivery(source, shipments, histories, owner, now)
         except (ValueError, KeyError, TypeError, AttributeError):
             continue
         # The inspected order, source revision, current waybill, and its clocks

@@ -5,6 +5,7 @@ obligation belongs here. Prepared cost exposure is a separate, optional input;
 its stage buckets replace overlapping estimates rather than being added to
 them. A recorded subtotal is not proof that an entire forecast is covered.
 """
+from collections import Counter
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
@@ -83,9 +84,12 @@ def _name(row):
 
 def _shipping_order(row):
     identity = str(row.get("id") or "")
-    if not identity.startswith("shipping:"):
+    prefix = next((prefix for prefix in ("shipping:", "shipping-prepaid:") if identity.startswith(prefix)), None)
+    if prefix is None:
         return None
-    identity = identity[len("shipping:"):]
+    if row.get("order_id"):
+        return str(row["order_id"])
+    identity = identity[len(prefix):]
     component = row.get("fee_component")
     if component and identity.endswith(":" + str(component)):
         identity = identity[:-(len(str(component)) + 1)]
@@ -421,20 +425,44 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
     for row in obligations:
         order = _shipping_order(row)
         if order and ((_number(row.get("confirmed")) or ZERO) > ZERO or facts.get("shipping:" + order)):
-            shipping.setdefault(order, []).append(row)
-    order_ids = set(shipping) | {str(value.get("order_id") or key.removeprefix("cod:")) for key, value in metrics.items()}
+            shipping.setdefault((order, row.get("party_type"), row.get("party_id")), []).append(row)
+    collections = {}
+    for key, source in metrics.items():
+        order = str(source.get("order_id") or key.removeprefix("cod:"))
+        cod = cod_obligations.get(key) or {}
+        context = (order, source.get("party_type") or cod.get("party_type"), source.get("party_id") or cod.get("party_id"))
+        if not context[1] or not context[2]:
+            known = [candidate for candidate in shipping if candidate[0] == order
+                     and (not context[1] or candidate[1] == context[1])
+                     and (not context[2] or candidate[2] == context[2])]
+            if len(known) == 1:
+                # Customer amounts belong to the order. Display them alongside
+                # its sole known fee without assigning collection to that carrier.
+                context = known[0]
+        collections[context] = source
+    contexts = set(shipping) | set(collections)
+    order_contexts = Counter(context[0] for context in contexts)
     rows, complete = [], True
     missing_fee_orders = {str(issue.get("source_id", "")).removeprefix("shipping:") for issue in source_issues
                           if str(issue.get("code", "")).startswith("shipping_")
                           or issue.get("component") in {"shipping_fee", "base_shipping", "cod_commission"}}
-    for order in sorted(order_ids):
+    for context in sorted(contexts, key=lambda row: tuple(str(value or "") for value in row)):
+        order, party_type, party_id = context
         key = "cod:" + order
-        source = metrics.get(key)
+        source = collections.get(context)
         frozen = facts.get("shipping:" + order) or {}
-        fee_rows = shipping.get(order, [])
-        obligation = cod_obligations.get(key) or (fee_rows[0] if fee_rows else {})
-        party_id = frozen.get("id") or obligation.get("party_id") or (source or {}).get("party_id")
-        party_type = frozen.get("party_type") or obligation.get("party_type") or (source or {}).get("party_type")
+        if frozen.get("id") != party_id or frozen.get("party_type") != party_type:
+            frozen = {}  # Evidence and fees stay with the carrier that owns them.
+        fee_rows = shipping.get(context, [])
+        prepaid_rows = [row for row in fee_rows if row.get("payment_mode") == "prepaid"
+                        or row.get("recognition_event") == "order_completed"]
+        prepaid = prepaid_rows[0] if prepaid_rows else None
+        completed_times = {row.get("completed_at") for row in prepaid_rows}
+        completed_at = next(iter(completed_times)) if len(completed_times) == 1 else None
+        cash_accounts = {row.get("cash_account_id") for row in prepaid_rows}
+        cash_account_id = next(iter(cash_accounts)) if len(cash_accounts) == 1 else None
+        if prepaid and (not completed_at or not cash_account_id):
+            complete = False
         original = facts.get("cod_collection:" + order) or {}
         proof = facts.get("cod_customer_confirmation:" + order) or original
         evidence = proof.get("evidence") or {}
@@ -443,7 +471,11 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
         destination, status = "unavailable", "unavailable"
         store_collection = custody = settled = outstanding = courier_responsibility = None
         if source is None:
-            destination = status = "not_applicable"
+            # Paying the courier at execution says nothing about whether the
+            # customer owes COD or has already paid for the order.
+            destination = status = "unavailable" if prepaid else "not_applicable"
+        elif not source.get("party_id") or not source.get("party_type"):
+            complete = False
         elif party_type == "store_driver":
             if method == "cash":
                 destination = "driver_custody"
@@ -479,12 +511,22 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
                 for field, key in (("shipping_confirmed", "confirmed"), ("shipping_settled", "settled"),
                                    ("shipping_outstanding", "outstanding"))}
         if order in missing_fee_orders:
-            fees = {key: None for key in fees}
+            complete = False
+            if not prepaid:
+                fees = {key: None for key in fees}
         if any(value is None for value in fees.values()) or status in {"unavailable", "not_confirmed", "pending_review"}:
             complete = False
-        rows.append({"id": "delivery:" + order, "order_id": order, "order_number": None,
+        identity = "delivery:" + order
+        if order_contexts[order] > 1:
+            identity += ":" + str(party_type) + ":" + str(party_id)
+        rows.append({"id": identity, "order_id": order,
+                     "order_number": prepaid.get("order_number") if prepaid else None,
                      "party_id": party_id, "party_type": party_type,
                      "party_name": names.get((party_type, party_id), party_id),
+                     "payment_mode": "prepaid" if prepaid else None,
+                     "recognition_event": "order_completed" if prepaid else None,
+                     "completed_at": completed_at, "cash_account_id": cash_account_id,
+                     "cash_account_name": names.get(("cash", cash_account_id)) if cash_account_id else None,
                      "delivered_at": frozen.get("delivered_at"), "payment_method": method,
                      "collection_destination": destination, "collection_status": status, **fees,
                      "courier_responsibility": courier_responsibility,
@@ -494,6 +536,7 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
                      "customer_outstanding": _money((source or {}).get("customer_outstanding"))})
     return {"complete": complete, "rows": rows, "notes": [
         "الرسوم من التزامات الشحن التشغيلية فقط؛ لا تضاف أرباح تطبيق المندوب مرة أخرى.",
+        "الشحن المدفوع مقدمًا يُخصم من الصندوق عند تم التنفيذ. تاريخ التنفيذ مستقل عن تاريخ التسليم، والتسليم اللاحق لا يكرر الخصم. دفع أجرة الشحن لا يثبت تحصيل قيمة الطلب من العميل.",
         "ذمة شركة الشحن تتبع مبلغ الدفع عند الاستلام المسجل عليها. السداد المخصص يخفّض المتبقي، وإثبات تحصيل الشركة من العميل يحتاج مستندًا مستقلًا.",
         "عهدة المندوب هي المسؤولية المثبتة في المصدر وليست إثباتًا لمقدار النقد الفعلي في يده.",
         "التحويل البنكي والشبكة لا ينشئان عهدة نقدية للمندوب. لا يثبت اعتماد التحصيل من حالة تسليم الطلب وحدها.",

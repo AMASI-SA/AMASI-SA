@@ -12,6 +12,7 @@ def fixture(old=True):
     data = courier_data()
     source = data["unified_orders"][0]
     raw = source["raw_by_source"]["salla_direct"]
+    raw.pop("status_changed_at", None)
     current = source["salla_shipping_current"]
     current["source_kind"] = "order"
     for row in (raw["shipping"], raw["shipments"][0]):

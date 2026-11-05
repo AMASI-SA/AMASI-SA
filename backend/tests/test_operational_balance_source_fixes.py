@@ -16,9 +16,11 @@ def shipping_data(rate=None, *, delivered_shipment=False, **raw):
             'mezan_product_cost_profiles_v2': [row(salla_product_id='p1', base_cost='20')],
             'mz2_shipping_setup_v2': [row(couriers=[dict(courier_key='carrier', name='Carrier', status='active',
                 confirmed_by='owner', confirmed_at=START, salla_carrier_keys=['carrier'])], contracts=[rate])]}
-    # A customer-facing delivered status is not shipment-specific delivery evidence.
+    # A complete fixture supplies both the actual order transition and its
+    # independent native shipment evidence; a label alone cannot date the order.
     if delivered_shipment:
         order_raw = data['unified_orders'][0]['raw_by_source']['salla_direct']
+        order_raw.setdefault('status_changed_at', '2026-10-06T12:00:00+00:00')
         data['unified_orders'][0]['salla_shipping_current'] = {
             'source_kind':'shipment', 'company_code':'carrier','company_name':'Carrier',
             'shipment_id':'shipment','tracking_number':'TEST-AWB','status':'delivered'}
