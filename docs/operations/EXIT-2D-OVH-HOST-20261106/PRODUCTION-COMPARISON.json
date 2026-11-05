@@ -1,9 +1,10 @@
 {
   "classification": "source-only-offline-comparison",
   "candidate_production_base": "2d73a2a039e16468bbd45523bacf441bff515eb2",
-  "production_snapshot": "ae2fe9ce01c003ff139e22dd54f4641be48c8e38",
-  "new_commit_count": 24,
+  "production_snapshot": "2304b365c267d2d4220bc3bc953ecbb5a7403062",
+  "new_commit_count": 30,
   "first_parent_merges": [
+    "2304b365c267d2d4220bc3bc953ecbb5a7403062 Merge pull request #1775 from AMASI-SA/codex/report-raw-option-recovery-20261105",
     "ae2fe9ce01c003ff139e22dd54f4641be48c8e38 Merge PR1774: prepaid completion and operating cost recovery",
     "4b336e2a8bb8288dae50505e8eca33147744f441 Merge pull request #1773 from AMASI-SA/codex/release-reviewed-products-20261105",
     "a973ee2d7556cc8a3afaa10bc51bee4df2959d7d Merge pull request #1772 from AMASI-SA/codex/report-option-cost-release-after1770",
@@ -46,6 +47,8 @@
     "backend/product_v2_details_routes.py",
     "backend/qoyod_auto_unified/queue_api.py",
     "backend/report_option_identity.py",
+    "backend/report_option_recovery.py",
+    "backend/requirements.txt",
     "backend/salla_integration/courier_delivery_sync.py",
     "backend/salla_integration/routes.py",
     "backend/salla_integration/webhook_order_sync.py",
@@ -79,9 +82,11 @@
     "backend/tests/test_qoyod_header_summary.py",
     "backend/tests/test_qoyod_verified_unsent_summary.py",
     "backend/tests/test_report_option_identity.py",
+    "backend/tests/test_report_raw_option_recovery.py",
     "docs/operations/ORDER-DELIVERED-SHIPPING-20261105/STATUS.json",
     "docs/operations/PREPAID-SHIPMENT-CHRONOLOGY-20261105/STATUS.json",
     "docs/operations/QOYOD-VERIFIED-UNSENT-20261105/STATUS.md",
+    "docs/operations/REPORT-OPTION-IDENTITY-20261105/RAW-RECOVERY.md",
     "docs/operations/REPORT-OPTION-IDENTITY-20261105/STATUS.md",
     "docs/operations/SHIPPING-CURRENCY-20261105/STATUS.md",
     "docs/operations/reviewed-zero-price-currency-20261105/README.md",
@@ -104,11 +109,14 @@
     "frontend/src/pages/operational/financialPositionPresentation.test.js",
     "frontend/src/qoyodUnsentHeaderAlert.test.js",
     "release/release-intent-v5.json",
-    "scripts/audit_pending_reviewed_products.py"
+    "scripts/audit_pending_reviewed_products.py",
+    "scripts/release_backend_requirements.lock"
   ],
   "merge_tree_exit": 0,
-  "prospective_tree_only": "5881cec4f8a1479fb79aab6f68f4e249f3e63fd4",
+  "prospective_tree_only": "9a4b321e139c8ed1543801ef91fa81214fae99d6",
   "merge_applied": false,
   "semantic_compatibility_certified": false,
-  "production_contacted": false
+  "production_contacted": false,
+  "compared_candidate_sha": "8b8d2aef835f65f1c9a88c24a12a58b920d901b2",
+  "initial_pre_additions_tree_only": "5881cec4f8a1479fb79aab6f68f4e249f3e63fd4"
 }

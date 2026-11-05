@@ -1,0 +1,1 @@
+{"kind": "actual_synthetic_mongo_restic_backup", "success": true, "verified_at": "2026-11-05T22:11:59.901615+00:00", "source_sha": "8b8d2aef835f65f1c9a88c24a12a58b920d901b2", "archive_bytes": 103292, "encrypted_repository_checked": true, "restored_archive_hash_equal": true, "external_s3_tested": false}

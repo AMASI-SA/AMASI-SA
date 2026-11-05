@@ -1,0 +1,16 @@
+test_actual_p95_nearest_rank (test_ops.Boundaries.test_actual_p95_nearest_rank) ... ok
+test_approval_example_never_authorizes (test_ops.Boundaries.test_approval_example_never_authorizes) ... ok
+test_backup_caps_cannot_silently_expand (test_ops.Boundaries.test_backup_caps_cannot_silently_expand) ... ok
+test_expired_wrong_source_and_scope_rejected (test_ops.Boundaries.test_expired_wrong_source_and_scope_rejected) ... ok
+test_firewall_owns_one_table_and_covers_docker_forwarding (test_ops.Boundaries.test_firewall_owns_one_table_and_covers_docker_forwarding) ... ok
+test_https_handshake_rejects_before_any_cookie (test_ops.Boundaries.test_https_handshake_rejects_before_any_cookie) ... ok
+test_missing_or_stale_backup_and_oom_alert (test_ops.Boundaries.test_missing_or_stale_backup_and_oom_alert) ... ok
+test_mongo_dump_script_has_single_auth_declaration_and_valid_syntax (test_ops.Boundaries.test_mongo_dump_script_has_single_auth_declaration_and_valid_syntax) ... ok
+test_reject_production_and_secrets (test_ops.Boundaries.test_reject_production_and_secrets) ... ok
+test_units_are_dormant_files_and_bound_backup (test_ops.Boundaries.test_units_are_dormant_files_and_bound_backup) ... ok
+test_valid_config_and_preserved_source (test_ops.Boundaries.test_valid_config_and_preserved_source) ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.165s
+
+OK

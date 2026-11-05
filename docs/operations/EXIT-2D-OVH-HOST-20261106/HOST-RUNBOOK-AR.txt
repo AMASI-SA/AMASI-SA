@@ -91,6 +91,8 @@ Caddy192MiB/0.2CPU، مراقبة96MiB/0.05CPU متقطعة. Backup768MiB/1CPU
 2. شغّل monitor.timer دقيقة أثناء التجربة؛ يحفظ CPU وRAM الحالية/الذروة منcgroup
    وOOM/restarts وحالة الخدمات ومساحة قرصMongo وحالة النسخ؛ احتفاظ7أيام محليًا.
    ذروة cgroup تخص generation الحالية؛ لا تجمع ذرى أجيال مختلفة كأنها متزامنة.
+   احفظ كذلك date -u وvmstat -w 1 وfree -b أثناء النافذة لقياس ذاكرة المضيف
+   وCPU بما فيهما الـOS وTLS والعمليات خارج الحاويات؛ لا تستنتجها من مجموع الذرى.
 3. داخل Sync فقط، شغّل python - --ack-synthetic-only --source-sha <SHA> --seconds 180
    مع إدخال ovh_host/snap_runtime.py؛ احفظ stdout المنقح. يستخدم client/entities/facts
    وMongo وlease الحقيقيين لكن MockTransport دائمًا، ولا يستدعي OAuth أو حساب إعلانات.

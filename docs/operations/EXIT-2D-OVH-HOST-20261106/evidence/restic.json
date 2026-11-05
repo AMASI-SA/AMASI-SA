@@ -1,0 +1,1 @@
+{"kind": "actual_local_restic_repository", "archive_bytes": 2097152, "restore_hash_equal": true, "wrong_key_refused": true, "tamper_refused": true, "external_s3_tested": false, "paid_resource_created": false}
