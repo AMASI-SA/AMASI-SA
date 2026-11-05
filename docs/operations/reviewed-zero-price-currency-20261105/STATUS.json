@@ -1,0 +1,14 @@
+{
+  "task": "reviewed-zero-price-currency-20261105",
+  "branch": "codex/fix-reviewed-product-pending-20261105",
+  "state": "implemented-awaiting-review-and-production-authorization",
+  "production_changed": false,
+  "scope": "Preserve component acceptance after proven zero-priced option currency-only source changes; recover unallocated reviewed units without changing Salla status.",
+  "base_commit": "a67da7816f24befb09fb713b294dea70e9517100",
+  "verification": {
+    "command": "MZ2_TEST_MONGO_URI=<isolated-local-replica-set> PYTHONPATH=.:backend python -m pytest -q backend/tests/test_component_zero_price_recovery.py backend/tests/test_shipping_catalog_label_recovery.py backend/tests/test_reviewed_products_catalog.py",
+    "result": "68 passed, 32 subtests passed; exit 0; real isolated Mongo replica set",
+    "diff_check": "git diff --check: exit 0"
+  },
+  "next_action": "Review Draft PR and CI. After authorized deployment, run the read-only audit and revalidate individual eligible revisions using the existing fenced command. Verify remaining piece catalog and unchanged external status."
+}
