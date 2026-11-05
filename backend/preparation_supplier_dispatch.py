@@ -1123,12 +1123,14 @@ def _waiting_group_expression() -> dict[str, Any]:
 
 async def _waiting_groups(db: Any, user_id: str, employee_id: str) -> dict[str, Any]:
     # Only pending identities/counts cross the wire. No files, dispatch history,
-    # customer options or image-batch hydration until a group is opened.
+    # customer options. Missing photos use one representative piece per group.
     projection = {field: 1 for field in (
         "product_id", "product_name", "sku", "order_number", "image_url",
         "resolved_image_url", "selected_image_url", "assignment_status", "status",
-        "supplier_dispatch_status", "supplier_receiving_session_id")}
+        "supplier_dispatch_status", "supplier_receiving_session_id", "batch_id",
+        "order_item_id", "group_key")}
     groups = {}
+    samples = {}
     cursor = db[PIECES].find(_waiting_query(user_id, employee_id), projection).batch_size(256)
     try:
         while True:
@@ -1147,10 +1149,21 @@ async def _waiting_groups(db: Any, user_id: str, employee_id: str) -> dict[str, 
                     "product_name": _text(row.get("product_name")), "sku": _text(row.get("sku")),
                     "image_url": image, "piece_count": 0})
                 group["piece_count"] += 1
+                samples.setdefault(key, row)
                 if not group["image_url"]:
                     group["image_url"] = image
     finally:
         await cursor.close()
+    missing = {key: samples[key] for key, group in groups.items() if not group["image_url"]}
+    batch_ids = list({_text(row.get("batch_id")) for row in missing.values()} - {""})
+    if batch_ids:
+        projection = {"_id": 0, "id": 1, "lines.order_item_id": 1, "lines.group_key": 1,
+                      "lines.image_url": 1, "lines.resolved_image_url": 1,
+                      "lines.selected_image_url": 1, "lines.image_candidates": 1}
+        batches = await db[BATCHES].find({"user_id": user_id, "id": {"$in": batch_ids}}, projection).to_list(len(batch_ids))
+        _hydrate_piece_images_from_batches(list(missing.values()), batches)
+        for key, row in missing.items():
+            groups[key]["image_url"] = _text(row.get("selected_image_url") or row.get("resolved_image_url") or row.get("image_url"))
     return {"ok": True, "employee_id": employee_id,
             "groups": sorted(groups.values(), key=lambda row: (-row["piece_count"], row["key"])),
             "suppliers": await _active_suppliers(db, user_id=user_id)}
