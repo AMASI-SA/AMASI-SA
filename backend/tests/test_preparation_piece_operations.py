@@ -381,7 +381,7 @@ def test_router_registers_work_receiving_manager_start_and_schedule_routes():
 def test_assembly_board_uses_live_salla_status_and_mezan_evidence():
     source = inspect.getsource(_assembly_order_board)
 
-    assert 'if _text(order.status).casefold() != state' in source
+    assert 'if _text(order.status).casefold() != board_state' in source
     assert '"preparation_batch_ids.0": {"$exists": True}' in source
     assert '"preparation_assignments.0": {"$exists": True}' in source
     assert '"preparation_piece_count": {"$gt": 0}' in source
