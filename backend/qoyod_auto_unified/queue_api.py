@@ -9,6 +9,7 @@ from typing import Any, Awaitable, Callable, Optional
 
 from integrations.qoyod.unsent_orders import DUPLICATE, FAILED, SENT, UNSENT
 from integrations.qoyod.invoice_presence import verified_unsent_summary
+from integrations.qoyod.header_summary import cache_report_summary
 
 from .common import RETRYABLE_SYNC_FAILURE_CODES
 from .queue_counts import _proof_classification, _queue_audit
@@ -99,6 +100,10 @@ async def _execute_list(
     from integrations.qoyod import unsent_orders as unsent_module
 
     effective_owner = str(orders_user_id or user_id)
+    settings_collection = getattr(db, "qoyod_settings", None)
+    settings = (await settings_collection.find_one(
+        {"user_id": str(user_id)}, {"_id": 0, "invoice_presence_snapshot": 1},
+    ) or {}) if settings_collection is not None else {}
     result = await original(
         db,
         user_id=user_id,
@@ -134,13 +139,15 @@ async def _execute_list(
             proof.get("current_status"), proof.get("current_status_key")
         )
     }
-    settings_collection = getattr(db, "qoyod_settings", None)
-    settings = (await settings_collection.find_one(
-        {"user_id": str(user_id)}, {"_id": 0, "invoice_presence_snapshot": 1},
-    ) or {}) if settings_collection is not None else {}
     presence = verified_unsent_summary(
         proof_by_reference.values(), settings.get("invoice_presence_snapshot"),
         now=now, scan_truncated=audit.get("scan_truncated", False),
+    )
+    await cache_report_summary(
+        db, user_id=user_id, orders_user_id=effective_owner,
+        proofs=proof_by_reference.values(), from_date=from_date, to_date=to_date,
+        search=search, salla_status=salla_status, now=now, settings=settings,
+        scan_truncated=audit.get("scan_truncated", False),
     )
     absent_references = set(presence["order_numbers"])
 

@@ -76,6 +76,27 @@ async def test_repeated_page_and_pagination_ceiling_cannot_prove_absence():
 
 
 @pytest.mark.asyncio
+async def test_proof_collection_preserves_legacy_sync_rows_and_page_count():
+    pages = {1: {'invoices': [{'id': 1}, {'id': 2}]},
+             2: {'invoices': [{'id': 1}, {'id': 2}]},
+             3: {'invoices': [{'id': 3}]}}
+    calls = []
+    async def fetch(page, **kwargs):
+        calls.append(page)
+        return pages[page]
+    legacy = await _paginate(fetch, page_size=2, max_pages=3,
+                             extract_keys=('invoices',))
+    assert calls == [1, 2, 3]
+    calls.clear()
+    evidence = {}
+    observed = await _paginate(fetch, page_size=2, max_pages=3,
+                               extract_keys=('invoices',), evidence=evidence)
+    assert calls == [1, 2, 3]
+    assert observed == legacy
+    assert evidence['complete'] is False
+
+
+@pytest.mark.asyncio
 async def test_complete_sync_records_evidence_but_partial_sync_invalidates_it():
     from mongomock_motor import AsyncMongoMockClient
     from integrations.qoyod.qoyod_invoices_sync import sync_qoyod_invoices

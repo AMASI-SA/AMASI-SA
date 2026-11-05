@@ -98,7 +98,8 @@ from integrations.qoyod.webhook_token_store import (
 )
 from integrations.qoyod.orders_owner import orders_owner_id
 from security_public_errors import public_error
-from security_sensitive_routes import require_qoyod_security_owner
+from security_sensitive_routes import require_qoyod_security_owner, require_security_owner
+from integrations.qoyod.header_summary import read_header_summary
 
 
 # MVP runs single-tenant; we still derive user_id from the auth layer
@@ -3872,6 +3873,13 @@ def make_qoyod_router(db, current_user) -> APIRouter:
 
 
     # ── طلبات لم تُرسل إلى قيود — READ-ONLY ────────────────────────
+    @router.get("/unsent-summary")
+    async def qoyod_unsent_summary(user: dict = Depends(current_user)):
+        actor = await require_security_owner(db, user)
+        return await read_header_summary(
+            db, user_id=_tenant_id(actor), orders_user_id=orders_owner_id(actor),
+        )
+
     @router.get("/unsent-orders")
     async def unsent_orders_endpoint(
         days: int = Query(30, ge=1, le=365),

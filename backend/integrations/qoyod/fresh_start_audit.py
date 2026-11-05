@@ -123,6 +123,7 @@ async def _paginate(
     """
     out: list = []
     seen_ids = set()
+    evidence_valid = True
     if evidence is not None:
         evidence["complete"] = False
     for page in range(1, max_pages + 1):
@@ -148,16 +149,16 @@ async def _paginate(
                    for item in items]
             if (not recognized or any(not value for value in ids)
                     or len(set(ids)) != len(ids) or seen_ids.intersection(ids)):
-                break
+                evidence_valid = False
             seen_ids.update(ids)
         if not items:
             if evidence is not None:
-                evidence["complete"] = True
+                evidence["complete"] = evidence_valid
             break
         out.extend(items)
         if len(items) < page_size:
             if evidence is not None:
-                evidence["complete"] = True
+                evidence["complete"] = evidence_valid
             break
         # 100ms cushion between pages — keeps us under most rate limits.
         await asyncio.sleep(0.1)

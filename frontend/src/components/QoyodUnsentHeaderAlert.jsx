@@ -2,13 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { WarningCircle } from "@phosphor-icons/react";
 
-import {
-    isQoyodRequestAbort,
-    loadQoyodUnsentOrders,
-} from "../lib/qoyodUnsentOrdersClient";
+import api from "../lib/api";
+import { useOptionalAuth } from "../context/AuthContext";
 
-const QOYOD_SYNC_START_DATE = "2026-07-01";
-const REFRESH_INTERVAL_MS = 60_000;
+const REFRESH_INTERVAL_MS = 300_000;
 
 export function eligibleQoyodUnsentCount(payload, now = Date.now()) {
     const evidence = payload?.invoice_presence;
@@ -20,24 +17,20 @@ export function eligibleQoyodUnsentCount(payload, now = Date.now()) {
 }
 
 export default function QoyodUnsentHeaderAlert() {
+    const owner = useOptionalAuth()?.user?.role === "owner";
     const [payload, setPayload] = useState(null);
     const count = eligibleQoyodUnsentCount(payload);
 
     const refresh = useCallback(async (signal) => {
         try {
-            const payload = await loadQoyodUnsentOrders(
-                {
-                    from_date: QOYOD_SYNC_START_DATE,
-                    limit: 5000,
-                    status: "verified_absent",
-                },
-                { signal },
+            const { data: payload } = await api.get(
+                "/integrations/qoyod/unsent-summary", { signal },
             );
             if (!signal.aborted) {
                 setPayload(payload);
             }
         } catch (error) {
-            if (isQoyodRequestAbort(error)) return;
+            if (signal.aborted) return;
             // This owner-only check must never break the store header.
             // Never retain a numeric claim when the refresh fails.
             setPayload(null);
@@ -45,10 +38,11 @@ export default function QoyodUnsentHeaderAlert() {
     }, []);
 
     useEffect(() => {
+        if (!owner) { setPayload(null); return; }
         let running = false;
         let controller = null;
         const run = async () => {
-            if (running) return;
+            if (running || document.visibilityState !== "visible") return;
             running = true;
             controller = new AbortController();
             try {
@@ -63,8 +57,9 @@ export default function QoyodUnsentHeaderAlert() {
             window.clearInterval(timer);
             controller?.abort();
         };
-    }, [refresh]);
+    }, [owner, refresh]);
 
+    if (!owner) return null;
     if (count === 0 && !payload?.invoice_presence?.verification_required) return null;
 
     return (
