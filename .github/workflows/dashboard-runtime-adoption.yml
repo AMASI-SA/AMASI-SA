@@ -123,6 +123,8 @@ jobs:
           tests/test_dashboard_runtime_authority_read_contract.py
           tests/test_dashboard_runtime_reducers.py
           tests/test_dashboard_v2_product_cost.py
+          tests/test_report_option_identity.py
+          tests/test_report_raw_option_recovery.py
           tests/test_dashboard_v2_arabic_status_normalization.py
           tests/test_dashboard_v2_salla_ads_executive.py
           tests/test_dashboard_v2_ad_account_costs.py

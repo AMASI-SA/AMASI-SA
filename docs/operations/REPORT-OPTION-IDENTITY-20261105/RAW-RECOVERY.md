@@ -63,3 +63,6 @@ Do not mutate shared/app or start release rehearsal until its owner closes it.
 Next: exact candidate CI, governed A/B source build/intent, clean-clone rehearsal,
 authorized merge/publish and live completeness validation. Never claim all costs
 complete from synthetic tests. Costs/prices have not been changed.
+
+The existing Dashboard runtime adoption CI now explicitly runs both identity and
+raw-recovery regression files; no existing reference/read/security gate removed.
