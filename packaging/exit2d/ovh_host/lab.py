@@ -38,7 +38,7 @@ def main():
         admin = container('admin', net, image); outsider = container('outsider', net, image)
         rip = address(router, net); bip = address(backend, backnet)
         time.sleep(2)
-        nat = 'table ip lab_nat { chain pre { type nat hook prerouting priority -100; tcp dport 18080 dnat to ' + bip + ':10000; } chain post { type nat hook postrouting priority 100; masquerade; } }'
+        nat = 'table ip lab_nat {\n chain pre {\n type nat hook prerouting priority -100;\n tcp dport 18080 dnat to ' + bip + ':10000\n }\n chain post {\n type nat hook postrouting priority 100;\n masquerade\n }\n}\n'
         docker('exec', '-i', router, 'nft', '-f', '-', input=nat.encode())
         if not curl(outsider, 'http://' + rip + ':18080'):
             raise ValueError('DNAT baseline not reachable; firewall assertion would be invalid')
