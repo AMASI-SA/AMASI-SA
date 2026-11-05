@@ -1,3 +1,7 @@
+CURRENT FINAL: 315 passed,20 subtests,0 skipped/failed,174.74s,exit0. All36 real-Mongo integration cases executed; none inapplicable. See REAL-MONGO-REPORT.md and final-real-mongo-regression.txt/xml.
+
+HISTORICAL SNAPSHOT: the initial no-push / 36-skipped result below is superseded by REAL-MONGO-REPORT.md and final-real-mongo-regression.txt/xml. Current work is published in draft PR #1776; no production PR merge or deployment.
+
 Recorded at UTC: 2026-11-05T21:01:58.393267+00:00
 Base: 4b336e2a8bb8288dae50505e8eca33147744f441 (#1773).
 No commit, push, production merge, deployment, live DB mutation or provider transaction.

@@ -1,24 +1,7 @@
-.........F.............................................................. [ 23%]
-........................................................................ [ 46%]
-........................................................................ [ 69%]
-................................................................................................                             [100%]
-================================== FAILURES ===================================
-_____ test_indexed_invoice_lookup_preserves_proof_and_avoids_history_scan _____
-tests\test_qoyod_real_mongo.py:283: in test_indexed_invoice_lookup_preserves_proof_and_avoids_history_scan
-    assert '\ufffd' not in json.dumps({k: v for k, v in plan.items() if k != 'serverInfo'}, ensure_ascii=False)
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\json\__init__.py:242: in dumps
-    **kw).encode(obj)
-          ^^^^^^^^^^^
-C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\json\encoder.py:202: in encode
-    chunks = self.iterencode(o, _one_shot=True)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\json\encoder.py:263: in iterencode
-    return _iterencode(o, 0)
-           ^^^^^^^^^^^^^^^^^
-C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\json\encoder.py:182: in default
-    raise TypeError(f'Object of type {o.__class__.__name__} '
-E   TypeError: Object of type Timestamp is not JSON serializable
+........................................................................ [ 22%]
+........................................................................ [ 45%]
+........................................................................ [ 68%]
+...................................................................................................                          [100%]
 ============================== warnings summary ===============================
 tests/test_qoyod_scheduled_incremental.py::test_http_display_never_starts_scan_and_native_employee_cannot_refresh
 tests/test_qoyod_header_summary.py::test_http_summary_denies_employee_actor_and_owner_uses_only_small_reads
@@ -31,4 +14,4 @@ tests/test_qoyod_header_summary.py::test_http_summary_denies_employee_actor_and_
     sort_dir: str = Query("desc", regex="^(asc|desc)$"),
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-1 failed, 311 passed, 4 warnings, 20 subtests passed in 108.23s (0:01:48)
+315 passed, 4 warnings, 20 subtests passed in 174.74s (0:02:54)

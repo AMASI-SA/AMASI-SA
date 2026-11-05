@@ -295,3 +295,39 @@ async def test_indexed_invoice_lookup_preserves_proof_and_avoids_history_scan(re
             'returned': plan['executionStats']['nReturned'],
             'diagnostic_host_omitted': True,
         }, indent=2) + '\n', encoding='utf-8')
+
+
+@pytest.mark.asyncio
+async def test_real_sender_success_then_retry_creates_only_one_invoice(real_db, monkeypatch):
+    from cryptography.fernet import Fernet
+    from unittest.mock import AsyncMock
+    import httpx
+    from tests.test_qoyod_manual_send_plan_b import test_send_happy_path_creates_invoice_and_payment
+    db, _ = real_db
+    monkeypatch.setenv('QOYOD_TOKEN_ENC_KEY', Fernet.generate_key().decode())
+    monkeypatch.setenv('QOYOD_API_BASE', 'https://qoyod.invalid/2.0')
+    monkeypatch.setattr(httpx.AsyncClient, 'request', AsyncMock(side_effect=AssertionError('unexpected real transport')))
+    # Reuse the public sender test with REAL storage/locks. Its provider
+    # transport alone is synthetic; it asserts one invoice/payment and blocks
+    # the second call with already_sent before another provider request.
+    await test_send_happy_path_creates_invoice_and_payment(db)
+    lock = await db.qoyod_manual_send_locks.find_one({'order_number': 'A200'})
+    assert lock['status'] == 'succeeded'
+    assert await db.qoyod_invoices.count_documents({'reference': 'A200'}) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('actor', ['manual-ui', 'auto-plan-b:real-test'])
+async def test_real_sender_unknown_reference_never_creates_invoice(real_db, monkeypatch, actor):
+    from tests import test_qoyod_manual_send_plan_b as sender_tests
+    db, _ = real_db
+    original_seed = sender_tests._seed_settings
+    async def seed_with_old_display(inner, **kwargs):
+        await original_seed(inner, **kwargs)
+        await inner.qoyod_settings.update_one({'user_id': 'main'}, {'$set': {'last_successful_scan_summary': {
+            'count': 0, 'complete': True, 'orders_user_id': 'main',
+            'verified_at': '2026-07-01T00:00:00+00:00', 'expires_at': '2026-07-01T00:15:00+00:00'}}})
+    monkeypatch.setattr(sender_tests, '_seed_settings', seed_with_old_display)
+    await sender_tests.test_unknown_qoyod_reference_lookup_never_reaches_a_write(db, monkeypatch, 503, actor)
+    assert await db.qoyod_invoices.count_documents({}) == 0
+    assert (await db.qoyod_manual_send_locks.find_one({}))['status'] == 'failed'

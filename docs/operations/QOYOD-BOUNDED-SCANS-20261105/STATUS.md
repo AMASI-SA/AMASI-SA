@@ -82,3 +82,8 @@ The bounded worker lookup now uses only the three invoice-reference forms alread
 A combined invocation covered312 backend cases:311 passed; one diagnostic assertion failed only because BSON Timestamp metadata could not be JSON-encoded. The diagnostic assertion was corrected without weakening application codecs; its focused rerun passed. Primary timing will use no profiling. Earlier exploratory profiler files remain explicitly labeled and are not the primary timing evidence.
 
 Current remote checkpoint before this milestone: afaf78ba60f8df120420b6cd8281d2f98c372b91. Next: serial paired real-Mongo baseline/candidate timing at1000 and5000 orders, then final full regression and remote report. No merge or production change.
+
+
+## Final real-Mongo review checkpoint — 2026-11-05 22:02 UTC
+
+Source under test: c4830c7adbd882ac2b931d348481cc05d579d379; baseline ae2fe9ce01c003ff139e22dd54f4641be48c8e38. Final integrated run: 315 passed,20 subtests,0 skipped/failed in174.74s,exit0. Includes all36 formerly skipped cases (none inapplicable),13 real-Mongo worker/sender cases. Four existing FastAPI regex deprecation warnings. REAL-MONGO-REPORT.md is the current Arabic handoff; mongo-paired-results.json holds20 primary unprofiled measurements and mongo-comparison.json holds ranges/medians. Historical snapshots above and VALIDATION.txt are superseded where noted. PR1776 remains draft; no production PR merge/deployment. Issue1006 is comment-limit blocked, so this PR is the continuation ledger. Remaining: human review, pending CI, production baseline/employee latency and server resource measurements before claiming live improvement.
