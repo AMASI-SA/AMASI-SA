@@ -6,6 +6,9 @@ on:
     paths:
       - "backend/shipping_pending_snapshot_recovery.py"
       - "backend/component_catalog_label_recovery.py"
+      - "backend/component_zero_price_recovery.py"
+      - "backend/tests/test_component_zero_price_recovery.py"
+      - "scripts/audit_pending_reviewed_products.py"
       - "backend/assembly_option_change_notice.py"
       - "backend/tests/test_assembly_option_change_notice.py"
       - "backend/tests/test_shipping_catalog_label_recovery.py"
@@ -151,6 +154,7 @@ jobs:
           tests/test_review_gift_address.py
           tests/test_review_acceptance_config_guard.py
           tests/test_g47_component_lifecycle_integration.py
+          tests/test_component_zero_price_recovery.py
           tests/test_order_review_stage_one.py
           tests/test_order_review_export_controls.py
           tests/test_order_review_mobile_app_permissions.py

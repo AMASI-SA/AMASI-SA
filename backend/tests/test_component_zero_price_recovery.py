@@ -1,5 +1,7 @@
 """Source refresh regression, using real Mongo owner transactions and catalogue."""
 from copy import deepcopy
+import importlib.util
+from pathlib import Path
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -136,8 +138,11 @@ class ZeroPriceCurrencyTests(fixture.ComponentRouteTests):
         self.assertTrue(preview["eligible_for_revalidation"])
         self.assertEqual(preview["reason"], "zero_option_price_currency_only")
         self.assertEqual(await self.db.unified_orders.find_one(selector), source)
-        from scripts.audit_pending_reviewed_products import audit
-        report = await audit(self.db, "owner")
+        path = Path(__file__).resolve().parents[2] / "scripts" / "audit_pending_reviewed_products.py"
+        spec = importlib.util.spec_from_file_location("pending_reviewed_audit", path)
+        audit_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(audit_module)
+        report = await audit_module.audit(self.db, "owner")
         self.assertEqual(report["proven_zero_price_currency_orders"], 1)
         self.assertEqual(report["proven_remaining_supplier_units"], 1)
         self.assertEqual(await self.db.unified_orders.find_one(selector), source)
