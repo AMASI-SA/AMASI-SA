@@ -448,6 +448,18 @@ async def ensure_qoyod_indexes(db) -> None:
     auditing trivial. Each index has a `name=` so future migrations
     can target them precisely.
     """
+    await db.qoyod_order_followup.create_index(
+        [('user_id', 1), ('order_number', 1)], unique=True,
+        name='qoyod_followup_owner_order',
+    )
+    await db.qoyod_order_followup.create_index(
+        [('user_id', 1), ('priority', 1), ('next_check_at', 1), ('order_number', 1)],
+        name='qoyod_followup_due',
+    )
+    await db.qoyod_scan_views.create_index(
+        [('tenant', 1), ('generation', 1), ('offset', 1)],
+        unique=True, name='qoyod_scan_view_generation',
+    )
     # --- qoyod_settings ---
     await db.qoyod_settings.create_index(
         [("user_id", pymongo.ASCENDING)],

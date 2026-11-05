@@ -62,17 +62,11 @@ async def _load_candidate_rows_oldest_first(
     orders_user_id: str,
     batch_limit: int,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    await _seed_retry_schedule(db)
-    snapshot = await build_candidate_audit(
-        db,
-        orders_user_id=str(orders_user_id),
-        markers_user_id=_TENANT,
-        marker_user_ids=(_TENANT, str(orders_user_id)),
-        from_date=QOYOD_SYNC_START_DATE,
-        lightweight=True,
-        scope_unified_to_date_range=True,
-        include_inbox_evidence=False,
-    )
+    from .incremental import discover, SEND_BATCH
+    snapshot = await discover(db, orders_user_id, build_candidate_audit)
+    if snapshot['discovery']['recovered']:
+        await _seed_retry_schedule(db)
+    batch_limit = max(1, min(int(batch_limit), SEND_BATCH))
     all_candidates = sorted(
         (
             row for row in (snapshot.get("orders") or [])
@@ -102,9 +96,21 @@ async def _load_candidate_rows_oldest_first(
         for pending_status in pending_statuses
     ]
 
+    live_refs = {row['order_number'] for row in snapshot['_pending_followup'] if row['priority'] == 0}
+    # Reserve send slots too: neither a historical backlog nor continuous
+    # intake may monopolize the worker. Final guards apply to both lanes.
+    live = [row for row in runnable_candidates if row['order_number'] in live_refs]
+    recovery = [row for row in runnable_candidates if row['order_number'] not in live_refs]
+    eligible = lambda row: any(auto_send_module._pending_row_matches_status(row, status) for status in pending_statuses)
+    live = [row for row in live if eligible(row)]
+    recovery = [row for row in recovery if eligible(row)]
+    recovery_slots = min(2, len(recovery), max(0, batch_limit - 1)) if live else batch_limit
+    preferred = live[:batch_limit - recovery_slots] + recovery[:recovery_slots]
+    preferred_refs = {row['order_number'] for row in preferred}
+    ordered = preferred + [row for row in live + recovery if row['order_number'] not in preferred_refs]
     candidates: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for row in runnable_candidates:
+    for row in ordered:
         if not any(
             auto_send_module._pending_row_matches_status(row, pending_status)
             for pending_status in pending_statuses
@@ -118,6 +124,9 @@ async def _load_candidate_rows_oldest_first(
         if len(candidates) >= max(1, int(batch_limit)):
             break
 
+    from .incremental import defer_selected
+    await defer_selected(db, orders_user_id, snapshot['_pending_followup'],
+                         {row['order_number'] for row in candidates} | quarantined)
     authoritative_status_counts = {
         API_STATUS_TO_KEY[pending_status]: sum(
             auto_send_module._pending_row_matches_status(row, pending_status)
@@ -135,7 +144,9 @@ async def _load_candidate_rows_oldest_first(
         or (snapshot.get("reference_hashes") or {}).get("worker_candidates")
     )
     return candidates, {
-        "authoritative_backlog_count": len(all_candidates),
+        "authoritative_backlog_count": None,
+        "counts_scope": "incremental_window",
+        "discovery": snapshot['discovery'],
         "runnable_candidate_count": len(runnable_candidates),
         "open_quarantined_candidate_count": max(
             0, len(all_candidates) - len(runnable_candidates)

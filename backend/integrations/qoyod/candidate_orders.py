@@ -14,6 +14,7 @@ Run without risking a Qoyod or Mongo write.
 from __future__ import annotations
 
 import hashlib
+import asyncio
 import json
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -50,17 +51,28 @@ def _bounded_cursor(
     scan_limit: int,
     batch_size: int = CANDIDATE_AUDIT_BATCH_SIZE,
     max_time_ms: int = CANDIDATE_AUDIT_MAX_TIME_MS,
+    full_scan: bool = False,
 ) -> Any:
     """Apply Motor/PyMongo bounds while remaining compatible with test fakes."""
-    for method_name, value in (
-        ("batch_size", max(1, int(batch_size))),
-        ("max_time_ms", max(1, int(max_time_ms))),
-        ("limit", max(1, int(scan_limit)) + 1),
-    ):
+    bounds = [("batch_size", max(1, int(batch_size))),
+              ("max_time_ms", max(1, int(max_time_ms)))]
+    if not full_scan:
+        bounds.append(("limit", max(1, int(scan_limit)) + 1))
+    for method_name, value in bounds:
         method = getattr(cursor, method_name, None)
         if callable(method):
             cursor = method(value)
     return cursor
+
+async def _audit_checkpoint(scanned, *, full_scan):
+    if scanned % CANDIDATE_AUDIT_BATCH_SIZE == 0:
+        await asyncio.sleep(0)
+    if full_scan and scanned % 1000 == 0:
+        from resource_governor import governor, ResourcePressure
+        decision, _ = governor.peek()
+        if decision in {'blocked', 'cancel'}:
+            raise ResourcePressure('resource_pressure')
+
 
 # Candidate visibility and automated financial-write authorization are
 # deliberately separate. This worker-only flag is absent/false on existing
@@ -540,6 +552,8 @@ async def load_unified_candidates(
     scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
     lightweight: bool = False,
     scope_to_date_range: bool = False,
+    order_numbers: Optional[Iterable[str]] = None,
+    full_scan: bool = False,
 ) -> dict[str, Any]:
     """Load the authoritative eligible set keyed by Salla order number."""
     # Full report/reconciliation callers intentionally do not pre-filter on
@@ -548,6 +562,8 @@ async def load_unified_candidates(
     # The automatic sender opts into a padded Mongo superset below because it
     # only needs actionable rows inside the configured sending window.
     query: dict[str, Any] = {"user_id": str(orders_user_id)}
+    if order_numbers is not None:
+        query['order_number'] = {'$in': list(order_numbers)}
     if search and str(search).strip():
         import re
         query["order_number"] = {
@@ -625,7 +641,7 @@ async def load_unified_candidates(
 
     scan_limit = max(1, int(scan_limit))
     cursor = db.unified_orders.find(query, projection).sort("order_date", -1)
-    cursor = _bounded_cursor(cursor, scan_limit=scan_limit)
+    cursor = _bounded_cursor(cursor, scan_limit=scan_limit, full_scan=full_scan)
     candidates: dict[str, dict[str, Any]] = {}
     excluded: dict[str, int] = {
         "missing_order_number": 0,
@@ -640,7 +656,8 @@ async def load_unified_candidates(
     scan_truncated = False
     async for row in cursor:
         scanned += 1
-        if scanned > scan_limit:
+        await _audit_checkpoint(scanned, full_scan=full_scan)
+        if not full_scan and scanned > scan_limit:
             scan_truncated = True
             break
         order_number = str(row.get("order_number") or "").strip()
@@ -687,7 +704,7 @@ async def load_unified_candidates(
     return {
         "by_reference": candidates,
         "references": set(candidates),
-        "scanned": min(scanned, scan_limit),
+        "scanned": (scanned if full_scan else min(scanned, scan_limit)),
         "observed_rows": scanned,
         "scan_limit": scan_limit,
         "scan_truncated": scan_truncated,
@@ -702,6 +719,7 @@ async def load_inbox_evidence(
     marker_user_ids: Iterable[str],
     order_numbers: Optional[Iterable[str]] = None,
     scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
+    full_scan: bool = False,
 ) -> dict[str, Any]:
     """Stream bounded marker evidence without retaining every inbox event."""
     references = (
@@ -761,7 +779,7 @@ async def load_inbox_evidence(
     cursor = db.integration_inbox.find(query, projection).sort(
         "received_at", -1
     )
-    cursor = _bounded_cursor(cursor, scan_limit=scan_limit)
+    cursor = _bounded_cursor(cursor, scan_limit=scan_limit, full_scan=full_scan)
     newest: dict[str, dict[str, Any]] = {}
     markers: dict[str, dict[str, Any]] = {}
     event_counts: dict[str, int] = {}
@@ -779,7 +797,8 @@ async def load_inbox_evidence(
     scan_truncated = False
     async for row in cursor:
         scanned += 1
-        if scanned > scan_limit:
+        await _audit_checkpoint(scanned, full_scan=full_scan)
+        if not full_scan and scanned > scan_limit:
             scan_truncated = True
             break
         reference = str(row.get("salla_order_number") or "").strip()
@@ -800,7 +819,7 @@ async def load_inbox_evidence(
         "markers": markers,
         "event_counts": event_counts,
         "owners_by_reference": owners,
-        "scanned_rows": min(scanned, scan_limit),
+        "scanned_rows": (scanned if full_scan else min(scanned, scan_limit)),
         "observed_rows": scanned,
         "scan_limit": scan_limit,
         "scan_truncated": scan_truncated,
@@ -813,6 +832,7 @@ async def load_qoyod_reference_evidence(
     markers_user_id: str,
     order_numbers: Optional[Iterable[str]],
     scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
+    full_scan: bool = False,
 ) -> dict[str, Any]:
     """Load bounded real local Qoyod invoices grouped by exact reference."""
     references = (
@@ -872,14 +892,15 @@ async def load_qoyod_reference_evidence(
     cursor = db.qoyod_invoices.find(query, projection).sort(
         [("issue_date", -1), ("created_at", -1)]
     )
-    cursor = _bounded_cursor(cursor, scan_limit=scan_limit)
+    cursor = _bounded_cursor(cursor, scan_limit=scan_limit, full_scan=full_scan)
     by_reference: dict[str, list[dict[str, Any]]] = {}
     unreferenced: list[dict[str, Any]] = []
     scanned = 0
     scan_truncated = False
     async for row in cursor:
         scanned += 1
-        if scanned > scan_limit:
+        await _audit_checkpoint(scanned, full_scan=full_scan)
+        if not full_scan and scanned > scan_limit:
             scan_truncated = True
             break
         if not real_invoice_id(row.get("qoyod_invoice_id")):
@@ -901,7 +922,7 @@ async def load_qoyod_reference_evidence(
             reference: rows for reference, rows in by_reference.items()
             if len(rows) > 1
         },
-        "scanned_rows": min(scanned, scan_limit),
+        "scanned_rows": (scanned if full_scan else min(scanned, scan_limit)),
         "observed_rows": scanned,
         "scan_limit": scan_limit,
         "scan_truncated": scan_truncated,
@@ -932,6 +953,8 @@ async def build_candidate_audit(
     require_complete: bool = True,
     scope_unified_to_date_range: bool = False,
     include_inbox_evidence: bool = True,
+    order_numbers: Optional[Iterable[str]] = None,
+    full_scan: bool = False,
 ) -> dict[str, Any]:
     """Build exact eligible/sent/unsent reference sets and per-order proof."""
     captured = now or datetime.now(timezone.utc)
@@ -949,6 +972,8 @@ async def build_candidate_audit(
         scan_limit=scan_limit,
         lightweight=lightweight,
         scope_to_date_range=scope_unified_to_date_range,
+        order_numbers=order_numbers,
+        full_scan=full_scan,
     )
     eligible_refs: set[str] = set(unified["references"])
     evidence_owners = list(marker_user_ids or (
@@ -963,12 +988,14 @@ async def build_candidate_audit(
             else (None if include_inbox_evidence else ())
         ),
         scan_limit=scan_limit,
+        full_scan=full_scan,
     )
     invoices = await load_qoyod_reference_evidence(
         db,
         markers_user_id=str(markers_user_id),
-        order_numbers=eligible_refs if lightweight else None,
+        order_numbers=eligible_refs if lightweight and not full_scan else None,
         scan_limit=scan_limit,
+        full_scan=full_scan,
     )
     scan_metadata = {
         "scan_truncated": bool(
@@ -976,7 +1003,7 @@ async def build_candidate_audit(
             or inbox["scan_truncated"]
             or invoices["scan_truncated"]
         ),
-        "scan_limit": max(1, int(scan_limit)),
+        "scan_limit": None if full_scan else max(1, int(scan_limit)),
         "scanned_rows": {
             "unified_orders": unified["scanned"],
             "integration_inbox": inbox["scanned_rows"],
@@ -994,7 +1021,8 @@ async def build_candidate_audit(
     qoyod_only_refs = invoice_refs - eligible_refs
 
     rows: list[dict[str, Any]] = []
-    for reference, order in unified["by_reference"].items():
+    for position, (reference, order) in enumerate(unified["by_reference"].items(), 1):
+        await _audit_checkpoint(position, full_scan=full_scan)
         inbox_row = inbox["newest"].get(reference)
         inbox_markers = inbox["markers"].get(reference, {})
         inbox_rows = [inbox_markers] if inbox_markers else []
@@ -1139,6 +1167,7 @@ async def build_candidate_audit(
         "qoyod_only_references": qoyod_only_refs,
         "by_reference": by_reference,
         "orders": rows,
+        "_invoice_evidence": invoices,
         "counts": {
             "scanned_unified_orders": unified["scanned"],
             "eligible_unified_orders": len(eligible_refs),

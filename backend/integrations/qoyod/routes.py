@@ -3891,20 +3891,11 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         search: Optional[str] = Query(None),
         user=Depends(current_user),
     ):
-        from integrations.qoyod.unsent_orders import list_unsent_orders
-
-        tenant = _tenant_id(user)
-        return await list_unsent_orders(
-            db,
-            user_id=tenant,
-            orders_user_id=orders_owner_id(user),
-            days=days,
-            limit=limit,
-            status=status,
-            salla_status=salla_status,
-            search=search,
-            from_date=from_date,
-            to_date=to_date,
+        from integrations.qoyod.scheduled_scan import read_unsent_view
+        return await read_unsent_view(
+            db, tenant=_tenant_id(user), owner=orders_owner_id(user),
+            days=days, limit=limit, status=status, salla_status=salla_status,
+            search=search, from_date=from_date, to_date=to_date,
         )
 
     # ── تقرير المطابقة ميزان ↔ قيود — READ-ONLY ─────────────────────
@@ -3913,8 +3904,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         sync_first: bool = Query(
             False,
             description=(
-                "If true, fetch invoices from Qoyod into the local "
-                "qoyod_invoices table before comparison."
+                "Deprecated: display reads never refresh; use reconciliation-refresh."
             ),
         ),
         from_date: Optional[str] = Query(None),
@@ -3922,97 +3912,21 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         user=Depends(current_user),
     ):
         user = await require_qoyod_security_owner(db, user)
-        tenant = _tenant_id(user)
-        sync_summary: dict = {"ran": False}
+        from integrations.qoyod.scheduled_scan import read_scan
+        result = await read_scan(db, tenant=_tenant_id(user), owner=orders_owner_id(user))
+        report = result.pop('report') or {'ok': True, 'counts': {}, 'rows': []}
+        # GET only displays the last published generation. Refresh is explicit
+        # and shares the scheduler's distributed lease across every replica.
+        return {**report, 'scan': result['scan']}
 
-        if sync_first:
-            try:
-                key = await get_api_key(db, tenant)
-                if not key:
-                    return {
-                        "ok": False,
-                        "error": (
-                            "لم يتم ضبط API key لقيود. أضف المفتاح من "
-                            "إعدادات قيود قبل تشغيل المطابقة."
-                        ),
-                        "sync_summary": {
-                            "ran": True,
-                            "ok": False,
-                            "error": "no_credentials",
-                        },
-                        "counts": {},
-                        "rows": [],
-                    }
-
-                from integrations.qoyod.qoyod_invoices_sync import (
-                    sync_qoyod_invoices,
-                )
-
-                api_client = await _build_qoyod_client_for(
-                    db, tenant, key
-                )
-                sync_summary = await sync_qoyod_invoices(
-                    db,
-                    user_id=tenant,
-                    api_client=api_client,
-                    from_date=(date.fromisoformat(from_date)
-                               if from_date else None),
-                )
-                sync_summary = _public_sync_summary(sync_summary)
-                sync_summary["ran"] = True
-
-            except Exception as exc:
-                logger.exception("Qoyod reconciliation sync failed")
-                return {
-                    "ok": False,
-                    "error": public_error("provider_operation_failed"),
-                    "sync_summary": {
-                        "ran": True,
-                        "ok": False,
-                        "error": public_error("provider_operation_failed"),
-                    },
-                    "counts": {},
-                    "rows": [],
-                }
-
-            if not sync_summary.get("ok"):
-                return {
-                    "ok": False,
-                    "error": (
-                        "فشل جلب فواتير قيود؛ لم تُنفذ المطابقة "
-                        "على بيانات محلية قديمة."
-                    ),
-                    "sync_summary": sync_summary,
-                    "counts": {},
-                    "rows": [],
-                }
-
-        try:
-            from integrations.qoyod.reconciliation_v2 import (
-                run_reconciliation_v2,
-            )
-
-            report = await run_reconciliation_v2(
-                db,
-                orders_user_id=orders_owner_id(user),
-                markers_user_id=tenant,
-                from_date=from_date,
-                to_date=to_date,
-            )
-        except Exception as exc:
-            logger.exception("Qoyod reconciliation report failed")
-            return {
-                "ok": False,
-                "error": public_error("diagnostic_failed"),
-                "sync_summary": sync_summary,
-                "counts": {},
-                "rows": [],
-            }
-
-        report = _public_reconciliation(report)
-        report["sync_summary"] = sync_summary
-
-        return report
+    @router.post("/reconciliation-refresh")
+    async def reconciliation_refresh_endpoint(user=Depends(current_user)):
+        user = await require_qoyod_security_owner(db, user)
+        from integrations.qoyod.scheduled_scan import request_scan
+        result = await request_scan(db, tenant=_tenant_id(user),
+                                    owner=orders_owner_id(user), manual=True)
+        report = result.pop('report') or {'ok': True, 'counts': {}, 'rows': []}
+        return {**report, 'scan': result['scan'], 'accepted': result['accepted']}
 
     # ── Iter-294 — Global Qoyod Production Write Lock report ────────
     # Read-only audit endpoint. Shows every write attempt that was

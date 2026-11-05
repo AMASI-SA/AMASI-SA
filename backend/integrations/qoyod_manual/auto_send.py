@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -502,6 +503,24 @@ async def _release_lease(db, owner: Optional[str]) -> None:
         logger.exception("Plan-B auto-send lease release failed")
 
 
+async def _lease_is_current(db, owner):
+    try:
+        return bool(await db.qoyod_manual_auto_worker_leases.find_one(
+            {'_id': _TENANT, 'owner': owner, 'lease_until': {'$gt': _now()}}, {'_id': 1}))
+    except Exception:
+        return False  # Unknown ownership may not start another financial send.
+
+
+async def _renew_worker_lease(db, owner):
+    while True:
+        await asyncio.sleep(10)
+        result = await db.qoyod_manual_auto_worker_leases.update_one(
+            {'_id': _TENANT, 'owner': owner, 'lease_until': {'$gt': _now()}},
+            {'$set': {'lease_until': _now() + timedelta(seconds=45)}})
+        if not result.matched_count:
+            return
+
+
 _LIVE_STATUS_NATIVE_BY_SLUG = {
     "completed": frozenset({"", "completed", "تم التنفيذ", "تم التجهيز"}),
     "in_delivery": frozenset({
@@ -877,6 +896,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         return result
 
     client_scope_token = None
+    lease_heartbeat = asyncio.create_task(_renew_worker_lease(db, owner))
     try:
         # Re-read after the lease. A save/disable may have happened while the
         # worker was waiting.
@@ -927,7 +947,11 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         # one complete Qoyod invoice-reference snapshot) for this batch only.
         client_scope_token = begin_shared_manual_qoyod_client()
         results: list[dict[str, Any]] = []
+        lease_lost = False
         for row in candidates:
+            if not await _lease_is_current(db, owner):
+                lease_lost = True
+                break
             order_number = str(row["order_number"])
             try:
                 still_eligible, refresh = await _refresh_and_verify_salla_status(
@@ -944,6 +968,9 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                             or snapshot.get("status_slug"),
                     })
                     continue
+                if not await _lease_is_current(db, owner):
+                    lease_lost = True
+                    break
                 payload = await manual_send_one(
                     db,
                     user_id=_TENANT,
@@ -1086,9 +1113,9 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         result = {
             "ok": True,
             "status": (
-                "credentials_paused"
-                if credential_paused_count
-                else "succeeded"
+                "lease_lost" if lease_lost else (
+                    "credentials_paused" if credential_paused_count else "succeeded"
+                )
             ),
             "run_id": run_id,
             "sent_count": sent_count,
@@ -1134,6 +1161,9 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         return result
     finally:
         _LAST_RUN_AT = _now()
+        lease_heartbeat.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await lease_heartbeat
         if client_scope_token is not None:
             end_shared_manual_qoyod_client(client_scope_token)
         await _release_lease(db, owner)
