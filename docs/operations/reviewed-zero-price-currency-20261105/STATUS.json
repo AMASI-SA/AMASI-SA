@@ -1,7 +1,7 @@
 {
   "task": "reviewed-zero-price-currency-20261105",
   "branch": "codex/reviewed-products-postdeploy-20261105",
-  "state": "published-live-identity-confirmed-final-verification-unobserved",
+  "state": "published-verified-four-historic-snapshots-recovered",
   "production_changed": true,
   "source_git_sha": "de938624f6bb3ea5188543753b5ce665f3d27b38",
   "intent_commit": "faaba4e1f1f6eb15e6a951d8fa1cd2936f6ed638",
@@ -28,27 +28,30 @@
       "frontend_build_verified": true,
       "source_and_release_match": true
     },
-    "three_round_guard": "started on shared Terminal3, final result not yet observed",
+    "three_round_guard": "PASS verified=true checks=3 exit=0; exact source/deployment/release; Terminal3 result observed",
     "guard_log": "/tmp/reviewed-products-1773-verify.json",
-    "lease": "own prepared lease; do not assume closed until status observed"
+    "lease": "closed; final guard status active=false"
   },
   "recovery": {
     "predeploy_active_local_review_candidates": 4,
     "confirmed_missing_supplier_orders": 2,
     "confirmed_missing_supplier_units": 2,
-    "first_order_refresh": "clicked existing Refresh from Salla UI; server result and lifecycle audit not yet observed",
-    "other_three_refreshes": "not started",
+    "first_order_refresh": "successful; lifecycle currency-only audit present; fur visible in reviewed remaining-products catalogue",
+    "other_three_refreshes": "successful through existing Refresh from Salla UI; all four lifecycle records show zero_option_price_currency_only with original approved fingerprint lineage",
     "no_salla_status_writes": true,
-    "no_allocation_writes": true
+    "no_allocation_writes": true,
+    "previously_assigned_shal": "committed immutable unit allocation links to a ready preparation batch with assigned responsible employee; correctly excluded from remaining-units catalogue; no reset",
+    "proven_zero_price_currency_orders": 4,
+    "recovered_orders": 4,
+    "source_component_pending_false": 4,
+    "remaining_blocked_in_original_candidate_set": 0,
+    "catalogue_observation": "First recovered fur is visible in user-provided live screenshot. Browser reviewed-products catalogue remained loading after one reload; remaining necklace card not independently observed. Source snapshots and lifecycle recovery verified for all four.",
+    "existing_assignment_verified": "Shal committed allocation points to ready preparation file with responsible employee; file and current allocation observed in production. Correctly absent from unallocated-unit catalogue. No allocation or custody reset.",
+    "no_direct_database_writes": true
   },
-  "blocker": "Cloud Browser exec-server transport disconnected, followed by2 transport timeouts, including documentation lookup. Not evidence of site failure or rejected credentials.",
+  "blocker": "No blocker to deployment or recovered source acceptance. Final browser catalogue smoke for second remaining unit limited by a long-running loading spinner.",
   "next_action": [
-    "Restore browser control without new sign-in unless required",
-    "Read Terminal3 existing verification completion; do not rerun successful publish or clear lease",
-    "If verify succeeded, observe active=false; if failed inspect reason and retry only own verify",
-    "Read first order lifecycle zero_price_currency_revalidation and source pending before retrying refresh",
-    "Recover remaining exact eligible candidates through existing central refresh, verify proof and reviewed product cards",
-    "Confirm existing allocations preserved and Salla statuses unchanged; report exact proven count"
+    "If user reports a missing unallocated card after catalogue loads, inspect current allocation ledger and source snapshot before changing any assignment. Do not repeat deployment or reset the existing shal allocation."
   ],
   "scope": "Zero-priced option currency-only source differences proved against immutable review snapshot and prior accepted component fingerprint",
   "unrelated_preserved": [
@@ -58,5 +61,5 @@
     "mezan-1711-intent-v5.json",
     "prepare_mezan_v5_operational_photo_courier.sh"
   ],
-  "updated_at_utc": "2026-11-05T20:36:00Z"
+  "updated_at_utc": "2026-11-05T21:02:22.328Z"
 }
