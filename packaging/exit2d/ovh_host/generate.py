@@ -44,8 +44,8 @@ def caddy(config, *, ci=False):
 ''' + domains + ''' {
 ''' + issuer + '''
     encode gzip
-    header X-Content-Type-Options nosniff
-    header Referrer-Policy same-origin
+    header >X-Content-Type-Options nosniff
+    header >Referrer-Policy same-origin
     reverse_proxy 127.0.0.1:10000 {
         header_up X-Forwarded-Proto https
         transport http {

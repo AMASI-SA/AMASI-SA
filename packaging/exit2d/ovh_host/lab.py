@@ -60,7 +60,7 @@ def main():
         # TLS reverse proxy has a private namespace and a local fixture upstream.
         tlsnet = network('tls')
         # Separate one-port JSON fixture so Caddy owns 80/443; no application claims.
-        server = "from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler;import json\nclass H(BaseHTTPRequestHandler):\n def do_GET(self):\n  b=json.dumps({'proto':self.headers.get('X-Forwarded-Proto')}).encode();self.send_response(200);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(b)\n def log_message(self,*a):pass\nThreadingHTTPServer(('0.0.0.0',10000),H).serve_forever()"
+        server = "from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler;import json\nclass H(BaseHTTPRequestHandler):\n def do_GET(self):\n  b=json.dumps({'proto':self.headers.get('X-Forwarded-Proto')}).encode();self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('X-Content-Type-Options','nosniff');self.end_headers();self.wfile.write(b)\n def log_message(self,*a):pass\nThreadingHTTPServer(('0.0.0.0',10000),H).serve_forever()"
         upstream = container('upstream', tlsnet, image, 'python', '-c', server)
         proxy = prefix+'caddy'; names.append(proxy)
         conf['hostname'] = 'staging.example.test'
@@ -71,8 +71,11 @@ def main():
         docker('exec', proxy, 'caddy', 'validate', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile')
         ca = docker('exec', proxy, 'cat', '/data/caddy/pki/authorities/local/root.crt').stdout
         docker('exec', '-i', upstream, 'sh', '-c', 'cat > /tmp/ca.crt', input=ca)
-        result = docker('exec', upstream, 'curl', '--fail', '--silent', '--cacert', '/tmp/ca.crt', 'https://127.0.0.1/').stdout
+        result = docker('exec', upstream, 'curl', '--fail', '--silent', '--dump-header', '/tmp/headers', '--cacert', '/tmp/ca.crt', 'https://127.0.0.1/').stdout
         if json.loads(result)['proto'] != 'https': raise ValueError('forwarded HTTPS header missing')
+        headers = docker('exec', upstream, 'cat', '/tmp/headers').stdout.decode().splitlines()
+        if [x.lower() for x in headers if x.lower().startswith('x-content-type-options:')] != ['x-content-type-options: nosniff']:
+            raise ValueError('security header absent or duplicated by reverse proxy')
         # Untrusted CA must fail; no TLS verify bypass is permitted.
         if curl(upstream, 'https://127.0.0.1/'):
             raise ValueError('untrusted test CA unexpectedly accepted')

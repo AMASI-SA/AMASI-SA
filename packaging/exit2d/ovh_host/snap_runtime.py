@@ -18,6 +18,7 @@ class Tokens:
 
 async def main(source, seconds):
     os.environ['MONGO_URL'] = Path('/run/secrets/mongo_uri').read_text().strip()
+    os.environ['JWT_SECRET'] = Path('/run/secrets/jwt_secret').read_text().strip()
     from independent_staging import validate
     if validate() != 'staging:'+source: raise ValueError('reviewed synthetic source required')
     import httpx
