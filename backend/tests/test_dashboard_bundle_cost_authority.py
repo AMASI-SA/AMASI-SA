@@ -572,3 +572,35 @@ async def test_current_estimate_is_opt_in_to_profitability_not_marketing_or_hist
     disabled = await read(CPUWorkBudget(5), current_profitability_estimate=False)
     assert disabled["calculation_cost_available"] is False
     assert disabled["cost_authority"] == "unresolved_snapshot"
+
+
+@pytest.mark.asyncio
+async def test_option_id_costs_agree_across_dashboard_executive_and_sold_products(db):
+    from tests.test_report_option_identity import PRODUCT, BINDING
+    await db[PRODUCTS].update_one({"salla_product_id": "plain"}, {"$set": deepcopy(PRODUCT)})
+    await db[COST_PROFILES].update_one({"salla_product_id": "plain"}, {"$set": {"base_cost": 15}})
+    await db[RESOURCES].insert_many([
+        {"user_id": OWNER, "id": "bag", "unit_cost": 1.2},
+        {"user_id": OWNER, "id": "emb", "unit_cost": 8},
+    ])
+    await db[BINDINGS].insert_one({**BINDING, "user_id": OWNER, "salla_product_id": "plain"})
+    await db[PRODUCT_RESOURCE_BINDINGS].insert_one({"id": "bag", "resource_id": "bag", "user_id": OWNER, "salla_product_id": "plain"})
+    orders = []
+    for index in range(21):
+        count = 4 if index == 19 else 5 if index == 20 else 1
+        lines = []
+        for position in range(count):
+            option = {"name": "Name embroidery" if 15 <= index < 19 else "تطريز الاسم",
+                      "values": [{"name": "Yes" if 15 <= index < 19 else "نعم"}]}
+            if count > 1:
+                option["id"] = f"checkout-row-{index}-{position}"
+            lines.append({**sale_line(f"line-{index}-{position}", product="plain"), "options": [option]})
+        orders.append(sale(f"order-{index}", *lines))
+    result = await build_mezan_v2_product_cost(ReadOnlyDB(db), OWNER, orders)
+    cooperative = await build_mezan_v2_product_cost_cooperative(ReadOnlyDB(db), OWNER, orders)
+    sold = await load_sold_products(ReadOnlyDB(db), OWNER, orders)
+    assert result == cooperative
+    assert result["total"] == result["product_profit_summary"]["total_cost"] == 677.6
+    assert result["incomplete_orders_count"] == 0
+    assert result["product_rows"][0]["units_sold"] == 28
+    assert sold[0]["total_cost"] == 677.6

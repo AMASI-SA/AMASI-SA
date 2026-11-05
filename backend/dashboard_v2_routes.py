@@ -130,6 +130,7 @@ PRODUCT_COST_CATALOG_PROJECTION = {
     "cost_price": 1,
     "cost": 1,
     "variants": 1,
+    "options": 1,
     "raw_salla": 1,
     "raw_salla_details": 1,
 }
