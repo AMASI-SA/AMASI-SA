@@ -424,6 +424,8 @@ async def test_group_summary_and_lazy_pages_are_scoped_fresh_and_lightweight(db)
                          image_url="https://example.invalid/shawl.jpg")
     for i in range(4):
         await seed_piece(db, "A", f"coat-{i}", product_id="coat", product_name="Coat")
+    await db.raw[dispatch.BATCHES].insert_one({"user_id": OWNER["id"], "id": "b1", "lines": [
+        {"order_item_id": "line-A", "group_key": "product:P-1", "selected_image_url": "https://example.invalid/coat.jpg"}]})
     await seed_piece(db, "A", "sent", supplier_dispatch_status="sent")
     await seed_piece(db, "A", "foreign", responsible_employee_id="different")
     await seed_piece(db, "A", "other-merchant", user_id="foreign-merchant")
@@ -436,8 +438,10 @@ async def test_group_summary_and_lazy_pages_are_scoped_fresh_and_lightweight(db)
         assert result.status_code == 200, result.text
         body = result.json()
         assert [(g["key"], g["piece_count"]) for g in body["groups"]] == [("product:shawl", 23), ("product:coat", 4)]
+        assert body["groups"][0]["image_url"] == "https://example.invalid/shawl.jpg"
+        assert body["groups"][1]["image_url"] == "https://example.invalid/coat.jpg"
         assert "files" not in body and "supplier_accounts" not in body
-        assert not any(name in {dispatch.BATCHES, dispatch.REGISTRY, dispatch.DISPATCHES} for name, _ in db.reads)
+        assert not any(name in {dispatch.REGISTRY, dispatch.DISPATCHES} for name, _ in db.reads)
         seen, after = set(), ""
         for count in (10, 10, 3):
             page = (await client.get("/supplier-dispatch-v1/waiting-page", params={"group": "product:shawl", "after": after})).json()
