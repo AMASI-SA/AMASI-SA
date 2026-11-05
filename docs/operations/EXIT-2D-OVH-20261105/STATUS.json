@@ -1,0 +1,20 @@
+{
+  "task": "EXIT-2D-OVH-20261105",
+  "state": "WIP_COMPOSE_DOCKER_ACCEPTANCE_PENDING",
+  "branch": "codex/exit-2d-render-integration-20261105",
+  "draft_pr": 1757,
+  "approved_render_reference": "e57847a361b37eccc171b625339e0fda97493a23",
+  "render_artifacts_modified": false,
+  "target": "One standard OVHcloud VPS-2,4vCPU/8GB; synthetic-only Docker Compose",
+  "services": ["web", "reports", "sync", "accounting", "mongo"],
+  "migration": "one-off before application activation",
+  "persistent_limits": {"cpu_total": 3.5, "memory_total_mib": 5888, "memory_host_reserve_mib": 2304},
+  "price": "Published starting8.50USD/month, region/commitment/renewal/tax checkout unverified",
+  "comparison": "Three OVHcloud VPS-1,2vCPU/4GB each, published starting4.54USD each=13.62USD/month; no assumed vRack or HA",
+  "production_changed": false,
+  "paid_resources_created": false,
+  "render_creation_authorized": false,
+  "ovh_creation_authorized": false,
+  "v5_or_financial_logic_changed": false,
+  "next_action": "Run actual Compose under shared4CPU8GB cgroup; collect memory/performance, worker fences/faults, Mongo restart and fresh-volume full restore; research offsite/monitoring/administration costs. No purchase or deployment."
+}

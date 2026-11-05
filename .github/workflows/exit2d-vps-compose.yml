@@ -1,0 +1,31 @@
+name: EXIT-2D VPS Compose
+on:
+  push:
+    branches: [codex/exit-2d-render-integration-20261105]
+    paths:
+      - packaging/exit2d/vps/**
+      - .github/workflows/exit2d-vps-compose.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  vps2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Actual Compose acceptance under shared4CPU8GB budget
+        run: bash packaging/exit2d/vps/run_linux.sh
+      - name: Preserve sanitized receipts on success or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vps-compose
+          path: |
+            vps-evidence/**/*.json
+            vps-evidence/**/*.jsonl
+            vps-evidence/**/*.txt
+            vps-evidence/**/*.log
+          retention-days: 14

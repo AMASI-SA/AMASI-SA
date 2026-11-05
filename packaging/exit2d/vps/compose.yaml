@@ -1,0 +1,151 @@
+# Synthetic-only VPS candidate. No purchase, Production access or deployment.
+x-app: &app
+  image: mezan-vps:${MEZAN_SOURCE_SHA:?exact source SHA required}
+  build:
+    context: ../../..
+    dockerfile: packaging/exit2d/render/Dockerfile
+    args:
+      RENDER_GIT_COMMIT: ${MEZAN_SOURCE_SHA}
+  entrypoint: [python, /opt/vps/entry.py]
+  init: true
+  read_only: true
+  tmpfs: ['/tmp:size=256m,uid=65532,gid=65532,mode=1777']
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 256
+  restart: on-failure:5
+  stop_grace_period: 30s
+  cgroup_parent: ${MEZAN_CGROUP_PARENT:-}
+  environment: &environment
+    APP_ENV: staging
+    MEZAN_SYNTHETIC_HOSTING: '1'
+    DB_NAME: mezan_exit2d_staging
+    MEZAN_STAGING_MONGO_HOST: staging-mongo
+    EMAIL_OTP_SMTP_HOST: 127.0.0.1
+    EMAIL_OTP_SMTP_PORT: '8025'
+    EMAIL_OTP_SMTP_STARTTLS: 'false'
+    EMAIL_OTP_FROM_EMAIL: otp@example.test
+    FRONTEND_URL: ${MEZAN_STAGING_ORIGIN:-https://staging.example.test}
+    WEBAUTHN_ORIGIN: ${MEZAN_STAGING_ORIGIN:-https://staging.example.test}
+    WEBAUTHN_RP_ID: ${MEZAN_STAGING_HOST:-staging.example.test}
+    EXIT2D_ECONOMY_CI: ${EXIT2D_ECONOMY_CI:-0}
+  volumes:
+    - ./entry.py:/opt/vps/entry.py:ro
+    - ./health.py:/opt/vps/health.py:ro
+  secrets: [jwt_secret, admin_password, mfa_bootstrap_code, mongo_uri]
+  networks: [private]
+  logging: &logging
+    driver: local
+    options: {max-size: 10m, max-file: '3'}
+  depends_on:
+    migration: {condition: service_completed_successfully}
+services:
+  mongo:
+    image: mezan-vps-mongo:${MEZAN_SOURCE_SHA}
+    build:
+      context: ../../..
+      dockerfile: packaging/exit2d/render/Mongo.Dockerfile
+    hostname: staging-mongo
+    entrypoint: [bash, /opt/vps/mongo-entry.sh]
+    init: true
+    read_only: true
+    tmpfs: [/tmp:size=64m, /data/configdb:size=32m]
+    volumes:
+      - mongo_data:/data/db
+      - ./mongo-entry.sh:/opt/vps/mongo-entry.sh:ro
+    secrets: [mongo_username, mongo_password, mongo_replica_key]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, SETUID, SETGID, FOWNER]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    cpus: '0.50'
+    pids_limit: 256
+    cgroup_parent: ${MEZAN_CGROUP_PARENT:-}
+    restart: on-failure:5
+    stop_grace_period: 30s
+    networks:
+      private: {aliases: [staging-mongo]}
+    healthcheck:
+      test: [CMD, mongosh, --quiet, --eval, "const fs=require('fs'); db.getSiblingDB('admin').auth(fs.readFileSync('/run/secrets/mongo_username','utf8').trim(),fs.readFileSync('/run/secrets/mongo_password','utf8').trim()); quit(db.adminCommand({ping:1}).ok?0:1)"]
+      interval: 20s
+      timeout: 10s
+      start_period: 30s
+      retries: 6
+    logging: *logging
+  migration:
+    <<: *app
+    command: [migration]
+    restart: 'no'
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    cpus: '1.00'
+    depends_on:
+      mongo: {condition: service_healthy}
+  reports:
+    <<: *app
+    command: [worker-reports]
+    mem_limit: 1024m
+    memswap_limit: 1024m
+    cpus: '0.75'
+    healthcheck:
+      test: [CMD, python, /opt/vps/health.py, reports]
+      interval: 20s
+      timeout: 5s
+      start_period: 90s
+      retries: 6
+  web:
+    <<: *app
+    command: [web]
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    cpus: '1.25'
+    cpu_shares: 1024
+    ports: ['127.0.0.1:${MEZAN_LOCAL_PORT:-10000}:10000']
+    environment:
+      <<: *environment
+      MEZAN_REPORT_WORKER_ADDRESS: reports:8000
+    depends_on:
+      migration: {condition: service_completed_successfully}
+      reports: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, /opt/vps/health.py, web]
+      interval: 20s
+      timeout: 5s
+      start_period: 90s
+      retries: 6
+  sync:
+    <<: *app
+    command: [worker-sync]
+    mem_limit: 1024m
+    memswap_limit: 1024m
+    cpus: '0.50'
+    cpu_shares: 256
+    environment:
+      <<: *environment
+      MEZAN_WORKER_ENABLED: '1'
+      MEZAN_LEGACY_WORKERS_STOPPED: '1'
+  accounting:
+    <<: *app
+    command: [worker-accounting]
+    mem_limit: 768m
+    memswap_limit: 768m
+    cpus: '0.50'
+    cpu_shares: 512
+    environment:
+      <<: *environment
+      MEZAN_WORKER_ENABLED: '1'
+      MEZAN_LEGACY_WORKERS_STOPPED: '1'
+networks:
+  private:
+    internal: true
+volumes:
+  mongo_data:
+secrets:
+  jwt_secret: {file: '${MEZAN_SECRETS_DIR:?external secret directory required}/jwt_secret'}
+  admin_password: {file: '${MEZAN_SECRETS_DIR}/admin_password'}
+  mfa_bootstrap_code: {file: '${MEZAN_SECRETS_DIR}/mfa_bootstrap_code'}
+  mongo_uri: {file: '${MEZAN_SECRETS_DIR}/mongo_uri'}
+  mongo_username: {file: '${MEZAN_SECRETS_DIR}/mongo_username'}
+  mongo_password: {file: '${MEZAN_SECRETS_DIR}/mongo_password'}
+  mongo_replica_key: {file: '${MEZAN_SECRETS_DIR}/mongo_replica_key'}
