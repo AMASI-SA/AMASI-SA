@@ -144,7 +144,7 @@ def calculate_catalog_line_cost(
     resources: dict[str, dict],
 ) -> dict:
     """Base + selected, independent resources/options, with one quantity pass."""
-    from order_option_cost_snapshot_routes import classify_base_unit_cost, binding_matches, selected_option_tokens
+    from order_option_cost_snapshot_routes import classify_base_unit_cost
     row = economic_item(item)
     quantity = decimal(row.get("quantity", 1))
     valid_quantity = quantity is not None and quantity > 0
@@ -160,23 +160,27 @@ def calculate_catalog_line_cost(
         missing.append("invalid_quantity")
     totals = {"product": Decimal(0), "option": Decimal(0)}
     applied = {"product": [], "option": []}
-    tokens = selected_option_tokens(row)
+    from report_option_identity import resolve_report_choices
+    decisions, selection_evidence = resolve_report_choices(row, product, option_bindings)
     seen: set[tuple[str, str]] = set()
     for kind, bindings in (("product", product_bindings), ("option", option_bindings)):
-        for binding in bindings:
-            if kind == "option" and not binding_matches(binding, tokens):
-                continue
+        for index, binding in enumerate(bindings):
             binding_id = str(binding.get("id") or "")
+            policy_key = ("product_resource" if kind == "product" else "option_resource") + ":" + binding_id
+            policy = ((profile or {}).get("composition_components") or {}).get(policy_key) or {}
+            if policy.get("cost_treatment") == "included_in_base" or binding.get("cost_treatment") == "included_in_base":
+                continue
+            if kind == "option" and decisions[index] is not True:
+                if decisions[index] is None:
+                    complete = False
+                    missing.append("option_selection_unresolved:" + str(binding.get("id") or binding.get("option_id") or "unknown"))
+                continue
             # Separate binding kinds can legitimately reference the same resource.
             # Deduplicate only identical source identities, never a resource SKU.
             if binding_id and (kind, binding_id) in seen:
                 continue
             if binding_id:
                 seen.add((kind, binding_id))
-            policy_key = ("product_resource" if kind == "product" else "option_resource") + ":" + binding_id
-            policy = ((profile or {}).get("composition_components") or {}).get(policy_key) or {}
-            if policy.get("cost_treatment") == "included_in_base" or binding.get("cost_treatment") == "included_in_base":
-                continue
             multiplier = decimal(binding.get("quantity", 1))
             resource = resources.get(str(binding.get("resource_id") or "")) or {}
             if kind == "product" or binding.get("mode") == "resource":
@@ -206,6 +210,7 @@ def calculate_catalog_line_cost(
         "selected_options_total": _amount(option_total), "components_total": _amount(product_total + option_total),
         "line_total": _amount(base_total + product_total + option_total),
         "applied_product_resources": applied["product"], "applied_option_costs": applied["option"],
+        "resolved_option_selections": selection_evidence,
         "cost_authority": "catalog_estimate", "cost_stage": "expected",
         "historical_cost_verified": False, "missing_cost_reasons": missing,
     }

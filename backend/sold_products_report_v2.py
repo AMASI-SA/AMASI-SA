@@ -28,7 +28,7 @@ CATALOG_FIELDS = {
     "_id": 0, "id": 1, "salla_product_id": 1, "mezan_product_id": 1,
     "sku": 1, "name": 1, "main_image": 1, "variants": 1,
     "cost_price_from_salla": 1, "cost_price": 1, "cost": 1,
-    "raw_salla": 1, "raw_salla_details": 1,
+    "raw_salla": 1, "raw_salla_details": 1, "options": 1,
 }
 SELECTABLE_STATUSES = {
     "pending_review": ("بإنتظار المراجعة", "بانتظار المراجعة", "انتظار المراجعة", "under review", "waiting review", "pending review"),

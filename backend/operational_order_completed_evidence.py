@@ -4,6 +4,7 @@ from datetime import datetime
 
 from operational_courier_transitions import COMPLETED_PROOF, completed_state, native_status_transition, transition_observation
 from operational_delivery_evidence import _instant, _order_waybill, _text
+from operational_completed_capture import SOURCE as CAPTURE_SOURCE, capture_time, capture_waybill_view
 
 HISTORY_SOURCE = 'verified_order_completed_history'
 WEBHOOK_SOURCE = 'verified_order_completed_update'
@@ -21,7 +22,10 @@ def bind_completed_waybill(raw, current, shipment, waybill, at):
         raise ValueError('operational_prepaid_shipping_completion_time_invalid')
     # Bound label creation to the canonical source version. The authoritative
     # completion time still controls cutover, tariff selection and recognition.
-    _order_waybill(raw, current, shipment, waybill, version)
+    observation = current.get(COMPLETED_PROOF) or {}
+    current_view = capture_waybill_view(raw, current, version) if (
+        observation.get('source') == CAPTURE_SOURCE and 'shipment' in observation) else raw
+    _order_waybill(current_view, current, shipment, waybill, version)
 
 
 def completion_time(raw, source, history, end):
@@ -62,7 +66,7 @@ def completion_time(raw, source, history, end):
     observation = current.get(COMPLETED_PROOF)
     if observation is not None:
         if (not isinstance(observation, dict) or observation.get('ambiguous')
-                or observation.get('source') not in {HISTORY_SOURCE, WEBHOOK_SOURCE}
+                or observation.get('source') not in {HISTORY_SOURCE, WEBHOOK_SOURCE, CAPTURE_SOURCE}
                 or observation.get('owner') != source['user_id'] or observation.get('order_id') != oid
                 or observation.get('order_number') != number or observation.get('target_status') != 'completed'
                 or observation.get('shipment_id') != current.get('shipment_id')
@@ -75,6 +79,8 @@ def completion_time(raw, source, history, end):
             detached = {**source, 'salla_shipping_current': {k: v for k, v in current.items() if k != COMPLETED_PROOF}}
             if completion_time(raw, detached, observation['events'], end) != _instant(observation.get('at')):
                 raise ValueError('operational_prepaid_shipping_completion_ambiguous')
+        elif observation['source'] == CAPTURE_SOURCE:
+            times.add(capture_time(observation, source['user_id'], oid, number, version, raw, current, source))
         times.add(_instant(observation.get('at')))
     if not times:
         raise ValueError('operational_prepaid_shipping_completion_timestamp_missing')
