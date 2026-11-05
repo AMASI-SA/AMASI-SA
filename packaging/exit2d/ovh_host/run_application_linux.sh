@@ -29,7 +29,12 @@ compose up -d --no-build --wait --wait-timeout 240
 web=$(compose ps -q web); mongo=$(compose ps -q mongo)
 reports=$(compose ps -q reports); sync=$(compose ps -q sync); accounting=$(compose ps -q accounting)
 python packaging/exit2d/render/economy_monitor.py host-app-evidence/resources.json "$web" "$mongo" "$reports" "$sync" "$accounting" & monitor=$!
-compose exec -T web python /opt/vps/entry.py test /evidence/tools/render/economy_acceptance.py setup > host-app-evidence/setup.jsonl
+sudo install -d -m 700 -o 65532 -g 65532 "$scratch/fixture"
+export MEZAN_FIXTURE_DIR="$scratch/fixture"
+sudo --preserve-env=MEZAN_SOURCE_SHA,MEZAN_SECRETS_DIR,MEZAN_CI_DISK,MEZAN_CGROUP_PARENT,EXIT2D_ECONOMY_CI,MEZAN_FIXTURE_DIR \
+  docker compose -p "$project" -f packaging/exit2d/vps/compose.yaml -f packaging/exit2d/vps/ci.override.yaml \
+  -f packaging/exit2d/ovh_host/compose.tools.yaml --profile tools run --rm --no-deps -T fixture \
+  --ack-synthetic-only --source-sha "$GITHUB_SHA" > host-app-evidence/setup.jsonl
 python - "$scratch" "$project" <<'PY'
 import json,os,sys
 from pathlib import Path
@@ -46,7 +51,8 @@ docker run -d --name "$project-tls" --network "container:$web" --memory 192m --c
 sleep 5
 docker exec "$project-tls" cat /data/caddy/pki/authorities/local/root.crt > "$scratch/ca.pem"
 chmod 644 "$scratch/ca.pem"
-compose exec -T sync python /opt/vps/entry.py test - < packaging/exit2d/render/economy_snap.py > host-app-evidence/snap.jsonl 2>&1 & snap=$!
+compose exec -T sync python - --ack-synthetic-only --source-sha "$GITHUB_SHA" --seconds 90 \
+  < packaging/exit2d/ovh_host/snap_runtime.py > host-app-evidence/snap.jsonl 2>&1 & snap=$!
 # External load generator shares only network namespace, outside service resource budget.
 docker run --rm -i --network "container:$web" --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
   --memory 1g --memory-swap 1g --cpus 1 \
@@ -58,7 +64,8 @@ docker run --rm -i --network "container:$web" --read-only --tmpfs /tmp --cap-dro
   -v "$MEZAN_SECRETS_DIR/mongo_uri:/run/secrets/mongo_uri:ro" \
   -v "$PWD/packaging/exit2d/vps/entry.py:/opt/vps/entry.py:ro" \
   -v "$PWD/packaging/exit2d:/evidence/tools:ro" -v "$PWD/packaging/exit2c:/evidence/acceptance:ro" \
-  -v "$scratch/ca.pem:/evidence/ca.pem:ro" --entrypoint python "mezan-vps:$GITHUB_SHA" \
+  -v "$scratch/ca.pem:/evidence/ca.pem:ro" -v "$scratch/fixture:/private-fixture:ro" \
+  --entrypoint python "mezan-vps:$GITHUB_SHA" \
   /opt/vps/entry.py test - < packaging/exit2d/ovh_host/ci_tls_benchmark.py | tee host-app-evidence/https-operations.jsonl
 wait "$snap"
 compose exec -T accounting python /opt/vps/entry.py test - < packaging/exit2d/render/economy_accounting.py > host-app-evidence/accounting-before.jsonl

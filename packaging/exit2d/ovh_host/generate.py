@@ -58,7 +58,23 @@ def caddy(config, *, ci=False):
 def units(config):
     folder = config['checkout'] + '/packaging/exit2d/ovh_host'
     conf = '/etc/mezan-vps/host.json'
+    compose = '/usr/bin/docker -H unix:///var/run/docker.sock compose --env-file /etc/mezan-vps/compose.env -p ' + config['project'] + ' -f ' + config['checkout'] + '/packaging/exit2d/vps/compose.yaml'
     return {
+      'mezan-stack.service': f'''[Unit]
+Description=Mezan synthetic five-service Compose stack
+Requires=docker.service
+After=docker.service network-online.target
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={config['checkout']}
+ExecStart={compose} up -d --no-build --wait --wait-timeout 240
+ExecStop={compose} stop --timeout 30
+TimeoutStartSec=300
+TimeoutStopSec=180
+[Install]
+WantedBy=multi-user.target
+''',
       'mezan-tls.service': f'''[Unit]
 Description=Mezan synthetic HTTPS edge
 After=network-online.target docker.service
@@ -129,7 +145,9 @@ def main():
     target = a.output.resolve()
     require(not any(target == Path(x) or Path(x) in target.parents for x in ('/etc', '/usr', '/run')), 'generate to a review directory only')
     target.mkdir(parents=True, exist_ok=False)
-    files = {'Caddyfile': caddy(c, ci=a.isolated_ci), 'firewall.nft': firewall(c), **units(c)}
+    env = 'MEZAN_SOURCE_SHA=' + c['source_sha'] + '\nMEZAN_SECRETS_DIR=' + c['secrets_dir'] + '\nMEZAN_STAGING_ORIGIN=' + c['origin'] + '\nMEZAN_STAGING_HOST=' + c['hostname'] + '\nMEZAN_CGROUP_PARENT=mezan-trial.slice\nEXIT2D_ECONOMY_CI=0\n'
+    files = {'Caddyfile': caddy(c, ci=a.isolated_ci), 'firewall.nft': firewall(c), 'compose.env':env,
+             'mezan-trial.slice': '[Unit]\nDescription=Mezan synthetic collective cap\n[Slice]\nCPUQuota=400%\nMemoryMax=8G\nMemorySwapMax=0\n', **units(c)}
     for name, value in files.items():
         (target/name).write_text(value)
     print('Generated review artifacts only; no installation, firewall application, certificate order or timer enabled')

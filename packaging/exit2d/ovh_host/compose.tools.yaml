@@ -1,0 +1,28 @@
+# One-off synthetic fixture tool only; no sixth persistent service.
+services:
+  fixture:
+    profiles: [tools]
+    image: mezan-vps:${MEZAN_SOURCE_SHA:?reviewed source required}
+    entrypoint: [python, /opt/host-tools/seed_runtime.py]
+    command: []
+    init: true
+    read_only: true
+    tmpfs: ['/tmp:size=128m,uid=65532,gid=65532,mode=1777']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    memswap_limit: 768m
+    cpus: '0.50'
+    pids_limit: 128
+    environment:
+      APP_ENV: staging
+      MEZAN_SYNTHETIC_HOSTING: '1'
+      DB_NAME: mezan_exit2d_staging
+      MEZAN_STAGING_MONGO_HOST: staging-mongo
+    secrets: [jwt_secret, mongo_uri]
+    networks: [private]
+    volumes:
+      - ../ovh_host:/opt/host-tools:ro
+      - ..:/evidence/tools:ro
+      - ../../exit2c:/evidence/acceptance:ro
+      - ${MEZAN_FIXTURE_DIR:?private directory UID65532 mode0700 required}:/private-fixture

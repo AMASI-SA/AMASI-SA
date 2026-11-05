@@ -1,6 +1,6 @@
 {
   "task": "EXIT-2D-OVH-HOST-20261106",
-  "state": "WIP host operations additions; Linux verification pending",
+  "state": "WIP: operational implementation complete; full current Linux evidence pending",
   "branch": "codex/exit-2d-render-integration-20261105",
   "pr": 1757,
   "draft": true,
@@ -13,8 +13,24 @@
   "prospective_tree_only": "5881cec4f8a1479fb79aab6f68f4e249f3e63fd4",
   "integration_applied": false,
   "local_tests": "9 unittest cases PASS; Linux kernel/TLS/restic not yet run",
-  "unchanged": ["backend", "frontend", "release", "packaging/exit2d/vps", "packaging/exit2d/render", "all accepted prior reports"],
+  "unchanged": [
+    "backend",
+    "frontend",
+    "release",
+    "packaging/exit2d/vps",
+    "packaging/exit2d/render",
+    "all accepted prior reports"
+  ],
   "production_accessed_or_changed": false,
   "resources_created": false,
-  "next": "Run isolated GitHub Linux host-boundaries CI; inspect full results, finish integration/operations/key inventory reports; no host application or purchase"
+  "next": "Inspect fresh full Linux host/application CI for this source; fix any failure, preserve sanitized receipts, update PR1757/Issue1006. OVH execution and final financial quote still pending separate approval.",
+  "completed": [
+    "source-only Production comparison and per-domain integration plan",
+    "dormant Caddy/nftables/systemd/collective budget generation",
+    "CPU/RAM peak/OOM/disk/backup-age monitoring",
+    "approved-only clean-writer encrypted backup and hash-verified restore",
+    "fresh random-credential synthetic seeder; native simulated Snap workload; external HTTPS employee measurements",
+    "original key names and Mongo/attachment metadata requirements; no values"
+  ],
+  "linux_partial": "42114358523 host-boundaries PASS at a8c9c0521: real kernel IPv4 allowlist/Docker DNAT protection, trusted HTTPS proxy fixture, local encrypted restic/wrong-key/tamper checks; full app job still running"
 }
