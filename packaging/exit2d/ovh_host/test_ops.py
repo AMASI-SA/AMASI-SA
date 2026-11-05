@@ -76,4 +76,9 @@ class Boundaries(unittest.TestCase):
     def test_actual_p95_nearest_rank(self):
         self.assertEqual(summarize(list(range(1, 101)))['p95_ms'], 95)
 
+    def test_backup_caps_cannot_silently_expand(self):
+        for key, value in [('max_archive_bytes', 1024**3), ('max_repository_bytes', 20_000_000_000)]:
+            c = copy.deepcopy(CONFIG); c['backup'][key] = value
+            with self.assertRaises(ValueError): validate(c)
+
 if __name__ == '__main__': unittest.main()

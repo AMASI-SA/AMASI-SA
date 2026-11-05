@@ -37,6 +37,9 @@ def validate(data, *, ci=False):
     forbidden = [k for k in data if any(x in k.lower() for x in ('password', 'token', 'api_key')) and not k.endswith('_file')]
     require(not forbidden, 'configuration must contain paths, never secret values')
     require(set(data.get('backup', {})) <= {'repository', 'password_file', 'access_key_file', 'secret_key_file', 'max_archive_bytes', 'max_repository_bytes'}, 'unknown backup key/value forbidden')
+    backup = data.get('backup', {})
+    require(0 < backup.get('max_archive_bytes', 0) <= 512 * 1024 * 1024, 'synthetic archive cap must be <=512MiB')
+    require(backup['max_archive_bytes'] < backup.get('max_repository_bytes', 0) <= 8_000_000_000, 'reviewed repository soft cap must be <=8GB')
     return data
 
 def ipaddress_like(value):

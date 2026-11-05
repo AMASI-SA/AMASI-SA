@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import tempfile
 from common import containers, docker, private_file, run, write_json
 from config import load
@@ -59,6 +60,8 @@ def execute(config, approval):
     authorize(config, approval)
     env = restic_environment(config)
     state = Path(config['state_dir']); state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if shutil.disk_usage(state).free < 2 * config['backup']['max_archive_bytes']:
+        raise ValueError('insufficient private scratch space for dump plus verified restore')
     import fcntl
     with (state/'backup.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -88,11 +91,15 @@ def execute(config, approval):
                 prepare = AUTH_JS + "fs.writeFileSync('/tmp/mezan-dump-config.yaml',JSON.stringify({uri:'mongodb://'+encodeURIComponent(u)+':'+encodeURIComponent(p)+'@127.0.0.1:27017/?authSource=admin'}),{mode:0o600});"
                 mongo(mid, prepare)
                 import subprocess
+                import resource
+                def cap_archive():
+                    cap = config['backup']['max_archive_bytes']
+                    resource.setrlimit(resource.RLIMIT_FSIZE, (cap, cap))
                 with archive.open('wb') as output:
                     result = subprocess.run(['docker', '-H', 'unix:///var/run/docker.sock', 'exec', mid,
                                              'mongodump', '--config=/tmp/mezan-dump-config.yaml',
                                              '--db=mezan_exit2d_staging', '--archive', '--gzip'],
-                                            stdout=output, stderr=subprocess.DEVNULL, timeout=600)
+                                            stdout=output, stderr=subprocess.DEVNULL, timeout=600, preexec_fn=cap_archive)
                 if result.returncode or not 0 < archive.stat().st_size <= config['backup']['max_archive_bytes']:
                     raise ValueError('dump failed or archive exceeds reviewed budget')
                 mongo(mid, 'fs.unlinkSync("/tmp/mezan-dump-config.yaml")')

@@ -117,7 +117,7 @@ Caddy192MiB/0.2CPU، مراقبة96MiB/0.05CPU متقطعة. Backup768MiB/1CPU
 محدودة لهذا المخزن فقط؛ لا يُنشئ البرنامج مخزنًا أو حسابًا أو restic init.
 احفظ restic password وS3credentials بملفات0400/0600 root خارج checkout؛ النسخة
 لا تتضمن مفاتيح التطبيق. احتفظ بكلمة restic في escrow مستقل واختبر فقد الخادم.
-نسخة الموافقة example قيمتها approved=false ومنتهية ولا تفوّض التنفيذ.
+نسخة الموافقة example قيمتها approved=false ولا تفوّض التنفيذ.
 الموافقة الخاصة تحدد synthetic-vps-backup وSHA/project ووقت انتهاء timezone-aware.
 
 التنفيذ يثبت Docker المحلي/source manifest/حدود staging، ويتحقق من budget،
@@ -128,6 +128,13 @@ Caddy192MiB/0.2CPU، مراقبة96MiB/0.05CPU متقطعة. Backup768MiB/1CPU
 الفشل يكتب تنبيهًا؛ الخروج غير النظيف يترك الكتّاب متوقفين للمراجعة ولا يمس claims.
 لا تعِد worker ماليًا تلقائيًا إذا لم يثبت توقف الآخر. انقطاع التنفيذ بعنف
 قبل finally يحتاج مراجعة حالة TTL والخدمات وbackup.lock قبل الاستئناف.
+
+الأذونات عند تثبيت الملفات لاحقًا: /etc/mezan-vps root:caddy0750، وCaddyfile
+root:caddy0640 كي يقرأه مستخدم الوكيل. host.json/compose.env/operations-approval
+root0600، وsecrets subdirectory root0700 مع ملفاتها0400 UID65532 وفق Compose.
+اختبر تزامن UTC/NTP وصلاحية وصول console قبل أي تغيير SSH أو firewall.
+النسخة الحالية تشمل قاعدة Mongo بكل collections وGridFS إن كان ضمنها؛ أي
+volume تجاري خارجي مستقل يحتاج inventory ونسخًا متزامنًا إضافيًا قبل نقل إنتاج.
 
 لا تفعّل backup.timer إلا بعد أول restore خارجي على قاعدة فارغة منفصلة؛
 الموعد المقترح02:30الرياض وتوجد نافذة توقف للتطبيقات، ليس نسخًا online بلا أثر.
