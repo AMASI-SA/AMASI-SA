@@ -66,3 +66,19 @@ complete from synthetic tests. Costs/prices have not been changed.
 
 The existing Dashboard runtime adoption CI now explicitly runs both identity and
 raw-recovery regression files; no existing reference/read/security gate removed.
+
+## Release dependency blocker
+
+Exact a81027fd CI:12 workflows passed, including frozen-reference real-Mongo
+Dashboard runtime gate, G47, Operational Balance, CodeQL and source build.
+Security Gate job127541862110 failed strict dependency audit: existing
+OAuthlib4.0.0 flagged GHSA-3jp2-3mrg-2vxc; fix version4.0.1. No audit bypass.
+Required maintenance bump updates only oauthlib in backend requirements and
+its identical governed release lock. Official PyPI offers4.0.1; installed into
+an isolated /tmp target, not the runtime environment. Offline client checks
+passed authorization URL, code parse, state mismatch rejection and RFC8628
+missing/unknown device-code rejection. Strict pip-audit of oauthlib4.0.1 plus
+requests-oauthlib2.0.0 closure: No known vulnerabilities found, exit0.
+First smoke used the RFC6749 validator instead of RFC8628 class; corrected
+import and exercised actual rejection. No app device-flow implementation found.
+Full exact-head Security Gate/closure and release checks must rerun before merge.
