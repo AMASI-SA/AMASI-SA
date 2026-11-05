@@ -1,5 +1,6 @@
 """Linux root only; create NEW staging secrets outside the repository."""
 import argparse
+import base64
 import os
 from pathlib import Path
 import secrets
@@ -17,7 +18,7 @@ def main():
     password = 'synthetic-only-password' if args.ci_fixture else secrets.token_urlsafe(36)
     values = {'mongo_username': username, 'mongo_password': password,
         'mongo_uri': f'mongodb://{username}:{password}@staging-mongo:27017',
-        'mongo_replica_key': secrets.token_urlsafe(48),
+        'mongo_replica_key': 'syntheticOnlyReplicaKey1234567890' if args.ci_fixture else base64.b64encode(secrets.token_bytes(48)).decode('ascii'),
         'jwt_secret': 'synthetic-hosting-public-key-not-for-production' if args.ci_fixture else secrets.token_urlsafe(48),
         'admin_password': 'Synthetic-hosting-password-only!' if args.ci_fixture else secrets.token_urlsafe(36),
         'mfa_bootstrap_code': secrets.token_urlsafe(24)}
