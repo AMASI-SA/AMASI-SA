@@ -859,6 +859,7 @@ def _piece_products(
             "piece_id": _text(piece.get("piece_id") or piece.get("id")) or None,
             "order_item_id": _text(piece.get("order_item_id")) or None,
             "unit_index": int(piece.get("unit_index") or 0),
+            "assigned_at": piece.get("assigned_at"),
             "product_id": _text(piece.get("product_id")) or None,
             "product_name": _text(piece.get("product_name")) or "منتج",
             "sku": _text(piece.get("sku")) or None,
