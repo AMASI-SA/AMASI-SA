@@ -1,0 +1,30 @@
+name: EXIT-2D Render Economy
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  economy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        web-memory: [2g, 512m]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Match proposed Render runtime limits
+        run: bash packaging/exit2d/render/economy_linux.sh '${{ matrix.web-memory }}'
+      - name: Preserve resource and fault evidence, including failed candidates
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: economy-${{ matrix.web-memory }}
+          path: |
+            economy-evidence/**/*.json
+            economy-evidence/**/*.jsonl
+            economy-evidence/**/*.txt
+            economy-evidence/**/*.log
+          retention-days: 14

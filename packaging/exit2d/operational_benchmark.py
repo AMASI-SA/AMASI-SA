@@ -11,7 +11,7 @@ import sys
 import time
 
 sys.path[:0] = ['/opt/acceptance', '/opt/mezan/backend']
-from acceptance import boundary, db, owner_session, employee_session, ORIGIN
+from acceptance import boundary, db, owner_session, employee_session, ORIGIN, URLS
 import httpx
 
 
@@ -88,7 +88,7 @@ async def run(owner_cookie, employee_cookie, database):
         async def call(method, path, cookie, expected=200, payload=None, group=None):
             nonlocal overlap
             started = time.perf_counter()
-            response = await client.request(method, 'http://127.0.0.1:8001' + path,
+            response = await client.request(method, URLS[0] + path,
                 headers={'Origin': ORIGIN, 'X-Forwarded-Proto': 'https', 'Cookie': cookie},
                 **({'json': payload} if payload is not None else {}))
             assert response.status_code == expected, f'{group}: expected={expected} actual={response.status_code} detail={response.text[:160]}'
