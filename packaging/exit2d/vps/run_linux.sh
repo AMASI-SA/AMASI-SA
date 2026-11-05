@@ -38,6 +38,7 @@ cleanup() {
   for file in memory.current memory.peak memory.events cpu.max cpu.stat memory.max memory.swap.max; do
     cat "$parent_path/$file" > "$root/parent-$file.txt" 2>/dev/null || true
   done
+  docker rm -f "$project-snapshot" "$project-verify" >/dev/null 2>&1 || true
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
   sudo umount "$scratch/disk" 2>/dev/null || true
   sudo umount "$scratch/restore-disk" 2>/dev/null || true
@@ -128,7 +129,7 @@ compose run --no-deps -d --name "$project-snapshot" --entrypoint python web -c '
 snapshot_id=$(docker inspect -f '{{.Id}}' "$project-snapshot")
 docker exec "$snapshot_id" python /opt/vps/entry.py test /opt/vps/restore.py seed /tmp/receipt.json
 docker exec "$snapshot_id" python /opt/vps/entry.py test /opt/vps/restore.py snapshot /tmp/receipt.json
-docker cp "$snapshot_id:/tmp/receipt.json" "$root/restore-expected.json"
+docker exec "$snapshot_id" cat /tmp/receipt.json > "$root/restore-expected.json"
 compose exec -T mongo bash -c 'mongodump --host 127.0.0.1 -u "$(cat /run/secrets/mongo_username)" -p "$(cat /run/secrets/mongo_password)" --authenticationDatabase admin --db mezan_exit2d_staging --archive --quiet' > "$scratch/synthetic.archive"
 docker rm -f "$snapshot_id" >/dev/null
 compose down --volumes --remove-orphans
@@ -146,12 +147,13 @@ compose exec -T mongo mongosh --quiet --eval "$mongo_eval db.adminCommand({setPa
 compose exec -T mongo bash -c 'mongorestore --host 127.0.0.1 -u "$(cat /run/secrets/mongo_username)" -p "$(cat /run/secrets/mongo_password)" --authenticationDatabase admin --archive --quiet' < "$scratch/synthetic.archive"
 compose run --no-deps -d --name "$project-verify" --entrypoint python web -c 'import time; time.sleep(600)' >/dev/null
 verify_id=$(docker inspect -f '{{.Id}}' "$project-verify")
-docker cp "$root/restore-expected.json" "$verify_id:/tmp/receipt.json"
+docker exec -i "$verify_id" sh -c 'cat > /tmp/receipt.json' < "$root/restore-expected.json"
 docker exec "$verify_id" python /opt/vps/entry.py test /opt/vps/restore.py verify /tmp/receipt.json | tee "$root/restore.jsonl"
 docker rm -f "$verify_id" >/dev/null
 compose up -d --no-build --wait --wait-timeout 240
 web=$(compose ps -q web)
 fixture outage
+compose exec -T accounting python /opt/vps/entry.py test - < packaging/exit2d/render/economy_accounting.py | tee "$root/accounting-restored.jsonl"
 compose stop web reports sync accounting
 for role in web reports sync accounting; do
   test "$(docker inspect -f '{{.State.ExitCode}}' "$(compose ps -a -q "$role")")" = 0
