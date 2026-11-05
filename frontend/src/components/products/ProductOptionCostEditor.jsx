@@ -159,7 +159,7 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
                                         const binding = bindings.get(`${option.id}:${value.id}`);
                                         return (
                                             <div key={value.id} className="flex flex-col gap-2 rounded-xl bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
-                                                <div><div className="font-bold">{value.name}</div><div className="mt-1 text-[11px] text-slate-500">{binding ? `${binding.mode === "resource" ? binding.resource?.name || "مكوّن مشترك" : "مبلغ مباشر"} · +${money(binding.resolved_amount)}` : "لا توجد تكلفة إضافية"}</div></div>
+                                                <div><div className="font-bold">{value.name}</div><div className="mt-1 text-[11px] text-slate-500">{binding ? `${binding.mode === "resource" ? binding.resource?.name || "مكوّن مشترك" : "مبلغ مباشر"} · ${binding.cost_missing || binding.resolved_amount == null ? "التكلفة غير مسجلة" : `+${money(binding.resolved_amount)}`}` : "لا توجد تكلفة إضافية"}</div></div>
                                                 <button onClick={() => openEditor(option, value)} className="rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-black text-violet-800">{binding ? <LinkSimple className="ml-1 inline" /> : <Plus className="ml-1 inline" />} {binding ? "تعديل التكلفة" : "إضافة تكلفة"}</button>
                                             </div>
                                         );

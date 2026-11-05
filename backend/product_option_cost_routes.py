@@ -126,9 +126,10 @@ async def _binding_view(db: Any, binding: dict[str, Any]) -> dict[str, Any]:
         # Existing bindings keep their current cost while the resource is
         # stopped. Inactive only blocks new links; it never rewrites an
         # existing product recipe or a historical snapshot.
-        unit_cost = _number((resource or {}).get("unit_cost")) or 0.0
-        amount = unit_cost * (_number(row.get("quantity")) or 1.0)
-    row["resolved_amount"] = amount or 0.0
+        unit_cost = _number((resource or {}).get("unit_cost"))
+        amount = unit_cost * (_number(row.get("quantity")) or 1.0) if unit_cost is not None else None
+    row["resolved_amount"] = amount
+    row["cost_missing"] = amount is None
     return row
 
 

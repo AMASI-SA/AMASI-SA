@@ -282,9 +282,12 @@ def make_product_v2_details_router(db: Any, current_user: Callable) -> APIRouter
         if not raw:
             raise HTTPException(status_code=502, detail={"code": "salla_product_details_empty"})
         patch = _details_patch(raw, user_id=user_id)
+        from report_option_identity import retain_option_identity_labels
+        retain_option_identity_labels(product, patch)
         now = _now()
         await db[PRODUCTS].update_one({"user_id": user_id, "salla_product_id": salla_id}, {"$set": {**patch, "updated_at": now}})
-        if salla_cost_fingerprint(product) != salla_cost_fingerprint(patch):
+        if (salla_cost_fingerprint(product) != salla_cost_fingerprint(patch)
+                or product.get("options") != patch.get("options")):
             await bump_product_cost_revision(db, user_id)
         await db[DETAIL_LOG].insert_one({"id": uuid.uuid4().hex, "user_id": user_id, "salla_product_id": salla_id, "event_type": "details_refreshed", "occurred_at": now, "options_count": len(patch["options"]), "variants_count": len(patch["variants"]), "images_count": len(patch["images"])})
         updated = await db[PRODUCTS].find_one({"user_id": user_id, "salla_product_id": salla_id}, {"_id": 0, "raw_salla": 0, "raw_salla_details": 0})
