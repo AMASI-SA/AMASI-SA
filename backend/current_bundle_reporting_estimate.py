@@ -63,6 +63,8 @@ def _choice_pairs(item: dict, product: dict) -> set[tuple[str, str]]:
     Customer text is only a presence signal and is never emitted or persisted.
     """
     from report_option_identity import catalog_options
+    from report_option_recovery import report_cost_item
+    item = report_cost_item(item)
     aliases = catalog_options(product)
     options = _options(product)
     by_id = {_id(o.get("id")): o for o in options if _id(o.get("id"))}
@@ -86,12 +88,15 @@ def _choice_pairs(item: dict, product: dict) -> set[tuple[str, str]]:
             _fail("current_order_option_invalid")
         row = original.get("raw") if isinstance(original.get("raw"), dict) else original
         nested = row.get("option") if isinstance(row.get("option"), dict) else {}
-        explicit_ids = [_id(row.get("option_id")), _id(nested.get("id")), _id(row.get("id"))]
-        known_ids = set(v for v in explicit_ids if v in by_id)
-        if len(known_ids) > 1:
+        strong_ids = {_id(row.get("product_option_id")), _id(row.get("option_id")), _id(nested.get("id"))} - {""}
+        if len(strong_ids) > 1:
             _fail("current_order_option_id_conflict")
+        candidate = next(iter(strong_ids), "")
+        if candidate and candidate not in by_id:
+            _fail("current_order_option_id_unknown")
+        if not candidate and _id(row.get("id")) in by_id:
+            candidate = _id(row["id"])
         name = _label(row.get("option_name") or row.get("name") or nested.get("name"))
-        candidate = next(iter(known_ids), "")
         if not candidate and name:
             matching = [oid for oid, o in by_id.items() if name in aliases.get(oid, {}).get("labels", set())]
             if len(matching) == 1:

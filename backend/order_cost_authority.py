@@ -145,7 +145,8 @@ def calculate_catalog_line_cost(
 ) -> dict:
     """Base + selected, independent resources/options, with one quantity pass."""
     from order_option_cost_snapshot_routes import classify_base_unit_cost
-    row = economic_item(item)
+    from report_option_recovery import report_cost_item
+    row = economic_item(report_cost_item(item))
     quantity = decimal(row.get("quantity", 1))
     valid_quantity = quantity is not None and quantity > 0
     quantity = quantity if valid_quantity else Decimal(0)
