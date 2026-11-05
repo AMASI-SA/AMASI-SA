@@ -1,23 +1,62 @@
 {
   "task": "reviewed-zero-price-currency-20261105",
-  "branch": "codex/release-reviewed-products-20261105",
-  "state": "source-ready-for-governed-release-build",
-  "production_changed": false,
-  "scope": "Preserve component acceptance after proven zero-priced option currency-only source changes; recover unallocated reviewed units without changing Salla status.",
-  "base_commit": "a973ee2d7556cc8a3afaa10bc51bee4df2959d7d",
-  "verification": {
-    "cwd": "backend",
-    "command": "MZ2_TEST_MONGO_URI=<isolated-local-replica-set> python -m pytest --noconftest -p no:cacheprovider -q --tb=short tests/test_component_zero_price_recovery.py tests/test_shipping_catalog_label_recovery.py tests/test_reviewed_products_catalog.py",
-    "result": "68 passed, 32 subtests passed; exit 0; real isolated Mongo replica set",
-    "diff_check": "git diff --check: exit 0",
-    "ci": "New regression suite is included in Review Completion Resumable, with real Mongo transactions.",
-    "prior_head_ci": "All 13 workflows succeeded at aeba2a5e5ffca4ef2a1861600640aefb7a9a7d54",
-    "integration_run": "68 passed, 32 subtests passed on integration with current production; exit 0; 32.49 seconds",
-    "prior_integration_release_check": "Previous branch included an intent-changing merge; release guard correctly refused it. This source is reconstructed as a single-parent change on latest reviewed production, preserving existing intent bytes."
+  "branch": "codex/reviewed-products-postdeploy-20261105",
+  "state": "published-live-identity-confirmed-final-verification-unobserved",
+  "production_changed": true,
+  "source_git_sha": "de938624f6bb3ea5188543753b5ce665f3d27b38",
+  "intent_commit": "faaba4e1f1f6eb15e6a951d8fa1cd2936f6ed638",
+  "deployment_git_sha": "4b336e2a8bb8288dae50505e8eca33147744f441",
+  "release_id": "rg5-d183411e4e999e56e70cd4b643ba1f50be8c84aa6b4105307a3e496e4137ce6b",
+  "pr": 1773,
+  "deployment": {
+    "id": "c32e5b7",
+    "started_at_riyadh": "2026-11-05T23:05:00+03:00",
+    "finished_at_riyadh": "2026-11-05T23:14:00+03:00",
+    "observed": "Emergent Deployment finished and new published version"
   },
-  "next_action": "Run current-base real-Mongo regressions and governed A/B build. Freeze reviewed intent-only B, run clean-clone adapter rehearsal, inspect CI, merge and publish under Release Guard, then audit and recover exact eligible revisions.",
-  "production_deployment_authorized": true,
-  "integration_base_commit": "a973ee2d7556cc8a3afaa10bc51bee4df2959d7d",
-  "blocker": null,
-  "supersedes_pr": 1767
+  "verification": {
+    "regression": "68 passed,32 subtests passed,real isolated Mongo,exit0",
+    "ci": "13 applicable workflows success,1 non-applicable skip at exactB",
+    "clean_clone_adapter": "PASS exit0,55.45s,isolated package boundary and intended release match",
+    "shared_adapter": "PASS exit0 after quarantining only untracked generated backend/__pycache__",
+    "prepare": "PASS actor reviewed-products-1773",
+    "prepublish": "PASS",
+    "live_health": {
+      "verified_identity_available": true,
+      "backend_runtime_source_verified": true,
+      "critical_file_hashes_match": true,
+      "frontend_build_verified": true,
+      "source_and_release_match": true
+    },
+    "three_round_guard": "started on shared Terminal3, final result not yet observed",
+    "guard_log": "/tmp/reviewed-products-1773-verify.json",
+    "lease": "own prepared lease; do not assume closed until status observed"
+  },
+  "recovery": {
+    "predeploy_active_local_review_candidates": 4,
+    "confirmed_missing_supplier_orders": 2,
+    "confirmed_missing_supplier_units": 2,
+    "first_order_refresh": "clicked existing Refresh from Salla UI; server result and lifecycle audit not yet observed",
+    "other_three_refreshes": "not started",
+    "no_salla_status_writes": true,
+    "no_allocation_writes": true
+  },
+  "blocker": "Cloud Browser exec-server transport disconnected, followed by2 transport timeouts, including documentation lookup. Not evidence of site failure or rejected credentials.",
+  "next_action": [
+    "Restore browser control without new sign-in unless required",
+    "Read Terminal3 existing verification completion; do not rerun successful publish or clear lease",
+    "If verify succeeded, observe active=false; if failed inspect reason and retry only own verify",
+    "Read first order lifecycle zero_price_currency_revalidation and source pending before retrying refresh",
+    "Recover remaining exact eligible candidates through existing central refresh, verify proof and reviewed product cards",
+    "Confirm existing allocations preserved and Salla statuses unchanged; report exact proven count"
+  ],
+  "scope": "Zero-priced option currency-only source differences proved against immutable review snapshot and prior accepted component fingerprint",
+  "unrelated_preserved": [
+    ".emergent/stripped_env_names",
+    ".emergent/testing/",
+    "deployer-agent-docs/",
+    "mezan-1711-intent-v5.json",
+    "prepare_mezan_v5_operational_photo_courier.sh"
+  ],
+  "updated_at_utc": "2026-11-05T20:36:00Z"
 }
