@@ -18,6 +18,7 @@ const u=fs.readFileSync('/run/secrets/mongo_username','utf8').trim();
 const p=fs.readFileSync('/run/secrets/mongo_password','utf8').trim();
 if(!db.getSiblingDB('admin').auth(u,p))throw Error('authentication refused');
 """
+DUMP_CONFIG_JS = "fs.writeFileSync('/tmp/mezan-dump-config.yaml',JSON.stringify({uri:'mongodb://'+encodeURIComponent(u)+':'+encodeURIComponent(p)+'@127.0.0.1:27017/?authSource=admin'}),{mode:0o600});"
 
 def mongo(container, script):
     return docker('exec', container, 'mongosh', '--quiet', '--eval', AUTH_JS + script)
@@ -88,8 +89,7 @@ def execute(config, approval):
             with tempfile.TemporaryDirectory(prefix='mezan-backup-', dir=state) as directory:
                 archive = Path(directory)/'synthetic.archive.gz'
                 # Credentials remain inside Mongo tmpfs; never shell/argv/log values.
-                prepare = AUTH_JS + "fs.writeFileSync('/tmp/mezan-dump-config.yaml',JSON.stringify({uri:'mongodb://'+encodeURIComponent(u)+':'+encodeURIComponent(p)+'@127.0.0.1:27017/?authSource=admin'}),{mode:0o600});"
-                mongo(mid, prepare)
+                mongo(mid, DUMP_CONFIG_JS)
                 import subprocess
                 import resource
                 def cap_archive():

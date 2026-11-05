@@ -81,4 +81,13 @@ class Boundaries(unittest.TestCase):
             c = copy.deepcopy(CONFIG); c['backup'][key] = value
             with self.assertRaises(ValueError): validate(c)
 
+    def test_mongo_dump_script_has_single_auth_declaration_and_valid_syntax(self):
+        with patch('backup.docker', return_value=b'') as command:
+            backup.mongo('fixture', backup.DUMP_CONFIG_JS)
+        script = command.call_args.args[-1]
+        self.assertEqual(script.count("const fs=require('fs')"), 1)
+        import subprocess
+        result = subprocess.run(['node', '--check'], input=script, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, 'Mongo setup script must parse before DB use')
+
 if __name__ == '__main__': unittest.main()
