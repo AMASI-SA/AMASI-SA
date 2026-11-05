@@ -75,7 +75,7 @@
     "Separately authorized real Mongo/files/encryption restore and old-owner stop proof",
     "Fresh reviewed V5 source/intent handoff before any Production merge/deploy"
   ],
-  "next_action": "Await approval of five1CPU/2GB Frankfurt services plus10GB Mongo disk, recommended dedicated Pro base152.50USD/month excluding taxes/overages. Do not create resources or connect Production before separate approval.",
+  "next_action": "Await explicit financial approval: Hobby, five Frankfurt1CPU/2GB services and10GB disk,127.50USD/month base; proposed72hours with20USD manual stop threshold; verify dashboard controls before paid creation.",
   "base_monthly_usd": {
     "hobby": 127.5,
     "pro": 152.5,
@@ -91,5 +91,9 @@
     "skipped": 6,
     "failure": 1,
     "failure_stage": "Unchanged V5 Production release readiness; no bypass"
-  }
+  },
+  "selected_workspace_plan": "Hobby",
+  "financial_approval_packet": "docs/operations/EXIT-2D-RENDER-20261105/HOBBY-APPROVAL.txt",
+  "resource_creation_authorized": false,
+  "account_alerts_configured": false
 }

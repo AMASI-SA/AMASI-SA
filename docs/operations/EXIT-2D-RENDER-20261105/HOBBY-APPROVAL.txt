@@ -1,0 +1,105 @@
+Render Hobby financial approval packet — 2026-11-05
+
+Status: user selected Hobby; Apply/Create/paid resources NOT authorized yet.
+No account settings or alerts were changed. No Render connector/account session
+is available in this task. Dashboard review and verified alert delivery remain
+pre-creation gates; do not claim these controls are active from this document.
+
+Exact proposed inventory: dedicated Hobby workspace, Frankfurt, one instance
+per service, plan1c-2g (1CPU/2GB): web/frontend/proxy25USD/month, private reports25,
+sync worker25, accounting worker25, private synthetic Mongo25. Compute125 total.
+One10GB Mongo disk at0.25USD/GB-month=2.50. Hobby subscription0.
+BASE127.50USD/month before tax, card/FX fees and excess usage.
+No managed Mongo, Redis, cron, preview resources, paid monitoring, domains,
+PrivateLink or Pro upgrade. No Production data/provider credentials/webhooks.
+
+Published Hobby allowances:500 Starter pipeline minutes/month,5GB outbound/month.
+Private same-region service traffic does not consume billed outbound bandwidth.
+Public excess outbound0.15USD/GB. Pipeline overage price must be confirmed in
+dashboard; proposed paid pipeline spend limit0USD means no paid build minutes.
+Compute is prorated to seconds. Approximate30-day estimates (not invoice quotes):
+24hours4.25USD;72hours12.75USD;7days29.75USD. Actual calendar/proration, start and
+stop times, overlap during deploys, migration runtime and billing lag can differ.
+
+Proposed authorization: initial72-hour window from first paid resource creation,
+target base12.75USD, manual stop threshold20USD accrued pre-tax spend. Neither20
+nor127.50 is a provider-enforced aggregate cap. Extension requires approval.
+Dashboard checkout must confirm all five25USD instances and2.50USD disk; any
+different rate/quantity/add-on blocks creation pending a revised quote.
+
+Controls BEFORE Apply (not configured yet)
+1. Dedicated Hobby workspace; verify owner billing email and payment/currency/tax.
+2. Workspace Settings > Build Pipeline: Starter, paid spend limit0USD, save and
+   read back. If0 unsupported or allowances insufficient, stop and seek approval.
+3. Integrations > Notifications: Email, failure notifications for all5 services;
+   confirm verified destination and account-supported delivery check. These cover
+   failures/unhealthy/disk80%, NOT a verified aggregate-spend alert feature.
+4. Inspect Billing for native usage alerts; enable available thresholds and read
+   back actual scope. No published general hard compute/egress cap is assumed.
+   If unavailable, explicitly use manual monitoring; do not invent native alerts.
+5. Named test operator must review Billing/Usage at creation, every6hours and at
+   each load test. Warn at10USD accrued, stop load at15USD, stop services at20USD;
+   watch outbound at3GB, stop load at4GB; pipeline warn350, stop redeploys450min.
+   Stop sooner at72hours, unexpected resources/usage, or missing monitoring owner.
+   These are operational thresholds, not background automation or guaranteed cap.
+6. Auto deploy off, one instance each; no autoscaling, PR previews or extra jobs.
+
+Creation sequence AFTER explicit financial approval
+1. Record approval scope/window, workspace ID, five-resource allowlist and checkout
+   screenshots. Connect only AMASI-SA/AMASI-SA and development branch from PR1757.
+2. Create private synthetic Mongo first using reviewed Mongo image/10GB disk in
+   Frankfurt. This is itself PAID and cannot precede approval. Record private host.
+3. Create synthetic-secrets group with NEW random staging-only values from HOSTING.
+   Never copy Production values. Configure only synthetic DB, temporary Render URL,
+   JWT/admin/MFA/bootstrap and WebAuthn origin. No real provider access or delivery.
+4. Preview the Blueprint path packaging/exit2d/render/render.staging.yaml. Reuse
+   EXACT existing Mongo service by identity, not a second instance. If dashboard
+   cannot adopt it, create remaining4 manually from YAML; do not Apply duplicate
+   Mongo or add a sixth service. Verify complete five-service estimate first.
+5. Run existing preDeploy migration; all roles wait matching schema barrier.
+   Verify reports and Mongo have NO public URL/port; web alone public HTTPS.
+6. Seed only synthetic data. Test auth/employee roles, reports+sync concurrency,
+   restart each role, report outage, fencing/replays. Real Qoyod remains unconfigured.
+   Preserve Draft1757; do not touch frozen V5 intent or bypass its failed check.
+
+Measurements / retention
+Record immutable code SHA, service IDs/specs/region, deploy/build durations, seed
+counts, timestamps, fault schedule and request IDs. Export sanitized logs daily
+and before teardown, and CPU/RAM charts/samples for EACH service at baseline/load/
+failure/recovery, plus Billing usage and estimated/final cost. Hobby retains logs
+and metrics7days; export earlier. Never export secrets, OTPs, tokens or raw bodies.
+Use existing operational harness for comparable5000-order/4-reader/8-group runs;
+check online seeding controls before targeting any URL. No blind benchmark reuse
+with providers configured. Latency dataset includes p50/p95/max/errors, TLS/TTFB,
+concurrency and client location/network metadata without personal IP disclosure.
+Riyadh test requires an actual Riyadh client/operator network; Windows timezone
+is NOT location evidence. If unavailable, label client geography unknown and
+report region-local results separately; do not buy another measurement service.
+Store sanitized evidence/checksums durably with GitHub task artifacts; large/raw
+captures stay in approved local storage. No new paid telemetry service.
+
+Stop / delete (planned, not executed or presently authorized)
+At test end or threshold: stop load and admission, disable automatic triggers,
+suspend both workers and verify process/claim drain; capture diagnostics, then
+suspend web/reports. Capture synthetic restore evidence only if needed; no keys
+or full synthetic DB dump in Git. Stop Mongo last after export/consistency checks.
+Suspension is temporary: do not assume attached disk billing has ended.
+Delete ONLY approved test IDs: four app services, Mongo service AND attached10GB
+disk; confirm disk deletion explicitly rather than assuming cascade. Review
+Blueprint and disable/remove reconciliation so nothing is recreated. Remove test
+secret groups/credentials and dedicated integration when no longer needed.
+Check workspace service/disk inventories and Billing for zero live/suspended test
+resources; retain deletion receipts, UTC/Saudi timestamps and final usage/invoice.
+Charges already accrued/billing lag remain payable after deletion. No blanket
+workspace deletion, no unrelated resources, no Production deletion. Future approval
+should explicitly include destruction of this allowlisted synthetic environment.
+
+Sources verified2026-11-05
+https://render.com/pricing?trk=article-ssr-frontend-pulse_little-text-block
+https://render.com/docs/compute-plans
+https://render.com/docs/outbound-bandwidth
+https://render.com/docs/build-pipeline
+https://render.com/docs/notifications
+https://render.com/docs/service-metrics
+https://render.com/docs/logging
+https://render.com/docs/disks
