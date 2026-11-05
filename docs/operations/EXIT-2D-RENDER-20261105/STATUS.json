@@ -99,5 +99,11 @@
   "economy_results": "docs/operations/EXIT-2D-RENDER-20261105/ECONOMY-RESULTS.json",
   "economy_report": "docs/operations/EXIT-2D-RENDER-20261105/ECONOMY-AR.txt",
   "selected_base_monthly_usd": 36.25,
-  "economy_tested_source": "3ae0ffa087d6d0f2c145f3278026cecfd8c4ca04"
+  "economy_tested_source": "3ae0ffa087d6d0f2c145f3278026cecfd8c4ca04",
+  "economy_final_tested_source": "cf4f1694f8e4dea5ec2830af975a6a559d65b31c",
+  "economy_final_ci_runs": [
+    42044382363,
+    42044383075
+  ],
+  "economy_final_four_jobs": "success"
 }

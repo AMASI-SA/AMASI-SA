@@ -515,6 +515,11 @@
       "run": 42042080212,
       "source": "3ae0ffa08",
       "result": "Both expanded profiles success"
+    },
+    {
+      "run": 42044382363,
+      "source": "cf4f1694f",
+      "result": "Final selected Blueprint source, both profiles success; inherited run42044383075 both jobs success"
     }
   ],
   "limits": [
@@ -526,5 +531,455 @@
     "No Riyadh measurement, long soak or Production dataset",
     "V5 remains unchanged and Production release readiness unsatisfied",
     "No Render account controls configured or paid resources created"
-  ]
+  ],
+  "final_source_retest": {
+    "tested_source": "cf4f1694f8e4dea5ec2830af975a6a559d65b31c",
+    "economy_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/42044382363",
+    "regression_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/42044383075",
+    "all_four_jobs_success": true,
+    "jobs": {
+      "economy512m": 127303259888,
+      "economy2g": 127303260324,
+      "hosting_images": 127303263758,
+      "isolated_linux": 127303264166
+    },
+    "profiles": {
+      "2g": {
+        "outcome": {
+          "exit_code": 0,
+          "web_memory": "2g"
+        },
+        "resources": {
+          "kind": "cgroup_v2_no_swap",
+          "services": {
+            "exit2d-econ-mongo-42044382363-2g": {
+              "samples": 776,
+              "current_bytes": 434356224,
+              "peak_bytes": 537161728,
+              "oom": 0,
+              "oom_kill": 0,
+              "restarts_max": 0,
+              "cpu_usage_usec": 35122422,
+              "sample_total_bytes": 301982339072,
+              "cpu_throttled_usec": 39768218,
+              "docker_oom_seen": false,
+              "memory_limit_bytes": 536870912,
+              "memory_swap_bytes": 536870912,
+              "nano_cpus": 500000000,
+              "sample_mean_bytes": 389152498,
+              "working_set_peak_bytes": 365760512,
+              "anonymous_peak_bytes": 353996800,
+              "memory_limit_hits": 1096
+            },
+            "exit2d-econ-web-42044382363-2g": {
+              "samples": 761,
+              "current_bytes": 269950976,
+              "peak_bytes": 319819776,
+              "oom": 0,
+              "oom_kill": 0,
+              "restarts_max": 0,
+              "cpu_usage_usec": 42148346,
+              "sample_total_bytes": 207077335040,
+              "cpu_throttled_usec": 19357684,
+              "docker_oom_seen": false,
+              "memory_limit_bytes": 2147483648,
+              "memory_swap_bytes": 2147483648,
+              "nano_cpus": 1000000000,
+              "sample_mean_bytes": 272112135,
+              "working_set_peak_bytes": 310538240,
+              "anonymous_peak_bytes": 301805568,
+              "memory_limit_hits": 0
+            },
+            "exit2d-econ-reports-42044382363-2g": {
+              "samples": 729,
+              "current_bytes": 238759936,
+              "peak_bytes": 301645824,
+              "oom": 0,
+              "oom_kill": 0,
+              "restarts_max": 0,
+              "cpu_usage_usec": 24891845,
+              "sample_total_bytes": 169113034752,
+              "cpu_throttled_usec": 24868898,
+              "docker_oom_seen": false,
+              "memory_limit_bytes": 536870912,
+              "memory_swap_bytes": 536870912,
+              "nano_cpus": 500000000,
+              "sample_mean_bytes": 231979471,
+              "working_set_peak_bytes": 301236224,
+              "anonymous_peak_bytes": 293466112,
+              "memory_limit_hits": 0
+            },
+            "exit2d-econ-sync-42044382363-2g": {
+              "samples": 733,
+              "current_bytes": 233607168,
+              "peak_bytes": 333398016,
+              "oom": 0,
+              "oom_kill": 0,
+              "restarts_max": 0,
+              "cpu_usage_usec": 37885192,
+              "sample_total_bytes": 176626036736,
+              "cpu_throttled_usec": 29355687,
+              "docker_oom_seen": false,
+              "memory_limit_bytes": 536870912,
+              "memory_swap_bytes": 536870912,
+              "nano_cpus": 500000000,
+              "sample_mean_bytes": 240963215,
+              "working_set_peak_bytes": 333389824,
+              "anonymous_peak_bytes": 325324800,
+              "memory_limit_hits": 0
+            },
+            "exit2d-econ-accounting-42044382363-2g": {
+              "samples": 737,
+              "current_bytes": 231612416,
+              "peak_bytes": 288067584,
+              "oom": 0,
+              "oom_kill": 0,
+              "restarts_max": 0,
+              "cpu_usage_usec": 22453744,
+              "sample_total_bytes": 160172908544,
+              "cpu_throttled_usec": 25399693,
+              "docker_oom_seen": false,
+              "memory_limit_bytes": 536870912,
+              "memory_swap_bytes": 536870912,
+              "nano_cpus": 500000000,
+              "sample_mean_bytes": 217330947,
+              "working_set_peak_bytes": 286744576,
+              "anonymous_peak_bytes": 279330816,
+              "memory_limit_hits": 0
+            }
+          }
+        },
+        "operations": [
+          {
+            "analytics_completed": 4,
+            "kind": "actual_operational_handlers_synthetic_data",
+            "paths": {
+              "assembly_labeling": {
+                "p50_ms": 9.396,
+                "p95_ms": 65.825,
+                "requests": 10
+              },
+              "assembly_piece_ready": {
+                "p50_ms": 30.801,
+                "p95_ms": 76.807,
+                "requests": 10
+              },
+              "assembly_receiving_board": {
+                "p50_ms": 34.963,
+                "p95_ms": 137.843,
+                "requests": 10
+              },
+              "create_supplier_file": {
+                "p50_ms": 37.643,
+                "p95_ms": 103.108,
+                "requests": 10
+              },
+              "mark_supplier_ready": {
+                "p50_ms": 21.099,
+                "p95_ms": 32.666,
+                "requests": 10
+              },
+              "my_products": {
+                "p50_ms": 31.001,
+                "p95_ms": 119.209,
+                "requests": 10
+              },
+              "my_products_waiting_page": {
+                "p50_ms": 20.5,
+                "p95_ms": 1011.782,
+                "requests": 10
+              },
+              "shipping_label_print": {
+                "p50_ms": 42.039,
+                "p95_ms": 53.037,
+                "requests": 10
+              }
+            },
+            "physical_printer_tested": false,
+            "provider_calls_possible": false,
+            "supplier_files_unique": 10
+          },
+          {
+            "kind": "snap_employee_overlap",
+            "before_rounds": 1,
+            "after_rounds": 9
+          },
+          {
+            "objects": 7707,
+            "dataSize": 4703657.0,
+            "storageSize": 1433600.0,
+            "indexSize": 5058560.0,
+            "totalSize": 6492160.0,
+            "kind": "synthetic_database_growth"
+          }
+        ],
+        "growth": [
+          {
+            "objects": 7767,
+            "dataSize": 57139807.0,
+            "storageSize": 49479680.0,
+            "indexSize": 10424320.0,
+            "totalSize": 59904000.0,
+            "kind": "synthetic_database_growth"
+          }
+        ],
+        "snap_final": {
+          "kind": "snap_real_client_real_mongo_simulated_transport",
+          "rounds": 59,
+          "entities_per_round": 100,
+          "hourly_facts_unique": 2400,
+          "duplicate_lease_denied": true
+        },
+        "accounting_before": [
+          {
+            "kind": "real_qoyod_durable_replay_guard",
+            "attempts": 100,
+            "all_refused_already_sent": true,
+            "markers_unchanged": true,
+            "real_provider_enabled": false
+          }
+        ],
+        "accounting_after": [
+          {
+            "kind": "real_qoyod_durable_replay_guard",
+            "attempts": 100,
+            "all_refused_already_sent": true,
+            "markers_unchanged": true,
+            "real_provider_enabled": false
+          }
+        ],
+        "disk_usage": "Filesystem      1B-blocks      Used  Available Use% Mounted on\n/dev/loop0     4834848768 574423040 4243648512  12% /home/runner/work/AMASI-SA/AMASI-SA/economy-evidence/2g/disk\n",
+        "evidence_file_sha256": {
+          "accounting-after.jsonl": "b91feb2d6cd432b1b693a5dae1e548ec53c116108112212b1bb9a9e0c9e7c182",
+          "accounting-before.jsonl": "b91feb2d6cd432b1b693a5dae1e548ec53c116108112212b1bb9a9e0c9e7c182",
+          "disk-usage.txt": "841dcb15bb7d0e665b91bd22144e0d095920dc4d44728289483a7c1768ef1d2d",
+          "final-inspect.json": "347a6ad5672a967c94a4991e64259ba2e87e629c4296baa8eed0b9cd3eacb741",
+          "growth.jsonl": "a23bd281fa227de373e5e7602ea3e2228e57416b87f30c5e87849640c9c02ca4",
+          "operations.jsonl": "2d6aa08de80668d1b2444d0b39357e13d86eb88558c3a2313b309094ffdcfe77",
+          "outcome.json": "77493537751be1cae752cc41559974a00fac450425eb81ab1b3c1bdb2888d821",
+          "resources.json": "dc677976857874dcaf6b9281efc0b9cbdd843937f639106657c5312ace989de6",
+          "setup.jsonl": "8c6f8f7c09b8b880d271d8ba205675c46b8cf949e816dabb0078e6e3109b7a50",
+          "snap.jsonl": "ccf0a62e87d916e23a3a5953e3e11f4a0c7b2346a5fb11d9f3ea4e3c04802708"
+        }
+      },
+      "512m": {
+        "outcome": {
+          "exit_code": 0,
+          "web_memory": "512m"
+        },
+        "resources": {
+          "kind": "cgroup_v2_no_swap",
+          "services": {
+            "exit2d-econ-mongo-42044382363-512m": {
+              "samples": 943,
+              "current_bytes": 432996352,
+              "peak_bytes": 537698304,
+              "oom": 0,
+              "oom_kill": 0,
+              "restarts_max": 0,
+              "cpu_usage_usec": 39285960,
+              "sample_total_bytes": 360511205376,
+              "cpu_throttled_usec": 49289553,
+              "docker_oom_seen": false,
+              "memory_limit_bytes": 536870912,
+              "memory_swap_bytes": 536870912,
+              "nano_cpus": 500000000,
+              "sample_mean_bytes": 382302444,
+              "working_set_peak_bytes": 331231232,
+              "anonymous_peak_bytes": 318947328,
+              "memory_limit_hits": 810
+            },
+            "exit2d-econ-web-42044382363-512m": {
+              "samples": 923,
+              "current_bytes": 22290432,
+              "peak_bytes": 319967232,
+              "oom": 0,
+              "oom_kill": 0,
+              "restarts_max": 0,
+              "cpu_usage_usec": 44491926,
+              "sample_total_bytes": 239844569088,
+              "cpu_throttled_usec": 89438598,
+              "docker_oom_seen": false,
+              "memory_limit_bytes": 536870912,
+              "memory_swap_bytes": 536870912,
+              "nano_cpus": 500000000,
+              "sample_mean_bytes": 259853270,
+              "working_set_peak_bytes": 319664128,
+              "anonymous_peak_bytes": 311140352,
+              "memory_limit_hits": 0
+            },
+            "exit2d-econ-reports-42044382363-512m": {
+              "samples": 891,
+              "current_bytes": 238936064,
+              "peak_bytes": 301662208,
+              "oom": 0,
+              "oom_kill": 0,
+              "restarts_max": 0,
+              "cpu_usage_usec": 31963296,
+              "sample_total_bytes": 205913493504,
+              "cpu_throttled_usec": 31582233,
+              "docker_oom_seen": false,
+              "memory_limit_bytes": 536870912,
+              "memory_swap_bytes": 536870912,
+              "nano_cpus": 500000000,
+              "sample_mean_bytes": 231103808,
+              "working_set_peak_bytes": 301121536,
+              "anonymous_peak_bytes": 293396480,
+              "memory_limit_hits": 0
+            },
+            "exit2d-econ-sync-42044382363-512m": {
+              "samples": 896,
+              "current_bytes": 233861120,
+              "peak_bytes": 333324288,
+              "oom": 0,
+              "oom_kill": 0,
+              "restarts_max": 0,
+              "cpu_usage_usec": 39916767,
+              "sample_total_bytes": 214836830208,
+              "cpu_throttled_usec": 31173885,
+              "docker_oom_seen": false,
+              "memory_limit_bytes": 536870912,
+              "memory_swap_bytes": 536870912,
+              "nano_cpus": 500000000,
+              "sample_mean_bytes": 239773248,
+              "working_set_peak_bytes": 333197312,
+              "anonymous_peak_bytes": 325361664,
+              "memory_limit_hits": 0
+            },
+            "exit2d-econ-accounting-42044382363-512m": {
+              "samples": 903,
+              "current_bytes": 231403520,
+              "peak_bytes": 287911936,
+              "oom": 0,
+              "oom_kill": 0,
+              "restarts_max": 0,
+              "cpu_usage_usec": 24250920,
+              "sample_total_bytes": 198126678016,
+              "cpu_throttled_usec": 26846537,
+              "docker_oom_seen": false,
+              "memory_limit_bytes": 536870912,
+              "memory_swap_bytes": 536870912,
+              "nano_cpus": 500000000,
+              "sample_mean_bytes": 219409388,
+              "working_set_peak_bytes": 287129600,
+              "anonymous_peak_bytes": 279228416,
+              "memory_limit_hits": 0
+            }
+          }
+        },
+        "operations": [
+          {
+            "analytics_completed": 4,
+            "kind": "actual_operational_handlers_synthetic_data",
+            "paths": {
+              "assembly_labeling": {
+                "p50_ms": 13.928,
+                "p95_ms": 71.069,
+                "requests": 10
+              },
+              "assembly_piece_ready": {
+                "p50_ms": 72.204,
+                "p95_ms": 113.023,
+                "requests": 10
+              },
+              "assembly_receiving_board": {
+                "p50_ms": 82.033,
+                "p95_ms": 186.354,
+                "requests": 10
+              },
+              "create_supplier_file": {
+                "p50_ms": 78.641,
+                "p95_ms": 195.581,
+                "requests": 10
+              },
+              "mark_supplier_ready": {
+                "p50_ms": 23.189,
+                "p95_ms": 105.118,
+                "requests": 10
+              },
+              "my_products": {
+                "p50_ms": 84.035,
+                "p95_ms": 104.842,
+                "requests": 10
+              },
+              "my_products_waiting_page": {
+                "p50_ms": 19.51,
+                "p95_ms": 2184.835,
+                "requests": 10
+              },
+              "shipping_label_print": {
+                "p50_ms": 86.685,
+                "p95_ms": 176.08,
+                "requests": 10
+              }
+            },
+            "physical_printer_tested": false,
+            "provider_calls_possible": false,
+            "supplier_files_unique": 10
+          },
+          {
+            "kind": "snap_employee_overlap",
+            "before_rounds": 1,
+            "after_rounds": 8
+          },
+          {
+            "objects": 7707,
+            "dataSize": 4703657.0,
+            "storageSize": 2170880.0,
+            "indexSize": 5926912.0,
+            "totalSize": 8097792.0,
+            "kind": "synthetic_database_growth"
+          }
+        ],
+        "growth": [
+          {
+            "objects": 7767,
+            "dataSize": 57139807.0,
+            "storageSize": 50749440.0,
+            "indexSize": 9428992.0,
+            "totalSize": 60178432.0,
+            "kind": "synthetic_database_growth"
+          }
+        ],
+        "snap_final": {
+          "kind": "snap_real_client_real_mongo_simulated_transport",
+          "rounds": 46,
+          "entities_per_round": 100,
+          "hourly_facts_unique": 2400,
+          "duplicate_lease_denied": true
+        },
+        "accounting_before": [
+          {
+            "kind": "real_qoyod_durable_replay_guard",
+            "attempts": 100,
+            "all_refused_already_sent": true,
+            "markers_unchanged": true,
+            "real_provider_enabled": false
+          }
+        ],
+        "accounting_after": [
+          {
+            "kind": "real_qoyod_durable_replay_guard",
+            "attempts": 100,
+            "all_refused_already_sent": true,
+            "markers_unchanged": true,
+            "real_provider_enabled": false
+          }
+        ],
+        "disk_usage": "Filesystem      1B-blocks      Used  Available Use% Mounted on\n/dev/loop0     4834848768 457789440 4360282112  10% /home/runner/work/AMASI-SA/AMASI-SA/economy-evidence/512m/disk\n",
+        "evidence_file_sha256": {
+          "accounting-after.jsonl": "b91feb2d6cd432b1b693a5dae1e548ec53c116108112212b1bb9a9e0c9e7c182",
+          "accounting-before.jsonl": "b91feb2d6cd432b1b693a5dae1e548ec53c116108112212b1bb9a9e0c9e7c182",
+          "disk-usage.txt": "7d64acb5cc3353d3bedd9e5569dafc5b6a0bed94625cd5b0f382a5663398fbed",
+          "final-inspect.json": "50c0c0259716bdda55556e72c7ec28c66bfca30a94522bd6595eb9f218738fa7",
+          "growth.jsonl": "3fde96a434d35813f95c45e0e8a1afd69ffd0e2adead06bd9d68ffed9696376e",
+          "operations.jsonl": "422ae60508cdb4acfcaf570f8fc60e0a1854c1930f643f526012c4889a30ce9b",
+          "outcome.json": "7d2333b0c9fbbe1026edbc7945e8e53c56e2a4bee060f474724743af266e1af6",
+          "resources.json": "b366fc0b9d1722b4167edca27bacbac05dfdc1e6b77f222ecbe21514a7f335eb",
+          "setup.jsonl": "cf7c5aa5be82825acd2fb7ec7a7a51771ee4c3af85a30054189f7f2c390d7c8d",
+          "snap.jsonl": "3134ae6ef5efa125ff16961cef2fd9c911c275394ecc5513563417124f4f4636"
+        }
+      }
+    }
+  }
 }
