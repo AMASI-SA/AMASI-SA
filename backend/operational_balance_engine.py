@@ -335,7 +335,7 @@ def reconcile(state, sources, as_of):
                         or order.get("status") not in DELIVERED
                         or not isinstance(order.get("currency"), str) or not order["currency"]
                         or event.get("currency") != order["currency"]
-                        or ((delivery_only or event.get("party_type") == "store_driver") and order["currency"] != "SAR")
+                        or (event.get("party_type") == "store_driver" and order["currency"] != "SAR")
                         or event.get("party_type") not in {"courier", "store_driver"}
                         or not event.get("party_id") or event.get("party_id") != carrier.get("id")
                         or event.get("party_type") != carrier.get("party_type", carrier.get("kind"))):
@@ -460,7 +460,7 @@ def reconcile(state, sources, as_of):
                             and not (key != service_key and key in facts) and key not in shipping_allocations
                             and money(row.get("confirmed", "0")) == ZERO):
                         del obligations[key]
-            elif frozen and fee_currency:
+            elif frozen and fee_currency and not order.get('prepaid_shipping'):
                 if order.get("native_driver_earning"):
                     earning = order["native_driver_earning"]
                     if (earning["party_id"] != frozen["id"] or frozen["party_type"] != "store_driver"
@@ -523,7 +523,8 @@ def reconcile(state, sources, as_of):
                     expected=ZERO if cancelled else money(order.get("cod_amount", "0")), direction="receivable", business_date=created.date(), **cod_metadata)
             else:
                 for key, obligation in obligations.items():
-                    if (fee_currency and (key == service_key or key.startswith(service_key + ":"))) or key == "cod:" + oid:
+                    if (fee_currency and not order.get('prepaid_shipping') and not order.get('shipping_evidence_held')
+                            and (key == service_key or key.startswith(service_key + ":"))) or key == "cod:" + oid:
                         obligations[key] = {**obligation, "expected": "0.00"}
             if (not delivery_only and order.get("payment") and
                     apply_split_payment(result, order, now, put, issue, sources.get("fee_policies", []), reference_owners)):
@@ -815,6 +816,8 @@ def reconcile(state, sources, as_of):
 
     from operational_historical_shipping_fee import apply_reviewed_fees
     resolved_fees = apply_reviewed_fees(result, sources, put, fact, issue)
+    from operational_prepaid_shipping import apply_events
+    apply_events(result, sources.get('prepaid_shipping_events', []), start, now, issue)
     if resolved_fees:
         issues = [i for i in issues if (i.get("code"), i.get("source_id")) not in resolved_fees]
     from operational_customer_returns import shipping_obligations

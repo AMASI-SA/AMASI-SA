@@ -429,6 +429,11 @@ async def sync_order_from_verified_webhook(
             proof = verified_webhook_transition(event_body, payload, shipping_snapshot, user_id)
             if proof:
                 shipping_snapshot[WEBHOOK_PROOF] = proof
+            from operational_courier_transitions import COMPLETED_PROOF
+            from operational_order_completed_evidence import verified_completed_webhook
+            completed = verified_completed_webhook(event_body, payload, shipping_snapshot, user_id)
+            if completed:
+                shipping_snapshot[COMPLETED_PROOF] = completed
 
         async def persist_snapshot(scoped):
             return await upsert_order(scoped, user_id, order_number, doc, source="salla_direct", raw=payload,

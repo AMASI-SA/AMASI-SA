@@ -1,4 +1,4 @@
-"""Pin an owner's saved deferred courier terms for the operational report."""
+"""Pin the owner's courier terms and an explicit cashbox for prepaid charges."""
 from collections import Counter
 from decimal import Decimal, InvalidOperation
 
@@ -81,7 +81,14 @@ def verified_native(c):
             and all(isinstance(k, str) and k and k == k.strip() for k in keys))
 
 
-async def choices(db, owner, state):
+async def cash_choices(db, owner):
+    from operational_balance_sources import entities
+    return [{**row, 'ready': True} for row in await entities(db, owner, 'cash')
+            if row.get('ready') is not False and row.get('settings_complete') is not False
+            and row.get('kind') == 'cash' and row.get('currency') == 'SAR']
+
+
+async def choices(db, owner, state, *, cash_accounts=None):
     from operational_balance_sources import external_courier, rows, usable
     records = await db['settings'].find({'user_id': owner}, {'_id': 0, 'user_id': 1, 'shipping_companies': 1}).to_list(2)
     setups = await rows(db, owner, 'mz2_shipping_setup_v2')
@@ -93,14 +100,16 @@ async def choices(db, owner, state):
     identities = [saved_identity(c) for c in companies]
     counts = Counter(item['id'] for item in identities if item)
     native_setup = setups[0] if setups else {}
+    cash_accounts = await cash_choices(db, owner) if cash_accounts is None else cash_accounts
     items = []
     for row, identity in zip(companies, identities):
-        if not (usable(row) and external_courier(row) and row.get('is_deferred') is True
-                and row.get('payment_mode') in (None, 'deferred')):
+        prepaid = row.get('is_deferred') is False and row.get('payment_mode') in (None, 'prepaid')
+        deferred = row.get('is_deferred') is True and row.get('payment_mode') in (None, 'deferred')
+        if not (usable(row) and external_courier(row) and (prepaid or deferred)):
             continue
         if not identity or counts[identity['id']] != 1:
             continue
-        candidate = {**identity, 'currency': 'SAR'}
+        candidate = {**identity, 'currency': 'SAR', 'payment_mode': 'prepaid' if prepaid else 'deferred'}
         native = native_matches(native_setup, candidate)
         if native:
             if len(native) != 1 or not verified_native(native[0]):
@@ -121,9 +130,12 @@ async def choices(db, owner, state):
         if previous and not native and folded(previous['keys']) != folded(candidate['keys']):
             items.append({**candidate, 'unavailable': 'تغيّرت معرّفات البوليصة. راجع تعريف الناقل قبل ربط التعرفة.'})
             continue
-        items.append({**candidate, 'source_hash': digest([owner, candidate, previous.get('version_id')]),
+        candidate['cash_account_id'] = (previous.get('cash_account') or {}).get('id') if prepaid else None
+        items.append({**candidate, 'source_hash': digest([owner, candidate, previous.get('version_id'),
+                                                        cash_accounts if prepaid else None]),
                       'current_from': previous.get('effective_from'), 'same_terms': previous.get('terms') == candidate['terms']
-                      and previous.get('keys') == candidate['keys'] and bool(previous.get('native_mapping')) == bool(native)})
+                      and previous.get('keys') == candidate['keys'] and bool(previous.get('native_mapping')) == bool(native)
+                      and previous.get('payment_mode', 'deferred') == candidate['payment_mode']})
     mapped_ids = Counter(item['id'] for item in items)
     for item in items:
         if mapped_ids[item['id']] > 1:
@@ -133,7 +145,9 @@ async def choices(db, owner, state):
 
 async def catalog(db, owner):
     state = await read(db, owner)
-    return {'items': await choices(db, owner, state), 'started_at': state.get('started_at')}
+    accounts = await cash_choices(db, owner)
+    return {'items': await choices(db, owner, state, cash_accounts=accounts), 'cash_accounts': accounts,
+            'started_at': state.get('started_at')}
 
 
 async def approve(db, owner, actor, payload):
@@ -160,12 +174,28 @@ async def approve(db, owner, actor, payload):
         candidate = next((c for c in await choices(db, owner, state) if c['id'] == payload['party_id']), None)
         if not candidate or candidate.get('source_hash') != payload['source_hash'] or candidate.get('unavailable'):
             fail('courier_tariff_preview_stale', 'تغيرت التعرفة أو الربط. افتح المعاينة من جديد.')
-        if candidate['same_terms'] or (candidate['current_from'] and at <= instant(candidate['current_from'])):
+        cash = None
+        if candidate['payment_mode'] == 'prepaid':
+            from operational_balance_service import entity
+            if not payload.get('cash_account_id'):
+                fail('courier_tariff_cash_account_required', 'اختر صندوق دفع أجرة الشحن المسبقة.')
+            cash = await entity(db, owner, 'cash', payload['cash_account_id'], candidate['currency'])
+        elif payload.get('cash_account_id'):
+            fail('courier_tariff_cash_account_invalid', 'ربط الصندوق متاح لعقد الشحن المدفوع مقدمًا فقط.')
+        same_binding = (cash or {}).get('id') == candidate.get('cash_account_id')
+        if (candidate['same_terms'] and same_binding) or (candidate['current_from'] and at <= instant(candidate['current_from'])):
             fail('courier_tariff_period_conflict', 'العقد مطابق أو يتداخل مع نسخة معتمدة.')
         versions = state.setdefault('courier_tariffs', [])
-        version = {k: candidate[k] for k in ('id', 'name', 'keys', 'currency', 'terms')}
+        version = {k: candidate[k] for k in ('id', 'name', 'keys', 'currency', 'terms', 'payment_mode')}
+        if cash:
+            version['cash_account'] = {k: cash[k] for k in ('id', 'name', 'kind', 'currency')}
         version['native_mapping'] = bool(candidate.get('native_mapping'))
-        version.update(version_id=digest([candidate['source_hash'], at.isoformat()]), effective_from=at.isoformat(),
+        identity = [candidate['source_hash'], at.isoformat()]
+        if cash:
+            # The preview includes the cashbox choices; only this approval
+            # chooses which exact account belongs to the immutable contract.
+            identity.append(version['cash_account'])
+        version.update(version_id=digest(identity), effective_from=at.isoformat(),
                        confirmed_at=stamp, confirmed_by=actor)
         versions.append(version)
         result = {'id': version['id'], 'version_id': version['version_id'], 'effective_from': version['effective_from']}
@@ -173,6 +203,18 @@ async def approve(db, owner, actor, payload):
         remember(state, action, payload, result)
         return result
     return await mutate(db, owner, save)
+
+
+def valid_payment_binding(version):
+    mode = version.get('payment_mode', 'deferred')
+    cash = version.get('cash_account')
+    if mode == 'deferred':
+        return cash is None
+    return (mode == 'prepaid' and isinstance(cash, dict)
+            and isinstance(cash.get('id'), str) and bool(cash['id'].strip())
+            and cash['id'] == cash['id'].strip() and cash.get('kind') == 'cash'
+            and cash.get('currency') == version.get('currency') == 'SAR'
+            and isinstance(cash.get('name'), str) and bool(cash['name'].strip()))
 
 
 def with_tariffs(setup, owner, state):
@@ -188,7 +230,8 @@ def with_tariffs(setup, owner, state):
         current = history[-1]
         keys = current['keys']
         native = native_matches(setup, {'id': key, 'keys': keys})
-        if (any(v.get('confirmed_by') != owner or not v.get('confirmed_at') for v in history)
+        if (any(v.get('confirmed_by') != owner or not v.get('confirmed_at') or not valid_payment_binding(v)
+                for v in history)
                 or native and (len(native) != 1 or not verified_native(native[0]) or native[0]['courier_key'] != key)):
             conflicts.append(key)
             continue
@@ -211,7 +254,8 @@ def with_tariffs(setup, owner, state):
                         conflicts.append(key)
                     continue
             result['contracts'].append({**version, 'id': version['version_id'], 'kind': 'operational_courier_tariff',
-                'status': 'approved', 'context': 'delivery', 'party_type': 'courier', 'party_id': key,
+                'status': 'approved', 'context': 'order_completed' if version.get('payment_mode') == 'prepaid' else 'delivery',
+                'party_type': 'courier', 'party_id': key,
                 'effective_to': history[index + 1]['effective_from'] if index + 1 < len(history) else None})
     return result, conflicts
 

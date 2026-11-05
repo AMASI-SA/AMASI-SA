@@ -81,6 +81,23 @@ test("workbook exports the visible currency and delivery filters as exact text w
     expect(supplier.views[0].rightToLeft).toBe(true);
 });
 
+test("prepaid shipping export preserves completion separately from the unproven delivery date", () => {
+    const payload = report();
+    payload.currencies.SAR.deliveries.rows = [{ id: "prepaid-fixture", order_id: "prepaid-order", order_number: "P-100",
+        party_type: "courier", party_name: "شركة الدفع المقدم", payment_mode: "prepaid", recognition_event: "order_completed",
+        completed_at: "2026-11-01T07:00:00Z", delivered_at: null, cash_account_name: "صندوق سلة التجريبي",
+        shipping_confirmed: "34.50", shipping_settled: "34.50", shipping_outstanding: "0.00" }];
+    const rows = buildFinancialPositionWorkbook(payload, "SAR").getWorksheet("تفاصيل الطلبات").getSheetValues().filter(Boolean);
+    const header = rows.find(values => values[1] === "رقم الطلب");
+    const order = rows.find(values => values[1] === "P-100");
+    expect(header).toContain("تاريخ التنفيذ — الرياض");
+    expect(order[header.indexOf("تاريخ التنفيذ — الرياض")]).toContain("10:00");
+    expect(order[header.indexOf("تاريخ التسليم — الرياض")]).toBe("غير متاح");
+    expect(order[header.indexOf("أساس احتساب أجرة الشحن")]).toBe("مدفوع مقدمًا عند تم التنفيذ");
+    expect(order[header.indexOf("صندوق خصم الأجرة")]).toBe("صندوق سلة التجريبي");
+    expect(order[header.indexOf("المتبقي من الأجرة")]).toBe("0.00");
+});
+
 test("export refuses inactive, unauthorized, foreign-currency and invalid contracts", () => {
     const payload = report();
     ["draft", "frozen", "accounting_active"].forEach(status => expect(() => buildFinancialPositionWorkbook({ ...payload, status }, "SAR")).toThrow("report_unavailable"));
