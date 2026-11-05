@@ -41,3 +41,20 @@ jobs:
           name: ovh-host-preparation
           path: host-evidence/
           retention-days: 14
+  application-host-tools:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install local encrypted repository tool
+        run: sudo apt-get update -qq && sudo apt-get install -y restic
+      - name: Actual Compose app TLS load, Mongo backup and unchanged financial refusals
+        run: bash packaging/exit2d/ovh_host/run_application_linux.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ovh-host-application
+          path: host-app-evidence/
+          retention-days: 14
