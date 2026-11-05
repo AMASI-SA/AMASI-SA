@@ -2,7 +2,7 @@
 from copy import deepcopy
 
 from order_cost_authority import calculate_catalog_line_cost, line_fingerprint
-from report_option_recovery import attach_report_option_evidence, report_cost_item
+from report_option_recovery import attach_report_option_evidence
 
 
 def fixture():
@@ -15,8 +15,8 @@ def fixture():
     return order, raw
 
 
-def cost(item):
-    return calculate_catalog_line_cost(item,
+def cost(item, *, current_report=True):
+    return calculate_catalog_line_cost(item, current_report=current_report,
         product={'options': [{'id': 'emb', 'name': 'Old question', 'values': [
             {'id': 'yes', 'name': 'Old answer'}, {'id': 'no', 'name': 'No'}]}]},
         profile={'base_cost': 15}, product_bindings=[{'resource_id': 'bag'}],
@@ -103,6 +103,8 @@ async def test_dashboard_and_sold_http_read_provider_choices_without_writes():
     for builder in (build_mezan_v2_product_cost, build_mezan_v2_product_cost_cooperative):
         result = await builder(readonly, owner, orders)
         assert result['total'] == 48.4, result
+        assert result['missing_product_cost_count'] == 0
+        assert result['product_rows'][0]['total_cost'] == 48.4
 
     async def user():
         return {'id': owner, 'role': 'owner'}
@@ -118,3 +120,74 @@ async def test_dashboard_and_sold_http_read_provider_choices_without_writes():
     stored = await db.unified_orders.find_one({'user_id': owner})
     assert stored['products'][0]['options'] == []
     assert '_report_options_raw' not in stored['products'][0]
+
+
+@pytest.mark.parametrize('alias', ['unknown', 'conflict'])
+def test_explicit_provider_identity_cannot_be_replaced_by_matching_text(alias):
+    order, raw = fixture()
+    option = raw['raw_by_source']['salla_direct']['items'][0]['options'][0]
+    option['name'] = 'Old question'
+    option['value']['name'] = 'Old answer'
+    if alias == 'unknown':
+        option['product_option_id'] = 'unknown'
+    else:
+        option['option_id'] = 'different'
+    attach_report_option_evidence([order], [raw])
+    assert cost(order['products'][0])['mezan_cost_complete'] is False
+
+
+def test_current_bundle_estimate_uses_same_recovered_provider_identity():
+    from current_bundle_reporting_estimate import _choice_pairs
+    order, raw = fixture()
+    attach_report_option_evidence([order], [raw])
+    product = {'options': [{'id': 'emb', 'name': 'Old question', 'values': [
+        {'id': 'yes', 'name': 'Old answer'}, {'id': 'no', 'name': 'No'}]}]}
+    assert _choice_pairs(order['products'][0], product) == {('emb', 'yes')}
+    raw['raw_by_source']['salla_direct']['items'][0]['options'][0]['product_option_id'] = 'unknown'
+    attach_report_option_evidence([order], [raw])
+    with pytest.raises(ValueError):
+        _choice_pairs(order['products'][0], product)
+
+
+@pytest.mark.asyncio
+async def test_cooperative_recovery_yields_without_changing_result():
+    from report_option_recovery import attach_report_option_evidence_cooperative
+    order, raw = fixture()
+    calls = []
+    async def checkpoint():
+        calls.append(True)
+    await attach_report_option_evidence_cooperative([order], [raw], checkpoint=checkpoint)
+    assert len(calls) >= 2
+    assert cost(order['products'][0])['line_total'] == 48.4
+
+
+def test_existing_frozen_cost_authority_remains_unchanged():
+    from order_cost_authority import resolve_order_line_cost
+    order, raw = fixture()
+    item = order['products'][0]
+    fingerprint = line_fingerprint(item)
+    historical = cost(item)
+    authority = {'lines': {('order1', 'line1'): {
+        'line_fingerprint': fingerprint, 'quantity': 2, 'product_id': 'product1',
+        'cost': historical, 'cost_authority': 'intake_snapshot'}}}
+    attach_report_option_evidence([order], [raw])
+    resolved = resolve_order_line_cost(item, order_number='order1', catalog_cost=cost(item),
+        authority=authority, product_id='product1')
+    assert resolved['line_total'] == 32.4
+    assert resolved['mezan_cost_complete'] is False
+
+
+def test_financial_catalog_calculation_does_not_consume_report_evidence():
+    order, raw = fixture()
+    attach_report_option_evidence([order], [raw])
+    assert cost(order['products'][0], current_report=False)['line_total'] == 32.4
+    assert cost(order['products'][0], current_report=False)['mezan_cost_complete'] is False
+
+
+def test_repeated_hydration_cannot_keep_stale_evidence():
+    order, raw = fixture()
+    attach_report_option_evidence([order], [raw])
+    assert cost(order['products'][0])['mezan_cost_complete'] is True
+    raw['raw_by_source']['salla_direct']['reference_id'] = 'different'
+    attach_report_option_evidence([order], [raw])
+    assert cost(order['products'][0])['mezan_cost_complete'] is False

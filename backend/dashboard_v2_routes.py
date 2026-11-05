@@ -315,6 +315,7 @@ def calculate_mezan_v2_line_cost(
         product_bindings=product_bindings,
         option_bindings=option_bindings,
         resources=resources,
+        current_report=True,
     )
 
 
@@ -470,7 +471,7 @@ async def _filtered_orders(
         # Historical rows predate promoted SAR fields. Fetch only the Salla FX
         # proof and exact item option evidence needed in memory. No customer or
         # payment raw fields are loaded and no database write is performed.
-        from report_option_recovery import SALLA_REPORT_OPTION_PROJECTION, attach_report_option_evidence
+        from report_option_recovery import SALLA_REPORT_OPTION_PROJECTION, attach_report_option_evidence_cooperative
         raw_projection = {**SALLA_RAW_CURRENCY_PROJECTION, **SALLA_REPORT_OPTION_PROJECTION}
         if include_marketing_attribution:
             raw_projection.update(SALLA_RAW_ATTRIBUTION_PROJECTION)
@@ -478,7 +479,8 @@ async def _filtered_orders(
             db.unified_orders.find(query, raw_projection),
             100000,
         )
-        attach_report_option_evidence(orders, projected_rows)
+        await attach_report_option_evidence_cooperative(
+            orders, projected_rows, checkpoint=CPUWorkBudget(PARSER_BUDGET_MS).checkpoint)
         await hydrate_order_currency_fields_cooperative(
             orders, projected_rows, checkpoint=CPUWorkBudget(PARSER_BUDGET_MS).checkpoint,
         )
@@ -2246,14 +2248,15 @@ def make_dashboard_v2_router(
         }
         if settings.get("hide_inferred_date_orders"):
             query["order_date_inferred"] = {"$ne": True}
-        from report_option_recovery import SALLA_REPORT_OPTION_PROJECTION, attach_report_option_evidence
+        from report_option_recovery import SALLA_REPORT_OPTION_PROJECTION, attach_report_option_evidence_cooperative
         orders = await db.unified_orders.find(
             query, {**SALLA_REPORT_OPTION_PROJECTION, "products": 1, "order_status": 1, "order_status_slug": 1},
         ).to_list(length=100000)
         orders = [order for order in orders if order_matches_status(
             order, selected, settings.get("report_included_statuses") or [],
         )]
-        attach_report_option_evidence(orders, orders)
+        await attach_report_option_evidence_cooperative(
+            orders, orders, checkpoint=CPUWorkBudget(PARSER_BUDGET_MS).checkpoint)
         for order in orders:
             order.pop("raw_by_source", None)
         rows = await load_sold_products(db, uid, orders)

@@ -127,6 +127,7 @@ def aggregate_sold_products(
                 product_bindings=context.get("product_binding_map", {}).get(product_id, []),
                 option_bindings=context.get("option_map", {}).get(product_id, []),
                 resources=context.get("resources", {}),
+                current_report=True,
             )
             order_number = str(order.get("order_number") or "")
             if authority is not None:

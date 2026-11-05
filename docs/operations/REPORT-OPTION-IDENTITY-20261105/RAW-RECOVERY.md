@@ -34,3 +34,32 @@ source-pinned report gate; independently review exact diff, freeze new A/B,
 wait for other release lease to close, merge/deploy/test under existing user
 authorization. Do not reuse or clear prepaid-cost-1774 lease. Production unchanged
 by this follow-up. Existing PR1772 publication remains verified separately.
+
+## Verified source candidate
+
+Read-only rose investigation also found an empty canonical line whose saved
+provider item contains both paid choices, with matching native line identity.
+No customer data copied into fixtures. Recovery remains deliberately limited
+to empty projections; unresolved/conflicting historical authority is retained.
+
+Added cooperative CPU checkpoints to the existing dashboard/sold-report reads,
+revalidation clears stale in-memory evidence, and explicit current_report opt-in
+prevents financial catalog callers from consuming report-only evidence. Bundle
+explicit option identity conflicts/unknown IDs reject label fallback.
+
+Final local affected suites:254 passed,4 existing real-Mongo skips,5 subtests;
+exit0 in5.94s from backend cwd with MEZAN_CGROUP_ROOT set to an absent test path.
+Twelve new recovery tests include endpoint/reducer integration, frozen authority,
+financial opt-out, duplicate/mismatch/tenant rejection, current bundle identity,
+and cooperative yielding. Source-pinned gate allows only the exact sold-report
+one-line opt-in hash a05b89134c078eefeac5ca9bc4e0827d9f5c7ec0769bed7674eca64c71327fb5.
+An earlier root-cwd run had2 path-read failures; corrected invocation passed.
+An initial source-pin rejection was expected and recorded before exact pin update.
+Diff whitespace check passes. No production writes, merge or deploy by this task.
+
+PR1775 is the continuation ledger. First checkpoint f4b34360b428276f1fc560d0a04a18efff3ee20b.
+Fresh guard status active:true, actor prepaid-cost-1774, prepared21:04:02Z.
+Do not mutate shared/app or start release rehearsal until its owner closes it.
+Next: exact candidate CI, governed A/B source build/intent, clean-clone rehearsal,
+authorized merge/publish and live completeness validation. Never claim all costs
+complete from synthetic tests. Costs/prices have not been changed.

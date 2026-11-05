@@ -124,6 +124,8 @@ class SourceContract(unittest.TestCase):
                     '41e42703643456a7b8164dcf1b9207cb8bfd53cbb15bac24e8f40dea31949d05',
                     # PR1763: only catalog options projection added for stable identity.
                     '20617f7ddae35f363ad80fb9406377fe28393e38b3bf9f16b8754ebe56953359',
+                    # PR1775: explicit report-only option recovery opt-in; no other reader changes.
+                    'a05b89134c078eefeac5ca9bc4e0827d9f5c7ec0769bed7674eca64c71327fb5',
                 })
             else:
                 self.assertEqual(before.replace(b'\r\n', b'\n'), current)
