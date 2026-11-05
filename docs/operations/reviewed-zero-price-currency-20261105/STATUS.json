@@ -1,0 +1,23 @@
+{
+  "task": "reviewed-zero-price-currency-20261105",
+  "branch": "codex/release-reviewed-products-20261105",
+  "state": "source-ready-for-governed-release-build",
+  "production_changed": false,
+  "scope": "Preserve component acceptance after proven zero-priced option currency-only source changes; recover unallocated reviewed units without changing Salla status.",
+  "base_commit": "a973ee2d7556cc8a3afaa10bc51bee4df2959d7d",
+  "verification": {
+    "cwd": "backend",
+    "command": "MZ2_TEST_MONGO_URI=<isolated-local-replica-set> python -m pytest --noconftest -p no:cacheprovider -q --tb=short tests/test_component_zero_price_recovery.py tests/test_shipping_catalog_label_recovery.py tests/test_reviewed_products_catalog.py",
+    "result": "68 passed, 32 subtests passed; exit 0; real isolated Mongo replica set",
+    "diff_check": "git diff --check: exit 0",
+    "ci": "New regression suite is included in Review Completion Resumable, with real Mongo transactions.",
+    "prior_head_ci": "All 13 workflows succeeded at aeba2a5e5ffca4ef2a1861600640aefb7a9a7d54",
+    "integration_run": "68 passed, 32 subtests passed on integration with current production; exit 0; 32.49 seconds",
+    "prior_integration_release_check": "Previous branch included an intent-changing merge; release guard correctly refused it. This source is reconstructed as a single-parent change on latest reviewed production, preserving existing intent bytes."
+  },
+  "next_action": "Run current-base real-Mongo regressions and governed A/B build. Freeze reviewed intent-only B, run clean-clone adapter rehearsal, inspect CI, merge and publish under Release Guard, then audit and recover exact eligible revisions.",
+  "production_deployment_authorized": true,
+  "integration_base_commit": "a973ee2d7556cc8a3afaa10bc51bee4df2959d7d",
+  "blocker": null,
+  "supersedes_pr": 1767
+}

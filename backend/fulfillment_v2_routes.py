@@ -1493,7 +1493,12 @@ async def revalidate_unchanged_component_snapshot(
                     or (plan.get("source_version") or {}).get("value") != previous.get("generation")):
                 return deferred
         rename = None
+        zero_price_change = None
         if current_fingerprint != previous["source_fingerprint"]:
+            from component_zero_price_recovery import prove_zero_price_currency_change
+            zero_price_change = await prove_zero_price_currency_change(
+                scoped, user_id=user_id, order_number=order_number, raw=raw, order=order, previous=previous)
+        if current_fingerprint != previous["source_fingerprint"] and not zero_price_change:
             if not allow_print_catalog_rename or not legacy:
                 return deferred
             # Legacy orders have no component consumption plan. Never carry a
@@ -1508,13 +1513,17 @@ async def revalidate_unchanged_component_snapshot(
                 return deferred
         if dry_run:
             return {"accepted": False, "eligible_for_revalidation": True, "dry_run": True,
-                    "reason": "unchanged_component_contract"}
+                    "reason": "zero_option_price_currency_only" if zero_price_change else "unchanged_component_contract"}
         await scoped[COMPONENT_LIFECYCLES].update_one(selector, {"$set": {
             "snapshot_revision": source_revision, "source_updated_at": version, "updated_at": _now(),
             **({"source_fingerprint": current_fingerprint,
                 "catalog_label_revalidation": {**rename, "source_revision": source_revision,
                                               "current_fingerprint": current_fingerprint}}
                if rename else {}),
+            **({"source_fingerprint": current_fingerprint,
+                "zero_price_currency_revalidation": {**zero_price_change, "source_revision": source_revision,
+                                                     "current_fingerprint": current_fingerprint}}
+               if zero_price_change else {}),
         }})
         await scoped.unified_orders.update_one({**selector, "g47_salla_snapshot.revision": source_revision},
             {"$set": {"g47_salla_snapshot.component_pending": False}})
