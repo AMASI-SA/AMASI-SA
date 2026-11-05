@@ -31,9 +31,10 @@ function CountCard({ label, value, active, onClick }) {
 }
 
 export default function QoyodUnsentOrders() {
+  const verifiedMode = new URLSearchParams(window.location.search).get("verified_absent") === "1";
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState("لم يُرسل");
+  const [tab, setTab] = useState(verifiedMode ? "الكل" : "لم يُرسل");
   const [days, setDays] = useState(30);
   const [error, setError] = useState(null);
   const [sallaStatus, setSallaStatus] = useState("");
@@ -214,7 +215,9 @@ export default function QoyodUnsentOrders() {
     fetchControllerRef.current = controller;
     setLoading(true);
     try {
-      const params = { days: d, limit: 1000 };
+      const params = verifiedMode
+        ? { from_date: "2026-07-01", status: "verified_absent", limit: 5000 }
+        : { days: d, limit: 1000 };
       if (ss) params.salla_status = ss;
       if (q && q.trim()) params.search = q.trim();
       const result = await loadQoyodUnsentOrders(
@@ -235,7 +238,7 @@ export default function QoyodUnsentOrders() {
         setLoading(false);
       }
     }
-  }, []);
+  }, [verifiedMode]);
 
   useEffect(() => {
     fetchAll(days, sallaStatus, search);
@@ -250,7 +253,12 @@ export default function QoyodUnsentOrders() {
 
   return (
     <div className="space-y-6" dir="rtl" data-testid="qoyod-unsent-orders-page">
-      <Qoyod404Recovery />
+      {!verifiedMode && <Qoyod404Recovery />}
+      {verifiedMode && <p role="status">{data?.invoice_presence?.complete
+        ? `طلبات ثبت عدم وجود فاتورة مطابقة لها في آخر تحقق: ${data.invoice_presence.count}`
+        : "يلزم تحديث المطابقة؛ لا يوجد عدد مؤكد للطلبات غير المرسلة."}
+        <a className="mr-2 underline" href="/integrations-v2/qoyod?tab=reconciliation">تحديث المطابقة</a>
+      </p>}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
@@ -297,7 +305,7 @@ export default function QoyodUnsentOrders() {
               <option key={s} value={s}>{s} ({n})</option>
             ))}
           </select>
-          <select value={days} onChange={(e) => setDays(Number(e.target.value))}
+          <select disabled={verifiedMode} value={days} onChange={(e) => setDays(Number(e.target.value))}
             data-testid="unsent-days-select"
             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
             <option value={7}>آخر 7 أيام</option>
@@ -423,6 +431,7 @@ export default function QoyodUnsentOrders() {
         </div>
       )}
 
+      {!verifiedMode && <>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {["لم يُرسل", "فشل", "مكرر", "أُرسل"].map((s) => (
           <CountCard key={s} label={s} value={counts[s]}
@@ -441,6 +450,8 @@ export default function QoyodUnsentOrders() {
           </button>
         ))}
       </div>
+
+      </>}
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
