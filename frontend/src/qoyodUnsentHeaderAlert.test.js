@@ -18,8 +18,8 @@ test("only fresh complete evidence yields a count, including zero", () => {
     expect(count({...payload, invoice_presence: {...payload.invoice_presence, count: null}}, now)).toBeNull();
 });
 test("the link requests the exact verified list and starts at the integration floor", () => {
-    expect(source).toContain('status: "verified_absent"');
-    expect(source).toContain('const QOYOD_SYNC_START_DATE = "2026-07-01"');
+    expect(source).toContain('"/integrations/qoyod/unsent-summary"');
+    expect(source).not.toContain("loadQoyodUnsentOrders");
     expect(source).toContain('tab=exceptions&verified_absent=1');
     expect(source).toContain('tab=reconciliation');
 });
