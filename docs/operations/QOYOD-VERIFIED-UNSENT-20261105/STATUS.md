@@ -1,3 +1,54 @@
+# QOYOD-VERIFIED-UNSENT-20261105 — published and verified
+
+Final checkpoint (2026-11-05): PR #1770 merged and deployed.
+Repository: AMASI-SA/AMASI-SA.
+Implementation branch: fix/qoyod-lightweight-header-current-20261105.
+Source A: bc2daf3c7e4cded33b57eb8aaddae9c88904a517.
+Intent B: d7508567c23cb4ebc3111ffaf7d8b33987f44269.
+Deployment merge: 7032e0f93ac22c9de83af0d80d3b0a1e3fb2c852.
+Release: rg5-872dc84f298b7d698d2d212b9b1778e1197771fbbc0c4dfb0655c89f4234c61a.
+Base preserved: fb43ce8af094bff529ecd8499c2537bc9c70b74b (#1765).
+PR #1764 and #1766 closed as superseded; do not deploy their frozen intents.
+
+Validation: 89 backend tests and six actual Jest tests passed on current base.
+All applicable CI workflows passed. Governed clean A/B builds matched; clean
+Emergent adapter exited 0, package verification passed, prepare/prepublish ready.
+Published via Manage at 20:12 Riyadh; newer Deployment finished at 20:21,
+published version prefix 899b6f6. First guard verification failed on a health
+read timeout. After a successful independent health read and UI retry, the
+second full guard run passed verified=true, checks=3 with exact release/source
+and deployment above. Guard status active=false. No guard checks were weakened.
+Production changed: YES; publication and full verification complete.
+
+Behavior: owner-only visible-page polling every five minutes, compact indexed
+settings summary, no audit/provider/worker work on reads or cache misses.
+Employee UI makes zero banner requests; server checks actual actor. Existing
+requested reports publish snapshot-bound summaries using already gathered proofs.
+Tests cover a 20,000-proof fixture and 100 reads with one settings read each,
+payload under 300 bytes, expiry, owner isolation, concurrent refresh, hidden tabs,
+non-overlap, abort and native employee authorization. All unrelated /app untracked
+files were preserved; no production load generator was used.
+
+Limits: actual provider-verified count remains unknown. Live reconciliation
+returns qoyod_security_owner_required; no permissions were changed and no Qoyod
+financial writes occurred. Read-only inspection of the setting itself could not
+run because the terminal interpreter lacks dotenv; do not infer its contents.
+The pre-existing sender CandidateAuditScanLimitExceeded is outside this patch.
+Emergent monitoring showed high memory/resource pressure over the preceding
+24 hours, and one post-rollout session check timed out before succeeding.
+Removing banner scans is not evidence that all general platform latency is fixed.
+
+Next safe action: no further publication for this task. To obtain the actual
+unsent count, resolve the explicit Qoyod owner-authority assignment through the
+approved security setup, then run a complete authorized reconciliation. Do not
+bypass ownership or replace unknown evidence with zero/271. Broader runtime
+pressure and worker scan limits require separate diagnosis.
+
+This documentation-only branch records completion without modifying the frozen
+deployment tree. PR #1770 is the continuation ledger (Issue #1006 comment limit).
+
+## Prior checkpoints
+
 # QOYOD-VERIFIED-UNSENT-20261105
 
 ## Lightweight banner follow-up (2026-11-05)
