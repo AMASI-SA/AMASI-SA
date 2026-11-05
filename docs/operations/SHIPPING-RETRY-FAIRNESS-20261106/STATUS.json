@@ -1,0 +1,156 @@
+{
+  "task_id": "SHIPPING-RETRY-FAIRNESS-20261106",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/shipping-retry-fairness-20261106",
+  "base_commit": "ae2fe9ce01c003ff139e22dd54f4641be48c8e38",
+  "phase": "Reviewed frozen source; independent real-Mongo81 and root combined405 passed; remote checkpoint and ProtocolV5 pending",
+  "predecessor": "https://github.com/AMASI-SA/AMASI-SA/pull/1774",
+  "approved_scope": "Ensure eligible shipping orders receive an acquisition attempt without older unresolved gaps repeatedly overtaking them. The existing manual carrier cashbox binding and authoritative completion/delivery rules remain the controlling financial contract.",
+  "write_scope": [
+    "backend/salla_integration/courier_delivery_sync.py",
+    "Narrow real-Mongo acquisition regression tests",
+    "This task status and predecessor release closeout only"
+  ],
+  "defect": "The atomic claim has no explicit sort. Four unresolved earlier matches can become eligible again after their 15-minute retry reservation before later eligible rows are ever attempted. A stable query plan can repeat this indefinitely for a sufficiently large fixed backlog.",
+  "remediation": "Order the existing atomic find_one_and_update by retry deadline ascending, then _id ascending. Missing deadlines precede attempted rows. Preserve all filters, the four-attempt cap, the 15-minute reservation, evidence validation and canonical-source CAS.",
+  "invariants": [
+    "No carrier-name or country priority",
+    "No new financial fact, expense, opening balance, status change, approval or forced backfill",
+    "No invented completion/delivery timestamps or weakened source proof",
+    "No owner/start/future-retry filter changes",
+    "No update of canonical data when evidence fails",
+    "No index, workflow or infrastructure change without concrete measured need",
+    "Frozen PR1774 A/B and all unrelated source remain unchanged"
+  ],
+  "verification": [
+    {
+      "scope": "Unchanged-source counterexample and proposed ordering at the real storage boundary",
+      "mongo_version": "7.0.16",
+      "exit_status": 0,
+      "current": {
+        "eligible_orders": 121,
+        "early_unresolved_deferred": 120,
+        "cycles": 120,
+        "cycle_seconds": 30,
+        "claims": 480,
+        "distinct_attempted": 120,
+        "later_prepaid_attempts": 0
+      },
+      "comparison": {
+        "claims": 480,
+        "distinct_attempted": 121,
+        "later_prepaid_attempts": 3,
+        "first_later_attempt_seconds": 900
+      },
+      "preserved": "At most4claims/cycle, no repeat within15minutes, owner/start/future retry controls untouched, only retry metadata changed, canonical/financial writes0.",
+      "isolation": "Verified owned loopback Mongo and private data path; external network forbidden; test databases removed, owned process stopped and private data removed.",
+      "source_sha256": "6e1467ea34b4b224b74c78947296c658b97de7e521979a1dd6d2e6abedaf22f6",
+      "limit": "The ordering comparison was injected at the DB adapter before the source patch. It proves a possible starvation schedule, not the exact live order blocker or the final integrated patch.",
+      "mock_limit": "mongomock4.3.0 can return the sorted row but update another natural-order row when projection excludes_id. That comparison is invalid; real-Mongo evidence supersedes it."
+    },
+    {
+      "scope": "Two real-Mongo regressions, red then green",
+      "mongo_version": "7.0.16",
+      "old_source_sha256": "6e1467ea34b4b224b74c78947296c658b97de7e521979a1dd6d2e6abedaf22f6",
+      "old_result": "2 intended assertion failures,0errors,0skips",
+      "frozen_result": "2passed,0errors,0skips",
+      "behavior": "121-row fixed backlog reaches the last prepaid row at the first retry crossover; reverse insertion, missing/oldest deadlines, exact due boundary, four-claim cap, owner/start/status/issue/future controls; actual stored15minute deadlines inspected; canonical and financial state unchanged"
+    },
+    {
+      "scope": "Implementation affected integration",
+      "mongo_version": "7.0.16",
+      "exit_status": 0,
+      "tests": 405,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "suites": [
+        "courier_acquisition",
+        "courier_order_transition",
+        "completed_capture",
+        "prepaid_shipping",
+        "order_delivery_status"
+      ]
+    },
+    {
+      "scope": "Root fresh combined affected integration",
+      "mongo_version": "7.0.16",
+      "exit_status": 0,
+      "tests": 405,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "seconds": 7.12,
+      "command": "env -i PATH=<system-path> PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=<repo>/backend:<repo>/backend/tests:<repo> <existing-test-venv>/bin/python -B <owned-evidence>/verify.py focused",
+      "pytest_command": "python -B -m pytest --noconftest -q -p no:cacheprovider --tb=short --junitxml=<owned-evidence>/tests.xml backend/tests/test_operational_balance_courier_acquisition.py backend/tests/test_operational_balance_courier_order_transition.py backend/tests/test_operational_balance_completed_capture.py backend/tests/test_operational_balance_prepaid_shipping.py backend/tests/test_operational_balance_order_delivery_status.py",
+      "harness_correction": "Initial root harness omitted repo root from PYTHONPATH;5collection errors,0tests executed. Corrected explicit paths, no source change; original failure retained."
+    },
+    {
+      "scope": "Bounded synthetic exact findAndModify explain",
+      "mongo_version": "7.0.16",
+      "collection_documents": 20000,
+      "owner_documents": 10000,
+      "issue_ids": 1051,
+      "native_id_variants": 2102,
+      "eligible": 789,
+      "existing_source_owner_indexes": {
+        "old_unsorted_keys_and_documents": 134,
+        "old_reported_ms": 3,
+        "sorted_keys_and_documents": 10000,
+        "sorted_reported_ms": 46
+      },
+      "default_id_only": {
+        "sorted_documents": 20000,
+        "sorted_reported_ms": 17
+      },
+      "sort": "top-one blocking SORT; no disk use or spills; explain modified no row",
+      "limit": "Single-run synthetic observations, not deployed index/latency evidence. Four claims does not bound examined documents. Mongo8.0.12 unavailable locally; existing exact-head CI provides pinned8 correctness, not a production performance proof. No index/workflow/test-property changes."
+    }
+  ],
+  "acceptance_remaining": [
+    "Remote checkpoint and exact-head CI including Mongo8.0.12 no-skips gate",
+    "New ProtocolV5 A/B build/rehearsal/merge/publish only after required gates",
+    "Live prepaid paid/cash/no-duplicate evidence after processing; missing proof may still prevent a debit"
+  ],
+  "predecessor_release": {
+    "source_A": "a009b05eb2f25b562678d579b69bed129cb0c025",
+    "intent_B": "30d43cef1a1af8414355a8f1fc6d70b73b248f2f",
+    "merge_M": "ae2fe9ce01c003ff139e22dd54f4641be48c8e38",
+    "runtime": "rg5-aae16b1799248ac98a3bcf081adae2597db874c822822ba82da9a8682e3f1fbc",
+    "published_version": "c919c57",
+    "published_at_ui": "2026-11-06 00:18 Asia/Riyadh",
+    "official_verify": "PASS:verified=true,checks=3,446publicFrontendrequests/round, exactA/M/runtime/artifact, empty stderr. Fresh status active:false; matching lease closed.",
+    "live_acceptance": "Still partial. Saved settings remain approved once. Actual selected prepaid paid/cash/no-duplicate evidence has not been demonstrated."
+  },
+  "release": {
+    "intent_frozen": false,
+    "merged": false,
+    "own_lease": false,
+    "published": false,
+    "production_changed_by_this_followup": false,
+    "shared_guard_observation": "Root freshly read /app production_release_guard.py status active:false at approximately2026-11-05T22:00UTC; read again before shared mutation or new rehearsal."
+  },
+  "next_safe_action": "Transfer reviewed sourceA with exact local/remote blob and tree verification, create recoverable PR checkpoint and update only own Issue1006 paragraph. Build governed A, freeze intent-onlyB, run exactB CI and clean-clone adapter rehearsal, then separately authorized merge/publish. Saved settings and previous release remain final.",
+  "updated_at_utc": "2026-11-05T22:01:27.681410+00:00",
+  "frozen_sha256": {
+    "backend/salla_integration/courier_delivery_sync.py": "2cc2d912f3d355099e9e952a5e47bf27ba74b1ffea8060d127fc9cd992ebe0f5",
+    "backend/tests/test_operational_balance_courier_acquisition.py": "36b6c166b33023eec1bc84248f5036cb44448e6aec6fb79d8437d28ce80f7c1d"
+  },
+  "local_isolation": "Each runner verified its owned loopback/private-path replica set; external network forbidden; no remaining test databases, owned process stopped and private data path removed; source hashes unchanged.",
+  "live_acceptance_limit": "A naturally refreshed report at Nov6 00:46Riyadh still showed51 missing prepaid completion timestamps and56 incomplete prepaid evidence cases. No actual selected-order debit has been demonstrated. Old disabled BNPL integrations do not establish current capture/plan details; do not infer a plan or create financial facts.",
+  "checkpoint_identity": "The containing commit full SHA will be recorded in the PR and Issue1006 after transfer; no self-reference is embedded here.",
+  "independent_review": {
+    "verdict": "No blocking findings in frozen source/test diff",
+    "tests": 81,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "exit_status": 0,
+    "seconds": 5.36,
+    "mongo_version": "7.0.16",
+    "hashes_match_before_after": true,
+    "isolation": "Separate owned loopback replica set; external network forbidden; no remaining test databases; owned process stopped and private data removed",
+    "harness_correction": "Initial isolated harness omitted repo root from sys.path,0tests executed; corrected harness only, original failure retained.",
+    "performance_review": "Measured scan/sort tradeoff has no concrete blocker at the synthetic workload; does not establish deployed inventory, latency, sustained load or Mongo8.0.12 performance."
+  }
+}
