@@ -137,7 +137,7 @@ jobs:
           import xml.etree.ElementTree as ET
           from pathlib import Path
           sys.path.insert(0, 'backend/tests')
-          from dashboard_runtime_gate_plugin import assert_runtime_read_contract
+          from dashboard_runtime_gate_plugin import assert_runtime_read_contract, expected_cost_completeness_json
           for name in ('reference','production-read-baseline','runtime','regression'):
               root=ET.parse(name+'.xml').getroot()
               assert not root.findall('.//skipped')
@@ -148,9 +148,9 @@ jobs:
           runtime = json.loads(Path('runtime-responses.json').read_text())
           assert len(reference) == len(baseline) == len(runtime) == 164
           assert set(reference) == set(baseline) == set(runtime)
-          assert {k: v['json'] for k, v in reference.items()} == {k: v['json'] for k, v in runtime.items()}
-          # The immutable JSON oracle and every prior read remain exact. Only
-          # the explicitly audited, tenant-scoped empty authority reads may
+          assert {k: expected_cost_completeness_json(v['json']) for k, v in reference.items()} == {k: v['json'] for k, v in runtime.items()}
+          # Only the approved cost-completeness JSON extension and
+          # explicitly audited, tenant-scoped empty authority reads may
           # differ; raw command/document evidence is retained in the artifact.
           for key in reference:
               assert_runtime_read_contract(runtime[key], baseline[key])
