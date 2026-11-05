@@ -77,3 +77,26 @@ async def test_missing_resource_cost_is_not_serialized_as_zero():
     await db[RESOURCES].update_one({"id": "emb"}, {"$set": {"unit_cost": 0}})
     view = await _binding_view(db, {**BINDING, "user_id": "owner"})
     assert view["resolved_amount"] == 0 and view["cost_missing"] is False
+
+
+@pytest.mark.parametrize("options", [[], [{"option_id": "emb", "value_id": "unrecognized"}]])
+def test_optional_or_unknown_choice_cannot_prove_a_free_service(options):
+    product = deepcopy(PRODUCT)
+    product["options"][0]["required"] = False
+    result = cost(options, product)
+    assert result["mezan_cost_complete"] is False
+    assert result["calculation_cost_available"] is False
+
+
+def test_unresolved_legacy_binding_without_ids_is_incomplete():
+    binding = {key: value for key, value in BINDING.items() if key not in {"option_id", "value_id"}}
+    result = calculate_catalog_line_cost({"quantity": 1, "options": []}, product={}, profile={"base_cost": 15},
+        product_bindings=[], option_bindings=[binding], resources={"emb": {"unit_cost": 8}})
+    assert result["mezan_cost_complete"] is False
+
+
+def test_unknown_legacy_answer_is_not_treated_as_declined():
+    binding = {key: value for key, value in BINDING.items() if key not in {"option_id", "value_id"}}
+    result = calculate_catalog_line_cost({"quantity": 1, "options": [{"name": "تطريز الاسم", "value": "unrecognized"}]},
+        product=PRODUCT, profile={"base_cost": 15}, product_bindings=[], option_bindings=[binding], resources={"emb": {"unit_cost": 8}})
+    assert result["calculation_cost_available"] is False

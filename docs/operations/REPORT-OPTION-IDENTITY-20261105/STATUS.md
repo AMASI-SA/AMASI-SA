@@ -23,3 +23,9 @@ From backend, with MEZAN_CGROUP_ROOT=/nonexistent-mezan-test-cgroup (isolate tes
 Dedicated branch: codex/report-option-cost-integrity-20261105. Original source baseline d80661fd27ef88bf639fa43d8f969f4d62239a61; integrated latest production source a67da7816f24befb09fb713b294dea70e9517100 without conflicts, preserving Qoyod changes. Draft checkpoint, not deployment-ready evidence. Exact pushed commit recorded in Draft PR #1763 (issue #1006 rejected comments at GitHub's 2500-comment limit).
 
 Next: review CI and diff, perform governed frontend build before release, inspect real affected rows for existing frozen incorrect snapshots (requires explicit versioned correction, never silently overwrite), then separately authorized release and live verification of both report surfaces. No production data, merge, backfill, or release guard lease changed. Do not claim the production discrepancy is resolved before those checks.
+
+## Follow-up: explicit unresolved-cost contract
+
+Owner confirmed that every unresolved cost-bearing choice must remain incomplete. Missing optional answers, unknown explicit values in a known catalog option, and unmatched legacy bindings now return unresolved rather than unselected. The executive API returns `product_cost_complete=false` and null net profit (and null cost-dependent net sales). The UI displays `ناقص التكلفة`, explains pending choices/costs, and suppresses stale profit and margin even if a prior response contains a number. Confirmed selections of a known non-cost value remain valid; explicit zero resource cost remains valid.
+
+Validation: 244 backend tests passed, 4 existing real-Mongo skips; 39 AdvancedDashboard UI tests passed, including stale numeric profit suppression. Four focused regressions failed before the follow-up fix. Full governed build rehearsal is next; production remains unchanged.

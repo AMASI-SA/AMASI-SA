@@ -58,6 +58,7 @@ def resolve_report_choices(item, product, bindings):
     if not bindings:
         return [], []
     catalog = catalog_options(product or {})
+    catalog_ids = set(catalog)
     # A stored binding itself supplies an identity/old label for deleted or
     # renamed catalog entries; it never supplies a customer's selection.
     for binding in bindings:
@@ -122,7 +123,7 @@ def resolve_report_choices(item, product, bindings):
                 candidates = [key for key, labels in choices.items() if label and label in labels]
                 if len(candidates) == 1:
                     vid = candidates[0]
-            if vid in choices or explicit:
+            if vid in choices or explicit and oid not in catalog_ids:
                 selected[oid].add(vid)
             else:
                 invalid.add(oid)
@@ -133,15 +134,24 @@ def resolve_report_choices(item, product, bindings):
     for binding in bindings:
         oid, vid = _id(binding.get("option_id")), _id(binding.get("value_id"))
         if not oid or not vid or vid == "filled" and oid not in present:
-            decisions.append(binding_selected(binding, tokens))
+            matched = binding_selected(binding, tokens)
+            # A legacy unmatched label is not proof that the service was declined.
+            name_key = "name:" + " ".join(str(binding.get("option_name") or "").strip().casefold().split())
+            known_values = {_label(b.get("value_name")) for b in bindings
+                            if _label(b.get("option_name")) == _label(binding.get("option_name"))}
+            for entry in catalog.values():
+                if _label(binding.get("option_name")) in entry["labels"]:
+                    known_values.update(label for labels in entry["values"].values() for label in labels)
+            answers = {value[5:] for key, value in tokens if key == name_key and str(value).startswith("name:")}
+            answered = bool(answers) and answers <= (known_values - {""})
+            decisions.append(True if matched else False if answered else None)
         elif oid in invalid:
             decisions.append(None)
         elif oid in present:
             decisions.append(bool(selected[oid]) if vid == "filled" else True if vid == "__option__" else vid in selected[oid])
-        elif catalog[oid]["required"] or unknown:
-            decisions.append(None)
         else:
-            decisions.append(False)
+            # Missing optional answers also need evidence; optional does not mean free.
+            decisions.append(None)
     evidence = [{"option_id": oid, "value_id": vid} for oid in sorted(selected) if oid not in invalid for vid in sorted(selected[oid])]
     return decisions, evidence
 

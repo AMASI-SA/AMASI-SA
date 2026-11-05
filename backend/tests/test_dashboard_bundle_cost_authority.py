@@ -292,7 +292,8 @@ async def test_reporting_reads_are_batched_instead_of_growing_per_bundle(db):
 
 
 @pytest.mark.asyncio
-async def test_executive_http_replaces_old_cost_and_decreases_profit_by_140_once(db, monkeypatch):
+@pytest.mark.parametrize("unresolved", [False, True])
+async def test_executive_http_replaces_old_cost_and_decreases_profit_by_140_once(db, monkeypatch, unresolved):
     """Exercise the real HTTP composition with only unrelated provider facts stubbed."""
     from auth import DEFAULT_PAYMENT_METHODS, PAYMENT_FEE_DEFAULTS_VERSION
     import dashboard_v2_routes as dashboard
@@ -300,7 +301,11 @@ async def test_executive_http_replaces_old_cost_and_decreases_profit_by_140_once
         "payment_methods": deepcopy(DEFAULT_PAYMENT_METHODS),
         "payment_fee_defaults_version": PAYMENT_FEE_DEFAULTS_VERSION})
     order = sale("executive-http", sale_line("line", 4))
-    await freeze(db, order)
+    if unresolved:
+        order["products"][0]["options"] = []
+        await db.unified_orders.insert_one(deepcopy(order))
+    else:
+        await freeze(db, order)
     baseline_response = {"totals": {
         "total_orders": 1, "total_sales": 400, "total_product_cost": 80,
         "total_ads_cost": 0, "operating_expenses_total": 0,
@@ -331,6 +336,13 @@ async def test_executive_http_replaces_old_cost_and_decreases_profit_by_140_once
             response = await client.get("/dashboard-v2", params={"from_date": "2026-11-02", "to_date": "2026-11-02"})
             assert response.status_code == 200, response.text
             result = response.json()
+            if unresolved:
+                assert result["totals"]["product_cost_complete"] is False
+                assert result["totals"]["net_profit"] is None
+                assert result["totals"]["net_sales"] is None
+                assert result["product_cost_v2"]["product_rows"][0]["cost_status"] == "missing"
+                assert result["product_cost_v2"]["product_rows"][0]["net_profit"] is None
+                continue
             assert result["totals"]["total_product_cost"] == 220
             assert result["product_cost_v2"]["product_rows"][0]["total_cost"] == 220
             assert result["totals"]["net_profit"] == 160
