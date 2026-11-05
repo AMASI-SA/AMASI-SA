@@ -742,6 +742,203 @@ def selected_cost_options(bindings, tokens):
     return [binding for i, binding in enumerate(bindings) if i in selected]
 
 
+def _option_needs_catalog(bindings, token):
+    option, value, name, label, _ = token
+    if option and value:
+        return False
+    candidates = [b for b in bindings if str(b.get('option_id') or '') == option] if option else [
+        b for b in bindings if name and _option_label(b.get('option_name')) == name]
+    if any(option_matches(b, [token]) for b in candidates):
+        return False
+    # Preserve the existing explicit yes/no contract, including a declined yes.
+    return not (candidates and label in {'yes', 'no'} and all(
+        _option_value_label(b.get('value_name')) in {'yes', 'no'} for b in candidates))
+
+
+def _catalog_recovery_preserves_ids(item):
+    """Unsupported explicit IDs must not disappear into a label-only fallback."""
+    for row in item.get('options_raw') or item.get('options') or []:
+        option = row.get('option') if isinstance(row.get('option'), dict) else {}
+        represented = row.get('option_id') or row.get('id') or option.get('id')
+        explicit = [row.get('option_id'), row.get('id'), option.get('id')]
+        if isinstance(row.get('raw'), dict) or any(v is not None and v != '' and
+                (not _catalog_identity(v) or str(v) != str(represented))
+                for v in explicit):
+            raise ValueError('mz2_cost_option_identity_conflict')
+        values = row.get('values') or row.get('value')
+        for value in values if isinstance(values, list) else [values]:
+            value = value if isinstance(value, dict) else {}
+            represented = row.get('value_id') or value.get('id')
+            explicit = [row.get('value_id'), row.get('option_value_id'), value.get('id'),
+                        value.get('value_id'), value.get('option_value_id')]
+            if any(v is not None and v != '' and (not _catalog_identity(v) or str(v) != str(represented)) for v in explicit):
+                raise ValueError('mz2_cost_option_identity_conflict')
+
+
+def _catalog_identity(value):
+    return isinstance(value, (str, int)) and not isinstance(value, bool) and bool(str(value).strip())
+
+
+def _verified_option_tokens(data, product_id, item, bindings, tokens):
+    if not bindings:
+        return tokens
+    if not tokens:
+        raise ValueError('mz2_cost_option_value_unverified')
+    if not any(_option_needs_catalog(bindings, token) for token in tokens):
+        return tokens
+    _catalog_recovery_preserves_ids(item)
+    product = item.get('product') if isinstance(item.get('product'), dict) else {}
+    native_product = item.get('parent_product_id') or item.get('product_id') or product.get('id')
+    if not _catalog_identity(native_product) or str(native_product) != product_id:
+        raise ValueError('mz2_cost_option_catalog_unverified')
+    if product_id in data.get('_option_catalog_errors', set()):
+        raise ValueError('mz2_cost_option_catalog_unverified')
+    candidates = [p for p in data.get('mezan_products_v2', []) if isinstance(p, dict)
+                  and _catalog_identity(p.get('salla_product_id')) and str(p['salla_product_id']) == product_id]
+    if len(candidates) != 1:
+        raise ValueError('mz2_cost_option_catalog_unverified')
+    from report_option_identity import catalog_options
+    try:
+        for source in (candidates[0].get('raw_salla'), candidates[0].get('raw_salla_details'), candidates[0]):
+            if not isinstance(source, dict):
+                continue
+            options = source.get('options', [])
+            if options is None:
+                continue
+            if not isinstance(options, list):
+                raise ValueError('invalid_options')
+            for option in options:
+                values = option.get('values', [])
+                if values is None:
+                    values = []
+                if not _catalog_identity(option.get('id')) or not isinstance(values, list) or any(
+                        not isinstance(v, dict) or not _catalog_identity(v.get('id')) for v in values):
+                    raise ValueError('invalid_option_identity')
+                for entry in [option, *values]:
+                    labels = entry.get('identity_labels', [])
+                    translations = entry.get('translations', {})
+                    if (labels is not None and (not isinstance(labels, list) or any(not isinstance(v, str) for v in labels))
+                            or translations is not None and (not isinstance(translations, dict)
+                                or any(not isinstance(v, dict) for v in translations.values()))):
+                        raise ValueError('invalid_option_labels')
+        catalog = catalog_options(candidates[0])
+    except (TypeError, AttributeError, ValueError):
+        raise ValueError('mz2_cost_option_catalog_unverified') from None
+    bound = {str(b.get('option_id')) for b in bindings if b.get('option_id')}
+    if not bound or not bound <= catalog.keys():
+        raise ValueError('mz2_cost_option_catalog_unverified')
+    # During recovery, compare every observation against the same identities.
+    # Existing bound labels remain evidence for those exact IDs, never new IDs.
+    for binding in bindings:
+        option, value = str(binding.get('option_id') or ''), str(binding.get('value_id') or '')
+        if option not in catalog or value not in catalog[option]['values']:
+            raise ValueError('mz2_cost_option_catalog_unverified')
+        if binding.get('option_name'):
+            catalog[option]['labels'].add(_option_label(binding['option_name']))
+        if binding.get('value_name'):
+            catalog[option]['values'][value].add(_option_value_label(binding['value_name']))
+    resolved = set()
+    for token in tokens:
+        option, value, name, label, origin = token
+        named = [key for key, entry in catalog.items()
+            if name in {_option_label(v) for v in entry['labels']}]
+        if option and (option not in catalog or named and option not in named):
+            raise ValueError('mz2_cost_option_identity_conflict')
+        choices = [option] if option else named
+        if len(choices) != 1:
+            raise ValueError('mz2_cost_option_identity_ambiguous')
+        option = choices[0]
+        if option in bound:
+            values = catalog[option]['values']
+            named_values = [key for key, labels in values.items()
+                if label in {_option_value_label(v) for v in labels}]
+            if value and (value not in values or named_values and value not in named_values):
+                raise ValueError('mz2_cost_option_identity_conflict')
+            matches = [value] if value else named_values
+            if len(matches) != 1:
+                raise ValueError('mz2_cost_option_value_unverified')
+            value = matches[0]
+        # A uniquely identified independent option cannot activate a paid one.
+        resolved.add((option, value, name, label, origin))
+    for option, entry in catalog.items():
+        if not entry.get('multiple') and len({value for oid, value, _, _, _ in resolved if oid == option and value}) > 1:
+            raise ValueError('mz2_cost_option_value_conflict')
+    return resolved
+
+
+async def _load_option_cost_catalog(db, owner, data, raw_orders, start, now, bundles):
+    """Read only needed owner/product identities; a bad catalogue is a local gap."""
+    from pymongo.errors import PyMongoError
+    bindings = {}
+    for binding in data['mezan_product_option_cost_bindings_v2']:
+        bindings.setdefault(str(binding.get('salla_product_id')), []).append(binding)
+    wanted = set()
+    for raw in raw_orders:
+        try:
+            if not start < instant(raw.get('date') or raw.get('created_at') or raw.get('order_date')) <= now:
+                continue
+        except (ValueError, TypeError):
+            continue
+        number = str(raw.get('reference_id') or raw.get('order_number') or '')
+        for item in raw.get('items') or []:
+            if not isinstance(item, dict):
+                continue
+            native = item.get('id') or item.get('item_id') or item.get('order_item_id')
+            if not native or (number, f'salla:{number}:{native}') in bundles:
+                continue
+            product = item.get('product') if isinstance(item.get('product'), dict) else {}
+            native_product = item.get('parent_product_id') or item.get('product_id') or product.get('id')
+            if not _catalog_identity(native_product):
+                continue
+            pid = str(native_product)
+            try:
+                if pid in bindings and any(_option_needs_catalog(bindings[pid], token) for token in option_tokens(item)):
+                    wanted.add(pid)
+            except (ValueError, TypeError):
+                pass  # The normal per-line cost validator reports this shape.
+    data['mezan_products_v2'], data['_option_catalog_errors'] = [], set()
+    errors = data['_option_catalog_errors']
+    if not wanted:
+        return
+    if len(wanted) > MAX_ROWS:
+        errors.update(wanted)
+        return
+    projection = {'_id': 0, 'user_id': 1, 'salla_product_id': 1, 'options': 1,
+                  'raw_salla.options': 1, 'raw_salla_details.options': 1}
+    wanted = sorted(wanted)
+    seen, read_count = set(), 0
+    # Each ID can have a string and numeric storage form; at most 250 query terms.
+    for offset in range(0, len(wanted), 125):
+        batch = wanted[offset:offset + 125]
+        values = list(batch)
+        values.extend(int(pid) for pid in batch if len(pid) <= 19 and pid.isascii() and pid.isdecimal()
+                      and int(pid) <= 9223372036854775807 and str(int(pid)) == pid)
+        limit = min(len(batch), MAX_ROWS - read_count)
+        if limit <= 0:
+            errors.update(wanted[offset:])
+            break
+        try:
+            records = await db['mezan_products_v2'].find(
+                {'user_id': owner, 'salla_product_id': {'$in': values}}, projection).to_list(length=limit + 1)
+        except PyMongoError:
+            errors.update(batch)
+            continue
+        read_count += len(records)
+        if len(records) > limit:
+            errors.update(batch)
+            continue
+        for record in records:
+            pid = str(record.get('salla_product_id')) if isinstance(record, dict) else ''
+            if pid not in batch:
+                errors.update(batch)
+                continue
+            if not _catalog_identity(record.get('salla_product_id')) or record.get('user_id') != owner or pid in seen:
+                errors.add(pid)
+                continue
+            seen.add(pid)
+            data['mezan_products_v2'].append(record)
+
+
 def cost_components(data, product_id, item, profile):
     """Resolve only MZ2-authoritative amounts; services retain independent identity."""
     from operational_product_cost_policy import require_sar_cost
@@ -752,6 +949,7 @@ def cost_components(data, product_id, item, profile):
     tokens = option_tokens(item)
     links = [dict(r, mode='resource') for r in data['mezan_product_resource_bindings_v2'] if str(r.get('salla_product_id')) == product_id]
     bindings = [r for r in data['mezan_product_option_cost_bindings_v2'] if str(r.get('salla_product_id')) == product_id]
+    tokens = _verified_option_tokens(data, product_id, item, bindings, tokens)
     links += selected_cost_options(bindings, tokens)
     seen, services, resource_costs = set(), {}, {}
     for link in links:
@@ -1082,6 +1280,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 'required_action': 'أعد معاينة مطابقة الفاتورة والسداد؛ لم تُرحّل الفروق تلقائيًا'})
     bundle_costs = await load_remaining_bundles(db, owner, raw_orders, now, preparation_pieces=pieces,
         operational_state=operational_state, native_matches=native_matches)
+    await _load_option_cost_catalog(db, owner, data, raw_orders, start, now, bundle_costs)
     from operational_customer_tender_coverage import finish_coverage, new_coverage, observe_nonprovider
     customer_tenders = out["customer_tender_coverage"] = new_coverage(start.isoformat(), now.isoformat())
     counted_order_ids, inspected_order_ids = set(), set()

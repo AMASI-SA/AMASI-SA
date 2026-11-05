@@ -2,7 +2,7 @@
 from copy import deepcopy
 from decimal import Decimal
 import pytest
-from test_operational_balance_sources import DB, row, run
+from test_operational_balance_sources import DB, Cursor, row, run
 from operational_open_cost_exposure import project
 
 START = "2026-11-01T00:00:00+00:00"
@@ -323,9 +323,41 @@ def test_received_order_split_between_suppliers_counts_once_in_the_report():
     assert next(t for t in partial["tables"] if t["id"] == table["id"])["totals"]["orders"] is None
 
 
+class OptionCatalogDB(DB):
+    """Extend only this fixture with the new, explicitly scoped identity read."""
+    def __init__(self, data):
+        super().__init__(data)
+        self.catalog_queries = []
+        self.catalog_read_override = None
+
+    def __getitem__(self, name):
+        original = super().__getitem__(name)
+        if name != "mezan_products_v2":
+            return original
+        db = self
+
+        class Catalog:
+            def find(self, query, projection=None):
+                if query == {"user_id": "owner"}:
+                    return original.find(query, projection)
+                assert set(query) == {"user_id", "salla_product_id"} and query["user_id"] == "owner"
+                wanted = query["salla_product_id"]["$in"]
+                assert 0 < len(wanted) <= 250
+                assert projection == {"_id": 0, "user_id": 1, "salla_product_id": 1, "options": 1,
+                                      "raw_salla.options": 1, "raw_salla_details.options": 1}
+                db.catalog_queries.append(deepcopy(query))
+                if isinstance(db.catalog_read_override, Exception):
+                    raise db.catalog_read_override
+                records = db.catalog_read_override if db.catalog_read_override is not None else [
+                    r for r in db.data.get(name, []) if r.get("user_id") == "owner" and r.get("salla_product_id") in wanted]
+                return Cursor(records)
+
+        return Catalog()
+
+
 def embroidery_db(*, old=False, with_ids=False, binding_value="نعم"):
     """28 synthetic units in 21 orders, including two repeated-product lines."""
-    db = DB({
+    db = OptionCatalogDB({
         "unified_orders": [],
         "mezan_product_cost_profiles_v2": [row(salla_product_id="p1", base_cost="15", cost_currency="SAR")],
         "mezan_product_resource_bindings_v2": [row(id="bag-link", salla_product_id="p1", resource_id="bag", quantity="1")],
@@ -372,6 +404,235 @@ def estimate_embroidery(db, previous=None):
     return sources, updated, exposure
 
 
+def translated_embroidery_catalog():
+    return row(salla_product_id="p1", options=[{
+        "id": "embroidery", "name": "تطريز اسم", "required": True,
+        "translations": {"en": {"option_name": "Name embroidery"}},
+        "values": [
+            {"id": "yes", "name": "نعم", "translations": {"en": {"option_details_name": "Yes"}}},
+            {"id": "no", "name": "لا", "translations": {"en": {"option_details_name": "No"}}},
+        ],
+    }])
+
+
+@pytest.mark.parametrize("old", [False, True])
+@pytest.mark.parametrize("shape", ["raw", "normalized", "both"])
+@pytest.mark.parametrize("metadata", ["translations", "identity_labels"])
+def test_verified_catalog_translation_counts_all_lines_without_native_selection_ids(old, shape, metadata):
+    db = embroidery_db(old=old)
+    catalog = translated_embroidery_catalog()
+    if metadata == "identity_labels":
+        option = catalog["options"][0]
+        option.pop("translations"); option["identity_labels"] = ["Name embroidery"]
+        for value in option["values"]:
+            value["identity_labels"] = [value.pop("translations")["en"]["option_details_name"]]
+    db.data["mezan_products_v2"] = [catalog]
+    for order in db.data["unified_orders"]:
+        for item in order["raw_by_source"]["salla_direct"]["items"]:
+            item["options"] = [] if shape == "normalized" else [{"name": "Name embroidery", "value": {"name": "Yes"}}]
+            if shape in {"normalized", "both"}:
+                item["options_normalized"] = {"Name embroidery": "Yes"}
+    sources, updated, exposure = estimate_embroidery(db)
+    expected = Decimal(28) * (Decimal("15") + Decimal("8") + Decimal("1.20"))
+    period = "prestart" if old else "poststart"
+    assert Decimal(exposure["currencies"]["SAR"][period + "_supplier_unreceived"]) == expected
+    assert exposure["bucket_completeness"]["products_unreceived"] is True
+    assert exposure["distinct_order_counts"]["SAR"]["products_unreceived"] == 21
+    if not old:
+        assert sum(i.get("component") == "service" for o in sources["orders"] for i in o["items"]) == 23
+    assert len(db.catalog_queries) == (0 if old else 1)
+    assert all(r["confirmed"] == "0.00" for r in updated["engine"]["obligations"].values() if r["kind"] == "supplier")
+
+
+@pytest.mark.parametrize("container", ["raw_salla", "raw_salla_details"])
+def test_translation_identity_can_come_from_provider_catalog_metadata(container):
+    db = embroidery_db()
+    item = embroidery_line(db, 2)
+    item["options"] = [{"name": "Name embroidery", "value": {"name": "Yes"}}]
+    catalog = translated_embroidery_catalog()
+    catalog[container] = {"options": catalog.pop("options")}
+    db.data["mezan_products_v2"] = [catalog]
+    _, _, exposure = estimate_embroidery(db)
+    assert exposure["currencies"]["SAR"]["poststart_supplier_unreceived"] == "48.40"
+    assert exposure["bucket_completeness"]["products_unreceived"] is True
+
+
+@pytest.mark.parametrize("problem", ["missing_catalog", "unknown_option", "unknown_value", "ambiguous_option",
+    "ambiguous_value", "missing_selection", "invalid_catalog_id", "raw_normalized", "raw_normalized_alias",
+    "legacy_raw_no_translated_yes", "legacy_raw_yes_translated_no", "native_raw_no_translated_yes",
+    "native_raw_yes_translated_no", "native_original_text_conflict",
+    "explicit_option_id", "checkout_row_id", "explicit_value_id", "nested_value_id", "nested_option_value_id",
+    "conflicting_value_ids", "boolean_id", "object_id", "list_id"])
+def test_unresolved_catalog_choice_is_incomplete_and_preserves_the_previous_estimate(problem):
+    db = embroidery_db()
+    item = embroidery_line(db)
+    _, previous, _ = estimate_embroidery(db)
+    item["options"] = [{"name": "Name embroidery", "value": {"name": "Yes"}}]
+    choice = item["options"][0]
+    catalog = translated_embroidery_catalog()
+    db.data["mezan_products_v2"] = [catalog]
+    option = catalog["options"][0]
+    if problem == "missing_catalog":
+        db.data["mezan_products_v2"] = []
+    elif problem == "unknown_option":
+        choice["name"] = "Unconfigured question"
+    elif problem == "unknown_value":
+        choice["value"]["name"] = "Unconfigured answer"
+    elif problem == "ambiguous_option":
+        other = deepcopy(option); other["id"] = "independent-unbound-option"
+        catalog["options"].append(other)
+    elif problem == "ambiguous_value":
+        option["values"][1]["translations"]["en"]["option_details_name"] = "Yes"
+    elif problem == "missing_selection":
+        item["options"] = []
+    elif problem == "invalid_catalog_id":
+        option["values"][0]["id"] = True
+    elif problem in {"raw_normalized", "raw_normalized_alias"}:
+        option["values"][1]["identity_labels"] = ["Excluded"]
+        item["options_normalized"] = {"Name embroidery": "No" if problem == "raw_normalized" else "Excluded"}
+    elif problem in {"legacy_raw_no_translated_yes", "legacy_raw_yes_translated_no",
+                     "native_raw_no_translated_yes", "native_raw_yes_translated_no", "native_original_text_conflict"}:
+        option["values"][0]["identity_labels"] = ["Included"]
+        option["values"][1]["identity_labels"] = ["Excluded"]
+        choice["name"] = "تطريز اسم"
+        raw_no = problem.endswith("no_translated_yes") or problem == "native_original_text_conflict"
+        choice["value"]["name"] = "No" if raw_no else "Yes"
+        item["options_normalized"] = {"Name embroidery": "Included" if raw_no else "Excluded"}
+        if problem.startswith("native"):
+            choice["option_id"] = "embroidery"
+            choice["value"]["id"] = "no" if raw_no and problem != "native_original_text_conflict" else "yes"
+    elif problem == "explicit_option_id":
+        choice["option_id"] = "different-option"
+    elif problem == "checkout_row_id":
+        choice["id"] = "checkout-row"
+    elif problem == "explicit_value_id":
+        choice["value_id"] = "different-value"
+    elif problem in {"nested_value_id", "nested_option_value_id"}:
+        choice["value"][problem.removeprefix("nested_")] = "different-value"
+    elif problem == "conflicting_value_ids":
+        choice["value_id"] = "yes"; choice["value"]["option_value_id"] = "no"
+    else:
+        choice["value"]["value_id"] = {"boolean_id": True, "object_id": {"id": "yes"}, "list_id": ["yes"]}[problem]
+    sources, updated, exposure = estimate_embroidery(db, previous)
+    assert sources["orders"][0]["items_complete"] is False
+    assert {i["code"] for i in sources["issues"]} == {"mz2_product_cost_incomplete"}
+    assert not any(i.get("component") == "service" for o in sources["orders"] for i in o["items"])
+    assert exposure["bucket_completeness"]["products_unreceived"] is False
+    assert exposure["bucket_completeness"]["products_received_uninvoiced"] is False
+    assert exposure["bucket_completeness"]["shipping_expected"] is True
+    assert sum(Decimal(r["expected"]) for r in updated["engine"]["obligations"].values()
+               if r["kind"] == "supplier") == Decimal("24.20")
+    assert updated["movements"] == previous["movements"]
+    assert updated["openings"] == previous["openings"]
+
+
+@pytest.mark.parametrize("selection", ["independent", "declined_alias"])
+def test_verified_independent_or_declined_choice_does_not_charge_embroidery(selection):
+    db = embroidery_db()
+    item = embroidery_line(db)
+    catalog = translated_embroidery_catalog()
+    db.data["mezan_products_v2"] = [catalog]
+    if selection == "independent":
+        catalog["options"].append({"id": "gift", "name": "Gift card", "values": [{"id": "gift-yes", "name": "Yes"}]})
+        item["options"] = [{"name": "Gift card", "value": {"name": "Yes"}}]
+    else:
+        catalog["options"][0]["values"][1]["identity_labels"] = ["Excluded"]
+        item["options"] = [{"name": "Name embroidery", "value": {"name": "Excluded"}}]
+    sources, _, exposure = estimate_embroidery(db)
+    assert exposure["currencies"]["SAR"]["poststart_supplier_unreceived"] == "16.20"
+    assert exposure["bucket_completeness"]["products_unreceived"] is True
+    assert not any(i.get("component") == "service" for o in sources["orders"] for i in o["items"])
+
+
+@pytest.mark.parametrize("fault", ["foreign", "duplicate", "out_of_scope", "malformed", "read_failure"])
+def test_catalog_read_gap_is_local_to_products_and_keeps_independent_components(fault):
+    from pymongo.errors import PyMongoError
+    db = embroidery_db()
+    item = embroidery_line(db)
+    item["options"] = [{"name": "Name embroidery", "value": {"name": "Yes"}}]
+    catalog = translated_embroidery_catalog()
+    db.data["mezan_products_v2"] = [catalog]
+    db.catalog_read_override = {
+        "foreign": [dict(catalog, user_id="different-owner")], "duplicate": [catalog, deepcopy(catalog)],
+        "out_of_scope": [dict(catalog, salla_product_id="not-requested")], "malformed": [None],
+        "read_failure": PyMongoError("synthetic catalog read failure"),
+    }[fault]
+    raw = db.data["unified_orders"][0]["raw_by_source"]["salla_direct"]
+    raw["items"].append({"id": "independent-line", "product_id": "independent", "quantity": 1})
+    db.data["mezan_product_cost_profiles_v2"].append(row(salla_product_id="independent", base_cost="9"))
+    sources, _, exposure = estimate_embroidery(db)
+    assert sources["orders"][0]["items_complete"] is False
+    assert [(i["id"], i["cost"]) for i in sources["orders"][0]["items"]] == [("salla:SYN-1:independent-line", "9")]
+    assert exposure["bucket_completeness"]["products_unreceived"] is False
+    assert exposure["bucket_completeness"]["shipping_expected"] is True
+
+
+@pytest.mark.parametrize("old", [False, True])
+@pytest.mark.parametrize("invalid", [True, 1.5, {"id": "p1"}, ["p1"]])
+def test_translation_recovery_rejects_untyped_source_product_identity(old, invalid):
+    db = embroidery_db(old=old)
+    item = embroidery_line(db)
+    item.update(product_id=invalid, options=[{"name": "Name embroidery", "value": {"name": "Yes"}}])
+    for collection in ("mezan_product_cost_profiles_v2", "mezan_product_resource_bindings_v2", "mezan_product_option_cost_bindings_v2"):
+        db.data[collection][0]["salla_product_id"] = str(invalid)
+    db.data["mezan_products_v2"] = [dict(translated_embroidery_catalog(), salla_product_id=str(invalid))]
+    _, _, exposure = estimate_embroidery(db)
+    assert exposure["bucket_completeness"]["products_unreceived"] is False
+    assert not db.catalog_queries
+
+
+@pytest.mark.parametrize("old", [False, True])
+def test_translation_recovery_rejects_untyped_catalog_product_identity(old):
+    db = embroidery_db(old=old)
+    item = embroidery_line(db)
+    item.update(product_id="True", options=[{"name": "Name embroidery", "value": {"name": "Yes"}}])
+    for collection in ("mezan_product_cost_profiles_v2", "mezan_product_resource_bindings_v2", "mezan_product_option_cost_bindings_v2"):
+        db.data[collection][0]["salla_product_id"] = "True"
+    db.data["mezan_products_v2"] = [dict(translated_embroidery_catalog(), salla_product_id=True)]
+    _, _, exposure = estimate_embroidery(db)
+    assert exposure["bucket_completeness"]["products_unreceived"] is False
+
+
+def test_catalog_reads_are_owner_product_scoped_batched_and_accept_numeric_or_text_storage():
+    db = embroidery_db()
+    embroidery_line(db)
+    template_order = deepcopy(db.data["unified_orders"][0])
+    profile = db.data["mezan_product_cost_profiles_v2"][0]
+    bag = db.data["mezan_product_resource_bindings_v2"][0]
+    service = db.data["mezan_product_option_cost_bindings_v2"][0]
+    for collection in ("unified_orders", "mezan_product_cost_profiles_v2", "mezan_product_resource_bindings_v2",
+                       "mezan_product_option_cost_bindings_v2", "mezan_products_v2"):
+        db.data[collection] = []
+    wanted = {str(i) for i in range(1000, 1126)}
+    for pid in sorted(wanted) + ["native-only"]:
+        document = deepcopy(template_order)
+        document["order_number"] = "SYN-" + pid
+        raw = document["raw_by_source"]["salla_direct"]
+        raw.update(id="order-" + pid, reference_id=document["order_number"])
+        raw["items"][0].update(product_id=pid, options=[{"name": "Name embroidery", "value": {"name": "Yes"}}])
+        if pid == "native-only":
+            raw["items"][0]["options"] = [{"option_id": "embroidery", "value_id": "yes"}]
+        else:
+            catalog = translated_embroidery_catalog()
+            catalog["salla_product_id"] = int(pid) if int(pid) % 2 else pid
+            db.data["mezan_products_v2"].append(catalog)
+        db.data["unified_orders"].append(document)
+        db.data["mezan_product_cost_profiles_v2"].append(dict(profile, salla_product_id=pid))
+        db.data["mezan_product_resource_bindings_v2"].append(dict(bag, salla_product_id=pid))
+        db.data["mezan_product_option_cost_bindings_v2"].append(dict(service, salla_product_id=pid))
+    db.data["mezan_products_v2"].extend([
+        dict(translated_embroidery_catalog(), salla_product_id="unused"),
+        dict(translated_embroidery_catalog(), user_id="other-owner", salla_product_id="1000"),
+    ])
+    _, _, exposure = estimate_embroidery(db)
+    assert len(db.catalog_queries) == 2
+    queried = [value for q in db.catalog_queries for value in q["salla_product_id"]["$in"]]
+    assert {str(value) for value in queried} == wanted
+    assert all(pid in queried and int(pid) in queried for pid in wanted)
+    assert exposure["bucket_completeness"]["products_unreceived"] is True
+    assert Decimal(exposure["currencies"]["SAR"]["poststart_supplier_unreceived"]) == Decimal(127) * Decimal("24.20")
+
+
 @pytest.mark.parametrize("old", [False, True])
 @pytest.mark.parametrize("with_ids", [False, True])
 @pytest.mark.parametrize("binding_value", ["نعم", "Yes"])
@@ -406,12 +667,13 @@ def test_no_does_not_apply_yes_service(value):
     assert exposure["bucket_completeness"]["products_unreceived"] is True
 
 
-def test_unrelated_option_name_is_not_translated_or_treated_as_a_missing_service():
+def test_unknown_option_is_incomplete_without_inventing_a_paid_service():
     db = embroidery_db()
     embroidery_line(db)["options"][0]["name"] = "تغليف هدية"
-    _, _, exposure = estimate_embroidery(db)
-    assert exposure["currencies"]["SAR"]["poststart_supplier_unreceived"] == "16.20"
-    assert exposure["bucket_completeness"]["products_unreceived"] is True
+    sources, _, exposure = estimate_embroidery(db)
+    assert sources["orders"][0]["items_complete"] is False
+    assert not any(i.get("component") == "service" for o in sources["orders"] for i in o["items"])
+    assert exposure["bucket_completeness"]["products_unreceived"] is False
 
 
 @pytest.mark.parametrize("problem", ["unknown_boolean", "unknown_service", "option_id_conflict", "value_id_conflict",
