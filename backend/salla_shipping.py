@@ -285,11 +285,22 @@ def accept_shipping(existing: dict, incoming: dict | None) -> dict | None:
     previous = current.get(proof_key)
     observed = incoming.get(proof_key)
     if previous and previous.get("shipment_id") == result.get("shipment_id"):
-        if (observed and observed != previous or result.get("status") not in {"delivered", "تم التوصيل"}
+        if (observed and observed != previous
+                or current.get("status") in {"delivered", "تم التوصيل"} and result.get("status") not in {"delivered", "تم التوصيل"}
+                or result.get("status") in {"cancelled", "canceled", "void", "deleted", "returned"}
                 or previous.get("waybill") != result.get("tracking_number")):
             result[proof_key] = {**previous, "ambiguous": True}
     elif not observed:
         result.pop(proof_key, None)
+    completed_key = 'verified_order_completed_transition'
+    previous_completed = current.get(completed_key)
+    completed = incoming.get(completed_key)
+    if previous_completed and previous_completed.get('shipment_id') == result.get('shipment_id'):
+        if (completed and completed != previous_completed
+                or previous_completed.get('waybill') != result.get('tracking_number') or carrier_changed):
+            result[completed_key] = {**previous_completed, 'ambiguous': True}
+    elif not completed:
+        result.pop(completed_key, None)
     return result
 
 

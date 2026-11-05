@@ -7,6 +7,7 @@ update clock or delivered label cannot supply a missing event time.
 """
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from hashlib import sha256
 import json
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -15,7 +16,8 @@ from shipping_companies import normalize_shipping_company
 
 
 DELIVERED = {"delivered", "تم التوصيل"}
-INACTIVE = {"cancelled", "canceled", "void", "deleted", "archived", "superseded", "returned"}
+INACTIVE = {"cancelled", "canceled", "void", "deleted", "archived", "superseded", "returned",
+            "ملغي", "ملغى", "تم الإلغاء", "تم الالغاء", "مسترجع", "مرتجع", "تم الاسترجاع", "محذوف", "مؤرشف"}
 RETURNS = {"return", "return_shipment", "reverse"}
 
 
@@ -156,7 +158,7 @@ def _driver_assignment(assignments, owner, order_id, number):
     return assignment
 
 
-def _current_shipping(raw, source):
+def _current_shipping(raw, source, *, require_delivered=True):
     current = source.get("salla_shipping_current")
     nested = raw.get("salla_shipping_current")
     if current is None:
@@ -175,7 +177,7 @@ def _current_shipping(raw, source):
         _fail("shipment_identity_conflict")
     if _inactive(current) or shipment in {_text(value) for value in superseded}:
         _fail("shipment_inactive")
-    if _status(current.get("status")) not in DELIVERED:
+    if require_delivered and _status(current.get("status")) not in DELIVERED:
         _fail("shipment_not_delivered")
     for root, field in (("salla_shipment_id", "shipment_id"), ("tracking_number", "tracking_number"),
                         ("shipping_number", "tracking_number"), ("shipping_company_code", "company_code"),
@@ -215,7 +217,7 @@ def _courier(setup, owner, current):
     return _text(matches[0]["courier_key"]), key
 
 
-def _shipment_time(raw, current, shipment, waybill, *, include_nested=True, order_transition=None):
+def _shipment_rows(raw, shipment, *, include_nested=True):
     shipping = raw.get("shipping") if isinstance(raw.get("shipping"), dict) else {}
     candidates = raw.get("shipments") or []
     candidates = candidates if isinstance(candidates, list) else [candidates] if isinstance(candidates, dict) else []
@@ -234,6 +236,41 @@ def _shipment_time(raw, current, shipment, waybill, *, include_nested=True, orde
     selected = [row for row in candidates if isinstance(row, dict) and _text(row.get("id") or row.get("shipment_id")) == shipment]
     if not selected:
         _fail("shipment_source_missing")
+    return candidates, selected, nested
+
+
+def _order_waybill(raw, current, shipment, waybill, at):
+    """Bind an order transition to its one original courier, without timing its label."""
+    from salla_shipping import extract_shipping, same_carrier
+
+    candidates, selected, nested = _shipment_rows(raw, shipment)
+    observed = extract_shipping(raw) or {}
+    if (current.get("superseded_shipment_ids") or len(selected) != len(candidates)
+            or nested and _text(nested.get("id") or nested.get("shipment_id")) != shipment):
+        _fail("order_waybill_unproven")
+    for row in selected:
+        if _inactive(row):
+            _fail("shipment_inactive")
+        company = row.get("courier") or row.get("company")
+        code = _text(company.get("code")) if isinstance(company, dict) else _text(row.get("company_code"))
+        name = _text(company.get("name")) if isinstance(company, dict) else _text(company)
+        if (code and current.get("company_code") and code != current["company_code"]
+                or name and current.get("company_name") and name != current["company_name"]):
+            _fail("shipment_carrier_conflict")
+        tracking = row.get("tracking") if isinstance(row.get("tracking"), dict) else {}
+        references = [_text(row.get(key)) for key in ("tracking_number", "tracking_id", "shipping_number", "awb")]
+        references.append(_text(tracking.get("number")))
+        if any(value != waybill for value in references if value is not None):
+            _fail("shipment_waybill_conflict")
+        if row.get("created_at") is not None and _instant(row["created_at"]) > at:
+            _fail("timestamp_before_shipment")
+    if (observed.get('shipment_id') != shipment or observed.get('tracking_number') != waybill
+            or not same_carrier(current, observed)):
+        _fail('order_waybill_unproven')
+
+
+def _shipment_time(raw, current, shipment, waybill, *, include_nested=True, order_transition=None):
+    candidates, selected, nested = _shipment_rows(raw, shipment, include_nested=include_nested)
     timestamps = []
     dated_waybill = False
     delivered_waybill = False
@@ -320,7 +357,23 @@ def conflicting_shipments(sources, state):
     return {key for key, orders in seen.items() if len(orders) > 1}
 
 
-def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at, as_of, history=(), shipment_conflicts=()):
+def recorded_courier_fee(state, order_id):
+    """An unpriced delivery observation cannot grandfather a new financial charge."""
+    engine = (state or {}).get('engine', {})
+    facts = engine.get('facts', {})
+    root = 'shipping:' + order_id
+    if (facts.get(root, {}).get('cost') is not None or 'shipping_fee:' + order_id in facts
+            or any(key.startswith(root + ':') for key in facts)):
+        return True
+    keys = {key for key, row in engine.get('obligations', {}).items()
+            if (key == root or key.startswith(root + ':')) and row.get('kind') == 'shipping'}
+    return (any(Decimal(engine['obligations'][key].get('confirmed', '0')) > 0 for key in keys)
+            or any(a.get('obligation_id') in keys and Decimal(a.get('amount', '0')) > 0
+                   for movement in (state or {}).get('movements', []) for a in movement.get('allocations', [])))
+
+
+def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at, as_of, history=(), shipment_conflicts=(),
+                           frozen_event=None, frozen_shipping=None, recorded_fee=False):
     """Return a proved post-start event, None outside scope, or an exact issue.
 
     The caller retains normal order eligibility independently and quotes the
@@ -369,7 +422,7 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
         _fail("current_shipment_required")
     if _status(raw.get("status")) not in DELIVERED and _status(current.get("status")) not in DELIVERED:
         return None
-    current, shipment, waybill = _current_shipping(raw, source)
+    current, shipment, waybill = _current_shipping(raw, source, require_delivered=False)
     if ("shipment", shipment) in shipment_conflicts or ("waybill", waybill) in shipment_conflicts:
         _fail("shipment_shared_by_orders")
     from operational_courier_transitions import CARRIER_HISTORY, WEBHOOK_PROOF, carrier_history_snapshot, order_delivery_time
@@ -381,8 +434,40 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
         # Its complete native history and binding are checked before use.
         order_delivery_time(raw, source, history, end, provenance=provenance)
         evidence_raw = carrier_history_snapshot(raw, current)
-    at, from_order = _shipment_time(evidence_raw, current, shipment, waybill,
-        order_transition=lambda: order_delivery_time(raw, source, history, end, provenance=provenance))
+    # Existing confirmed amounts keep their original native evidence. New fees
+    # use the order's actual delivered transition, never a label timestamp or a
+    # generic order update. The waybill supplies courier identity only.
+    legacy = recorded_fee and (frozen_event is None or frozen_event.get("timestamp_source") != "order_status_transition")
+    if legacy:
+        # A grandfathered fee does not grandfather new cash evidence when the
+        # current carrier's state no longer satisfies the native COD contract.
+        _current_shipping(raw, source, require_delivered=True)
+        at, from_order = _shipment_time(evidence_raw, current, shipment, waybill,
+            order_transition=lambda: order_delivery_time(raw, source, history, end, provenance=provenance))
+    else:
+        at = order_delivery_time(raw, source, history, end, provenance=provenance)
+        _order_waybill(evidence_raw, current, shipment, waybill, at)
+        from_order = True
+        # Preserve the separate pre-existing native delivery/COD contract when
+        # its own dated shipment independently agrees with this order event.
+        if (frozen_event is None or frozen_event.get("timestamp_source") != "order_status_transition") and _status(current.get("status")) in DELIVERED:
+            try:
+                native_at, _ = _shipment_time(evidence_raw, current, shipment, waybill)
+                from_order = native_at != at
+                if from_order:
+                    base['native_delivery_at'] = native_at.isoformat()
+            except ValueError:
+                pass
+        elif frozen_event is not None and frozen_event.get("timestamp_source") == "order_status_transition":
+            if frozen_event.get('native_delivery_at'):
+                base['native_delivery_at'] = frozen_event['native_delivery_at']
+            try:
+                native_at, _ = (_shipment_time(evidence_raw, current, shipment, waybill)
+                                if _status(current.get('status')) in DELIVERED else (at, True))
+            except ValueError:
+                native_at = at
+            if native_at != at and native_at.isoformat() != frozen_event.get('native_delivery_at'):
+                _fail("confirmed_evidence_changed")
     if provenance and _instant(provenance["at"]) != at:
         _fail("timestamp_ambiguous")
     delivered = _window(at, created, start, end)

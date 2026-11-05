@@ -44,7 +44,7 @@ def test_preview_then_pin_delivery_at_approved_price_and_replay_without_new_cash
             await db.settings.insert_one({'user_id': 'other', 'shipping_companies': [dict(COMPANY, cost_per_order=50)]})
             assert await db.operational_balance_states_v1.count_documents({}) == 0
             preview = await catalog(db, 'owner')
-            assert [i['id'] for i in preview['items']] == ['smsa']
+            assert [i['id'] for i in preview['items']] == ['smsa', 'aramex']
             assert await db.operational_balance_states_v1.count_documents({}) == 0
             args = dict(party_id='smsa', source_hash=preview['items'][0]['source_hash'], reason='signed rate',
                         effective_from=START, confirmed=True, request_id='synthetic-1')

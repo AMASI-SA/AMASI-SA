@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/order-delivered-shipping-20261105",
   "base_commit": "d80661fd27ef88bf639fa43d8f969f4d62239a61",
-  "phase": "WIP: cashbox approval and shipping presentation verified; backend implementation in progress",
+  "phase": "Source implemented and locally verified; isolated CI verification pending",
   "requirements": [
     "Deferred courier fees use an authoritative order transition to delivered after operational start; a lagging waybill does not block the fee.",
     "Aramex prepaid shipping is recognized at the authoritative completed order transition after operational start, with one debit to an explicitly approved cashbox.",
@@ -11,33 +11,82 @@
     "Preserve frozen existing facts, opening balances, native driver rules, independent COD evidence, and distinct fee/customer currencies."
   ],
   "completed_in_this_checkpoint": [
-    "Explicit ready active SAR cashbox selection for prepaid courier tariff approval; sends the canonical account ID.",
-    "Dated replacement cashbox binding can be requested while preserving the existing approved version.",
-    "Prepaid completed charges are shown separately from delivery counts; counts group fee components by order.",
-    "Completed-trigger description is scoped to the Mezan 2 operational UI."
+    "Deferred courier fees use the authenticated order delivered transition; a lagging waybill no longer blocks the fee. Carrier identity, cancellation and replacement safeguards remain.",
+    "Historical order creation does not exclude a post-start delivery fee with an independently known contract currency; old sale and supplier records are not recreated.",
+    "Native order history and verified status webhooks retain explicit completed evidence and its original timestamp, including later shipping or delivered order states.",
+    "Approved prepaid tariffs carry immutable dated owner cashbox bindings; missing, stale, foreign, inactive or unready accounts never authorize a new debit.",
+    "A completed prepaid order creates one confirmed shipping charge and one fully allocated cashbox movement atomically; it leaves no unpaid courier liability or advance.",
+    "Recorded payments and confirmed shipping charges require matching review before any new automatic debit. Replay, concurrent refresh, later delivery and cancellation preserve the original paid fact.",
+    "Paid shipping is included in expense reporting and removed from overlapping open shipping estimates.",
+    "Reports and Excel retain separate execution and delivery dates and the cashbox; a replacement carrier has a separate row and cannot inherit the original charge or COD.",
+    "Native driver behavior, independent COD proof and original opening balances remain protected by the regression suite."
   ],
   "changed_files": [
+    "backend/operational_balance_engine.py",
+    "backend/operational_balance_routes.py",
+    "backend/operational_balance_service.py",
+    "backend/operational_balance_sources.py",
+    "backend/operational_courier_tariffs.py",
+    "backend/operational_courier_transitions.py",
+    "backend/operational_delivery_evidence.py",
+    "backend/operational_financial_position_core.py",
+    "backend/operational_open_cost_exposure.py",
+    "backend/operational_order_completed_evidence.py",
+    "backend/operational_prepaid_shipping.py",
+    "backend/salla_integration/courier_delivery_sync.py",
+    "backend/salla_integration/webhook_order_sync.py",
+    "backend/salla_shipping.py",
+    "backend/tests/test_operational_balance_courier_acquisition.py",
+    "backend/tests/test_operational_balance_courier_order_transition.py",
+    "backend/tests/test_operational_balance_courier_tariffs.py",
+    "backend/tests/test_operational_balance_delivery_cutover.py",
+    "backend/tests/test_operational_balance_delivery_evidence.py",
+    "backend/tests/test_operational_balance_order_delivery_status.py",
+    "backend/tests/test_operational_balance_prepaid_position.py",
+    "backend/tests/test_operational_balance_prepaid_shipping.py",
+    "backend/tests/test_operational_balance_prepaid_tariffs.py",
+    "backend/tests/test_operational_balance_shipping_currency.py",
+    "backend/tests/test_operational_balance_source_fixes.py",
+    "backend/tests/test_operational_balance_verified_shipping_fees.py",
     "frontend/src/pages/ShippingCompanySettings.jsx",
     "frontend/src/pages/operational/CourierTariffApproval.jsx",
     "frontend/src/pages/operational/DeliveryFeeReview.test.jsx",
     "frontend/src/pages/operational/DomainDetails.jsx",
-    "frontend/src/pages/operational/DomainDetails.test.jsx"
+    "frontend/src/pages/operational/DomainDetails.test.jsx",
+    "frontend/src/pages/operational/OperationalFinancialPosition.jsx",
+    "frontend/src/pages/operational/OperationalFinancialPosition.test.jsx",
+    "frontend/src/pages/operational/financialPositionPresentation.js",
+    "frontend/src/pages/operational/financialPositionPresentation.test.js"
   ],
   "verification": [
     {
-      "command": "CI=true node node_modules/react-scripts/scripts/test.js --watchAll=false --runInBand --runTestsByPath src/pages/operational/DeliveryFeeReview.test.jsx src/pages/operational/DomainDetails.test.jsx src/pages/ShippingCompanySettings.test.jsx",
+      "command": "CI=true node node_modules/react-scripts/scripts/test.js --watchAll=false --runInBand --runTestsByPath src/pages/operational/DeliveryFeeReview.test.jsx src/pages/operational/DomainDetails.test.jsx src/pages/ShippingCompanySettings.test.jsx src/pages/operational/OperationalFinancialPosition.test.jsx src/pages/operational/financialPositionPresentation.test.js",
       "cwd": "frontend",
       "node_version": "22.23.2",
       "exit_status": 0,
-      "result": "Independent review: 3 suites, 23 tests passed. New prepaid UI and counting cases also demonstrated expected failure before implementation."
+      "result": "Root integrated verification: 5 suites, 61 passed; independently reviewed UI and projection behavior."
+    },
+    {
+      "command": "PYTHONPATH=backend:backend/tests .test-venv/bin/python -B -m pytest --noconftest -q backend/tests/test_operational_balance_order_delivery_status.py backend/tests/test_operational_balance_prepaid_shipping.py backend/tests/test_operational_balance_prepaid_tariffs.py backend/tests/test_operational_balance_prepaid_position.py backend/tests/test_operational_balance_financial_position.py --tb=short",
+      "cwd": ".",
+      "python_version": "3.12.14",
+      "exit_status": 0,
+      "result": "Root final integrated contract verification: 130 passed, no skips or deselections."
+    },
+    {
+      "command": "PYTHONPATH=.:backend:backend/tests .test-venv/bin/python -B -m pytest --noconftest -q backend/tests/test_operational_balance_sources.py backend/tests/test_operational_balance_shipping_currency.py backend/tests/test_operational_balance_engine.py backend/tests/test_operational_balance_engine_fixes.py backend/tests/test_operational_balance_source_fixes.py backend/tests/test_operational_balance_delivery_cutover.py backend/tests/test_operational_balance_delivery_evidence.py backend/tests/test_operational_balance_courier_tariffs.py backend/tests/test_operational_balance_verified_shipping_fees.py backend/tests/test_operational_open_cost_exposure.py backend/tests/test_operational_balance_cost_completeness.py backend/tests/test_operational_balance_financial_position.py backend/tests/test_operational_balance_prepaid_shipping.py backend/tests/test_operational_balance_prepaid_tariffs.py backend/tests/test_operational_balance_prepaid_position.py backend/tests/test_operational_balance_order_delivery_status.py backend/tests/test_operational_balance_courier_order_transition.py backend/tests/test_operational_balance_courier_acquisition.py -k 'not test_real_refresh_preserves_old_delivery_custody_and_bank_settlement_once and not authenticated_history_refresh and not worker_recovers_seven and not network_read and not ineligible_existing and not concurrent_acquisition' --tb=short",
+      "cwd": ".",
+      "python_version": "3.12.14",
+      "exit_status": 0,
+      "result": "Integrated affected regression run: 599 passed, 3 skipped, 19 deselected. The skipped/deselected existing tests require an isolated real Mongo replica set; CI remains required and no test gate was modified."
     },
     {
       "command": "git diff --check",
       "exit_status": 0,
-      "result": "Clean for the checkpoint source files."
+      "result": "Clean."
     }
   ],
-  "review_state": "Frontend independently reviewed; no unresolved blocking frontend findings. Backend review pending fixed target.",
+  "review_state": "Independent reviews accepted the order transition producer/consumer chain, prepaid financial effects, tariff binding, carrier-separated reports and UI. Identified defects were reproduced and fixed with regressions.",
   "release_state": {
     "source_only": true,
     "release_intent_frozen": false,
@@ -48,11 +97,13 @@
     "reason": "No production commands, provider mutations, live database writes or financial postings were performed for this source task. The prior production approval rejection has not been bypassed."
   },
   "remaining": [
-    "Finish backend order status proof acquisition through collect_sources and reconcile.",
-    "Implement completed-trigger prepaid charge, fully allocated cashbox debit and paid-expense reporting in the atomic operational state.",
-    "Prove tariff ownership/version, missing or stale binding, source conflict, idempotency, historical cutover, rollback and frozen evidence behavior.",
-    "Run integrated regression checks and independent backend review, then save a final remote checkpoint and Draft PR.",
-    "Production release and live cashbox configuration remain separate from this source checkpoint."
+    "Run the Draft PR CI gates with an isolated real Mongo replica set, including cases not runnable in the local environment.",
+    "Inspect exact-commit CI results and resolve task-related failures before declaring the release ready.",
+    "Obtain explicit production release authorization before preparing a release lease or publishing; the earlier automatic approval rejection remains respected.",
+    "After an authorized deployment, explicitly approve the intended Salla cashbox and tariff effective period through the normal owner UI, then verify the live balances."
   ],
-  "next_safe_action": "Continue isolated backend implementation on this task branch; do not deploy this WIP checkpoint. Exact checkpoint commit is recorded by the branch ref and subsequent handoff."
+  "next_safe_action": "Fetch this task branch and inspect the exact Draft PR head and CI checks. This is a source checkpoint; do not create a production lease or publish without explicit authorization.",
+  "previous_remote_checkpoint": "9d7971214dd7c77eaaf01948d50d9deb99de9d21",
+  "checkpoint_identity": "The containing Git commit and its branch ref identify this snapshot. The exact full source SHA is also recorded in the Draft PR handoff body after creation.",
+  "updated_at_utc": "2026-11-05T14:03:21.511571+00:00"
 }

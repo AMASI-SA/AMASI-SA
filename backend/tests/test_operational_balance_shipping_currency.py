@@ -85,14 +85,18 @@ def test_native_driver_foreign_currency_delivery_remains_unsupported():
         resolve(values)
 
 
-def test_prestart_foreign_delivery_remains_outside_the_sar_historical_fee_review_contract():
+def test_prestart_foreign_order_can_earn_its_independently_dated_sar_courier_fee():
     from test_operational_balance_delivery_cutover import courier_data
     data = courier_data()
     raw = data["unified_orders"][0]["raw_by_source"]["salla_direct"]
     raw["currency"] = raw["total"]["currency"] = "KWD"
     sources = run(collect_sources(HardBoundaryDB(data), "owner", START, NOW))
-    assert not sources["orders"] and not sources["delivery_events"]
-    assert any(row["code"] == "operational_delivery_currency_unsupported" for row in sources["issues"])
+    assert not sources["orders"] and len(sources["delivery_events"]) == 1
+    result = reconcile(initial(), sources, NOW)
+    shipping = result["engine"]["obligations"]["shipping:100:base_shipping"]
+    assert (shipping["confirmed"], shipping["currency"]) == ("10.00", "SAR")
+    assert not any(row["kind"] in {"supplier", "provider"} for row in result["engine"]["obligations"].values())
+    assert result["movements"] == [] and reconcile(result, sources, NOW) == result
 
 
 @pytest.mark.parametrize("rate_kind", ["simple", "operational_courier_tariff", "rich"])

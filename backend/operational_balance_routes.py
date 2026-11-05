@@ -39,6 +39,7 @@ class CourierTariffApproval(Request):
     effective_from: str = Field(min_length=16, max_length=40)
     reason: str = Field(min_length=3, max_length=400)
     confirmed: Literal[True]
+    cash_account_id: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class ProviderHistoryApproval(Request):
