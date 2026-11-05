@@ -1,0 +1,78 @@
+{
+  "method": "Transitive static JavaScript imports; gzip per file. Excludes CSS, API time, and device execution.",
+  "initial": {
+    "files": [
+      "assets/api-Cn6ediUw.js",
+      "assets/axios-CRBZr4vS.js",
+      "assets/clsx-DB0hHKMi.js",
+      "assets/index-DDqNjoJ2.js",
+      "assets/jsx-runtime-BpzPEenQ.js",
+      "assets/preload-helper-Czpn1I53.js",
+      "assets/react-dom-5PB_EGoG.js",
+      "assets/rolldown-runtime-Dd_uD5pT.js"
+    ],
+    "bytes": 1074854,
+    "gzip_bytes": 305309
+  },
+  "dashboard": {
+    "files": [
+      "assets/AdvancedDashboard-BewKVgw-.js",
+      "assets/AdvancedFilters-DymRfaup.js",
+      "assets/ArabicDateRangePicker-BqXcA668.js",
+      "assets/Calendar.es-Briv-G3N.js",
+      "assets/CampaignAccountAnalysis-DmvfThX8.js",
+      "assets/CampaignResearchStatus-UPDn9_tn.js",
+      "assets/CaretLeft.es-D6j6DGEJ.js",
+      "assets/CaretRight.es-DjwpQfJ_.js",
+      "assets/CartesianChart-CLkAhnrY.js",
+      "assets/Coins.es-BCT9Y1XZ.js",
+      "assets/DailyProductCostModal-CTm0slsH.js",
+      "assets/DashboardPanel-CoUG_rp8.js",
+      "assets/ExcludedOrdersModal-BSJc4DNr.js",
+      "assets/Funnel.es-CYbJjGK1.js",
+      "assets/Legend-_F5RYPyJ.js",
+      "assets/LineChart-CXC1BMHB.js",
+      "assets/NotePencil.es-DSrSBZ3j.js",
+      "assets/OrderCurrencyAmount-B80nJAcY.js",
+      "assets/Warning.es-DFThMaUC.js",
+      "assets/api-Cn6ediUw.js",
+      "assets/axios-CRBZr4vS.js",
+      "assets/chart-column-D4hVrEeB.js",
+      "assets/chevron-down-9mOSJTPv.js",
+      "assets/clsx-DB0hHKMi.js",
+      "assets/dashboardAdsSpend-B9_SBZbI.js",
+      "assets/dates-CnmNS_0-.js",
+      "assets/format-BmuT15Y2.js",
+      "assets/fulfillmentV2-Ci0H1OxX.js",
+      "assets/index-DDqNjoJ2.js",
+      "assets/jsx-runtime-BpzPEenQ.js",
+      "assets/mezanV2CostLinks-BktwNvdM.js",
+      "assets/orderCampaignAttribution-C4aBVWk4.js",
+      "assets/preload-helper-Czpn1I53.js",
+      "assets/react-dom-5PB_EGoG.js",
+      "assets/refresh-cw-w3B9v-lx.js",
+      "assets/rolldown-runtime-Dd_uD5pT.js",
+      "assets/triangle-alert-TyIOCEKH.js",
+      "assets/tzUtils-BdxHQ2m4.js",
+      "assets/useOrders-BIJreWFA.js"
+    ],
+    "bytes": 1632218,
+    "gzip_bytes": 475322
+  },
+  "fulfillment_shell": {
+    "files": [
+      "assets/FulfillmentV2-CRnsi_1S.js",
+      "assets/UserCheck.es-TvAzxfvF.js",
+      "assets/api-Cn6ediUw.js",
+      "assets/axios-CRBZr4vS.js",
+      "assets/clsx-DB0hHKMi.js",
+      "assets/index-DDqNjoJ2.js",
+      "assets/jsx-runtime-BpzPEenQ.js",
+      "assets/preload-helper-Czpn1I53.js",
+      "assets/react-dom-5PB_EGoG.js",
+      "assets/rolldown-runtime-Dd_uD5pT.js"
+    ],
+    "bytes": 1093959,
+    "gzip_bytes": 311487
+  }
+}

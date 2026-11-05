@@ -3,6 +3,7 @@ from __future__ import annotations
 from order_tracking_notes import instruction_banner
 
 import io
+import asyncio
 from copy import deepcopy
 import hashlib
 import json
@@ -11,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-from typing import Any, Callable
+from typing import Any, AsyncIterator, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -29,7 +30,7 @@ from carrier_handoff import (
 from fulfillment_batch_pdf import generate_shipping_batch_pdf
 from fulfillment_carrier_label import sync_completed_carrier_label, _require_print_completed_workflow
 from order_engine.repository import MongoOrderRepository
-from order_engine.service import OrderNotFoundError, get_order
+from order_engine.service import OrderNotFoundError, get_order, get_orders
 from order_engine.shipping_label_service import ShippingLabelError
 from order_option_cost_snapshot_routes import binding_matches, selected_option_tokens
 from product_fulfillment_rules import (
@@ -2176,6 +2177,10 @@ async def _order_view(
         )
     except OrderNotFoundError:
         return None
+    return _serialize_order_view(order, workflow)
+
+
+def _serialize_order_view(order: Any, workflow: dict[str, Any]) -> dict[str, Any]:
     # Current provider facts are a read projection, independent of a previous
     # print attempt. They never grant permission to open/print a saved label.
     shipping = order.shipping
@@ -2290,6 +2295,49 @@ async def _order_view(
     }
 
 
+async def _workflow_orders(
+    repository: MongoOrderRepository,
+    *,
+    user_id: str,
+    workflows: list[dict[str, Any]],
+) -> AsyncIterator[tuple[dict[str, Any], Any]]:
+    """Hydrate queue rows in bounded batches, preserving workflow order.
+
+    No shared cache: every read uses current tenant-scoped order facts. Missing
+    or invalid orders still leave room for later candidates in the same queue.
+    """
+    for start in range(0, len(workflows), 100):
+        batch = workflows[start:start + 100]
+        orders = await get_orders(
+            repository,
+            user_id=user_id,
+            order_numbers=[_text(row.get("order_number")) for row in batch],
+        )
+        for workflow in batch:
+            order = orders.get(_text(workflow.get("order_number")))
+            if order is None:
+                continue
+            yield workflow, order
+        await asyncio.sleep(0)
+
+
+async def _order_views(
+    repository: MongoOrderRepository,
+    *,
+    user_id: str,
+    workflows: list[dict[str, Any]],
+    limit: int,
+) -> list[dict[str, Any]]:
+    items = []
+    async for workflow, order in _workflow_orders(
+        repository, user_id=user_id, workflows=workflows,
+    ):
+        items.append(_serialize_order_view(order, workflow))
+        if len(items) >= limit:
+            break
+    return items
+
+
 def make_fulfillment_v2_router(
     db: Any,
     current_user: Callable[..., Any],
@@ -2315,22 +2363,14 @@ def make_fulfillment_v2_router(
             },
             {"_id": 0},
         ).sort("ready_to_ship_at", 1).limit(limit * 3).to_list(limit * 3)
-        items = []
-        for workflow in workflows:
-            if not _ready_order_allowed(context, workflow):
-                continue
-            claimed_by = _text(workflow.get("claimed_by"))
-            if claimed_by and claimed_by != context["actor_id"] and not context["is_owner"]:
-                continue
-            row = await _order_view(
-                repository,
-                user_id=context["merchant_id"],
-                workflow=workflow,
-            )
-            if row:
-                items.append(row)
-            if len(items) >= limit:
-                break
+        eligible = [workflow for workflow in workflows
+                    if _ready_order_allowed(context, workflow)
+                    and (not _text(workflow.get("claimed_by"))
+                         or _text(workflow.get("claimed_by")) == context["actor_id"]
+                         or context["is_owner"])]
+        items = await _order_views(
+            repository, user_id=context["merchant_id"], workflows=eligible, limit=limit,
+        )
         return {
             "items": items,
             "total": len(items),
@@ -2381,24 +2421,13 @@ def make_fulfillment_v2_router(
             query,
             {"_id": 0},
         ).sort("completed_at", -1).limit(limit * 2).to_list(limit * 2)
-        items = []
-        for workflow in workflows:
-            claimed_by = _text(workflow.get("claimed_by"))
-            if (
-                claimed_by
-                and claimed_by != context["actor_id"]
-                and not context["is_owner"]
-            ):
-                continue
-            row = await _order_view(
-                repository,
-                user_id=context["merchant_id"],
-                workflow=workflow,
-            )
-            if row:
-                items.append(row)
-            if len(items) >= limit:
-                break
+        eligible = [workflow for workflow in workflows
+                    if (not _text(workflow.get("claimed_by"))
+                        or _text(workflow.get("claimed_by")) == context["actor_id"]
+                        or context["is_owner"])]
+        items = await _order_views(
+            repository, user_id=context["merchant_id"], workflows=eligible, limit=limit,
+        )
         batch_ids = sorted({
             _text(row.get("print_batch_id"))
             for row in items
@@ -2652,18 +2681,14 @@ def make_fulfillment_v2_router(
             query,
             {"_id": 0},
         ).sort("carrier_handoff_scanned_at", -1).limit(limit).to_list(limit)
+        rows = await _order_views(
+            repository, user_id=context["merchant_id"], workflows=workflows, limit=limit,
+        )
         items = []
-        for workflow in workflows:
-            row = await _order_view(
-                repository,
-                user_id=context["merchant_id"],
-                workflow=workflow,
-            )
-            if not row:
-                continue
+        for row in rows:
             if not carrier_handoff_custody_is_visible(
-                workflow_stage=workflow.get("stage"),
-                handoff_state=workflow.get("carrier_handoff_state"),
+                workflow_stage="completed",
+                handoff_state=row.get("carrier_handoff_state"),
                 order_status_slug=row.get("order_status"),
                 order_status_name=row.get("order_status_native"),
             ):
@@ -2705,15 +2730,9 @@ def make_fulfillment_v2_router(
             ),
             -1,
         ).limit(limit).to_list(limit)
-        items = []
-        for workflow in workflows:
-            row = await _order_view(
-                repository,
-                user_id=context["merchant_id"],
-                workflow=workflow,
-            )
-            if row:
-                items.append(row)
+        items = await _order_views(
+            repository, user_id=context["merchant_id"], workflows=workflows, limit=limit,
+        )
         return {
             "stage": normalized_stage,
             "items": items,

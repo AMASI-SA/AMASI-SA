@@ -302,18 +302,27 @@ class LocalDownstreamTests(unittest.IsolatedAsyncioTestCase):
         await self.db[local.OPERATIONS].delete_one({"_id": "operation-broken"})
         for number in [*stages, "legacy", "broken", "unknown"]:
             await self.db[pieces.PIECES].insert_one({"user_id": OWNER, "order_number": number, "piece_id": number})
+            status = "in_progress" if number == "unknown" else "under_review"
+            await self.db.unified_orders.insert_one({
+                "user_id": OWNER, "order_number": number, "order_date": WHEN.isoformat(), "order_status": status,
+                "raw_by_source": {"salla_direct": {
+                    "id": "provider-" + number, "reference_id": number, "date": WHEN.isoformat(),
+                    "status": status, "payment_method": "cod",
+                    "items": [{"id": "line", "product_id": "product", "name": "Synthetic product", "quantity": 2}],
+                }},
+            })
 
-        async def current(_repository, *, user_id, order_number):
-            return order(order_number, status="in_progress" if order_number == "unknown" else "under_review")
-
-        with patch.object(pieces, "get_order", side_effect=current):
-            progress = await pieces._assembly_order_board(self.db, user_id=OWNER, state="in_progress", limit=50, offset=0)
-            completed = await pieces._assembly_order_board(self.db, user_id=OWNER, state="completed", limit=50, offset=0)
+        # Exercise the real single/batch read model; a get_order double would
+        # silently bypass the batch reader used by the board.
+        progress = await pieces._assembly_order_board(self.db, user_id=OWNER, state="in_progress", limit=50, offset=0)
+        completed = await pieces._assembly_order_board(self.db, user_id=OWNER, state="completed", limit=50, offset=0)
         self.assertEqual({row["order_number"] for row in progress["items"]}, {"working", "received"})
         self.assertEqual({row["order_number"] for row in completed["items"]}, {"finished"})
         self.assertTrue(all(row["order_status"] == "under_review" for row in progress["items"]))
-        with patch.object(pieces, "get_order", AsyncMock(return_value=order(status="cancelled"))):
-            cancelled = await pieces._assembly_order_board(self.db, user_id=OWNER, state="in_progress", limit=50, offset=0)
+        await self.db.unified_orders.update_many({"user_id": OWNER}, {"$set": {
+            "order_status": "cancelled", "raw_by_source.salla_direct.status": "cancelled",
+        }})
+        cancelled = await pieces._assembly_order_board(self.db, user_id=OWNER, state="in_progress", limit=50, offset=0)
         self.assertEqual(cancelled["items"], [])
 
     async def test_legacy_receipt_counts_custody_without_promoting_ready(self):

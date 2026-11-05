@@ -289,10 +289,10 @@ async def _location(db, owner, receipt, identity, quantity, context):
     return location, barcode
 
 
-async def invoice_public(db, owner, invoice):
+def invoice_public_projection(invoice, operation=None):
+    """Project an invoice using its current approval evidence, without I/O."""
     row = {k: v for k, v in invoice.items() if k != "_id"}
     if row.get("schema_version") == SCHEMA:
-        operation = await db[OPERATIONS].find_one({"_id": row["approval_operation_id"], "user_id": owner}, {"_id": 0})
         row["operation"] = operation
         row["status"] = row["state"]
         row["paid_amount"] = 0
@@ -300,6 +300,13 @@ async def invoice_public(db, owner, invoice):
     else:
         row["legacy_read_only"] = True
     return row
+
+
+async def invoice_public(db, owner, invoice):
+    operation = None
+    if invoice.get("schema_version") == SCHEMA:
+        operation = await db[OPERATIONS].find_one({"_id": invoice["approval_operation_id"], "user_id": owner}, {"_id": 0})
+    return invoice_public_projection(invoice, operation)
 
 
 async def approve_and_receive(db, *, user, invoice_id, payload):

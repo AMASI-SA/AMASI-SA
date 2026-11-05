@@ -1,0 +1,55 @@
+{
+  "task_id": "PAGE-PERFORMANCE-20261106",
+  "state": "authorized_remote_checkpoint_native_coordination_pending",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/mezan-page-performance-20261106",
+  "base_sha": "ae2fe9ce01c003ff139e22dd54f4641be48c8e38",
+  "source_commit": null,
+  "production_changed_by_this_task": false,
+  "remote_checkpoint": null,
+  "pr": null,
+  "ci": "workflow added; remote CI not run",
+  "release_guard": "no lease or /app mutation performed",
+  "verification": {
+    "backend": {
+      "exit_code": 0,
+      "passed": 689,
+      "subtests_passed": 93,
+      "skipped": 0,
+      "real_loopback_mongo": true
+    },
+    "frontend": {
+      "exit_code": 0,
+      "passed": 323,
+      "suites": 29
+    },
+    "build": {
+      "exit_code": 0,
+      "kind": "ordinary_local_vite_build",
+      "governed_release": false
+    },
+    "overall_live_80_percent_target": "unverified",
+    "installed_employee_device": "unverified"
+  },
+  "source_sha256": {
+    "backend/fulfillment_v2_routes.py": "4cc5e9f212fe959fab4f6870f5f46ee87c4c5302c5fa3057d24ec83662f67546",
+    "backend/preparation_piece_operations.py": "3faf65b16d7e2c3a201c6a69592f49705597edc763980f751c60f3d79b6b9886",
+    "backend/purchase_invoices_routes.py": "bb8184166afab5930784f19f2054f41171f2787db768cebbb02c94e6c1002029",
+    "backend/purchase_receiving_service.py": "147edbc44df2ac060077fba5e9849325a7a521ddd7442b3f2d59d52c9f51e220",
+    "frontend/src/components/Layout.jsx": "be91019417518b4526845f99d75541e6ba9b2db39c75786901b643e9dfd63d8b",
+    "frontend/src/components/fulfillment/PreparationWorkDashboard.jsx": "e248646a9d937ec33e78f8729cd21439a9855cdcd87a4456995b7c2986cd29ed",
+    "frontend/src/pages/AdvancedDashboard.jsx": "dfff67127aa9b468264bd10525ac96f38a69b4ad8547de7289610517c48d497b",
+    "frontend/src/pages/FulfillmentV2.jsx": "c5c5bda8771eb948f001efd576b3ab842b5c7bd127d32881ee6b0238eab947ac"
+  },
+  "next_safe_action": "Push exact verified web/backend checkpoint and create Draft PR; coordinate native 71 and companion server PR1777, fresh CI and final governed v5 candidate before production.",
+  "user_authorization": "Explicit approval: push and review, then publish after release checks; later request preserves the new native grouped loading.",
+  "native_coordination": {
+    "thread_id": "01a1ad29-d640-7b20-81c6-4d2ff90e6d58",
+    "thread_title": "\u0625\u0643\u0645\u0627\u0644 \u0627\u0644\u062a\u0637\u0628\u064a\u0642",
+    "send_message_delivered": false,
+    "tool_error": "Invalid app tool request",
+    "active_branch_observed": "codex/android71-supplier-receiving-fast-20261106",
+    "mobile_checkout_written_by_this_task": false,
+    "user_relay_requested": true
+  }
+}

@@ -33,6 +33,7 @@ from fulfillment_v2_routes import (
     BATCHES as SHIPPING_BATCHES,
     _actor_context,
     _require_permission,
+    _workflow_orders,
     build_order_fulfillment_decision,
     effective_operation_actor,
 )
@@ -3124,6 +3125,10 @@ async def _assembly_order_board(
         {"user_id": user_id, "$or": evidence_or},
         {"_id": 0},
     ).sort("updated_at", 1).limit(5000).to_list(5000)
+    workflows = [row for row in workflows
+                 if is_known_review_mode(row.get("completion_mode"))
+                 and _text(row.get("order_number"))
+                 and (not normalized_query or normalized_query in _text(row.get("order_number")))]
 
     order_numbers = sorted({
         _text(row.get("order_number"))
@@ -3160,22 +3165,11 @@ async def _assembly_order_board(
 
     repository = MongoOrderRepository(db)
     rows: list[dict[str, Any]] = []
-    for workflow in workflows:
-        if not is_known_review_mode(workflow.get("completion_mode")):
-            continue
+    # Keep only one bounded DTO batch in memory and yield between batches.
+    async for workflow, order in _workflow_orders(
+        repository, user_id=user_id, workflows=workflows,
+    ):
         order_number = _text(workflow.get("order_number"))
-        if not order_number:
-            continue
-        if normalized_query and normalized_query not in order_number:
-            continue
-        try:
-            order = await get_order(
-                repository,
-                user_id=user_id,
-                order_number=order_number,
-            )
-        except OrderNotFoundError:
-            continue
 
         if workflow.get("completion_mode") == LOCAL_COMPLETION_MODE:
             local_stages = {"in_progress", "ready_to_ship"} if state == "in_progress" else {"completed"}
@@ -3866,6 +3860,19 @@ async def _manager_summary(db: Any, *, user_id: str, date: str) -> dict[str, Any
 
 def make_preparation_piece_operations_router(db: Any, current_user: Callable) -> APIRouter:
     router = APIRouter(prefix="/preparation-work-v1", tags=["Preparation Piece Operations"])
+    indexes_ready = False
+    indexes_lock = asyncio.Lock()
+
+    async def ensure_indexes_once() -> None:
+        # Mongo persists these definitions. Polling must not resubmit five
+        # createIndexes commands per read. Failed/cancelled setup is retryable.
+        nonlocal indexes_ready
+        if indexes_ready:
+            return
+        async with indexes_lock:
+            if not indexes_ready:
+                await ensure_piece_operation_indexes(db)
+                indexes_ready = True
     from assembly_mobile_settings import make_assembly_mobile_settings_router
     make_assembly_mobile_settings_router(db, current_user, router=router)
 
@@ -3901,7 +3908,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
                 status_code=403,
                 detail={"code": "preparation_receipt_permission_required"},
             )
-        await ensure_piece_operation_indexes(db)
+        await ensure_indexes_once()
         return {
             "ok": True,
             **await _preparation_receiving_custody_view(
@@ -3927,7 +3934,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
                 status_code=403,
                 detail={"code": "preparation_receipt_permission_required"},
             )
-        await ensure_piece_operation_indexes(db)
+        await ensure_indexes_once()
         return await _preparation_receipt_search(
             db,
             user_id=context["merchant_id"],
@@ -4059,7 +4066,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             "fulfillment.ready.read",
             responsibility="instant_ready",
         )
-        await ensure_piece_operation_indexes(db)
+        await ensure_indexes_once()
         result = await _assembly_search(
             db,
             user_id=context["merchant_id"],
@@ -4100,7 +4107,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             "fulfillment.ready.read",
             responsibility="instant_ready",
         )
-        await ensure_piece_operation_indexes(db)
+        await ensure_indexes_once()
         return await _assembly_order_board(
             db,
             user_id=context["merchant_id"],
