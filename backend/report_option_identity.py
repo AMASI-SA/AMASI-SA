@@ -82,7 +82,7 @@ def resolve_report_choices(item, product, bindings):
             continue
         row = original.get("raw") if isinstance(original.get("raw"), dict) else original
         nested = row.get("option") if isinstance(row.get("option"), dict) else {}
-        strong = {_id(row.get("option_id")), _id(nested.get("id"))} - {""}
+        strong = {_id(row.get("option_id")), _id(row.get("product_option_id")), _id(nested.get("id"))} - {""}
         known = strong & catalog.keys()
         if len(strong) > 1:
             invalid.update(known)
