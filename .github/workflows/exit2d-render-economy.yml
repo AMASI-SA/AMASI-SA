@@ -1,5 +1,10 @@
 name: EXIT-2D Render Economy
 on:
+  push:
+    branches: [codex/exit-2d-render-integration-20261105]
+    paths:
+      - packaging/exit2d/render/**
+      - .github/workflows/exit2d-render-economy.yml
   workflow_dispatch:
 permissions:
   contents: read
