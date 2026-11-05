@@ -29,7 +29,7 @@ cleanup() {
 trap cleanup EXIT
 docker build -f packaging/exit2d/render/Dockerfile --build-arg "RENDER_GIT_COMMIT=$GITHUB_SHA" -t mezan-econ:staging .
 docker build -f packaging/exit2d/render/Mongo.Dockerfile -t mezan-econ:mongo .
-truncate -s 5G "$root/mongo.img"
+truncate -s 5000000000 "$root/mongo.img"
 mkfs.ext4 -q -F -m 0 "$root/mongo.img"
 sudo mount -o loop "$root/mongo.img" "$root/disk"
 docker network create --internal "$network" >/dev/null
@@ -72,8 +72,17 @@ fixture() {
     -v "$PWD/packaging/exit2d:/evidence/tools:ro" --entrypoint python mezan-econ:staging \
     /evidence/tools/render/economy_acceptance.py "$1"
 }
+for role in sync accounting; do
+  if docker run --rm "${runtime[@]}" "${small[@]}" -e MEZAN_WORKER_ENABLED=1 -e MEZAN_LEGACY_WORKERS_STOPPED=1 mezan-econ:staging python /opt/render/start.py "worker-$role" > "$root/duplicate-$role.log" 2>&1; then
+    echo 'FAIL duplicate role accepted'; exit 1
+  fi
+  grep -q 'another worker holds the fenced claim' "$root/duplicate-$role.log"
+done
 fixture setup | tee "$root/setup.jsonl"
+docker exec -i "$sync" python - < packaging/exit2d/render/economy_snap.py > "$root/snap.jsonl" 2>&1 & snap_pid=$!
 fixture load | tee "$root/operations.jsonl"
+wait "$snap_pid"
+docker exec -i "$accounting" python - < packaging/exit2d/render/economy_accounting.py | tee "$root/accounting-before.jsonl"
 fixture growth | tee "$root/growth.jsonl"
 df -B1 "$root/disk" > "$root/disk-usage.txt"
 for service in "$reports" "$sync" "$accounting"; do
@@ -86,6 +95,7 @@ for service in "$reports" "$sync" "$accounting"; do
   test "$(docker inspect -f '{{.State.Running}}' "$service")" = true
   probe
 done
+docker exec -i "$accounting" python - < packaging/exit2d/render/economy_accounting.py | tee "$root/accounting-after.jsonl"
 sleep 30
 for service in "$web" "$reports" "$sync" "$accounting"; do
   test "$(docker inspect -f '{{.State.Running}}' "$service")" = true

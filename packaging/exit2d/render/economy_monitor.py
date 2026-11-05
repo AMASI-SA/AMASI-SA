@@ -12,7 +12,7 @@ while not Path(output + '.stop').exists():
     for state in states:
         name = state['Name'].lstrip('/')
         row = rows.setdefault(name, {'samples': 0, 'current_bytes': 0, 'peak_bytes': 0,
-            'oom': 0, 'oom_kill': 0, 'restarts_max': 0, 'cpu_usage_usec': 0})
+            'oom': 0, 'oom_kill': 0, 'restarts_max': 0, 'cpu_usage_usec': 0, 'sample_total_bytes': 0, 'cpu_throttled_usec': 0})
         row['restarts_max'] = max(row['restarts_max'], state['RestartCount'])
         row['docker_oom_seen'] = row.get('docker_oom_seen', False) or state['State']['OOMKilled']
         row['memory_limit_bytes'] = state['HostConfig']['Memory']
@@ -29,6 +29,9 @@ while not Path(output + '.stop').exists():
             events = dict(line.split() for line in (group / 'memory.events').read_text().splitlines())
             cpu = dict(line.split() for line in (group / 'cpu.stat').read_text().splitlines())
             row.update(current_bytes=current, samples=row['samples'] + 1)
+            row['sample_total_bytes'] += current
+            row['sample_mean_bytes'] = row['sample_total_bytes'] // row['samples']
+            row['cpu_throttled_usec'] = max(row['cpu_throttled_usec'], int(cpu.get('throttled_usec', 0)))
             row['peak_bytes'] = max(row['peak_bytes'], peak)
             row['oom'] = max(row['oom'], int(events.get('oom', 0)))
             row['oom_kill'] = max(row['oom_kill'], int(events.get('oom_kill', 0)))
