@@ -1,0 +1,279 @@
+{
+  "task_id": "SHIPPING-RETRY-FAIRNESS-20261106",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/shipping-retry-fairness-release-20261106",
+  "base_commit": "2304b365c267d2d4220bc3bc953ecbb5a7403062",
+  "phase": "Final source independently reviewed and tested; publication reservation explicitly withheld by the user",
+  "predecessor": "https://github.com/AMASI-SA/AMASI-SA/pull/1774",
+  "approved_scope": "Complete the authorized shipping/payment table and operating product-cost correctness work. Ensure eligible shipping orders receive acquisition attempts, and validate the observed native product_option_id shape in the separate operating-cost resolver. Existing manual cashbox binding and authoritative completion/delivery rules remain controlling financial contracts.",
+  "write_scope": [
+    "backend/salla_integration/courier_delivery_sync.py",
+    "backend/tests/test_operational_balance_courier_acquisition.py",
+    "backend/operational_balance_sources.py",
+    "backend/tests/test_operational_open_cost_exposure.py",
+    "This task status and predecessor release closeout only"
+  ],
+  "defect": "The atomic claim has no explicit sort. Four unresolved earlier matches can become eligible again after their 15-minute retry reservation before later eligible rows are ever attempted. A stable query plan can repeat this indefinitely for a sufficiently large fixed backlog.",
+  "remediation": "Order the existing atomic find_one_and_update by retry deadline ascending, then _id ascending. Missing deadlines precede attempted rows. Preserve all filters, the four-attempt cap, the 15-minute reservation, evidence validation and canonical-source CAS.",
+  "invariants": [
+    "No carrier-name or country priority",
+    "No new financial fact, expense, opening balance, status change, approval or forced backfill",
+    "No invented completion/delivery timestamps or weakened source proof",
+    "No owner/start/future-retry filter changes",
+    "No update of canonical data when evidence fails",
+    "No index, workflow or infrastructure change without concrete measured need",
+    "Frozen PR1774 A/B and all unrelated source remain unchanged"
+  ],
+  "verification": [
+    {
+      "scope": "Unchanged-source counterexample and proposed ordering at the real storage boundary",
+      "mongo_version": "7.0.16",
+      "exit_status": 0,
+      "current": {
+        "eligible_orders": 121,
+        "early_unresolved_deferred": 120,
+        "cycles": 120,
+        "cycle_seconds": 30,
+        "claims": 480,
+        "distinct_attempted": 120,
+        "later_prepaid_attempts": 0
+      },
+      "comparison": {
+        "claims": 480,
+        "distinct_attempted": 121,
+        "later_prepaid_attempts": 3,
+        "first_later_attempt_seconds": 900
+      },
+      "preserved": "At most4claims/cycle, no repeat within15minutes, owner/start/future retry controls untouched, only retry metadata changed, canonical/financial writes0.",
+      "isolation": "Verified owned loopback Mongo and private data path; external network forbidden; test databases removed, owned process stopped and private data removed.",
+      "source_sha256": "6e1467ea34b4b224b74c78947296c658b97de7e521979a1dd6d2e6abedaf22f6",
+      "limit": "The ordering comparison was injected at the DB adapter before the source patch. It proves a possible starvation schedule, not the exact live order blocker or the final integrated patch.",
+      "mock_limit": "mongomock4.3.0 can return the sorted row but update another natural-order row when projection excludes_id. That comparison is invalid; real-Mongo evidence supersedes it."
+    },
+    {
+      "scope": "Two real-Mongo regressions, red then green",
+      "mongo_version": "7.0.16",
+      "old_source_sha256": "6e1467ea34b4b224b74c78947296c658b97de7e521979a1dd6d2e6abedaf22f6",
+      "old_result": "2 intended assertion failures,0errors,0skips",
+      "frozen_result": "2passed,0errors,0skips",
+      "behavior": "121-row fixed backlog reaches the last prepaid row at the first retry crossover; reverse insertion, missing/oldest deadlines, exact due boundary, four-claim cap, owner/start/status/issue/future controls; actual stored15minute deadlines inspected; canonical and financial state unchanged"
+    },
+    {
+      "scope": "Implementation affected integration",
+      "mongo_version": "7.0.16",
+      "exit_status": 0,
+      "tests": 405,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "suites": [
+        "courier_acquisition",
+        "courier_order_transition",
+        "completed_capture",
+        "prepaid_shipping",
+        "order_delivery_status"
+      ]
+    },
+    {
+      "scope": "Root fresh combined affected integration",
+      "mongo_version": "7.0.16",
+      "exit_status": 0,
+      "tests": 405,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "seconds": 7.12,
+      "command": "env -i PATH=<system-path> PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=<repo>/backend:<repo>/backend/tests:<repo> <existing-test-venv>/bin/python -B <owned-evidence>/verify.py focused",
+      "pytest_command": "python -B -m pytest --noconftest -q -p no:cacheprovider --tb=short --junitxml=<owned-evidence>/tests.xml backend/tests/test_operational_balance_courier_acquisition.py backend/tests/test_operational_balance_courier_order_transition.py backend/tests/test_operational_balance_completed_capture.py backend/tests/test_operational_balance_prepaid_shipping.py backend/tests/test_operational_balance_order_delivery_status.py",
+      "harness_correction": "Initial root harness omitted repo root from PYTHONPATH;5collection errors,0tests executed. Corrected explicit paths, no source change; original failure retained."
+    },
+    {
+      "scope": "Bounded synthetic exact findAndModify explain",
+      "mongo_version": "7.0.16",
+      "collection_documents": 20000,
+      "owner_documents": 10000,
+      "issue_ids": 1051,
+      "native_id_variants": 2102,
+      "eligible": 789,
+      "existing_source_owner_indexes": {
+        "old_unsorted_keys_and_documents": 134,
+        "old_reported_ms": 3,
+        "sorted_keys_and_documents": 10000,
+        "sorted_reported_ms": 46
+      },
+      "default_id_only": {
+        "sorted_documents": 20000,
+        "sorted_reported_ms": 17
+      },
+      "sort": "top-one blocking SORT; no disk use or spills; explain modified no row",
+      "limit": "Single-run synthetic observations, not deployed index/latency evidence. Four claims does not bound examined documents. Mongo8.0.12 unavailable locally; existing exact-head CI provides pinned8 correctness, not a production performance proof. No index/workflow/test-property changes."
+    },
+    {
+      "scope": "Root new-base courier/cost combined verification on final four source/test hashes",
+      "mongo_version": "7.0.16",
+      "selected_tests": 682,
+      "combined_result": "681passed,1failed,0errors/skips in19.22s. Unchanged PR1775 sold-products HTTP test was refused503resource_pressure while Mongo and all modules shared the constrained process.",
+      "diagnosis": "Actual governor snapshot afterward showed78.72% of8GiB against80%block threshold; no source or threshold change.",
+      "resolved_check": "Reran only the failed mongomock/ASGI case in a fresh process without Mongo.1passed,0failures/errors/skips in1.72s. Actual memory78.97%before/79.43%after; governor unmodified. Original failure retained. All682selectedcases now have passing evidence across combined+isolated executions, not one all-green combinedrun.",
+      "isolation": "External network forbidden, exact fourhashesunchanged; owned loopback Mongo/privateRS verified; testDBsremoved, processstopped, private data removed.",
+      "tests": [
+        "courier_acquisition",
+        "courier_order_transition",
+        "completed_capture",
+        "prepaid_shipping",
+        "order_delivery_status",
+        "operational_open_cost_exposure",
+        "cost_completeness",
+        "report_option_identity",
+        "report_raw_option_recovery",
+        "remaining_products",
+        "operational_balance_sources"
+      ],
+      "command": "env -i PATH=<system-path> PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=<repo>/backend:<repo>/backend/tests:<repo> <existing-venv>/bin/python -B <owned-runner> focused; then exact failed reportcase in fresh clean process, unchanged governor"
+    }
+  ],
+  "acceptance_remaining": [
+    "Create remotely recoverable successor source checkpoint and PR; exact-source CI",
+    "New governed A/B and clean-clone verification only after a fresh inactive shared guard, without a lease or publisher reservation",
+    "Strict final-head CI including Security Gate and pinned Mongo8.0.12/no-skips",
+    "Publication and live paid/cash/replay acceptance remain on explicit user hold; do not reserve or publish until the user changes that direction"
+  ],
+  "predecessor_release": {
+    "source_A": "a009b05eb2f25b562678d579b69bed129cb0c025",
+    "intent_B": "30d43cef1a1af8414355a8f1fc6d70b73b248f2f",
+    "merge_M": "ae2fe9ce01c003ff139e22dd54f4641be48c8e38",
+    "runtime": "rg5-aae16b1799248ac98a3bcf081adae2597db874c822822ba82da9a8682e3f1fbc",
+    "published_version": "c919c57",
+    "published_at_ui": "2026-11-06 00:18 Asia/Riyadh",
+    "official_verify": "PASS:verified=true,checks=3,446publicFrontendrequests/round, exactA/M/runtime/artifact, empty stderr. Fresh status active:false; matching lease closed.",
+    "live_acceptance": "Still partial. Saved settings remain approved once. Actual selected prepaid paid/cash/no-duplicate evidence has not been demonstrated."
+  },
+  "release": {
+    "intent_frozen": false,
+    "merged": false,
+    "own_lease": false,
+    "published": false,
+    "production_changed_by_this_followup": false
+  },
+  "next_safe_action": "Checkpoint the exact six-path successor on J2304b365 and update its PR/Issue1006. Preserve J intent and all 13 upstream paths. Continue isolated verification only. The user explicitly says an important release has priority and forbids reserving publication: do not prepare, prepublish, acquire a lease, mutate the shared publisher or publish this task. Release rehearsal also requires a freshly inactive shared guard. Saved approvals must not be repeated.",
+  "updated_at_utc": "2026-11-05T22:42:59.644790+00:00",
+  "frozen_sha256": {
+    "backend/salla_integration/courier_delivery_sync.py": "2cc2d912f3d355099e9e952a5e47bf27ba74b1ffea8060d127fc9cd992ebe0f5",
+    "backend/tests/test_operational_balance_courier_acquisition.py": "36b6c166b33023eec1bc84248f5036cb44448e6aec6fb79d8437d28ce80f7c1d",
+    "backend/operational_balance_sources.py": "abddf8c44c662a2fbf98e7b77589bf1f3e3afa9cb33db96e53eb9e810b78ab15",
+    "backend/tests/test_operational_open_cost_exposure.py": "f1b13a293af8d789b4aa5c2b3ad6675f1f17a005f72f0119d20894ab86c35fc3"
+  },
+  "local_isolation": "Each runner verified its owned loopback/private-path replica set; external network forbidden; no remaining test databases, owned process stopped and private data path removed; source hashes unchanged.",
+  "live_acceptance_limit": "A naturally refreshed report at Nov6 00:46Riyadh still showed51 missing prepaid completion timestamps and56 incomplete prepaid evidence cases. No actual selected-order debit has been demonstrated. Old disabled BNPL integrations do not establish current capture/plan details; do not infer a plan or create financial facts.",
+  "checkpoint_identity": "The containing commit full SHA will be recorded in the PR and Issue1006 after transfer; no self-reference is embedded here.",
+  "independent_review": {
+    "verdict": "No blocking findings in frozen source/test diff",
+    "tests": 81,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "exit_status": 0,
+    "seconds": 5.36,
+    "mongo_version": "7.0.16",
+    "hashes_match_before_after": true,
+    "isolation": "Separate owned loopback replica set; external network forbidden; no remaining test databases; owned process stopped and private data removed",
+    "harness_correction": "Initial isolated harness omitted repo root from sys.path,0tests executed; corrected harness only, original failure retained.",
+    "performance_review": "Measured scan/sort tradeoff has no concrete blocker at the synthetic workload; does not establish deployed inventory, latency, sustained load or Mongo8.0.12 performance."
+  },
+  "superseded_candidate": {
+    "PR": "https://github.com/AMASI-SA/AMASI-SA/pull/1778",
+    "source_A": "283a352eb6ea70bc1f66156653e017ae279d3ec0",
+    "intent_B": "2d5be07b544a4c948e52c9214238de91f3f9b8de",
+    "base_J": "ae2fe9ce01c003ff139e22dd54f4641be48c8e38",
+    "ci": "13 workflows complete:11success,1SecurityGate failure,1inapplicableTikTok skipped. Mongo8.0.12 operational3140passed plus16shipping/18subtests; frontend447/38suites. Actual host20.20.2/24.19.0 adapter rehearsals passed.",
+    "blocker": "Strict pip-audit flagged inheritedoauthlib4.0.0 GHSA-3jp2-3mrg-2vxc, fixed4.0.1. No waiver or deployment.",
+    "security_run": 42118740740,
+    "security_job": 127565206768,
+    "operational_run": 42118740650,
+    "release_run": 42118740731,
+    "source_unchanged": true,
+    "published": false,
+    "own_lease": false
+  },
+  "base_integration": {
+    "PR": "https://github.com/AMASI-SA/AMASI-SA/pull/1775",
+    "merge": "2304b365c267d2d4220bc3bc953ecbb5a7403062",
+    "source_A": "3524e8c1da730db307d031e726b0e30df3eecf57",
+    "intent_B": "78c16c999275c3d9d68df17fc162d5e98099cd57",
+    "reason": "Fresh Production already contains reviewedoauthlib4.0.1 in bothrequirements and governedlock, plus exact raw report-option recovery. Carry it unchanged; do not implement a duplicate dependency patch.",
+    "proof_requirement": "Preserve complete base source/intent; validate unchanged fairness hashes and affected operational cost behavior on the combined base before newA/B. Shared publisher status must be read freshly before rehearsal or/app mutation."
+  },
+  "security_sources": [
+    "https://github.com/advisories/GHSA-3jp2-3mrg-2vxc",
+    "https://github.com/oauthlib/oauthlib/releases/tag/v4.0.1",
+    "https://pypi.org/project/oauthlib/4.0.1/"
+  ],
+  "security_source_observation": "Primary advisory freshly opened2026-11-05:updatedNov5,affected>=3.3.0<4.0.1,fixed4.0.1. Older search snippets naming4.0.0 were stale; official4.0.1release confirms device-code validation patch. No device-flow implementation change is made in this task.",
+  "new_base_fairness_review": {
+    "verdict": "PASS static preservation review; no concrete blocker",
+    "base": "2304b365c267d2d4220bc3bc953ecbb5a7403062",
+    "preservation": "All 13 PR1775 paths byte-identical to J, including dependency pins, report helpers/readers/tests/workflow and release intent. Old frozen A/B preserved. Courier source/test hashes match prior reviewed candidate. No shipping acquisition or evidence helper changed between old/new base.",
+    "limits": "No fresh combined execution, successor CI, frozen intent or production acceptance claimed."
+  },
+  "operating_native_option_gap": {
+    "state": "Reproduced and corrected; writer focused and affected suites pass; root combined verification resolved one unrelated environment-pressure failure in a separate process",
+    "finding": "Operating option_tokens ignores product_option_id and can treat a bare checkout-row id as a native option identity. With an English/renamed label and explicit value.id, catalog recovery is bypassed and a paid service can be omitted without marking the cost incomplete.",
+    "evidence": "PR1775 synthetic raw-provider fixture and RAW-RECOVERY.md distinguish native product_option_id from checkout id. This does not prove the cause of any particular live order cost.",
+    "candidate": "Two units with native embroidery option plus checkout-row id should cost 2*(15+8+1.20)=48.40; source trace predicts 32.40. Must execute before treating as reproduced.",
+    "controls": "Only authoritative, typed, agreeing native identifiers; no generic Yes match, no override of unknown/conflicting native identity; report-only recovery remains excluded from financial sources; old/new cutover, repeated quantities, No, duplicate observations, confirmed facts and opening balances preserved.",
+    "writer_scope": [
+      "backend/operational_balance_sources.py",
+      "backend/tests/test_operational_open_cost_exposure.py"
+    ],
+    "red_evidence": {
+      "source_sha256": "1eb7ae193df9f08e09e53571053e7f6e44fd8b953c7c6cc00b606ba6b941c916",
+      "cases": 6,
+      "result": "Four English/renamed pre/poststart cases returned32.40 markedcomplete instead of48.40 for2units; two Arabic cases returnedincomplete/noamount. External network forbidden, fixtures synthetic, no source-data mutation."
+    },
+    "intermediate_review": {
+      "source_sha256": "c39aa760ec43250d9c86525f07c49ba92c7560bcfe5951e76b9dd51f800f3904",
+      "initial_alias_tests": "21passed",
+      "affected_run": "198cases:197passed,1existing nonboolean compatibilityfailure,0errors/skips; blanket removalof fullID shortcut changed known color=blue unselectedRed behavior. Must restore known nonboolean compatibility without permitting unknown nativeoption to become zero.",
+      "value_conflict": "Root independent synthetic2cases with nativeproductoption plus value_id=yes and value.id=no/option_value_id=no both incorrectly returned48.40 complete. Additional3case redrun has2intendedfailures/1existingpass. Must validate explicit value IDs before directmatches. Originalfailuresretained; no frozenintent or deployment."
+    },
+    "remediation": "Require typed, agreeing option_id/product_option_id/nested option.id before falling back to bare checkout id. Validate explicit value IDs before direct matching. Unknown native option identities and unresolved boolean values require catalog proof; preserve known nonboolean alternate-value compatibility. Report-only evidence is not consumed.",
+    "final_verification": {
+      "focused": "24passed,0failures/errors/skips,1.48s",
+      "affected": "201passed,0failures/errors/skips,2.65s",
+      "modules": [
+        "test_operational_open_cost_exposure.py",
+        "test_operational_balance_sources.py",
+        "test_operational_balance_cost_completeness.py"
+      ],
+      "synthetic_acceptance": "28units/21orders/23lines=677.60SAR; renamed labels and agreeing native aliases; duplicate raw/normalized observations counted once; prior estimates, movements and openings unchanged under uncertainty. Not a live historical total.",
+      "external_network_forbidden": true
+    }
+  },
+  "shared_release_observation": {
+    "active": true,
+    "actor": "report-raw-option-1775",
+    "protocol_version": 5,
+    "source_A": "3524e8c1da730db307d031e726b0e30df3eecf57",
+    "deployment_M": "2304b365c267d2d4220bc3bc953ecbb5a7403062",
+    "runtime": "rg5-136a4fee3ffd367d4c6576373379057d86efec2072f8d74ae3492c45090d99ec",
+    "action": "Wait for owner verification and fresh inactive status before any release rehearsal or shared workspace mutation. No fairness lease or publication."
+  },
+  "user_publication_hold": {
+    "instruction_ar": "يوجد نشر مهم قبلك لا تحجز النشر",
+    "recorded_at_utc": "2026-11-05T22:42:59.644774+00:00",
+    "scope": "Continue isolated source checkpoint and verification. Do not prepare, prepublish, acquire a release lease, reserve the shared publisher or publish this task while this instruction remains in force.",
+    "own_lease_created": false,
+    "shared_app_mutated": false,
+    "publication_attempted": false
+  },
+  "final_independent_review": {
+    "verdict": "PASS; no blocking findings",
+    "base": "2304b365c267d2d4220bc3bc953ecbb5a7403062",
+    "cases": 12,
+    "exit_status": 0,
+    "external_network_forbidden": true,
+    "coverage": "Renamed native identity, agreeing aliases, repeated plural values, conflicting Yes/No, three explicit value-alias conflicts, boolean/fractional IDs, unknown option/value identities, and explicit No. Correct 48.40/32.40 amounts; uncertainty preserves prior estimate, movements and openings.",
+    "preservation": "All four source/test hashes unchanged. All 13 PR1775 paths byte-identical to J; old PR1778 frozen A/B preserved. No source/Git/browser/release mutation by reviewer.",
+    "limits": "Static and focused executable review, not successor CI or live acceptance."
+  }
+}
