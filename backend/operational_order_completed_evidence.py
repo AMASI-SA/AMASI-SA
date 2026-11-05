@@ -4,9 +4,28 @@ from datetime import datetime
 
 from operational_courier_transitions import COMPLETED_PROOF, completed_state, native_status_transition, transition_observation
 from operational_delivery_evidence import _instant, _order_waybill, _text
+from operational_completed_capture import SOURCE as CAPTURE_SOURCE, capture_time, capture_waybill_view
 
 HISTORY_SOURCE = 'verified_order_completed_history'
 WEBHOOK_SOURCE = 'verified_order_completed_update'
+
+
+def _source_version(raw):
+    date = raw.get('date') if isinstance(raw.get('date'), dict) else {}
+    return _instant(raw.get('updated_at') or date.get('updated') or raw.get('date_updated'))
+
+
+def bind_completed_waybill(raw, current, shipment, waybill, at):
+    """The original prepaid label may follow completion within this snapshot."""
+    version = _source_version(raw)
+    if at > version:
+        raise ValueError('operational_prepaid_shipping_completion_time_invalid')
+    # Bound label creation to the canonical source version. The authoritative
+    # completion time still controls cutover, tariff selection and recognition.
+    observation = current.get(COMPLETED_PROOF) or {}
+    current_view = capture_waybill_view(raw, current, version) if (
+        observation.get('source') == CAPTURE_SOURCE and 'shipment' in observation) else raw
+    _order_waybill(current_view, current, shipment, waybill, version)
 
 
 def completion_time(raw, source, history, end):
@@ -15,8 +34,7 @@ def completion_time(raw, source, history, end):
             or any(source.get(k) is not None and _text(source[k]) != expected
                    for k, expected in (('order_id', oid), ('salla_order_id', oid), ('order_number', number)))):
         raise ValueError('operational_prepaid_shipping_order_identity_conflict')
-    date = raw.get('date') if isinstance(raw.get('date'), dict) else {}
-    version = _instant(raw.get('updated_at') or date.get('updated') or raw.get('date_updated'))
+    version = _source_version(raw)
     watermark = source.get('g47_salla_snapshot') or {}
     if (any(watermark.get(k) for k in ('cancelled', 'component_pending', 'requires_authoritative_refresh'))
             or watermark.get('source_updated_at') is not None and _instant(watermark['source_updated_at']) != version
@@ -48,7 +66,7 @@ def completion_time(raw, source, history, end):
     observation = current.get(COMPLETED_PROOF)
     if observation is not None:
         if (not isinstance(observation, dict) or observation.get('ambiguous')
-                or observation.get('source') not in {HISTORY_SOURCE, WEBHOOK_SOURCE}
+                or observation.get('source') not in {HISTORY_SOURCE, WEBHOOK_SOURCE, CAPTURE_SOURCE}
                 or observation.get('owner') != source['user_id'] or observation.get('order_id') != oid
                 or observation.get('order_number') != number or observation.get('target_status') != 'completed'
                 or observation.get('shipment_id') != current.get('shipment_id')
@@ -61,6 +79,8 @@ def completion_time(raw, source, history, end):
             detached = {**source, 'salla_shipping_current': {k: v for k, v in current.items() if k != COMPLETED_PROOF}}
             if completion_time(raw, detached, observation['events'], end) != _instant(observation.get('at')):
                 raise ValueError('operational_prepaid_shipping_completion_ambiguous')
+        elif observation['source'] == CAPTURE_SOURCE:
+            times.add(capture_time(observation, source['user_id'], oid, number, version, raw, current, source))
         times.add(_instant(observation.get('at')))
     if not times:
         raise ValueError('operational_prepaid_shipping_completion_timestamp_missing')
@@ -93,7 +113,7 @@ def verified_completed_webhook(body, raw, current, owner):
         if isinstance(stamp, str) and ' GMT' in stamp:
             stamp = datetime.strptime(stamp, '%a %b %d %Y %H:%M:%S GMT%z')
         at = _instant(stamp)
-        _order_waybill(raw, current, current.get('shipment_id'), current.get('tracking_number'), at)
+        bind_completed_waybill(raw, current, current.get('shipment_id'), current.get('tracking_number'), at)
     except (TypeError, ValueError):
         return None
     return {'source': WEBHOOK_SOURCE, 'owner': owner, 'order_id': oid, 'order_number': number,
@@ -119,7 +139,7 @@ def verified_completed_history(source, histories, owner, now):
     if not any(row['native_status_transition'][0].get('target_status') == 'completed' for row in events):
         raise ValueError('operational_prepaid_shipping_completion_timestamp_missing')
     at = completion_time(raw, source, events, now)
-    _order_waybill(raw, current, current.get('shipment_id'), current.get('tracking_number'), at)
+    bind_completed_waybill(raw, current, current.get('shipment_id'), current.get('tracking_number'), at)
     result = deepcopy(current)
     result[COMPLETED_PROOF] = {'source': HISTORY_SOURCE, 'owner': owner, 'order_id': oid, 'order_number': number,
         'shipment_id': current['shipment_id'], 'waybill': current['tracking_number'], 'at': at.isoformat(),

@@ -961,6 +961,8 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
 async def ensure_salla_indexes(db) -> None:
     """Idempotent index creation called once at app startup."""
     await db.salla_integrations.create_index("user_id", unique=True)
+    from operational_completed_capture import ensure_completed_capture_indexes
+    await ensure_completed_capture_indexes(db)
     await db.salla_oauth_states.create_index("state", unique=True)
     # Auto-expire stale OAuth states after 10 min so the collection
     # doesn't grow forever.
