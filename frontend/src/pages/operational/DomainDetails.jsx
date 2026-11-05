@@ -11,6 +11,16 @@ const amount = value => value == null ? 'غير مكتمل' : `${value < 0n ? '-
 const sum = values => values.reduce((total,value) => total == null || cents(value) == null ? null : total + cents(value), 0n);
 const codLabels={gross:'إجمالي قيمة طلبات التحصيل',collected:'المحصل من العملاء',customer_outstanding:'المتبقي لدى العملاء',custody_amount:'المبلغ بعهدة المنفذ',confirmed_custody:'عهدة التحصيل المؤكدة',settled:'المورد لأماسي',outstanding:'المتبقي لدى المنفذ'};
 const unique = rows => [...new Map(rows.map(row => [row.id,row])).values()];
+const prepaidShipping = row => row.payment_mode === 'prepaid' || row.recognition_event === 'order_completed' || String(row.id).startsWith('shipping-prepaid:');
+const shippingOrderId = row => {
+  if (row.order_id != null && String(row.order_id)) return String(row.order_id);
+  const id = String(row.id);
+  const prefix = ['shipping:', 'shipping-prepaid:'].find(value => id.startsWith(value));
+  if (!prefix) return id;
+  const order = id.slice(prefix.length);
+  const suffix = row.fee_component && ':' + row.fee_component;
+  return suffix && order.endsWith(suffix) ? order.slice(0, -suffix.length) : order;
+};
 
 function ReceiptDocument({id,label}) {
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -55,9 +65,17 @@ export default function DomainDetails({report}) {
   });
   const carriers = parties.filter(p => ['courier','store_driver'].includes(p.party_type)).map(p => {
     const rows = obligations.filter(o => o.kind === 'shipping' && o.party_id === p.party_id && o.party_type === p.party_type && o.currency === p.currency);
-    const delivered = rows.filter(o => Boolean(facts[o.id]?.delivered_at) || (cents(o.confirmed) || 0n) > 0n);
+    const prepaid = rows.filter(prepaidShipping);
+    const delivered = rows.filter(o => {
+      const proof = [facts[o.id], facts['shipping:' + shippingOrderId(o)]].some(row => row?.delivered_at
+        && (!row.id || row.id === o.party_id) && (!row.party_type || row.party_type === o.party_type));
+      // Payment at completion is independent of a later delivery by this carrier.
+      return proof || (!prepaidShipping(o) && (cents(o.confirmed) || 0n) > 0n);
+    });
     const cod=Object.entries(report.details?.cod_reports || {}).filter(([id,row])=>row.party_id===p.party_id&&row.currency===p.currency&&(row.party_type||obligations.find(o=>o.id===id)?.party_type)===p.party_type).map(([,row])=>row);
-    return {...p,orderCount:rows.length,deliveredCount:delivered.length,shippingConfirmed:sum(rows.map(o => o.confirmed)),codTotals:cod.length?Object.fromEntries(Object.keys(codLabels).map(key=>[key,sum(cod.map(row=>row[key]))])):null};
+    return {...p,orderCount:new Set(rows.map(shippingOrderId)).size,deliveredCount:new Set(delivered.map(shippingOrderId)).size,
+      shippingConfirmed:sum(rows.map(o => o.confirmed)),hasPrepaidShipping:prepaid.length > 0,prepaidPaid:sum(prepaid.map(o => o.settled)),
+      codTotals:cod.length?Object.fromEntries(Object.keys(codLabels).map(key=>[key,sum(cod.map(row=>row[key]))])):null};
   });
   const suppliers = parties.filter(p => p.party_type === 'supplier').map(p => {
     const rows = obligations.filter(o => o.kind === 'supplier' && !o.derived_credit && o.party_id === p.party_id && o.currency === p.currency);
@@ -86,7 +104,7 @@ export default function DomainDetails({report}) {
         ? 'تظهر مدفوعات الطلبات أعلاه. لم تتوفر أرصدة منصات الدفع وعمولاتها لهذه اللقطة.'
         : 'لا توجد بيانات مسجلة لهذا القسم حتى الآن؛ يبدأ الاحتساب بعد إنهاء الافتتاحيات وتوفر العمليات المؤهلة.'}</p>}
     </details>
-    <details className="op-card"><summary>الشحن ومناديب المتجر</summary>{!carriers.length && <p className="op-muted">لا توجد بيانات مسجلة لهذا القسم حتى الآن؛ يبدأ الاحتساب بعد إنهاء الافتتاحيات وتوفر العمليات المؤهلة.</p>}{carriers.map(p => <article key={`${p.party_type}:${p.party_id}:${p.currency}`}><h3>{p.name} · {p.currency}</h3><p>عدد الطلبات: {p.orderCount} · التوصيلات المؤكدة: {p.deliveredCount}</p><p>أجرة التوصيل المؤكدة: {amount(p.shippingConfirmed)} · المسدد: {p.settled ?? 'غير مكتمل'} · المتبقي: {p.outstanding_payable ?? 'غير مكتمل'}</p><p>التحصيل المستحق لنا: {p.outstanding_receivable ?? 'غير مكتمل'}</p>{p.codTotals&&<div>{Object.entries(codLabels).map(([key,label])=><p key={key}>{label}: {amount(p.codTotals[key])} {p.currency}</p>)}</div>}</article>)}</details>
+    <details className="op-card"><summary>الشحن ومناديب المتجر</summary>{!carriers.length && <p className="op-muted">لا توجد بيانات مسجلة لهذا القسم حتى الآن؛ يبدأ الاحتساب بعد إنهاء الافتتاحيات وتوفر العمليات المؤهلة.</p>}{carriers.map(p => <article key={`${p.party_type}:${p.party_id}:${p.currency}`}><h3>{p.name} · {p.currency}</h3><p>عدد الطلبات: {p.orderCount} · التوصيلات المؤكدة: {p.deliveredCount}</p><p>{p.hasPrepaidShipping ? 'أجرة الشحن المؤكدة' : 'أجرة التوصيل المؤكدة'}: {amount(p.shippingConfirmed)} · المسدد: {p.settled ?? 'غير مكتمل'} · المتبقي: {p.outstanding_payable ?? 'غير مكتمل'}</p>{p.hasPrepaidShipping && <p>المدفوع مقدمًا عند «تم التنفيذ»: {amount(p.prepaidPaid)} {p.currency}</p>}<p>التحصيل المستحق لنا: {p.outstanding_receivable ?? 'غير مكتمل'}</p>{p.codTotals&&<div>{Object.entries(codLabels).map(([key,label])=><p key={key}>{label}: {amount(p.codTotals[key])} {p.currency}</p>)}</div>}</article>)}</details>
     <details className="op-card"><summary>تغطية الموردين والمرتجعات والمدفوعات</summary>{!suppliers.length && <p className="op-muted">لا توجد بيانات مسجلة لهذا القسم حتى الآن؛ يبدأ الاحتساب بعد إنهاء الافتتاحيات وتوفر العمليات المؤهلة.</p>}{suppliers.map(p => <article key={`${p.party_id}:${p.currency}`}><h3>{p.name} · {p.currency}</h3><p>قيمة الفواتير المغطاة: {amount(p.covered)} · المرتجعات المقبولة: {amount(p.acceptedReturns)}</p><p>صافي الفواتير: {amount(p.invoiceNet)} · ضريبة الفواتير المثبتة: {amount(p.invoiceTax)} · إجمالي الفواتير بالضريبة: {amount(p.invoiceGross)}</p><p>التقديري المتبقي: {p.expected_payable ?? 'غير مكتمل'}</p><p>المدفوع المخصص: {p.settled ?? 'غير مكتمل'} · المتبقي علينا: {p.outstanding_payable ?? 'غير مكتمل'} · المستحق لنا: {p.outstanding_receivable ?? 'غير مكتمل'}</p></article>)}</details>
     <details className="op-card"><summary>عهد الموظفين</summary>{!(report.details?.employee_custody || []).length && <p className="op-muted">لا توجد بيانات مسجلة لهذا القسم حتى الآن؛ يبدأ الاحتساب بعد إنهاء الافتتاحيات وتوفر العمليات المؤهلة.</p>}{(report.details?.employee_custody || []).map(p => <article key={`${p.party_id}:${p.currency}`}><h3>{p.name} · {p.currency}</h3><p>الممول: {p.custody_funded ?? 'غير مكتمل'} · المصروف: {p.custody_spent ?? 'غير مكتمل'} · المرتجع: {p.custody_returned ?? 'غير مكتمل'}</p><p>الرصيد المتبقي في العهدة: {p.custody_remaining ?? 'غير مكتمل'}</p>{(p.receipts || []).filter(r=>r.receipt_id).map((r,index)=><p key={r.id}><ReceiptDocument id={r.receipt_id} label={`إيصال ${index+1} · ${r.amount} ${p.currency}`}/>{r.occurred_at ? ` · ${new Date(r.occurred_at).toLocaleString('ar-SA')}` : ''}</p>)}</article>)}</details>
     <details className="op-card"><summary>المصروفات التشغيلية وسحوبات المالك/المدير</summary>{!Object.keys(report.summaries || {}).length && !parties.some(p=>['operating_expense','owner_withdrawal'].includes(p.party_type)) && <p className="op-muted">لا توجد بيانات مسجلة لهذا القسم حتى الآن؛ يبدأ الاحتساب بعد إنهاء الافتتاحيات وتوفر العمليات المؤهلة.</p>}<p className="op-muted">حركات فعلية منذ بداية التشغيل؛ السحوبات منفصلة عن المصروفات التشغيلية.</p>{Object.entries(report.summaries || {}).map(([currency,values])=><article key={currency}><h3>{currency}</h3><p>إجمالي المصروفات التشغيلية: {values.operating_expenses_paid ?? 'غير مكتمل'}</p><p>إجمالي سحوبات المالك/المدير: {values.owner_withdrawals ?? 'غير مكتمل'}</p></article>)}{parties.filter(p=>['operating_expense','owner_withdrawal'].includes(p.party_type)).map(p=><p key={`${p.party_type}:${p.party_id}:${p.currency}`}>{p.name} · {p.party_type==='operating_expense'?'مصروف تشغيلي':'سحب مالك/مدير'} · {p.party_type==='operating_expense'?p.expense_paid:p.owner_withdrawals} {p.currency}</p>)}</details>

@@ -220,7 +220,9 @@ export default function ShippingCompanySettings({ mezan2 = false }) {
                                     <div className="text-[10px] text-slate-500 mt-1 leading-tight max-w-[180px]">
                                         {c.is_deferred
                                             ? "تكلفة الشحن مستحقة على الشركة (ذمة)."
-                                            : "مخصومة مسبقاً من مستحقات سلة."}
+                                            : mezan2
+                                                ? "تُخصم من الصندوق عند تم التنفيذ بعد اعتماد التعرفة وربط الصندوق."
+                                                : "أجرة الشحن مدفوعة مقدمًا."}
                                     </div>
                                 </td>
                                 <td className="p-2"><input type="number" step="0.01" value={c.cost_per_order ?? c.cost ?? 0} onChange={(e) => updateCompany(idx, { cost_per_order: Number(e.target.value), cost: Number(e.target.value) })} className="w-24 border border-slate-300 rounded px-1 py-1 text-xs num text-right" data-testid={`cost-${c.name}`} /></td>

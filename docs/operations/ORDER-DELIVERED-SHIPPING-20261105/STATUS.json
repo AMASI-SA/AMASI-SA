@@ -1,0 +1,58 @@
+{
+  "task_id": "ORDER-DELIVERED-SHIPPING-20261105",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/order-delivered-shipping-20261105",
+  "base_commit": "d80661fd27ef88bf639fa43d8f969f4d62239a61",
+  "phase": "WIP: cashbox approval and shipping presentation verified; backend implementation in progress",
+  "requirements": [
+    "Deferred courier fees use an authoritative order transition to delivered after operational start; a lagging waybill does not block the fee.",
+    "Aramex prepaid shipping is recognized at the authoritative completed order transition after operational start, with one debit to an explicitly approved cashbox.",
+    "Prepaid shipping remains fully paid, never an unpaid courier liability or an unallocated advance; later delivery and replay do not debit again.",
+    "Preserve frozen existing facts, opening balances, native driver rules, independent COD evidence, and distinct fee/customer currencies."
+  ],
+  "completed_in_this_checkpoint": [
+    "Explicit ready active SAR cashbox selection for prepaid courier tariff approval; sends the canonical account ID.",
+    "Dated replacement cashbox binding can be requested while preserving the existing approved version.",
+    "Prepaid completed charges are shown separately from delivery counts; counts group fee components by order.",
+    "Completed-trigger description is scoped to the Mezan 2 operational UI."
+  ],
+  "changed_files": [
+    "frontend/src/pages/ShippingCompanySettings.jsx",
+    "frontend/src/pages/operational/CourierTariffApproval.jsx",
+    "frontend/src/pages/operational/DeliveryFeeReview.test.jsx",
+    "frontend/src/pages/operational/DomainDetails.jsx",
+    "frontend/src/pages/operational/DomainDetails.test.jsx"
+  ],
+  "verification": [
+    {
+      "command": "CI=true node node_modules/react-scripts/scripts/test.js --watchAll=false --runInBand --runTestsByPath src/pages/operational/DeliveryFeeReview.test.jsx src/pages/operational/DomainDetails.test.jsx src/pages/ShippingCompanySettings.test.jsx",
+      "cwd": "frontend",
+      "node_version": "22.23.2",
+      "exit_status": 0,
+      "result": "Independent review: 3 suites, 23 tests passed. New prepaid UI and counting cases also demonstrated expected failure before implementation."
+    },
+    {
+      "command": "git diff --check",
+      "exit_status": 0,
+      "result": "Clean for the checkpoint source files."
+    }
+  ],
+  "review_state": "Frontend independently reviewed; no unresolved blocking frontend findings. Backend review pending fixed target.",
+  "release_state": {
+    "source_only": true,
+    "release_intent_frozen": false,
+    "merged": false,
+    "lease_created": false,
+    "published": false,
+    "production_changed": "no",
+    "reason": "No production commands, provider mutations, live database writes or financial postings were performed for this source task. The prior production approval rejection has not been bypassed."
+  },
+  "remaining": [
+    "Finish backend order status proof acquisition through collect_sources and reconcile.",
+    "Implement completed-trigger prepaid charge, fully allocated cashbox debit and paid-expense reporting in the atomic operational state.",
+    "Prove tariff ownership/version, missing or stale binding, source conflict, idempotency, historical cutover, rollback and frozen evidence behavior.",
+    "Run integrated regression checks and independent backend review, then save a final remote checkpoint and Draft PR.",
+    "Production release and live cashbox configuration remain separate from this source checkpoint."
+  ],
+  "next_safe_action": "Continue isolated backend implementation on this task branch; do not deploy this WIP checkpoint. Exact checkpoint commit is recorded by the branch ref and subsequent handoff."
+}
