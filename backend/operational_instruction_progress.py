@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 
 from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS, instruction_targets
-from operational_instruction_notifications import emit_instruction_notification
+from operational_instruction_notifications import emit_instruction_notification, monitoring_urgency_completed
 
 PROGRESS = "operational_instruction_progress_v1"
 
@@ -32,6 +32,8 @@ async def refresh_instruction_progress(db, instruction):
         key = hashlib.sha256(f"{owner}:{instruction['id']}:{pid}".encode()).hexdigest()
         state = {"stage": stage, "status": piece.get("status"), "execution_status": piece.get("execution_status"),
             "assembly_status": piece.get("assembly_status"), "assignee_id": piece.get("responsible_employee_id")}
+        if instruction.get("urgency_receipt_protocol"):
+            state["supplier_receipt_completed"] = monitoring_urgency_completed(piece)
         saved = await db[PROGRESS].find_one({"_id": key})
         if stage not in instruction.get("target_stages", []) and not saved:
             continue  # a future-stage note must not announce work beforehand
@@ -50,9 +52,12 @@ async def refresh_instruction_progress(db, instruction):
             "notification_revision": pending["id"], "notification_metadata": {
                 "piece_id": pid, "order_item_id": piece.get("order_item_id"),
                 "product_name": piece.get("product_name") or piece.get("item_name") or "منتج",
+                "image_url": piece.get("selected_image_url") or piece.get("resolved_image_url") or piece.get("image_url") or "",
                 "employee_name": employee.get("name") or "", "previous": saved["state"],
                 "current": pending["state"], "observed_at": pending["at"],
-            }}, event_type="progress", recipient_ids={creator})
+            }}, event_type="supplier_received" if instruction.get("urgency_receipt_protocol")
+                and pending["state"].get("supplier_receipt_completed")
+                and not saved["state"].get("supplier_receipt_completed") else "progress", recipient_ids={creator})
         await db[PROGRESS].update_one({"_id": key, "pending.id": pending["id"]}, {"$set": {"state": pending["state"]}, "$unset": {"pending": ""}})
 
 

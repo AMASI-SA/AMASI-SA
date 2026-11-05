@@ -78,6 +78,32 @@ class CommentProgressTests(unittest.IsolatedAsyncioTestCase):
         self.db.raw.mezan_preparation_pieces_v1.update_one({"piece_id": "p1"}, {"$set": {"responsible_employee_id": "b"}})
         self.assertEqual(self.client.get(f"/order-tracking-notes/instructions/n/tasks/{own['id']}/comments").status_code, 404)
 
+    async def test_thread_reads_are_private_monotonic_and_do_not_acknowledge_work(self):
+        from operational_instruction_comments import conversation_summary
+        tasks = await ensure_instruction_tasks(self.db, "owner", self.row)
+        own = next(task for task in tasks if task["assignee_id"] == "a")
+        path = f"/order-tracking-notes/instructions/n/tasks/{own['id']}"
+        self.actor = self.db.raw.users.find_one({"id": "creator"})
+        first = self.client.post(path + "/comments", json={"body": "first", "client_request_id": "first_message_123456"}).json()["comment"]
+        self.actor = self.db.raw.users.find_one({"id": "a"})
+        summary = await conversation_summary(self.db, "owner", "n", own["id"], "a")
+        self.assertTrue(summary["never_opened"])
+        self.assertEqual(summary["unread_comments"], 1)
+        self.assertEqual(self.client.post(path + "/read", json={"last_comment_id": first["id"]}).status_code, 200)
+        self.actor = self.db.raw.users.find_one({"id": "creator"})
+        self.client.post(path + "/comments", json={"body": "second", "client_request_id": "second_message_123456"})
+        self.actor = self.db.raw.users.find_one({"id": "a"})
+        # A repeated old read cannot consume a message the client never displayed.
+        self.client.post(path + "/read", json={"last_comment_id": first["id"]})
+        summary = await conversation_summary(self.db, "owner", "n", own["id"], "a")
+        self.assertFalse(summary["never_opened"])
+        self.assertEqual(summary["unread_comments"], 1)
+        self.assertFalse(summary["replied"])
+        self.assertEqual(summary["latest_comment"], "second")
+        self.assertEqual(self.db.raw[TASKS].find_one({"id": own["id"]})["status"], "pending")
+        self.actor = self.db.raw.users.find_one({"id": "b"})
+        self.assertEqual(self.client.post(path + "/read", json={"last_comment_id": first["id"]}).status_code, 404)
+
     async def test_urgent_progress_reports_actual_product_to_requester_once(self):
         note = {**self.row, "action_type": "urgent_preparation", "priority": "urgent", "target_stages": ["preparation", "preparation_receiving"]}
         await refresh_instruction_progress(self.db, note)

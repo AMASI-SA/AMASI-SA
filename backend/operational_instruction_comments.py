@@ -10,6 +10,44 @@ from operational_instruction_notifications import TASKS, ensure_instruction_task
 from operational_push import notification_actor
 
 COMMENTS = "operational_instruction_comments_v1"
+READS = "operational_instruction_reads_v1"
+
+
+def thread_identity(merchant, instruction_id, task_id, actor_id):
+    return hashlib.sha256(f"{merchant}:{instruction_id}:{task_id}:{actor_id}".encode()).hexdigest()
+
+
+def comment_key(row):
+    at = row["created_at"]
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=timezone.utc)
+    stamp = at.astimezone(timezone.utc).isoformat(timespec="microseconds")
+    return stamp + "|" + row["id"]
+
+
+async def conversation_summary(db, merchant, instruction_id, task_id, actor_id, piece_id=""):
+    query = {"merchant_id": merchant, "instruction_id": instruction_id, "task_id": task_id}
+    marker = await db[READS].find_one({"_id": thread_identity(merchant, instruction_id, task_id, actor_id)})
+    unread = {**query, "author_id": {"$ne": actor_id}}
+    if marker and marker.get("last_comment_key"):
+        stamp, identity = marker["last_comment_key"].split("|", 1)
+        at = datetime.fromisoformat(stamp)
+        unread["$or"] = [{"created_at": {"$gt": at}}, {"created_at": at, "id": {"$gt": identity}}]
+    latest = await db[COMMENTS].find(query).sort([("created_at", -1), ("id", -1)]).to_list(1)
+    from operational_instruction_notifications import NOTIFICATIONS
+    completion = await db[NOTIFICATIONS].find_one({"merchant_id": merchant, "instruction_id": instruction_id,
+        "recipient_id": actor_id, "event_type": "supplier_received", "metadata.piece_id": piece_id, "read_at": None}) if piece_id else None
+    return {"never_opened": marker is None,
+        "unread_comments": await db[COMMENTS].count_documents(unread),
+        "replied": bool(latest and latest[0].get("author_id") == actor_id),
+        "latest_comment": latest[0].get("body", "") if latest else "",
+        "latest_comment_at": latest[0].get("created_at") if latest else None,
+        "completion": {"id": completion["id"], "image_url": (completion.get("metadata") or {}).get("image_url", "")} if completion else None}
+
+
+class ThreadRead(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    last_comment_id: str | None = Field(default=None, max_length=128)
 
 
 class CommentCreate(BaseModel):
@@ -48,7 +86,9 @@ async def notify_comment(db, row):
         targets.add(task.get("assignee_id"))
     targets -= {None, "", row["author_id"]}
     await emit_instruction_notification(db, merchant_id=row["merchant_id"],
-        instruction={**instruction, "notification_revision": row["id"]}, event_type="comment", recipient_ids=targets)
+        instruction={**instruction, "notification_revision": row["id"], "notification_metadata": {
+            "task_id": row["task_id"], "piece_id": task.get("piece_id"), "author_id": row["author_id"],
+            "author_name": row["author_name"], "comment_key": comment_key(row)}}, event_type="comment", recipient_ids=targets)
     await db[COMMENTS].update_one({"_id": row["id"]}, {"$set": {"notification_pending": False}})
 
 
@@ -91,6 +131,29 @@ def make_instruction_comments_router(db, current_user):
         except Exception:
             pass  # durable pending marker is retried by worker
         return {"ok": True, "comment": public_comment(saved)}
+
+    @router.post("/instructions/{instruction_id}/tasks/{task_id}/read")
+    async def read_thread(instruction_id: str, task_id: str, payload: ThreadRead, user=Depends(current_user)):
+        user = await notification_actor(db, user)
+        merchant, _, _ = await conversation_context(db, user, instruction_id, task_id)
+        key = ""
+        if payload.last_comment_id:
+            anchor = await db[COMMENTS].find_one({"merchant_id": merchant, "instruction_id": instruction_id,
+                "task_id": task_id, "id": payload.last_comment_id})
+            if not anchor:
+                raise HTTPException(422, detail={"code": "invalid_comment_cursor"})
+            key = comment_key(anchor)
+        await db[READS].update_one({"_id": thread_identity(merchant, instruction_id, task_id, user["id"])},
+            {"$setOnInsert": {"opened_at": datetime.now(timezone.utc)}, "$max": {"last_comment_key": key}}, upsert=True)
+        from operational_instruction_notifications import NOTIFICATIONS
+        await db[NOTIFICATIONS].update_many({"merchant_id": merchant, "instruction_id": instruction_id,
+            "recipient_id": user["id"], "read_at": None, "event_type": {"$in": ["created", "assigned"]}},
+            {"$set": {"read_at": datetime.now(timezone.utc)}})
+        if payload.last_comment_id:
+            await db[NOTIFICATIONS].update_many({"merchant_id": merchant, "instruction_id": instruction_id,
+                "recipient_id": user["id"], "event_type": "comment", "metadata.task_id": task_id,
+                "metadata.comment_key": {"$lte": key}}, {"$set": {"read_at": datetime.now(timezone.utc)}})
+        return {"ok": True}
 
     return router
 

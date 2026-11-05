@@ -43,3 +43,7 @@ Mobile companion on staff65 only requests a further page on user action and reta
 
 ## Monitoring chronology follow-up (WIP, publication HOLD)
 Canonical physical-piece projection now exposes its stored assigned_at, which native mappers already expect. No substitution from file/status/supplier timestamps. Two focused projection tests pass. Mobile companion oldest-first dates and read-only product images verified locally; notification conversations, urgency lifecycle and same-stage count parity still pending. No production change. User requested more fixes before publication.
+
+
+## Preserved notification WIP, 2026-11-06
+User reauthorized release of the priority app fixes. Broader monitoring urgency, conversation read markers and completion/push work is preserved separately before release integration. Not deployed; do not treat as final-ready. Backend focused run: 94 passed/1 failed/2 subtests passed; sole courier cycle fixture expects9000 while returns9600, baseline not yet characterized. Last small receipt lifecycle correction needs a focused rerun. Original Qoyod checkout and untracked build-performance outputs preserved. Release will integrate reviewed source from latest origin/hotfix/prod-snap-meta-final, not deploy this unverified WIP directly.

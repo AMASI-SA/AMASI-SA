@@ -160,7 +160,7 @@ def test_monitoring_live_stages_equal_employee_workspace_including_new_assignmen
         {"id": "sent", "batch_id": "active-file", "status": PIECE_STATUS_IN_PROGRESS,
          "supplier_dispatch_status": "sent"},
         {"id": "received", "batch_id": "active-file", "status": "received",
-         "supplier_dispatch_status": "received"},
+         "supplier_dispatch_status": "received", "received_at": _dt(12)},
         {"id": "finished", "batch_id": "finished-file", "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
          "completed_at": _dt(12), "started_at": _dt(11)},
     ]
@@ -169,7 +169,7 @@ def test_monitoring_live_stages_equal_employee_workspace_including_new_assignmen
 
     assert monitored["pending_review_count"] == workspace["waiting_review_pieces"] == 2
     assert monitored["in_progress_count"] == workspace["in_progress_pieces"] == 1
-    assert monitored["received_count"] == workspace["received_pieces_awaiting_branch_handoff"] == 1
+    assert monitored["received_count"] == workspace["supplier_received_pieces_awaiting_handoff"] == 1
     assert monitored["completed_count"] == 1  # Performance history is not a live stage.
     assert monitored["current_held_pieces"] == 4
 

@@ -175,7 +175,7 @@ def _live_preparation_metrics(
     current = employee_workspace_stage_summary(pieces)
     waiting = current["waiting_review_pieces"]
     progress = current["in_progress_pieces"]
-    received = current["received_pieces_awaiting_branch_handoff"]
+    received = current["supplier_received_pieces_awaiting_handoff"]
     return {
         **metrics,
         "pending_review_count": waiting,

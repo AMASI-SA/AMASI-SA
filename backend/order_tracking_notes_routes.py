@@ -1015,6 +1015,16 @@ def make_order_tracking_notes_router(
     @router.post("/notifications/{notification_id}/read")
     async def read_notification(notification_id: str, user: dict = Depends(instruction_user)):
         context = await _actor_context(db, user)
+        notification = await db[NOTIFICATIONS].find_one({"id": notification_id,
+            "merchant_id": context["merchant_id"], "recipient_id": context["actor_id"]})
+        if notification and notification.get("event_type") == "supplier_received":
+            # Explicit sender acceptance closes only this nonblocking single-piece
+            # monitoring urgency. Reading a thread never resolves operational work.
+            await db[ORDER_TRACKING_INSTRUCTIONS].update_one({"user_id": context["merchant_id"],
+                "id": notification["instruction_id"], "created_by": context["actor_id"],
+                "urgency_receipt_protocol": 1, "action_type": "urgent_preparation", "scope": "piece",
+                "status": "active", "operational_hold": {"$ne": True}},
+                {"$set": {"status": "completed", "completed_at": _now(), "completion_accepted_by": context["actor_id"]}})
         result = await db[NOTIFICATIONS].update_one({"id": notification_id, "merchant_id": context["merchant_id"], "recipient_id": context["actor_id"]}, {"$set": {"read_at": _now()}})
         if not result.matched_count:
             raise HTTPException(status_code=404, detail={"code": "notification_not_found"})

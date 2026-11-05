@@ -66,6 +66,8 @@ def _card(instruction, item, piece):
         image = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
     return {
         "id": pid or iid, "piece_id": pid, "order_item_id": iid,
+        "assigned_at": piece.get("assigned_at"), "file_number": text(piece.get("file_number")),
+        "file_piece_number": piece.get("file_piece_number") or piece.get("line_number"),
         "name": text(piece.get("product_name") or item.get("name")),
         "image_url": text(piece.get("selected_image_url") or piece.get("resolved_image_url") or piece.get("image_url") or item.get("image_url")),
         "quantity": 1 if pid else item.get("quantity", 1),

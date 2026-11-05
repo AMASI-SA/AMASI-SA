@@ -13,6 +13,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from employees_v2_routes import EMPLOYEES
 from mobile_app_permissions import mobile_app_access_for_user
 from preparation_supplier_dispatch import _employee_workspace
+from datetime import datetime, timezone
+import hashlib
 
 MONITORING_PERMISSION = "app.page.operations_monitoring"
 
@@ -99,6 +101,43 @@ def make_mobile_employee_monitoring_workspace_router(
         prefix="/mobile/operations-monitoring",
         tags=["mobile-operations-monitoring"],
     )
+
+    @router.post("/preparation/{employee_id}/pieces/{piece_id}/urgency")
+    async def request_urgency(employee_id: str, piece_id: str, user: dict = Depends(current_user)):
+        from operational_push import notification_actor
+        from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS
+        from operational_instruction_notifications import ensure_instruction_tasks, emit_instruction_notification, recipients
+        from operational_instruction_progress import refresh_instruction_progress
+        owner_id = await _monitoring_owner_scope(db, user)
+        actor = await notification_actor(db, user)
+        employee = await _resolve_monitored_employee(db, owner_id=owner_id, employee_id=employee_id)
+        if not employee:
+            raise HTTPException(404, detail={"code": "employee_not_found"})
+        account = monitored_work_account_id(employee)
+        piece = await db["mezan_preparation_pieces_v1"].find_one({
+            "user_id": owner_id, "piece_id": piece_id, "responsible_employee_id": account,
+            "experiment_archived_at": {"$in": [None, ""]}}, {"_id": 0})
+        if not piece:
+            raise HTTPException(404, detail={"code": "preparation_piece_not_found"})
+        if piece.get("status") not in {"assigned", "in_progress", "blocked"} or piece.get("branch_handoff_at"):
+            raise HTTPException(409, detail={"code": "preparation_responsibility_ended"})
+        identity = "monitor-urgency-" + hashlib.sha256(f"{owner_id}:{actor['id']}:{piece_id}:{piece.get('assigned_at') or ''}".encode()).hexdigest()
+        row = {"id": identity, "user_id": owner_id, "created_by": actor["id"],
+            "created_by_name": actor.get("name") or actor.get("display_name") or "موظف",
+            "order_number": _text(piece.get("order_number")), "scope": "piece", "target_ids": [piece_id],
+            "target_id": piece_id, "action_type": "urgent_preparation", "priority": "urgent",
+            "note": "عجّل بتجهيز المنتج، تأخّر", "status": "active", "enforcement": "notice",
+            "required_action": "none", "approval_required": False, "thread_protocol": 1,
+            "urgency_receipt_protocol": 1, "activation_state": "active",
+            "target_stages": ["preparation", "supplier_dispatch", "supplier_receiving", "preparation_receiving"],
+            "created_at": datetime.now(timezone.utc)}
+        await db[ORDER_TRACKING_INSTRUCTIONS].update_one({"_id": identity}, {"$setOnInsert": row}, upsert=True)
+        saved = await db[ORDER_TRACKING_INSTRUCTIONS].find_one({"_id": identity}, {"_id": 0})
+        await ensure_instruction_tasks(db, owner_id, saved)
+        await refresh_instruction_progress(db, saved)
+        await emit_instruction_notification(db, merchant_id=owner_id, instruction=saved,
+            event_type="created", recipient_ids={account} & await recipients(db, owner_id, saved))
+        return {"ok": True, "instruction_id": identity}
 
     @router.get("/preparation/{employee_id}/workspace")
     async def employee_workspace(

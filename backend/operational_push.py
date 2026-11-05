@@ -254,6 +254,7 @@ async def send_to_provider(device, payload, *, ticket=None):
                 response = await client.post("https://exp.host/--/api/v2/push/send", headers=headers, json={
                     "to": device["token"], "title": payload["title"], "body": payload["body"],
                     "data": payload, "sound": "default", "channelId": "operational-instructions", "ttl": 3600,
+                    "badge": int(payload.get("badge", 0)),
                     "priority": "high" if payload.get("priority") == "urgent" else "default",
                 })
                 response.raise_for_status()
@@ -292,8 +293,14 @@ async def deliver_one(db, sender=send_to_provider):
     result = {"status": "discarded"}
     if await device_is_active(db, device):
         try:
+            notification = await db["operational_instruction_notifications_v1"].find_one({"id": job["event_id"],
+                "merchant_id": device.get("merchant_id"), "recipient_id": job["actor_id"]}) or {}
+            badge = await db["operational_instruction_notifications_v1"].count_documents({
+                "merchant_id": device.get("merchant_id"), "recipient_id": job["actor_id"], "read_at": None})
             result = await sender(device, {"title": "أماسي — تنبيه مستعجل" if job.get("priority") == "urgent" else "أماسي — تعليمات الطلب", "body": "لديك تحديث على مهمة. افتح التطبيق للاطلاع والتأكيد.",
-                "event_id": job["event_id"], "instruction_id": job["instruction_id"], "priority": job.get("priority", "normal")}, ticket=job.get("ticket"))
+                "event_id": job["event_id"], "instruction_id": job["instruction_id"],
+                "task_id": (notification.get("metadata") or {}).get("task_id"), "badge": badge,
+                "priority": job.get("priority", "normal")}, ticket=job.get("ticket"))
         except Exception:
             # Provider exception text can contain device credentials; never log it.
             result = {"status": "retry", "error": "transport_error"}

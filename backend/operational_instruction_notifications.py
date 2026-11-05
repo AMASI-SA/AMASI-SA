@@ -16,9 +16,16 @@ LABELS = {
     "rejected": "رُفض التنفيذ؛ راجع سبب الرفض", "completed": "اكتملت التعليمات وفُك الإيقاف",
     "closed": "أُغلقت الملاحظة بواسطة صاحبها",
     "progress": "تحديث تقدم تجهيز المنتج",
-    "comment": "رد جديد على طلب الإيقاف",
+    "supplier_received": "تم تجهيز المنتج",
+    "comment": "تعليق جديد على المنتج",
     "acknowledged": "تم الاطلاع على التعليمات",
 }
+
+def monitoring_urgency_completed(piece):
+    # Read the actual supplier receipt contract, not the supplier's "ready" flag.
+    return (piece.get("supplier_dispatch_status") == "received"
+        and piece.get("status") in {"received", "ready_for_assembly"}
+        and int(piece.get("remaining_service_count") or 0) == 0)
 
 async def recipients(db, merchant_id, instruction):
     """Resolve current responsibility; driver IDs are never treated as account IDs."""
@@ -36,6 +43,8 @@ async def recipients(db, merchant_id, instruction):
     reached_stages = set()
     for piece in pieces:
         if instruction_targets(instruction, piece_id=text(piece.get("piece_id")), order_item_id=text(piece.get("order_item_id"))):
+            if instruction.get("urgency_receipt_protocol") and monitoring_urgency_completed(piece):
+                continue
             stage = activated.get(text(piece.get("piece_id"))) or _piece_stage(piece, workflow)
             persistent_piece = latched and (instruction.get("activated_order") or not instruction.get("activated_piece_stages") or text(piece.get("piece_id")) in instruction.get("activated_piece_stages", {}))
             if stage not in stages and not persistent_piece:
@@ -218,6 +227,8 @@ async def ensure_instruction_tasks(db, merchant_id, instruction):
         current = stage in instruction.get("target_stages", []) or bool(
             instruction.get("task_protocol") and instruction.get("activation_state") == "active"
             and (instruction.get("activated_order") or not activated or piece_id in activated))
+        if instruction.get("urgency_receipt_protocol") and monitoring_urgency_completed(piece):
+            current = False
         if not instruction.get("task_protocol") and stage not in instruction.get("target_stages", []):
             continue
         stage_key = "" if instruction.get("task_protocol") else ":" + stage
@@ -244,6 +255,9 @@ async def scoped_instruction(db, merchant_id, instruction, actor_id, can_manage=
     result = public_instruction(instruction)
     result.pop("resolution_intent", None)
     result["tasks"] = visible
+    from operational_instruction_comments import conversation_summary
+    for task in visible:
+        task["conversation"] = await conversation_summary(db, merchant_id, instruction["id"], task["id"], actor_id, task.get("piece_id", ""))
     result["can_approve_resume"] = (text(instruction.get("created_by")) == actor_id
         and instruction.get("status") == "waiting_customer_service_approval"
         and (not instruction.get("task_protocol") or bool(tasks) and all(task["status"] == "submitted" for task in tasks)))

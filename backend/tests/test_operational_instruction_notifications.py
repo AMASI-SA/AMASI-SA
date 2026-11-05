@@ -56,6 +56,19 @@ class InstructionNotificationTests(unittest.IsolatedAsyncioTestCase):
         self.client = TestClient(self.app)
     def tearDown(self): self.context_patch.stop(); self.push_patch.stop(); self.client.close()
     def select(self, uid): self.user = self.db.raw.users.find_one({'id':uid})
+    async def test_completion_notice_acceptance_closes_only_authored_monitoring_urgency(self):
+        self.db.raw[ORDER_TRACKING_INSTRUCTIONS].update_one({'id': 'n'}, {'$set': {
+            'scope': 'piece', 'target_ids': ['p1'], 'action_type': 'urgent_preparation',
+            'urgency_receipt_protocol': 1, 'enforcement': 'notice'}})
+        self.db.raw[notifications.NOTIFICATIONS].insert_one({'id': 'done', 'merchant_id': 'owner',
+            'instruction_id': 'n', 'recipient_id': 'cs', 'event_type': 'supplier_received', 'read_at': None})
+        self.assertEqual(self.client.post('/api/order-tracking-notes/notifications/done/read').status_code, 404)
+        self.assertEqual(self.db.raw[ORDER_TRACKING_INSTRUCTIONS].find_one()['status'], 'active')
+        self.select('cs')
+        for _ in range(2):
+            self.assertEqual(self.client.post('/api/order-tracking-notes/notifications/done/read').status_code, 200)
+        self.assertEqual(self.db.raw[ORDER_TRACKING_INSTRUCTIONS].find_one()['status'], 'completed')
+
     async def test_detail_cards_follow_employee_scope_and_creator_order_scope(self):
         self.db.raw.mezan_preparation_pieces_v1.update_one({'piece_id':'p1'}, {'$set': {'product_options_snapshot': {'size':'M'}, 'image_url':'first.png'}})
         self.db.raw.mezan_preparation_pieces_v1.update_one({'piece_id':'p2'}, {'$set': {'product_options_snapshot': {'size':'S'}, 'image_url':'second.png'}})
