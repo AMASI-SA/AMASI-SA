@@ -64,6 +64,16 @@ def supervise(commands):
 
 def main():
     role = sys.argv[1] if len(sys.argv) == 2 else ''
+    # Do not retain the imported server graph in the Web supervisor. The
+    # readiness probe exits completely BEFORE the real server is started.
+    if role.startswith('barrier-'):
+        target = role.removeprefix('barrier-')
+        if target not in {'web', 'worker-reports', 'worker-sync', 'worker-accounting'}:
+            raise RuntimeError('explicit hosting barrier role required')
+        if os.environ.get('APP_ENV') != 'staging':
+            raise RuntimeError('this image is synthetic hosting only')
+        asyncio.run(barrier(target))
+        return 0
     if role not in {'web', 'worker-reports', 'worker-sync', 'worker-accounting', 'migration'}:
         raise RuntimeError('explicit hosting role required')
     if os.environ.get('APP_ENV') != 'staging':
@@ -100,7 +110,7 @@ def main():
         finally:
             client.close()
         os.execv(sys.executable, command)
-    asyncio.run(barrier(role))
+    subprocess.run([sys.executable, __file__, 'barrier-' + role], check=True)
     if role == 'web':
         for name in ('nginx-client', 'nginx-proxy', 'nginx-fastcgi', 'nginx-uwsgi', 'nginx-scgi'):
             Path('/tmp', name).mkdir(exist_ok=True)

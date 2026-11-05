@@ -47,7 +47,15 @@ elif sys.argv[1:] == ['load']:
     op.seed(database)
     owner = database.users.find_one({'email': 'admin@hesab.app'})
     database.users.update_one({'id': owner['id']}, {'$unset': {'mfa_last_totp_counter': ''}})
+    deadline = time.monotonic() + 45
+    while not database.exit2d_economy_sync.find_one({'_id': 'snap', 'state': 'running'}):
+        assert time.monotonic() < deadline, 'actual synthetic Snap sync did not become active'
+        time.sleep(.5)
+    before = database.exit2d_economy_sync.find_one({'_id': 'snap'})
     asyncio.run(op.run(a.owner_session(), a.employee_session({'employee': 'exit2c-employee'}), database))
+    after = database.exit2d_economy_sync.find_one({'_id': 'snap'})
+    assert after['state'] == 'running' and after['rounds'] > before['rounds'], 'no proven Snap progress during employee load'
+    print(json.dumps({'kind': 'snap_employee_overlap', 'before_rounds': before['rounds'], 'after_rounds': after['rounds']}), flush=True)
     disk()
 elif sys.argv[1:] == ['outage']:
     session = a.employee_session({'employee': 'exit2c-employee'})

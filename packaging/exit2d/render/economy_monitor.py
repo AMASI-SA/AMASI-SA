@@ -27,12 +27,16 @@ while not Path(output + '.stop').exists():
             current = int((group / 'memory.current').read_text())
             peak = int((group / 'memory.peak').read_text())
             events = dict(line.split() for line in (group / 'memory.events').read_text().splitlines())
+            stat = dict(line.split() for line in (group / 'memory.stat').read_text().splitlines())
             cpu = dict(line.split() for line in (group / 'cpu.stat').read_text().splitlines())
             row.update(current_bytes=current, samples=row['samples'] + 1)
             row['sample_total_bytes'] += current
             row['sample_mean_bytes'] = row['sample_total_bytes'] // row['samples']
             row['cpu_throttled_usec'] = max(row['cpu_throttled_usec'], int(cpu.get('throttled_usec', 0)))
             row['peak_bytes'] = max(row['peak_bytes'], peak)
+            row['working_set_peak_bytes'] = max(row.get('working_set_peak_bytes', 0),
+                current - int(stat.get('inactive_file', 0)))
+            row['anonymous_peak_bytes'] = max(row.get('anonymous_peak_bytes', 0), int(stat.get('anon', 0)))
             row['oom'] = max(row['oom'], int(events.get('oom', 0)))
             row['oom_kill'] = max(row['oom_kill'], int(events.get('oom_kill', 0)))
             row['cpu_usage_usec'] = max(row['cpu_usage_usec'], int(cpu['usage_usec']))

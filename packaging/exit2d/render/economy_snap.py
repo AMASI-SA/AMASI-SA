@@ -71,10 +71,13 @@ async def main():
             await upsert_hourly_facts(db, facts['campaign_rows'])
             assert await db[SNAPCHAT_HOURLY_FACTS_COLLECTION].count_documents({'user_id': 'synthetic-snap-owner'}) == 2400
             rounds += 1
+            await db.exit2d_economy_sync.update_one({'_id': 'snap'}, {'$set': {'rounds': rounds,
+                'state': 'running', 'updated_at': datetime.now(timezone.utc)}}, upsert=True)
             print(json.dumps({'kind': 'snap_real_client_real_mongo_simulated_transport', 'rounds': rounds,
                 'entities_per_round': 100, 'hourly_facts_unique': 2400, 'duplicate_lease_denied': True}), flush=True)
             await asyncio.sleep(.5)
     finally:
+        await db.exit2d_economy_sync.update_one({'_id': 'snap'}, {'$set': {'state': 'finished'}})
         assert await release_lease(db, 'synthetic-snap-owner', 'synthetic-account', 'first')
         mongo.close()
     assert rounds >= 2

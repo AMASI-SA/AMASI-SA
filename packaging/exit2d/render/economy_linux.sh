@@ -66,6 +66,11 @@ for attempt in $(seq 1 150); do
   sleep 1
 done
 probe
+for attempt in $(seq 1 150); do
+  if docker exec "$web" python -c "import httpx; assert httpx.get('http://staging-reports:8000/api/ready',timeout=3).status_code==200" >/dev/null 2>&1; then break; fi
+  sleep 1
+done
+docker exec "$web" python -c "import httpx; assert httpx.get('http://staging-reports:8000/api/ready',timeout=3).status_code==200"
 fixture() {
   docker run --rm "${runtime[@]:2}" --network "container:$web" --memory 2g --memory-swap 2g --cpus 1 \
     -e EXIT2D_ECONOMY_CI=1 -v "$PWD/packaging/exit2c:/evidence/acceptance:ro" \
