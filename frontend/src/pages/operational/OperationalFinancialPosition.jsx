@@ -9,7 +9,7 @@ import { operationalApi } from "./api";
 import {
     buildFinancialPositionWorkbook, collectionLabel, currencyCodes, DELIVERY_MONEY_COLUMNS, DELIVERY_SCOPE_NOTE,
     deliveryOrderLabel, deliveryParties, destinationLabel, filterDeliveries, formatPositionCount, formatPositionMoney,
-    isPositionContract, PARTY_LABELS, paymentLabel, positionText, readableMessages, UNAVAILABLE,
+    isPositionContract, PARTY_LABELS, paymentLabel, positionText, readableMessages, shippingRecognitionLabel, UNAVAILABLE,
 } from "./financialPositionPresentation";
 import "./financialPosition.css";
 import NativePurchaseReview from "./NativePurchaseReview";
@@ -107,11 +107,14 @@ function DeliveryDetails({ delivery, filters, onFiltersChange, currency }) {
         </div>
         <p className="ofp-detail-scope">السجلات المعروضة: <bdi>{rows.length}</bdi> من <bdi>{allRows.length}</bdi>. فلاتر التفاصيل لا تغيّر إجماليات التقرير، ويشمل التصدير التفاصيل المعروضة.</p>
         <PaginatedReportTable rows={rows} label="تفاصيل الشحن والتحصيل لكل طلب" resetKey={JSON.stringify(filters)}>{pageRows => <div className="ofp-table-scroll"><table className="ofp-delivery-table"><thead><tr>
-            <th scope="col">الطلب والتسليم</th><th scope="col">جهة التنفيذ</th><th scope="col">الدفع وجهة التحصيل</th><th scope="col">حالة التحصيل</th>
+            <th scope="col">الطلب والتواريخ</th><th scope="col">جهة التنفيذ</th><th scope="col">الدفع وجهة التحصيل</th><th scope="col">حالة التحصيل</th>
             {DELIVERY_MONEY_COLUMNS.map(column => <th scope="col" key={column.key}>{column.label}</th>)}
         </tr></thead><tbody>{pageRows.map(row => <tr key={row.id} data-testid="financial-delivery-row">
-            <td><strong>{deliveryOrderLabel(row)}</strong><small>{formatRiyadhDateTime(row.delivered_at)}</small></td>
-            <td><strong>{positionText(row.party_name)}</strong><small>{PARTY_LABELS[row.party_type] || UNAVAILABLE}</small></td>
+            <td><strong>{deliveryOrderLabel(row)}</strong>
+                {row.recognition_event === "order_completed" && <small>تم التنفيذ: {row.completed_at ? formatRiyadhDateTime(row.completed_at) : UNAVAILABLE}</small>}
+                <small>التسليم: {row.delivered_at ? formatRiyadhDateTime(row.delivered_at) : UNAVAILABLE}</small></td>
+            <td><strong>{positionText(row.party_name)}</strong><small>{PARTY_LABELS[row.party_type] || UNAVAILABLE}</small>
+                {row.recognition_event === "order_completed" && <><small>{shippingRecognitionLabel(row)}</small><small>صندوق الخصم: {positionText(row.cash_account_name)}</small></>}</td>
             <td><strong>{paymentLabel(row.payment_method)}</strong><small>{destinationLabel(row.collection_destination)}</small>{row.destination_name && <small>{row.destination_name}</small>}</td>
             <td><CollectionStatus value={row.collection_status} /></td>
             {DELIVERY_MONEY_COLUMNS.map(column => <td key={column.key}><Money value={row[column.key]} role={column.role} /></td>)}

@@ -93,7 +93,7 @@ class Collection:
             assert projection in allowed
         if self.name == 'settings':
             assert projection and projection.get('_id') == 0
-            identity_fields = {'_id', 'user_id', 'shipping_companies.name',
+            identity_fields = {'_id', 'user_id', 'shipping_companies.name', 'shipping_companies.salla_carrier_key',
                 *('shipping_companies.' + key for key in ('status', 'active', 'is_active', 'archived', 'deleted', 'is_deleted', 'is_archived'))}
             fee_fields = {'_id', 'user_id', 'payment_methods', 'updated_at'}
             assert set(projection) in (identity_fields, fee_fields)

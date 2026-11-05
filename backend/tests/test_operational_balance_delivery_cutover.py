@@ -37,6 +37,7 @@ def courier_data():
         'company_name': 'Carrier', 'shipment_id': 'shipment', 'tracking_number': 'TEST-AWB',
         'status': 'delivered', 'superseded_shipment_ids': []}
     raw = source['raw_by_source']['salla_direct']
+    raw['status_changed_at'] = DELIVERED
     raw['shipping'].update(shipment_id='shipment', tracking_number='TEST-AWB',
                            status='delivered', delivered_at=DELIVERED)
     raw['shipments'] = [{'id': 'shipment', 'tracking_number': 'TEST-AWB', 'company': {'code': 'carrier'},
@@ -178,9 +179,11 @@ def test_foreign_currency_fee_contract_is_not_relabelled_as_sar():
     data = courier_data()
     data['mz2_shipping_setup_v2'][0]['contracts'][0]['currency'] = 'USD'
     state = reconcile(active(), collect(data), NOW)
-    assert fee_total(state) == 0
+    assert fee_total(state) == 10
     assert state['engine']['obligations']['cod:100']['confirmed'] == '200.00'
-    assert any(i['code'] == 'operational_delivery_fee_currency_conflict' for i in state['engine']['issues'])
+    assert state['engine']['obligations']['cod:100']['currency'] == 'SAR'
+    assert state['engine']['obligations']['shipping:100:base_shipping']['currency'] == 'USD'
+    assert 'shipping:100:cod_commission' not in state['engine']['obligations']
 
 
 @pytest.mark.parametrize('patch', [
