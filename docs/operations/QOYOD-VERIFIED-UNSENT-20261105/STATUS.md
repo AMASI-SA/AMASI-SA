@@ -1,5 +1,17 @@
 # QOYOD-VERIFIED-UNSENT-20261105
 
+Follow-up compatibility checkpoint: PR #1762 merged as
+a67da7816f24befb09fb713b294dea70e9517100 and its first publish is running.
+Keep evidence gathering observational: invalid/repeated pages invalidate the
+absence proof without shortening legacy pagination or changing returned rows.
+The old sync wrapper uses fetched row counts for recovery decisions; changing
+those counts would be an unintended sender-side effect. Regression coverage
+now checks identical rows and page calls with and without evidence collection.
+Follow-up branch: fix/qoyod-sync-proof-compatibility-20261105.
+All 81 affected backend tests pass. Rebuild/freeze a new A/B release from the
+merged base after this checkpoint, then publish under a fresh lease only after
+the first release finishes and its existing lease is verified/closed.
+
 State: remotely checkpointed in PR #1762; user authorized merge and publication.
 Initial verified source: 5ea8e4d0ff6320616659f7464ea2c279699191b6.
 GitHub Issue #1006 rejected further comments (2500-comment limit); PR #1762
