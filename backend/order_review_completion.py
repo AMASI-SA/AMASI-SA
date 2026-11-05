@@ -126,6 +126,11 @@ def _review_409_log_detail(exc, *, stage, user_id, order_number, revision):
         "schema_version", "normalization_version", "observed_at",
     }
     safe = {key: detail[key] for key in allowed if key in detail}
+    evidence = detail.get("source_diagnostic")
+    if isinstance(evidence, dict):
+        # Snapshot conflicts nest their sanitized hashes/paths. Keep that
+        # evidence on transaction rollback without logging raw source values.
+        safe["source_diagnostic"] = {key: evidence[key] for key in allowed if key in evidence}
     safe["stage"] = stage
     safe["user_id"] = user_id
     safe["order_number"] = order_number
@@ -256,7 +261,8 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         if uses_business_snapshot(op):
             try:
                 candidate = build_snapshot(source, current, current_acceptance, identity=approval_identity(op),
-                                           schema_version=op["approval_contract_version"])
+                                           schema_version=op["approval_contract_version"],
+                                           normalization_version=op["business_snapshot"]["normalization_version"])
             except HTTPException as exc:
                 approved = op["business_snapshot"]
                 raise HTTPException(409, detail={
@@ -391,7 +397,8 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                 # explicitly confirmed new acceptance is checked separately.
                 current_basis = build_snapshot(source, order, previous["acceptance_snapshot"],
                                                identity=approval_identity(previous),
-                                               schema_version=previous["approval_contract_version"])
+                                               schema_version=previous["approval_contract_version"],
+                                               normalization_version=previous["business_snapshot"]["normalization_version"])
                 same_business = compare_snapshots(previous["business_snapshot"], current_basis)["equal"]
             else:
                 same_business = (previous.get("order_fingerprint") == order_fingerprint(order)
