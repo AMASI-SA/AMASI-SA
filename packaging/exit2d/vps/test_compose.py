@@ -7,8 +7,8 @@ s = d['services']
 assert set(s) == {'web', 'reports', 'sync', 'accounting', 'mongo', 'migration'}
 persistent = [s[n] for n in ('web', 'reports', 'sync', 'accounting', 'mongo')]
 assert sum(float(x['cpus']) for x in persistent) == 3.5
-assert sum(x['mem_limit'] for x in persistent) == 5888*1024*1024
-assert all(x['mem_limit'] == x['memswap_limit'] for x in persistent)
+assert sum(int(x['mem_limit']) for x in persistent) == 5888*1024*1024
+assert all(int(x['mem_limit']) == int(x['memswap_limit']) for x in persistent)
 assert all(x['cgroup_parent'] for x in persistent)
 assert d['networks']['private']['internal'] is True
 assert len(s['web']['ports']) == 1 and s['web']['ports'][0]['host_ip'] == '127.0.0.1'
