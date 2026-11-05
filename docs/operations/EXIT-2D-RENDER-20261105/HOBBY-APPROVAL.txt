@@ -1,5 +1,9 @@
 Render Hobby financial approval packet — 2026-11-05
 
+SUPERSEDED COST PROPOSAL: economy selection36.25USD/month is now documented in
+ECONOMY-AR.txt and ECONOMY-RESULTS.json. The127.50USD inventory below is retained
+as historical reference; do not purchase it as the current requested proposal.
+
 Status: user selected Hobby; Apply/Create/paid resources NOT authorized yet.
 No account settings or alerts were changed. No Render connector/account session
 is available in this task. Dashboard review and verified alert delivery remain

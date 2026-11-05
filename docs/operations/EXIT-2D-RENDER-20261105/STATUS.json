@@ -5,7 +5,7 @@
   "prior_delivery": "c19bb28b8cb705132794d13e0e4df52d074873e2",
   "production_integrated": "2d73a2a039e16468bbd45523bacf441bff515eb2",
   "integration_merge": "440c25ded463ae2a5be86d92e1772ade2142e72e",
-  "state": "SYNTHETIC_RENDER_CANDIDATE_ACCEPTED_AWAITING_RESOURCE_APPROVAL",
+  "state": "ECONOMY_SYNTHETIC_ACCEPTANCE_PASSED_AWAITING_FINANCIAL_APPROVAL",
   "latest_integration_merge": "8e2f05a26e7e9c8211cc61335a9d1226712ba62c",
   "code_checkpoint": "c3ded22b5da09188daba2d56c5607db75f1b1a35",
   "draft_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1757",
@@ -75,7 +75,7 @@
     "Separately authorized real Mongo/files/encryption restore and old-owner stop proof",
     "Fresh reviewed V5 source/intent handoff before any Production merge/deploy"
   ],
-  "next_action": "Await explicit financial approval: Hobby, five Frankfurt1CPU/2GB services and10GB disk,127.50USD/month base; proposed72hours with20USD manual stop threshold; verify dashboard controls before paid creation.",
+  "next_action": "Await explicit financial approval of Hobby five0.5CPU/512MiB Frankfurt services plus5GB Mongo disk,36.25USD/month base; proposed72hours approx3.63USD and5USD manual pre-tax stop threshold. No Apply/Create, Production access or V5 bypass.",
   "base_monthly_usd": {
     "hobby": 127.5,
     "pro": 152.5,
@@ -95,5 +95,9 @@
   "selected_workspace_plan": "Hobby",
   "financial_approval_packet": "docs/operations/EXIT-2D-RENDER-20261105/HOBBY-APPROVAL.txt",
   "resource_creation_authorized": false,
-  "account_alerts_configured": false
+  "account_alerts_configured": false,
+  "economy_results": "docs/operations/EXIT-2D-RENDER-20261105/ECONOMY-RESULTS.json",
+  "economy_report": "docs/operations/EXIT-2D-RENDER-20261105/ECONOMY-AR.txt",
+  "selected_base_monthly_usd": 36.25,
+  "economy_tested_source": "3ae0ffa087d6d0f2c145f3278026cecfd8c4ca04"
 }

@@ -25,13 +25,13 @@ services:
     dockerfilePath: packaging/exit2d/render/Mongo.Dockerfile
     dockerContext: .
     region: frankfurt
-    plan: 1c-2g
+    plan: 0.5c-512mb
     numInstances: 1
     autoDeployTrigger: 'off'
     disk:
       name: synthetic-mongo
       mountPath: /data/db
-      sizeGB: 10
+      sizeGB: 5
     envVars:
       - key: MONGO_INITDB_ROOT_USERNAME
         sync: false
@@ -46,7 +46,7 @@ services:
     runtime: docker
     branch: codex/exit-2d-render-integration-20261105
     region: frankfurt
-    plan: 1c-2g
+    plan: 0.5c-512mb
     numInstances: 1
     autoDeployTrigger: 'off'
     dockerfilePath: packaging/exit2d/render/Dockerfile
@@ -67,7 +67,7 @@ services:
     runtime: docker
     branch: codex/exit-2d-render-integration-20261105
     region: frankfurt
-    plan: 1c-2g
+    plan: 0.5c-512mb
     numInstances: 1
     autoDeployTrigger: 'off'
     dockerfilePath: packaging/exit2d/render/Dockerfile
@@ -86,7 +86,7 @@ services:
     runtime: docker
     branch: codex/exit-2d-render-integration-20261105
     region: frankfurt
-    plan: 1c-2g
+    plan: 0.5c-512mb
     numInstances: 1
     autoDeployTrigger: 'off'
     dockerfilePath: packaging/exit2d/render/Dockerfile
@@ -107,7 +107,7 @@ services:
     runtime: docker
     branch: codex/exit-2d-render-integration-20261105
     region: frankfurt
-    plan: 1c-2g
+    plan: 0.5c-512mb
     numInstances: 1
     autoDeployTrigger: 'off'
     dockerfilePath: packaging/exit2d/render/Dockerfile
