@@ -66,6 +66,38 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             replacement.start()
             self.patches.append(replacement)
 
+    async def test_paid_review_commits_when_its_component_ack_enables_display_balance(self):
+        await self.assert_paid_component_ack("mada")
+
+    async def test_tabby_review_commits_when_its_component_ack_enables_display_balance(self):
+        await self.assert_paid_component_ack("tabby_installment")
+
+    async def test_tamara_review_commits_when_its_component_ack_enables_display_balance(self):
+        await self.assert_paid_component_ack("tamara_installment")
+
+    async def assert_paid_component_ack(self, method):
+        payload = self.source_payload(number="paid-component-ack")
+        payload.update(payment_method=method, paid_amount=100, remaining_amount=0)
+        self.assertTrue((await self.webhook(payload))["synced"])
+        selector = {"user_id": "owner", "order_number": "paid-component-ack"}
+        await self.db.unified_orders.update_one(selector, {"$set": {"g47_salla_snapshot.component_pending": True}})
+        source = await self.db.unified_orders.find_one(selector)
+        before = await pieces._current_assembly_order(self.db, user_id="owner", order_number="paid-component-ack")
+        self.assertIsNone(before.payment.source_balance)
+        displayed = await self.client.get("/order-reviews-v1/paid-component-ack?local_only=true")
+        self.assertEqual(displayed.status_code, 200, displayed.text)
+        response = await self.client.post("/order-reviews-v1/paid-component-ack/complete", json={
+            "expected_revision": displayed.json()["revision"], "approval_token": displayed.json()["approval_token"]})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["stage"], "reviewed")
+        after = await pieces._current_assembly_order(self.db, user_id="owner", order_number="paid-component-ack")
+        self.assertEqual(after.payment.source_balance.paid, "100.00")
+        current = await self.db.unified_orders.find_one(selector)
+        self.assertEqual(current["raw_by_source"], source["raw_by_source"])
+        self.assertFalse(current["g47_salla_snapshot"]["component_pending"])
+        self.assertEqual(await self.db[completion.EVENTS].count_documents({**selector, "event_type": "order_review_completed"}), 1)
+        self.external.assert_not_awaited()
+
     async def complete_review(self, *, mixed=False, operational=False, direct=True):
         payload = self.source_payload(number="local-assembly")
         if mixed:

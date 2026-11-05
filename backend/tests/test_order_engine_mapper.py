@@ -532,3 +532,30 @@ def test_native_zero_due_is_required_when_paid_amount_is_absent(salla_order_payl
     row = MongoOrderRepository._to_discovery_row(doc)
     result = _map_row(row.salla_raw, native_payment_source=row.native_payment_source)
     assert result.payment.source_balance.paid == "135.00"
+
+
+def test_review_approval_survives_internal_component_acknowledgement(salla_order_payload):
+    from copy import deepcopy
+    from order_engine.repository import MongoOrderRepository
+    from order_engine.service import _map_row
+    from order_review_business_snapshot import build_snapshot, compare_snapshots, REVIEW_SCOPE_VERSION
+
+    raw = dict(salla_order_payload, payment_method="mada", payment={}, paid_amount=135, remaining_amount=0)
+    doc = {"order_number": str(raw["reference_id"]), "order_date": str(raw["date"]),
+           "raw_by_source": {"salla_direct": raw}, "g47_salla_snapshot": {"component_pending": True}}
+
+    def snapshot(document):
+        row = MongoOrderRepository._to_discovery_row(document)
+        order = _map_row(row.salla_raw, native_payment_source=row.native_payment_source)
+        return order, build_snapshot(document, order, {}, identity={"operation_id": "same-operation"},
+                                     schema_version=REVIEW_SCOPE_VERSION)
+
+    before_order, before = snapshot(doc)
+    acknowledged = deepcopy(doc)
+    acknowledged["g47_salla_snapshot"]["component_pending"] = False
+    after_order, after = snapshot(acknowledged)
+    assert before_order.payment.source_balance is None
+    assert after_order.payment.source_balance.paid == "135.00"
+    assert before_order.payment.paid_amount == after_order.payment.paid_amount
+    comparison = compare_snapshots(before, after)
+    assert comparison["equal"], comparison
