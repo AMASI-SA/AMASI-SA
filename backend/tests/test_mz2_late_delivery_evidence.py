@@ -223,7 +223,11 @@ async def test_upload_replay_and_conflicting_request_or_duplicate_bytes(late):
 @pytest.mark.asyncio
 async def test_concurrent_identical_upload_and_approval_have_one_event_each(late):
     from store_delivery_late_evidence import EVENTS
+    from store_delivery_payment_evidence_routes import DELIVERY_PROOFS
     await seed_delivery(late.db)
+    # Exercise the real cold start: neither collection may be fixture-created.
+    names = await late.db.list_collection_names()
+    assert DELIVERY_PROOFS not in names and EVENTS not in names
     before = await financial(late)
     results = await asyncio.gather(upload(late), upload(late))
     assert [r.status_code for r in results] == [200, 200], [r.text for r in results]
@@ -231,13 +235,32 @@ async def test_concurrent_identical_upload_and_approval_have_one_event_each(late
     assert sorted(r.json()["replayed"] for r in results) == [False, True]
     attachment = results[0].json()["attachment"]
     count = await late.db[EVENTS].count_documents({"user_id": OWNER})
+    assert count == 1
+    assert await late.db[DELIVERY_PROOFS].count_documents({"user_id": OWNER}) == 1
+    assert await financial(late) == before
     results = await asyncio.gather(review(late, attachment), review(late, attachment))
     assert [r.status_code for r in results] == [200, 200], [r.text for r in results]
     assert sorted(r.json()["replayed"] for r in results) == [False, True]
     assert await late.db[EVENTS].count_documents({"user_id": OWNER}) == count + 1
+    assert await late.db[DELIVERY_PROOFS].count_documents({"user_id": OWNER}) == 1
     assert (await review(late, attachment, key="another-approval-request")).status_code == 409
     assert (await review(late, attachment, decision="rejected")).status_code == 409
     assert await financial(late) == before
+
+
+@pytest.mark.asyncio
+async def test_disabled_driver_cannot_bootstrap_late_evidence_storage(late):
+    from store_delivery_late_evidence import Submission, submit
+    await late.db.users.update_one({"id": DRIVER}, {"$set": {"is_active": False}})
+    names = set(await late.db.list_collection_names())
+    controls = await late.db.mz2_atomic_owners.find_one({"_id": OWNER})
+    payload = Submission(assignment_id="assignment-1", request_id="disabled-driver-request",
+        reason="Synthetic rejected late evidence")
+    with pytest.raises(HTTPException) as failure:
+        await submit(late.db, DRIVER, payload, PNG, "image/png", "delivery.png")
+    assert failure.value.status_code == 403
+    assert set(await late.db.list_collection_names()) == names
+    assert await late.db.mz2_atomic_owners.find_one({"_id": OWNER}) == controls
 
 
 @pytest.mark.asyncio

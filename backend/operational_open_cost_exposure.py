@@ -343,6 +343,10 @@ async def project(db, owner, state, *, as_of=None):
         # Receipt obligations survive a closed order; unreceived estimates do not.
         if status in CLOSED:
             continue
+        # A prepaid service was already charged to its approved cashbox at
+        # completion. It cannot remain an open delivery-fee estimate as well.
+        if state.get('engine', {}).get('facts', {}).get('prepaid_shipping:' + oid):
+            continue
         # Shipping quote is independent from product-cost completeness.
         shipping = raw.get("salla_shipping_current") or raw.get("shipping") or {}
         if not isinstance(shipping, dict):

@@ -661,7 +661,10 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
             party["funding_mode"] = movement["funding_mode"]
         if movement["direction"] == "outgoing" and movement["party_type"] not in {"operating_expense", "owner_withdrawal"}:
             party["expense_paid"] += sum((Decimal(a["amount"]) for a in movement.get("allocations", [])
-                if state.get("engine", {}).get("obligations", {}).get(a["obligation_id"], {}).get("kind") == "recurring"), Decimal(0))
+                if (state.get("engine", {}).get("obligations", {}).get(a["obligation_id"], {}).get("kind") == "recurring"
+                    or movement.get('automatic_prepaid_shipping') is True
+                    and state.get('engine', {}).get('obligations', {}).get(a['obligation_id'], {}).get('recognition_event') == 'order_completed'
+                    and state.get('engine', {}).get('obligations', {}).get(a['obligation_id'], {}).get('payment_mode') == 'prepaid')), Decimal(0))
         if movement["party_type"] == "employee_custody" and movement["kind"] != "correction":
             party["actual"] -= signed
             party["custody_funded" if signed < 0 else "custody_returned"] += amount

@@ -442,7 +442,7 @@ async def entities(db, owner, kind, *, include_unready=False, operational_state=
             raise ValueError('operational_source_rejected')
         # Same persisted courier identities used by MZ2's shipping contract
         # setup. No default companies, old balances or prices are imported.
-        projection = {'_id': 0, 'user_id': 1, 'shipping_companies.name': 1,
+        projection = {'_id': 0, 'user_id': 1, 'shipping_companies.name': 1, 'shipping_companies.salla_carrier_key': 1,
                       **{f'shipping_companies.{key}': 1 for key in
                          ('status', 'active', 'is_active', 'archived', 'deleted', 'is_deleted', 'is_archived')}}
         settings = await db['settings'].find({'user_id': owner}, projection).to_list(2)
@@ -459,15 +459,26 @@ async def entities(db, owner, kind, *, include_unready=False, operational_state=
                 raise ValueError('shipping_setup_ambiguous')
             if not usable(configured) or not external_courier(configured):
                 continue
-            key, name = normalize_shipping_company(configured.get('name'))
-            if key == 'unknown':
-                continue
+            identity = None
+            if configured.get('salla_carrier_key') is not None:
+                from operational_courier_tariffs import native_matches, saved_identity
+                identity = saved_identity(configured)
+                if not identity:
+                    continue
+                if identity.get('identity_error'):
+                    raise ValueError('operational_entity_identity_ambiguous')
+                key, name = identity['id'], identity['name']
+            else:
+                key, name = normalize_shipping_company(configured.get('name'))
+                if key == 'unknown':
+                    continue
             if key in configured_keys:
                 raise ValueError('operational_entity_identity_ambiguous')
             configured_keys.add(key)
-            configured_aliases.update((key, configured['name']))
-            matches = [r for r in native if r.get('courier_key') == key or
-                       any(normalize_shipping_company(alias)[0] == key for alias in r.get('salla_carrier_keys', []))]
+            configured_aliases.update(identity['keys'] if identity else (key, configured['name']))
+            matches = native_matches({'couriers': native}, identity) if identity else [
+                r for r in native if r.get('courier_key') == key or
+                any(normalize_shipping_company(alias)[0] == key for alias in r.get('salla_carrier_keys', []))]
             if len(matches) > 1:
                 raise ValueError('operational_entity_identity_ambiguous')
             if not matches:
@@ -619,10 +630,23 @@ def hybrid_policy(binding, policies, owner, business_date=None):
             'hybrid_confirmed_at': policy['confirmed_at'], 'hybrid_confirmed_by': policy['confirmed_by']}
 
 
+def _option_label(value):
+    return ' '.join(str(value or '').replace('_', ' ').strip().casefold().split())
+
+
+def _option_value_label(value):
+    label = _option_label(value)
+    # Only the explicit boolean value is bilingual; option names and IDs are not.
+    return {'نعم': 'yes', 'لا': 'no'}.get(label, label)
+
+
+def _option_binding_token(binding):
+    return (str(binding.get('option_id') or ''), str(binding.get('value_id') or ''),
+            _option_label(binding.get('option_name')), _option_value_label(binding.get('value_name')))
+
+
 def option_tokens(item):
-    """Native IDs first; normalized explicit labels follow the MZ2 cost contract."""
-    def norm(value):
-        return ' '.join(str(value or '').replace('_', ' ').strip().casefold().split())
+    """Retain each selection's IDs with its labels; a label cannot override an ID."""
     tokens = set()
     for row in item.get('options_raw') or item.get('options') or []:
         if not isinstance(row, dict):
@@ -637,21 +661,85 @@ def option_tokens(item):
             entry_dict = entry if isinstance(entry, dict) else value
             value_id = row.get('value_id') or entry_dict.get('id')
             value_name = row.get('value_name') or entry_dict.get('name') or entry_dict.get('value') or entry
-            if option_id not in (None, '') and value_id not in (None, ''):
-                tokens.add((f'id:{option_id}', f'id:{value_id}'))
-            if option_name and value_name not in (None, '', {}):
-                tokens.add((f'name:{norm(option_name)}', f'name:{norm(value_name)}'))
+            if (option_id or option_name) and (value_id or value_name):
+                tokens.add((str(option_id or ''), str(value_id or ''),
+                            _option_label(option_name), _option_value_label(value_name), 'raw'))
     for key, values in (item.get('options_normalized') or {}).items():
         for value in values if isinstance(values, list) else [values]:
-            tokens.add((f'name:{norm(key)}', f'name:{norm(value)}'))
+            if key and value not in (None, ''):
+                tokens.add(('', '', _option_label(key), _option_value_label(value), 'normalized'))
     return tokens
 
 
 def option_matches(binding, tokens):
-    def norm(value):
-        return ' '.join(str(value or '').replace('_', ' ').strip().casefold().split())
-    return ((f"id:{binding.get('option_id')}", f"id:{binding.get('value_id')}") in tokens
-            or (f"name:{norm(binding.get('option_name'))}", f"name:{norm(binding.get('value_name'))}") in tokens)
+    bound_option, bound_value, bound_name, bound_label = _option_binding_token(binding)
+    for option, value, name, label, _ in tokens:
+        if (option and bound_option and option != bound_option) or (value and bound_value and value != bound_value):
+            continue
+        same_option = bool(option and bound_option) or bool(name and name == bound_name)
+        same_value = bool(value and bound_value) or bool(label and label == bound_label)
+        if same_option and same_value:
+            return True
+    return False
+
+
+def selected_cost_options(bindings, tokens):
+    """Resolve missing IDs only within one known option/value identity."""
+    native_pairs = {(option, value) for option, value, _, _, origin in tokens
+                    if origin == 'raw' and option and value}
+    native_values = {option: {value for key, value in native_pairs if key == option}
+                     for option, _ in native_pairs}
+    # Normalized labels repeat native selections. They must not activate another
+    # option with the same display name when native IDs already identify this one.
+    observations = [token for token in tokens if token[4] != 'normalized' or not any(
+        _option_binding_token(binding)[:2] in native_pairs and option_matches(binding, [token])
+        for binding in bindings)]
+    selected, boolean_values = set(), {}
+    for token in observations:
+        option, value, name, label, _ = token
+        if option:
+            candidates = [(i, b) for i, b in enumerate(bindings)
+                          if str(b.get('option_id') or '') == option]
+            if not candidates:
+                candidates = [(i, b) for i, b in enumerate(bindings)
+                              if not b.get('option_id') and name and _option_label(b.get('option_name')) == name]
+                if not candidates and any(name and _option_label(b.get('option_name')) == name for b in bindings):
+                    raise ValueError('mz2_cost_option_identity_conflict')
+        else:
+            candidates = [(i, b) for i, b in enumerate(bindings)
+                          if name and _option_label(b.get('option_name')) == name]
+            if len({str(b.get('option_id')) for _, b in candidates if b.get('option_id')}) > 1:
+                raise ValueError('mz2_cost_option_identity_ambiguous')
+        matched = [(i, b) for i, b in candidates if option_matches(b, [token])]
+        if not value and len({str(b.get('value_id')) for _, b in matched if b.get('value_id')}) > 1:
+            raise ValueError('mz2_cost_option_identity_ambiguous')
+        boolean = [(i, b) for i, b in candidates if _option_value_label(b.get('value_name')) in {'yes', 'no'}]
+        for _, b in boolean:
+            bound_option, bound_value, bound_name, bound_label = _option_binding_token(b)
+            identity = ('id', bound_option) if bound_option else ('name', bound_name)
+            observed = boolean_values.setdefault(identity, set())
+            if label in {'yes', 'no'}:
+                observed.add(label)
+            if (bound_option, bound_value) in native_pairs:
+                # Native IDs establish this value even if the raw row has no
+                # labels. A contrary normalized label remains a conflict.
+                observed.add(bound_label)
+            if len(observed) > 1 or len(native_values.get(bound_option, ())) > 1:
+                raise ValueError('mz2_cost_option_value_conflict')
+        if not value and any(_option_value_label(b.get('value_name')) in {'yes', 'no'}
+                and native_values.get(str(b.get('option_id') or ''))
+                and str(b.get('value_id') or '') not in native_values[str(b.get('option_id') or '')]
+                for _, b in matched):
+            raise ValueError('mz2_cost_option_identity_conflict')
+        if not matched:
+            if value and any(label and _option_value_label(b.get('value_name')) == label for _, b in candidates):
+                raise ValueError('mz2_cost_option_identity_conflict')
+            if boolean and not value and label not in {'yes', 'no'}:
+                raise ValueError('mz2_cost_option_value_unverified')
+        selected.update(i for i, _ in matched)
+    # One binding applies once, even when the same choice appears in raw and
+    # normalized input. Duplicate persisted binding identities still fail below.
+    return [binding for i, binding in enumerate(bindings) if i in selected]
 
 
 def cost_components(data, product_id, item, profile):
@@ -663,7 +751,8 @@ def cost_components(data, product_id, item, profile):
     resources = unique_index(data['mezan_cost_resources_v2'], 'id')
     tokens = option_tokens(item)
     links = [dict(r, mode='resource') for r in data['mezan_product_resource_bindings_v2'] if str(r.get('salla_product_id')) == product_id]
-    links += [r for r in data['mezan_product_option_cost_bindings_v2'] if str(r.get('salla_product_id')) == product_id and option_matches(r, tokens)]
+    bindings = [r for r in data['mezan_product_option_cost_bindings_v2'] if str(r.get('salla_product_id')) == product_id]
+    links += selected_cost_options(bindings, tokens)
     seen, services, resource_costs = set(), {}, {}
     for link in links:
         identity = link.get('id')
@@ -781,6 +870,14 @@ def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, co
             return
         if party_id:
             order['carrier'] = {'id': party_id, 'kind': party_kind, 'cost': None, 'fee_complete': False}
+        if identity in data.get('_prepaid_orders', set()) and not assignments:
+            order['prepaid_shipping'] = True
+            if delivery_event and party_id:
+                order['carrier'].update(payment_mode='prepaid', currency='SAR')
+            else:
+                # Completion can pay shipping without asserting delivery or COD.
+                order.pop('carrier', None)
+            return
         if len(assignments) == 1:
             party_kind, party_id = 'store_driver', assignments[0].get('driver_id')
             if party_id:
@@ -854,9 +951,7 @@ def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, co
             and assignments[0].get('status') == 'delivered') else None
         quote = None
         if party_id and rate:
-            historical_delivery = delivery_event and instant(order['created_at']) <= instant(
-                out['delivery_event_coverage']['started_at'])
-            if (completed_assignment or historical_delivery or (delivery_event and party_kind == 'store_driver')) and rate.get('currency') != order['currency']:
+            if (completed_assignment or (delivery_event and party_kind == 'store_driver')) and rate.get('currency') != order['currency']:
                 raise ValueError('operational_delivery_fee_currency_conflict')
             cod_incomplete = cod and 'cod' not in order
             quote = shipping_charge(rate, owner, party_id, when,
@@ -909,7 +1004,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     start, now = instant(started_at), instant(as_of)
     if now < start:
         raise ValueError('operational_source_time_range_invalid')
-    out = {key: [] for key in ('orders', 'delivery_events', 'supplier_receipts', 'supplier_returns', 'employees',
+    out = {key: [] for key in ('orders', 'delivery_events', 'prepaid_shipping_events', 'supplier_receipts', 'supplier_returns', 'employees',
                                'ad_snapshots', 'recurring', 'fee_policies', 'issues')}
     out['delivery_event_coverage'] = {'version': 1, 'started_at': start.isoformat(), 'as_of': now.isoformat()}
     out['ad_balance_sar_basis'] = {}
@@ -947,6 +1042,10 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
         setup, tariff_conflicts = with_tariffs(setup, owner, operational_state)
         for party in tariff_conflicts:
             issue(out, 'operational_courier_tariff_authority_conflict', party, component='shipping_fee')
+    prepaid_keys = {str(key).casefold() for rate in setup.get('contracts', [])
+                    if rate.get('context') == 'order_completed' and rate.get('payment_mode') == 'prepaid'
+                    for key in rate.get('keys', [])}
+    data['_prepaid_orders'] = set()
     profiles = unique_index(data['mezan_product_cost_profiles_v2'], 'salla_product_id')
     suppliers = unique_index(data['mezan_suppliers_v2'], 'id')
     pieces = [r for r in data['mezan_preparation_pieces_v1'] if not r.get('experiment_mode') and not r.get('experiment_run_id')]
@@ -970,7 +1069,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
         max_rows=MAX_ROWS, order_numbers=plan_orders) if plan_orders else {}
     from operational_delivery_evidence import conflicting_shipments
     shipment_conflicts = conflicting_shipments(data['unified_orders'], operational_state)
-    delivery_history = await load_delivery_history(db, owner, data['unified_orders'], max_rows=MAX_ROWS)
+    delivery_history = await load_delivery_history(db, owner, data['unified_orders'], max_rows=MAX_ROWS,
+                                                   completion_keys=prepaid_keys)
     txn_by_order = await load_transaction_rows(db, owner, raw_orders, start, now, to_instant=instant, max_rows=MAX_ROWS)
     from operational_remaining_bundle_sources import load_remaining_bundles
     from operational_native_purchase_link_service import verified_saved_links
@@ -1010,20 +1110,40 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             watermark = source.get('g47_salla_snapshot') or {}
             if watermark.get('requires_authoritative_refresh'):
                 raise ValueError('canonical_salla_refresh_required')
+            current_shipping = source.get('salla_shipping_current') or raw.get('salla_shipping_current') or {}
+            saved_prepaid = (operational_state or {}).get('engine', {}).get('facts', {}).get('prepaid_shipping:' + identity)
+            if saved_prepaid or isinstance(current_shipping, dict) and any(
+                    str(current_shipping.get(key) or '').casefold() in prepaid_keys for key in ('company_code', 'company_name')):
+                data['_prepaid_orders'].add(identity)
+                from operational_prepaid_shipping import source_event
+                try:
+                    prepaid, charge = source_event(data, setup, source, raw, operational_state, owner, start, now,
+                                                   delivery_history.get(order_number, ()), shipment_conflicts)
+                    if not prepaid:
+                        data['_prepaid_orders'].discard(identity)
+                    if charge:
+                        out['prepaid_shipping_events'].append(charge)
+                except (ValueError, TypeError, KeyError, InvalidOperation) as exc:
+                    code = str(exc) if str(exc).startswith('operational_prepaid_shipping_') else 'operational_prepaid_shipping_evidence_incomplete'
+                    issue(out, code, identity, component='prepaid_shipping',
+                          required_action='راجع إثبات تنفيذ الطلب وتعرفة الشحن والصندوق المعتمد قبل احتساب الخصم.')
             # Supplier approval and actual delivery each have their own cutoff.
             # Keep old orders out of the ordinary sales/estimate/payment stream.
             order_numbers[order_number] = identity
             if created <= start:
-                from operational_delivery_evidence import resolve_delivery_event
+                from operational_delivery_evidence import recorded_courier_fee, resolve_delivery_event
                 event = resolve_delivery_event(raw, source=source, owner=owner,
                     assignments=data['store_delivery_assignments'], setup=setup,
                     started_at=started_at, as_of=as_of, history=delivery_history.get(order_number, ()),
-                    shipment_conflicts=shipment_conflicts)
+                    shipment_conflicts=shipment_conflicts,
+                    frozen_event=(operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity),
+                    frozen_shipping=(operational_state or {}).get('engine', {}).get('facts', {}).get('shipping:' + identity),
+                    recorded_fee=recorded_courier_fee(operational_state, identity))
                 if event is None:
                     continue
-                # Historical fee approval still binds a SAR delivery and fee.
-                # Do not broaden that separate review contract in this repair.
-                if event['currency'] != 'SAR':
+                # Native drivers retain their SAR-only contract. A courier's
+                # earned fee is independently denominated by its approved rate.
+                if event['party_type'] == 'store_driver' and event['currency'] != 'SAR':
                     raise ValueError('operational_delivery_currency_unsupported')
                 order = {'id': identity, 'order_number': order_number, 'created_at': created.isoformat(),
                     'updated_at': max(instant(raw.get('updated_at') or raw.get('date_updated') or created),
@@ -1171,7 +1291,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             event = None
             allow_shipping = True
             current = source.get('salla_shipping_current') or raw.get('salla_shipping_current') or {}
-            from operational_delivery_evidence import DELIVERED, _status, resolve_delivery_event
+            from operational_delivery_evidence import DELIVERED, _status, recorded_courier_fee, resolve_delivery_event
             native_driver = data['_driver_fee_review'].requires_delivery_proof(order)
             if native_driver or status in DELIVERED or (isinstance(current, dict) and _status(current.get('status')) in DELIVERED):
                 # Legacy drivers have a separate native collection contract. External
@@ -1185,7 +1305,10 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                             raise ValueError('operational_delivery_order_shipment_status_conflict')
                         event = resolve_delivery_event(raw, source=source, owner=owner,
                             assignments=data['store_delivery_assignments'], setup=setup, started_at=started_at, as_of=as_of,
-                            history=delivery_history.get(order_number, ()), shipment_conflicts=shipment_conflicts)
+                            history=delivery_history.get(order_number, ()), shipment_conflicts=shipment_conflicts,
+                            frozen_event=(operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity),
+                            frozen_shipping=(operational_state or {}).get('engine', {}).get('facts', {}).get('shipping:' + identity),
+                            recorded_fee=recorded_courier_fee(operational_state, identity))
                         if event is None:
                             raise ValueError('operational_delivery_timestamp_missing')
                         saved = (operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity)
@@ -1194,6 +1317,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         order['delivered_at'] = event['delivered_at']
                     except (ValueError, KeyError, TypeError) as exc:
                         allow_shipping = False
+                        order['shipping_evidence_held'] = True
                         code = str(exc) if str(exc).startswith('operational_delivery_') else 'operational_delivery_evidence_invalid'
                         issue(out, code, identity, component='shipping_fee')
                         courier_issue(out, code, raw, source)
@@ -1347,6 +1471,17 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     _recurring(data, out, start, now)
     from operational_shipping_fee_review import hold_native_fee_overlaps
     await hold_native_fee_overlaps(db, owner, out, operational_state, max_rows=MAX_ROWS)
+    if out['prepaid_shipping_events']:
+        from operational_historical_shipping_fee import native_conflicts
+        overlaps = await native_conflicts(db, owner, out['prepaid_shipping_events'], max_rows=MAX_ROWS)
+        accepted = []
+        for charge in out['prepaid_shipping_events']:
+            if charge['order_number'] in overlaps:
+                issue(out, 'operational_prepaid_shipping_native_overlap', charge['order_id'], component='prepaid_shipping',
+                      required_action=overlaps[charge['order_number']])
+            else:
+                accepted.append(charge)
+        out['prepaid_shipping_events'] = accepted
     finish_coverage(customer_tenders, counted_order_ids - inspected_order_ids)
     return out
 

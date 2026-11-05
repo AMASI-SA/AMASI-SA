@@ -25,6 +25,7 @@ def evidence(*, driver=True):
               "status": "active", "salla_carrier_keys": ["carrier-source", "Test carrier"],
               "confirmed_by": "owner", "confirmed_at": "2026-10-01T00:00:00+03:00"}]}
     if not driver:
+        raw['status_changed_at'] = DELIVERED
         source["salla_shipping_current"] = {
             "source_kind": "shipment", "company_code": "carrier-source", "company_name": "Test carrier",
             "shipment_id": "shipment-one", "tracking_number": "TEST-AWB", "status": "delivered",
@@ -58,7 +59,7 @@ def test_driver_event_uses_assignment_delivery_not_customer_order_age_or_update_
     assert not {"items", "payment", "bank_credit", "amount", "delivery_fee", "cod_amount"}.intersection(event)
 
 
-def test_courier_event_uses_exact_current_shipment_and_explicit_delivery_time():
+def test_courier_event_uses_order_transition_and_exact_current_shipment_identity():
     values = evidence(driver=False)
     event = resolve(values)
     assert event["party_type"] == "courier" and event["party_id"] == "carrier-one"
@@ -76,6 +77,7 @@ def test_prestart_events_belong_to_opening_boundary(at, driver):
     if driver:
         values[2][0]["delivered_at"] = at
     else:
+        values[0]['status_changed_at'] = at
         values[0]["shipping"]["delivered_at"] = at
         values[0]["shipments"][0]["delivered_at"] = at
     assert resolve(values) is None
@@ -88,6 +90,7 @@ def test_exact_start_delivery_is_eligible_in_utc_and_riyadh(driver):
     if driver:
         values[2][0]["delivered_at"] = at
     else:
+        values[0]['status_changed_at'] = at
         values[0]["shipping"]["delivered_at"] = at
         values[0]["shipments"][0]["delivered_at"] = at
     assert resolve(values)["delivered_at"] == at
@@ -99,6 +102,7 @@ def test_future_delivery_is_a_visible_issue(driver):
     if driver:
         values[2][0]["delivered_at"] = "2026-11-02T00:00:00+03:00"
     else:
+        values[0]['status_changed_at'] = '2026-11-02T00:00:00+03:00'
         values[0]["shipping"]["delivered_at"] = "2026-11-02T00:00:00+03:00"
         values[0]["shipments"][0]["delivered_at"] = "2026-11-02T00:00:00+03:00"
     with pytest.raises(ValueError, match="^operational_delivery_event_in_future$"):
@@ -114,6 +118,7 @@ def test_missing_driver_event_time_never_uses_order_update_time():
 
 def test_courier_update_clocks_and_current_status_cannot_replace_delivery_timestamp():
     values = evidence(driver=False)
+    values[0].pop('status_changed_at')
     values[0]["shipping"].pop("delivered_at")
     values[0]["shipments"][0].pop("delivered_at")
     with pytest.raises(ValueError, match="^operational_delivery_timestamp_missing$"):
@@ -263,7 +268,7 @@ def test_later_customer_order_status_does_not_erase_proved_earned_service(driver
     values = evidence(driver=driver)
     event = resolve(values)
     values[0]["status"] = {"slug": status}
-    assert resolve(values) == event
+    assert resolve(values, frozen_event=event, recorded_fee=not driver) == event
 
 
 @pytest.mark.parametrize("current", [None, "malformed", {}])
@@ -313,6 +318,10 @@ def test_same_shipment_raw_evidence_must_agree(change, reason):
         shipment["status"] = "returned"
     else:
         shipment["delivered_at"] = "2026-11-01T00:16:00+03:00"
+        event = resolve(values)
+        assert event['timestamp_source'] == 'order_status_transition'
+        assert event['delivered_at'] == '2026-10-31T21:15:00+00:00'
+        return
     with pytest.raises(ValueError, match="^operational_delivery_" + reason + "$"):
         resolve(values)
 
@@ -321,7 +330,7 @@ def test_older_shipments_cannot_supply_missing_current_delivery_time():
     values = evidence(driver=False)
     values[0]["shipping"].pop("delivered_at")
     values[0]["shipments"][0]["id"] = "older-shipment"
-    with pytest.raises(ValueError, match="^operational_delivery_timestamp_missing$"):
+    with pytest.raises(ValueError, match="^operational_delivery_order_waybill_unproven$"):
         resolve(values)
 
 
