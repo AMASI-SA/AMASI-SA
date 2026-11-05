@@ -10,6 +10,8 @@ external supplier-account writes.
 """
 from __future__ import annotations
 
+import re
+
 import asyncio
 import hashlib
 import json
@@ -1095,11 +1097,85 @@ async def _active_suppliers(db: Any, *, user_id: str) -> list[dict[str, Any]]:
     ).sort("company_name", 1).to_list(2000)
 
 
-async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str) -> dict[str, Any]:
+def _waiting_query(user_id: str, employee_id: str) -> dict[str, Any]:
+    # Reject already-dispatched history in Mongo before current-order hydration.
+    # Missing legacy fields remain eligible and the Python policy is authoritative.
+    return {"user_id": user_id, "responsible_employee_id": employee_id,
+            "experiment_archived_at": None,
+            "assignment_status": {"$ne": ASSIGNMENT_STATUS_UNASSIGNED},
+            "status": {"$nin": [PIECE_STATUS_BLOCKED, PIECE_STATUS_CANCELLED,
+                                 PIECE_STATUS_RECEIVED, PIECE_STATUS_READY_FOR_ASSEMBLY]},
+            "supplier_dispatch_status": {"$in": [None, re.compile(r"^\s*$")]},
+            "supplier_receiving_session_id": {"$in": [None, re.compile(r"^\s*$")]}}
+
+
+def _waiting_group_expression() -> dict[str, Any]:
+    # Same identity expression for summaries and detail pages, including legacy rows.
+    def value(field):
+        return {"$trim": {"input": {"$convert": {"input": "$" + field,
+                    "to": "string", "onError": "", "onNull": ""}}}}
+    return {"$cond": [{"$ne": [value("product_id"), ""]},
+                     {"$concat": ["product:", value("product_id")]},
+                     {"$cond": [{"$ne": [value("sku"), ""]},
+                                {"$concat": ["sku:", value("sku")]},
+                                {"$concat": ["name:", value("product_name")]}]}]}
+
+
+async def _waiting_groups(db: Any, user_id: str, employee_id: str) -> dict[str, Any]:
+    # Only pending identities/counts cross the wire. No files, dispatch history,
+    # customer options. Missing photos use one representative piece per group.
+    projection = {field: 1 for field in (
+        "product_id", "product_name", "sku", "order_number", "image_url",
+        "resolved_image_url", "selected_image_url", "assignment_status", "status",
+        "supplier_dispatch_status", "supplier_receiving_session_id", "batch_id",
+        "order_item_id", "group_key")}
+    groups = {}
+    samples = {}
+    cursor = db[PIECES].find(_waiting_query(user_id, employee_id), projection).batch_size(256)
+    try:
+        while True:
+            rows = await cursor.to_list(length=256)
+            if not rows:
+                break
+            candidates = [row for row in rows if piece_is_available_for_supplier_dispatch(row)]
+            for row in await annotate_waiting_pieces(db, user_id=user_id, pieces=candidates):
+                if row.get("waiting_review_eligible") is not True:
+                    continue
+                key = next((prefix + _text(row.get(field)) for prefix, field in
+                            (("product:", "product_id"), ("sku:", "sku"), ("name:", "product_name"))
+                            if _text(row.get(field))), "name:")
+                image = _text(row.get("selected_image_url") or row.get("resolved_image_url") or row.get("image_url"))
+                group = groups.setdefault(key, {"key": key, "product_id": _text(row.get("product_id")),
+                    "product_name": _text(row.get("product_name")), "sku": _text(row.get("sku")),
+                    "image_url": image, "piece_count": 0})
+                group["piece_count"] += 1
+                samples.setdefault(key, row)
+                if not group["image_url"]:
+                    group["image_url"] = image
+    finally:
+        await cursor.close()
+    missing = {key: samples[key] for key, group in groups.items() if not group["image_url"]}
+    batch_ids = list({_text(row.get("batch_id")) for row in missing.values()} - {""})
+    if batch_ids:
+        projection = {"_id": 0, "id": 1, "lines.order_item_id": 1, "lines.group_key": 1,
+                      "lines.image_url": 1, "lines.resolved_image_url": 1,
+                      "lines.selected_image_url": 1, "lines.image_candidates": 1}
+        batches = await db[BATCHES].find({"user_id": user_id, "id": {"$in": batch_ids}}, projection).to_list(len(batch_ids))
+        _hydrate_piece_images_from_batches(list(missing.values()), batches)
+        for key, row in missing.items():
+            groups[key]["image_url"] = _text(row.get("selected_image_url") or row.get("resolved_image_url") or row.get("image_url"))
+    return {"ok": True, "employee_id": employee_id,
+            "groups": sorted(groups.values(), key=lambda row: (-row["piece_count"], row["key"])),
+            "suppliers": await _active_suppliers(db, user_id=user_id)}
+
+
+async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str, group: str = "") -> dict[str, Any]:
     from bson import ObjectId
 
-    query = {"user_id": user_id, "responsible_employee_id": employee_id,
-             "experiment_archived_at": None, "status": {"$ne": PIECE_STATUS_CANCELLED}}
+    query = _waiting_query(user_id, employee_id)
+    expressions = []
+    if group:
+        expressions.append({"$eq": [_waiting_group_expression(), {"$literal": group}]})
     if after:
         if after.startswith("o:") and ObjectId.is_valid(after[2:]):
             boundary = ObjectId(after[2:])
@@ -1107,7 +1183,9 @@ async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str) -> 
             boundary = after[2:]
         else:
             raise HTTPException(status_code=400, detail="invalid_waiting_cursor")
-        query["$expr"] = {"$lt": ["$_id", {"$literal": boundary}]}
+        expressions.append({"$lt": ["$_id", {"$literal": boundary}]})
+    if expressions:
+        query["$expr"] = {"$and": expressions}
 
     chosen = []
     cursor = db[PIECES].find(query, {"image_b64": 0}).sort("_id", -1).batch_size(32)
@@ -1508,10 +1586,16 @@ def make_preparation_supplier_dispatch_router(
                 indexes_ready = True
 
     @router.get("/waiting-page")
-    async def waiting_page(after: str = Query("", max_length=256), user: dict = Depends(current_user)) -> dict[str, Any]:
+    async def waiting_page(after: str = Query("", max_length=256), group: str = Query("", max_length=1024), user: dict = Depends(current_user)) -> dict[str, Any]:
         worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
         await ensure_indexes_once()
-        return await _waiting_page(db, _merchant_user_id(worker), _actor_id(worker), after)
+        return await _waiting_page(db, _merchant_user_id(worker), _actor_id(worker), after, group)
+
+    @router.get("/waiting-groups")
+    async def waiting_groups(user: dict = Depends(current_user)) -> dict[str, Any]:
+        worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
+        await ensure_indexes_once()
+        return await _waiting_groups(db, _merchant_user_id(worker), _actor_id(worker))
 
     @router.get("/workspace")
     async def workspace(

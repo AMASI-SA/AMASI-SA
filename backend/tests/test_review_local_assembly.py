@@ -66,6 +66,38 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             replacement.start()
             self.patches.append(replacement)
 
+    async def test_paid_review_commits_when_its_component_ack_enables_display_balance(self):
+        await self.assert_paid_component_ack("mada")
+
+    async def test_tabby_review_commits_when_its_component_ack_enables_display_balance(self):
+        await self.assert_paid_component_ack("tabby_installment")
+
+    async def test_tamara_review_commits_when_its_component_ack_enables_display_balance(self):
+        await self.assert_paid_component_ack("tamara_installment")
+
+    async def assert_paid_component_ack(self, method):
+        payload = self.source_payload(number="paid-component-ack")
+        payload.update(payment_method=method, paid_amount=100, remaining_amount=0)
+        self.assertTrue((await self.webhook(payload))["synced"])
+        selector = {"user_id": "owner", "order_number": "paid-component-ack"}
+        await self.db.unified_orders.update_one(selector, {"$set": {"g47_salla_snapshot.component_pending": True}})
+        source = await self.db.unified_orders.find_one(selector)
+        before = await pieces._current_assembly_order(self.db, user_id="owner", order_number="paid-component-ack")
+        self.assertIsNone(before.payment.source_balance)
+        displayed = await self.client.get("/order-reviews-v1/paid-component-ack?local_only=true")
+        self.assertEqual(displayed.status_code, 200, displayed.text)
+        response = await self.client.post("/order-reviews-v1/paid-component-ack/complete", json={
+            "expected_revision": displayed.json()["revision"], "approval_token": displayed.json()["approval_token"]})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["stage"], "reviewed")
+        after = await pieces._current_assembly_order(self.db, user_id="owner", order_number="paid-component-ack")
+        self.assertEqual(after.payment.source_balance.paid, "100.00")
+        current = await self.db.unified_orders.find_one(selector)
+        self.assertEqual(current["raw_by_source"], source["raw_by_source"])
+        self.assertFalse(current["g47_salla_snapshot"]["component_pending"])
+        self.assertEqual(await self.db[completion.EVENTS].count_documents({**selector, "event_type": "order_review_completed"}), 1)
+        self.external.assert_not_awaited()
+
     async def complete_review(self, *, mixed=False, operational=False, direct=True):
         payload = self.source_payload(number="local-assembly")
         if mixed:
@@ -189,6 +221,44 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             {"user_id": "owner", "order_number": "local-assembly"},
             {"$set": {"raw_by_source.salla_direct.shipping_address": address}},
         )
+
+    async def test_supplier_queue_includes_mixed_after_supplier_receipt_before_employee_receipt(self):
+        self.mount_assignment()
+        await self.complete_review(mixed=True)
+        cards = await self.catalog_cards()
+        cards = [row for row in cards if row["source_lines"][0]["order_item_id"] == self.supplier_line_id]
+        assigned = await self.assign_cards(cards, "supplier-board-only")
+        self.assertEqual(assigned.status_code, 200, assigned.text)
+        path = "/preparation-work-v1/assembly/orders?state=supplier_received&limit=8"
+        self.assertEqual((await self.client.get(path)).json()["total"], 0)
+        # Model the supplier close receipt, deliberately without employee custody receipt.
+        await self.db[pieces.PIECES].update_many({}, {"$set": {
+            "supplier_dispatch_status": "received", "received_at": datetime.now(timezone.utc),
+            "execution_status": "received_from_supplier", "status": "received"}})
+        result = await self.client.get(path)
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual(result.json()["total"], 1, result.text)
+        self.assertEqual(result.json()["group_counts"], {"direct_preparation": 0, "supplier_received": 1})
+        self.assertEqual(await self.db[pieces.PIECES].count_documents({"preparation_received_at": {"$exists": True}}), 0)
+        row = await self.db[pieces.PIECES].find_one({})
+        await self.db[pieces.PIECES].update_one({"_id": row["_id"]}, {"$set": {"supplier_dispatch_status": "partial_received"}})
+        self.assertEqual((await self.client.get(path)).json()["total"], 0)
+
+    async def test_direct_queue_membership_count_and_no_ready_write(self):
+        await self.complete_review()
+        before = await self.workflow()
+        direct = await self.client.get("/preparation-work-v1/assembly/orders?state=direct_preparation&limit=8")
+        self.assertEqual(direct.status_code, 200, direct.text)
+        self.assertEqual(direct.json()["total"], 1)
+        self.assertEqual(direct.json()["group_counts"], {"direct_preparation": 1, "supplier_received": 0})
+        self.assertEqual(direct.json()["items"][0]["order_number"], "local-assembly")
+        empty = await self.client.get("/preparation-work-v1/assembly/orders?state=direct_preparation&limit=8&offset=8")
+        self.assertEqual(empty.json()["items"], [])
+        self.assertEqual(empty.json()["total"], 1)
+        supplier = await self.client.get("/preparation-work-v1/assembly/orders?state=supplier_received&limit=8")
+        self.assertEqual(supplier.json()["total"], 0)
+        self.assertEqual(await self.workflow(), before)
+        self.external.assert_not_awaited()
 
     async def test_real_local_review_direct_assembly_starts_then_completes(self):
         await self.complete_review()

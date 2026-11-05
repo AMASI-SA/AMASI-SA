@@ -28,6 +28,7 @@ from pymongo.write_concern import WriteConcern
 from operational_atomic import operational_owner
 from mobile_operational_flow_policy import FIELD_PREPARATION, is_optional
 from assembly_status_policy import canonical_status
+from assembly_board_groups import assembly_queue_group
 
 from fulfillment_v2_routes import (
     BATCHES as SHIPPING_BATCHES,
@@ -3073,7 +3074,7 @@ async def _assembly_order_board(
     db: Any,
     *,
     user_id: str,
-    state: Literal["in_progress", "completed"],
+    state: Literal["in_progress", "completed", "direct_preparation", "supplier_received"],
     limit: int,
     offset: int,
     query: str = "",
@@ -3084,11 +3085,12 @@ async def _assembly_order_board(
     Completed local review contracts follow their Mezan stage while current
     order safety constraints still apply.
     """
-    if state not in {"in_progress", "completed"}:
+    if state not in {"in_progress", "completed", "direct_preparation", "supplier_received"}:
         raise HTTPException(
             status_code=422,
             detail={"code": "assembly_board_state_invalid"},
         )
+    board_state = "completed" if state == "completed" else "in_progress"
     normalized_query = _text(query).removeprefix("#").strip()
 
     physical_order_numbers = {
@@ -3149,6 +3151,9 @@ async def _assembly_order_board(
                 "order_number": 1,
                 "piece_id": 1,
                 "assembly_status": 1,
+                "order_item_id": 1,
+                "supplier_dispatch_status": 1,
+                "received_at": 1,
             },
         ).to_list(50000)
         if order_numbers
@@ -3178,12 +3183,12 @@ async def _assembly_order_board(
             continue
 
         if workflow.get("completion_mode") == LOCAL_COMPLETION_MODE:
-            local_stages = {"in_progress", "ready_to_ship"} if state == "in_progress" else {"completed"}
-            if state == "in_progress" and _workflow_assembly_pieces(workflow, order_number=order_number):
+            local_stages = {"in_progress", "ready_to_ship"} if board_state == "in_progress" else {"completed"}
+            if board_state == "in_progress" and _workflow_assembly_pieces(workflow, order_number=order_number):
                 local_stages.add("reviewed")
             if not local_review_stage_eligible(order, local_workflows.get(order_number), local_stages):
                 continue
-        elif _text(order.status).casefold() != state:
+        elif _text(order.status).casefold() != board_state:
             continue
 
         pieces = list(physical_by_order.get(order_number) or [])
@@ -3204,11 +3209,12 @@ async def _assembly_order_board(
             if _text(piece.get("assembly_status")) == "ready"
         )
         rows.append({
+            "queue_group": assembly_queue_group(workflow, physical_by_order.get(order_number) or []),
             "order_number": order.order_number,
             "order_created_at": order.created_at,
             "status_at": (
                 order.completed_at
-                if state == "completed"
+                if board_state == "completed"
                 else order.engine_updated_at
             ) or order.created_at,
             "shipping_company": (
@@ -3226,7 +3232,7 @@ async def _assembly_order_board(
             "mezan_preparation": True,
         })
 
-    if state == "in_progress":
+    if board_state == "in_progress":
         rows.sort(
             key=lambda row: (
                 row["order_created_at"],
@@ -3242,9 +3248,14 @@ async def _assembly_order_board(
             reverse=True,
         )
 
+    group_counts = {key: sum(row["queue_group"] == key for row in rows)
+                    for key in ("direct_preparation", "supplier_received")}
+    if state in group_counts:
+        rows = [row for row in rows if row["queue_group"] == state]
     total = len(rows)
     return {
         "state": state,
+        "group_counts": group_counts,
         "items": rows[offset:offset + limit],
         "total": total,
         "offset": offset,
@@ -4088,7 +4099,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
 
     @router.get("/assembly/orders")
     async def list_assembly_orders(
-        state: Literal["in_progress", "completed"] = Query(...),
+        state: Literal["in_progress", "completed", "direct_preparation", "supplier_received"] = Query(...),
         limit: int = Query(100, ge=1, le=300),
         offset: int = Query(0, ge=0, le=10000),
         q: str = Query(default="", max_length=64),

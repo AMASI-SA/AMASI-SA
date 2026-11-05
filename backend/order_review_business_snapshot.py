@@ -12,7 +12,7 @@ import json
 from fastapi import HTTPException
 
 SCHEMA_VERSION = 1
-NORMALIZATION_VERSION = 2
+NORMALIZATION_VERSION = 3
 REVIEW_SCOPE_VERSION = 2
 # Only named delivery-operation paths are outside approval. Financial fields,
 # shipping method/fulfillment inputs and unfamiliar siblings remain guarded.
@@ -172,7 +172,8 @@ def _business_tree(value, allowed):
     return _tree(value)
 
 
-def build_snapshot(source, order, acceptance, *, identity, schema_version=SCHEMA_VERSION):
+def build_snapshot(source, order, acceptance, *, identity, schema_version=SCHEMA_VERSION,
+                   normalization_version=NORMALIZATION_VERSION):
     """Freeze supplied approval inputs; callers persist once before provider I/O."""
     raw = (source.get("raw_by_source") or {}).get("salla_direct")
     if not isinstance(raw, dict) or not isinstance(acceptance, dict) or not isinstance(identity, dict):
@@ -182,10 +183,19 @@ def build_snapshot(source, order, acceptance, *, identity, schema_version=SCHEMA
         _reject()
     if schema_version not in (SCHEMA_VERSION, REVIEW_SCOPE_VERSION):
         _reject("/snapshot/schema_version")
+    if normalization_version not in (2, NORMALIZATION_VERSION):
+        _reject("/snapshot/normalization_version")
     source_hash = raw_source_hash(source)
     if schema_version == REVIEW_SCOPE_VERSION:
         raw = review_approval_projection(raw)
         dto = review_approval_projection(dto)
+        if normalization_version >= 3 and isinstance(dto.get("payment"), dict):
+            # This display-only balance is derived from native payment evidence
+            # AND component_pending. Completion itself clears component_pending,
+            # so its appearance must not invalidate the transaction's consent.
+            # Keep raw provider payment evidence and canonical paid/due/method
+            # fields guarded. Never remove a same-named field from provider raw.
+            dto["payment"].pop("source_balance", None)
     created = getattr(order, "created_at", None)
     if isinstance(created, datetime) and created.tzinfo:
         dto["created_at"] = created.astimezone(timezone.utc).isoformat()
@@ -216,7 +226,7 @@ def build_snapshot(source, order, acceptance, *, identity, schema_version=SCHEMA
     _unknown(dto, "/order", ORDER, unknown)
     facts = {"source": _business_tree(normalized, ROOT), "order": _business_tree(dto, ORDER),
              "acceptance": _tree(acceptance), "identity": _tree(identity)}
-    snapshot = {"schema_version": schema_version, "normalization_version": NORMALIZATION_VERSION,
+    snapshot = {"schema_version": schema_version, "normalization_version": normalization_version,
                 "facts": facts, "unknown_field_fingerprints": unknown,
                 "source_hash": source_hash,
                 "canonical_hash": _hash({"facts": facts, "unknown": unknown})}
@@ -231,7 +241,7 @@ def snapshot_hash(snapshot):
 def verify_snapshot(snapshot):
     try:
         return (isinstance(snapshot, dict) and snapshot.get("schema_version") in (SCHEMA_VERSION, REVIEW_SCOPE_VERSION)
-                and snapshot.get("normalization_version") == NORMALIZATION_VERSION
+                and snapshot.get("normalization_version") in (2, NORMALIZATION_VERSION)
                 and set(snapshot.get("facts", {})) == {"source", "order", "acceptance", "identity"}
                 and isinstance(snapshot.get("unknown_field_fingerprints"), dict)
                 and snapshot.get("canonical_hash") == _hash({"facts": snapshot["facts"],
@@ -264,6 +274,8 @@ def compare_snapshots(approved, current):
         return {"equal": False, "code": "unknown_source_change", "classification": "unknown", "differing_fields": ["/snapshot_integrity"]}
     if approved["schema_version"] != current["schema_version"]:
         return {"equal": False, "code": "unknown_source_change", "classification": "unknown", "differing_fields": ["/snapshot/schema_version"]}
+    if approved["normalization_version"] != current["normalization_version"]:
+        return {"equal": False, "code": "unknown_source_change", "classification": "unknown", "differing_fields": ["/snapshot/normalization_version"]}
     fields = _diff(approved["facts"], current["facts"])
     before_unknown, after_unknown = approved["unknown_field_fingerprints"], current["unknown_field_fingerprints"]
     unknown = [key for key in sorted(set(before_unknown) | set(after_unknown)) if before_unknown.get(key) != after_unknown.get(key)]
@@ -283,6 +295,6 @@ def diagnostic(approved, current):
     result = compare_snapshots(approved, current)
     unknown_paths = set(approved.get("unknown_field_fingerprints", {})) | set(current.get("unknown_field_fingerprints", {}))
     result["differing_fields"] = ["/unknown-path-sha256/" + _hash(path) if any(path == item or path.startswith(item + "/") for item in unknown_paths) else path[:512] for path in result["differing_fields"]]
-    return {**result, "schema_version": SCHEMA_VERSION, "normalization_version": NORMALIZATION_VERSION,
+    return {**result, "schema_version": approved.get("schema_version"), "normalization_version": approved.get("normalization_version"),
             "approved_source_hash": approved.get("source_hash"), "current_source_hash": current.get("source_hash"),
             "approved_canonical_hash": approved.get("canonical_hash"), "current_canonical_hash": current.get("canonical_hash")}
