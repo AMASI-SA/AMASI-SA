@@ -1,0 +1,39 @@
+{
+  "task_id": "PREPAID-SHIPMENT-CHRONOLOGY-20261105",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/prepaid-shipment-chronology-20261105",
+  "base_commit": "7032e0f93ac22c9de83af0d80d3b0a1e3fb2c852",
+  "phase": "Verified local source checkpoint; draft PR and exact-head CI pending",
+  "predecessor": "https://github.com/AMASI-SA/AMASI-SA/pull/1765",
+  "contract": "An original prepaid shipping label may be created after the authoritative completed transition, but must exist by the canonical source version. The completed timestamp still determines cutover, tariff and accounting recognition. One allocated cashbox debit is retained through replay and later delivery.",
+  "defect": "The prepaid path reused the deferred-delivery label-creation cutoff. A label created after completion was incorrectly rejected even when it was the single original current label in a valid newer canonical snapshot.",
+  "changes": [
+    "backend/operational_delivery_evidence.py: clarify the shared validator's creation boundary without relaxing original shipment, carrier, waybill or active-state checks.",
+    "backend/operational_order_completed_evidence.py: bind prepaid labels through the canonical source version in both history and webhook producers.",
+    "backend/operational_prepaid_shipping.py: consume the same prepaid binding rule while retaining the authoritative completion time.",
+    "backend/tests/test_operational_balance_prepaid_shipment_chronology.py: 50 synthetic regression cases covering chronology, snapshot validity, owner and shipment identity, tariff time, cutover, ambiguity, replay and later delivery.",
+    "Task continuity documents only; no frontend, release intent, dashboard, Qoyod or deployment-adapter edits."
+  ],
+  "verification": [
+    {"scope": "Initial red regression", "result": "5 failed, 37 passed", "exit_status": 1},
+    {"scope": "Final focused regression, independently rerun by root", "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:backend/tests <existing-test-venv>/bin/python -m pytest -q -p no:cacheprovider backend/tests/test_operational_balance_prepaid_shipment_chronology.py", "result": "50 passed", "exit_status": 0},
+    {"scope": "Existing affected pure and mongomock contracts", "result": "275 passed, 19 deselected; the 19 real Mongo cases subsequently passed in the separate local run below", "exit_status": 0},
+    {"scope": "Independent reviewer synthetic checks", "result": "12 passed; no implementation defect found", "exit_status": 0},
+    {"scope": "git diff --check", "exit_status": 0},
+    {"scope": "Existing broader integration attempt", "result": "Interrupted with exit 130 after unavailable localhost Mongo failures; not a passing test run", "exit_status": 130},
+    {"scope": "First disposable local Mongo attempt", "result": "Already-cached Mongo 7.0.16 could not start: open Operation not permitted before readiness. No integration tests executed in that attempt. No sandbox bypass or installation attempted.", "exit_status": 100},
+    {"scope": "Disposable Mongo integration using the repository benchmark's TemporaryDirectory and nounixsocket pattern", "result": "All 19 previously outstanding cases passed in 5.71 seconds, with zero failures, errors or skips. Mongo 7.0.16 was loopback-only with its verified private data directory; dotenv was disabled and noconftest used. Test databases were removed by fixtures, the owned process stopped cleanly and the data directory was removed. Tested source hashes match the reviewed source checkpoint. Exact CI still uses Mongo 8.0.12.", "exit_status": 0}
+  ],
+  "independent_review": "Read-only source review and independent pure execution found no defect. Typed native history parsing and ambiguous completion rejection were not changed.",
+  "ci": {"state": "pending", "required_gate": ".github/workflows/operational-balance-web.yml; its backend job executes all test_operational_balance*.py against an isolated Mongo 8.0.12 replica set and rejects skipped, failed or errored tests."},
+  "live_configuration": {
+    "emkan": "The owner explicitly approved 6.99 percent plus 1.50 SAR with 15 percent VAT added to the fee, effective 2026-11-01. One owner-UI save succeeded and a saved-policy preview matched 19.36 SAR on 219.32 SAR. Do not save again. Refund/cancellation terms remain undocumented.",
+    "aramex": "Existing 30 SAR plus 15 percent VAT, prepaid, selected Salla cashbox, effective operational start 2026-11-01 00:30 Asia/Riyadh, was approved once and independently reread. Do not reapprove or enter a manual expense/opening.",
+    "acceptance": "Actual automatic Aramex paid/cash/no-duplicate effect remains unverified. A targeted normal order-history refresh succeeded. A subsequent official Salla connector read of that same order proves the native history rows are activity/status observations, not typed status transitions accepted by the existing producer. The original label follows the first completed observation, but chronology correction alone cannot resolve the missing typed completion proof. No first/last observation or free-text timestamp fallback was introduced. Latest observed report still has prepaid evidence/completion-time/stale warnings 55/51/1.",
+    "diagnostic_boundary": "A bounded existing-environment read resolved exactly one active owner, but the exact owner-scoped cashbox match was absent. It stopped before tariff/state/order reads. No alternate credentials, environment or dataset was probed. This does not establish that the reproduced chronology defect is the exact live order blocker."
+  },
+  "release": {"intent_frozen": false, "merged": false, "own_lease": false, "published": false, "production_application_changed_by_this_followup": false},
+  "preserved": ["Existing opening balances and recorded financial facts", "Deferred delivered-time validation", "Provider payment and COD evidence boundaries", "Original PR1765 frozen A/B history", "Later Qoyod source on the current production base", "Unrelated user editor and preview configuration"],
+  "next_safe_action": "Push this source checkpoint and open a draft PR; obtain exact-head CI and resolve any failures. Before any /app mutation or release rehearsal, reread Release Guard and require active=false. If release proceeds, use a fresh Protocol V5 A/B intent and current-base review; never republish the older shipping identity.",
+  "checkpoint_identity": "The containing commit is recorded by its full SHA in the PR and Issue1006 after pushing; this document does not self-reference its own hash."
+}
