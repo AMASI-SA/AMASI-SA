@@ -1972,7 +1972,10 @@ def make_dashboard_v2_router(
                 for row in (response.get("payment_breakdown") or [])
                 if row.get("key") != "ad_bank_commissions"
             ]
-        totals["product_cost_complete"] = product_cost["incomplete_orders_count"] == 0
+        totals["product_cost_complete"] = (
+            product_cost["missing_all_cost_products_count"] == 0
+            and product_cost["no_products_orders_count"] == 0
+        )
         if not totals["product_cost_complete"]:
             totals["net_profit"] = None
             if config.get("deduct_product_costs", True):

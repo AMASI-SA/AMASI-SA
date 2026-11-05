@@ -544,8 +544,9 @@ function OperatingProfitDetails({ totals = {}, total = 0 }) {
 export function ProfitCard({ data, loading = false, fromDate, toDate }) {
     const [expanded, setExpanded] = useState(null);
     const t = data?.totals || {};
-    const productCostComplete = t.product_cost_complete !== false
-        && Number(t.incomplete_profit_orders_count || data?.product_cost_v2?.incomplete_orders_count || 0) === 0;
+    const productCostComplete = typeof t.product_cost_complete === "boolean"
+        ? t.product_cost_complete
+        : Number(t.incomplete_profit_orders_count || data?.product_cost_v2?.incomplete_orders_count || 0) === 0;
     const adsQuality = data?.ads_v2?.spend_quality || {};
     const adsTotal = finiteFinancialValue(t.total_ads_cost, { nonnegative: true });
     const adsSpendComplete = (
