@@ -101,6 +101,20 @@ for service in "$reports" "$sync" "$accounting"; do
   probe
 done
 docker exec -i "$accounting" python - < packaging/exit2d/render/economy_accounting.py | tee "$root/accounting-after.jsonl"
+docker kill "$web" >/dev/null
+docker start "$web" >/dev/null
+for attempt in $(seq 1 150); do
+  if probe >/dev/null 2>&1; then break; fi
+  sleep 1
+done
+probe
+fixture outage
+python - "$root/disk" <<'PY'
+import os,sys,json
+s=os.statvfs(sys.argv[1]); total=s.f_blocks*s.f_frsize; free=s.f_bavail*s.f_frsize
+assert total <= 5_000_000_000 and free > 1_000_000_000, (total,free)
+print(json.dumps({'kind':'bounded_five_gb_volume','total_bytes':total,'available_bytes':free}),flush=True)
+PY
 sleep 30
 for service in "$web" "$reports" "$sync" "$accounting"; do
   test "$(docker inspect -f '{{.State.Running}}' "$service")" = true

@@ -24,6 +24,7 @@ async def main():
         number = f'ECON-SENT-{index}'
         await db.integration_inbox.update_one({'user_id': owner, 'salla_order_number': number}, {'$setOnInsert': {
             'id': number, 'received_at': datetime.now(timezone.utc),
+            'connector_key': 'synthetic-economy', 'idempotency_key': number,
             'raw_payload': {'data': {'created_at': '2026-09-06'}},
             'canonical_payload': {'order_number': number, 'order_date': '2026-09-06',
                 'order_status': 'completed', 'payment_method': 'credit_card', 'currency': 'SAR'},

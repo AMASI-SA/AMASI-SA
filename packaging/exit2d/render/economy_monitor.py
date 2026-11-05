@@ -37,6 +37,7 @@ while not Path(output + '.stop').exists():
             row['working_set_peak_bytes'] = max(row.get('working_set_peak_bytes', 0),
                 current - int(stat.get('inactive_file', 0)))
             row['anonymous_peak_bytes'] = max(row.get('anonymous_peak_bytes', 0), int(stat.get('anon', 0)))
+            row['memory_limit_hits'] = max(row.get('memory_limit_hits', 0), int(events.get('max', 0)))
             row['oom'] = max(row['oom'], int(events.get('oom', 0)))
             row['oom_kill'] = max(row['oom_kill'], int(events.get('oom_kill', 0)))
             row['cpu_usage_usec'] = max(row['cpu_usage_usec'], int(cpu['usage_usec']))
