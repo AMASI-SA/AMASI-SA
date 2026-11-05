@@ -241,8 +241,8 @@ def _shipment_rows(raw, shipment, *, include_nested=True):
     return candidates, selected, nested
 
 
-def _order_waybill(raw, current, shipment, waybill, at):
-    """Bind an order transition to its one original courier, without timing its label."""
+def _order_waybill(raw, current, shipment, waybill, created_through):
+    """Bind one original waybill whose label exists by the supplied boundary."""
     from salla_shipping import extract_shipping, same_carrier
 
     candidates, selected, nested = _shipment_rows(raw, shipment)
@@ -264,7 +264,7 @@ def _order_waybill(raw, current, shipment, waybill, at):
         references.append(_text(tracking.get("number")))
         if any(value != waybill for value in references if value is not None):
             _fail("shipment_waybill_conflict")
-        if row.get("created_at") is not None and _instant(row["created_at"]) > at:
+        if row.get("created_at") is not None and _instant(row["created_at"]) > created_through:
             _fail("timestamp_before_shipment")
     if (observed.get('shipment_id') != shipment or observed.get('tracking_number') != waybill
             or not same_carrier(current, observed)):
