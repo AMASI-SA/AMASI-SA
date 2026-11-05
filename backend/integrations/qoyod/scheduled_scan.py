@@ -62,12 +62,15 @@ async def _claim(db, tenant, owner, manual):
         await db.qoyod_full_scans.insert_one({'_id': str(tenant)})
     except DuplicateKeyError:
         pass
-    query = {'_id': str(tenant), '$or': [
-        {'lease_until': {'$lte': at}}, {'lease_until': {'$exists': False}}]}
+    expired = {'$or': [{'lease_until': {'$lte': at}}, {'lease_until': {'$exists': False}}]}
+    # A process may die after claiming its slot. Expired in-progress work may
+    # resume in that same slot; completed/failed attempts keep normal throttles.
+    abandoned = {'status': 'running', 'lease_until': {'$lte': at}}
     if manual:
-        query['last_attempt_at'] = {'$not': {'$gt': at - timedelta(seconds=60)}}
+        eligible = {'$or': [abandoned, {'last_attempt_at': {'$not': {'$gt': at - timedelta(seconds=60)}}}]}
     else:
-        query['last_slot'] = {'$ne': slot_key(at)}
+        eligible = {'$or': [abandoned, {'last_slot': {'$ne': slot_key(at)}}]}
+    query = {'_id': str(tenant), '$and': [expired, eligible]}
     token = uuid.uuid4().hex
     claimed = await db.qoyod_full_scans.find_one_and_update(
         query, {'$set': {'token': token, 'orders_user_id': str(owner),

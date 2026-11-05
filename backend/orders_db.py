@@ -982,15 +982,7 @@ async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
         from assembly_status_policy import invalidate_shipping_if_blocked
         await invalidate_shipping_if_blocked(scoped, user_id, order_number)
         return result
-    result = await operational_owner(db, user_id, persist)
-    try:
-        from qoyod_auto_unified.incremental import mark_dirty
-        await mark_dirty(db, user_id, order_number)
-    except Exception:
-        # The indexed keyset recovery sweep repairs a missed hint. Never
-        # invalidate a successfully committed operational order for telemetry.
-        logger.warning('Qoyod followup hint unavailable; recovery sweep will retry')
-    return result
+    return await operational_owner(db, user_id, persist)
 
 
 async def _upsert_order(db, user_id: str, order_number: str, incoming: dict,
@@ -1015,6 +1007,10 @@ async def _upsert_order(db, user_id: str, order_number: str, incoming: dict,
         merged = _merge_into(existing, incoming, source)
         merged["user_id"] = user_id
         merged["order_number"] = order_number
+        # Durable hint shares the canonical owner transaction. No Qoyod
+        # collection may be written through a restricted operational DB.
+        merged['qoyod_followup_dirty'] = True
+        merged['qoyod_followup_revision'] = uuid.uuid4().hex
         if raw is not None:
             # Keep archived payloads and richer product options. Current
             # shipping is projected separately from this source history.

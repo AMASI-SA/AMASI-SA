@@ -61,7 +61,29 @@ async def recover_page(db, owner):
     return len(references)
 
 
+async def drain_dirty_page(db, owner):
+    cursor = db.unified_orders.find(
+        {'user_id': str(owner), 'qoyod_followup_dirty': True},
+        {'_id': 0, 'order_number': 1, 'qoyod_followup_revision': 1},
+    ).sort('order_number', 1).limit(DISCOVERY_BATCH).batch_size(DISCOVERY_BATCH).max_time_ms(2000)
+    hints = [row async for row in cursor]
+    await write_batch(db.qoyod_order_followup, [UpdateOne(
+        {'user_id': str(owner), 'order_number': row['order_number']},
+        {'$set': {'revision': row['qoyod_followup_revision'], 'priority': 0, 'next_check_at': now()}},
+        upsert=True,
+    ) for row in hints])
+    # Acknowledge only the revision durably queued. New events and crashes
+    # cannot clear an unprocessed hint from the canonical order.
+    await write_batch(db.unified_orders, [UpdateOne(
+        {'user_id': str(owner), 'order_number': row['order_number'],
+         'qoyod_followup_revision': row['qoyod_followup_revision']},
+        {'$set': {'qoyod_followup_dirty': False}},
+    ) for row in hints])
+    return len(hints)
+
+
 async def discover(db, owner, audit_builder, *, clock=None):
+    hinted = await drain_dirty_page(db, owner)
     recovered = await recover_page(db, owner)
     at = clock or now()
     async def due(priority, limit):
@@ -96,6 +118,7 @@ async def discover(db, owner, audit_builder, *, clock=None):
         ))
     await write_batch(db.qoyod_order_followup, operations)
     audit['discovery'] = {'scope': 'incremental', 'checked': len(pending),
+                          'intake_hints': hinted,
                           'recovered': recovered, 'batch_limit': DISCOVERY_BATCH}
     audit['_pending_followup'] = pending
     return audit

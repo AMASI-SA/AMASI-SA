@@ -452,6 +452,10 @@ async def ensure_qoyod_indexes(db) -> None:
         [('user_id', 1), ('order_number', 1)], unique=True,
         name='qoyod_followup_owner_order',
     )
+    await db.unified_orders.create_index(
+        [('user_id', 1), ('qoyod_followup_dirty', 1), ('order_number', 1)],
+        name='qoyod_followup_dirty_orders',
+    )
     await db.qoyod_order_followup.create_index(
         [('user_id', 1), ('priority', 1), ('next_check_at', 1), ('order_number', 1)],
         name='qoyod_followup_due',

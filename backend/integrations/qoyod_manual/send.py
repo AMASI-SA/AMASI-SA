@@ -27,6 +27,7 @@ from __future__ import annotations
 import logging
 import uuid
 from contextvars import ContextVar
+from pymongo.errors import DuplicateKeyError
 from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Optional
@@ -1011,8 +1012,8 @@ async def _acquire_lock(db, *, user_id: str, order_number: str,
     # Fire-and-forget: ensure unique index (idempotent).
     try:
         await coll.create_index("order_number", unique=True)
-    except Exception:
-        pass
+    except Exception as exc:
+        raise ManualSendRefused('send_lock_unavailable', 'تعذر تأكيد قفل منع التكرار') from exc
 
     lock_id = f"manual-{order_number}-{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc)
@@ -1056,20 +1057,22 @@ async def _acquire_lock(db, *, user_id: str, order_number: str,
                     {"started_at": started.isoformat()
                      if isinstance(started, datetime) else str(started)})
         # Reset failed / stale-in_progress locks in place.
-        await coll.update_one(
-            {"order_number": order_number, "user_id": user_id},
+        acquired = await coll.update_one(
+            {"order_number": order_number, "user_id": user_id,
+             "lock_id": existing.get('lock_id'), 'status': existing.get('status')},
             {"$set": {"status": "in_progress", "lock_id": lock_id,
                        "started_at": now, "actor": actor,
                        "last_error": None}})
+        if acquired.matched_count != 1:
+            raise ManualSendRefused('in_progress', 'حصل عامل آخر على قفل إرسال الطلب')
         return lock_id
-    await coll.insert_one({
-        "order_number":  order_number,
-        "user_id":       user_id,
-        "lock_id":       lock_id,
-        "status":        "in_progress",
-        "started_at":    now,
-        "actor":         actor,
-    })
+    try:
+        await coll.insert_one({
+            "order_number": order_number, "user_id": user_id,
+            "lock_id": lock_id, "status": "in_progress", "started_at": now, "actor": actor,
+        })
+    except DuplicateKeyError as exc:
+        raise ManualSendRefused('in_progress', 'حصل عامل آخر على قفل إرسال الطلب') from exc
     return lock_id
 
 

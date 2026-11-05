@@ -1,6 +1,6 @@
 # قيود: فحوص موزعة ومتابعة مستقلة — نتيجة التنفيذ المحلي
 
-الحالة: تعديل محلي للمراجعة فقط. لا commit أو push أو دمج أو نشر، ولا تغيير في إعدادات أو قاعدة الإنتاج. لم يُشغّل إرسال أو مطابقة أو مزامنة أو ضغط على الإنتاج.
+الحالة الحالية: WIP في PR #1776، فرع codex/qoyod-bounded-scans-current-20261105؛ أُذن بالرفع في 6 نوفمبر. الحفظ الأول 47d9ff5b2ce9dddac913ec31d5cad70408618aa3. لا دمج أو نشر أو تغيير إنتاج. السجل المحلي أدناه تاريخي؛ آخر نتائج Mongo في القسم المضاف بالأسفل.
 
 ## المصدر وحماية العمل القائم
 
@@ -60,3 +60,17 @@
 التحقق المحلي المسجل: 263 اختبار backend ناجح قبل تحديث الأساس إلى1773؛ أعيدت المجموعة مع اختبارات الإصدار1773 على الأساس النهائي، والنتيجة النهائية تسجل في VALIDATION.txt. الواجهة28 اختبارًا في6 مجموعات. بناء Vite محلي ناجح، مع تحذيرات CSS/chunk المعروفة؛ ليس release build أو rehearsal معتمدًا.
 
 بعد إذن مستقل للنشر، تُجمع نافذتان من نشاط طبيعي متقارب، ويفضل دورة يوم كاملة لتغطية الخمس نوافذ: عدد طلبات الموظفين وأنواعها وعدد الطلبات الجديدة وحجم البيانات وإعادات تشغيل النسخ. تجمع لكل نسخة الهوية والتوقيت وCPU وثوانيه وRSS/ذاكرة الحاوية وانتظار Mongo وأعداد الأوامر/getMore، وسجلات جولات المتابعة والفحص، وأزمنة مسارات التجهيز p50/p95 ومعدل المهلة. يربط القياس بالنوافذ الثقيلة ويقارن حسب نوع العملية وحجم النشاط. لا اختبار ضغط أو إرسال تجريبي؛ لا نسبة سرعة معتمدة قبل ذلك.
+
+## Real Mongo checkpoint — 2026-11-06
+
+Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1776. User explicitly authorized branch/PR publication, not merge or deployment. Production changed: no. Issue #1006 rejected a checkpoint comment because it reached the 2500-comment limit; this PR is the continuation ledger.
+
+An isolated loopback MongoDB8.0.12 single-member replica set was started with a 0.25GiB WiredTiger cache. No existing database or application worker was reused or stopped. Synthetic worker processes alone were terminated for crash tests.
+
+Initial real-Mongo evidence found: (1) a crashed scan could not be reclaimed in its current slot; (2) two workers could both reclaim an existing failed send lock, producing two local synthetic provider-sink entries; (3) writing a followup collection inside nested operational transactions poisoned the outer transaction even when the exception was caught. The revised implementation permits reclaim only after lease expiry, uses CAS for send-lock recovery and handles duplicate insert claims as a refusal, and stores a dirty revision in the canonical order's existing transaction. The worker durably enqueues then acknowledges that exact revision. Restricted transaction permissions are unchanged.
+
+Fresh results: real-mongo-worker.txt/XML:8 passed in39.60s, including two OS processes and the unmodified20-second lease-renewal interval. The crash test alone shortens lease duration to3s in its synthetic process. real-mongo-integration.txt/XML:39 passed,20 subtests, no skips in73.66s. All36 formerly skipped integration cases ran and passed; none is classified inapplicable. No stock/transaction/service mocks were added to those cases. Provider transport remains synthetic, never a Qoyod financial request.
+
+Diagnostic limitation: this Windows Mongo build emitted malformed UTF-8 only in explain.serverInfo.host. Only diagnostic explain decoding uses replacement, verifies that no plan/value field was replaced, and omits host from published evidence. Application data decoding remains strict.
+
+Pending: real-Mongo timing/count/profile comparison, representative invoice lookup plans, final regressions, published report and final PR review checkpoint. Next safe action: run bounded synthetic benchmarking on this isolated server, then publish measured results to this draft.
