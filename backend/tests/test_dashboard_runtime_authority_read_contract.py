@@ -181,3 +181,29 @@ def test_cohort_identity_rejects_foreign_orders_and_duplicates():
         _cohort_evidence('owner', [{'user_id': 'foreign', 'order_number': 'A'}])
     with pytest.raises(AssertionError):
         _cohort_evidence('owner', [{'order_number': 'A'}, {'order_number': 'A'}])
+
+
+@pytest.mark.parametrize('missing,empty,complete', [(0, 0, True), (1, 0, False), (0, 1, False)])
+@pytest.mark.parametrize('deduct', [False, True])
+def test_approved_completeness_extension_preserves_every_other_field(missing, empty, complete, deduct):
+    runtime, baseline = evidence_pair()
+    old = {'totals': {'net_profit': 80, 'net_sales': 90, 'sales': 100},
+           'product_cost_v2': {'missing_all_cost_products_count': missing,
+                               'no_products_orders_count': empty},
+           'net_sales_config': {'deduct_product_costs': deduct}}
+    baseline['json'] = json.dumps(old)
+    new = copy.deepcopy(old)
+    new['totals']['product_cost_complete'] = complete
+    if not complete:
+        new['totals']['net_profit'] = None
+        if deduct:
+            new['totals']['net_sales'] = None
+    runtime['json'] = json.dumps(new)
+    assert_runtime_read_contract(runtime, baseline)
+    for field, bad in [('sales', 101), ('product_cost_complete', not complete),
+                       ('net_profit', 99), ('net_sales', 99)]:
+        changed = copy.deepcopy(new)
+        changed['totals'][field] = bad
+        runtime['json'] = json.dumps(changed)
+        with pytest.raises(AssertionError):
+            assert_runtime_read_contract(runtime, baseline)

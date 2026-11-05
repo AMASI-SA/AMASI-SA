@@ -180,10 +180,30 @@ def _expected_authority_commands(audit):
     return expected
 
 
+def expected_cost_completeness_json(historical_json):
+    """Owner-approved response extension; all other historical bytes stay exact.
+
+    Derive the new contract solely from the frozen response's cost coverage,
+    never from the candidate response or production resolver.
+    """
+    response = json.loads(historical_json)
+    if 'product_cost_v2' not in response or 'totals' not in response:
+        return historical_json
+    costs = response['product_cost_v2']
+    complete = (costs['missing_all_cost_products_count'] == 0
+                and costs['no_products_orders_count'] == 0)
+    response['totals']['product_cost_complete'] = complete
+    if not complete:
+        response['totals']['net_profit'] = None
+        if response['net_sales_config'].get('deduct_product_costs', True):
+            response['totals']['net_sales'] = None
+    return json.dumps(response, ensure_ascii=False, default=str)
+
+
 def assert_runtime_read_contract(runtime, baseline):
     """Subtract only individually audited empty authority reads from raw data."""
     assert set(runtime) == set(baseline) | {'cost_authority_audit'}
-    assert runtime['json'] == baseline['json'], 'Immutable JSON response changed'
+    assert runtime['json'] == expected_cost_completeness_json(baseline['json']), 'Unapproved JSON response change'
     audit = runtime['cost_authority_audit']
     expected = _expected_authority_commands(audit)
     assert audit['commands'] == expected, 'Unexpected authority query, scope, operation or batch count'
@@ -196,6 +216,7 @@ def assert_runtime_read_contract(runtime, baseline):
     assert observed_collections == {row['collection'] for row in expected}
     normalized = {key: copy.deepcopy(value) for key, value in runtime.items()
                   if key != 'cost_authority_audit'}
+    normalized['json'] = baseline['json']  # Validated exact approved extension above.
     for operation, count in Counter(row['operation'] for row in expected).items():
         assert normalized['commands'].get(operation, 0) >= count
         normalized['commands'][operation] -= count
@@ -269,9 +290,10 @@ def pytest_collection_modifyitems(session, config, items):
             value['cost_authority_audit'] = audit
         records[key] = value
         if expected is not None:
-            # Keep the immutable historical JSON contract. Later approved
-            # production changes may add reads without changing the response.
-            assert value['json'] == expected[key]['json'], key
+            expected_json = expected[key]['json']
+            if ARM == 'runtime':
+                expected_json = expected_cost_completeness_json(expected_json)
+            assert value['json'] == expected_json, key
             if ARM == 'runtime':
                 assert_runtime_read_contract(value, (read_baseline or expected)[key])
         return result, metrics
