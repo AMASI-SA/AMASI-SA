@@ -860,3 +860,19 @@ test("missing account contract cannot restore the combined Snapchat expense colu
         expect(details.textContent).not.toContain("Snapchat");
     });
 });
+
+
+test("executive profit hides stale numeric profit when product choices are unresolved", () => {
+    const markup = renderToStaticMarkup(<ProfitCard data={{
+        totals: {
+            total_sales: 400, net_profit: 987654.32, product_cost_complete: false,
+            incomplete_profit_orders_count: 1, total_ads_cost: 0,
+            ads_spend_data_complete: true,
+        },
+        ads_v2: {spend_quality: {status: "complete", amount_complete: true}},
+    }} />);
+    expect(markup).toContain("ناقص التكلفة");
+    expect(markup).toContain("بانتظار حسم خيارات المنتجات وتكاليفها");
+    expect(markup).not.toContain("987,654.32");
+    expect(markup).not.toContain('data-testid="advanced-profit-net-margin"');
+});

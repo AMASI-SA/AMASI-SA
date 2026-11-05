@@ -62,6 +62,8 @@ def _choice_pairs(item: dict, product: dict) -> set[tuple[str, str]]:
     a unique exact name/value match is needed. Ambiguous Yes answers fail.
     Customer text is only a presence signal and is never emitted or persisted.
     """
+    from report_option_identity import catalog_options
+    aliases = catalog_options(product)
     options = _options(product)
     by_id = {_id(o.get("id")): o for o in options if _id(o.get("id"))}
     if len(by_id) != len(options):
@@ -91,7 +93,7 @@ def _choice_pairs(item: dict, product: dict) -> set[tuple[str, str]]:
         name = _label(row.get("option_name") or row.get("name") or nested.get("name"))
         candidate = next(iter(known_ids), "")
         if not candidate and name:
-            matching = [oid for oid, o in by_id.items() if _label(o.get("name")) == name]
+            matching = [oid for oid, o in by_id.items() if name in aliases.get(oid, {}).get("labels", set())]
             if len(matching) == 1:
                 candidate = matching[0]
             elif len(matching) > 1:
@@ -107,7 +109,7 @@ def _choice_pairs(item: dict, product: dict) -> set[tuple[str, str]]:
                               or v.get("text")) if isinstance(v, dict) else v) for v in pieces]
             matches = [(oid, vid) for oid, choices in values.items()
                        for vid, val in choices.items()
-                       if any(_label(val.get("name")) == x for x in labels if x)]
+                       if any(x in aliases.get(oid, {}).get("values", {}).get(vid, set()) for x in labels if x)]
             if len(matches) != 1 or len(pieces) != 1:
                 _fail("current_order_choice_ambiguous")
             oid, vid = matches[0]
@@ -120,13 +122,13 @@ def _choice_pairs(item: dict, product: dict) -> set[tuple[str, str]]:
             continue
         for value in pieces:
             data = value if isinstance(value, dict) else {}
-            raw_vid = _id(row.get("value_id") or data.get("id"))
+            raw_vid = _id(row.get("value_id") or data.get("value_id") or data.get("option_value_id") or data.get("id"))
             label = _label(data.get("name") or data.get("label") or data.get("value") or
                            data.get("text") if data else value)
             if raw_vid in values[candidate]:
                 vid = raw_vid
             else:
-                found = [vid for vid, v in values[candidate].items() if _label(v.get("name")) == label and label]
+                found = [vid for vid, v in values[candidate].items() if label and label in aliases.get(candidate, {}).get("values", {}).get(vid, set())]
                 if len(found) != 1:
                     _fail("current_order_value_unproved")
                 vid = found[0]

@@ -292,7 +292,8 @@ async def test_reporting_reads_are_batched_instead_of_growing_per_bundle(db):
 
 
 @pytest.mark.asyncio
-async def test_executive_http_replaces_old_cost_and_decreases_profit_by_140_once(db, monkeypatch):
+@pytest.mark.parametrize("unresolved", [False, True, "known_salla_fallback"])
+async def test_executive_http_replaces_old_cost_and_decreases_profit_by_140_once(db, monkeypatch, unresolved):
     """Exercise the real HTTP composition with only unrelated provider facts stubbed."""
     from auth import DEFAULT_PAYMENT_METHODS, PAYMENT_FEE_DEFAULTS_VERSION
     import dashboard_v2_routes as dashboard
@@ -300,7 +301,16 @@ async def test_executive_http_replaces_old_cost_and_decreases_profit_by_140_once
         "payment_methods": deepcopy(DEFAULT_PAYMENT_METHODS),
         "payment_fee_defaults_version": PAYMENT_FEE_DEFAULTS_VERSION})
     order = sale("executive-http", sale_line("line", 4))
-    await freeze(db, order)
+    if unresolved == "known_salla_fallback":
+        order = sale("executive-http", sale_line("line", 4, product="plain"))
+        await db[COST_PROFILES].delete_one({"user_id": OWNER, "salla_product_id": "plain"})
+        await db[PRODUCTS].update_one({"user_id": OWNER, "salla_product_id": "plain"}, {"$set": {"cost_price_from_salla": 9}})
+        await db.unified_orders.insert_one(deepcopy(order))
+    elif unresolved:
+        order["products"][0]["options"] = []
+        await db.unified_orders.insert_one(deepcopy(order))
+    else:
+        await freeze(db, order)
     baseline_response = {"totals": {
         "total_orders": 1, "total_sales": 400, "total_product_cost": 80,
         "total_ads_cost": 0, "operating_expenses_total": 0,
@@ -331,6 +341,18 @@ async def test_executive_http_replaces_old_cost_and_decreases_profit_by_140_once
             response = await client.get("/dashboard-v2", params={"from_date": "2026-11-02", "to_date": "2026-11-02"})
             assert response.status_code == 200, response.text
             result = response.json()
+            if unresolved == "known_salla_fallback":
+                assert result["totals"]["product_cost_complete"] is True
+                assert result["totals"]["total_product_cost"] == 36
+                assert result["totals"]["net_profit"] == 344
+                continue
+            if unresolved:
+                assert result["totals"]["product_cost_complete"] is False
+                assert result["totals"]["net_profit"] is None
+                assert result["totals"]["net_sales"] is None
+                assert result["product_cost_v2"]["product_rows"][0]["cost_status"] == "missing"
+                assert result["product_cost_v2"]["product_rows"][0]["net_profit"] is None
+                continue
             assert result["totals"]["total_product_cost"] == 220
             assert result["product_cost_v2"]["product_rows"][0]["total_cost"] == 220
             assert result["totals"]["net_profit"] == 160
@@ -572,3 +594,35 @@ async def test_current_estimate_is_opt_in_to_profitability_not_marketing_or_hist
     disabled = await read(CPUWorkBudget(5), current_profitability_estimate=False)
     assert disabled["calculation_cost_available"] is False
     assert disabled["cost_authority"] == "unresolved_snapshot"
+
+
+@pytest.mark.asyncio
+async def test_option_id_costs_agree_across_dashboard_executive_and_sold_products(db):
+    from tests.test_report_option_identity import PRODUCT, BINDING
+    await db[PRODUCTS].update_one({"salla_product_id": "plain"}, {"$set": deepcopy(PRODUCT)})
+    await db[COST_PROFILES].update_one({"salla_product_id": "plain"}, {"$set": {"base_cost": 15}})
+    await db[RESOURCES].insert_many([
+        {"user_id": OWNER, "id": "bag", "unit_cost": 1.2},
+        {"user_id": OWNER, "id": "emb", "unit_cost": 8},
+    ])
+    await db[BINDINGS].insert_one({**BINDING, "user_id": OWNER, "salla_product_id": "plain"})
+    await db[PRODUCT_RESOURCE_BINDINGS].insert_one({"id": "bag", "resource_id": "bag", "user_id": OWNER, "salla_product_id": "plain"})
+    orders = []
+    for index in range(21):
+        count = 4 if index == 19 else 5 if index == 20 else 1
+        lines = []
+        for position in range(count):
+            option = {"name": "Name embroidery" if 15 <= index < 19 else "تطريز الاسم",
+                      "values": [{"name": "Yes" if 15 <= index < 19 else "نعم"}]}
+            if count > 1:
+                option["id"] = f"checkout-row-{index}-{position}"
+            lines.append({**sale_line(f"line-{index}-{position}", product="plain"), "options": [option]})
+        orders.append(sale(f"order-{index}", *lines))
+    result = await build_mezan_v2_product_cost(ReadOnlyDB(db), OWNER, orders)
+    cooperative = await build_mezan_v2_product_cost_cooperative(ReadOnlyDB(db), OWNER, orders)
+    sold = await load_sold_products(ReadOnlyDB(db), OWNER, orders)
+    assert result == cooperative
+    assert result["total"] == result["product_profit_summary"]["total_cost"] == 677.6
+    assert result["incomplete_orders_count"] == 0
+    assert result["product_rows"][0]["units_sold"] == 28
+    assert sold[0]["total_cost"] == 677.6
