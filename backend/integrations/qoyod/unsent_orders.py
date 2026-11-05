@@ -886,7 +886,10 @@ async def list_unsent_orders(
         if not status or entry["status"] == status
     ]
     matched_order_count = len(table)
-    table = table[:limit]
+    # The queue wrapper must classify/filter the full bounded audit before
+    # applying the public table limit, otherwise old unsent rows disappear.
+    if not _include_internal:
+        table = table[:limit]
     result = {
         "ok": True,
         "read_only": True,
