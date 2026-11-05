@@ -25,6 +25,7 @@ with tempfile.TemporaryDirectory(prefix='mezan-restic-test-') as directory:
     else: raise ValueError('wrong repository encryption password accepted')
     damaged = root/'damaged'; shutil.copytree(repository, damaged)
     pack = next((damaged/'data').rglob('*'+'[0-9a-f]'*64))
+    pack.chmod(0o600)  # Mutate only the disposable copy; restic packs are read-only.
     content = bytearray(pack.read_bytes()); content[0] ^= 1; pack.write_bytes(content)
     try: run(['restic','check','--read-data'], env=dict(env, RESTIC_REPOSITORY=str(damaged)))
     except RuntimeError: pass

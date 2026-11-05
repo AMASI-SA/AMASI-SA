@@ -70,7 +70,7 @@ def execute(config, approval):
             if not row['State']['Running'] or row['State'].get('OOMKilled') or row['State'].get('Health', {}).get('Status') == 'unhealthy':
                 raise ValueError('backup requires healthy source services')
         # Verify application source manifest and fixed synthetic Mongo address inside image.
-        code = "import os,sys;sys.path.insert(0,'/opt/mezan/backend');os.environ['MONGO_URL']=open('/run/secrets/mongo_uri').read().strip();from independent_staging import validate;validate()"
+        code = "import os,sys;sys.path.insert(0,'/opt/mezan/backend');os.environ['MONGO_URL']=open('/run/secrets/mongo_uri').read().strip();from independent_staging import validate;v=validate();sys.exit(0 if v=='staging:" + config['source_sha'] + "' else 1)"
         docker('exec', rows['web']['Id'], 'python', '-c', code)
         mid = rows['mongo']['Id']; writers = [rows[k]['Id'] for k in ('web', 'reports', 'sync', 'accounting')]
         stopped = False; ttl = None; safe_resume = False

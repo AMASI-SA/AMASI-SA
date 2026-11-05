@@ -59,12 +59,7 @@ def main():
         print(json.dumps({'kind':'kernel_firewall_ipv4', 'dnat_baseline_proved':True, 'cases':cases, 'host_firewall_modified':False}))
         # TLS reverse proxy has a private namespace and a local fixture upstream.
         tlsnet = network('tls')
-        upstream = container('upstream', tlsnet, image, 'python', '-m', 'http.server', '10000')
-        # Fixture for header/JSON assertions; no public ports or certificate orders.
-        docker('exec', upstream, 'sh', '-c', 'true')
-        # Use a separate one-port JSON upstream so Caddy owns 80/443.
-        docker('rm', '-f', upstream); names.remove(upstream)
-        code = "from lab_server import Handler"  # lab_server starts multiport listeners; use extracted class below.
+        # Separate one-port JSON fixture so Caddy owns 80/443; no application claims.
         server = "from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler;import json\nclass H(BaseHTTPRequestHandler):\n def do_GET(self):\n  b=json.dumps({'proto':self.headers.get('X-Forwarded-Proto')}).encode();self.send_response(200);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(b)\n def log_message(self,*a):pass\nThreadingHTTPServer(('0.0.0.0',10000),H).serve_forever()"
         upstream = container('upstream', tlsnet, image, 'python', '-c', server)
         proxy = prefix+'caddy'; names.append(proxy)
