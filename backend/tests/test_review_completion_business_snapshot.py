@@ -8,6 +8,29 @@ from order_review_business_snapshot import build_snapshot, compare_snapshots, di
 
 
 class BusinessSnapshotTests(unittest.TestCase):
+    def test_balance_projection_is_versioned_and_keeps_native_payment_guarded(self):
+        source = {"raw_by_source": {"salla_direct": {"id": 1, "payment_method": "mada", "paid_amount": 100}}}
+        order = {"order_id": "1", "payment": {"method": "mada", "paid_amount": 100, "source_balance": None}}
+        def build(normalization=3, scope=2, source_input=None):
+            return build_snapshot(source_input or source, order, {}, identity={}, schema_version=scope,
+                                  normalization_version=normalization)
+        legacy, current, legacy_scope = build(2), build(), build(scope=1)
+        order["payment"]["source_balance"] = {"paid": "100.00", "remaining": "0.00"}
+        self.assertTrue(compare_snapshots(current, build())["equal"])
+        self.assertTrue(verify_snapshot(legacy))
+        self.assertFalse(compare_snapshots(legacy, build(2))["equal"])
+        self.assertFalse(compare_snapshots(legacy_scope, build(scope=1))["equal"])
+        self.assertFalse(compare_snapshots(legacy, build())["equal"])
+        order["payment"]["paid_amount"] = 50
+        self.assertFalse(compare_snapshots(current, build())["equal"])
+        order["payment"]["paid_amount"] = 100
+        changed = deepcopy(source)
+        changed["raw_by_source"]["salla_direct"]["paid_amount"] = 50
+        self.assertFalse(compare_snapshots(current, build(source_input=changed))["equal"])
+        changed = deepcopy(source)
+        changed["raw_by_source"]["salla_direct"]["payment"] = {"source_balance": {"paid": "50.00"}}
+        self.assertFalse(compare_snapshots(current, build(source_input=changed))["equal"])
+
     def setUp(self):
         self.raw = {"id": 1, "items": [{"product": {"id": 2}, "sku": "A", "quantity": 1,
                     "options": [{"id": 3, "value": "blue"}], "customer_selections": ["AB"]}],

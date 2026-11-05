@@ -414,3 +414,61 @@ async def test_waiting_pages_only_contain_current_employee_eligible_pieces(db):
         response = await client.get("/supplier-dispatch-v1/waiting-page")
         assert response.json()["files"] == []
         assert (await client.get("/supplier-dispatch-v1/waiting-page?after=bad")).status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_group_summary_and_lazy_pages_are_scoped_fresh_and_lightweight(db):
+    await seed_order(db, "A")
+    for i in range(23):
+        await seed_piece(db, "A", f"shawl-{i}", product_id="shawl", product_name="Shawl",
+                         image_url="https://example.invalid/shawl.jpg")
+    for i in range(4):
+        await seed_piece(db, "A", f"coat-{i}", product_id="coat", product_name="Coat")
+    await db.raw[dispatch.BATCHES].insert_one({"user_id": OWNER["id"], "id": "b1", "lines": [
+        {"order_item_id": "line-A", "group_key": "product:P-1", "selected_image_url": "https://example.invalid/coat.jpg"}]})
+    await seed_piece(db, "A", "sent", supplier_dispatch_status="sent")
+    await seed_piece(db, "A", "foreign", responsible_employee_id="different")
+    await seed_piece(db, "A", "other-merchant", user_id="foreign-merchant")
+    await seed_order(db, "C", current="cancelled")
+    await seed_piece(db, "C", "cancelled")
+    app = FastAPI()
+    app.include_router(dispatch.make_preparation_supplier_dispatch_router(db, lambda: OWNER))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        result = await client.get("/supplier-dispatch-v1/waiting-groups")
+        assert result.status_code == 200, result.text
+        body = result.json()
+        assert [(g["key"], g["piece_count"]) for g in body["groups"]] == [("product:shawl", 23), ("product:coat", 4)]
+        assert body["groups"][0]["image_url"] == "https://example.invalid/shawl.jpg"
+        assert body["groups"][1]["image_url"] == "https://example.invalid/coat.jpg"
+        assert "files" not in body and "supplier_accounts" not in body
+        assert not any(name in {dispatch.REGISTRY, dispatch.DISPATCHES} for name, _ in db.reads)
+        seen, after = set(), ""
+        for count in (10, 10, 3):
+            page = (await client.get("/supplier-dispatch-v1/waiting-page", params={"group": "product:shawl", "after": after})).json()
+            pieces = [p for f in page["files"] for p in f["products"]]
+            assert len(pieces) == count
+            assert all(p["product_id"] == "shawl" for p in pieces)
+            ids = {p["piece_id"] for p in pieces}
+            assert not seen.intersection(ids)
+            seen.update(ids)
+            after = page["next_cursor"]
+        assert after is None and len(seen) == 23
+        await seed_order(db, "A", current="cancelled")
+        assert (await client.get("/supplier-dispatch-v1/waiting-groups")).json()["groups"] == []
+        assert (await client.get("/supplier-dispatch-v1/waiting-page", params={"group": "product:shawl"})).json()["files"] == []
+
+
+@pytest.mark.asyncio
+async def test_group_identity_legacy_fallback_literal_and_whitespace(db):
+    await seed_order(db, "A")
+    await seed_piece(db, "A", "legacy-sku", product_id="", sku="$literal", supplier_dispatch_status="  ")
+    await seed_piece(db, "A", "legacy-name", product_id=None, sku="", product_name="Name only")
+    app = FastAPI()
+    app.include_router(dispatch.make_preparation_supplier_dispatch_router(db, lambda: OWNER))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        groups = (await client.get("/supplier-dispatch-v1/waiting-groups")).json()["groups"]
+        assert {g["key"] for g in groups} == {"sku:$literal", "name:Name only"}
+        for group in groups:
+            page = (await client.get("/supplier-dispatch-v1/waiting-page", params={"group": group["key"]})).json()
+            assert sum(len(f["products"]) for f in page["files"]) == 1
+        assert (await client.get("/supplier-dispatch-v1/waiting-page", params={"group": "$ne"})).json()["files"] == []
