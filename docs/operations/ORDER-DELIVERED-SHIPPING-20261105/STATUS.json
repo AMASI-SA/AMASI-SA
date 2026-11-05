@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/order-delivered-shipping-20261105",
   "base_commit": "d80661fd27ef88bf639fa43d8f969f4d62239a61",
-  "phase": "Source implemented and locally verified; isolated CI verification pending",
+  "phase": "Implementation verified locally and in isolated real-Mongo CI; awaiting explicit production release authorization",
   "requirements": [
     "Deferred courier fees use an authoritative order transition to delivered after operational start; a lagging waybill does not block the fee.",
     "Aramex prepaid shipping is recognized at the authoritative completed order transition after operational start, with one debit to an explicitly approved cashbox.",
@@ -97,13 +97,101 @@
     "reason": "No production commands, provider mutations, live database writes or financial postings were performed for this source task. The prior production approval rejection has not been bypassed."
   },
   "remaining": [
-    "Run the Draft PR CI gates with an isolated real Mongo replica set, including cases not runnable in the local environment.",
-    "Inspect exact-commit CI results and resolve task-related failures before declaring the release ready.",
     "Obtain explicit production release authorization before preparing a release lease or publishing; the earlier automatic approval rejection remains respected.",
-    "After an authorized deployment, explicitly approve the intended Salla cashbox and tariff effective period through the normal owner UI, then verify the live balances."
+    "After authorization, follow repository Protocol V5 for the reviewed source, verify the published runtime, explicitly approve the intended Salla cashbox and tariff effective period through the normal owner UI, then verify live balances."
   ],
-  "next_safe_action": "Fetch this task branch and inspect the exact Draft PR head and CI checks. This is a source checkpoint; do not create a production lease or publish without explicit authorization.",
-  "previous_remote_checkpoint": "9d7971214dd7c77eaaf01948d50d9deb99de9d21",
-  "checkpoint_identity": "The containing Git commit and its branch ref identify this snapshot. The exact full source SHA is also recorded in the Draft PR handoff body after creation.",
-  "updated_at_utc": "2026-11-05T14:03:21.511571+00:00"
+  "next_safe_action": "Request explicit authorization to publish PR 1760 to Mezan and configure the intended Salla cashbox binding. Continue only after authorization; do not create a production lease or publish before it.",
+  "previous_remote_checkpoint": "ca2420fb0c24dbb78523cd4dcec9a05426aad9e9",
+  "checkpoint_identity": "The containing Git commit and branch ref identify this documentation checkpoint. The exact full head SHA and final CI state are also recorded in the Draft PR and Issue 1006 handoff.",
+  "updated_at_utc": "2026-11-05T14:14:46.538137+00:00",
+  "verified_implementation_commit": "ca2420fb0c24dbb78523cd4dcec9a05426aad9e9",
+  "verified_implementation_tree": "370d8bd218ea48901e7038f71d87f99184290aa5",
+  "pull_request": {
+    "number": 1760,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1760",
+    "draft": true,
+    "merged": false
+  },
+  "ci_verification": {
+    "commit_sha": "ca2420fb0c24dbb78523cd4dcec9a05426aad9e9",
+    "workflow_count": 13,
+    "all_success": true,
+    "runs": [
+      {
+        "id": 42041551203,
+        "name": "Qoyod Payment Freshness",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551296,
+        "name": "Snapchat Settings Management V2",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551418,
+        "name": "Snapchat Direct Active Publication",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551273,
+        "name": "Mobile Order Tracking",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551231,
+        "name": "Mezan Release Readiness",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551322,
+        "name": "Shipping Print Boundary",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551177,
+        "name": "MZ2 Track F native shipping",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551659,
+        "name": "G47 Focused Integration",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551404,
+        "name": "Security Gate",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551141,
+        "name": "Operational Stock Eligibility",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551248,
+        "name": "CodeQL",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551312,
+        "name": "Operational Balance Web",
+        "conclusion": "success"
+      },
+      {
+        "id": 42041551213,
+        "name": "MZ2 Employee Salary and Password",
+        "conclusion": "success"
+      }
+    ],
+    "operational_backend": {
+      "job_id": 127293365822,
+      "result": "2776 passed, 5 warnings; then 16 passed, 18 subtests passed. No skips."
+    },
+    "shipping_mongo": {
+      "job_id": 127293559820,
+      "result": "26 passed; then 578 passed, 1 skipped.",
+      "skip": "Only transaction rollback [memory] case is skipped because rollback requires real Mongo. The [mongo] case passed."
+    },
+    "note": "The local real-Mongo limitations are resolved by successful isolated CI. This handoff changes only this status document; executable source is unchanged. Consult the PR for checks on the containing documentation checkpoint."
+  }
 }
