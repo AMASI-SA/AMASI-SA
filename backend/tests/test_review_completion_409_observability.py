@@ -5,6 +5,18 @@ import order_review_completion as completion
 
 
 class ReviewCompletion409ObservabilityTests(unittest.TestCase):
+    def test_nested_snapshot_diagnostic_survives_without_raw_source(self):
+        exc = HTTPException(409, detail={"code": "unknown_source_change", "source_diagnostic": {
+            "approved_source_hash": "a" * 64, "current_source_hash": "a" * 64,
+            "differing_fields": ["/unknown-path-sha256/" + "b" * 64],
+            "classification": "unknown", "customer": {"mobile": "private"},
+            "raw": {"payment": "private"}}})
+        result = completion._review_409_log_detail(exc, stage="finalize", user_id="owner", order_number="test", revision=0)
+        self.assertEqual(result["source_diagnostic"]["approved_source_hash"], "a" * 64)
+        self.assertEqual(len(result["source_diagnostic"]["differing_fields"]), 1)
+        self.assertNotIn("private", str(result))
+        self.assertNotIn("raw", result["source_diagnostic"])
+
     def test_allowlisted_fields_only(self):
         exc = HTTPException(409, detail={
             "code": "review_completion_source_changed",
