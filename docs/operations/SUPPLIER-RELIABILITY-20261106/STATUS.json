@@ -1,0 +1,116 @@
+{
+  "task_id": "SUPPLIER-RELIABILITY-20261106",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/fix-supplier-preview-images-20261106",
+  "base": "049fba51c13b902cd12808e03e87aca203649fb7",
+  "previous_source_checkpoint": "00aabda919a2b7e0b71c58864fc4fdda157e3866",
+  "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1789",
+  "companion_mobile": {
+    "repository": "AMASI-SA/amasi-mobile",
+    "branch": "codex/fix-supplier-session-recovery-20261106",
+    "checkpoint": "1a0b099c0959cb882d20783aa257910cb555a6f1",
+    "pull_request": "https://github.com/AMASI-SA/amasi-mobile/pull/341"
+  },
+  "state": "verified_source_draft_review_only",
+  "completed": [
+    "Selected immutable supplier-file photos hydrate completely before PDF rendering; no live product substitutions.",
+    "Exact-piece supplier preview reads selected employee/file/piece scope only.",
+    "Waiting detail eligibility reuses current order reads only within each request.",
+    "Owned uncategorized products may be dispatched; explicit category mismatches, foreign and ambiguous product identities retain existing refusals.",
+    "Synthetic uncategorized assigned/direct receipt accepts another piece, refreshes current prices, and posts one exact invoice without modifying classifications.",
+    "Waiting headers now use the same current order eligibility as selected detail pages, without physical options/image bytes/supplier hydration; sibling order reads are request-local.",
+    "Barcode/order receiving lookups gain nonunique tenant-scoped indexes and omit embedded PDF images from order-picker reads.",
+    "One/50-piece actual assignment, original-request readback and native printable PDF retain every physical QR.",
+    "Native review outcome reads fetch only immutable proof/binding/event/current-pointer fields; all validators, primary snapshot, receipt identity and actor/tenant guards are unchanged."
+  ],
+  "verification": {
+    "previous_pdf_preview_request_checks": {
+      "passed": 34,
+      "exit_code": 0
+    },
+    "previous_real_mongo_waiting_checks": {
+      "passed": 69,
+      "exit_code": 0
+    },
+    "category_red_regression": "Three missing/empty/whitespace category cases reproduced the 409 before the source change.",
+    "uncategorized_invoice_http": {
+      "passed": 2,
+      "exit_code": 0
+    },
+    "expanded_category_receipt_invoice_http": {
+      "passed": 94,
+      "failed": 1,
+      "exit_code": 1,
+      "failure": "Unchanged test_prior_component_lookup_is_owner_scoped_and_matches_each_invoice_line: local Mongo8/Windows explain response raises InvalidBSON UTF-8 decode. HTTP business assertions preceding explain pass; do not count as green. Linux pinned-Mongo CI remains required."
+    },
+    "previous_source_ci": "Supplier recovery, PDF, waiting and release-readiness workflows passed for e22aa5b; security still in progress at last observation. These results do not certify subsequent commits.",
+    "current_pdf_options_photo_assignment_readback": {
+      "passed": 38,
+      "exit_code": 0
+    },
+    "current_real_mongo_waiting": {
+      "passed": 71,
+      "exit_code": 0
+    },
+    "current_receiving_entry_concurrency_scan_direct_uncategorized": {
+      "passed": 53,
+      "exit_code": 0
+    },
+    "lookup_photo_budget": {
+      "passed": 2,
+      "exit_code": 0,
+      "before_fetched_bytes": 1576416,
+      "maximum_after_bytes": 20000
+    },
+    "lookup_explain": "Both old/new local Windows Mongo8 explain attempts hit InvalidBSON decoding; exact assertions passed Linux pinned-Mongo recovery CI on00aabda9 and finalf649aa01. No skip or weakened decoding.",
+    "category_checkpoint_ci": "All16 PR workflows passed for9de01b5, including Linux recovery/full invoice assertions and Security Gate. New source requires fresh CI.",
+    "readback_metadata_regression": {
+      "before_fetched_bytes": 6308511,
+      "maximum_after_bytes": 32768,
+      "passed": 1,
+      "exit_code": 0,
+      "public_proof": "exactly_equal"
+    },
+    "latest_checkpoint_ci": "All20 applicable workflows passed for00aabda9, including Linux indexed lookup, complete PDF/options/photos, full invoice integrity and Security Gate. No failing/unknown test was waived.",
+    "expanded_review_checks": {
+      "passed": 67,
+      "failed": 1,
+      "subtests_passed": 33,
+      "exit_code": 1,
+      "failure": "Unchanged hide/unhide export-control test expects no product-default action-clock sidecar; same failure reproduced in isolation using exact unchanged00aabda9 readback module (SHA256 ae05ddb771f87db44a906a8fea491b4da5c8319d397cff6fcdaaee929ed0b0be). No production guard or unrelated test was changed."
+    },
+    "readback_v2_fresh_suite": {
+      "passed": 38,
+      "subtests_passed": 22,
+      "failed": 0,
+      "skipped": 0,
+      "exit_code": 0
+    },
+    "critical_pdf_guard_sources": "reviewed_preparation_batches.py, preparation_pdf_reference_layout.py, preparation_file_images.py and mobile_product_file_pdf.py remain byte-identical to task base. All38 affected PDF/options/photos/assignment checks passed.",
+    "final_source_ci": {
+      "source_sha": "f649aa01c808af7585cac3be18f9abad7004819d",
+      "successful_workflows": 20,
+      "failed_workflows": 0,
+      "recovery_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/42268250818",
+      "waiting_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/42268250848",
+      "native_invoice_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/42268250932",
+      "security_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/42268250919"
+    }
+  },
+  "incomplete": [
+    "Phone/device acceptance and authenticated historical file/order inspection remain unverified; no live credentials are available to this chat.",
+    "Pre-existing export-control sidecar expectation fails before/after the change; source/tests remain untouched and the failure is documented in PR1789."
+  ],
+  "continuation_ledger": "Issue1006 reached GitHub's 2500-comment limit; use this status record and PR1789 comments.",
+  "next_safe_action": "Review Draft PR1789 and companion341. Do not merge or publish. A separately authorized release must re-fetch current Production and obey its current AGENTS/Release Guard protocol; this task created no release lease.",
+  "production_changed": false,
+  "release": {
+    "merge": false,
+    "lease": false,
+    "deployment": false,
+    "financial_or_provider_writes": false
+  },
+  "authorization": "Commit, push task branches, Draft PRs and continuation records only. No merge or deployment.",
+  "verified_source_commit": "f649aa01c808af7585cac3be18f9abad7004819d",
+  "handoff": "This documentation-only checkpoint records exact verified source and CI. Final delivery SHA and latest CI are recorded in PR1789 continuation comments."
+}

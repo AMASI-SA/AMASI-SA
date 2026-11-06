@@ -1170,6 +1170,30 @@ async def _waiting_groups(db: Any, user_id: str, employee_id: str) -> dict[str, 
             "suppliers": await _active_suppliers(db, user_id=user_id)}
 
 
+async def _current_waiting_candidates(
+    db: Any, *, user_id: str, rows: list[dict[str, Any]],
+    order_context: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Share current order authority within one directory/detail request only."""
+    candidates = [row for row in rows if piece_is_available_for_supplier_dispatch(row)]
+    unread = {}
+    for row in candidates:
+        number = _text(row.get("order_number"))
+        if number not in order_context:
+            unread.setdefault(number, row)
+    if unread:
+        annotated = await annotate_waiting_pieces(db, user_id=user_id, pieces=list(unread.values()))
+        for row in annotated:
+            order_context[_text(row.get("order_number"))] = {
+                key: row.get(key) for key in (
+                    "order_status", "order_status_native", "preparation_terminal", "waiting_review_eligible"
+                )
+            }
+    return [{**row, **order_context[_text(row.get("order_number"))]}
+        for row in candidates
+        if order_context.get(_text(row.get("order_number")), {}).get("waiting_review_eligible") is True]
+
+
 async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str, group: str = "") -> dict[str, Any]:
     from bson import ObjectId
 
@@ -1189,16 +1213,15 @@ async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str, gro
         query["$expr"] = {"$and": expressions}
 
     chosen = []
+    order_context: dict[str, dict[str, Any]] = {}
     cursor = db[PIECES].find(query, {"image_b64": 0}).sort("_id", -1).batch_size(10)
     try:
         while len(chosen) < 11:
             batch = await cursor.to_list(length=10)
             if not batch:
                 break
-            candidates = [row for row in batch if piece_is_available_for_supplier_dispatch(row)]
-            if candidates:
-                annotated = await annotate_waiting_pieces(db, user_id=user_id, pieces=candidates)
-                chosen.extend(row for row in annotated if row.get("waiting_review_eligible") is True)
+            chosen.extend(await _current_waiting_candidates(
+                db, user_id=user_id, rows=batch, order_context=order_context))
     finally:
         await cursor.close()
 

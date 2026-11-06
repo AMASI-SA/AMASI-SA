@@ -52,6 +52,8 @@ async def require_supplier_product_categories(db: Any, *, user_id: str, supplier
 
     Preserve existing service-only suppliers until an operator explicitly assigns
     their categories. Never infer a broader dispatch scope from service names.
+    An owned product may remain uncategorized; category compatibility applies
+    only when that product has an explicit category.
     """
     allowed = set(unique_category_ids(supplier.get("category_ids")))
     if not allowed:
@@ -69,9 +71,10 @@ async def require_supplier_product_categories(db: Any, *, user_id: str, supplier
             by_identifier.setdefault(identifier, []).append(product)
     for piece in pieces:
         matches = by_identifier.get(_text(piece.get("product_id")), [])
-        if len(matches) != 1 or not _text(matches[0].get("cost_category_id")):
+        if len(matches) != 1:
             raise HTTPException(409, detail={"code": "supplier_dispatch_product_category_required",
                 "message": "حدّد تصنيف المنتج في إعدادات المنتجات قبل إسناده لهذا المورد."})
-        if _text(matches[0].get("cost_category_id")) not in allowed:
+        category_id = _text(matches[0].get("cost_category_id"))
+        if category_id and category_id not in allowed:
             raise HTTPException(409, detail={"code": "supplier_dispatch_category_mismatch",
                 "message": "تصنيف المنتج غير مرتبط بالمورد المحدد. اختر موردًا من تصنيف المنتج."})

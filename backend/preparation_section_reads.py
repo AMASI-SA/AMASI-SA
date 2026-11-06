@@ -183,26 +183,51 @@ async def progress_workspace(db: Any, *, user_id: str, employee_id: str, day: st
 
 
 async def waiting_cards(db: Any, *, user_id: str, employee_id: str, after: str = "") -> dict[str, Any]:
-    from preparation_supplier_dispatch import PIECES, _waiting_query, _waiting_group_expression
+    from preparation_supplier_dispatch import (
+        PIECES, _waiting_query, _waiting_group_expression, _current_waiting_candidates,
+    )
     from fastapi import HTTPException
 
     if after and (not after.startswith("g:") or not after[2:]):
         raise HTTPException(status_code=400, detail="invalid_waiting_group_cursor")
     pipeline = [
         {"$match": _waiting_query(user_id, employee_id)},
-        {"$group": {"_id": _waiting_group_expression(),
-            "product_id": {"$first": "$product_id"}, "product_name": {"$first": "$product_name"},
-            "sku": {"$first": "$sku"}, "image_url": {"$first": {"$ifNull": [
-                "$selected_image_url", {"$ifNull": ["$resolved_image_url", "$image_url"]}]}}}},
+        {"$set": {"_waiting_key": _waiting_group_expression()}},
     ]
-    # Stable product identity, not a changing count, is the page boundary. The
-    # aggregation never reads or validates individual customer options here.
+    # Stable product identity remains the page boundary. Only lightweight
+    # eligibility/identity fields cross this cursor; physical options, image
+    # bytes and suppliers still load on Show. A header requires an eligible
+    # sibling, using exactly the same current order policy as its detail page.
     if after:
-        pipeline.append({"$match": {"_id": {"$gt": after[2:]}}})
-    pipeline.extend([{"$sort": {"_id": 1}}, {"$limit": 11}])
-    groups = await db[PIECES].aggregate(pipeline).to_list(11)
-    next_cursor = "g:" + groups[9]["_id"] if len(groups) > 10 else None
+        pipeline.append({"$match": {"_waiting_key": {"$gt": after[2:]}}})
+    fields = ("_waiting_key", "order_number", "product_id", "product_name", "sku",
+        "selected_image_url", "resolved_image_url", "image_url", "assignment_status", "status",
+        "supplier_dispatch_status", "supplier_receiving_session_id", "experiment_archived_at")
+    pipeline.extend([{"$sort": {"_waiting_key": 1, "_id": 1}},
+        {"$project": {"_id": 0, **{field: 1 for field in fields}}}])
+    groups, order_context = {}, {}
+    cursor = db[PIECES].aggregate(pipeline).batch_size(32)
+    try:
+        while len(groups) < 11:
+            rows = await cursor.to_list(32)
+            if not rows:
+                break
+            candidates = [row for row in rows if row["_waiting_key"] not in groups]
+            for row in await _current_waiting_candidates(
+                db, user_id=user_id, rows=candidates, order_context=order_context,
+            ):
+                key = row["_waiting_key"]
+                groups.setdefault(key, {"key": key,
+                    "product_id": _text(row.get("product_id")), "product_name": _text(row.get("product_name")),
+                    "sku": _text(row.get("sku")), "image_url": _text(row.get("selected_image_url")
+                        or row.get("resolved_image_url") or row.get("image_url")), "lazy": True})
+                if len(groups) == 11:
+                    break
+    finally:
+        await cursor.close()
+    page = list(groups.values())
+    next_cursor = "g:" + page[9]["key"] if len(page) > 10 else None
     return {"ok": True, "employee_id": employee_id, "read_only": True,
-        "groups": [{"key": row.pop("_id"), **row, "lazy": True} for row in groups[:10]],
+        "groups": page[:10],
         "next_cursor": next_cursor,
         "suppliers": []}

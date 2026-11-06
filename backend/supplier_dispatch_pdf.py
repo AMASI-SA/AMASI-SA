@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from order_review_routes import _merchant_user_id, _text
 from preparation_pdf_amasi_a4_layout import generate_amasi_product_file_pdf
+from preparation_file_images import hydrate_preparation_images
 from preparation_supplier_dispatch import (
     DISPATCHES,
     DISPATCH_STATUS_RECEIVED,
@@ -219,7 +220,7 @@ async def build_supplier_dispatch_pdf(
     ).to_list(max(len(batch_ids), 1))
     by_batch = {_text(row.get("id")): row for row in batches}
 
-    lines = []
+    render_rows = []
     for piece in ordered:
         batch = by_batch.get(_text(piece.get("batch_id")))
         if not batch:
@@ -233,7 +234,16 @@ async def build_supplier_dispatch_pdf(
         unit_row["quantity"] = 1
         line = _line_from_batch_storage(unit_row, batch)
         _assert_saved_customer_options_preserved(source, line, piece=piece)
-        lines.append(line)
+        render_rows.append((unit_row, batch))
+
+    # Old batches can retain the approved image reference without embedded
+    # bytes. Resolve only the dispatch's immutable card snapshots, sharing each
+    # photo fetch across duplicate cards. A failed photo must not print blank.
+    hydrated = await hydrate_preparation_images(db, user_id, [row for row, _batch in render_rows])
+    lines = [
+        _line_from_batch_storage(row, batch)
+        for row, (_source, batch) in zip(hydrated, render_rows)
+    ]
 
     return generate_amasi_product_file_pdf(
         lines,

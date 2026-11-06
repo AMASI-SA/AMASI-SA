@@ -48,11 +48,23 @@ async def _eligible_employee_candidates(
     *,
     user_id: str,
     employee_id: str,
+    files: list[_dispatch.SupplierDispatchFileSelection],
 ) -> list[dict[str, Any]]:
+    selectors = [_text(row.group_key) for file in files for row in file.selections]
+    # Native cards already identify exact physical pieces. Legacy product-group
+    # selections still need all candidates in their selected preparation files.
+    # Neither case needs the employee's entire queue or stored photo payloads.
+    physical_ids = sorted({key[len("piece:"):] for key in selectors}) if all(
+        key.startswith("piece:") for key in selectors
+    ) else None
     rows = await db[_dispatch.PIECES].find(
         {
             "user_id": user_id,
             "responsible_employee_id": employee_id,
+            "file_number": {"$in": sorted({_text(file.file_number) for file in files})},
+            **({"$and": [{"$or": [
+                {"piece_id": {"$in": physical_ids}}, {"id": {"$in": physical_ids}},
+            ]}]} if physical_ids is not None else {}),
             "experiment_archived_at": None,
             "status": {"$in": [
                 _dispatch.PIECE_STATUS_ASSIGNED,
@@ -65,7 +77,7 @@ async def _eligible_employee_candidates(
                 {"supplier_dispatch_status": _dispatch.DISPATCH_STATUS_PARTIAL},
             ],
         },
-        {"_id": 0},
+        {"_id": 0, "image_b64": 0},
     ).to_list(50000)
     return [
         piece for piece in rows
@@ -122,6 +134,7 @@ async def _plan_for_worker(
         db,
         user_id=user_id,
         employee_id=employee_id,
+        files=files,
     )
     planned = _requested_plan(candidates, files)
     return planned, planned, _preview_result(planned)

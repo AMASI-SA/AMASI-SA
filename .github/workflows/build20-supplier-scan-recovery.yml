@@ -5,11 +5,22 @@ on:
   pull_request:
     paths:
       - 'backend/supplier_receiving_routes.py'
+      - 'backend/review_completion_readback.py'
+      - 'backend/tests/test_review_readback_v2.py'
+      - 'backend/supplier_category_service_policy.py'
+      - 'backend/tests/test_supplier_category_contract.py'
+      - 'backend/tests/test_supplier_uncategorized_receipt.py'
+      - 'backend/tests/test_supplier_receiving_lookup_budget.py'
       - 'backend/tests/test_supplier_scan_recovery.py'
       - 'backend/tests/test_supplier_optional_unstarted_receipt.py'
       - 'backend/tests/test_supplier_receiving_entry.py'
       - 'backend/preparation_section_reads.py'
       - 'backend/preparation_supplier_dispatch.py'
+      - 'backend/supplier_dispatch_order_group_guard.py'
+      - 'backend/supplier_dispatch_pdf.py'
+      - 'backend/tests/test_supplier_dispatch_preview_scope.py'
+      - 'backend/tests/test_supplier_dispatch_pdf_images.py'
+      - 'backend/tests/test_preparation_lazy_sections.py'
       - 'backend/mobile_operations_monitoring_routes.py'
       - 'backend/mobile_employee_monitoring_workspace_routes.py'
       - 'backend/reviewed_product_pages.py'
@@ -67,6 +78,9 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/build20-scan-recovery"
           git rev-parse HEAD HEAD^{tree} > "$RUNNER_TEMP/build20-scan-recovery/identity.txt"
+          python -m pytest tests/test_supplier_category_contract.py tests/test_supplier_uncategorized_receipt.py -v --tb=short
+          python -m pytest tests/test_supplier_receiving_lookup_budget.py -v --tb=short
+          python -m pytest test_supplier_dispatch_order_group_guard.py tests/test_supplier_dispatch_preview_scope.py tests/test_supplier_dispatch_pdf_images.py tests/test_supplier_dispatch_remaining_pdf.py -v --tb=short
           python -m pytest tests/test_supplier_receiving_entry.py tests/test_monitoring_lazy_directory.py tests/test_preparation_lazy_sections.py tests/test_reviewed_product_pages.py -v --tb=short
           python -m pytest tests/test_supplier_receiving_concurrency.py tests/test_review_product_defaults.py tests/test_review_gallery_read_performance.py tests/test_order_review_operational_images.py tests/test_order_review_export_controls.py -v --tb=short
           python -m pytest tests/test_preparation_file_images.py tests/test_preparation_request_outcome.py tests/test_preparation_selected_order_scope.py tests/test_notification_sender_directory.py tests/test_review_direct_preparation_sync.py tests/test_review_product_defaults_regressions.py tests/test_review_readback_v2.py -v --tb=short
