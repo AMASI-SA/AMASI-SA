@@ -13,7 +13,7 @@ import logging
 import os
 import socket
 import uuid
-from contextlib import suppress
+from contextlib import AsyncExitStack, suppress
 from datetime import date, datetime, timedelta, timezone
 from time import monotonic
 from typing import Any, Callable
@@ -1318,6 +1318,14 @@ async def _refresh_snapchat(
     await bind_run_to_lease(db, lease, run_id=run_id)
     failure_stage = SNAPCHAT_DEFAULT_FAILURE_STAGE
     finalized_status: str | None = None
+    manual_stack = AsyncExitStack()
+
+    async def release_manual_owner() -> None:
+        await release_snapchat_lease(db, lease,
+            final_status=finalized_status or "failed", now=_utcnow())
+
+    if manual:
+        manual_stack.push_async_callback(release_manual_owner)
 
     def observe_failure_stage(stage: str) -> None:
         nonlocal failure_stage
@@ -1332,6 +1340,12 @@ async def _refresh_snapchat(
             )
         if on_started is not None:
             on_started(run_id)
+        if manual:
+            # Register the durable run before waiting for heavy-work capacity,
+            # so HTTP can acknowledge it promptly while the API remains free.
+            await manual_stack.enter_async_context(
+                governor.heavy("snapchat", task_name="manual_snapchat_spend")
+            )
         accounts = await _load_canonical_scheduler_accounts(
             db,
             user_id,
@@ -1773,6 +1787,14 @@ async def _refresh_snapchat(
             )
             result["decision_outcomes"] = decision_outcomes
         return {"run_id": run_id, **result}
+    except ResourcePressure:
+        if finalized_status is None:
+            await _finish_run(db, user_id=user_id, run_id=run_id, status="failed",
+                error={"code": "resource_pressure", "retryable": True})
+        await release_snapchat_lease(db, lease,
+            final_status=finalized_status or "failed", now=_utcnow())
+        return {"provider": SNAPCHAT_PROVIDER_ID, "run_id": run_id,
+            "status": finalized_status or "failed", "code": "resource_pressure"}
     except asyncio.CancelledError:
         # A supervised manual task can stop at a cooperative checkpoint. Keep
         # already-finalized facts intact; otherwise terminalize its own run.
@@ -1914,6 +1936,8 @@ async def _refresh_snapchat(
             "status": "failed",
             "code": code,
         }
+    finally:
+        await manual_stack.aclose()
 
 
 async def _snapchat_cadence_ready(

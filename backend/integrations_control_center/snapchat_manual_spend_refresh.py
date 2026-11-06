@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date, datetime, timezone
+import logging
 from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,6 +19,7 @@ START_TIMEOUT_SECONDS = 10
 JOB_TIMEOUT_SECONDS = 25 * 60
 MAX_OWNED_JOBS = 8
 ROUTE = "/ads-auto-sync/snapchat/refresh"
+logger = logging.getLogger(__name__)
 
 
 class ManualSpendPeriod(BaseModel):
@@ -113,10 +115,9 @@ class ManualSpendJobs:
                     "date_from": period.date_from.isoformat(), "date_to": period.date_to.isoformat()})
 
         async def run():
-            async with scheduler.governor.heavy("snapchat", task_name="manual_snapchat_spend"):
-                return await scheduler._refresh_snapchat(self.db, user_id=user_id,
-                    start_date=period.date_from, end_date=period.date_to, now=scheduler._utcnow(),
-                    manual=True, on_started=registered)
+            return await scheduler._refresh_snapchat(self.db, user_id=user_id,
+                start_date=period.date_from, end_date=period.date_to, now=scheduler._utcnow(),
+                manual=True, on_started=registered)
 
         try:
             await asyncio.wait_for(run(), JOB_TIMEOUT_SECONDS)
@@ -136,6 +137,8 @@ class ManualSpendJobs:
                 started.cancel()
             raise
         except Exception as exc:
+            logger.warning("Manual Snapchat spend job failed exception_type=%s",
+                           scheduler._safe_exception_type(exc))
             if not started.done():
                 started.set_exception(exc if isinstance(exc, HTTPException) else HTTPException(503,
                     detail={"code": "snapchat_manual_refresh_unavailable"}))

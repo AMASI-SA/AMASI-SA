@@ -80,6 +80,9 @@
     "Snapchat account-page extraction, row validation and both Riyadh aggregation folds use existing request-local CPUWorkBudget checkpoints. Ordered calculations and synchronous public helper contracts remain identical. Cancellation before publication produces no partial facts."
   ],
   "verification": {
+    "broad_backend": {"passed": 210, "exit_code": 0, "source_checkpoint": "d093ced62f1504166aad37100adcd79da1d6b584", "includes": "Full affected reporting/financial suites, native token rotation, employee fulfillment read and order repository regressions"},
+    "broad_frontend": {"passed": 132, "suites": 10, "exit_code": 0, "includes": "Manual card/service/cache plus existing financial/date/cart/mobile/interceptor behavior"},
+    "queued_manual_admission_followup": {"passed": 73, "exit_code": 0, "includes": "Durable registration before heavy-capacity wait; actual provider exclusion; resource pressure leaves connection health intact; own lease cleanup on cancellation and rejection"},
     "before": {"failed": 3, "exit_code": 1, "reason": "Another replica immediately starts after a 20-minute completed/partial/failed cycle"},
     "after": {"passed": 87, "exit_code": 0, "real_loopback_mongo": true, "includes": "New cooldown cases, real global lease race/skew/fencing, scheduler v2, target recovery, TikTok and resource governor"},
     "ci": "Not yet run for this source checkpoint",
@@ -103,7 +106,7 @@
       "reproduced_on_current_and_production_base": "1 failure / 54 passes in the same four-module CI command, in independent processes",
       "cause": "Mock product_cost omitted missing_all_cost_products_count required by the unchanged endpoint",
       "repair": "Complete the fixture with zero missing-cost products; preserve all null-profit/fee assertions and leave dashboard runtime unchanged",
-      "fresh_checks": "pending"
+      "fresh_checks": "Repaired fixture passes within the 210-case affected backend run; all financial assertions retained"
     },
     "synchronous_profile": {"synthetic_only": true, "network_or_database_requests": 0, "rows_14400_ms": 611.04, "rows_72000_ms": 3034.74, "note": "Measured synchronous extraction plus two folds; controlled comparison and complete v6 path still pending"},
     "limitation": "Cadence correctness is proven; live employee latency impact and CPU/memory inside a running cycle remain unmeasured"
@@ -112,7 +115,7 @@
     "post": "/api/integrations-v2/ads-auto-sync/snapchat/refresh",
     "get": "/api/integrations-v2/ads-auto-sync/snapchat/refresh/{run_id}",
     "authority": "Existing _refresh_snapchat canonical writer and provider Mongo lease; manual skips only the two-hour cadence gate",
-    "lifecycle": "Bounded coordinator, max 8 owned tasks, 25-minute deadline, shutdown cancellation/drain; repeated same-owner/range clicks join; range-covering canonical jobs on another replica can be observed",
+    "lifecycle": "Bounded coordinator, max 8 owned tasks, 25-minute deadline, shutdown cancellation/drain; repeated same-owner/range clicks join; range-covering canonical jobs on another replica can be observed. The canonical run is durably registered before heavy-capacity waiting so HTTP acknowledges promptly even when capacity is occupied. Resource pressure does not invalidate provider connection health.",
     "ui": "Existing advertising-chart icon becomes a labelled circular refresh pill; initial card opening reads saved data only. Only explicit clicks start provider work. Status reads abort on leave/period change and pause while hidden/offline.",
     "general_dashboard_source_unchanged": true
   },
