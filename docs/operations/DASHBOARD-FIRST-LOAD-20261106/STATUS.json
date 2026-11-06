@@ -1,6 +1,6 @@
 {
   "task_id": "DASHBOARD-FIRST-LOAD-20261106",
-  "state": "wip_extended_manual_refresh_and_background_diagnosis",
+  "state": "dashboard_work_stopped_by_user_preserved_wip",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1784",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/mezan-dashboard-first-load-20261106",
@@ -66,6 +66,13 @@
     "No provider refresh or business write added"
   ],
   "production_changed_by_this_followup": false,
+  "user_stop": {
+    "scope": "Stop dashboard modifications and deployment; investigate actual backend/background causes instead",
+    "pr_state": "PR1784 closed unmerged; branch retained",
+    "extended_checks": "37 tests / 3 focused control and lifecycle suites passed. Full extended release verification not performed; historical cart/automatic-refresh tests have not been adapted.",
+    "intent_applied_or_frozen": false,
+    "lease_or_app_mutation": false
+  },
   "intermediate_source_candidate": {
     "sha": "1cb7976aa53b5740f5dab878cce8f1741e61d20d",
     "checks": "30 success, 6 conditional skips, no failures",
@@ -93,6 +100,6 @@
     "user_supplied_verify_tail_and_status_active_false": true,
     "preview_restart_command_given": true
   },
-  "next_safe_action": "Implement manual card refresh while preserving the real Recent Orders hook, verify page activation, diagnose background contention, then run fresh affected checks before a new source/intent. No lease or /app mutation.",
-  "source_checkpoint": "1cb7976aa53b5740f5dab878cce8f1741e61d20d"
+  "next_safe_action": "Do not continue or release dashboard changes without renewed user instruction. Preserve WIP; investigate actual background activity separately while keeping financial jobs and native operations intact.",
+  "source_checkpoint": "0a589eeed606e002c0d096b3fde2833dc015143b"
 }

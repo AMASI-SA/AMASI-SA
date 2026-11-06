@@ -72,6 +72,9 @@ jobs:
           src/components/fulfillment/PreparationWorkDashboard.loading.test.jsx
           src/pages/AdvancedDashboard.cartFreeze.test.jsx
           src/pages/AdvancedDashboard.firstLoad.test.jsx
+          src/pages/AdvancedDashboard.manualRefresh.test.jsx
+          src/components/DashboardPanel.test.jsx
+          src/components/DashboardAdsSpendCard.test.jsx
           src/pages/AdvancedDashboard.latestOrders.test.jsx
           src/pages/AdvancedDashboard.mobile.test.jsx
           src/defaultDashboardRoute.test.js

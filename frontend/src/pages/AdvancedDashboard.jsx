@@ -25,12 +25,6 @@ import { dashboardRequestRangeKey } from "../lib/dashboardLatestResponseBroker";
 import { createDashboardFetchAdmission } from "../lib/dashboardFetchAdmission";
 import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
 import { buildMezanProductCostHref, buildMissingMezanCostHref } from "../lib/mezanV2CostLinks";
-import {
-    DASHBOARD_AUTO_REFRESH_MS,
-    ABANDONED_CARTS_DASHBOARD_AUTO_SYNC,
-    dashboardOrdersSignature,
-    shouldRefreshDashboardForOrders,
-} from "../lib/dashboardLiveRefresh";
 
 const PLATFORM_META = [
     { key: "snapchat", label: "سناب شات", color: "#f59e0b" },
@@ -41,7 +35,6 @@ const PLATFORM_META = [
 
 const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const integer = (value) => Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
-const CARTS_AUTO_REFRESH_MS = 15_000;
 
 function finiteFinancialValue(value, { nonnegative = false } = {}) {
     if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
@@ -86,8 +79,8 @@ export function aggregateDashboardAdsHistoryByMonth(daily = []) {
     return Object.values(grouped);
 }
 
-function Panel({ children, className = "", testid, title }) {
-    return <DashboardPanel title={title} data-testid={testid} className={`min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</DashboardPanel>;
+function Panel({ children, className = "", testid, title, onRefresh, refreshing }) {
+    return <DashboardPanel title={title} onRefresh={onRefresh} refreshing={refreshing} data-testid={testid} className={`min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</DashboardPanel>;
 }
 
 const AI_ACTIONS = {
@@ -159,9 +152,14 @@ export function CampaignAdvisorCard() {
     const [unifiedShadow, setUnifiedShadow] = useState(null);
     const [loading, setLoading] = useState(true);
     const [approving, setApproving] = useState({});
+    const reloadRef = useRef(null);
     useEffect(() => {
         let active = true;
+        let inFlight = false;
         const load = async () => {
+            if (!active || inFlight) return;
+            inFlight = true;
+            setLoading(true);
             try {
                 const [latestResult, shadowResult] = await Promise.allSettled([
                     api.get("/ads-manager/ai-monitor/latest"),
@@ -172,12 +170,13 @@ export function CampaignAdvisorCard() {
             } catch {
                 if (active) setSnapshot(null);
             } finally {
+                inFlight = false;
                 if (active) setLoading(false);
             }
         };
+        reloadRef.current = load;
         load();
-        const timer = window.setInterval(load, 5 * 60 * 1000);
-        return () => { active = false; window.clearInterval(timer); };
+        return () => { active = false; reloadRef.current = null; };
     }, []);
     const recommendations = (snapshot?.recommendations || []).filter((item) => ["snapchat", "meta", "google"].includes(item.provider));
     const visible = [...recommendations].sort((a, b) => ({ critical: 4, high: 3, medium: 2, low: 1 }[b.priority] || 0) - ({ critical: 4, high: 3, medium: 2, low: 1 }[a.priority] || 0)).slice(0, 5);
@@ -203,7 +202,7 @@ export function CampaignAdvisorCard() {
                 try {
                     const latest = await api.get("/ads-manager/ai-monitor/latest");
                     setSnapshot(latest.data);
-                } catch { /* the regular five-minute refresh remains available */ }
+                } catch { /* The card refresh remains available. */ }
             }, 6000);
         } catch (error) {
             window.alert(error?.response?.data?.detail?.message || "تعذّر تنفيذ التوصية بأمان. حدّث التحليل وحاول مجددًا.");
@@ -211,7 +210,7 @@ export function CampaignAdvisorCard() {
             setApproving((value) => ({ ...value, [item.recommendation_id]: false }));
         }
     };
-    return <Panel className="border-violet-200" testid="advanced-campaign-ai-advisor" title="ملاحظات الذكاء على الحملات">
+    return <Panel className="border-violet-200" testid="advanced-campaign-ai-advisor" onRefresh={() => reloadRef.current?.()} refreshing={loading} title="ملاحظات الذكاء على الحملات">
         <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 border-b border-violet-800 bg-violet-700 px-4 py-3 text-white">
             <div>
                 <h2 className="flex items-center gap-2 font-extrabold"><Sparkles className="h-5 w-5" />ملاحظات الذكاء على الحملات</h2>
@@ -275,19 +274,15 @@ function relativeTime(value, now = Date.now()) {
     return `منذ ${Math.floor(seconds / 31536000)} سنة`;
 }
 
-export function AbandonedCartsCard({ carts, summary = {} }) {
+export function AbandonedCartsCard({ carts, summary = {}, onRefresh, loading = false, error = "" }) {
     const [visibleCount, setVisibleCount] = useState(5);
-    const [clock, setClock] = useState(() => Date.now());
+    const clock = Date.now();
     const cartRows = carts || [];
     const visibleCarts = cartRows.slice(0, visibleCount);
     const hasMore = visibleCount < cartRows.length;
     useEffect(() => { setVisibleCount(5); }, [carts]);
-    useEffect(() => {
-        const timer = window.setInterval(() => setClock(Date.now()), 1_000);
-        return () => window.clearInterval(timer);
-    }, []);
     return (
-        <Panel className="border-teal-200" testid="advanced-abandoned-carts" title="السلات المتروكة">
+        <Panel className="border-teal-200" testid="advanced-abandoned-carts" title="السلات المتروكة" onRefresh={onRefresh} refreshing={loading}>
             <div className="flex h-14 items-center justify-between border-b border-slate-900 bg-slate-800 px-4 text-white">
                 <h2 className="flex items-center gap-2 font-extrabold"><ShoppingCart className="h-5 w-5" />السلات المتروكة</h2>
                 <div className="flex items-center gap-1.5 text-[10px] font-black">
@@ -306,14 +301,14 @@ export function AbandonedCartsCard({ carts, summary = {} }) {
                     <div className="min-w-0 flex-1"><p className="truncate text-xs font-extrabold text-slate-800">{cart.customer_name || "عميل سلة"}</p><p className="mt-1 text-[10px] font-bold text-teal-700">{integer(productCount)} {productCount === 1 ? "منتج" : "منتجات"}</p><p className="mt-0.5 truncate text-[9px] text-slate-400">سلة #{cart.cart_id}</p></div>
                     <div className="text-left"><p className="num text-xs font-black text-teal-700">{money(cart.total)} {cart.currency || "SAR"}</p><p className="mt-1 text-[10px] text-slate-400">{relativeTime(cart.activity_at || cart.cart_updated_at || cart.updated_at || cart.created_at, clock)}</p></div>
                 </div>;
-            }) : <div className="p-8 text-center text-xs text-slate-400">لا توجد سلات متروكة نشطة.</div>}
+            }) : <div className="p-8 text-center text-xs text-slate-400">{loading ? "جارٍ تحميل السلات…" : error || "لا توجد سلات متروكة نشطة."}</div>}
             </div>
             {cartRows.length > 5 && <button type="button" onClick={() => hasMore ? setVisibleCount((value) => Math.min(value + 5, cartRows.length)) : setVisibleCount(5)} className="w-full border-t border-teal-200 bg-teal-50/70 px-4 py-3 text-xs font-extrabold text-teal-800 hover:bg-teal-100">{hasMore ? "المزيد" : "عرض أقل"}</button>}
         </Panel>
     );
 }
 
-export function TopProductsCard({ rows, summary = {}, filters = {}, loading = false }) {
+export function TopProductsCard({ rows, summary = {}, filters = {}, loading = false, onRefresh }) {
     const [visibleCount, setVisibleCount] = useState(5);
     const products = [...(rows || [])].sort((a, b) => Number(b.units_sold || 0) - Number(a.units_sold || 0));
     const productSummary = summary?.product_profit_summary || {};
@@ -346,7 +341,7 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
     const hasMore = visibleCount < products.length;
     useEffect(() => { setVisibleCount(5); }, [rows]);
     return (
-        <Panel className="border-indigo-200" testid="advanced-top-products" title="المنتجات الأكثر مبيعًا">
+        <Panel className="border-indigo-200" testid="advanced-top-products" title="المنتجات الأكثر مبيعًا" onRefresh={onRefresh} refreshing={loading}>
             <div className="flex h-14 items-center justify-between border-b border-indigo-800 bg-indigo-700 px-4 text-white"><h2 className="font-extrabold"><Link to={`/products-v2/sold?from=${encodeURIComponent(filters.from || "")}&to=${encodeURIComponent(filters.to || "")}`} className="flex items-center gap-2 rounded hover:underline focus-visible:outline-2" data-testid="advanced-top-products-report-link"><Trophy className="h-5 w-5" />المنتجات الأكثر مبيعًا ↗</Link></h2><div className="text-left text-[9px] font-bold leading-4"><p>{loading && !rows ? "—" : integer(productCount)} منتجًا خلال الفترة</p><p className="text-indigo-100">بتكلفة سلة {loading && !rows ? "—" : integer(summary.salla_fallback_products_count)} · تكلفة ناقصة {loading && !rows ? "—" : integer(summary.missing_all_cost_products_count)}</p></div></div>
             <div className="dashboard-products-table" tabIndex={0} role="region" aria-label="جدول المنتجات الأكثر مبيعًا"><div className="grid grid-cols-[48px_48px_minmax(80px,1fr)_minmax(86px,1fr)_minmax(86px,1fr)] gap-1.5 border-b px-3 py-2 text-center text-[8px] font-bold leading-4 text-slate-400">
                 <span>المنتج</span>
@@ -541,7 +536,7 @@ function OperatingProfitDetails({ totals = {}, total = 0 }) {
     return <ProfitDetailBox testid="advanced-profit-operating-details"><DetailTitle title="💼 تفاصيل المصروفات التشغيلية" count={`${integer(rows.length)} بند`} tone="text-orange-900" />{rows.length === 0 ? <EmptyDetails text="لا توجد مصروفات تشغيلية في هذه الفترة" /> : <div className="text-xs">{rows.map(([name, value]) => <div key={name} className="flex justify-between border-b py-2"><b>{name}</b><span className="num font-black text-orange-700">{money(value)}</span></div>)}<div className="flex justify-between border-t-2 border-orange-200 py-2"><b>الإجمالي</b><span className="num font-black text-orange-800">{money(total)}</span></div></div>}</ProfitDetailBox>;
 }
 
-export function ProfitCard({ data, loading = false, fromDate, toDate }) {
+export function ProfitCard({ data, loading = false, fromDate, toDate, onRefresh }) {
     const [expanded, setExpanded] = useState(null);
     const t = data?.totals || {};
     const productCostComplete = typeof t.product_cost_complete === "boolean"
@@ -602,7 +597,7 @@ export function ProfitCard({ data, loading = false, fromDate, toDate }) {
         operating: <OperatingProfitDetails totals={t} total={t.operating_expenses_total} />,
     };
     const initialLoading = loading && !data;
-    return <Panel className="border-emerald-200" testid="advanced-profit-summary" title="الملخص التنفيذي للأرباح"><div className="flex h-14 items-center justify-between border-b border-emerald-800 bg-emerald-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><TrendingUp className="h-5 w-5" />الملخص التنفيذي للأرباح</h2><span className="text-[9px] font-bold text-emerald-100">{initialLoading ? "جارٍ مزامنة الفترة…" : !salesConversionComplete ? "تحويل العملات غير مكتمل" : adsSpendProvisional ? "الفترة المحددة · مؤقت" : "الفترة المحددة"}</span></div>
+    return <Panel className="border-emerald-200" testid="advanced-profit-summary" onRefresh={onRefresh} refreshing={loading} title="الملخص التنفيذي للأرباح"><div className="flex h-14 items-center justify-between border-b border-emerald-800 bg-emerald-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><TrendingUp className="h-5 w-5" />الملخص التنفيذي للأرباح</h2><span className="text-[9px] font-bold text-emerald-100">{initialLoading ? "جارٍ مزامنة الفترة…" : !salesConversionComplete ? "تحويل العملات غير مكتمل" : adsSpendProvisional ? "الفترة المحددة · مؤقت" : "الفترة المحددة"}</span></div>
         {operationalNoActivityObserved && <p className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-[10px] font-semibold text-amber-800" data-testid="advanced-profit-no-activity-hint">لم يُرصد نشاط في أحد الحسابات حتى آخر فحص. الأرقام أولية وقد تتأخر تقارير سناب.</p>}
         <div className="grid grid-cols-2 gap-2 border-b border-emerald-100 bg-emerald-50/40 p-3 sm:grid-cols-4"><Metric label="تكلفة الطلب" value={initialLoading || !adsSpendAvailable || t.avg_cost_per_order == null ? "—" : `${money(t.avg_cost_per_order)} ر.س`} Icon={ShoppingBag} tone="bg-blue-50 text-blue-700" /><Metric label="عدد الطلبات" value={initialLoading ? "—" : integer(orderCount)} Icon={ShoppingCart} tone="bg-emerald-50 text-emerald-700" /><Metric label="العائد" value={initialLoading || !salesConversionComplete || !adsSpendAvailable || t.overall_roas == null ? "—" : `${Number(t.overall_roas).toFixed(2)}×`} Icon={TrendingUp} tone="bg-violet-50 text-violet-700" /><Metric label="متوسط قيمة سلة المشتريات" value={initialLoading || averageBasket == null ? "—" : `${money(averageBasket)} ر.س`} Icon={ShoppingBag} tone="bg-rose-50 text-rose-600" /></div><div className="px-4 py-2">{rows.map((row, index) => { const rowValue = finiteFinancialValue(row.value); const rowIncomplete = (row.key === "ads" && !adsSpendAvailable) || (row.key === "sales" && !salesConversionComplete); const percentage = index > 0 && sales > 0 && rowValue !== null && !rowIncomplete ? (rowValue / sales * 100).toFixed(2) : null; return <div key={row.key}><button type="button" disabled={!row.expandable} onClick={() => row.expandable && setExpanded((value) => value === row.key ? null : row.key)} aria-expanded={row.expandable ? expanded === row.key : undefined} data-testid={`advanced-profit-row-${row.key}`} dir="rtl" className={`flex min-h-[56px] w-full items-center gap-3 border-b text-right last:border-0 ${row.expandable ? "cursor-pointer rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-200" : "cursor-default"}`}><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 ${row.color}`}><row.Icon className="h-4 w-4" /></span><p className="flex min-w-0 flex-1 items-center gap-1 text-right text-xs font-extrabold text-slate-700">{row.label}{row.expandable && <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${expanded === row.key ? "rotate-180" : ""}`} />}</p><div dir="ltr" className={`num flex shrink-0 items-baseline gap-1 text-left text-base font-black ${row.color}`}><span>{initialLoading ? "—" : rowIncomplete ? "غير مكتمل" : optionalMoney(row.value)}</span>{!initialLoading && !rowIncomplete && rowValue !== null && <span className="text-[11px] font-extrabold">ر.س</span>}{percentage && <span className="ml-1 rounded-md bg-current/10 px-1.5 py-0.5 text-[9px] opacity-80">{percentage}%</span>}</div></button>{row.expandable && expanded === row.key && details[row.key]}</div>; })}</div><div dir="ltr" className="m-4 flex min-h-[64px] items-center justify-between rounded-xl bg-emerald-600 px-5 text-white"><p className="num flex items-baseline gap-1 text-xl font-black">{!initialLoading && productCostComplete && netMargin && <span data-testid="advanced-profit-net-margin" title="هامش صافي الأرباح">{netMargin}%</span>}<span>{initialLoading ? "—" : !productCostComplete ? "ناقص التكلفة" : !salesConversionComplete || !adsSpendAvailable ? "غير مكتمل" : optionalMoney(t.net_profit)}</span>{!initialLoading && productCostComplete && salesConversionComplete && adsSpendAvailable && netProfit !== null && <span className="text-sm">ر.س</span>}</p><div dir="rtl"><p className="font-black">صافي الأرباح</p><p className="text-[9px] text-emerald-100">{!initialLoading && !productCostComplete ? "بانتظار حسم خيارات المنتجات وتكاليفها" : !initialLoading && !salesConversionComplete ? "بانتظار سعر صرف موثّق من طلب سلة" : !initialLoading && !adsSpendAvailable ? "بانتظار اكتمال بيانات الإعلانات" : adsSpendProvisional ? "تقديري حتى آخر مزامنة للإعلانات" : "بعد جميع التكاليف والمصروفات"}</p></div></div></Panel>;
 }
@@ -711,7 +706,7 @@ export function LatestOrders({ orders, totals = {} }) {
     </Panel>;
 }
 
-function GaLive({ data }) { const pages = data?.top_pages || []; const minutes = data?.active_users?.per_minute || []; const max = Math.max(1, ...pages.map((p) => Number(p.views || 0))); const minuteMax = Math.max(1, ...minutes.map((m) => Number(m.active_users || 0))); return <div className="space-y-4"><Panel className="border-blue-200" testid="advanced-ga-pages" title="Google Analytics 4 — مباشر"><div className="flex h-14 items-center gap-2 border-b border-blue-800 bg-blue-700 px-4 text-white"><BarChart3 className="h-5 w-5" /><h2 className="text-sm font-black">Google Analytics 4 — مباشر</h2></div><div className="p-4"><h3 className="mb-3 text-sm font-extrabold">الصفحات الأكثر مشاهدة</h3>{pages.slice(0, 6).map((p, i) => <div key={`${p.title}-${i}`} className="mb-3"><div className="flex justify-between gap-2 text-[10px]"><span className="truncate">{p.title}</span><b>{p.views}</b></div><div className="mt-1 h-1.5 rounded bg-slate-100"><div className="h-full rounded bg-blue-500" style={{ width: `${Number(p.views || 0) / max * 100}%` }} /></div></div>)}</div></Panel><Panel className="border-violet-200" testid="advanced-ga-users" title="المستخدمون النشطون الآن"><div className="flex h-14 items-center gap-2 border-b border-violet-800 bg-violet-700 px-4 text-white"><UsersRound className="h-5 w-5" /><h2 className="font-black">المستخدمون النشطون الآن</h2></div><div className="grid grid-cols-2 gap-2 p-4"><Metric label="آخر 30 دقيقة" value={integer(data?.active_users?.last_30_minutes)} Icon={UsersRound} tone="bg-blue-50 text-blue-600" /><Metric label="آخر 5 دقائق" value={integer(data?.active_users?.last_5_minutes)} Icon={UsersRound} tone="bg-violet-50 text-violet-600" /></div><div className="flex h-36 items-end gap-1 overflow-hidden px-4 pb-4" dir="ltr" data-testid="advanced-ga-active-chart">{minutes.map((m, i) => <div key={i} className="max-h-full flex-1 rounded-t bg-violet-600" style={{ height: `${Math.min(100, Math.max(4, Number(m.active_users || 0) / minuteMax * 100))}%` }} />)}</div></Panel></div>; }
+function GaLive({ data, onRefresh, loading }) { const pages = data?.top_pages || []; const minutes = data?.active_users?.per_minute || []; const max = Math.max(1, ...pages.map((p) => Number(p.views || 0))); const minuteMax = Math.max(1, ...minutes.map((m) => Number(m.active_users || 0))); return <div className="space-y-4"><Panel className="border-blue-200" testid="advanced-ga-pages" onRefresh={onRefresh} refreshing={loading} title="Google Analytics 4 — مباشر"><div className="flex h-14 items-center gap-2 border-b border-blue-800 bg-blue-700 px-4 text-white"><BarChart3 className="h-5 w-5" /><h2 className="text-sm font-black">Google Analytics 4 — مباشر</h2></div><div className="p-4"><h3 className="mb-3 text-sm font-extrabold">الصفحات الأكثر مشاهدة</h3>{pages.slice(0, 6).map((p, i) => <div key={`${p.title}-${i}`} className="mb-3"><div className="flex justify-between gap-2 text-[10px]"><span className="truncate">{p.title}</span><b>{p.views}</b></div><div className="mt-1 h-1.5 rounded bg-slate-100"><div className="h-full rounded bg-blue-500" style={{ width: `${Number(p.views || 0) / max * 100}%` }} /></div></div>)}</div></Panel><Panel className="border-violet-200" testid="advanced-ga-users" onRefresh={onRefresh} refreshing={loading} title="المستخدمون النشطون الآن"><div className="flex h-14 items-center gap-2 border-b border-violet-800 bg-violet-700 px-4 text-white"><UsersRound className="h-5 w-5" /><h2 className="font-black">المستخدمون النشطون الآن</h2></div><div className="grid grid-cols-2 gap-2 p-4"><Metric label="آخر 30 دقيقة" value={integer(data?.active_users?.last_30_minutes)} Icon={UsersRound} tone="bg-blue-50 text-blue-600" /><Metric label="آخر 5 دقائق" value={integer(data?.active_users?.last_5_minutes)} Icon={UsersRound} tone="bg-violet-50 text-violet-600" /></div><div className="flex h-36 items-end gap-1 overflow-hidden px-4 pb-4" dir="ltr" data-testid="advanced-ga-active-chart">{minutes.map((m, i) => <div key={i} className="max-h-full flex-1 rounded-t bg-violet-600" style={{ height: `${Math.min(100, Math.max(4, Number(m.active_users || 0) / minuteMax * 100))}%` }} />)}</div></Panel></div>; }
 
 export async function loadDashboardPeriodSnapshot({
     next,
@@ -792,14 +787,16 @@ export default function AdvancedDashboard() {
     const [filters, setFilters] = useState(() => defaultFilters("today"));
     const [data, setData] = useState(null); const [carts, setCarts] = useState([]); const [cartSummary, setCartSummary] = useState({ abandoned_count: 0, recovered_count: 0 }); const [ga, setGa] = useState(null); const [loading, setLoading] = useState(true); const [loadError, setLoadError] = useState(null);
     const { orders, hasMore: hasMoreOrders, loading: ordersLoading, loadMore: loadMoreOrders } = useOrders();
-    const dashboardDataRef = useRef(null);
+    const [cartLoading, setCartLoading] = useState(true);
+    const [cartError, setCartError] = useState("");
+    const [gaLoading, setGaLoading] = useState(true);
+    const cartReloadRef = useRef(null);
+    const gaReloadRef = useRef(null);
     const requestSequenceRef = useRef(0);
     const dashboardRefreshGateRef = useRef(null);
     if (dashboardRefreshGateRef.current === null) {
         dashboardRefreshGateRef.current = createDashboardFetchAdmission();
     }
-    const lastOrderSignatureRef = useRef("");
-    const orderSignature = useMemo(() => dashboardOrdersSignature(orders), [orders]);
     const loadPeriod = useCallback(async (next, { background = false } = {}) => {
         const gate = dashboardRefreshGateRef.current;
         if (!gate.start(background)) return;
@@ -819,66 +816,36 @@ export default function AdvancedDashboard() {
             gate.finish(background);
         }
     }, []);
-  const refreshDashboard = useCallback(() => {
-    if (
-      (typeof document !== "undefined" && document.hidden)
-      || (typeof navigator !== "undefined" && !navigator.onLine)
-    ) return;
-    void loadPeriod(filters, { background: true });
-  }, [filters, loadPeriod]);
     useEffect(() => {
         loadPeriod(filters);
         return () => { requestSequenceRef.current += 1; };
     }, [filters, loadPeriod]);
-    useEffect(() => { dashboardDataRef.current = data; }, [data]);
     useEffect(() => {
-        const previousSignature = lastOrderSignatureRef.current;
-        lastOrderSignatureRef.current = orderSignature;
-        if (shouldRefreshDashboardForOrders(previousSignature, orderSignature, Boolean(dashboardDataRef.current))) {
-      refreshDashboard();
-        }
-  }, [orderSignature, refreshDashboard]);
-    useEffect(() => {
-    const handleVisibilityChange = () => { if (!document.hidden) refreshDashboard(); };
-    const timer = window.setInterval(refreshDashboard, DASHBOARD_AUTO_REFRESH_MS);
-    window.addEventListener("focus", refreshDashboard);
-    window.addEventListener("online", refreshDashboard);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refreshDashboard);
-      window.removeEventListener("online", refreshDashboard);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [refreshDashboard]);
-    useEffect(() => {
-        if (!ABANDONED_CARTS_DASHBOARD_AUTO_SYNC) return;
         let active = true;
         let cartRequestInFlight = false;
         const loadCarts = async () => {
-            if (cartRequestInFlight || (typeof document !== "undefined" && document.hidden) || (typeof navigator !== "undefined" && !navigator.onLine)) return;
+            if (!active || cartRequestInFlight || (typeof document !== "undefined" && document.hidden) || (typeof navigator !== "undefined" && !navigator.onLine)) return;
             cartRequestInFlight = true;
+            setCartLoading(true);
+            setCartError("");
             const cartQuery = new URLSearchParams({ from_date: filters.from || "", to_date: filters.to || filters.from || "" }).toString();
             try {
                 const result = await api.get(`/dashboard-v2/abandoned-carts/recent?${cartQuery}`);
                 if (!active) return;
                 setCarts(result.data?.items || []);
                 setCartSummary({ abandoned_count: Number(result.data?.abandoned_count || 0), recovered_count: Number(result.data?.recovered_count || 0) });
-            } catch { /* Keep the last good cart snapshot during transient failures. */ }
-            finally { cartRequestInFlight = false; }
+            } catch {
+                if (active) setCartError("تعذر تحميل السلات. اضغط تحديث للمحاولة مجددًا.");
+            } finally {
+                cartRequestInFlight = false;
+                if (active) setCartLoading(false);
+            }
         };
-        const handleVisibilityChange = () => { if (!document.hidden) loadCarts(); };
+        cartReloadRef.current = loadCarts;
         loadCarts();
-        const timer = window.setInterval(loadCarts, CARTS_AUTO_REFRESH_MS);
-        window.addEventListener("focus", loadCarts);
-        window.addEventListener("online", loadCarts);
-        document.addEventListener("visibilitychange", handleVisibilityChange);
         return () => {
             active = false;
-            window.clearInterval(timer);
-            window.removeEventListener("focus", loadCarts);
-            window.removeEventListener("online", loadCarts);
-            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            cartReloadRef.current = null;
         };
     }, [filters.from, filters.to]);
     useEffect(() => {
@@ -887,15 +854,16 @@ export default function AdvancedDashboard() {
         const loadGa = async () => {
             if (!active || inFlight || document.hidden || !navigator.onLine) return;
             inFlight = true;
+            setGaLoading(true);
             try {
                 const result = await api.get("/integrations-v2/google_analytics_4/realtime-dashboard");
                 if (active) setGa(result.data);
             } catch { /* Preserve the last successful realtime snapshot. */ }
-            finally { inFlight = false; }
+            finally { inFlight = false; if (active) setGaLoading(false); }
         };
+        gaReloadRef.current = loadGa;
         loadGa();
-        const timer = window.setInterval(loadGa, 60_000);
-        return () => { active = false; window.clearInterval(timer); };
+        return () => { active = false; gaReloadRef.current = null; };
     }, []);
     return <div dir="rtl" className="space-y-4" data-testid="advanced-dashboard-page">
         <header className="flex flex-wrap items-center justify-between gap-3">
@@ -906,9 +874,9 @@ export default function AdvancedDashboard() {
         <div className="flex items-stretch gap-2"><div className="min-w-0 flex-1"><AdvancedFilters value={filters} onChange={setFilters} defaultPreset="today" /></div><button onClick={() => loadPeriod(filters)} className="rounded-xl border bg-white px-4 text-blue-700" aria-label="تحديث بيانات الفترة"><RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button></div>
         {!loading && loadError && <Panel className="border-amber-200 bg-amber-50 p-5 text-sm font-bold text-amber-900"><span role="alert">{loadError} — {data ? "تم الاحتفاظ بآخر بيانات موثوقة." : "لم تُعرض أرقام بديلة أو بيانات من فترة سابقة."}</span></Panel>}
         {(Boolean(data) || loading) && <>
-        <Panel title="ملخص الفترة" testid="advanced-period-summary"><div className="bg-slate-50 px-4 text-slate-800"><h2 className="font-extrabold">ملخص الفترة</h2></div><div className="p-3"><SummaryStrip data={data} filters={filters} loading={loading} /></div></Panel>
+        <Panel title="ملخص الفترة" testid="advanced-period-summary" onRefresh={() => loadPeriod(filters)} refreshing={loading}><div className="bg-slate-50 px-4 text-slate-800"><h2 className="font-extrabold">ملخص الفترة</h2></div><div className="p-3"><SummaryStrip data={data} filters={filters} loading={loading} /></div></Panel>
         <CampaignAdvisorCard />
-        <div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="min-w-0 space-y-4"><DashboardAdsSpendCard collapsible fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} />{ABANDONED_CARTS_DASHBOARD_AUTO_SYNC ? <AbandonedCartsCard carts={carts} summary={cartSummary} /> : <Panel testid="advanced-abandoned-carts-frozen" title="السلات المتروكة"><div className="bg-slate-800 px-4 text-white"><h2 className="font-bold">السلات المتروكة</h2></div><p role="status" className="p-4 text-sm">تم إيقاف التحديث التلقائي مؤقتًا لتحسين أداء لوحة التحكم.</p></Panel>}</aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="min-w-0 space-y-4"><ProfitCard data={data} loading={loading} fromDate={filters.from} toDate={filters.to} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="min-w-0 space-y-4"><GaLive data={ga} /><LatestSoldProductsCard collapsible /></div></div></main></div>
+        <div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="min-w-0 space-y-4"><DashboardAdsSpendCard collapsible fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} onRefresh={() => loadPeriod(filters)} /><AbandonedCartsCard carts={carts} summary={cartSummary} loading={cartLoading} error={cartError} onRefresh={() => cartReloadRef.current?.()} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="min-w-0 space-y-4"><ProfitCard data={data} loading={loading} fromDate={filters.from} toDate={filters.to} onRefresh={() => loadPeriod(filters)} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="min-w-0 space-y-4"><GaLive data={ga} loading={gaLoading} onRefresh={() => gaReloadRef.current?.()} /><LatestSoldProductsCard collapsible /></div></div></main></div>
         </>}
     </div>;
 }

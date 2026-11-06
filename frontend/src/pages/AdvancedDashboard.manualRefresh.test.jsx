@@ -98,7 +98,7 @@ test("each circular card refresh reads its own source; shared financial cards ke
     }
     for (const [label, sourceIndex] of [
         ["Google Analytics 4 — مباشر", 1], ["المستخدمون النشطون الآن", 1],
-        ["المستشار الذكي للإعلانات", 2], ["السلات المتروكة", 3],
+        ["ملاحظات الذكاء على الحملات", 2], ["السلات المتروكة", 3],
     ]) {
         const before = sources();
         await click(`تحديث بطاقة ${label}`);

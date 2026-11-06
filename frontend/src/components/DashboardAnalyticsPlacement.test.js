@@ -58,7 +58,8 @@ test("the advanced dashboard retains governed date refresh and latest-snapshot b
     expect(advancedDashboardSource).toContain("isLatest(requestSequence)");
     expect(advancedDashboardSource).not.toContain("setData(null)");
     expect(advancedDashboardSource).toContain("requestSequenceRef");
-    expect(advancedDashboardSource).toContain("DASHBOARD_AUTO_REFRESH_MS");
+    expect(advancedDashboardSource).not.toContain("setInterval(");
+    expect(advancedDashboardSource).toContain("onRefresh={() => loadPeriod(filters)}");
     expect(advancedDashboardSource).toContain("Keep the last good cart snapshot");
     expect(advancedDashboardSource).not.toContain(
         "/dashboard-v2/unified-marketing-shadow",

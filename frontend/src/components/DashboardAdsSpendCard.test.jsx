@@ -54,7 +54,8 @@ function providers({ hourly = true } = {}) {
     };
 }
 
-test("mounted card reloads saved Google spend without a page refresh and stops polling on unmount", async () => {
+test("card reads saved spend on open, ignores automatic triggers and refreshes from its button", async () => {
+    getDashboardAdsSpend.mockClear();
     jest.useFakeTimers(); globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     const previousVisibility = Object.getOwnPropertyDescriptor(document, "visibilityState");
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
@@ -64,15 +65,22 @@ test("mounted card reloads saved Google spend without a page refresh and stops p
     try {
         await act(async () => root.render(<DashboardAdsSpendCard fromDate="2026-10-13" toDate="2026-10-13" />));
         expect(host.textContent).toContain("7.5");
+        expect(getDashboardAdsSpend).toHaveBeenCalledTimes(1);
+        expect(getDashboardAdsSpend).toHaveBeenLastCalledWith({ dateFrom: "2026-10-13", dateTo: "2026-10-13", refresh: false });
         google = 14.25;
         await act(async () => jest.advanceTimersByTime(5 * 60_000));
+        await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+        expect(getDashboardAdsSpend).toHaveBeenCalledTimes(1);
+        expect(host.textContent).toContain("7.5");
+        await act(async () => host.querySelector('[data-testid="dashboard-ads-spend-refresh"]').click());
         expect(host.textContent).toContain("14.25");
-        expect(getDashboardAdsSpend.mock.calls.some(([input]) => input.dateFrom === "2026-10-13" && input.dateTo === "2026-10-13" && input.refresh === false)).toBe(true);
+        expect(getDashboardAdsSpend).toHaveBeenLastCalledWith({ dateFrom: "2026-10-13", dateTo: "2026-10-13", refresh: true });
         await act(async () => root.unmount());
         const completed = getDashboardAdsSpend.mock.calls.length;
         await act(async () => jest.advanceTimersByTime(10 * 60_000));
         expect(getDashboardAdsSpend).toHaveBeenCalledTimes(completed);
     } finally {
+        await act(async () => root.unmount());
         host.remove(); jest.useRealTimers();
         if (previousVisibility) Object.defineProperty(document, "visibilityState", previousVisibility); else delete document.visibilityState;
     }

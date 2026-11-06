@@ -1,5 +1,9 @@
 # Dashboard first usable data
 
+**Stopped by the user. PR1784 is closed and unmerged.** Preserve this branch as WIP only; do not resume or deploy dashboard changes without renewed instruction. The user redirected work to actual background/server contention because employee slowness also occurs with every dashboard closed.
+
+The extended manual-card implementation passed 37 tests across three focused suites. It has not had full release verification; the historical cart/automatic-refresh contract tests still need adaptation if the work is resumed. No extended source/intent pair, merge, /app mutation, release lease or deployment was performed. The earlier candidate intent was downloaded for inspection only.
+
 User reports first figures, executive cards, charts and bestselling products remain slow after PR1782. The first isolated UI regression reproduces a complete backend snapshot waiting behind an unrelated spend read; all four new regressions fail before the change and pass afterward.
 
 This slice publishes the actual selected-period backend snapshot immediately while keeping incomplete profit null. The existing advertising/canonical follow-up continues afterward and cannot replace a newer period. Initial data survives an optional follow-up failure; unmount invalidates pending work. Existing calculation tests now check both the initial and final frames.

@@ -21,7 +21,6 @@ import {
     getDashboardAdsSpend,
 } from "../services/dashboardAdsSpend";
 
-const AUTO_REFRESH_MS = 5 * 60 * 1000;
 const PROVIDER_META = Object.freeze({
     snapchat: { label: "سناب شات", stroke: "#eab308" },
     meta: { label: "ميتا", stroke: "#2563eb" },
@@ -482,26 +481,9 @@ export default function DashboardAdsSpendCard({ fromDate, toDate, collapsible = 
     }, [data, fromDate, toDate]);
 
     useEffect(() => {
-        load({ refresh: true });
+        load({ refresh: false });
+        return () => { requestId.current += 1; };
     }, [fromDate, toDate]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    useEffect(() => {
-        const timer = window.setInterval(() => {
-            if (document.visibilityState === "visible") {
-                load({ silent: true, refresh: false });
-            }
-        }, AUTO_REFRESH_MS);
-        const onVisible = () => {
-            if (document.visibilityState === "visible") {
-                load({ silent: true, refresh: false });
-            }
-        };
-        document.addEventListener("visibilitychange", onVisible);
-        return () => {
-            window.clearInterval(timer);
-            document.removeEventListener("visibilitychange", onVisible);
-        };
-    }, [load]);
 
     return (
         <DashboardAdsSpendCardContent

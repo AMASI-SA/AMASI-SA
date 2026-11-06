@@ -1,0 +1,9 @@
+PASS src/pages/AdvancedDashboard.manualRefresh.test.jsx
+PASS src/components/DashboardAdsSpendCard.test.jsx
+PASS src/components/DashboardPanel.test.jsx
+
+Test Suites: 3 passed, 3 total
+Tests:       37 passed, 37 total
+Snapshots:   0 total
+Time:        5.141 s
+Ran all test suites within paths "src/pages/AdvancedDashboard.manualRefresh.test.jsx", "src/components/DashboardAdsSpendCard.test.jsx", "src/components/DashboardPanel.test.jsx".
