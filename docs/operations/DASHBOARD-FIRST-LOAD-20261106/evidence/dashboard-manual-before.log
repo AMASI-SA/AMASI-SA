@@ -1,0 +1,84 @@
+FAIL src/pages/AdvancedDashboard.manualRefresh.test.jsx
+  × cards load once on open and never reread on elapsed time, focus, reconnection or visibility (160 ms)
+  × Recent Orders retains its automatic refresh without reloading financial or analytics cards (145 ms)
+  × each circular card refresh reads its own source; shared financial cards keep one canonical snapshot (115 ms)
+  √ leaving the page stops page-owned reads, including Recent Orders (81 ms)
+
+  ● cards load once on open and never reread on elapsed time, focus, reconnection or visibility
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 2
+
+      Array [
+    -   1,
+    -   1,
+    +   2,
+        1,
+        1,
+    +   0,
+      ]
+
+      69 |     await act(async () => root.render(<AdvancedDashboard />));
+      70 |     const initial = sources();
+    > 71 |     expect(initial.slice(0, 4)).toEqual([1, 1, 1, 1]);
+         |                                 ^
+      72 |     for (let i = 0; i < 36; i += 1) await tick(10_000);
+      73 |     await act(async () => {
+      74 |         window.dispatchEvent(new Event("focus"));
+
+      at Object.<anonymous> (src/pages/AdvancedDashboard.manualRefresh.test.jsx:71:33)
+
+  ● Recent Orders retains its automatic refresh without reloading financial or analytics cards
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 2
+
+      Array [
+    -   2,
+    +   3,
+        1,
+        1,
+        0,
+    -   3,
+    +   4,
+        1,
+      ]
+
+      87 |     expect(listOrders).toHaveBeenCalledTimes(2);
+      88 |     expect(host.querySelector('[data-testid="advanced-latest-orders"]').textContent).toContain("1002");
+    > 89 |     expect(sources()).toEqual(initial);
+         |                       ^
+      90 | });
+      91 |
+      92 | test("each circular card refresh reads its own source; shared financial cards keep one canonical snapshot", async () => {
+
+      at Object.<anonymous> (src/pages/AdvancedDashboard.manualRefresh.test.jsx:89:23)
+
+  ● each circular card refresh reads its own source; shared financial cards keep one canonical snapshot
+
+    expect(received).not.toBeNull()
+
+    Received: null
+
+      38 | const click = async label => act(async () => {
+      39 |     const button = host.querySelector(`[aria-label="${label}"]`);
+    > 40 |     expect(button).not.toBeNull();
+         |                        ^
+      41 |     button.click();
+      42 | });
+      43 |
+
+      at src/pages/AdvancedDashboard.manualRefresh.test.jsx:40:24
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (C:/Users/amasi/.codex/worktrees/mezan-page-performance-20261106/frontend/node_modules/react/cjs/react.development.js:814:22)
+      at click (src/pages/AdvancedDashboard.manualRefresh.test.jsx:38:33)
+      at Object.<anonymous> (src/pages/AdvancedDashboard.manualRefresh.test.jsx:96:15)
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 1 passed, 4 total
+Snapshots:   0 total
+Time:        2.743 s
+Ran all test suites within paths "src/pages/AdvancedDashboard.manualRefresh.test.jsx".

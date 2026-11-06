@@ -1,11 +1,11 @@
 {
   "task_id": "DASHBOARD-FIRST-LOAD-20261106",
-  "state": "source_locally_verified_exact_source_ci_pending",
+  "state": "wip_extended_manual_refresh_and_background_diagnosis",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1784",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/mezan-dashboard-first-load-20261106",
   "base_sha": "b0b23a5ca62efe934d7eded08d2b7abdca9a9389",
-  "user_requirement": "Dashboard still slow before figures, executive summary, chart cards and bestselling products. Continue the authorized performance fix; preserve financial authority and native grouped/on-demand loading.",
+  "user_requirement": "Load dashboard cards once on page open, then circular manual refresh per card like Latest Sold Products. Preserve Recent Orders automatic refresh unchanged. Verify unopened page data stays inactive. User also reports employee slowness with all dashboards closed; investigate backend/background contention as well as frontend polling. Preserve financial authority and native grouped/on-demand loading.",
   "first_confirmed_mechanism": "AdvancedDashboard waits for saved platform spend after the main backend snapshot. That read may join an external provider refresh, and its 12-second timeout only starts after the primary response. An additional canonical recomputation also precedes the first publication.",
   "implementation": "Publish the current-range backend snapshot immediately; preserve null/unverified financial fields; refresh canonical advertising/profit later using the existing same-range backend path; retain primary data on follow-up failure and invalidate late work on unmount or period change.",
   "scope": [
@@ -66,6 +66,18 @@
     "No provider refresh or business write added"
   ],
   "production_changed_by_this_followup": false,
+  "intermediate_source_candidate": {
+    "sha": "1cb7976aa53b5740f5dab878cce8f1741e61d20d",
+    "checks": "30 success, 6 conditional skips, no failures",
+    "candidate_artifact_sha256": "33e622cea4114d848b69b3713f3ee9a81bfbfe2bb92cb635c9867bb86ca9b807",
+    "intent_applied_or_frozen": false,
+    "note": "Scope extended by user before freeze; rebuild and fresh source required"
+  },
+  "manual_refresh_regressions_before": {
+    "failed": 3,
+    "passed": 1,
+    "note": "Missing per-card controls, automatic financial refresh on Recent Orders update, cart rollout still frozen; leaving page already stops owned reads"
+  },
   "shared_app_or_lease_changed": false,
   "live_dashboard_api_timings": "Asked user to capture Network Time for dashboard-v2 and ads-platform-spend; pending",
   "remaining": [
@@ -81,6 +93,6 @@
     "user_supplied_verify_tail_and_status_active_false": true,
     "preview_restart_command_given": true
   },
-  "next_safe_action": "Push final source to PR1784, inspect exact-head checks and governed A/B artifact, then freeze intent-only commit. No /app change or lease until source and adapter checks pass.",
-  "source_checkpoint": "efdbe0cfc46f7c86310b067d4cf0a88efb3f705c"
+  "next_safe_action": "Implement manual card refresh while preserving the real Recent Orders hook, verify page activation, diagnose background contention, then run fresh affected checks before a new source/intent. No lease or /app mutation.",
+  "source_checkpoint": "1cb7976aa53b5740f5dab878cce8f1741e61d20d"
 }
