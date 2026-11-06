@@ -50,3 +50,39 @@ fetch and the prepare/prepublish gates before the authorized publication. Requir
 new Deployment Succeeded and three matching official verification probes. Existing
 source-fingerprint failures require fresh evidence and remain excluded from any
 automatic repair or data migration in this scheduling patch.
+
+
+## Accepted source and reviewed intent checkpoint
+
+Release PR: https://github.com/AMASI-SA/AMASI-SA/pull/1792 (ready, unmerged).
+Source A: 6ffa622c04f2359dc99f501d16e13c942ab5b1d0.
+Intent-only B: bcb4d10e08b1dd80e126ea975a64e90f795b9c34.
+A..B changes only release/release-intent-v5.json. Runtime identity:
+rg5-75858ae3554d19d11fe40214537a2f02eec0292f6b73e9c6e5e2e8d451155873.
+Candidate artifact SHA256:
+21347861bd19309a504adc38d400708a16384c8e141bd433acd13c75c890eb8d.
+
+Final affected isolated-Mongo validation: 32 tests passed in 180.026 seconds,
+exit 0, including post-commit Ready wake and actual child-pipe isolation.
+Exact B CI: 34 successful / 10 not-applicable skipped / no pending or failed.
+Readiness run42300441669 passed, including clean-clone governed adapter rehearsals
+under both Host Node20.20.2 and24.19.0. Original readiness42299903849 generated the
+candidate intent; exact source/base and six critical Git blob hashes matched.
+The owned local Mongo fixture process has been stopped after verification.
+
+Shared release is still owned by android75-selected-groups-20261107:
+deployment3bd31d56a93ce30f43d514008f545eb2ca3563c3,
+sourceebb69057d25d6578ae0b28eb4e6aab1ab71f44e3,
+runtime rg5-03f70cc373f6f22c5b7b904ac6de8278d736978c30b6ce74a8094d4dba9ff96c.
+Its official detached verification is running. Our read-only guard status is
+waiting on that operation lock. Do not clear it or start another release.
+Production changed by THIS task: no. No live business/provider write.
+
+Next: observe inactive guard after the owner's proof, fetch fresh Production and
+confirm unchanged base, normal-merge1792 preserving the reviewed B tree, ff /app,
+materialize and verify the governed build, prepare/prepublish, publish and obtain
+the new platform success plus official verify3/statusinactive.
+
+This document's continuation is on the dedicated evidence branch
+codex/assembly-completion-release-evidence-20261107. It is documentation-only and
+must not be deployed or merged into the frozen A/B release pair.
