@@ -60,7 +60,10 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             patch.object(review, "call_salla", self.external),
             patch.object(review, "_sync_salla_reviewed", self.external),
             patch.object(review, "refresh_order_from_salla", self.external),
-            patch.object(pieces, "call_salla", self.external),
+            # The explicit all-pieces-routed preparation transition is separate
+            # from immutable local review approval. Keep review/refresh external
+            # calls forbidden while modelling this exact status-only seam.
+            patch.object(pieces, "call_salla", side_effect=LocalAssemblyTests.assignment_transport.__get__(self)),
             patch.object(batches, "refresh_order_from_salla", self.external),
         ):
             replacement.start()
@@ -127,20 +130,22 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json()["stage"], "reviewed")
         self.assertEqual(await self.db[completion.EVENTS].count_documents({"event_type": "order_review_completed"}), 1)
         workflow = await self.workflow()
-        self.assertEqual(workflow["stage"], "reviewed")
+        self.assertEqual(workflow["stage"], "in_progress" if direct and not mixed else "reviewed")
+        self.assertEqual(self.assignment_posts, int(direct and not mixed))
         self.external.assert_not_awaited()
         self.ids = workflow["items"][0].get("direct_assembly_piece_ids") or []
         self.assertEqual(len(self.ids), 2 if direct else 0)
-        # Assembly now requires positive current Salla in_progress evidence.
-        # This fixture models the provider update after review, not a write
-        # performed by local review itself.
-        await self.db.unified_orders.update_one(
-            {"user_id": "owner", "order_number": "local-assembly"}, {"$set": {
-                "order_status": "in_progress",
-                "order_status_slug": "in_progress",
-                "raw_by_source.salla_direct.status_slug": "in_progress",
-                "raw_by_source.salla_direct.status": {"slug": "in_progress", "name": "in_progress"},
-            }})
+        # All-direct preparation now has verified current aliases already. The
+        # mixed/supplier scenarios retain the fixture's independent provider
+        # observation used to exercise individual assembly/receipt contracts.
+        if not (direct and not mixed):
+            await self.db.unified_orders.update_one(
+                {"user_id": "owner", "order_number": "local-assembly"}, {"$set": {
+                    "order_status": "in_progress",
+                    "order_status_slug": "in_progress",
+                    "raw_by_source.salla_direct.status_slug": "in_progress",
+                    "raw_by_source.salla_direct.status": {"slug": "in_progress", "name": "in_progress"},
+                }})
         return workflow
 
     async def workflow(self):
@@ -174,6 +179,7 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         if method == "GET" and path == "/orders/statuses":
             return {"data": [{"id": 7, "name": "قيد التنفيذ"}]}
         if method == "POST" and path.endswith("/status"):
+            self.assertEqual(kwargs["json"], {"status_id": 7})
             self.assignment_posts += 1
             if self.assignment_uncertain:
                 raise TimeoutError("synthetic uncertain assignment update")
@@ -182,7 +188,11 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(method, "GET")
         self.assertTrue(path.startswith("/orders/"))
         self.assignment_reads += 1
-        return {"data": {"status": {"slug": self.assignment_status}}}
+        internal_id = path.removeprefix("/orders/")
+        source = await self.db.unified_orders.find_one({"user_id": user_id,
+            "raw_by_source.salla_direct.id": internal_id}) or {}
+        return {"data": {"id": internal_id, "reference_id": source.get("order_number"),
+            "status": {"slug": self.assignment_status}}}
 
     async def assign_cards(self, cards, request_id, *, mobile=False):
         selections = [{"group_key": row["group_key"], "quantity": 1} for row in cards]

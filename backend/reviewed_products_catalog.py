@@ -930,6 +930,7 @@ async def load_reviewed_product_context(
     limit: int = MAX_REVIEWED_ORDERS,
     reviewed_date: str = "",
     order_number: str = "",
+    order_numbers: list[str] | None = None,
 ) -> dict[str, Any]:
     workflow_query: dict[str, Any] = {"user_id": user_id, **assignment_workflow_query()}
     historical = bool(_text(reviewed_date))
@@ -958,11 +959,13 @@ async def load_reviewed_product_context(
         }
     pairs = []
     allocation_documents = []
-    if historical or order_number:
+    if historical or order_number or order_numbers is not None:
         # Stage reconciliation must still see its specific fully allocated
         # order; it must not search a limited catalogue of remaining units.
         if order_number:
             workflow_query["order_number"] = order_number
+        elif order_numbers is not None:
+            workflow_query["order_number"] = {"$in": order_numbers}
         workflows = await db[WORKFLOWS].find(workflow_query, {"_id": 0}).sort(
             "reviewed_at", 1,
         ).limit(limit + 1).to_list(limit + 1)
@@ -1063,6 +1066,23 @@ async def load_reviewed_product_context(
 
 def make_reviewed_products_catalog_router(db: Any, current_user: Callable) -> APIRouter:
     router = APIRouter(prefix="/reviewed-products-v1", tags=["Reviewed Products Catalog"])
+
+    @router.get("/groups")
+    async def reviewed_product_groups(q: str = Query("", max_length=200), user: dict = Depends(current_user)) -> dict[str, Any]:
+        reviewer = _require_reviewer(user)
+        from reviewed_product_pages import reviewed_groups
+        return await reviewed_groups(db, user_id=_merchant_user_id(reviewer), query=q)
+
+    @router.get("/group-page")
+    async def reviewed_product_group_page(
+        group_key: str = Query(min_length=1, max_length=1024),
+        after: str = Query("", max_length=2048),
+        q: str = Query("", max_length=200),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        reviewer = _require_reviewer(user)
+        from reviewed_product_pages import reviewed_group_page
+        return await reviewed_group_page(db, user_id=_merchant_user_id(reviewer), group_key=group_key, after=after, query=q)
 
     @router.get("/catalog")
     async def reviewed_products_catalog(

@@ -165,7 +165,8 @@ async def test_create_operational_item_uses_independent_photo_and_next_order_lea
     async def allowed(*_args, **_kwargs):
         return None
 
-    async def detail(_db, tenant, order):
+    async def detail(_db, tenant, order, *, local_only=False):
+        assert local_only is True
         row = await _db[review.WORKFLOWS].find_one(
             {"user_id": tenant, "order_number": order.order_number}, {"_id": 0},
         )

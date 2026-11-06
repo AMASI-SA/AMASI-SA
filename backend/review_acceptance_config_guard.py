@@ -17,6 +17,7 @@ FENCES = "order_review_acceptance_config_versions"
 IDENTITY_FIELDS = {"id", "salla_product_id", "product_id", "parent_product_id", "sku", "barcode",
                    "variants.id", "variants.sku", "variants.barcode"}
 FIELDS = {
+    "order_review_product_option_defaults": {"product_key", "manual_hidden_spec_keys", "operational_templates", "revision"},
     "settings": {"g47_inventory.component_lifecycle_starts_at", "g47_inventory.revision", "g47_inventory.version"},
     "mezan_products_v2": IDENTITY_FIELDS | {"mezan_product_id", "revision", "version"},
     "salla_products": IDENTITY_FIELDS,

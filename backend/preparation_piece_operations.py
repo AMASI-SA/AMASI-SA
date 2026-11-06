@@ -836,6 +836,8 @@ async def _sync_salla_in_progress(
     user_id: str,
     order: Any,
     reserve_dispatch: Callable | None = None,
+    validate_current: Callable | None = None,
+    confirmed_order: dict | None = None,
 ) -> tuple[str, str | None]:
     """Set and verify the order's exact custom in-progress status in Salla."""
     source = getattr(order, "source", None)
@@ -858,7 +860,11 @@ async def _sync_salla_in_progress(
             if isinstance(current_response, dict)
             else None
         )
+        if validate_current is not None and not validate_current(current):
+            return "pending", "salla_current_status_not_eligible"
         if _salla_order_is_in_progress(current):
+            if confirmed_order is not None:
+                confirmed_order.update(current)
             return "sent", None
     except SallaError:
         if reserve_dispatch is not None:
@@ -873,6 +879,18 @@ async def _sync_salla_in_progress(
             return "pending", "in_progress_status_not_found"
         if reserve_dispatch is not None and not await reserve_dispatch():
             return "pending", "salla_in_progress_confirmation_required"
+        if validate_current is not None:
+            # The local reservation can wait on an owner transaction. Recheck
+            # the provider immediately after it so a terminal observation is
+            # never overwritten by a stale pre-reservation read.
+            response = await call_salla(db, user_id, "GET", f"/orders/{internal_order_id}")
+            current = response.get("data") if isinstance(response, dict) else None
+            if not validate_current(current):
+                return "pending", "salla_current_status_not_eligible"
+            if _salla_order_is_in_progress(current):
+                if confirmed_order is not None:
+                    confirmed_order.update(current)
+                return "sent", None
         await call_salla(
             db,
             user_id,
@@ -895,7 +913,11 @@ async def _sync_salla_in_progress(
                 f"/orders/{internal_order_id}",
             )
             latest = response.get("data") if isinstance(response, dict) else None
+            if validate_current is not None and not validate_current(latest):
+                return "pending", "salla_current_status_not_eligible"
             if _salla_order_is_in_progress(latest):
+                if confirmed_order is not None:
+                    confirmed_order.update(latest)
                 return "sent", None
     except SallaError as exc:
         return "pending", f"salla_verify_{exc.status_code}"
@@ -947,6 +969,22 @@ async def _assigned_reconcile_order_stage(
         )
         if not local_review_stage_eligible(order, local_workflows.get(order_number), {"reviewed", "in_progress"}):
             raise HTTPException(409, detail={"code": "local_review_preparation_not_eligible"})
+    direct_coverage = None
+    if local_contract:
+        from review_direct_preparation_sync import (
+            has_direct_route, preparation_routing_coverage, reconcile_direct_preparation_after_review,
+        )
+        if has_direct_route(workflow):
+            direct_coverage = await preparation_routing_coverage(db, user_id=user_id, order=order, workflow=workflow)
+            if direct_coverage is None:
+                raise HTTPException(409, detail={"code": "direct_preparation_routing_not_proven"})
+            if direct_coverage["fully_routed"]:
+                confirmed = await reconcile_direct_preparation_after_review(db, user_id=user_id,
+                    order_number=order_number, actor=actor, result={}, batch_id=batch_id)
+                state = confirmed.get("preparation_status_sync") or {}
+                if state.get("state") != "sent":
+                    raise RuntimeError("salla_in_progress_status_sync_failed:" + _text(state.get("reason")))
+                return True, 0
     states = {
         _text(row.get("order_item_id")): dict(row)
         for row in workflow.get("items") or []
@@ -968,6 +1006,8 @@ async def _assigned_reconcile_order_stage(
     required = allocated = 0
     for item in getattr(order, "items", None) or []:
         item_id = _text(getattr(item, "order_item_id", None))
+        if direct_coverage is not None and states.get(item_id, {}).get("preparation_route") == "direct_assembly":
+            continue
         if states.get(item_id, {}).get("supplier_export") is False:
             continue
         try:

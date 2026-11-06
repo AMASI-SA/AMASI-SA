@@ -333,13 +333,13 @@ async def test_reference_image_enrichment_pairs_duplicate_group_rows_by_order(
                 "group_key": "legacy-group",
                 "order_number": "301",
                 "order_item_id": "line-a",
-                "image_b64": "already-hydrated-a",
+                "image_b64": __import__("base64").b64encode(_image_bytes(1)).decode("ascii"),
             },
             {
                 "group_key": "legacy-group",
                 "order_number": "302",
                 "order_item_id": "line-b",
-                "image_b64": "already-hydrated-b",
+                "image_b64": __import__("base64").b64encode(_image_bytes(2)).decode("ascii"),
             },
         ]
 

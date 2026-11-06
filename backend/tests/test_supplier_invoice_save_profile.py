@@ -47,17 +47,20 @@ async def test_save_sequence_profile(env, monkeypatch, installed_live_cost_suppo
     app = FastAPI(); app.include_router(r.make_supplier_receiving_router(db, current))
     stages = {}; index_calls = 0; index_seconds = 0
     phase = "setup"; index_stages = {}
-    create_index = AsyncIOMotorCollection.create_index
-    async def counted(collection, *args, **kwargs):
-        nonlocal index_calls, index_seconds
-        index_calls += 1; started = perf_counter()
-        try: return await create_index(collection, *args, **kwargs)
-        finally:
-            elapsed = perf_counter() - started
-            index_seconds += elapsed
-            entry = index_stages.setdefault(phase, {"calls": 0, "ms": 0})
-            entry["calls"] += 1; entry["ms"] += elapsed * 1000
-    monkeypatch.setattr(AsyncIOMotorCollection, "create_index", counted)
+    def trace_ddl(operation):
+        original = getattr(AsyncIOMotorCollection, operation)
+        async def counted(collection, *args, **kwargs):
+            nonlocal index_calls, index_seconds
+            index_calls += 1; started = perf_counter()
+            try: return await original(collection, *args, **kwargs)
+            finally:
+                elapsed = perf_counter() - started
+                index_seconds += elapsed
+                entry = index_stages.setdefault(phase, {"calls": 0, "ms": 0})
+                entry["calls"] += 1; entry["ms"] += elapsed * 1000
+        monkeypatch.setattr(AsyncIOMotorCollection, operation, counted)
+    trace_ddl("create_index")
+    trace_ddl("create_indexes")
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://synthetic.test") as client:
         async def request(stage, method, path, **kwargs):
             nonlocal phase
@@ -80,7 +83,19 @@ async def test_save_sequence_profile(env, monkeypatch, installed_live_cost_suppo
         replay = await client.post(f"/supplier-receiving-v1/sessions/{session['id']}/close", json=payload)
         assert replay.status_code == 200 and replay.json()["supplier_invoice"]["id"] == saved["supplier_invoice"]["id"]
         assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 1
-    # Current setup adds the prior-piece and order-unit indexes once per router.
-    assert index_calls == (36 if revision == "baseline" else 14)
+    # Count both single and batched DDL honestly; the original budget stays14.
+    # Personal query indexes must exist without adding request-time DDL work.
+    if revision == "baseline":
+        assert index_calls == 36
+    else:
+        assert 0 < index_calls <= 14
+        indexes = await db[r.SESSIONS].index_information()
+        assert list(indexes["ix_supplier_receiving_actor_active_v1"]["key"]) == [
+            ("user_id", 1), ("opened_by", 1), ("status", 1), ("opened_at", -1)]
+        assert list(indexes["ix_supplier_receiving_actor_history_v1"]["key"]) == [
+            ("user_id", 1), ("opened_by", 1), ("status", 1), ("closed_at", -1), ("id", -1)]
+        assert indexes["uq_supplier_receiving_open_actor_v1"]["unique"] is True
+        assert indexes["uq_supplier_receiving_open_actor_v1"]["partialFilterExpression"] == {"status": "open"}
+        assert indexes["uq_supplier_receiving_request_v1"]["unique"] is True
     print("SAVE_PROFILE", json.dumps({"revision": revision, "pieces": count, "ms": stages,
           "indexes_by_stage": index_stages, "index_calls_including_replay": index_calls, "index_ms_including_replay": round(index_seconds * 1000, 3)}, sort_keys=True))

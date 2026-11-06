@@ -71,4 +71,7 @@ async def acceptance_snapshot(db, *, user_id, order):
         "assignment_defaults": await rows(ASSIGNMENT_DEFAULTS, {"user_id": user_id, "product_key": {
             "$in": sorted({preparation_assignment_product_key(item) for item in order.items})}},
             "product_key preparation_route assigned_employee_id"),
+        "product_option_defaults": await rows("order_review_product_option_defaults", {"user_id": user_id,
+            "product_key": {"$in": sorted({preparation_assignment_product_key(item) for item in order.items})}},
+            "product_key manual_hidden_spec_keys operational_templates"),
     })
