@@ -2690,6 +2690,19 @@ async def ensure_supplier_receiving_indexes(db: Any) -> None:
         [("user_id", ASCENDING), ("opened_at", DESCENDING)],
         name="ix_supplier_receiving_history_v1",
     )
+    # Both open/cancelling lookup and closed history are personal. The legacy
+    # tenant/date index scans colleagues' drafts as the shared tenant grows;
+    # the unique open-only index cannot answer an open-or-cancelling read.
+    await db[SESSIONS].create_index(
+        [("user_id", ASCENDING), ("opened_by", ASCENDING),
+         ("status", ASCENDING), ("opened_at", DESCENDING)],
+        name="ix_supplier_receiving_actor_active_v1",
+    )
+    await db[SESSIONS].create_index(
+        [("user_id", ASCENDING), ("opened_by", ASCENDING),
+         ("status", ASCENDING), ("closed_at", DESCENDING), ("id", DESCENDING)],
+        name="ix_supplier_receiving_actor_history_v1",
+    )
     await db[RECEIVING_EVENTS].create_index(
         [
             ("user_id", ASCENDING),
@@ -3973,6 +3986,7 @@ def make_supplier_receiving_router(
     async def catalog(
         limit: int = Query(default=50, ge=1, le=200),
         entry_only: bool = False,
+        session_only: bool = False,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
@@ -4000,7 +4014,7 @@ def make_supplier_receiving_router(
             # list or financial authority; the selected child must read fresh.
             return {"ok": True, "entry_only": True, "read_only": True,
                     "suppliers": suppliers, "active_session": _public_session(active)}
-        sessions = (
+        sessions = [] if session_only else (
             await db[SESSIONS]
             .find(
                 {
@@ -4021,6 +4035,7 @@ def make_supplier_receiving_router(
                 {
                     "user_id": merchant_id,
                     "status": {"$ne": "inactive"},
+                    **({"id": _text((active or {}).get("supplier_id"))} if session_only else {}),
                 },
                 {
                     "_id": 0,
@@ -4063,7 +4078,7 @@ def make_supplier_receiving_router(
             if supplier_service_ids
             else []
         )
-        eligible_count = await db[PIECES].count_documents(
+        eligible_count = None if session_only else await db[PIECES].count_documents(
             {
                 "user_id": merchant_id,
                 "status": {"$in": sorted(ELIGIBLE_PIECE_STATUSES)},
@@ -4092,7 +4107,7 @@ def make_supplier_receiving_router(
                     session_id=_text(active.get("id")),
                     limit=MAX_SESSION_SCANS,
                 )
-                if active
+                if active and not session_only
                 else []
             ),
             "sessions": [
@@ -4100,7 +4115,8 @@ def make_supplier_receiving_router(
                 for row in sessions
                 if (view := _catalog_session_view(row, context=context)) is not None
             ],
-            "eligible_piece_count": eligible_count,
+            **({"session_only": True, "session_refresh_required": True}
+               if session_only else {"eligible_piece_count": eligible_count}),
             "permissions": {
                 "can_open": True,
                 "can_scan": True,

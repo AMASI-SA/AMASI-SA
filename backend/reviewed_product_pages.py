@@ -18,12 +18,12 @@ from reviewed_products_catalog import (
 )
 
 
-async def _group_index(db: Any, *, user_id: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+async def _group_index(db: Any, *, user_id: str, query: str = "") -> tuple[dict[str, Any], list[dict[str, Any]]]:
     pipeline = _available_workflow_pipeline({"user_id": user_id, **assignment_workflow_query()})
     pipeline.append({"$project": {"order_number": 1,
-        **{"items." + field: 1 for field in (
+        **({"items": 1} if query else {"items." + field: 1 for field in (
             "order_item_id", "product_id", "parent_product_id", "product_key", "product_name", "name",
-            "sku", "selected_image_url", "supplier_export", "source_addition", "review_status")}}})
+            "sku", "selected_image_url", "supplier_export", "source_addition", "review_status")})}})
     cursor = db[WORKFLOWS].aggregate(pipeline, batchSize=64)
     groups: dict[str, Any] = {}
     try:
@@ -37,6 +37,8 @@ async def _group_index(db: Any, *, user_id: str) -> tuple[dict[str, Any], list[d
             if not states:
                 states = [{"_fallback_order": number, "name": "منتجات الطلب #" + number}]
             for state in states:
+                if query and query.casefold() not in (number + " " + json.dumps(state, ensure_ascii=False, default=str)).casefold():
+                    continue
                 kind, _, value = _text(state.get("product_key")).partition(":")
                 identity = {"product_id": state.get("product_id") or (value if kind == "product" else None),
                     "parent_product_id": state.get("parent_product_id") or (value if kind == "parent" else None),
@@ -75,8 +77,8 @@ async def _group_index(db: Any, *, user_id: str) -> tuple[dict[str, Any], list[d
     return groups, build_category_catalog(products)
 
 
-async def reviewed_groups(db: Any, *, user_id: str) -> dict[str, Any]:
-    groups, categories = await _group_index(db, user_id=user_id)
+async def reviewed_groups(db: Any, *, user_id: str, query: str = "") -> dict[str, Any]:
+    groups, categories = await _group_index(db, user_id=user_id, query=query)
     headers = [{key: value for key, value in row.items() if not key.startswith("_")} for row in groups.values()]
     headers.sort(key=lambda row: (_normalized(row["product_name"]), row["key"]))
     return {"ok": True, "read_only": True, "selection_grain": "group_preview", "groups": headers, "categories": categories}
@@ -106,9 +108,9 @@ def _decode(value: str) -> tuple[str, str, int, str]:
         raise HTTPException(status_code=400, detail={"code": "reviewed_group_cursor_invalid"}) from exc
 
 
-async def reviewed_group_page(db: Any, *, user_id: str, group_key: str, after: str) -> dict[str, Any]:
+async def reviewed_group_page(db: Any, *, user_id: str, group_key: str, after: str, query: str = "") -> dict[str, Any]:
     position = _decode(after)
-    groups, _categories = await _group_index(db, user_id=user_id)
+    groups, _categories = await _group_index(db, user_id=user_id, query=query)
     target = groups.get(group_key)
     if not target:
         return {"ok": True, "read_only": True, "selection_grain": "physical_piece", "products": [],

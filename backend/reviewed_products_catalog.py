@@ -1068,20 +1068,21 @@ def make_reviewed_products_catalog_router(db: Any, current_user: Callable) -> AP
     router = APIRouter(prefix="/reviewed-products-v1", tags=["Reviewed Products Catalog"])
 
     @router.get("/groups")
-    async def reviewed_product_groups(user: dict = Depends(current_user)) -> dict[str, Any]:
+    async def reviewed_product_groups(q: str = Query("", max_length=200), user: dict = Depends(current_user)) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         from reviewed_product_pages import reviewed_groups
-        return await reviewed_groups(db, user_id=_merchant_user_id(reviewer))
+        return await reviewed_groups(db, user_id=_merchant_user_id(reviewer), query=q)
 
     @router.get("/group-page")
     async def reviewed_product_group_page(
         group_key: str = Query(min_length=1, max_length=1024),
         after: str = Query("", max_length=2048),
+        q: str = Query("", max_length=200),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         from reviewed_product_pages import reviewed_group_page
-        return await reviewed_group_page(db, user_id=_merchant_user_id(reviewer), group_key=group_key, after=after)
+        return await reviewed_group_page(db, user_id=_merchant_user_id(reviewer), group_key=group_key, after=after, query=q)
 
     @router.get("/catalog")
     async def reviewed_products_catalog(

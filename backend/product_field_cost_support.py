@@ -411,13 +411,17 @@ def install_product_field_cost_support() -> None:
             mongo_session: Any = None,
             refresh_product_services: bool = False,
         ) -> list[dict[str, Any]]:
-            if mongo_session is not None:
-                from supplier_receiving_read_scope import ReceivingProductReadScope
-                db = ReceivingProductReadScope(db, mongo_session=mongo_session, collections={
-                    supplier_module.PRODUCTS, supplier_module.COST_PROFILES,
-                    supplier_module.PRODUCT_RESOURCE_BINDINGS, supplier_module.BINDINGS,
-                    supplier_module.RESOURCES,
-                })
+            # One response reads product setup once per exact query, including
+            # legacy read-only catalog/session requests. The scope is new for
+            # every call; it never retains prices between responses. Refresh
+            # and invoice approval still bind this scope to their existing
+            # transaction, and mutable pieces/events/session state stay live.
+            from supplier_receiving_read_scope import ReceivingProductReadScope
+            db = ReceivingProductReadScope(db, mongo_session=mongo_session, collections={
+                supplier_module.PRODUCTS, supplier_module.COST_PROFILES,
+                supplier_module.PRODUCT_RESOURCE_BINDINGS, supplier_module.BINDINGS,
+                supplier_module.RESOURCES,
+            })
             rows = await original_recent_events(
                 db,
                 user_id=user_id,

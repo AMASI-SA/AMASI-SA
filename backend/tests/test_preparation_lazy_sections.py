@@ -73,3 +73,72 @@ async def test_waiting_cards_defer_customer_piece_eligibility_and_suppliers(db, 
     assert result["groups"][0]["lazy"] is True
     assert "piece_count" not in result["groups"][0]
     assert "source_lines" not in result["groups"][0]
+
+
+async def test_waiting_cards_page_ten_unique_headers_without_hydrating_customer_rows(db, monkeypatch):
+    for index in range(23):
+        await seed_piece(db, str(index), product_id=f"product-{index:02}",
+            product_name=f"Product {index:02}", piece_id=f"piece-{index:02}")
+    await seed_piece(db, "foreign", product_id="foreign-product", responsible_employee_id="other-worker")
+    await seed_piece(db, "foreign-tenant", product_id="foreign-tenant-product", user_id="other-owner")
+    async def forbidden(*_args, **_kwargs):
+        raise AssertionError("header scrolling must not load physical details or suppliers")
+    monkeypatch.setattr(dispatch, "annotate_waiting_pieces", forbidden)
+    monkeypatch.setattr(dispatch, "_active_suppliers", forbidden)
+    after = ""; keys = []; sizes = []
+    for _ in range(4):
+        response = await request(db, "waiting-groups", cards_only="true", after=after)
+        assert response.status_code == 200, response.text
+        data = response.json()
+        sizes.append(len(data["groups"]))
+        keys.extend(group["key"] for group in data["groups"])
+        assert data["suppliers"] == []
+        assert all("piece_count" not in group and "source_lines" not in group for group in data["groups"])
+        after = data["next_cursor"]
+        if not after:
+            break
+    assert sizes == [10, 10, 3]
+    assert len(keys) == len(set(keys)) == 23
+    assert "product:foreign-product" not in keys
+    assert "product:foreign-tenant-product" not in keys
+    for invalid in ("bad", "g:"):
+        response = await request(db, "waiting-groups", cards_only="true", after=invalid)
+        assert response.status_code == 400
+
+
+async def test_progress_returns_ten_then_ten_with_whole_day_totals(db, monkeypatch):
+    original = await progress_seed(db, "A", "2026-11-01")
+    extra = [{**original, "piece_id": f"page-piece-{index:03}", "unit_index": index + 2,
+              "status": "in_progress" if index < 22 else "received",
+              "supplier_dispatch_status": "sent" if index < 22 else "received"} for index in range(29)]
+    await db.raw[dispatch.PIECES].insert_many(extra)
+    all_ids = [original["piece_id"], *(row["piece_id"] for row in extra)]
+    await db.raw[dispatch.DISPATCHES].update_one({"id": "dispatch-A"}, {"$set": {
+        "piece_count": 30, "source_files": [{"cards": [{"piece_id": pid} for pid in all_ids]}]}})
+    # A never-dispatched sibling must not inflate either whole-date totals or pages.
+    await db.raw[dispatch.PIECES].insert_one({**original, "piece_id": "never-dispatched", "supplier_dispatch_status": ""})
+    annotate = dispatch.annotate_waiting_pieces
+    batches = []
+    async def observe(db, *, user_id, pieces):
+        batches.append(len(pieces))
+        assert len(pieces) <= 10, "full canonical detail hydration must be page-bounded"
+        return await annotate(db, user_id=user_id, pieces=pieces)
+    monkeypatch.setattr(dispatch, "annotate_waiting_pieces", observe)
+    after = ""; loaded = []; counts = []
+    for _ in range(4):
+        response = await request(db, "progress-workspace", day="2026-11-01", after=after)
+        assert response.status_code == 200, response.text
+        page = response.json()
+        ids = [row["piece_id"] for file in page["files"] for row in file["products"]]
+        counts.append(len(ids)); loaded.extend(ids)
+        assert page["progress_day_summary"]["assigned"] == 30
+        assert page["progress_day_summary"]["ready"] == 7
+        assert page["progress_day_summary"]["remaining"] == 23
+        assert "never-dispatched" not in page["progress_active_piece_ids"]
+        for account in page["supplier_accounts"]:
+            assert account["dispatches"][0]["progress"]["remaining"] == 23
+        after = page["next_cursor"]
+        if not after:
+            break
+    assert counts == [10, 10, 3] and len(set(loaded)) == len(loaded) == 23
+    assert batches == [10, 10, 3]
