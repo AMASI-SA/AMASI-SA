@@ -6,7 +6,8 @@
   "reused_qoyod_source": "fa1aae7bcdc6b1fc09091a46752bd93ee7b049b1",
   "related_prs": [1776, 1785],
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1788",
-  "stage": "WIP checkpoint: all-eligible cycles and manual control implemented; broader verification running",
+  "stage": "Implementation locally verified; CI contract adaptations verified, full remote checks pending",
+  "implementation_checkpoint": "c24ed63e0836d919110e1e5042ae473484817066",
   "latest_user_decision": "Each cycle must attempt all eligible invoices once, without an overall 500-invoice cutoff. Add an owner button to start a cycle at any time. Concurrent requests join the active cycle.",
   "user_requirement": "Complete platform performance fixes. Automatic Qoyod invoice sending must remain enabled according to existing settings and run every two hours.",
   "implemented": [
@@ -26,19 +27,25 @@
     "two_hour_cycle_real_mongo": "9 passed, including two OS processes and cancellation after lease loss; synthetic batches only",
     "process_health_auth_readiness_timing": "28 passed from repository root with a synthetic JWT test secret",
     "canonical_child_boot": "Passed against an empty isolated Mongo database; real canonical application booted and shutdown drained",
-    "integrated_core": "86 passed, zero skips",
+    "integrated_core": "65 passed, zero skips on the integrated all-eligible/manual implementation, real isolated Mongo including actual child boot, API auth/readiness, timing and cycle ownership",
     "ads_observability": "119 passed, 12 missing-Mongo cases then ran separately with 12 passes",
     "all_eligible_manual_and_process": "18 passed with no skips: real isolated Mongo, 606 eligible invoices attempted exactly once across slices, page replay after a crash, manual cooldown bypass/deduplication, actual owner authorization, canonical child boot",
-    "frontend": "29 passed in 7 affected suites, including real button click, disabled repeat click, lightweight progress polling and permission error"
+    "inherited_qoyod_financial": "279 passed, 36 missing-MZ2-Mongo skipped initially; all 36 then ran on the owned real replica set and passed. Combined coverage: 315 passed, 20 subtests passed, no unresolved skip",
+    "ci_contract_adaptations": "93 passed: old in-web observer assertions now verify child startup/drain; reconciliation security test exercises the sanitized background producer and cached GET that never refreshes",
+    "frontend": "29 passed in 7 affected suites, including real button click, disabled repeat click, lightweight progress polling and permission error",
+    "frontend_build": "Ordinary Vite compilation passed; output outside the source checkout. This is not a governed v5 release rehearsal or deployment proof",
+    "workflow_lint": "actionlint 1.7.12 passed for the new disposable real-Mongo acceptance workflow",
+    "diff_check": "git diff --check against the Production base passed"
   },
   "remaining": [
-    "Run the integrated Qoyod/financial/worker/Snapchat/frontend affected checks and inspect the final diff",
-    "Inspect exact-source CI and finalize draft PR/handoff with source-bound evidence",
+    "Push the verified CI contract adaptations and inspect the complete exact-head check set",
+    "Finalize draft PR/handoff with source-bound evidence; stop only the owned disposable Mongo runtime after verification",
     "Live latency/CPU/RSS comparison remains a separately governed deployment/measurement step"
   ],
   "production_changed": false,
   "deployment_or_lease_created": false,
   "provider_or_financial_test_writes": false,
   "runtime_evidence": "D:/codex-release-artifacts/mezan-background-workers-qoyod-2h-20261106",
-  "next_safe_action": "Finish integrated affected verification and the frontend build; inspect PR1788 exact-head CI. Do not merge, publish, alter /app, send live invoices or activate any disabled worker."
+  "known_ci_diagnosis": "The c24 checkpoint had two failing jobs, both caused by tests asserting the former in-web worker/GET-refresh implementation. All six failing cases were reproduced and the adjusted full test files passed locally (93 tests). Await the next exact-head jobs before claiming CI success.",
+  "next_safe_action": "Inspect PR1788 exact-head CI and finish the durable handoff. Do not merge, publish, alter /app, send live invoices or activate any disabled worker."
 }

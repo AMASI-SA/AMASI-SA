@@ -213,18 +213,28 @@ async def test_recovery_only_returns_public_outcome(monkeypatch, index, module_n
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["success", "nested_failure", "sync_exception", "report_exception"])
-async def test_reconciliation_guards_sync_and_projects_nested_errors(monkeypatch, mode):
-    from integrations.qoyod import qoyod_invoices_sync, reconciliation_v2
+async def test_background_reconciliation_projects_errors_and_get_never_refreshes(monkeypatch, mode):
+    import asyncio
+    from mongomock_motor import AsyncMongoMockClient
+    from integrations.qoyod import qoyod_invoices_sync, reconciliation_v2, credentials, scheduled_scan
+    from qoyod_auto_unified import queue_api
+    db = AsyncMongoMockClient().db
+    await db.users.insert_one(OWNER)
+    await db.qoyod_settings.insert_one({'user_id': 'main', 'security_owner_id': 'owner-a',
+        'invoice_presence_snapshot': {'complete': True, 'started_at': 'synthetic-generation'}})
+    calls = []
     async def key(*args):
         return "fake-key"
     async def client(*args):
         return object()
     async def sync(db, **kwargs):
+        calls.append('sync')
         if mode == "sync_exception":
             raise RuntimeError(CANARY)
         return {"ok": mode != "nested_failure", "fetched": 2,
                 "error": CANARY, "raw_response": CANARY}
     async def report(db, **kwargs):
+        calls.append('report')
         assert kwargs["orders_user_id"] == "owner-a"
         assert kwargs["markers_user_id"] == "main"
         if mode == "report_exception":
@@ -232,21 +242,30 @@ async def test_reconciliation_guards_sync_and_projects_nested_errors(monkeypatch
         return {"ok": True, "counts": {"مطابق": 1}, "rows": [
             {"order_number": "123", "customer_name": "Authorized Customer", "salla_total": 115,
              "debug": {"match_source": "reference", "notes_snippet": CANARY}, "raw": CANARY}],
-             "raw_response": CANARY}
-    monkeypatch.setattr(routes, "get_api_key", key)
+             "raw_response": CANARY, '_candidate_audit': {'scanned_rows': {}}}
+    async def view(*args, **kwargs):
+        return {'orders': [], 'invoice_presence': {'complete': True, 'count': 0}}
+    monkeypatch.setattr(credentials, "get_api_key", key)
     monkeypatch.setattr(routes, "_build_qoyod_client_for", client)
     monkeypatch.setattr(qoyod_invoices_sync, "sync_qoyod_invoices", sync)
     monkeypatch.setattr(reconciliation_v2, "run_reconciliation_v2", report)
-    response = await request(DB(), OWNER, *CASES[6])
+    monkeypatch.setattr(queue_api, '_execute_list', view)
+    await scheduled_scan.request_scan(db, tenant='main', owner='owner-a', manual=True)
+    await asyncio.gather(*list(scheduled_scan._TASKS))
+    before = list(calls)
+    response = await request(db, OWNER, *CASES[6])
     assert response.status_code == 200
     assert CANARY not in response.text
     body = response.json()
-    assert body["sync_summary"]["ran"] is True
-    assert body["ok"] is (mode == "success")
+    assert calls == before  # Even sync_first=true never refreshes in HTTP.
+    assert body['scan']['running'] is False
     if mode == "success":
+        assert body["sync_summary"]["ran"] is True
+        assert body['scan']['last_error'] is None
         assert body["rows"][0]["customer_name"] == "Authorized Customer"
         assert body["counts"] == {"مطابق": 1}
     else:
+        assert body['scan']['last_error'] is not None
         assert body["counts"] == {}
         assert body["rows"] == []
 
