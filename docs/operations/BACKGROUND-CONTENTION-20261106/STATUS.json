@@ -88,6 +88,7 @@
     "ci": {"verified_checkpoint": "9015721d5f46dfbab044b8f0000d11c76b6e8cc6", "success": 36, "skipped": 6, "failures": 0, "final_source_candidate": "Pending after the type-annotation and evidence-only final source checkpoint; source A must pass before intent B is frozen"},
     "final_reporting_check": {"passed": 24, "result": "24 passed, 1 warning in 3.67s", "includes": "Cooperative reporting and existing hourly v2 cases after private generator return-annotation correction", "log": "evidence/final-reporting-tests.log"},
     "ordinary_frontend_build": {"result": "Vite completed: built in 5.77s", "log": "evidence/ordinary-build-tail.log", "limitation": "Ordinary local build; governed Linux A/B release and both clean-clone host rehearsals remain required"},
+    "owner_policy_status": {"before": "1 failed: owner GET lacked the Snapchat cadence already present in internal cycle results", "after": "60 passed, 1 warning in 3.66s; exit 0", "behavior": "Owner status explicitly reports 7200 seconds / 120 minutes based on completion so the selected policy can be verified after deployment; original tenant-isolation/sanitization assertions remain intact"},
     "two_hour_policy": {"before_failed": 3, "after_passed": 90, "exit_code": 0, "real_mongo": true},
     "cooperative_reporting": {"before_failed": 3, "after_passed": 24, "exit_code": 0, "covers": "Real provider-page seam, unrelated callback opportunities in both folds, exact independent monetary/conversion totals, cancellation before any fact write, existing hourly v2 cases"},
     "manual_backend": {"before_failed": 4, "after_passed": 6, "real_mongo": true, "exit_code": 0, "covers": "HTTP 202 before completion and before occupied heavy capacity; duplicate join, owner scope/employee denial, range validation; real canonical writer bypasses only automatic cadence, retains provider exclusion, preserves connection health on admission rejection, and terminalizes/releases its own cancelled run"},
@@ -121,7 +122,8 @@
     "ui": "Existing advertising-chart icon becomes a labelled circular refresh pill; initial card opening reads saved data only. Only explicit clicks start provider work. Status reads abort on leave/period change and pause while hidden/offline.",
     "general_dashboard_source_unchanged": true
   },
-  "latest_verified_remote_checkpoint": "9015721d5f46dfbab044b8f0000d11c76b6e8cc6",
+  "latest_verified_remote_checkpoint": "5a1cb3cdacb72d147343ae21e036de877c0c8285",
+  "local_test_runtime": "Owned synthetic Mongo PID34840 on loopback port27616 was shut down gracefully after verifying its exact executable/dbpath; mongod logged shutdown exitCode 0",
   "source_review": "Reviewed runtime diff and manual ownership/admission/cancellation lifecycle; only requested UI card/service/cache changed. AdvancedDashboard, mobile, Qoyod and operational writers are untouched. Full-output benchmark parity and affected backend/frontend checks are complete.",
   "next_safe_action": "Commit and push the final annotation/evidence source checkpoint A; record its exact SHA on PR1785. Inspect all exact-A checks and hash-validate the governed Linux candidate. Commit B with only release/release-intent-v5.json; require both clean-clone host rehearsals and all B checks before reviewed merge. Fresh /app status must be inactive before any workspace mutation or lease. No deployment has occurred in this task."
 }
