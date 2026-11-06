@@ -1,7 +1,7 @@
 # Automatic cost option recovery — WIP
 
 Scope: recover completely absent Salla item selections for existing orders whose
-catalog has options/bindings. List Order Items only; no Order Details, provider
+catalog has cost bindings or a composite definition. List Order Items only; no Order Details, provider
 writes, price changes, assumed-zero selections, or financial observers.
 
 Observed cause: a known order had empty canonical AND raw item options. Explicit

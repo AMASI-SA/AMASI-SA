@@ -189,8 +189,6 @@ async def run_once(db):
     connected = {row['user_id'] for row in connections}
     option_ids_by_owner = {}
     from product_option_cost_routes import BINDINGS
-    from product_v2_routes import PRODUCTS
-    from report_option_identity import catalog_options
     for owner in connected:
         ids = list({str(p.get('product_id')) for order in rows if order.get('user_id') == owner
                     for p in order.get('products') or []
@@ -199,11 +197,11 @@ async def run_once(db):
             continue
         bindings = await db[BINDINGS].find({'user_id': owner, 'salla_product_id': {'$in': ids}},
             {'salla_product_id': 1}).limit(1000).to_list(1000)
-        products = await db[PRODUCTS].find({'user_id': owner, 'salla_product_id': {'$in': ids}},
-            {'salla_product_id': 1, 'options': 1, 'raw_salla.options': 1,
-             'raw_salla_details.options': 1}).limit(1000).to_list(1000)
+        definitions = await db['mezan_bundle_definitions_v2'].find(
+            {'user_id': owner, 'product_id': {'$in': ids}, 'product_type': 'composite'},
+            {'product_id': 1}).limit(1000).to_list(1000)
         option_ids = {str(b['salla_product_id']) for b in bindings}
-        option_ids.update(str(p['salla_product_id']) for p in products if catalog_options(p))
+        option_ids.update(str(d['product_id']) for d in definitions)
         option_ids_by_owner[owner] = option_ids
     fetched, last = 0, None
     attempted = set()
