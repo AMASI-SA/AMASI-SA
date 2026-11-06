@@ -117,3 +117,35 @@ verify--urlhttps://mezansalla.com (three rounds internally), require exact sourc
 runtime identity and critical/Frontend proof and inactive status. Restore only the
 Preview backend we stopped, after checking no successor lease and unchanged appHEAD.
 
+
+
+## New platform completion and official proof running
+
+Emergent shows a new GREEN Deployment finished at Nov7 01:24Riyadh and a new
+published version292fa73 (previous374bf08). The current platform calls its success
+marker Deployment finished; this was observed visually, not inferred from an
+enabled Republish button. Screenshot saved locally at
+D:/codex-test-runtime/assembly-completion-20261107/deployment-finished.jpg.
+
+Initial public /api/health returns the intended source6ffa622c04f2359dc99f501d16e13c942ab5b1d0
+and runtime rg5-75858ae3554d19d11fe40214537a2f02eec0292f6b73e9c6e5e2e8d451155873;
+verified identity, all critical hashes, Backend runtime source and embedded
+Frontend proof all true. Boot2026-11-07T01:24:05.384631+03:00. This single read is
+not the required three-round public Frontend/replica proof.
+
+Started unchanged official guard verify--urlhttps://mezansalla.com exactly once,
+detached, at2026-11-06T22:26:10.678754+00:00. Parent shellPID83534.
+Job directory /root/assembly-completion-proof-75858ae3554d; files job.json,
+official-verification.json, error.log, launcher.log and exit-code (appears only
+after official process exits). A separate read-only guard status waits on the
+same operation lock and writes post-status.json after verification releases it.
+No duplicate official verify. Launcher SHA256
+8244ba215793bb9e3e950638cc6710310b90eea8561f05253f52ca61d6813955.
+
+Next read this existing job only. Require exit-code0, verifiedtrue, checks3, exact
+source/deployment/runtime identities and post-statusactivefalse. Then restore the
+Preview backend only after fresh inactive status and unchanged appHEAD. Do not
+start another verify or publication while this job is alive. No live business,
+financial, advertising, stock or Ready test write by this task. Release acceptance
+remains pending the official result; our lease is still active until it passes.
+
