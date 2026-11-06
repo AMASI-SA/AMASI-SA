@@ -8,10 +8,10 @@
   "companion_mobile": {
     "repository": "AMASI-SA/amasi-mobile",
     "branch": "codex/fix-supplier-session-recovery-20261106",
-    "checkpoint": "8ed84a67dfd861bbf8a116e1912452086fa16175",
+    "checkpoint": "1a0b099c0959cb882d20783aa257910cb555a6f1",
     "pull_request": "https://github.com/AMASI-SA/amasi-mobile/pull/341"
   },
-  "state": "draft_review_only",
+  "state": "verified_source_draft_review_only",
   "completed": [
     "Selected immutable supplier-file photos hydrate completely before PDF rendering; no live product substitutions.",
     "Exact-piece supplier preview reads selected employee/file/piece scope only.",
@@ -62,7 +62,7 @@
       "before_fetched_bytes": 1576416,
       "maximum_after_bytes": 20000
     },
-    "lookup_explain": "Local Windows Mongo8 explain reproduces the unchanged InvalidBSON UTF-8 decode issue; new Linux pinned-Mongo CI test must prove <=6 examined selected documents among1500 unrelated orders and no blocking sort. No test skip or weakened decoding.",
+    "lookup_explain": "Both old/new local Windows Mongo8 explain attempts hit InvalidBSON decoding; exact assertions passed Linux pinned-Mongo recovery CI on00aabda9 and finalf649aa01. No skip or weakened decoding.",
     "category_checkpoint_ci": "All16 PR workflows passed for9de01b5, including Linux recovery/full invoice assertions and Security Gate. New source requires fresh CI.",
     "readback_metadata_regression": {
       "before_fetched_bytes": 6308511,
@@ -79,15 +79,30 @@
       "exit_code": 1,
       "failure": "Unchanged hide/unhide export-control test expects no product-default action-clock sidecar; same failure reproduced in isolation using exact unchanged00aabda9 readback module (SHA256 ae05ddb771f87db44a906a8fea491b4da5c8319d397cff6fcdaaee929ed0b0be). No production guard or unrelated test was changed."
     },
-    "readback_v2_fresh_suite": "Fresh standalone38-case suite running at checkpoint; final immutable-head result belongs in PR1789 ledger.",
-    "critical_pdf_guard_sources": "reviewed_preparation_batches.py, preparation_pdf_reference_layout.py, preparation_file_images.py and mobile_product_file_pdf.py remain byte-identical to task base. All38 affected PDF/options/photos/assignment checks passed."
+    "readback_v2_fresh_suite": {
+      "passed": 38,
+      "subtests_passed": 22,
+      "failed": 0,
+      "skipped": 0,
+      "exit_code": 0
+    },
+    "critical_pdf_guard_sources": "reviewed_preparation_batches.py, preparation_pdf_reference_layout.py, preparation_file_images.py and mobile_product_file_pdf.py remain byte-identical to task base. All38 affected PDF/options/photos/assignment checks passed.",
+    "final_source_ci": {
+      "source_sha": "f649aa01c808af7585cac3be18f9abad7004819d",
+      "successful_workflows": 20,
+      "failed_workflows": 0,
+      "recovery_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/42268250818",
+      "waiting_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/42268250848",
+      "native_invoice_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/42268250932",
+      "security_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/42268250919"
+    }
   },
   "incomplete": [
-    "Fresh exact-source CI for final readback checkpoint; inspect task PR ledger for final result.",
-    "Authenticated historical file/order inspection and phone UAT are not available in this chat."
+    "Phone/device acceptance and authenticated historical file/order inspection remain unverified; no live credentials are available to this chat.",
+    "Pre-existing export-control sidecar expectation fails before/after the change; source/tests remain untouched and the failure is documented in PR1789."
   ],
   "continuation_ledger": "Issue1006 reached GitHub's 2500-comment limit; use this status record and PR1789 comments.",
-  "next_safe_action": "Finish the running standalone readback suite; inspect exact-source backend/mobile CI, document final baseline limitation and review state, stop only our synthetic Mongo. No deployment.",
+  "next_safe_action": "Review Draft PR1789 and companion341. Do not merge or publish. A separately authorized release must re-fetch current Production and obey its current AGENTS/Release Guard protocol; this task created no release lease.",
   "production_changed": false,
   "release": {
     "merge": false,
@@ -95,5 +110,7 @@
     "deployment": false,
     "financial_or_provider_writes": false
   },
-  "authorization": "Commit, push task branches, Draft PRs and continuation records only. No merge or deployment."
+  "authorization": "Commit, push task branches, Draft PRs and continuation records only. No merge or deployment.",
+  "verified_source_commit": "f649aa01c808af7585cac3be18f9abad7004819d",
+  "handoff": "This documentation-only checkpoint records exact verified source and CI. Final delivery SHA and latest CI are recorded in PR1789 continuation comments."
 }
