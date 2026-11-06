@@ -1,0 +1,18 @@
+PASS src/pages/AdvancedDashboard.firstLoad.test.jsx
+PASS src/pages/AdvancedDashboard.latestOrders.test.jsx (12.438 s)
+PASS src/services/dashboardAdsSpend.test.js
+PASS src/lib/dashboardPlatformSpendMerge.test.js
+PASS src/pages/AdvancedDashboard.cartFreeze.test.jsx (8.104 s)
+PASS src/pages/AdvancedDashboard.mobile.test.jsx
+PASS src/lib/dashboardPlatformSpendClient.test.js
+PASS src/defaultDashboardRoute.test.js
+PASS src/dashboardExecutivePlatformSpendInterceptor.test.js
+PASS src/lib/dashboardLatestResponseBroker.test.js
+PASS src/lib/dashboardFetchAdmission.test.js
+PASS src/lib/dashboardLiveRefresh.test.js
+
+Test Suites: 12 passed, 12 total
+Tests:       115 passed, 115 total
+Snapshots:   0 total
+Time:        34.761 s
+Ran all test suites within paths "src/pages/AdvancedDashboard.firstLoad.test.jsx", "src/pages/AdvancedDashboard.latestOrders.test.jsx", "src/pages/AdvancedDashboard.cartFreeze.test.jsx", "src/pages/AdvancedDashboard.mobile.test.jsx", "src/defaultDashboardRoute.test.js", "src/lib/dashboardLiveRefresh.test.js", "src/lib/dashboardFetchAdmission.test.js", "src/lib/dashboardLatestResponseBroker.test.js", "src/lib/dashboardPlatformSpendMerge.test.js", "src/lib/dashboardPlatformSpendClient.test.js", "src/dashboardExecutivePlatformSpendInterceptor.test.js", "src/services/dashboardAdsSpend.test.js".

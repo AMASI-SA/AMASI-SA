@@ -1,6 +1,6 @@
 {
   "task_id": "DASHBOARD-FIRST-LOAD-20261106",
-  "state": "wip_first_slice_focused_pass_broader_checks_pending",
+  "state": "wip_affected_suites_and_ordinary_build_passed",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/mezan-dashboard-first-load-20261106",
   "base_sha": "b0b23a5ca62efe934d7eded08d2b7abdca9a9389",
@@ -22,7 +22,18 @@
       "passed": 4,
       "exit_code": 0
     },
-    "broader_existing_suites": "pending; expected observations updated to assert initial snapshot then final canonical values"
+    "broader_existing_suites": "Passed all 12 affected suites; initial/final publication assertions retain canonical profit and stale/wrong-range fences.",
+    "affected_frontend": {
+      "exit_code": 0,
+      "passed": 115,
+      "suites": 12
+    },
+    "ordinary_vite_build": {
+      "result": "passed",
+      "completed_in_seconds": 7.2,
+      "governed_release": false,
+      "evidence": "evidence/dashboard-ordinary-build.log"
+    }
   },
   "invariants": [
     "No financial formula or backend contract change",
@@ -35,7 +46,7 @@
   "shared_app_or_lease_changed": false,
   "live_dashboard_api_timings": "Asked user to capture Network Time for dashboard-v2 and ads-platform-spend; pending",
   "remaining": [
-    "Run affected suites and inspect timing-sensitive financial tests",
+    "Exact-source governed CI still required; ordinary local Vite build completed",
     "Measure initial-ready latency at the public UI seam",
     "Inspect real API latency; server-side dashboard stage remains unprofiled",
     "CI/governed release only after final scope is verified; no new intent frozen"
@@ -47,5 +58,6 @@
     "user_supplied_verify_tail_and_status_active_false": true,
     "preview_restart_command_given": true
   },
-  "next_safe_action": "Run focused + existing dashboard financial/freshness/request-lifecycle suites; keep backend diagnosis open until Network timing evidence arrives. Freeze a new v5 intent only after a final source checkpoint and exact-head CI."
+  "next_safe_action": "Measure the first usable DOM frame with controlled primary/spend delays; independently inspect the one-file runtime change; open the dedicated PR and verify exact-source CI before freezing a new v5 intent.",
+  "source_checkpoint": "d6b98eaaa701f461e3c0839ae63792ef2135a075"
 }
