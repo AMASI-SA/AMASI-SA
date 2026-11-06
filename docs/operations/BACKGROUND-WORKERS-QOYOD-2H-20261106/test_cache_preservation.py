@@ -1,9 +1,13 @@
-"""Synthetic filesystem acceptance only; no /app, root cache, Git or network."""
+"""Disposable filesystem/Git acceptance; no /app, root cache or network."""
+import contextlib
 import importlib.util
+import os
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('cache_recovery', Path(__file__).with_name('RECOVER-YARN-CACHE.py'))
 helper = importlib.util.module_from_spec(spec)
@@ -75,6 +79,72 @@ class PreservationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'outside the cache'):
             helper.preserve_cache(self.source, inner, allowed_source=self.source, before_remove=lambda: None)
         self.assertEqual((self.source / 'nested' / 'archive.bin').read_bytes(), self.payload)
+
+
+class ReadOnlyWorkspaceTests(unittest.TestCase):
+    def setUp(self):
+        self.fixture = tempfile.TemporaryDirectory(prefix='mezan-index-preservation-')
+        self.addCleanup(self.fixture.cleanup)
+        self.root = Path(self.fixture.name).resolve()
+        self.git('init', '-q')
+        self.git('config', 'core.autocrlf', 'false')
+        self.file = self.root / 'tracked.txt'
+        self.file.write_bytes(b'reviewed source\n')
+        self.git('add', 'tracked.txt')
+        self.git('-c', 'user.name=Isolated fixture', '-c', 'user.email=test@example.invalid',
+                 'commit', '-qm', 'fixture')
+        self.head = self.git('rev-parse', 'HEAD').strip()
+        scripts = self.root / 'scripts'
+        scripts.mkdir()
+        (scripts / 'production_release_guard.py').write_text(
+            'print(\'{"active": false}\')\n', encoding='utf-8')
+
+    def git(self, *args, **kwargs):
+        return subprocess.check_output(['git', *args], cwd=self.root, text=True, **kwargs)
+
+    def check_workspace(self):
+        with contextlib.chdir(self.root), patch.object(helper, 'DEPLOYMENT', self.head):
+            helper.require_workspace()
+
+    def touch_source(self):
+        info = self.file.stat()
+        os.utime(self.file, ns=(info.st_atime_ns, info.st_mtime_ns + 10_000_000_000))
+
+    def test_clean_stat_refresh_is_read_only_and_ignores_existing_index_lock(self):
+        index = self.root / '.git' / 'index'
+        self.touch_source()
+        before = index.read_bytes()
+        # The old command really refreshes the index after a stat-only change.
+        with patch.dict(os.environ, {'GIT_OPTIONAL_LOCKS': '1'}):
+            self.git('diff', '--quiet')
+        self.assertNotEqual(index.read_bytes(), before)
+        self.touch_source()
+        before = index.read_bytes()
+        lock = self.root / '.git' / 'index.lock'
+        lock.write_bytes(b'leave another operation lock intact')
+        self.check_workspace()
+        self.assertEqual(index.read_bytes(), before)
+        self.assertEqual(lock.read_bytes(), b'leave another operation lock intact')
+        lock.unlink()  # Only this fixture's explicitly created lock.
+        self.touch_source()
+        before = index.read_bytes()
+        self.check_workspace()
+        self.assertEqual(index.read_bytes(), before)
+
+    def test_read_only_check_still_refuses_unstaged_source_edits(self):
+        self.file.write_bytes(b'changed source\n')
+        before = (self.root / '.git' / 'index').read_bytes()
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.check_workspace()
+        self.assertEqual((self.root / '.git' / 'index').read_bytes(), before)
+
+    def test_read_only_check_still_refuses_staged_source_edits(self):
+        self.file.write_bytes(b'changed staged source\n')
+        self.git('add', 'tracked.txt')
+        before = (self.root / '.git' / 'index').read_bytes()
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.check_workspace()
+        self.assertEqual((self.root / '.git' / 'index').read_bytes(), before)
 
 
 if __name__ == '__main__':

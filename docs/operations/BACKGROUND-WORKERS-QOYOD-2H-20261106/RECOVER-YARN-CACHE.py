@@ -96,8 +96,11 @@ def require_workspace():
     head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
     if head != DEPLOYMENT:
         raise RuntimeError('STOP: the reviewed /app checkout changed')
-    subprocess.run(['git', 'diff', '--quiet'], check=True)
-    subprocess.run(['git', 'diff', '--cached', '--quiet'], check=True)
+    # A clean diff may refresh the index by default. Space recovery must not
+    # need an index.lock write before it can free any capacity.
+    readonly_git = ['git', '--no-optional-locks', '-c', 'diff.autoRefreshIndex=false']
+    subprocess.run([*readonly_git, 'diff', '--quiet'], check=True)
+    subprocess.run([*readonly_git, 'diff', '--cached', '--quiet'], check=True)
 
 
 def require_cache_idle():
