@@ -1,0 +1,56 @@
+{
+  "task_id": "BACKGROUND-CONTENTION-20261106",
+  "state": "wip_runtime_evidence_and_root_cause_reproduction",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/mezan-background-contention-20261106",
+  "reviewed_base": "b0b23a5ca62efe934d7eded08d2b7abdca9a9389",
+  "user_requirement": "Find and repair actual background causes of employee/system slowness even when all dashboard browsers are closed. Dashboard UI work is stopped and must not be resumed or published.",
+  "related_issue": "https://github.com/AMASI-SA/AMASI-SA/issues/1724",
+  "prior_dashboard_work": {
+    "branch": "codex/mezan-dashboard-first-load-20261106",
+    "wip_sha": "5c33a559a64ff846718494331b057b7ea39ecefa",
+    "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1784",
+    "state": "closed_unmerged_at_user_request",
+    "intent_applied_or_frozen": false,
+    "lease_or_deployment": false
+  },
+  "observed_production_state": {
+    "source": "User supplied owner-authenticated GET /api/integrations-v2/ads-auto-sync/status",
+    "enabled": true,
+    "runs_without_browser": true,
+    "interval_seconds": 300,
+    "rolling_days": 2,
+    "scheduler_status": "running",
+    "previous_cycle_started_at": "2026-11-06T01:58:20.231768+00:00",
+    "previous_cycle_finished_at": "2026-11-06T02:17:57.401300+00:00",
+    "previous_cycle_wall_seconds": 1177.169532,
+    "next_cycle_started_at": "2026-11-06T02:18:09.383000",
+    "scheduler_storage_uses_utc": true,
+    "gap_seconds_under_utc_storage_convention": 11.981700,
+    "snapchat_status": "partial",
+    "snapchat_coverage": {"status": "incomplete", "data_state": "unknown_incomplete", "expected_requests": 4, "completed_requests": 3},
+    "other_provider_status": {"google_ads": "partial", "meta_ads": "complete", "tiktok_ads": "complete"},
+    "provider_campaign_accounting_qoyod_write_reached": false,
+    "limitation": "Cycle and run wall duration includes queue/network time. It does not establish CPU time or sole causation of employee slowness. No live latency improvement claim."
+  },
+  "confirmed_code_mechanisms": [
+    "Native advertising scheduler starts after readiness and defaults enabled; runs in the FastAPI process independent of browser state",
+    "Global Mongo claim sets next_due_at to server NOW plus interval at cycle start",
+    "Cycle release does not move next_due_at after completion; loop checks again every 15 seconds, allowing overrunning cycles almost continuously",
+    "Provider start timestamps use the common cycle timestamp; individual provider wall values must not be treated as exclusive CPU time",
+    "Heavy-work admission/cooperative dashboard reducers do not reserve CPU for employee routes",
+    "Some legacy AI/ad loops were already disabled; other AI launchers already use bounded children. Do not restart disabled work."
+  ],
+  "invariants": [
+    "No Qoyod source, schedules, locks, sending, reconciliation or financial behavior changes",
+    "No Salla/order/shipping/payment/employee writer changes",
+    "No dashboard UI modifications",
+    "No provider campaign/budget/bid writes in testing",
+    "Preserve provider facts, completeness/unknown policies, ownership fencing and exact source calculations",
+    "No unreviewed worker activation, /app mutation, lease or production configuration change"
+  ],
+  "production_changed_by_this_task": false,
+  "source_changes": [],
+  "verification": "Source inspection only; reproduction and causal comparison pending",
+  "next_safe_action": "Reproduce overrun cadence and assess actual Snapchat parsing/aggregation event-loop stalls using isolated synthetic fixtures and private Mongo. Measure exact output parity and employee/health latency before selecting a runtime change."
+}
