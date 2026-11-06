@@ -9,7 +9,7 @@
     1785
   ],
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1788",
-  "stage": "Owner transcript confirms protocol-v5 ready_to_publish=true for expected A/M/release identity after cache recovery. Await fresh prepublish immediately followed by one publish click, visible newer Deployment Succeeded, official verify3 and closed lease.",
+  "stage": "Expected release is live: browser-observed backend/frontend source identity matches A, newer green Deployment finished/published version100 is visible, and owner explicitly confirmed the first official verify returned verified=true. Repeated verify correctly refused because the lease was already removed. Preview service restoration and measured performance follow-up remain.",
   "latest_readonly_preflight_result": {
     "helper_commit": "550e103ade4096c350852eaea48e1531b765798b",
     "helper_sha256": "ec0dde328cc6c51b9ae647aab67f805171f60934f4d8fc87e2baf8feba4e0b49",
@@ -146,15 +146,51 @@
   "complete_premerge_ci": "48 successful checks and six expected scope skips; zero failed or pending checks at exact source 76779980d38bcf5feb251888f63b1f85fabd6b1e",
   "owned_test_mongo": "Stopped gracefully after verifying exact loopback port 49417, replica set mezan_bg_test_rs and the owned data directory; no other runtime stopped",
   "remaining": [
-    "Owner runs cd /app && python scripts/production_release_guard.py prepublish; require exit0/ready_to_publish=true and immediately click Re-publish changes once",
-    "Retain sanitized Cloud Build adapter output and require a newer visible Deployment Succeeded",
-    "Run official python scripts/production_release_guard.py verify --url https://mezansalla.com; require all3 successful intended-identity probes and then status active=false",
-    "After successful production verification, restore stopped preview services with the pinned VERIFY-EMERGENT.sh helper and measure live performance"
+    "Restore the preview backend/frontend services stopped for the local build, starting only stopped/exited/failed services; inspect supervisorctl status after restoration",
+    "Preserve full first-success verification stdout if still available; do not rerun prepare or republish to recreate a closed lease",
+    "Measure and separately diagnose remaining slow assembly/order routes using sanitized timing logs; current deployment evidence does not establish an80-percent speed gain"
   ],
-  "production_changed": false,
+  "production_changed": true,
   "deployment_or_lease_created": true,
   "provider_or_financial_test_writes": false,
   "runtime_evidence": "D:/codex-release-artifacts/mezan-background-workers-qoyod-2h-20261106",
   "known_ci_diagnosis": "Source-only A push intentionally fails reviewed-B classification; B has now been frozen, verified and merged without changing source. The new exact-deployment postmerge workflow must finish. Windows POSIX-loader permissions were not weakened; official validation ran successfully on Linux.",
-  "next_safe_action": "cd /app && python scripts/production_release_guard.py prepublish; on successful fresh gate immediately click Re-publish changes once. After newer explicit Deployment Succeeded run official verify and confirm lease closure. Do not rerun prepare/cache recovery or alter the frozen source."
+  "next_safe_action": "Owner restores stopped preview services from /app and checks supervisorctl status backend frontend. No repeat publish/prepare/cache recovery or provider/financial test write is needed.",
+  "postpublish_observation": {
+    "evidence_date": "2026-11-06",
+    "ui_project": "Salla Analytics / salla-analytics / mezansalla.com",
+    "ui_published_version": 100,
+    "ui_publish_reference": "82f581a",
+    "ui_completion": "New green Deployment finished Nov 6, 10:30 PM; later Published versions lists 100th publish and distinguishes failed earlier version8793d9d. Current UI wording is Deployment finished, not the historical Deployment Succeeded label.",
+    "browser_health_url": "https://mezansalla.com/api/health",
+    "ok": true,
+    "source_git_sha": "9e22418cf2350fe09a4bb61acfabaefb7748dede",
+    "release_id": "rg5-a3231edbd640b42b45d45cd0254bc0c0099de868b2722a97bd707495e5bb3231",
+    "protocol_version": 5,
+    "verified_identity_available": true,
+    "backend_runtime_source_verified": true,
+    "release_control_source_bound": true,
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true,
+    "boot_started_at": "2026-11-06T20:10:58.024811+00:00",
+    "public_frontend_metadata": {
+      "url": "https://mezansalla.com/build-meta.json",
+      "parsed_json": true,
+      "git_sha": "9e22418cf2350fe09a4bb61acfabaefb7748dede",
+      "schema_version": 1,
+      "limitation": "Browser DOM check confirms JSON/source only, not independent byte hashes/MIME; official verify is owner-reported below."
+    },
+    "official_verify": {
+      "owner_confirmation": "Explicit async answer: yes, verified:true appeared before repeating the command.",
+      "first_success": "Owner-reported official verified=true implies all3 internal probes passed and exact active lease was removed, per unchanged guard implementation. Full first-success stdout not copied to this chat.",
+      "repeat_stdout": "RELEASE_GUARD_REFUSED: no prepared production release lease",
+      "cause": "Expected refusal on repetition after successful first verify. No new lease created or protocol weakened."
+    },
+    "assistant_browser_terminal": "VS Code editor failed to load due proxy/extension/content-filter/CSP startup fallback; no remote shell commands were executed by the assistant.",
+    "assistant_local_http_limit": "Local urllib health timed out and build-meta returned403; browser paths responded successfully. Do not conflate that transport difference with absent production release.",
+    "live_performance_limit": "Current deployment logs still include assembly/orders requests approximately16.8-30.2 seconds and3 upstream health timeouts; no80-percent speed improvement claim or complete latency remediation is justified."
+  },
+  "production_change_evidence": "Browser /api/health reports exact sourceA and deterministic release ID; public /build-meta.json reports sameA; Emergent visibly lists newer green finished publish100. Owner confirms official verified:true before the expected no-lease repeat.",
+  "official_verification_success": "Explicitly confirmed by owner; full original success JSON is not supplied. Exact live identity independently observed through browser.",
+  "release_lease_state": "Closed after first successful verify per owner confirmation and subsequent no-prepared-lease refusal. Do not create another lease merely to repeat verification."
 }
