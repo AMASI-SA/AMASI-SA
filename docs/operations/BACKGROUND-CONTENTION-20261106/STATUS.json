@@ -1,6 +1,6 @@
 {
   "task_id": "BACKGROUND-CONTENTION-20261106",
-  "state": "wip_runtime_evidence_and_root_cause_reproduction",
+  "state": "first_cadence_fix_verified_further_cpu_diagnosis_pending",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/mezan-background-contention-20261106",
   "reviewed_base": "b0b23a5ca62efe934d7eded08d2b7abdca9a9389",
@@ -50,7 +50,17 @@
     "No unreviewed worker activation, /app mutation, lease or production configuration change"
   ],
   "production_changed_by_this_task": false,
-  "source_changes": [],
-  "verification": "Source inspection only; reproduction and causal comparison pending",
-  "next_safe_action": "Reproduce overrun cadence and assess actual Snapchat parsing/aggregation event-loop stalls using isolated synthetic fixtures and private Mongo. Measure exact output parity and employee/health latency before selecting a runtime change."
+  "source_changes": [
+    "backend/integrations_control_center/ads_auto_sync_scheduler.py",
+    "backend/tests/test_ads_scheduler_completion_cadence.py",
+    ".github/workflows/ads-auto-sync-5min-v2.yml"
+  ],
+  "first_fix": "Cycle completion, lease expiry and next due time are one atomic Mongo server-clock update. Every successful, partial or failed completed cycle leaves the configured interval before another replica can start; data results and owner fencing are preserved.",
+  "verification": {
+    "before": {"failed": 3, "exit_code": 1, "reason": "Another replica immediately starts after a 20-minute completed/partial/failed cycle"},
+    "after": {"passed": 87, "exit_code": 0, "real_loopback_mongo": true, "includes": "New cooldown cases, real global lease race/skew/fencing, scheduler v2, target recovery, TikTok and resource governor"},
+    "ci": "Not yet run for this source checkpoint",
+    "limitation": "Cadence correctness is proven; live employee latency impact and CPU/memory inside a running cycle remain unmeasured"
+  },
+  "next_safe_action": "Profile actual Snapchat parsing/aggregation event-loop stalls with isolated synthetic fixtures; measure exact output parity and employee/health latency. Review all background changes before any new source/intent or production handoff."
 }
