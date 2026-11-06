@@ -11,8 +11,8 @@ from typing import Any
 from fastapi import HTTPException
 
 from order_engine import service as order_service
-from order_engine.repository import MongoOrderRepository, _STATUS_PATTERNS
-from review_local_policy import load_review_operational_context, local_review_stage_eligible
+from order_engine.repository import MongoOrderRepository, _STATUS_PATTERNS, _NATIVE_PAYMENT_FIELDS
+from review_local_policy import load_review_operational_context, local_review_stage_eligible, execution_status_allowed
 
 _WAITING_REVIEW_ELIGIBLE = frozenset({
     # Business rule for the first "بانتظار المراجعة" stage in AMASI:
@@ -72,6 +72,58 @@ async def annotate_waiting_pieces(
             fields["waiting_review_eligible"] = False
         annotated.append({**piece, **fields})
     return annotated
+
+
+class _HeaderOrderRepository(MongoOrderRepository):
+    """Read only the inputs to canonical status/payment eligibility.
+
+    This private repository cannot supply product/customer detail or write
+    authority. The normal detail/dispatch paths keep their complete fresh reads.
+    """
+
+    async def get_salla_orders(self, *, user_id: str, order_numbers: list[str]):
+        fields = (
+            "id", "reference_id", "order_number", "date", "created_at", "order_date",
+            "updated_at", "date_updated", "status_slug", *_NATIVE_PAYMENT_FIELDS,
+        )
+        projection = {"_id": 0, **{field: 1 for field in (
+            "user_id", "order_number", "order_date", "order_status", "order_status_slug",
+            "salla_order_id", "g47_salla_snapshot", "payment_method", "paid_amount",
+            "remaining_amount", "has_remaining_amount", "payment_collection_status",
+        )}, **{"raw_by_source.salla_direct." + field: 1 for field in fields}}
+        rows = self._collection.find({
+            "user_id": user_id, "order_number": {"$in": order_numbers},
+            "raw_by_source.salla_direct": {"$type": "object"},
+        }, projection)
+        result = []
+        async for row in rows:
+            raw = (row.get("raw_by_source") or {}).get("salla_direct") or {}
+            native = order_service._provider_status_native(raw, current_status=row.get("order_status"))
+            # Negative prefilter only; positive membership still requires the
+            # same current-order/local-proof policy as details and dispatch.
+            if not execution_status_allowed("", native):
+                continue
+            mapped = self._to_discovery_row(row)
+            if mapped is not None:
+                result.append(mapped)
+        return result
+
+
+async def waiting_header_order_fields(db: Any, *, user_id: str, order_numbers: list[str]) -> dict[str, dict]:
+    """Fresh, request-local navigation eligibility without options or photos."""
+    orders = await order_service.get_orders(
+        _HeaderOrderRepository(db), user_id=user_id, order_numbers=order_numbers,
+    )
+    workflows, blocked = await load_review_operational_context(
+        db, user_id=user_id, order_numbers=order_numbers, metadata_only=True,
+    )
+    result = {}
+    for number in order_numbers:
+        fields = order_waiting_fields(orders.get(number), workflows.get(number))
+        if number in blocked:
+            fields["waiting_review_eligible"] = False
+        result[number] = {**fields, "created_at": orders[number].created_at if number in orders else None}
+    return result
 
 
 async def require_current_under_review(

@@ -222,25 +222,118 @@ async def waiting_count(db: Any, *, user_id: str, employee_id: str, group: str) 
 
 async def waiting_cards(db: Any, *, user_id: str, employee_id: str, after: str = "") -> dict[str, Any]:
     from preparation_supplier_dispatch import PIECES, _waiting_query, _waiting_group_expression
+    from supplier_dispatch_waiting_policy import waiting_header_order_fields
+    from order_engine.repository import _normalized_status_expression
     from fastapi import HTTPException
+    from base64 import urlsafe_b64decode, urlsafe_b64encode
+    import json
 
-    if after and (not after.startswith("g:") or not after[2:]):
+    boundary = None
+    legacy_after = ""
+    try:
+        if after.startswith("g2:"):
+            boundary = json.loads(urlsafe_b64decode(after[3:] + "=" * (-len(after[3:]) % 4)))
+            if (not isinstance(boundary, list) or len(boundary) != 2
+                    or not all(isinstance(value, str) and value for value in boundary)):
+                raise ValueError
+            if datetime.fromisoformat(boundary[0]).tzinfo is None:
+                raise ValueError
+        elif after.startswith("g:") and after[2:]:
+            # Already-open Android72/75 screens can finish a legacy page.
+            legacy_after = after[2:]
+        elif after:
+            raise ValueError
+    except (ValueError, TypeError, UnicodeDecodeError):
         raise HTTPException(status_code=400, detail="invalid_waiting_group_cursor")
+
+    def trimmed(field):
+        return {"$trim": {"input": {"$convert": {"input": "$" + field,
+            "to": "string", "onError": "", "onNull": ""}}}}
+
     pipeline = [
         {"$match": _waiting_query(user_id, employee_id)},
-        {"$group": {"_id": _waiting_group_expression(),
+        {"$match": {"$expr": {"$and": [
+            {"$ne": [trimmed("assignment_status"), "unassigned"]},
+            {"$not": [{"$in": [trimmed("status"), ["blocked", "cancelled", "received", "ready_for_assembly"]]}]},
+        ]}}},
+        # Deduplicate physical units before reading current order metadata.
+        # The representative header must come from an eligible order, never
+        # from a terminal member that happens to share this product identity.
+        {"$group": {"_id": {"group": _waiting_group_expression(), "order": trimmed("order_number")},
             "product_id": {"$first": "$product_id"}, "product_name": {"$first": "$product_name"},
             "sku": {"$first": "$sku"}, "image_url": {"$first": {"$ifNull": [
                 "$selected_image_url", {"$ifNull": ["$resolved_image_url", "$image_url"]}]}}}},
+        # Tenant-scoped indexed metadata join rejects stale external states
+        # before grouping/paging. It supplies only a date and never grants
+        # local review/payment authority; those are checked below.
+        {"$lookup": {"from": "unified_orders", "let": {"number": "$_id.order"}, "pipeline": [
+            {"$match": {"user_id": user_id, "raw_by_source.salla_direct": {"$type": "object"},
+                "$expr": {"$eq": ["$order_number", "$$number"]}}},
+            {"$match": {"$expr": {"$not": [{"$regexMatch": {
+                "input": _normalized_status_expression(), "options": "i",
+                "regex": "|".join(_STATUS_PATTERNS[group] for group in ("completed", "shipping", "cancelled", "refunded")),
+            }}]}}},
+            {"$project": {"_id": 0, "date": {"$dateToString": {
+                "date": {"$convert": {"input": "$order_date", "to": "date", "onError": None, "onNull": None}},
+                "format": "%Y-%m-%dT%H:%M:%S.%LZ", "onNull": ""}}}},
+        ], "as": "order"}},
+        {"$unwind": "$order"},
+        {"$match": {"order.date": {"$ne": ""}}},
+        {"$sort": {"order.date": 1}},
+        {"$group": {"_id": "$_id.group", "date": {"$max": "$order.date"},
+            "members": {"$push": {"order": "$_id.order", "date": "$order.date", "product_id": "$product_id",
+                "product_name": "$product_name", "sku": "$sku", "image_url": "$image_url"}}}},
     ]
-    # Stable product identity, not a changing count, is the page boundary. The
-    # aggregation never reads or validates individual customer options here.
-    if after:
-        pipeline.append({"$match": {"_id": {"$gt": after[2:]}}})
-    pipeline.extend([{"$sort": {"_id": 1}}, {"$limit": 11}])
-    groups = await db[PIECES].aggregate(pipeline).to_list(11)
-    next_cursor = "g:" + groups[9]["_id"] if len(groups) > 10 else None
+    if legacy_after:
+        pipeline.append({"$match": {"_id": {"$gt": legacy_after}}})
+    pipeline.append({"$sort": {"date": -1, "_id": 1}})
+    groups = []
+    eligibility = {}
+    cursor = db[PIECES].aggregate(pipeline, batchSize=16)
+    try:
+        while rows := await cursor.to_list(16):
+            pending = list(rows)
+            accepted = {}
+            while pending:
+                # One representative per group first. A rejected order must
+                # not hide another live member of the same product group.
+                numbers = sorted({row["members"][-1]["order"] for row in pending} - set(eligibility))
+                if numbers:
+                    eligibility.update(await waiting_header_order_fields(db, user_id=user_id, order_numbers=numbers))
+                remaining = []
+                for row in pending:
+                    member = row["members"].pop()
+                    if eligibility[member.pop("order")]["waiting_review_eligible"] is True:
+                        accepted[row["_id"]] = {"key": row["_id"], **member, "lazy": True}
+                    elif row["members"]:
+                        remaining.append(row)
+                pending = remaining
+            groups.extend(accepted[row["_id"]] for row in rows if row["_id"] in accepted)
+            if boundary:
+                date, key = boundary
+                groups = [row for row in groups if row["date"] < date
+                          or (row["date"] == date and row["key"] > key)]
+            groups.sort(key=lambda row: row["key"])
+            groups.sort(key=lambda row: row["date"], reverse=True)
+            groups = groups[:11]
+            # A candidate's newest possible date is an upper bound. Continue
+            # if rejected local proof/payment could move it behind a later
+            # candidate. Stop only when no unseen group can enter this page.
+            if len(groups) == 11:
+                cutoff = groups[-1]
+                last = rows[-1]
+                if (last["date"] < cutoff["date"]
+                        or (last["date"] == cutoff["date"] and last["_id"] >= cutoff["key"])):
+                    break
+    finally:
+        await cursor.close()
+    # Newest eligible order first; no global sales/count calculation on entry.
+    page = groups[:10]
+    next_cursor = None
+    if len(groups) > 10:
+        boundary = json.dumps([page[-1]["date"], page[-1]["key"]], separators=(",", ":")).encode()
+        next_cursor = "g2:" + urlsafe_b64encode(boundary).decode().rstrip("=")
     return {"ok": True, "employee_id": employee_id, "read_only": True,
-        "groups": [{"key": row.pop("_id"), **row, "lazy": True} for row in groups[:10]],
+        "groups": [{key: value for key, value in row.items() if key != "date"} for row in page],
         "next_cursor": next_cursor,
         "suppliers": []}

@@ -77,6 +77,7 @@ async def test_waiting_cards_defer_customer_piece_eligibility_and_suppliers(db, 
 
 async def test_waiting_cards_page_ten_unique_headers_without_hydrating_customer_rows(db, monkeypatch):
     for index in range(23):
+        await seed_order(db, str(index))
         await seed_piece(db, str(index), product_id=f"product-{index:02}",
             product_name=f"Product {index:02}", piece_id=f"piece-{index:02}")
     await seed_piece(db, "foreign", product_id="foreign-product", responsible_employee_id="other-worker")
