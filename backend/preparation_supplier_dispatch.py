@@ -1170,6 +1170,30 @@ async def _waiting_groups(db: Any, user_id: str, employee_id: str) -> dict[str, 
             "suppliers": await _active_suppliers(db, user_id=user_id)}
 
 
+async def _current_waiting_candidates(
+    db: Any, *, user_id: str, rows: list[dict[str, Any]],
+    order_context: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Share current order authority within one directory/detail request only."""
+    candidates = [row for row in rows if piece_is_available_for_supplier_dispatch(row)]
+    unread = {}
+    for row in candidates:
+        number = _text(row.get("order_number"))
+        if number not in order_context:
+            unread.setdefault(number, row)
+    if unread:
+        annotated = await annotate_waiting_pieces(db, user_id=user_id, pieces=list(unread.values()))
+        for row in annotated:
+            order_context[_text(row.get("order_number"))] = {
+                key: row.get(key) for key in (
+                    "order_status", "order_status_native", "preparation_terminal", "waiting_review_eligible"
+                )
+            }
+    return [{**row, **order_context[_text(row.get("order_number"))]}
+        for row in candidates
+        if order_context.get(_text(row.get("order_number")), {}).get("waiting_review_eligible") is True]
+
+
 async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str, group: str = "") -> dict[str, Any]:
     from bson import ObjectId
 
@@ -1196,29 +1220,8 @@ async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str, gro
             batch = await cursor.to_list(length=10)
             if not batch:
                 break
-            candidates = [row for row in batch if piece_is_available_for_supplier_dispatch(row)]
-            if candidates:
-                # Eligibility is current order authority, identical for sibling
-                # pieces. One page may skip hundreds of historical pieces of
-                # the same order; do not remap that full order every ten rows.
-                # This context belongs only to this read. A later page/refresh
-                # and the actual dispatch still validate the current facts.
-                unread = {}
-                for row in candidates:
-                    number = _text(row.get("order_number"))
-                    if number not in order_context:
-                        unread.setdefault(number, row)
-                if unread:
-                    annotated = await annotate_waiting_pieces(db, user_id=user_id, pieces=list(unread.values()))
-                    for row in annotated:
-                        order_context[_text(row.get("order_number"))] = {
-                            key: row.get(key) for key in (
-                                "order_status", "order_status_native", "preparation_terminal", "waiting_review_eligible"
-                            )
-                        }
-                chosen.extend({**row, **order_context[_text(row.get("order_number"))]}
-                    for row in candidates
-                    if order_context.get(_text(row.get("order_number")), {}).get("waiting_review_eligible") is True)
+            chosen.extend(await _current_waiting_candidates(
+                db, user_id=user_id, rows=batch, order_context=order_context))
     finally:
         await cursor.close()
 

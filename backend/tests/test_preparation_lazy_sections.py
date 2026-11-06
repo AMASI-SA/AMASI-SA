@@ -16,6 +16,39 @@ async def request(db, path, **params):
         return await http.get("/supplier-dispatch-v1/" + path, params=params)
 
 
+async def test_waiting_header_uses_same_current_order_authority_as_its_empty_details(db):
+    await seed_order(db, "completed", current="completed")
+    await seed_piece(db, "completed", product_id="only-stale-product")
+    detail = await request(db, "waiting-page", group="product:only-stale-product")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["files"] == []
+    headers = await request(db, "waiting-groups", cards_only="true")
+    assert headers.status_code == 200, headers.text
+    assert headers.json()["groups"] == [], "a product with no currently eligible pieces must not advertise Show"
+    assert all(method in {"create_index", "create_indexes"} for _, method in db.writes), "headers never change historical pieces"
+
+
+async def test_waiting_header_keeps_valid_siblings_and_rechecks_on_refresh(db, monkeypatch):
+    await seed_order(db, "old", current="completed")
+    await seed_order(db, "current", current="reviewed")
+    for index in range(45):
+        await seed_piece(db, "old", piece_id=f"old-{index}", product_id="mixed-product")
+    await seed_piece(db, "current", product_id="mixed-product")
+    annotated = dispatch.annotate_waiting_pieces
+    orders = []
+    async def observe(db, *, user_id, pieces):
+        orders.extend(row["order_number"] for row in pieces)
+        assert all(not ({"piece_id", "specifications_snapshot", "services", "image_b64"} & set(row)) for row in pieces)
+        return await annotated(db, user_id=user_id, pieces=pieces)
+    monkeypatch.setattr(dispatch, "annotate_waiting_pieces", observe)
+    headers = await request(db, "waiting-groups", cards_only="true")
+    assert [row["key"] for row in headers.json()["groups"]] == ["product:mixed-product"]
+    assert sorted(orders) == ["current", "old"], "sibling history must not repeatedly hydrate its order"
+    await seed_order(db, "current", current="completed")
+    assert (await request(db, "waiting-groups", cards_only="true")).json()["groups"] == []
+    assert all(method in {"create_index", "create_indexes"} for _, method in db.writes)
+
+
 async def progress_seed(db, number, day, *, piece_status="in_progress", order_status="processing", worker=None):
     await seed_order(db, number, current=order_status)
     piece = await seed_piece(db, number, batch_id="batch-" + number,
@@ -58,12 +91,16 @@ async def test_progress_selected_day_loads_only_that_dates_files_and_summary(db)
     assert empty.json()["files"] == [] and empty.json()["supplier_accounts"] == []
 
 
-async def test_waiting_cards_defer_customer_piece_eligibility_and_suppliers(db, monkeypatch):
+async def test_waiting_cards_validate_current_order_without_customer_rows_or_suppliers(db, monkeypatch):
     await seed_order(db)
     await seed_piece(db)
     async def forbidden(*_args, **_kwargs):
         raise AssertionError("individual rows/suppliers load only on Show")
-    monkeypatch.setattr(dispatch, "annotate_waiting_pieces", forbidden)
+    annotate = dispatch.annotate_waiting_pieces
+    async def metadata_only(db, *, user_id, pieces):
+        assert all(not ({"piece_id", "specifications_snapshot", "services", "image_b64"} & set(row)) for row in pieces)
+        return await annotate(db, user_id=user_id, pieces=pieces)
+    monkeypatch.setattr(dispatch, "annotate_waiting_pieces", metadata_only)
     monkeypatch.setattr(dispatch, "_active_suppliers", forbidden)
     response = await request(db, "waiting-groups", cards_only="true")
     assert response.status_code == 200, response.text
@@ -77,13 +114,22 @@ async def test_waiting_cards_defer_customer_piece_eligibility_and_suppliers(db, 
 
 async def test_waiting_cards_page_ten_unique_headers_without_hydrating_customer_rows(db, monkeypatch):
     for index in range(23):
+        await seed_order(db, str(index))
         await seed_piece(db, str(index), product_id=f"product-{index:02}",
             product_name=f"Product {index:02}", piece_id=f"piece-{index:02}")
+    for index in range(8):
+        await seed_order(db, f"closed-{index}", current="completed")
+        await seed_piece(db, f"closed-{index}", product_id=f"product-{index:02}-closed")
     await seed_piece(db, "foreign", product_id="foreign-product", responsible_employee_id="other-worker")
     await seed_piece(db, "foreign-tenant", product_id="foreign-tenant-product", user_id="other-owner")
     async def forbidden(*_args, **_kwargs):
         raise AssertionError("header scrolling must not load physical details or suppliers")
-    monkeypatch.setattr(dispatch, "annotate_waiting_pieces", forbidden)
+    annotate = dispatch.annotate_waiting_pieces
+    async def metadata_only(db, *, user_id, pieces):
+        assert len(pieces) <= 32
+        assert all(not ({"piece_id", "specifications_snapshot", "services", "image_b64"} & set(row)) for row in pieces)
+        return await annotate(db, user_id=user_id, pieces=pieces)
+    monkeypatch.setattr(dispatch, "annotate_waiting_pieces", metadata_only)
     monkeypatch.setattr(dispatch, "_active_suppliers", forbidden)
     after = ""; keys = []; sizes = []
     for _ in range(4):

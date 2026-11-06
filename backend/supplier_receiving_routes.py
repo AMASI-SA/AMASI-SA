@@ -2691,6 +2691,16 @@ async def ensure_supplier_receiving_indexes(db: Any) -> None:
         IndexModel([("user_id", ASCENDING), ("opened_by", ASCENDING), ("status", ASCENDING), ("closed_at", DESCENDING), ("id", DESCENDING)],
             name="ix_supplier_receiving_actor_history_v1"),
     ])
+    # Receipt barcode and order-picker reads must not scan every employee's
+    # historical pieces. Nonunique indexes preserve existing legacy identity
+    # handling; the mutation still validates the exact tenant/piece state.
+    await db[PIECES].create_indexes([
+        IndexModel([("user_id", ASCENDING), ("piece_id", ASCENDING)],
+            name="ix_supplier_receiving_piece_lookup_v1"),
+        IndexModel([("user_id", ASCENDING), ("order_number", ASCENDING),
+                    ("order_item_id", ASCENDING), ("unit_index", ASCENDING), ("piece_id", ASCENDING)],
+            name="ix_supplier_receiving_order_lookup_v1"),
+    ])
     await db[RECEIVING_EVENTS].create_index(
         [
             ("user_id", ASCENDING),
@@ -3098,7 +3108,7 @@ async def _supplier_receiving_search(
                     {"experiment_archived_at": None},
                 ],
             },
-            {"_id": 0},
+            {"_id": 0, "order_number": 1},
         )
         if not matched_piece:
             raise HTTPException(
@@ -3128,7 +3138,7 @@ async def _supplier_receiving_search(
                     {"experiment_archived_at": None},
                 ],
             },
-            {"_id": 0},
+            {"_id": 0, "image_b64": 0},
         )
         .sort([("order_item_id", 1), ("unit_index", 1), ("piece_id", 1)])
         .limit(1000)
