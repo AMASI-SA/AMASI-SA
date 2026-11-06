@@ -86,14 +86,16 @@ MIN_INTERVAL_SECONDS = 300
 MAX_INTERVAL_SECONDS = 3600
 # Snapchat's Ads API is more rate-limited than Meta/Google, and its
 # analytics_refresh does per-hour fetches per selected account.  Enforce a
-# provider-scoped cadence of at most 10 minutes even when the global
+# provider-scoped two-hour cadence even when the global
 # scheduler tick is faster – the distributed lease is the real guarantee
 # against concurrent runs across replicas, but the cadence gate prevents
 # needless attempts.
 SNAPCHAT_MIN_INTERVAL_SECONDS_ENV = "MEZAN_ADS_AUTO_SYNC_SNAPCHAT_INTERVAL_SECONDS"
-SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT = 600
-SNAPCHAT_MIN_INTERVAL_SECONDS_FLOOR = 300
-SNAPCHAT_MIN_INTERVAL_SECONDS_CEILING = 600
+# The owner selected two hours. Normalize surviving ten-minute environment
+# values too, so a stale deployment setting cannot retain continuous polling.
+SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT = 7200
+SNAPCHAT_MIN_INTERVAL_SECONDS_FLOOR = 7200
+SNAPCHAT_MIN_INTERVAL_SECONDS_CEILING = 7200
 SNAPCHAT_ACCOUNT_REFRESH_TIMEOUT_SECONDS_ENV = (
     "MEZAN_ADS_AUTO_SYNC_SNAPCHAT_ACCOUNT_TIMEOUT_SECONDS"
 )
@@ -129,6 +131,7 @@ TERMINAL_STATUSES = ("complete", "partial", "failed", "skipped")
 SCHEDULER_OUTCOME_REASONS = frozenset({
     "disabled",
     "cadence_gate_10m",
+    "cadence_gate_2h",
     "running_elsewhere",
     "sync_in_progress",
 })
@@ -1274,7 +1277,7 @@ async def _refresh_snapchat(
         return {
             "provider": SNAPCHAT_PROVIDER_ID,
             "status": "skipped",
-            "reason": "cadence_gate_10m",
+            "reason": "cadence_gate_2h",
         }
 
     # Distributed atomic lease – prevents more than one Snapchat refresh
@@ -1897,11 +1900,12 @@ async def _snapchat_cadence_ready(
     user_id: str,
     now: datetime,
 ) -> bool:
-    """Return True when the Snapchat 10-minute cadence gate is open.
+    """Return True two hours after the previous Snapchat attempt completed.
 
     The gate looks at the last non-skipped Snapchat analytics_refresh run
-    for this tenant.  If that run started within the configured minimum
-    interval, the current tick is deferred without allocating a lease.
+    for this tenant. If it finished within the selected interval, defer
+    without allocating a lease. Legacy rows without a finish timestamp use
+    their start time; completed, partial and failed attempts all cool down.
     Skipped runs (running_elsewhere or sync_in_progress) are ignored so
     a briefly-noisy replica loop cannot lock a tenant out of retries.
     """
@@ -1929,7 +1933,7 @@ async def _snapchat_cadence_ready(
         "run_type": SNAP_RUN_TYPE,
         "status": {"$in": ["complete", "partial", "failed"]},
     }
-    projection = {"_id": 0, "started_at": 1, "created_at": 1, "status": 1}
+    projection = {"_id": 0, "started_at": 1, "finished_at": 1, "created_at": 1, "status": 1}
     find = getattr(runs_collection, "find", None)
     if callable(find):
         cursor = find(query, projection)
@@ -1952,7 +1956,7 @@ async def _snapchat_cadence_ready(
         candidates = [latest] if latest else []
 
     for candidate in candidates:
-        marker = _parse_datetime(candidate.get("started_at"))
+        marker = _parse_datetime(candidate.get("finished_at")) or _parse_datetime(candidate.get("started_at"))
         if marker is None or marker > future_limit:
             continue
         return marker <= threshold
@@ -2118,6 +2122,11 @@ async def run_auto_sync_cycle(
         "skipped": skipped,
         "results": results,
         "runs_without_browser": True,
+        "snapchat": {
+            "automatic_interval_seconds": SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT,
+            "automatic_interval_minutes": SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT // 60,
+            "cadence_basis": "last_finished_at",
+        },
         "tiktok": _tiktok_scheduler_state(),
     }
 

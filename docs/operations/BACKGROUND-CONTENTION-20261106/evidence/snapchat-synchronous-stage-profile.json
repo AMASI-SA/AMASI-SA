@@ -1,0 +1,28 @@
+{
+  "synthetic_only": true,
+  "network_or_database_requests": 0,
+  "results": [
+    {
+      "campaigns": 200,
+      "rows": 14400,
+      "parse_ms": 64.65,
+      "account_aggregation_ms": 269.21,
+      "campaign_aggregation_ms": 277.18,
+      "total_synchronous_ms": 611.04,
+      "errors": 0,
+      "days": 3,
+      "campaign_days": 600
+    },
+    {
+      "campaigns": 1000,
+      "rows": 72000,
+      "parse_ms": 415.16,
+      "account_aggregation_ms": 1514.78,
+      "campaign_aggregation_ms": 1104.8,
+      "total_synchronous_ms": 3034.74,
+      "errors": 0,
+      "days": 3,
+      "campaign_days": 3000
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 # Background contention investigation
 
+Latest user choice: Snapchat automatically every **two hours**, plus an explicit manual spending refresh button above the advertising-platforms chart in Mezan 2, styled like Latest Sold Products. General dashboard work remains stopped; this narrowly requested control is the sole new UI scope. PR1784 is not reused.
+
 The user stopped dashboard work and redirected the performance repair to background activity: employee slowness occurs with all dashboard browsers closed. PR1784 is closed unmerged; its WIP remains recoverable on its own branch. Do not resume it as part of this task.
 
 The owner supplied the production advertising scheduler status: enabled, running without a browser, 300-second interval. A completed cycle occupied 1177.17 seconds of wall time and a new cycle began approximately 12 seconds later. Snapchat finished partial with three of four expected requests complete. These are cycle/queue/network durations, not CPU measurements or proof of a sole cause.
@@ -11,3 +13,5 @@ Historical platform support evidence identified heavy Snapchat work coinciding w
 The first focused fix atomically records completion and the next due time using Mongo server time. Completed, partial and failed cycles now leave the configured interval before another replica may start. Three real-Mongo regressions failed before and pass after; the affected lease, scheduler, recovery, TikTok and governor checks pass 87 tests. Owner fencing and the saved result are preserved. CI also runs the new cases on its disposable Mongo service.
 
 The fix remains on a WIP branch. No production configuration, lease, /app workspace or provider/financial state has changed in this task. Preserve Qoyod and operational processing completely. Next profile synthetic event-loop contention and verify exact data contracts and employee/health responsiveness. Cadence correctness does not establish the live improvement or resolve CPU/memory pressure inside an active cycle. STATUS.json records the reviewed base and sanitized production observation.
+
+The two-hour completion-based Snapchat gate now passes the affected 90 tests; three new cases failed before the policy change. A synthetic stage profile measured 611 ms for 14,400 rows and 3,035 ms for 72,000 rows of uninterrupted page extraction plus the two account/campaign folds. The real asynchronous fetch/fold entry points failed three responsiveness/cancellation cases before cooperative checkpoints and pass afterward. The new cases plus existing hourly v2 cases pass 24 tests, retaining independently calculated exact spend and purchase totals. Controlled timing/full-v6 comparison and the manual refresh path remain pending.

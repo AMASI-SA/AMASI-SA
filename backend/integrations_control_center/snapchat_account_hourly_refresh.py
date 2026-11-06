@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import httpx
+from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
 
 from .snapchat_native_data_common import (
     BUSINESS_TIMEZONE,
@@ -349,8 +350,39 @@ def _subrequest_error(
     }
 
 
+def _finish_cpu_steps(steps: Any) -> Any:
+    while True:
+        try:
+            next(steps)
+        except StopIteration as completed:
+            return completed.value
+
+
+async def _finish_cpu_steps_cooperatively(steps: Any) -> Any:
+    budget = CPUWorkBudget(PARSER_BUDGET_MS)
+    while True:
+        try:
+            next(steps)
+        except StopIteration as completed:
+            return completed.value
+        await budget.checkpoint()
+
+
 @latency_evidence.timed_sync("computation_wall")
 def extract_account_hour_rows(
+    payload: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+    return _finish_cpu_steps(_extract_account_hour_rows_steps(payload))
+
+
+@latency_evidence.timed("computation_wall")
+async def extract_account_hour_rows_cooperative(
+    payload: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+    return await _finish_cpu_steps_cooperatively(_extract_account_hour_rows_steps(payload))
+
+
+def _extract_account_hour_rows_steps(
     payload: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
     """Extract campaign HOUR rows and provider sub-request errors."""
@@ -391,6 +423,7 @@ def extract_account_hour_rows(
     errors: list[dict[str, Any]] = []
     successful_subrequests = 0
     for wrapped in wrapped_stats:
+        yield None
         if not isinstance(wrapped, dict):
             raise _incomplete_coverage_error(
                 "snapchat_account_hour_wrapper_invalid",
@@ -436,6 +469,7 @@ def extract_account_hour_rows(
 
         wrapper_rows: list[dict[str, Any]] = []
         for entity in campaign_rows:
+            yield None
             if not isinstance(entity, dict):
                 raise _incomplete_coverage_error(
                     "snapchat_account_hour_campaign_invalid",
@@ -460,6 +494,7 @@ def extract_account_hour_rows(
                     completed_requests=0,
                 )
             for point in points:
+                yield None
                 if not isinstance(point, dict):
                     raise _incomplete_coverage_error(
                         "snapchat_account_hour_point_invalid",
@@ -577,7 +612,7 @@ async def _fetch_account_hours(
             params=params,
         )
         try:
-            page_rows, page_errors, _ = extract_account_hour_rows(payload)
+            page_rows, page_errors, _ = await extract_account_hour_rows_cooperative(payload)
         except SnapchatNativeSyncError as exc:
             exc.result = {
                 **dict(exc.result or {}),
@@ -600,7 +635,9 @@ async def _fetch_account_hours(
             if request_end.tzinfo is not None
             else request_end.replace(tzinfo=timezone.utc)
         ).astimezone(timezone.utc)
+        row_budget = CPUWorkBudget(PARSER_BUDGET_MS)
         for row in page_rows:
+            await row_budget.checkpoint()
             row_start = _parse_datetime(row.get("start_time"))
             row_end = _parse_datetime(row.get("end_time"))
             if row_start is not None and row_start.tzinfo is None:
@@ -699,10 +736,30 @@ def aggregate_account_hours_by_riyadh_day(
     start_date: date,
     end_date: date,
 ) -> dict[str, dict[str, Any]]:
+    return _finish_cpu_steps(_aggregate_account_hours_steps(rows, start_date=start_date, end_date=end_date))
+
+
+@latency_evidence.timed("computation_wall")
+async def aggregate_account_hours_cooperative(
+    rows: list[dict[str, Any]],
+    *,
+    start_date: date,
+    end_date: date,
+) -> dict[str, dict[str, Any]]:
+    return await _finish_cpu_steps_cooperatively(_aggregate_account_hours_steps(rows, start_date=start_date, end_date=end_date))
+
+
+def _aggregate_account_hours_steps(
+    rows: list[dict[str, Any]],
+    *,
+    start_date: date,
+    end_date: date,
+) -> dict[str, dict[str, Any]]:
     """Fold provider-native hourly campaign facts into Riyadh dates."""
     business_tz = _timezone(BUSINESS_TIMEZONE)
     daily: dict[str, dict[str, Any]] = {}
     for row in rows:
+        yield None
         point = _parse_datetime(row.get("start_time"))
         if point is None:
             continue
@@ -730,6 +787,25 @@ def aggregate_campaign_hours_by_riyadh_day(
     start_date: date,
     end_date: date,
 ) -> dict[tuple[str, str], dict[str, Any]]:
+    return _finish_cpu_steps(_aggregate_campaign_hours_steps(rows, start_date=start_date, end_date=end_date))
+
+
+@latency_evidence.timed("computation_wall")
+async def aggregate_campaign_hours_cooperative(
+    rows: list[dict[str, Any]],
+    *,
+    start_date: date,
+    end_date: date,
+) -> dict[tuple[str, str], dict[str, Any]]:
+    return await _finish_cpu_steps_cooperatively(_aggregate_campaign_hours_steps(rows, start_date=start_date, end_date=end_date))
+
+
+def _aggregate_campaign_hours_steps(
+    rows: list[dict[str, Any]],
+    *,
+    start_date: date,
+    end_date: date,
+) -> dict[tuple[str, str], dict[str, Any]]:
     """Fold the already-fetched HOUR rows into campaign/Riyadh-day facts.
 
     This deliberately consumes the same rows used for the account total.  It
@@ -740,6 +816,7 @@ def aggregate_campaign_hours_by_riyadh_day(
     business_tz = _timezone(BUSINESS_TIMEZONE)
     daily: dict[tuple[str, str], dict[str, Any]] = {}
     for row in rows:
+        yield None
         campaign_id = str(row.get("campaign_id") or "").strip()
         point = _parse_datetime(row.get("start_time"))
         if not campaign_id or point is None:
@@ -886,12 +963,12 @@ async def refresh_snapchat_account_hours(
         )
         rows, errors = fetched
 
-    daily = aggregate_account_hours_by_riyadh_day(
+    daily = await aggregate_account_hours_cooperative(
         rows,
         start_date=start_date,
         end_date=end_date,
     )
-    campaign_daily = aggregate_campaign_hours_by_riyadh_day(
+    campaign_daily = await aggregate_campaign_hours_cooperative(
         rows,
         start_date=start_date,
         end_date=end_date,

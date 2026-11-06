@@ -1,11 +1,16 @@
 {
   "task_id": "BACKGROUND-CONTENTION-20261106",
-  "state": "first_cadence_fix_verified_further_cpu_diagnosis_pending",
+  "state": "wip_two_hour_cadence_and_cooperative_reporting_manual_refresh_pending",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/mezan-background-contention-20261106",
   "reviewed_base": "b0b23a5ca62efe934d7eded08d2b7abdca9a9389",
   "user_requirement": "Find and repair actual background causes of employee/system slowness even when all dashboard browsers are closed. Dashboard UI work is stopped and must not be resumed or published.",
   "related_issue": "https://github.com/AMASI-SA/AMASI-SA/issues/1724",
+  "latest_user_decision": {
+    "snapchat_automatic_cadence": "Every two hours plus manual spending refresh when needed",
+    "manual_control_location": "Above the advertising-platforms chart in Mezan 2; same circular refresh icon and label as Latest Sold Products",
+    "dashboard_scope": "General dashboard changes remain stopped. Only the explicitly requested spending refresh control is authorized in this task. Do not reuse PR1784."
+  },
   "prior_dashboard_work": {
     "branch": "codex/mezan-dashboard-first-load-20261106",
     "wip_sha": "5c33a559a64ff846718494331b057b7ea39ecefa",
@@ -53,14 +58,23 @@
   "source_changes": [
     "backend/integrations_control_center/ads_auto_sync_scheduler.py",
     "backend/tests/test_ads_scheduler_completion_cadence.py",
+    "backend/integrations_control_center/snapchat_account_hourly_refresh.py",
+    "backend/tests/test_snapchat_background_responsiveness.py",
     ".github/workflows/ads-auto-sync-5min-v2.yml"
   ],
   "first_fix": "Cycle completion, lease expiry and next due time are one atomic Mongo server-clock update. Every successful, partial or failed completed cycle leaves the configured interval before another replica can start; data results and owner fencing are preserved.",
+  "additional_fixes": [
+    "Snapchat waits two hours after complete/partial/failed attempts, including normalization of surviving legacy ten-minute environment values; other provider intervals remain unchanged",
+    "Snapchat account-page extraction, row validation and both Riyadh aggregation folds use existing request-local CPUWorkBudget checkpoints. Ordered calculations and synchronous public helper contracts remain identical. Cancellation before publication produces no partial facts."
+  ],
   "verification": {
     "before": {"failed": 3, "exit_code": 1, "reason": "Another replica immediately starts after a 20-minute completed/partial/failed cycle"},
     "after": {"passed": 87, "exit_code": 0, "real_loopback_mongo": true, "includes": "New cooldown cases, real global lease race/skew/fencing, scheduler v2, target recovery, TikTok and resource governor"},
     "ci": "Not yet run for this source checkpoint",
+    "two_hour_policy": {"before_failed": 3, "after_passed": 90, "exit_code": 0, "real_mongo": true},
+    "cooperative_reporting": {"before_failed": 3, "after_passed": 24, "exit_code": 0, "covers": "Real provider-page seam, unrelated callback opportunities in both folds, exact independent monetary/conversion totals, cancellation before any fact write, existing hourly v2 cases"},
+    "synchronous_profile": {"synthetic_only": true, "network_or_database_requests": 0, "rows_14400_ms": 611.04, "rows_72000_ms": 3034.74, "note": "Measured synchronous extraction plus two folds; controlled comparison and complete v6 path still pending"},
     "limitation": "Cadence correctness is proven; live employee latency impact and CPU/memory inside a running cycle remain unmeasured"
   },
-  "next_safe_action": "Profile actual Snapchat parsing/aggregation event-loop stalls with isolated synthetic fixtures; measure exact output parity and employee/health latency. Review all background changes before any new source/intent or production handoff."
+  "next_safe_action": "Measure before/after responsiveness and full output parity, then implement the explicit owner-only manual Snapchat spend refresh through the canonical writer with distributed exclusion. Add only the spending-chart control requested by the user. Full CI, governed release and actual production proof remain pending."
 }
