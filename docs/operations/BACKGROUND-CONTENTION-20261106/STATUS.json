@@ -4,7 +4,16 @@
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1785",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/mezan-background-contention-20261106",
-  "reviewed_base": "b0b23a5ca62efe934d7eded08d2b7abdca9a9389",
+  "reviewed_base": "2549f053f1ec272cd6e4fc371919775db2d02b6c",
+  "integration": {
+    "reason": "Production advanced with Android72 PR1787 before any intent B was frozen",
+    "preserved_source": "f89feb9889ec953e1c76e7677ee87eec4f9fafde",
+    "preserved_branch": "codex/mezan-background-before-android72-20261106",
+    "preserved_checks": "36 successful, six conditional skips, no failures after one bounded retry of a Docker Hub TLS service-download failure before tests",
+    "method": "Rebase only the eight source checkpoints onto new J; range-diff reports all eight identical and task file bytes are identical; inherited new Production intent remains unchanged",
+    "old_candidate_not_used": "Artifact13476155648/source f89feb9889ec953e1c76e7677ee87eec4f9fafde/base b0b23a5ca62efe934d7eded08d2b7abdca9a9389 is preserved outside the repository but must not be frozen or deployed after the Production advance",
+    "platform_validation": "Official full candidate loader passed in Linux CI. Native Windows POSIX-permission revalidation is unsupported (0666); no permission/source gate was bypassed. New exact-source Linux candidate and host rehearsals are required."
+  },
   "user_requirement": "Find and repair actual background causes of employee/system slowness even when all dashboard browsers are closed. Dashboard UI work is stopped and must not be resumed or published.",
   "related_issue": "https://github.com/AMASI-SA/AMASI-SA/issues/1724",
   "latest_user_decision": {
@@ -122,7 +131,7 @@
     "ui": "Existing advertising-chart icon becomes a labelled circular refresh pill; initial card opening reads saved data only. Only explicit clicks start provider work. Status reads abort on leave/period change and pause while hidden/offline.",
     "general_dashboard_source_unchanged": true
   },
-  "latest_verified_remote_checkpoint": "5a1cb3cdacb72d147343ae21e036de877c0c8285",
+  "latest_verified_remote_checkpoint": "f89feb9889ec953e1c76e7677ee87eec4f9fafde",
   "local_test_runtime": "Owned synthetic Mongo PID34840 on loopback port27616 was shut down gracefully after verifying its exact executable/dbpath; mongod logged shutdown exitCode 0",
   "source_review": "Reviewed runtime diff and manual ownership/admission/cancellation lifecycle; only requested UI card/service/cache changed. AdvancedDashboard, mobile, Qoyod and operational writers are untouched. Full-output benchmark parity and affected backend/frontend checks are complete.",
   "next_safe_action": "Commit and push the final annotation/evidence source checkpoint A; record its exact SHA on PR1785. Inspect all exact-A checks and hash-validate the governed Linux candidate. Commit B with only release/release-intent-v5.json; require both clean-clone host rehearsals and all B checks before reviewed merge. Fresh /app status must be inactive before any workspace mutation or lease. No deployment has occurred in this task."
