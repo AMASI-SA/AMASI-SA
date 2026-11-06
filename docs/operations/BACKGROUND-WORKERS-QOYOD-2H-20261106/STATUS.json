@@ -4,14 +4,65 @@
   "branch": "codex/mezan-background-workers-qoyod-2h-20261106",
   "base": "049fba51c13b902cd12808e03e87aca203649fb7",
   "reused_qoyod_source": "fa1aae7bcdc6b1fc09091a46752bd93ee7b049b1",
-  "related_prs": [1776, 1785],
+  "related_prs": [
+    1776,
+    1785
+  ],
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1788",
-  "stage": "Recovery phases separated: preserve only the old Yarn cache after free-lease/exact-HEAD gates, then enforce read-only tracked cleanliness and print changed path names before any build. Owner execution and publish pending",
-  "latest_readonly_preflight_result": {"helper_commit": "550e103ade4096c350852eaea48e1531b765798b", "helper_sha256": "ec0dde328cc6c51b9ae647aab67f805171f60934f4d8fc87e2baf8feba4e0b49", "command": "git --no-optional-locks -c diff.autoRefreshIndex=false diff --quiet", "exit_code": 1, "lease_and_local_sha_checks": "Passed before this command in the transcript", "cache_copy_and_eviction": "Not reached", "prepare_and_publish": "Not reached", "cause": "Unconfirmed: obtain file names, mode summaries, staged status and read-only porcelain status. Do not assume it is safe to discard source changes or remove a Git lock."},
-  "cache_recovery_preflight_issue": {"affected_helper_commit": "267c88d326183d3709110e162312f313cd416e90", "owner_failure": "git diff --quiet attempted /app/.git/index.lock write and failed with out-of-diskspace before cache copy began", "root_cause": "Porcelain diff refreshes stat information by default. Disabling its refresh avoided writes but the owner then received diff exit1 with no path diagnosis.", "fix": "Cache preservation outside /app is independent of source edits: require the free lease/exact checkout and idle cache before preservation. After space recovery use git --no-pager --no-optional-locks status --porcelain=v1 --untracked-files=no, matching the official tracked-clean policy, before any build. Actual tracked edits print path names and still stop the release.", "source": "https://git-scm.com/docs/git", "safety": "Cache maintenance never restores, stages, stashes or discards source edits. Dirty staged/unstaged content still refused before building; existing index.lock is left unchanged. Official guard and mandatory lease/fetch checks are unchanged."},
-  "storage_diagnosis": {"owner_guard_status": "active=false", "app_device": "/dev/nvme0n27", "app_size": "9.8G", "app_available": "0", "app_used_percent": 100, "app_inode_used_percent": 59, "app_free_inodes": 270185, "tmp_device": "overlay", "tmp_available": "231G", "app_worktrees": "5.1G", "app_du_total": "5.5G", "root_yarn_cache": "960M; backing filesystem not yet confirmed", "root_toolchain_cache": "235M; backing filesystem not yet confirmed", "source_of_remaining_df_vs_du_difference": "Not confirmed; inspect deleted-open files and mount roots without terminating processes", "safe_boundary": "Do not delete or relocate other conversations' source worktrees. Prefer verified disposable build caches or an approved external build path while retaining all official release gates."},
-  "latest_storage_observation": {"root_yarn_cache_mount": "/dev/nvme0n27, same full filesystem as /app", "root_toolchain_cache_mount": "/dev/nvme0n27", "other_worktrees": "Historical source/release/test worktrees, including Mongo fixtures; all retained", "open_deleted_file_output": "No output; do not infer process absence or terminate anything", "recovery_scope": "Only /root/.cache/yarn; Node toolchains, all worktrees, application source/configuration and live data are untouched", "comparable_dependency_logical_bytes": 383398384, "measurement_limit": "Same-lock local Windows dependency size is indicative only, not an exact Linux ARM64 allocation budget"},
-  "storage_recovery_helper": {"file": "RECOVER-YARN-CACHE.py", "sha256": "e0a731c9df88f3cd2107ba12aa8e8db50ead430c1ba7070272cedfb0d5d8b00b", "mechanism": "Exact HEAD/lease/helper-hash checks; reject active cache usage; copy to private /tmp; compare complete hashes/types/modes/link targets; recheck source inode/snapshot and lease before eviction; recreate the empty normal cache and retain backup/receipt. Then a read-only tracked-source status gate reports changes and blocks any build until clean.", "minimum_app_free_bytes": 805306368, "resume": "Only with >=768MiB available and tracked source clean: execute the unchanged pinned DEPLOY-EMERGENT.sh; child TMPDIR and XDG_CACHE_HOME use /tmp", "bootstrap": "Anonymous HTTPS exact-hash download into memory; no Git fetch/write on the full volume", "validation": "10 native filesystem/real-Git cases passed, zero skips: original six preservation/refusal cases, stat-only/index-lock preservation and staged/unstaged refusal, plus a combined real-Git/filesystem test proving cache recovery retains an unrelated source edit and the build gate still refuses it. No /app/root-cache/provider/network action is executed by tests."},
+  "stage": "Owner transcript confirms protocol-v5 ready_to_publish=true for expected A/M/release identity after cache recovery. Await fresh prepublish immediately followed by one publish click, visible newer Deployment Succeeded, official verify3 and closed lease.",
+  "latest_readonly_preflight_result": {
+    "helper_commit": "550e103ade4096c350852eaea48e1531b765798b",
+    "helper_sha256": "ec0dde328cc6c51b9ae647aab67f805171f60934f4d8fc87e2baf8feba4e0b49",
+    "command": "git --no-optional-locks -c diff.autoRefreshIndex=false diff --quiet",
+    "exit_code": 1,
+    "lease_and_local_sha_checks": "Passed before this command in the transcript",
+    "cache_copy_and_eviction": "Not reached",
+    "prepare_and_publish": "Not reached",
+    "cause": "Unconfirmed: obtain file names, mode summaries, staged status and read-only porcelain status. Do not assume it is safe to discard source changes or remove a Git lock."
+  },
+  "cache_recovery_preflight_issue": {
+    "affected_helper_commit": "267c88d326183d3709110e162312f313cd416e90",
+    "owner_failure": "git diff --quiet attempted /app/.git/index.lock write and failed with out-of-diskspace before cache copy began",
+    "root_cause": "Porcelain diff refreshes stat information by default. Disabling its refresh avoided writes but the owner then received diff exit1 with no path diagnosis.",
+    "fix": "Cache preservation outside /app is independent of source edits: require the free lease/exact checkout and idle cache before preservation. After space recovery use git --no-pager --no-optional-locks status --porcelain=v1 --untracked-files=no, matching the official tracked-clean policy, before any build. Actual tracked edits print path names and still stop the release.",
+    "source": "https://git-scm.com/docs/git",
+    "safety": "Cache maintenance never restores, stages, stashes or discards source edits. Dirty staged/unstaged content still refused before building; existing index.lock is left unchanged. Official guard and mandatory lease/fetch checks are unchanged."
+  },
+  "storage_diagnosis": {
+    "owner_guard_status": "active=false",
+    "app_device": "/dev/nvme0n27",
+    "app_size": "9.8G",
+    "app_available": "0",
+    "app_used_percent": 100,
+    "app_inode_used_percent": 59,
+    "app_free_inodes": 270185,
+    "tmp_device": "overlay",
+    "tmp_available": "231G",
+    "app_worktrees": "5.1G",
+    "app_du_total": "5.5G",
+    "root_yarn_cache": "960M; backing filesystem not yet confirmed",
+    "root_toolchain_cache": "235M; backing filesystem not yet confirmed",
+    "source_of_remaining_df_vs_du_difference": "Not confirmed; inspect deleted-open files and mount roots without terminating processes",
+    "safe_boundary": "Do not delete or relocate other conversations' source worktrees. Prefer verified disposable build caches or an approved external build path while retaining all official release gates."
+  },
+  "latest_storage_observation": {
+    "root_yarn_cache_mount": "/dev/nvme0n27, same full filesystem as /app",
+    "root_toolchain_cache_mount": "/dev/nvme0n27",
+    "other_worktrees": "Historical source/release/test worktrees, including Mongo fixtures; all retained",
+    "open_deleted_file_output": "No output; do not infer process absence or terminate anything",
+    "recovery_scope": "Only /root/.cache/yarn; Node toolchains, all worktrees, application source/configuration and live data are untouched",
+    "comparable_dependency_logical_bytes": 383398384,
+    "measurement_limit": "Same-lock local Windows dependency size is indicative only, not an exact Linux ARM64 allocation budget"
+  },
+  "storage_recovery_helper": {
+    "file": "RECOVER-YARN-CACHE.py",
+    "sha256": "e0a731c9df88f3cd2107ba12aa8e8db50ead430c1ba7070272cedfb0d5d8b00b",
+    "mechanism": "Exact HEAD/lease/helper-hash checks; reject active cache usage; copy to private /tmp; compare complete hashes/types/modes/link targets; recheck source inode/snapshot and lease before eviction; recreate the empty normal cache and retain backup/receipt. Then a read-only tracked-source status gate reports changes and blocks any build until clean.",
+    "minimum_app_free_bytes": 805306368,
+    "resume": "Only with >=768MiB available and tracked source clean: execute the unchanged pinned DEPLOY-EMERGENT.sh; child TMPDIR and XDG_CACHE_HOME use /tmp",
+    "bootstrap": "Anonymous HTTPS exact-hash download into memory; no Git fetch/write on the full volume",
+    "validation": "10 native filesystem/real-Git cases passed, zero skips: original six preservation/refusal cases, stat-only/index-lock preservation and staged/unstaged refusal, plus a combined real-Git/filesystem test proving cache recovery retains an unrelated source edit and the build gate still refuses it. No /app/root-cache/provider/network action is executed by tests."
+  },
   "implementation_checkpoint": "c24ed63e0836d919110e1e5042ae473484817066",
   "verified_pr_source": "76779980d38bcf5feb251888f63b1f85fabd6b1e",
   "merged_source_A": "9e22418cf2350fe09a4bb61acfabaefb7748dede",
@@ -25,15 +76,44 @@
   "deployment_git_sha": "a56399edf46f97f8b8e4793dc2619bb2a1b7ac2f",
   "release_id": "rg5-a3231edbd640b42b45d45cd0254bc0c0099de868b2722a97bd707495e5bb3231",
   "intent_proof": "Deployment merge tree equals B exactly; git diff A..deployment changes only release/release-intent-v5.json. No squash/rebase or source change after freeze.",
-  "candidate_artifact": {"run_id": 42251617163, "artifact_id": 13521765367, "json_sha256": "57c5612244044554281f5fa9f1e9856bd7a2115c0b0aff96257b68a39f70511e"},
+  "candidate_artifact": {
+    "run_id": 42251617163,
+    "artifact_id": 13521765367,
+    "json_sha256": "57c5612244044554281f5fa9f1e9856bd7a2115c0b0aff96257b68a39f70511e"
+  },
   "reviewed_B_run_id": 42253238914,
   "postmerge_release_run_id": 42254282673,
   "postmerge_release_state_at_checkpoint": "Release Readiness42254282673 and CodeQL42254282534 both completed successfully on exact deployment a56399edf46f97f8b8e4793dc2619bb2a1b7ac2f; remote Production still equals that SHA",
-  "latest_owner_execution": {"helper_commit": "6f3ab9fc6da61026e8d22a819df77e6b05122534", "workspace_fast_forward": "049fba51c13b902cd12808e03e87aca203649fb7 -> a56399edf46f97f8b8e4793dc2619bb2a1b7ac2f", "tracked_changes_before_update": false, "untracked_files": "Preserved", "preview_backend": "Stopped by the helper before checkout/build", "preserved_python_cache_directories": 1, "platform": "Linux aarch64, Host Node24.19.0; governed Node22.23.2/Yarn1.22.22 installed with the pinned archive hash", "failure": "ENOSPC: no space left on device, mkdir /app/frontend/node_modules", "failure_stage": "governed yarn install, linking dependencies", "prepare_and_prepublish": "Not reached in the supplied transcript; refresh status before any remediation", "publish": "Not performed", "required_diagnosis": "df block and inode counts for /app and /tmp; bounded du of /app, /tmp and package caches. Do not delete caches or data blindly."},
+  "latest_owner_execution": {
+    "recovery_helper_commit": "4e4937822a6292689c9fde72d78355f349e1ccdb",
+    "evidence": "Owner supplied terminal transcript ending with ready_to_publish=true; copied ^C is after the shell prompt, not during a running build",
+    "ready_to_publish": true,
+    "protocol_version": 5,
+    "source_git_sha": "9e22418cf2350fe09a4bb61acfabaefb7748dede",
+    "deployment_git_sha": "a56399edf46f97f8b8e4793dc2619bb2a1b7ac2f",
+    "release_id": "rg5-a3231edbd640b42b45d45cd0254bc0c0099de868b2722a97bd707495e5bb3231",
+    "frontend_artifact_tree_sha256": "0b11891afc21a2fde3c6b5fe2865a178241e775f73370c36ee84de3c3dbe7a91",
+    "frontend_build_meta_sha256": "b853c73797a6828586ce167d154b284cf1102c7f03ac85dc80f504f24fe70584",
+    "publish": "No explicit deployment-started or newer Deployment Succeeded evidence supplied",
+    "lease": "Prepare/prepublish succeeded in supplied output; do not prepare again or abort the lease. Fresh prepublish remains mandatory immediately before the click."
+  },
   "app_workspace_updated_by_owner": true,
-  "emergent_owner_observation": {"active_lease": false, "head": "049fba51c13b902cd12808e03e87aca203649fb7", "branch": "hotfix/prod-snap-meta-final", "tracked_changes": false, "untracked_platform_and_helper_files": "Preserve all; do not clean, delete, stage or commit"},
-  "deployment_helper": {"file": "DEPLOY-EMERGENT.sh", "sha256": "43c89c3cef10a786d5e5f8070daedf9c3cc247feda046ef9c08e6c008a06d3fc", "validation": "Bash syntax and all four embedded Python blocks compile; exact-head/branch/lease gates and ff-only update; no live execution by the assistant"},
-  "verify_helper": {"file": "VERIFY-EMERGENT.sh", "sha256": "bd3fd94c90a6f896cecd7bf4525fa4fe28676ccfb7eda4c7b15807fc64d55887"},
+  "emergent_owner_observation": {
+    "active_lease": false,
+    "head": "049fba51c13b902cd12808e03e87aca203649fb7",
+    "branch": "hotfix/prod-snap-meta-final",
+    "tracked_changes": false,
+    "untracked_platform_and_helper_files": "Preserve all; do not clean, delete, stage or commit"
+  },
+  "deployment_helper": {
+    "file": "DEPLOY-EMERGENT.sh",
+    "sha256": "43c89c3cef10a786d5e5f8070daedf9c3cc247feda046ef9c08e6c008a06d3fc",
+    "validation": "Bash syntax and all four embedded Python blocks compile; exact-head/branch/lease gates and ff-only update; no live execution by the assistant"
+  },
+  "verify_helper": {
+    "file": "VERIFY-EMERGENT.sh",
+    "sha256": "bd3fd94c90a6f896cecd7bf4525fa4fe28676ccfb7eda4c7b15807fc64d55887"
+  },
   "latest_user_decision": "Each cycle must attempt all eligible invoices once, without an overall 500-invoice cutoff. Add an owner button to start a cycle at any time. Concurrent requests join the active cycle.",
   "user_requirement": "Complete platform performance fixes. Automatic Qoyod invoice sending must remain enabled according to existing settings and run every two hours.",
   "implemented": [
@@ -66,16 +146,15 @@
   "complete_premerge_ci": "48 successful checks and six expected scope skips; zero failed or pending checks at exact source 76779980d38bcf5feb251888f63b1f85fabd6b1e",
   "owned_test_mongo": "Stopped gracefully after verifying exact loopback port 49417, replica set mezan_bg_test_rs and the owned data directory; no other runtime stopped",
   "remaining": [
-    "Owner executes phased cache-preservation helper; it preserves Yarn downloads without touching application source or other worktrees",
-    "If actual tracked edits are reported after preservation, inspect and preserve them before choosing any source repair; do not discard edits or bypass the build gate",
-    "Once tracked source is clean, inspect governed build/prepare/prepublish output",
-    "Confirm postmerge checks, inspect helper output and run a fresh prepublish immediately before the owner's one Re-publish click",
-    "Require a newer visible Deployment Succeeded plus the official three-probe verify and closed lease; measure live performance afterward"
+    "Owner runs cd /app && python scripts/production_release_guard.py prepublish; require exit0/ready_to_publish=true and immediately click Re-publish changes once",
+    "Retain sanitized Cloud Build adapter output and require a newer visible Deployment Succeeded",
+    "Run official python scripts/production_release_guard.py verify --url https://mezansalla.com; require all3 successful intended-identity probes and then status active=false",
+    "After successful production verification, restore stopped preview services with the pinned VERIFY-EMERGENT.sh helper and measure live performance"
   ],
   "production_changed": false,
-  "deployment_or_lease_created": false,
+  "deployment_or_lease_created": true,
   "provider_or_financial_test_writes": false,
   "runtime_evidence": "D:/codex-release-artifacts/mezan-background-workers-qoyod-2h-20261106",
   "known_ci_diagnosis": "Source-only A push intentionally fails reviewed-B classification; B has now been frozen, verified and merged without changing source. The new exact-deployment postmerge workflow must finish. Windows POSIX-loader permissions were not weakened; official validation ran successfully on Linux.",
-  "next_safe_action": "Owner runs the exact-hash phased recovery helper. Inspect preserved cache/capacity, any tracked path names and the final guarded build output. Never restore or discard unknown source edits. Require fresh prepublish, visible successful deployment and official verify3/closed lease."
+  "next_safe_action": "cd /app && python scripts/production_release_guard.py prepublish; on successful fresh gate immediately click Re-publish changes once. After newer explicit Deployment Succeeded run official verify and confirm lease closure. Do not rerun prepare/cache recovery or alter the frozen source."
 }
