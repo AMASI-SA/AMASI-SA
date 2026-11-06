@@ -86,3 +86,34 @@ the new platform success plus official verify3/statusinactive.
 This document's continuation is on the dedicated evidence branch
 codex/assembly-completion-release-evidence-20261107. It is documentation-only and
 must not be deployed or merged into the frozen A/B release pair.
+
+
+## Publication started — 2026-11-06 22:14 UTC
+
+PR1792 merged normally as a2487c339fce1c3c6f022d96e91d7d892b66f663;
+its tree exactly equals reviewed B. Previous Android75 publisher finished its
+official3-probe proof and closed its lease before our app update. App fast-forward
+preserved unrelated files. Preview backend is temporarily stopped for packaging.
+
+Initial app adapter refused prepackaged backend/__pycache__. Only generated,
+untracked bytecode was preserved intact outside the governed roots at
+/app/.release-preserved/assembly-completion-bytecode-c4ecdcb313fd465b8bb50f9252872bb8.
+Rebuild with PYTHONDONTWRITEBYTECODE=1 passed completely; no source/intent change.
+Use python-B for later guard commands to avoid regenerating packaged bytecode.
+
+Prepare passed with actorcodex-assembly-completion-20261107 at
+2026-11-06T22:12:52.251970+00:00, source6ffa622c04f2359dc99f501d16e13c942ab5b1d0,
+deploymenta2487c339fce1c3c6f022d96e91d7d892b66f663, runtime
+rg5-75858ae3554d19d11fe40214537a2f02eec0292f6b73e9c6e5e2e8d451155873.
+Both prepublish gates passed, including the second immediately before the final
+Publish changes click. Clicked exactly once. Emergent visibly shows Publishing,
+Deployment Started Nov7 01:14Riyadh, then Workspace ready / Packaging latest changes.
+Deployment success and actual new Production revision are not yet verified.
+
+Our exact lease remains active. Do not prepare another release, clear this lease,
+or alter app while publication/proof runs. No live business/provider test write.
+Next observe a new explicit successful deployment, run the unchanged official
+verify--urlhttps://mezansalla.com (three rounds internally), require exact source,
+runtime identity and critical/Frontend proof and inactive status. Restore only the
+Preview backend we stopped, after checking no successor lease and unchanged appHEAD.
+
