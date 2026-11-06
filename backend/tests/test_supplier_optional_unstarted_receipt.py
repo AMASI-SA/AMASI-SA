@@ -98,6 +98,11 @@ async def test_optional_offer_is_revalidated_before_consent(env, change):
 
 
 async def test_optional_assigned_scan_still_approves_invoice_and_custody_once(invoice_env, monkeypatch):
+    from supplier_receipt_employee_custody import install_supplier_receipt_employee_custody
+    # The production mobile request context installs this real custody wrapper.
+    # A bare ASGI router fixture must compose it explicitly, not rely on which
+    # unrelated test happened to import mobile_app_request_context first.
+    install_supplier_receipt_employee_custody()
     db, http, _ = invoice_env
     session, payload = await invoice_seed(db)
     pid = uuid.uuid4().hex

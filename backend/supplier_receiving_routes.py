@@ -3972,6 +3972,7 @@ def make_supplier_receiving_router(
     @router.get("/catalog")
     async def catalog(
         limit: int = Query(default=50, ge=1, le=200),
+        entry_only: bool = False,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
@@ -3990,6 +3991,15 @@ def make_supplier_receiving_router(
             {"_id": 0},
             sort=[("opened_at", DESCENDING)],
         )
+        if entry_only:
+            suppliers = await db[SUPPLIERS].find(
+                {"user_id": merchant_id, "status": {"$ne": "inactive"}},
+                {"_id": 0, "id": 1, "company_name": 1, "contact_person": 1, "phone": 1},
+            ).sort("company_name", 1).to_list(2000)
+            # Navigation only. It cannot bootstrap an invoice, scanned piece
+            # list or financial authority; the selected child must read fresh.
+            return {"ok": True, "entry_only": True, "read_only": True,
+                    "suppliers": suppliers, "active_session": _public_session(active)}
         sessions = (
             await db[SESSIONS]
             .find(

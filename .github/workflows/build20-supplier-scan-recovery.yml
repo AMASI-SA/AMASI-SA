@@ -7,6 +7,13 @@ on:
       - 'backend/supplier_receiving_routes.py'
       - 'backend/tests/test_supplier_scan_recovery.py'
       - 'backend/tests/test_supplier_optional_unstarted_receipt.py'
+      - 'backend/tests/test_supplier_receiving_entry.py'
+      - 'backend/preparation_section_reads.py'
+      - 'backend/preparation_supplier_dispatch.py'
+      - 'backend/mobile_operations_monitoring_routes.py'
+      - 'backend/mobile_employee_monitoring_workspace_routes.py'
+      - 'backend/reviewed_product_pages.py'
+      - 'backend/reviewed_products_catalog.py'
       - 'backend/tests/test_supplier_receiving.py'
       - 'backend/tests/test_supplier_invoice_financial_integrity.py'
       - '.github/workflows/build20-supplier-scan-recovery.yml'
@@ -17,8 +24,10 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     env:
+      PYTHONPATH: .:tests
       BUILD20_SCAN_TEST_MONGO_URL: mongodb://127.0.0.1:27017/?replicaSet=rs0
       BUILD20_INVOICE_TEST_MONGO_URL: mongodb://127.0.0.1:27017/?replicaSet=rs0
+      WAITING_TEST_MONGO_URL: mongodb://127.0.0.1:27017/?replicaSet=rs0
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -40,6 +49,7 @@ jobs:
           python -m pip install
           fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 motor==3.3.1
           httpx==0.28.1 openai==1.99.9 pytest==9.0.2 pytest-asyncio==1.3.0
+          mongomock-motor==0.0.36 PyJWT python-dotenv
           openpyxl cryptography reportlab python-multipart arabic-reshaper python-bidi Pillow qrcode PyMuPDF
       - name: Scan recovery plus supplier/invoice regressions
         working-directory: backend
@@ -48,6 +58,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/build20-scan-recovery"
           git rev-parse HEAD HEAD^{tree} > "$RUNNER_TEMP/build20-scan-recovery/identity.txt"
+          python -m pytest tests/test_supplier_receiving_entry.py tests/test_monitoring_lazy_directory.py tests/test_preparation_lazy_sections.py tests/test_reviewed_product_pages.py -v --tb=short
           python -m pytest             tests/test_supplier_optional_unstarted_receipt.py             tests/test_supplier_scan_recovery.py             tests/test_supplier_scan_lock.py             tests/test_supplier_scan_approval.py             tests/test_supplier_receiving.py             tests/test_supplier_invoice_financial_integrity.py             tests/test_supplier_multi_supplier_lifecycle.py             tests/test_supplier_invoice_live_cost_session.py             tests/test_supplier_invoice_service_eligibility.py             -v --tb=short --junitxml="$RUNNER_TEMP/build20-scan-recovery/pytest.xml"             2>&1 | tee "$RUNNER_TEMP/build20-scan-recovery/pytest.log"
       - name: Stop disposable Mongo
         if: always()

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from employees_v2_routes import EMPLOYEES
 from mobile_app_permissions import mobile_app_access_for_user
@@ -99,6 +99,25 @@ def make_mobile_employee_monitoring_workspace_router(
         prefix="/mobile/operations-monitoring",
         tags=["mobile-operations-monitoring"],
     )
+
+    async def progress_target(employee_id: str, user: dict) -> tuple[str, str]:
+        owner_id = await _monitoring_owner_scope(db, user)
+        employee = await _resolve_monitored_employee(db, owner_id=owner_id, employee_id=employee_id)
+        if not employee:
+            raise HTTPException(status_code=404, detail={"code": "employee_not_found"})
+        return owner_id, monitored_work_account_id(employee)
+
+    @router.get("/preparation/{employee_id}/progress-days")
+    async def employee_progress_days(employee_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+        owner_id, account_id = await progress_target(employee_id, user)
+        from preparation_section_reads import progress_days
+        return await progress_days(db, user_id=owner_id, employee_id=account_id)
+
+    @router.get("/preparation/{employee_id}/progress-workspace")
+    async def employee_progress_workspace(employee_id: str, day: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$|^__unknown__$"), user: dict = Depends(current_user)) -> dict[str, Any]:
+        owner_id, account_id = await progress_target(employee_id, user)
+        from preparation_section_reads import progress_workspace
+        return await progress_workspace(db, user_id=owner_id, employee_id=account_id, day=day)
 
     @router.get("/preparation/{employee_id}/workspace")
     async def employee_workspace(

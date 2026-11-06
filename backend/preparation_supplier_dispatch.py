@@ -1244,6 +1244,7 @@ async def _employee_workspace(
     employee_id: str,
     limit: int,
     piece_grain: bool = False,
+    batch_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     pieces = await db[PIECES].find(
         {
@@ -1251,6 +1252,7 @@ async def _employee_workspace(
             "responsible_employee_id": employee_id,
             "experiment_archived_at": None,
             "status": {"$ne": PIECE_STATUS_CANCELLED},
+            **({"batch_id": {"$in": batch_ids}} if batch_ids is not None else {}),
         },
         {"_id": 0, "user_id": 0, "image_b64": 0},
     ).sort("updated_at", -1).limit(50000).to_list(50000)
@@ -1363,7 +1365,9 @@ async def _employee_workspace(
         )
 
     dispatches = await db[DISPATCHES].find(
-        {"user_id": user_id, "sent_by_id": employee_id, "status": {"$ne": "building"}},
+        {"user_id": user_id, "sent_by_id": employee_id, "status": {"$ne": "building"},
+         **({"source_files.cards.piece_id": {"$in": [_text(row.get("piece_id")) for row in pieces]}}
+            if batch_ids is not None else {})},
         {"_id": 0, "user_id": 0},
     ).sort("sent_at", -1).limit(500).to_list(500)
     pieces_by_dispatch: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -1400,7 +1404,7 @@ async def _employee_workspace(
             supplier_rows.values(),
             key=lambda row: (_normalized(row.get("supplier_name")), row["supplier_id"]),
         ),
-        "suppliers": await _active_suppliers(db, user_id=user_id),
+        "suppliers": await _active_suppliers(db, user_id=user_id) if batch_ids is None else [],
     }
 
 
@@ -1593,10 +1597,27 @@ def make_preparation_supplier_dispatch_router(
         return await _waiting_page(db, _merchant_user_id(worker), _actor_id(worker), after, group)
 
     @router.get("/waiting-groups")
-    async def waiting_groups(user: dict = Depends(current_user)) -> dict[str, Any]:
+    async def waiting_groups(cards_only: bool = False, user: dict = Depends(current_user)) -> dict[str, Any]:
         worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
         await ensure_indexes_once()
+        if cards_only:
+            from preparation_section_reads import waiting_cards
+            return await waiting_cards(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker))
         return await _waiting_groups(db, _merchant_user_id(worker), _actor_id(worker))
+
+    @router.get("/progress-days")
+    async def progress_dates(user: dict = Depends(current_user)) -> dict[str, Any]:
+        worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
+        await ensure_indexes_once()
+        from preparation_section_reads import progress_days
+        return await progress_days(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker))
+
+    @router.get("/progress-workspace")
+    async def progress_day_workspace(day: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$|^__unknown__$"), user: dict = Depends(current_user)) -> dict[str, Any]:
+        worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
+        await ensure_indexes_once()
+        from preparation_section_reads import progress_workspace
+        return await progress_workspace(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker), day=day)
 
     @router.get("/workspace")
     async def workspace(
