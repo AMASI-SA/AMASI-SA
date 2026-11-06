@@ -41,7 +41,7 @@ export async function refreshSnapchatSpend({ dateFrom, dateTo, signal } = {}) {
             clearDashboardPlatformSpendCache();
             return job;
         }
-        if (["failed", "skipped", "unknown"].includes(job.status)) {
+        if (!["queued", "running"].includes(job.status)) {
             throw new Error("تعذر إكمال جلب صرف سناب. تم الاحتفاظ بآخر بيانات محفوظة.");
         }
         await wait(Date.now() - startedAt < 30_000 ? 2000 : 10_000, signal);

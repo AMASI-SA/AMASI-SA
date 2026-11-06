@@ -966,6 +966,7 @@ async def test_dashboard_v2_keeps_dependent_financial_totals_null_when_snapchat_
         return {
             "total": 0.0,
             "missing_products_count": 0,
+            "missing_all_cost_products_count": 0,
             "incomplete_orders_count": 0,
             "no_products_orders_count": 0,
             "source_contract": "test_product_cost",
