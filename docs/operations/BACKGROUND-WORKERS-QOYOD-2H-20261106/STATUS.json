@@ -6,7 +6,8 @@
   "reused_qoyod_source": "fa1aae7bcdc6b1fc09091a46752bd93ee7b049b1",
   "related_prs": [1776, 1785],
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1788",
-  "stage": "Owner updated /app successfully; governed install stopped with ENOSPC before prepare/prepublish. Diagnose disk blocks and inode availability before remediation; publishing and verification pending",
+  "stage": "Confirmed /app filesystem byte exhaustion (9.8GiB full), not inode exhaustion. Preserve other worktrees; identify disposable build artifacts and their mounts before freeing space. Publishing and verification pending",
+  "storage_diagnosis": {"owner_guard_status": "active=false", "app_device": "/dev/nvme0n27", "app_size": "9.8G", "app_available": "0", "app_used_percent": 100, "app_inode_used_percent": 59, "app_free_inodes": 270185, "tmp_device": "overlay", "tmp_available": "231G", "app_worktrees": "5.1G", "app_du_total": "5.5G", "root_yarn_cache": "960M; backing filesystem not yet confirmed", "root_toolchain_cache": "235M; backing filesystem not yet confirmed", "source_of_remaining_df_vs_du_difference": "Not confirmed; inspect deleted-open files and mount roots without terminating processes", "safe_boundary": "Do not delete or relocate other conversations' source worktrees. Prefer verified disposable build caches or an approved external build path while retaining all official release gates."},
   "implementation_checkpoint": "c24ed63e0836d919110e1e5042ae473484817066",
   "verified_pr_source": "76779980d38bcf5feb251888f63b1f85fabd6b1e",
   "merged_source_A": "9e22418cf2350fe09a4bb61acfabaefb7748dede",
@@ -61,7 +62,7 @@
   "complete_premerge_ci": "48 successful checks and six expected scope skips; zero failed or pending checks at exact source 76779980d38bcf5feb251888f63b1f85fabd6b1e",
   "owned_test_mongo": "Stopped gracefully after verifying exact loopback port 49417, replica set mezan_bg_test_rs and the owned data directory; no other runtime stopped",
   "remaining": [
-    "Obtain fresh lease status and read-only disk/inode/cache usage from the owner; no remote terminal control tool is available here",
+    "Obtain worktree subdirectory sizes, registered worktree names, cache backing filesystems and deleted-open file metadata from the owner; no remote terminal control tool is available here",
     "Free or relocate only verified reproducible build caches after diagnosis, or use available capacity; rerun the same exact-source governed build and preparation without weakening release gates",
     "Confirm postmerge checks, inspect helper output and run a fresh prepublish immediately before the owner's one Re-publish click",
     "Require a newer visible Deployment Succeeded plus the official three-probe verify and closed lease; measure live performance afterward"
@@ -71,5 +72,5 @@
   "provider_or_financial_test_writes": false,
   "runtime_evidence": "D:/codex-release-artifacts/mezan-background-workers-qoyod-2h-20261106",
   "known_ci_diagnosis": "Source-only A push intentionally fails reviewed-B classification; B has now been frozen, verified and merged without changing source. The new exact-deployment postmerge workflow must finish. Windows POSIX-loader permissions were not weakened; official validation ran successfully on Linux.",
-  "next_safe_action": "Owner runs read-only status, df -h, df -i and bounded du. Diagnose ENOSPC from that output before changing storage. Do not Re-publish or run financial actions until a complete governed build, prepare/prepublish, visible success and official verification."
+  "next_safe_action": "Inspect du -xhd2 /app/.worktrees, git worktree list, df for /root/.cache/{yarn,mezan-release-toolchains} and deleted-open file metadata. Free only verified disposable artifacts or preserve them on the spacious /tmp filesystem, then rerun exact-source governed preparation. Do not publish before prepare/prepublish."
 }
