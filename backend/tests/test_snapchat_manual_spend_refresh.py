@@ -131,7 +131,9 @@ async def test_invalid_period_never_dispatches_provider_work(manual_app, period)
 
 
 @pytest.mark.asyncio
-async def test_real_canonical_manual_refresh_bypasses_only_cadence_and_retains_distributed_exclusion(monkeypatch):
+@pytest.mark.parametrize("pressure", [False, True])
+async def test_real_canonical_manual_refresh_bypasses_only_cadence_and_retains_distributed_exclusion(monkeypatch, pressure):
+    from contextlib import asynccontextmanager
     from datetime import date, timedelta
     port = os.environ.get("ADS_LEASE_TEST_MONGO_PORT")
     if not port:
@@ -143,6 +145,8 @@ async def test_real_canonical_manual_refresh_bypasses_only_cadence_and_retains_d
     entered = asyncio.Event()
     calls = []
     registered = []
+    admission_waiting = asyncio.Event()
+    allow_admission = asyncio.Event()
     owner = "synthetic-owner"
 
     async def selected(*args, **kwargs):
@@ -156,11 +160,24 @@ async def test_real_canonical_manual_refresh_bypasses_only_cadence_and_retains_d
         entered.set()
         await asyncio.Event().wait()
 
+    @asynccontextmanager
+    async def admission(*args, **kwargs):
+        admission_waiting.set()
+        await allow_admission.wait()
+        if pressure:
+            raise scheduler.ResourcePressure("resource_pressure")
+        yield None
+
+    async def unexpected_unhealthy(*args, **kwargs):
+        pytest.fail("Resource admission/cancellation must not invalidate provider connection health")
+
     monkeypatch.setattr(scheduler, "snapchat_oauth_configured", lambda: True)
     monkeypatch.setattr(scheduler, "snapchat_native_sync_enabled", lambda: True)
     monkeypatch.setattr(scheduler, "_load_canonical_scheduler_accounts", selected)
     monkeypatch.setattr(scheduler.SnapchatSyncContext, "access_token", access_token)
     monkeypatch.setattr(scheduler.snapchat_hourly, "refresh_snapchat_account_hours", provider_read)
+    monkeypatch.setattr(scheduler.governor, "heavy", admission)
+    monkeypatch.setattr(scheduler, "_mark_snapchat_sync_unhealthy", unexpected_unhealthy)
     task = None
     try:
         await db[scheduler.RUNS_COLLECTION].insert_one({
@@ -176,18 +193,27 @@ async def test_real_canonical_manual_refresh_bypasses_only_cadence_and_retains_d
         assert calls == []
         task = asyncio.create_task(scheduler._refresh_snapchat(db, **options,
             manual=True, on_started=registered.append))
-        await asyncio.wait_for(entered.wait(), timeout=10)
+        await asyncio.wait_for(admission_waiting.wait(), timeout=10)
         assert len(registered) == 1
-        duplicate = await scheduler._refresh_snapchat(db, **options, manual=True)
-        assert duplicate["reason"] == "running_elsewhere"
-        assert calls == [1]
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
+        assert calls == []  # HTTP can acknowledge the durable run while capacity is busy.
+        allow_admission.set()
+        if pressure:
+            result = await task
+            assert result["code"] == "resource_pressure"
+            assert calls == []
+        else:
+            await asyncio.wait_for(entered.wait(), timeout=10)
+            assert len(registered) == 1
+            duplicate = await scheduler._refresh_snapchat(db, **options, manual=True)
+            assert duplicate["reason"] == "running_elsewhere"
+            assert calls == [1]
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
         run = await db[scheduler.RUNS_COLLECTION].find_one({"user_id": owner, "run_id": registered[0]})
         assert run["requested_by"] == "owner_manual"
         assert run["status"] == "failed"
-        assert run["error"]["code"] == "snapchat_sync_cancelled"
+        assert run["error"]["code"] == ("resource_pressure" if pressure else "snapchat_sync_cancelled")
         # Cancellation releases only this owned lease, allowing a later explicit retry.
         successor = await scheduler.acquire_snapchat_lease(db, user_id=owner, now=scheduler._utcnow())
         assert successor is not None

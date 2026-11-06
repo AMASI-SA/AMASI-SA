@@ -1,0 +1,16 @@
+PASS src/components/DashboardAdsSpendCard.manualRefresh.test.jsx
+PASS src/components/DashboardAdsSpendCard.test.jsx
+PASS src/lib/dashboardPlatformSpendClient.test.js
+PASS src/services/snapchatManualSpendRefresh.test.js
+PASS src/pages/AdvancedDashboard.latestOrders.test.jsx
+PASS src/services/dashboardAdsSpend.test.js
+PASS src/lib/dashboardPlatformSpendMerge.test.js
+PASS src/pages/AdvancedDashboard.cartFreeze.test.jsx
+PASS src/pages/AdvancedDashboard.mobile.test.jsx
+PASS src/dashboardExecutivePlatformSpendInterceptor.test.js
+
+Test Suites: 10 passed, 10 total
+Tests:       132 passed, 132 total
+Snapshots:   0 total
+Time:        8.707 s
+Ran all test suites within paths "src/components/DashboardAdsSpendCard.manualRefresh.test.jsx", "src/components/DashboardAdsSpendCard.test.jsx", "src/services/snapchatManualSpendRefresh.test.js", "src/lib/dashboardPlatformSpendClient.test.js", "src/services/dashboardAdsSpend.test.js", "src/lib/dashboardPlatformSpendMerge.test.js", "src/dashboardExecutivePlatformSpendInterceptor.test.js", "src/pages/AdvancedDashboard.latestOrders.test.jsx", "src/pages/AdvancedDashboard.cartFreeze.test.jsx", "src/pages/AdvancedDashboard.mobile.test.jsx".
