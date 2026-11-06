@@ -182,6 +182,44 @@ async def progress_workspace(db: Any, *, user_id: str, employee_id: str, day: st
         "progress_active_piece_ids": remaining_ids}
 
 
+async def waiting_count(db: Any, *, user_id: str, employee_id: str, group: str) -> dict[str, Any]:
+    """Selected-group count, independent of first details and never a write gate.
+
+    Read eligibility metadata only. Reuse the canonical current-order/local
+    review policy once per order within this request, without a cross-request
+    authority cache or customer-option/image/supplier hydration.
+    """
+    from preparation_supplier_dispatch import (
+        PIECES, _waiting_query, _waiting_group_expression,
+        piece_is_available_for_supplier_dispatch, annotate_waiting_pieces,
+    )
+    query = _waiting_query(user_id, employee_id)
+    query["$expr"] = {"$eq": [_waiting_group_expression(), {"$literal": group}]}
+    projection = {"_id": 0, **{key: 1 for key in (
+        "order_number", "status", "assignment_status", "supplier_dispatch_status",
+        "supplier_receiving_session_id", "experiment_archived_at")}}
+    cursor = db[PIECES].find(query, projection).batch_size(256)
+    eligibility = {}
+    total = 0
+    try:
+        while True:
+            batch = await cursor.to_list(length=256)
+            if not batch:
+                break
+            candidates = [row for row in batch if piece_is_available_for_supplier_dispatch(row)]
+            pending = {_text(row.get("order_number")): row for row in candidates
+                       if _text(row.get("order_number")) not in eligibility}
+            if pending:
+                annotated = await annotate_waiting_pieces(db, user_id=user_id, pieces=list(pending.values()))
+                eligibility.update({_text(row.get("order_number")): row.get("waiting_review_eligible") is True
+                                    for row in annotated})
+            total += sum(eligibility.get(_text(row.get("order_number")), False) for row in candidates)
+    finally:
+        await cursor.close()
+    return {"ok": True, "employee_id": employee_id, "group": group,
+            "eligible_piece_count": total, "read_only": True}
+
+
 async def waiting_cards(db: Any, *, user_id: str, employee_id: str, after: str = "") -> dict[str, Any]:
     from preparation_supplier_dispatch import PIECES, _waiting_query, _waiting_group_expression
     from fastapi import HTTPException

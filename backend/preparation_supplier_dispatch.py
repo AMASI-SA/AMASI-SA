@@ -1170,7 +1170,7 @@ async def _waiting_groups(db: Any, user_id: str, employee_id: str) -> dict[str, 
             "suppliers": await _active_suppliers(db, user_id=user_id)}
 
 
-async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str, group: str = "") -> dict[str, Any]:
+async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str, group: str = "", page_size: int = 10) -> dict[str, Any]:
     from bson import ObjectId
 
     query = _waiting_query(user_id, employee_id)
@@ -1189,10 +1189,10 @@ async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str, gro
         query["$expr"] = {"$and": expressions}
 
     chosen = []
-    cursor = db[PIECES].find(query, {"image_b64": 0}).sort("_id", -1).batch_size(10)
+    cursor = db[PIECES].find(query, {"image_b64": 0}).sort("_id", -1).batch_size(page_size)
     try:
-        while len(chosen) < 11:
-            batch = await cursor.to_list(length=10)
+        while len(chosen) < page_size + 1:
+            batch = await cursor.to_list(length=page_size)
             if not batch:
                 break
             candidates = [row for row in batch if piece_is_available_for_supplier_dispatch(row)]
@@ -1203,10 +1203,10 @@ async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str, gro
         await cursor.close()
 
     next_cursor = None
-    if len(chosen) > 10:
-        key = chosen[9]["_id"]
+    if len(chosen) > page_size:
+        key = chosen[page_size - 1]["_id"]
         next_cursor = ("o:" if isinstance(key, ObjectId) else "s:") + str(key)
-    chosen = chosen[:10]
+    chosen = chosen[:page_size]
     by_batch = defaultdict(list)
     for row in chosen:
         by_batch[_text(row.get("batch_id"))].append(row)
@@ -1597,10 +1597,17 @@ def make_preparation_supplier_dispatch_router(
                 indexes_ready = True
 
     @router.get("/waiting-page")
-    async def waiting_page(after: str = Query("", max_length=256), group: str = Query("", max_length=1024), user: dict = Depends(current_user)) -> dict[str, Any]:
+    async def waiting_page(after: str = Query("", max_length=256), group: str = Query("", max_length=1024), page_size: int = Query(10, ge=1, le=10), user: dict = Depends(current_user)) -> dict[str, Any]:
         worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
         await ensure_indexes_once()
-        return await _waiting_page(db, _merchant_user_id(worker), _actor_id(worker), after, group)
+        return await _waiting_page(db, _merchant_user_id(worker), _actor_id(worker), after, group, page_size)
+
+    @router.get("/waiting-count")
+    async def waiting_count(group: str = Query(min_length=1, max_length=1024), user: dict = Depends(current_user)) -> dict[str, Any]:
+        worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
+        await ensure_indexes_once()
+        from preparation_section_reads import waiting_count
+        return await waiting_count(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker), group=group)
 
     @router.get("/waiting-groups")
     async def waiting_groups(cards_only: bool = False, after: str = Query("", max_length=2048), user: dict = Depends(current_user)) -> dict[str, Any]:
