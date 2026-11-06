@@ -5,6 +5,8 @@ on:
   pull_request:
     paths:
       - 'backend/supplier_receiving_routes.py'
+      - 'backend/review_completion_readback.py'
+      - 'backend/tests/test_review_readback_v2.py'
       - 'backend/supplier_category_service_policy.py'
       - 'backend/tests/test_supplier_category_contract.py'
       - 'backend/tests/test_supplier_uncategorized_receipt.py'

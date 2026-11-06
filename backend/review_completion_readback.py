@@ -18,6 +18,15 @@ BINDING_FIELDS = (
     "origin_session_ref", "origin_session_epoch", "order_number",
     "approved_revision", "approval_fingerprint", "approval_token_sha256",
 )
+_OPERATION_PROJECTION = {field: 1 for field in (
+    "_id", "user_id", "actor_id", "order_number", "readback_binding", "state",
+    "completion_mode", "revision", "committed_revision", "completed_at",
+    "closure_contract_version", "barrier_revision", "closed_at", "result.salla_status_sync",
+)}
+_EVENT_PROJECTION = {field: 1 for field in (
+    "_id", "user_id", "actor_id", "order_number", "operation_id", "event_type",
+    "readback_binding", "committed_revision", "occurred_at", "barrier_revision", "closure_contract_version",
+)}
 
 
 def unknown_attempt():
@@ -148,10 +157,11 @@ async def operation_result(scoped, operation):
     if not operation or operation.get("state") not in {"completed", "not_committed"}:
         return unknown_attempt()
     selector = {"user_id": operation["user_id"], "order_number": operation["order_number"]}
-    workflow = await scoped[WORKFLOWS].find_one(selector) or {}
+    workflow = await scoped[WORKFLOWS].find_one(selector,
+        {"_id": 0, "revision": 1, "review_completion_operation_id": 1}) or {}
     closed = operation["state"] == "not_committed"
     event = await scoped[EVENTS].find_one({"_id": operation["_id"] + (":closed" if closed else ":completed"),
-                                          "user_id": operation["user_id"]})
+                                          "user_id": operation["user_id"]}, _EVENT_PROJECTION)
     proof = closed_proof(operation, event, workflow) if closed else committed_proof(operation, event)
     return {"operation": proof, "state": proof["state"], "current_revision": workflow.get("revision"),
             "current_operation_id": workflow.get("review_completion_operation_id")}
@@ -239,5 +249,5 @@ async def read_attempt(db, *, user_id, actor_id, order_number, client_request_id
             operation = await scoped[OPERATIONS].find_one({
                 "user_id": user_id, "order_number": order_number, "actor_id": actor_id,
                 "readback_binding.client_request_id": cid,
-            })
+            }, _OPERATION_PROJECTION)
             return await operation_result(scoped, operation)

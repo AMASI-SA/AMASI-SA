@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/fix-supplier-preview-images-20261106",
   "base": "049fba51c13b902cd12808e03e87aca203649fb7",
-  "previous_source_checkpoint": "9de01b5fb9980c6c274605d6cafb00dfd99819d7",
+  "previous_source_checkpoint": "00aabda919a2b7e0b71c58864fc4fdda157e3866",
   "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1789",
   "companion_mobile": {
     "repository": "AMASI-SA/amasi-mobile",
@@ -20,7 +20,8 @@
     "Synthetic uncategorized assigned/direct receipt accepts another piece, refreshes current prices, and posts one exact invoice without modifying classifications.",
     "Waiting headers now use the same current order eligibility as selected detail pages, without physical options/image bytes/supplier hydration; sibling order reads are request-local.",
     "Barcode/order receiving lookups gain nonunique tenant-scoped indexes and omit embedded PDF images from order-picker reads.",
-    "One/50-piece actual assignment, original-request readback and native printable PDF retain every physical QR."
+    "One/50-piece actual assignment, original-request readback and native printable PDF retain every physical QR.",
+    "Native review outcome reads fetch only immutable proof/binding/event/current-pointer fields; all validators, primary snapshot, receipt identity and actor/tenant guards are unchanged."
   ],
   "verification": {
     "previous_pdf_preview_request_checks": {
@@ -62,15 +63,31 @@
       "maximum_after_bytes": 20000
     },
     "lookup_explain": "Local Windows Mongo8 explain reproduces the unchanged InvalidBSON UTF-8 decode issue; new Linux pinned-Mongo CI test must prove <=6 examined selected documents among1500 unrelated orders and no blocking sort. No test skip or weakened decoding.",
-    "category_checkpoint_ci": "All16 PR workflows passed for9de01b5, including Linux recovery/full invoice assertions and Security Gate. New source requires fresh CI."
+    "category_checkpoint_ci": "All16 PR workflows passed for9de01b5, including Linux recovery/full invoice assertions and Security Gate. New source requires fresh CI.",
+    "readback_metadata_regression": {
+      "before_fetched_bytes": 6308511,
+      "maximum_after_bytes": 32768,
+      "passed": 1,
+      "exit_code": 0,
+      "public_proof": "exactly_equal"
+    },
+    "latest_checkpoint_ci": "All20 applicable workflows passed for00aabda9, including Linux indexed lookup, complete PDF/options/photos, full invoice integrity and Security Gate. No failing/unknown test was waived.",
+    "expanded_review_checks": {
+      "passed": 67,
+      "failed": 1,
+      "subtests_passed": 33,
+      "exit_code": 1,
+      "failure": "Unchanged hide/unhide export-control test expects no product-default action-clock sidecar; same failure reproduced in isolation using exact unchanged00aabda9 readback module (SHA256 ae05ddb771f87db44a906a8fea491b4da5c8319d397cff6fcdaaee929ed0b0be). No production guard or unrelated test was changed."
+    },
+    "readback_v2_fresh_suite": "Fresh standalone38-case suite running at checkpoint; final immutable-head result belongs in PR1789 ledger.",
+    "critical_pdf_guard_sources": "reviewed_preparation_batches.py, preparation_pdf_reference_layout.py, preparation_file_images.py and mobile_product_file_pdf.py remain byte-identical to task base. All38 affected PDF/options/photos/assignment checks passed."
   },
   "incomplete": [
-    "Newly reported pending-review approval unknown-result investigation, using original immutable attempt only.",
-    "Fresh exact-source CI for this backend checkpoint.",
-    "Authenticated historical file inspection and phone UAT unavailable in this chat."
+    "Fresh exact-source CI for final readback checkpoint; inspect task PR ledger for final result.",
+    "Authenticated historical file/order inspection and phone UAT are not available in this chat."
   ],
   "continuation_ledger": "Issue1006 reached GitHub's 2500-comment limit; use this status record and PR1789 comments.",
-  "next_safe_action": "Inspect new backend CI, diagnose pending-review approval readback, preserve its idempotency/source/options guards, then update both Draft PR descriptions and final ledger.",
+  "next_safe_action": "Finish the running standalone readback suite; inspect exact-source backend/mobile CI, document final baseline limitation and review state, stop only our synthetic Mongo. No deployment.",
   "production_changed": false,
   "release": {
     "merge": false,

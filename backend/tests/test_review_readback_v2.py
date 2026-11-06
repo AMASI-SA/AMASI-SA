@@ -187,6 +187,31 @@ class ReviewReadbackV2Tests(unittest.IsolatedAsyncioTestCase):
         self.actor.pop("_review_session", None)
         self.actor["_review_session"] = await sessions.create_review_session(self.db, self.actor)
 
+    async def test_readback_loads_only_receipt_evidence_without_copying_order_payloads(self):
+        from bson import BSON
+        from motor.motor_asyncio import AsyncIOMotorCollection
+        detail = await self.display()
+        payload = self.request(detail)
+        await self.assert_commit(await self.submit(payload), detail, payload)
+        expected = (await self.reconcile(payload["client_request_id"])).json()
+        for name in (readback.OPERATIONS, readback.WORKFLOWS, readback.EVENTS):
+            await self.db[name].update_many({}, {"$set": {"synthetic_unused_payload": "x" * 2097152}})
+        before = await self.state()
+        loaded = []
+        original = AsyncIOMotorCollection.find_one
+        async def find_one(collection, *args, **kwargs):
+            row = await original(collection, *args, **kwargs)
+            if collection.name in {readback.OPERATIONS, readback.WORKFLOWS, readback.EVENTS} and row:
+                loaded.append(len(BSON.encode(row)))
+            return row
+        with patch.object(AsyncIOMotorCollection, "find_one", find_one):
+            response = await self.reconcile(payload["client_request_id"])
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json(), expected, "metadata projection must preserve every native binding/event proof field")
+        self.assertLess(sum(loaded), 32768, "readback must not fetch multi-megabyte order/options/image payloads")
+        self.assertEqual(await self.state(), before, "outcome lookup is read-only")
+        self.external.assert_not_awaited()
+
     async def test_success_commits_exact_binding_event_and_proof_atomically(self):
         detail = await self.display()
         payload = self.request(detail)
