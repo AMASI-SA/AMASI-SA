@@ -6,7 +6,7 @@
   "reused_qoyod_source": "fa1aae7bcdc6b1fc09091a46752bd93ee7b049b1",
   "related_prs": [1776, 1785],
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1788",
-  "stage": "Source and governed intent merged; hash-pinned deployment helpers ready for owner execution in Emergent; runtime deployment and verification pending",
+  "stage": "Owner updated /app successfully; governed install stopped with ENOSPC before prepare/prepublish. Diagnose disk blocks and inode availability before remediation; publishing and verification pending",
   "implementation_checkpoint": "c24ed63e0836d919110e1e5042ae473484817066",
   "verified_pr_source": "76779980d38bcf5feb251888f63b1f85fabd6b1e",
   "merged_source_A": "9e22418cf2350fe09a4bb61acfabaefb7748dede",
@@ -23,7 +23,9 @@
   "candidate_artifact": {"run_id": 42251617163, "artifact_id": 13521765367, "json_sha256": "57c5612244044554281f5fa9f1e9856bd7a2115c0b0aff96257b68a39f70511e"},
   "reviewed_B_run_id": 42253238914,
   "postmerge_release_run_id": 42254282673,
-  "postmerge_release_state_at_checkpoint": "Running; inspect before the final publish instruction",
+  "postmerge_release_state_at_checkpoint": "Release Readiness42254282673 and CodeQL42254282534 both completed successfully on exact deployment a56399edf46f97f8b8e4793dc2619bb2a1b7ac2f; remote Production still equals that SHA",
+  "latest_owner_execution": {"helper_commit": "6f3ab9fc6da61026e8d22a819df77e6b05122534", "workspace_fast_forward": "049fba51c13b902cd12808e03e87aca203649fb7 -> a56399edf46f97f8b8e4793dc2619bb2a1b7ac2f", "tracked_changes_before_update": false, "untracked_files": "Preserved", "preview_backend": "Stopped by the helper before checkout/build", "preserved_python_cache_directories": 1, "platform": "Linux aarch64, Host Node24.19.0; governed Node22.23.2/Yarn1.22.22 installed with the pinned archive hash", "failure": "ENOSPC: no space left on device, mkdir /app/frontend/node_modules", "failure_stage": "governed yarn install, linking dependencies", "prepare_and_prepublish": "Not reached in the supplied transcript; refresh status before any remediation", "publish": "Not performed", "required_diagnosis": "df block and inode counts for /app and /tmp; bounded du of /app, /tmp and package caches. Do not delete caches or data blindly."},
+  "app_workspace_updated_by_owner": true,
   "emergent_owner_observation": {"active_lease": false, "head": "049fba51c13b902cd12808e03e87aca203649fb7", "branch": "hotfix/prod-snap-meta-final", "tracked_changes": false, "untracked_platform_and_helper_files": "Preserve all; do not clean, delete, stage or commit"},
   "deployment_helper": {"file": "DEPLOY-EMERGENT.sh", "sha256": "43c89c3cef10a786d5e5f8070daedf9c3cc247feda046ef9c08e6c008a06d3fc", "validation": "Bash syntax and all four embedded Python blocks compile; exact-head/branch/lease gates and ff-only update; no live execution by the assistant"},
   "verify_helper": {"file": "VERIFY-EMERGENT.sh", "sha256": "bd3fd94c90a6f896cecd7bf4525fa4fe28676ccfb7eda4c7b15807fc64d55887"},
@@ -59,7 +61,8 @@
   "complete_premerge_ci": "48 successful checks and six expected scope skips; zero failed or pending checks at exact source 76779980d38bcf5feb251888f63b1f85fabd6b1e",
   "owned_test_mongo": "Stopped gracefully after verifying exact loopback port 49417, replica set mezan_bg_test_rs and the owned data directory; no other runtime stopped",
   "remaining": [
-    "Owner executes the hash-pinned deployment helper in Emergent; it rechecks active=false, preserves untracked platform/helper files, updates ff-only to the exact deployment SHA, builds and runs prepare/prepublish",
+    "Obtain fresh lease status and read-only disk/inode/cache usage from the owner; no remote terminal control tool is available here",
+    "Free or relocate only verified reproducible build caches after diagnosis, or use available capacity; rerun the same exact-source governed build and preparation without weakening release gates",
     "Confirm postmerge checks, inspect helper output and run a fresh prepublish immediately before the owner's one Re-publish click",
     "Require a newer visible Deployment Succeeded plus the official three-probe verify and closed lease; measure live performance afterward"
   ],
@@ -68,5 +71,5 @@
   "provider_or_financial_test_writes": false,
   "runtime_evidence": "D:/codex-release-artifacts/mezan-background-workers-qoyod-2h-20261106",
   "known_ci_diagnosis": "Source-only A push intentionally fails reviewed-B classification; B has now been frozen, verified and merged without changing source. The new exact-deployment postmerge workflow must finish. Windows POSIX-loader permissions were not weakened; official validation ran successfully on Linux.",
-  "next_safe_action": "Owner runs the exact-commit/hash-verified DEPLOY-EMERGENT.sh helper. Inspect postmerge run42254282673 and user output. After ready_to_publish=true, require fresh prepublish before one Re-publish click. Require visible newer Deployment Succeeded and official verify3 plus active=false."
+  "next_safe_action": "Owner runs read-only status, df -h, df -i and bounded du. Diagnose ENOSPC from that output before changing storage. Do not Re-publish or run financial actions until a complete governed build, prepare/prepublish, visible success and official verification."
 }
