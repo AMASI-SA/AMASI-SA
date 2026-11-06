@@ -149,3 +149,51 @@ start another verify or publication while this job is alive. No live business,
 financial, advertising, stock or Ready test write by this task. Release acceptance
 remains pending the official result; our lease is still active until it passes.
 
+
+
+## Owner decision: keep the previous live version; stop further changes
+
+The forward release completed official verify successfully before the owner's
+rollback request: exit0, verifiedtrue, checks3, source6ffa622c04f2359dc99f501d16e13c942ab5b1d0,
+deploymenta2487c339fce1c3c6f022d96e91d7d892b66f663,
+runtime rg5-75858ae3554d19d11fe40214537a2f02eec0292f6b73e9c6e5e2e8d451155873,
+activefalse. Proof SHA256194aa243486bd829966bbef8f2a4fc5da259f4140de50d8c4b07625a06bb7649.
+Read-only followup showed dispatch lag still present, including28.7s/65.6s on
+two post-deployment local completions; no further forward fix was implemented.
+
+Owner reported heaviness and explicitly requested undoing our last deployment.
+With guardinactive, selected the immediately previous successful artifact374bf08
+and Confirm Rollback once. Platform completed it as current versiond9202d8,
+green Deployment finished Nov7 01:44Riyadh. This was an explicit artifact rollback,
+not a new Republish changes click. Publichealth confirms old reviewed source
+ebb69057d25d6578ae0b28eb4e6aab1ab71f44e3 and old runtime
+rg5-03f70cc373f6f22c5b7b904ac6de8278d736978c30b6ce74a8094d4dba9ff96c;
+identity, critical hashes and embedded Frontend proof true,
+boot2026-11-07T01:43:37.808155+03:00. No new guard lease was created for that
+platform artifact rollback; do not misreport it as another official verify3.
+
+Owner then asked to stop rollback for a one-hour trial. Rollback had already
+completed, so the assistant asked which version to retain. Owner explicitly chose
+keep the previous version currently running, then said keep it like this.
+No restoration of our forward update, no further publication, and no automatic
+action after an hour. Await a new explicit owner instruction.
+
+Local inverse of1792 was staged on codex/revert-assembly-completion-20261107,
+then CANCELLED uncommitted in response to the stop instruction. Its exact patch
+is preserved at D:/codex-test-runtime/assembly-completion-20261107/paused-rollback.patch.
+No source revert was committed, pushed or merged. Production GitHub branch and
+Emergent workspace still point at a2487c339 and contain1792; LIVE runtime is the
+previous artifact. Do not republish that workspace or reintroduce1792 during the
+owner's trial. No force push or reset-hard. The original source/intent task branch
+is clean and remotely recoverable; this evidence branch is documentation only.
+
+Temporary Preview backend stop was cleaned up after fresh inactive guard and
+unchanged appHEAD checks: backendRUNNING pid98870. No production business,
+financial, advertising, stock or Ready test write was performed. Original unrelated
+Qoyod working tree preserved. Local isolated Mongo fixture stopped.
+
+Current objective is PAUSED by the owner, with the previous live version retained.
+Do not resume the discarded fix or code rollback automatically. If the owner later
+requests source reconciliation, inspect this runtime/Git divergence and fresh
+release coordination first; keep all existing v5 gates for any new Republish.
+
