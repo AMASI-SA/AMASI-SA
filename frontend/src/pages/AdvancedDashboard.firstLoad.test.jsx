@@ -81,9 +81,26 @@ afterEach(async () => {
 
 test("summary figures and top products appear before an unrelated spend read finishes", async () => {
     const spend = deferred();
+    const startedAt = Date.now();
     getDashboardAdsSpend.mockReturnValue(spend.promise);
+    api.get.mockImplementation((url) => url.startsWith("/dashboard-v2?")
+        ? new Promise((resolve) => setTimeout(() => resolve({ data: initialSnapshot() }), 400))
+        : Promise.resolve({ data: {} }));
+    setTimeout(() => spend.resolve(null), 3500);
     await act(async () => root.render(<AdvancedDashboard />));
 
+    let firstReadyMs = null;
+    for (let elapsed = 50; elapsed <= 4000; elapsed += 50) {
+        await act(async () => { jest.advanceTimersByTime(50); await flush(); });
+        if (host.querySelector('[data-testid="advanced-period-summary"]').textContent.includes("1,234.50")
+            && host.querySelector('[data-testid="advanced-top-product-row-visible-product"]')) {
+            firstReadyMs = Date.now() - startedAt;
+            break;
+        }
+    }
+    console.info(JSON.stringify({ probe: "controlled-first-usable-dom", primary_delay_ms: 400,
+        optional_spend_delay_ms: 3500, clock: "jest-fake-timers", first_ready_ms: firstReadyMs }));
+    expect(firstReadyMs).toBe(400);
     expect(host.querySelector('[data-testid="advanced-period-summary"]').textContent).toContain("1,234.50");
     expect(host.querySelector('[data-testid="advanced-top-product-row-visible-product"]')).not.toBeNull();
     expect(host.querySelector('[aria-label="تحديث بيانات الفترة"] .animate-spin')).toBeNull();

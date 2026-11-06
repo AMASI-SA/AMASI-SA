@@ -1,0 +1,16 @@
+  console.info
+    {"probe":"controlled-first-usable-dom","primary_delay_ms":400,"optional_spend_delay_ms":3500,"clock":"jest-fake-timers","first_ready_ms":400}
+
+      at Object.<anonymous> (src/pages/AdvancedDashboard.firstLoad.test.jsx:101:13)
+
+PASS src/pages/AdvancedDashboard.firstLoad.test.jsx (16.128 s)
+  √ summary figures and top products appear before an unrelated spend read finishes (1323 ms)
+  √ core data is usable while profit waits for the same-period backend recomputation (33 ms)
+  √ a failed follow-up read keeps the already delivered core snapshot visible (34 ms)
+  √ unmounting prevents a late spend read from starting another summary request (376 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       4 passed, 4 total
+Snapshots:   0 total
+Time:        17.138 s
+Ran all test suites within paths "src/pages/AdvancedDashboard.firstLoad.test.jsx".

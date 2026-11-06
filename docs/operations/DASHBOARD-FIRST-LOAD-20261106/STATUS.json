@@ -1,6 +1,7 @@
 {
   "task_id": "DASHBOARD-FIRST-LOAD-20261106",
-  "state": "wip_affected_suites_and_ordinary_build_passed",
+  "state": "source_locally_verified_exact_source_ci_pending",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1784",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/mezan-dashboard-first-load-20261106",
   "base_sha": "b0b23a5ca62efe934d7eded08d2b7abdca9a9389",
@@ -28,6 +29,28 @@
       "passed": 115,
       "suites": 12
     },
+    "controlled_first_usable_dom": {
+      "method": "Same React component and fixture at Production base versus current runtime; Jest fake timers; readiness requires selected-period sales and bestselling product row in DOM",
+      "baseline_sha": "b0b23a5ca62efe934d7eded08d2b7abdca9a9389",
+      "primary_delay_ms": 400,
+      "optional_spend_delay_ms": 3500,
+      "before_first_ready_ms": 3500,
+      "after_first_ready_ms": 400,
+      "before_regression_exit_code": 1,
+      "after_regressions_exit_code": 0,
+      "limitation": "Controlled dependency-wait regression, not real browser paint or live API timing; no live percentage claimed"
+    },
+    "manual_source_review": {
+      "findings": [],
+      "checked": [
+        "Latest request and matching filters checked before both publications",
+        "Backend remains financial authority; null profit and spend preserved",
+        "Canonical recomputation retains same filters and no-cache headers",
+        "Optional failure preserves primary; initial failure retains existing error behavior",
+        "Admission held through follow-up; unmount/date cleanup invalidates late work",
+        "No backend, native Android, financial formula or business-write source changed"
+      ]
+    },
     "ordinary_vite_build": {
       "result": "passed",
       "completed_in_seconds": 7.2,
@@ -46,10 +69,10 @@
   "shared_app_or_lease_changed": false,
   "live_dashboard_api_timings": "Asked user to capture Network Time for dashboard-v2 and ads-platform-spend; pending",
   "remaining": [
-    "Exact-source governed CI still required; ordinary local Vite build completed",
-    "Measure initial-ready latency at the public UI seam",
-    "Inspect real API latency; server-side dashboard stage remains unprofiled",
-    "CI/governed release only after final scope is verified; no new intent frozen"
+    "Exact-source CI and governed Linux A/B candidate build",
+    "Freeze a new v5 intent-only commit; validate frozen adapter and current Production base",
+    "Authenticated API timing remains unmeasured; use Network Time to decide whether backend profiling is required",
+    "Fresh /app status, prepare/prepublish and visible publish/verify after release checks"
   ],
   "previous_release": {
     "pr": 1782,
@@ -58,6 +81,6 @@
     "user_supplied_verify_tail_and_status_active_false": true,
     "preview_restart_command_given": true
   },
-  "next_safe_action": "Measure the first usable DOM frame with controlled primary/spend delays; independently inspect the one-file runtime change; open the dedicated PR and verify exact-source CI before freezing a new v5 intent.",
-  "source_checkpoint": "d6b98eaaa701f461e3c0839ae63792ef2135a075"
+  "next_safe_action": "Push final source to PR1784, inspect exact-head checks and governed A/B artifact, then freeze intent-only commit. No /app change or lease until source and adapter checks pass.",
+  "source_checkpoint": "efdbe0cfc46f7c86310b067d4cf0a88efb3f705c"
 }
