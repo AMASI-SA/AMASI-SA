@@ -171,5 +171,44 @@ class SyncComponentSnapshotTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.db[inbox.COLLECTION].find_one({"_id": key}))["state"], "paused")
 
 
+    async def test_cost_option_recovery_joins_real_owner_transaction(self):
+        from salla_integration.cost_option_recovery import apply_options
+        payload = self.source_payload()
+        payload['items'][0]['options'] = []
+        await self.webhook(payload)
+        before = await self.db.unified_orders.find_one({'user_id': 'owner'})
+        items = deepcopy(payload['items'])
+        items[0]['options'] = [{'product_option_id': 'synthetic-option',
+            'name': 'Renamed question', 'value': {'id': 'synthetic-choice', 'name': 'Renamed answer'}}]
+        inventory = {name: await self.db[name].find({}).to_list(100)
+                     for name in (PLANS, UNITS, LOCATIONS, fulfillment.WORKFLOWS)}
+        with patch('accounting_shipping_native_observer.observe_delivery',
+                   AsyncMock(side_effect=AssertionError('No financial observation'))) as observer:
+            self.assertTrue(await apply_options(self.db, before, items))
+            observer.assert_not_awaited()
+        after = await self.db.unified_orders.find_one({'user_id': 'owner'})
+        self.assertEqual(after['products'][0]['options_raw'], items[0]['options'])
+        self.assertEqual(after['order_status_slug'], before['order_status_slug'])
+        self.assertEqual(after['total_amount'], before['total_amount'])
+        self.assertGreater(after['g47_salla_snapshot']['revision'], before['g47_salla_snapshot']['revision'])
+        for name, prior in inventory.items():
+            self.assertEqual(await self.db[name].find({}).to_list(100), prior, name)
+
+    async def test_cost_option_recovery_rejects_concurrent_source_change(self):
+        from salla_integration.cost_option_recovery import apply_options, SourceChanged
+        payload = self.source_payload()
+        payload['items'][0]['options'] = []
+        await self.webhook(payload)
+        before = await self.db.unified_orders.find_one({'user_id': 'owner'})
+        items = deepcopy(payload['items'])
+        items[0]['options'] = [{'product_option_id': 'option', 'value': {'id': 'choice'}}]
+        await self.db.unified_orders.update_one({'user_id': 'owner'},
+            {'$inc': {'g47_salla_snapshot.revision': 1}})
+        with self.assertRaises(SourceChanged):
+            await apply_options(self.db, before, items)
+        after = await self.db.unified_orders.find_one({'user_id': 'owner'})
+        self.assertEqual(after['products'], before['products'])
+
+
 if __name__ == "__main__":
     unittest.main()
