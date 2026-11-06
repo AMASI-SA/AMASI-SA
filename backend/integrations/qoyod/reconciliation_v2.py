@@ -27,6 +27,8 @@ READ-ONLY. No writes to قيود. No writes to `qoyod_invoices` here
 """
 from __future__ import annotations
 
+import asyncio
+
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 
@@ -316,6 +318,8 @@ async def run_reconciliation_v2(
     to_date: Any = None,
     days: int = 90,
     now: Optional[datetime] = None,
+    full_scan: bool = False,
+    publish_summary: bool = True,
 ) -> dict:
     """The reconciliation report itself. Read-only."""
     if markers_user_id is None:
@@ -346,13 +350,16 @@ async def run_reconciliation_v2(
         to_date=date_range.to_date,
         days=days,
         now=now,
+        full_scan=full_scan,
+        lightweight=full_scan,
     )
-    await cache_report_summary(
-        db, user_id=markers_user_id, orders_user_id=orders_user_id,
-        proofs=audit.get("orders") or [], from_date=date_range.from_date,
-        to_date=date_range.to_date, now=now, settings=header_settings,
-        scan_truncated=audit.get("scan_truncated", False),
-    )
+    if publish_summary:
+        await cache_report_summary(
+            db, user_id=markers_user_id, orders_user_id=orders_user_id,
+            proofs=audit.get("orders") or [], from_date=date_range.from_date,
+            to_date=date_range.to_date, now=now, settings=header_settings,
+            scan_truncated=audit.get("scan_truncated", False),
+        )
     unified = {
         row["order_number"]: {
             **(row.get("unified_order") or {}),
@@ -364,9 +371,7 @@ async def run_reconciliation_v2(
         }
         for row in audit["orders"]
     }
-    invoice_evidence = await load_qoyod_reference_evidence(
-        db, markers_user_id=str(markers_user_id)
-    )
+    invoice_evidence = audit['_invoice_evidence']
     local_inv: dict[str, dict] = {}
     for reference, invoice_rows in invoice_evidence["by_reference"].items():
         if not invoice_rows:
@@ -399,7 +404,9 @@ async def run_reconciliation_v2(
     rows: list[dict] = []
     claimed_refs: set[str] = set()
 
-    for on, u in unified.items():
+    for position, (on, u) in enumerate(unified.items()):
+        if position % 100 == 0:
+            await asyncio.sleep(0)
         inv = local_inv.get(on)
         salla_total = _fmt(u.get("total_amount"))
         salla_date = u.get("order_date")
@@ -590,6 +597,7 @@ async def run_reconciliation_v2(
         "from_date":             date_range.from_date.isoformat(),
         "to_date":               date_range.to_date.isoformat(),
         "source_authority":      "unified_orders",
+        "_candidate_audit": audit,
         "match_contract":        audit["match_contract"],
         "captured_at":           audit["captured_at"],
         "snapshot_fingerprint":  audit["snapshot_fingerprint"],

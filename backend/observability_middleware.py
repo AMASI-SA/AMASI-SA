@@ -1,8 +1,11 @@
 """ASGI timing only: never read headers, body, query string or identifiers."""
 import asyncio
 import time
+import logging
 
 from observability_metrics import EMPLOYEE_ROUTES, metrics
+
+log = logging.getLogger('mezan.api_timing')
 
 
 def route_group(scope):
@@ -25,7 +28,7 @@ class DiagnosticsMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or not metrics.enabled:
+        if scope["type"] != "http":
             return await self.app(scope, receive, send)
         token = metrics.begin_request()
         started = time.monotonic()
@@ -44,6 +47,13 @@ class DiagnosticsMiddleware:
             outcome = "cancelled" if cancelled else category
             metrics.increment("api.status." + outcome)
             template = getattr(scope.get("route"), "path", "")
+            # Only the router's declared template, never the request URL,
+            # query, headers, user/order identity or exception text.
+            method = scope.get('method')
+            if method not in {'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'}:
+                method = 'OTHER'
+            log.info('api_timing method=%s route=%s status=%s duration_ms=%.3f outcome=%s',
+                     method, template[:200] or 'unmatched', status, elapsed * 1000, outcome)
             route = EMPLOYEE_ROUTES.get((scope.get("method"), template.removeprefix("/api")))
             if route:
                 metrics.observe("employee_route.duration." + route, elapsed)

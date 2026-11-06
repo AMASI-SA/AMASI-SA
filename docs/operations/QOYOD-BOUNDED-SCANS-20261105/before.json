@@ -1,0 +1,38 @@
+{
+  "at_utc": "2026-11-05T19:35:46.037129+00:00",
+  "source_sha": "a973ee2d7556cc8a3afaa10bc51bee4df2959d7d",
+  "mode": "baseline",
+  "environment": "Windows/mongomock, offline",
+  "orders": 1000,
+  "ticks_per_trial": 10,
+  "employee_latency_measured": false,
+  "trials": [
+    {
+      "writes": 10,
+      "find": 30,
+      "returned_documents": 10000,
+      "wall_ms": 4967.33,
+      "cpu_ms": 4734.38,
+      "python_peak_bytes": 2469141,
+      "heartbeat_max_lag_ms": 541.59
+    },
+    {
+      "writes": 10,
+      "find": 30,
+      "returned_documents": 10000,
+      "wall_ms": 4496.83,
+      "cpu_ms": 4218.75,
+      "python_peak_bytes": 2458664,
+      "heartbeat_max_lag_ms": 565.22
+    },
+    {
+      "writes": 10,
+      "find": 30,
+      "returned_documents": 10000,
+      "wall_ms": 5890.13,
+      "cpu_ms": 5265.62,
+      "python_peak_bytes": 2457507,
+      "heartbeat_max_lag_ms": 707.36
+    }
+  ]
+}

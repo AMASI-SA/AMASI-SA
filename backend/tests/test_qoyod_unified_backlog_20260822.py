@@ -137,7 +137,9 @@ async def _pending(db, status: str):
 
 
 async def _unsent(db):
-    return await list_unsent_orders(
+    # Resolve the installed production wrapper, independent of test collection order.
+    from integrations.qoyod import unsent_orders
+    return await unsent_orders.list_unsent_orders(
         db,
         user_id=QOYOD_TENANT,
         orders_user_id=ORDERS_OWNER,
@@ -480,7 +482,7 @@ async def test_exact_invoice_with_failed_payment_stays_actionable_without_dup(db
     assert audit["counts"]["worker_candidates"] == 0
     assert unsent["counts"][FAILED] == 1
     assert unsent["counts"][SENT] == 0
-    assert unsent["orders"][0]["retry_allowed"] is True
+    assert unsent["orders"][0]["retry_allowed"] is False
     assert unsent["orders"][0]["failure_code"] == (
         "invoice_created_payment_failed"
     )
@@ -992,6 +994,9 @@ async def test_worker_auto_approval_flag_blocks_unified_backlog_writes(
         raise AssertionError("legacy recovery must remain behind rollout flag")
 
     monkeypatch.setattr(auto_send, "_acquire_lease", acquire_lease)
+    async def current_lease(db, owner):
+        return True
+    monkeypatch.setattr(auto_send, '_lease_is_current', current_lease)
     monkeypatch.setattr(auto_send, "_release_lease", release_lease)
     monkeypatch.setattr(auto_send, "manual_send_one", forbidden_manual_send)
     monkeypatch.setattr(
@@ -1017,7 +1022,7 @@ async def test_worker_auto_approval_flag_blocks_unified_backlog_writes(
 
 
 @pytest.mark.asyncio
-async def test_worker_candidate_loader_reports_full_set_not_batch_limit(
+async def test_worker_candidate_loader_reports_bounded_window_not_global_total(
     db, monkeypatch,
 ):
     await db.unified_orders.insert_many([
@@ -1047,9 +1052,9 @@ async def test_worker_candidate_loader_reports_full_set_not_batch_limit(
     )
     ui = await _unsent(db)
 
-    assert counts["authoritative_backlog_count"] == (
-        ui["worker_candidate_count"]
-    ) == 90
+    assert counts["authoritative_backlog_count"] is None
+    assert counts['counts_scope'] == 'incremental_window'
+    assert ui["worker_candidate_count"] == 90
     assert counts["runnable_candidate_count"] == 90
     assert counts["open_quarantined_candidate_count"] == 0
     assert counts["batch_candidate_count"] == len(candidates) == 5
@@ -1194,6 +1199,9 @@ async def test_live_worker_uses_resynced_owner_row_without_compatibility_write(
         return {"invoice_id": "test-only", "payment_id": "test-only"}
 
     monkeypatch.setattr(auto_send, "_acquire_lease", acquire_lease)
+    async def current_lease(db, owner):
+        return True
+    monkeypatch.setattr(auto_send, '_lease_is_current', current_lease)
     monkeypatch.setattr(auto_send, "_release_lease", release_lease)
     monkeypatch.setattr(auto_send, "resync_single_order", resync_owner_row)
     monkeypatch.setattr(auto_send, "manual_send_one", sender_sees_owner_row)

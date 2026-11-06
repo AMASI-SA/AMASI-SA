@@ -2652,6 +2652,9 @@ def attach_ads_auto_sync_scheduler(
 
     async def start() -> None:
         nonlocal task
+        from background_worker_process import is_worker_process
+        if not is_worker_process():
+            return
         if auto_sync_enabled() and (task is None or task.done()):
             task = asyncio.create_task(
                 ready_loop(),

@@ -1,6 +1,52 @@
 from __future__ import annotations
 
 import pytest
+from unittest.mock import AsyncMock
+
+
+@pytest.mark.asyncio
+async def test_guarded_send_invalidates_only_negative_invoice_cache(monkeypatch):
+    client = ManualQoyodClient(api_key='synthetic', base_url='https://qoyod.invalid')
+    client._invoice_reference_snapshot = {'exists': {'id': 1, 'reference': 'exists'}}
+    client.invalidate_invoice_absence('exists')
+    assert client._invoice_reference_snapshot is not None
+    client.invalidate_invoice_absence('missing')
+    assert client._invoice_reference_snapshot is None
+    request = AsyncMock(return_value={'invoices': [{'id': 2, 'reference': 'missing'}]})
+    monkeypatch.setattr(client, '_request', request)
+    assert (await client.find_invoice_by_reference('missing'))['id'] == 2
+    request.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_ignored_invoice_filter_requires_complete_fallback(monkeypatch):
+    client = ManualQoyodClient(api_key='synthetic', base_url='https://qoyod.invalid')
+    async def request(method, path, **kwargs):
+        if 'page' in kwargs['params']:
+            return {'invoices': [{'id': 1, 'reference': 'other'}, {'id': 2, 'reference': 'wanted'}]}
+        return {'invoices': [{'id': 1, 'reference': 'other'}]}
+    monkeypatch.setattr(client, '_request', request)
+    assert (await client.find_invoice_by_reference('wanted'))['id'] == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['repeated', 'route_404', 'declared_incomplete'])
+async def test_invoice_fallback_cannot_prove_absence_from_bad_pagination(monkeypatch, mode):
+    from integrations.qoyod_manual import client as module
+    monkeypatch.setattr(module, '_INVOICE_SCAN_PAGE_SIZE', 1)
+    monkeypatch.setattr(module, '_INVOICE_SCAN_DELAY_SECONDS', 0)
+    client = ManualQoyodClient(api_key='synthetic', base_url='https://qoyod.invalid')
+    async def request(method, path, **kwargs):
+        page = kwargs['params']['page']
+        if page == 2 and mode == 'route_404':
+            raise ManualQoyodError(status_code=404, endpoint='GET /invoices', response_excerpt='URL not found')
+        if page == 2 and mode == 'declared_incomplete':
+            return {'invoices': [], 'meta': {'total': 2}}
+        return {'invoices': [{'id': 1, 'reference': 'other'}],
+                **({'meta': {'total': 2}} if mode == 'declared_incomplete' else {})}
+    monkeypatch.setattr(client, '_request', request)
+    with pytest.raises(ManualQoyodError):
+        await client._load_complete_invoice_reference_snapshot()
 
 from integrations.qoyod_manual.client import (
     ManualQoyodClient,

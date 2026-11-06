@@ -75,10 +75,13 @@ def test_disabled_shadow_creates_neither_worker_nor_indexes_at_startup():
     worker = (backend / "salla_orders_v3" / "worker.py").read_text(encoding="utf-8")
     config = (backend / "salla_orders_v3" / "config.py").read_text(encoding="utf-8")
     server = (backend / "server.py").read_text(encoding="utf-8")
+    runtime = (backend / 'background_worker_runtime.py').read_text(encoding='utf-8')
 
     assert 'SHADOW_ENABLED_ENV = "SALLA_ORDERS_V3_SHADOW_ENABLED"' in config
     assert 'os.environ.get(SHADOW_ENABLED_ENV, "false")' in worker
-    assert "await start_salla_orders_v3_shadow_runtime(db)" in server
+    assert "await start_salla_orders_v3_shadow_runtime(db)" in runtime
+    assert "start_background_process(app)" in server
+    assert "start_salla_orders_v3_shadow_runtime" not in server
     guarded = worker.split("async def start_salla_orders_v3_shadow_runtime", 1)[1]
     assert guarded.index("if not shadow_enabled():") < guarded.index(
         "await ensure_salla_orders_v3_indexes(db)"

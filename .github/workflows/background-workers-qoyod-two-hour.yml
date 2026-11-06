@@ -1,0 +1,106 @@
+name: Background workers and two-hour Qoyod cycles
+
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - 'backend/background_worker_*.py'
+      - 'backend/integrations/qoyod/**'
+      - 'backend/integrations/qoyod_manual/**'
+      - 'backend/qoyod_auto_unified/**'
+      - 'backend/server.py'
+      - 'backend/runtime_mongo.py'
+      - 'backend/observability_middleware.py'
+      - 'backend/snapchat_v2/scheduler.py'
+      - 'backend/integrations_control_center/ads_auto_sync_scheduler.py'
+      - 'backend/tests/test_background_worker_process.py'
+      - 'backend/tests/test_qoyod_*cycle.py'
+      - 'backend/tests/test_qoyod_cycle_manifest.py'
+      - 'backend/tests/qoyod_cycle_process_worker.py'
+      - '.github/workflows/background-workers-qoyod-two-hour.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-real-mongo:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: backend:backend/tests
+      JWT_SECRET: isolated-background-worker-test-secret
+      QOYOD_API_BASE: https://qoyod.invalid/2.0
+      QOYOD_TEST_MONGO_URI: mongodb://127.0.0.1:49417/?replicaSet=mezanBgTest
+      MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:49417/?replicaSet=mezanBgTest
+      EMAIL_OTP_SMTP_HOST: smtp.example.invalid
+      EMAIL_OTP_FROM_EMAIL: test@example.invalid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install the repository public dependency closure and isolated test tools
+        run: |
+          grep -vE '^[[:space:]]*emergentintegrations==' backend/requirements.txt > /tmp/background-test-requirements.txt
+          python -m pip install -r /tmp/background-test-requirements.txt
+          python -m pip install pytest pytest-asyncio mongomock-motor
+          mkdir -p evidence
+          git rev-parse HEAD HEAD^{tree} > evidence/identity.txt
+          python -m pip freeze > evidence/python-packages.txt
+      - name: Start only the disposable loopback Mongo replica set
+        run: |
+          docker run -d --name mezan-background-test --network host mongo:8.0.12 --port 49417 --bind_ip 127.0.0.1 --replSet mezanBgTest --wiredTigerCacheSizeGB 0.25
+          python - <<'PY'
+          import time
+          from pymongo import MongoClient
+          c = MongoClient('mongodb://127.0.0.1:49417/?directConnection=true', serverSelectionTimeoutMS=1000)
+          for _ in range(60):
+              try:
+                  c.admin.command('ping')
+                  break
+              except Exception:
+                  time.sleep(1)
+          else:
+              raise RuntimeError('isolated Mongo unavailable')
+          c.admin.command('replSetInitiate', {'_id':'mezanBgTest','members':[{'_id':0,'host':'127.0.0.1:49417'}]})
+          for _ in range(60):
+              if c.admin.command('hello').get('isWritablePrimary'):
+                  break
+              time.sleep(1)
+          else:
+              raise RuntimeError('isolated primary unavailable')
+          c.close()
+          PY
+      - name: Verify cycle ownership, canonical child boot, sender barriers and responsiveness
+        run: |
+          python -m pytest -q --tb=short \
+            backend/tests/test_qoyod_two_hour_cycle.py \
+            backend/tests/test_qoyod_cycle_manifest.py \
+            backend/tests/test_qoyod_real_mongo.py \
+            backend/tests/test_qoyod_scheduled_incremental.py \
+            backend/tests/test_background_worker_process.py \
+            backend/tests/test_scheduler_readiness_gate.py \
+            backend/tests/test_web_process_background_isolation.py \
+            backend/tests/test_api_timing_logs.py \
+            backend/tests/test_auth_security_replica_startup.py \
+            --junitxml=evidence/tests.xml | tee evidence/tests.txt
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('evidence/tests.xml').getroot()
+          assert not root.findall('.//skipped'), 'Acceptance cases must execute on real Mongo'
+          assert not root.findall('.//failure') and not root.findall('.//error')
+          PY
+      - name: Preserve source-bound evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: background-workers-${{ github.event.pull_request.head.sha || github.sha }}
+          path: evidence/
+          retention-days: 14
+      - name: Stop only this disposable Mongo container
+        if: always()
+        run: docker rm -f mezan-background-test

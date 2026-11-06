@@ -1,0 +1,30 @@
+CURRENT FINAL: 315 passed,20 subtests,0 skipped/failed,174.74s,exit0. All36 real-Mongo integration cases executed; none inapplicable. See REAL-MONGO-REPORT.md and final-real-mongo-regression.txt/xml.
+
+HISTORICAL SNAPSHOT: the initial no-push / 36-skipped result below is superseded by REAL-MONGO-REPORT.md and final-real-mongo-regression.txt/xml. Current work is published in draft PR #1776; no production PR merge or deployment.
+
+Recorded at UTC: 2026-11-05T21:01:58.393267+00:00
+Base: 4b336e2a8bb8288dae50505e8eca33147744f441 (#1773).
+No commit, push, production merge, deployment, live DB mutation or provider transaction.
+
+Backend: 266 passed, 36 skipped, 4 warnings, 7 subtests passed; exit 0.
+263 Qoyod/diagnostics tests plus 3 source-only #1773 preservation tests passed.
+36 inherited #1773 real-Mongo integration tests require MZ2_TEST_MONGO_URI; no production fallback was used.
+
+Command, from backend (PYTHONPATH=.;tests):
+python -m pytest tests/test_qoyod_scheduled_incremental.py tests/test_qoyod_plan_b_auto_send.py tests/test_qoyod_manual_send_plan_b.py tests/test_qoyod_manual_client_fail_closed.py tests/test_qoyod_auto_send_authoritative_payment.py tests/test_qoyod_auto_send_per_order_isolation.py tests/test_qoyod_auto_send_latest_payment.py tests/test_qoyod_unified_backlog_20260822.py tests/test_qoyod_header_summary.py tests/test_qoyod_verified_unsent_summary.py tests/test_qoyod_reconciliation_v2.py tests/test_qoyod_invoices_sync_identity.py tests/test_qoyod_invoice_review.py tests/test_qoyod_unsent_memory_bounds.py tests/test_server_diagnostics_route_bindings.py tests/test_component_zero_price_recovery.py -q --disable-warnings --tb=short
+Environment: QOYOD_API_BASE=https://qoyod.invalid/2.0; ephemeral test-only encryption key, never persisted. No real credentials used.
+Runtime: C:/Users/amasi/build37-test-venv/Scripts/python.exe (existing runtime).
+
+Frontend: 28 passed in 6 suites; exit 0.
+Command, from frontend:
+node node_modules/react-scripts/scripts/test.js --watchAll=false --runInBand --runTestsByPath src/components/QoyodUnsentHeaderAlert.test.jsx src/qoyodUnsentHeaderAlert.test.js src/pages/QoyodReconciliation.scheduled.test.jsx src/pages/QoyodControlCenter.test.jsx src/pages/QoyodUnsentOrders.test.jsx src/pages/QoyodInvoiceReview.test.jsx
+
+Final local build on #1773: exit 0, Node v24.19.0 / Vite 8.2.4.
+node node_modules/vite/bin/vite.js build --outDir ../outputs/qoyod-scan-frontend-build
+Existing CSS import-order, dynamic-import and large-chunk warnings remain. This is NOT a governed release build.
+
+git diff --check: exit 0.
+Release intent, CI workflows and deployment scripts: unchanged by this patch.
+
+Offline performance: before.json captured before source edits; after.json captures identical synthetic discovery workload after edits. Both have 3 trials of 1000 eligible orders and 10 discovery rounds. baseline-recheck.json repeats the original source independently. comparison.json records medians and measurement limitations.
+Unmeasured: production CPU/RSS, Mongo wire commands/getMore/executionStats, employee endpoint p50/p95, page loading, full-scan production capacity, real-Mongo distributed lease behavior.
