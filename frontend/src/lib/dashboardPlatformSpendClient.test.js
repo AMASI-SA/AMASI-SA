@@ -15,6 +15,19 @@ beforeEach(() => {
     localStorage.clear();
 });
 
+test("a read from before invalidation cannot replace the new saved spend cache", async () => {
+    let resolveOld;
+    axios.get.mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }));
+    const range = { dateFrom: "2026-11-06", dateTo: "2026-11-06", refresh: false };
+    const oldRequest = loadDashboardPlatformSpend(range);
+    clearDashboardPlatformSpendCache();
+    axios.get.mockResolvedValueOnce({ data: { snapshot: "after-manual-refresh" } });
+    expect(await loadDashboardPlatformSpend(range)).toEqual({ snapshot: "after-manual-refresh" });
+    resolveOld({ data: { snapshot: "before-manual-refresh" } });
+    await oldRequest;
+    expect(await loadDashboardPlatformSpend(range)).toEqual({ snapshot: "after-manual-refresh" });
+});
+
 test("deduplicates concurrent selected-period refreshes", async () => {
     localStorage.setItem("access_token", "token-1");
     let resolveRequest;

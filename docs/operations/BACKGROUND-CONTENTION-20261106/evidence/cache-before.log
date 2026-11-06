@@ -1,0 +1,35 @@
+FAIL src/lib/dashboardPlatformSpendClient.test.js
+  × a read from before invalidation cannot replace the new saved spend cache (5 ms)
+  √ deduplicates concurrent selected-period refreshes (1 ms)
+  √ explicit refresh bypasses the four-minute cache and replaces stale Google spend
+  √ saved reads reuse an in-flight refresh for the same selected period (1 ms)
+  √ reads saved platform spend without triggering a provider refresh (1 ms)
+  √ rejects invalid or reversed date ranges (5 ms)
+
+  ● a read from before invalidation cannot replace the new saved spend cache
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+    -   "snapshot": "after-manual-refresh",
+    +   "snapshot": "before-manual-refresh",
+      }
+
+      26 |     resolveOld({ data: { snapshot: "before-manual-refresh" } });
+      27 |     await oldRequest;
+    > 28 |     expect(await loadDashboardPlatformSpend(range)).toEqual({ snapshot: "after-manual-refresh" });
+         |                                                     ^
+      29 | });
+      30 |
+      31 | test("deduplicates concurrent selected-period refreshes", async () => {
+
+      at Object.<anonymous> (src/lib/dashboardPlatformSpendClient.test.js:28:53)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 5 passed, 6 total
+Snapshots:   0 total
+Time:        1.598 s
+Ran all test suites within paths "src/lib/dashboardPlatformSpendClient.test.js".

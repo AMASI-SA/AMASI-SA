@@ -13,7 +13,7 @@ import logging
 import os
 import socket
 import uuid
-from contextlib import suppress
+from contextlib import AsyncExitStack, suppress
 from datetime import date, datetime, timedelta, timezone
 from time import monotonic
 from typing import Any, Callable
@@ -86,14 +86,16 @@ MIN_INTERVAL_SECONDS = 300
 MAX_INTERVAL_SECONDS = 3600
 # Snapchat's Ads API is more rate-limited than Meta/Google, and its
 # analytics_refresh does per-hour fetches per selected account.  Enforce a
-# provider-scoped cadence of at most 10 minutes even when the global
+# provider-scoped two-hour cadence even when the global
 # scheduler tick is faster – the distributed lease is the real guarantee
 # against concurrent runs across replicas, but the cadence gate prevents
 # needless attempts.
 SNAPCHAT_MIN_INTERVAL_SECONDS_ENV = "MEZAN_ADS_AUTO_SYNC_SNAPCHAT_INTERVAL_SECONDS"
-SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT = 600
-SNAPCHAT_MIN_INTERVAL_SECONDS_FLOOR = 300
-SNAPCHAT_MIN_INTERVAL_SECONDS_CEILING = 600
+# The owner selected two hours. Normalize surviving ten-minute environment
+# values too, so a stale deployment setting cannot retain continuous polling.
+SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT = 7200
+SNAPCHAT_MIN_INTERVAL_SECONDS_FLOOR = 7200
+SNAPCHAT_MIN_INTERVAL_SECONDS_CEILING = 7200
 SNAPCHAT_ACCOUNT_REFRESH_TIMEOUT_SECONDS_ENV = (
     "MEZAN_ADS_AUTO_SYNC_SNAPCHAT_ACCOUNT_TIMEOUT_SECONDS"
 )
@@ -129,6 +131,7 @@ TERMINAL_STATUSES = ("complete", "partial", "failed", "skipped")
 SCHEDULER_OUTCOME_REASONS = frozenset({
     "disabled",
     "cadence_gate_10m",
+    "cadence_gate_2h",
     "running_elsewhere",
     "sync_in_progress",
 })
@@ -1267,14 +1270,16 @@ async def _refresh_snapchat(
     end_date: date,
     now: datetime,
     on_progress: Callable[[], None] | None = None,
+    manual: bool = False,
+    on_started: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     if not snapchat_oauth_configured() or not snapchat_native_sync_enabled():
         return {"provider": SNAPCHAT_PROVIDER_ID, "status": "skipped", "reason": "disabled"}
-    if not await _snapchat_cadence_ready(db, user_id=user_id, now=now):
+    if not manual and not await _snapchat_cadence_ready(db, user_id=user_id, now=now):
         return {
             "provider": SNAPCHAT_PROVIDER_ID,
             "status": "skipped",
-            "reason": "cadence_gate_10m",
+            "reason": "cadence_gate_2h",
         }
 
     # Distributed atomic lease – prevents more than one Snapchat refresh
@@ -1312,6 +1317,15 @@ async def _refresh_snapchat(
     )
     await bind_run_to_lease(db, lease, run_id=run_id)
     failure_stage = SNAPCHAT_DEFAULT_FAILURE_STAGE
+    finalized_status: str | None = None
+    manual_stack = AsyncExitStack()
+
+    async def release_manual_owner() -> None:
+        await release_snapchat_lease(db, lease,
+            final_status=finalized_status or "failed", now=_utcnow())
+
+    if manual:
+        manual_stack.push_async_callback(release_manual_owner)
 
     def observe_failure_stage(stage: str) -> None:
         nonlocal failure_stage
@@ -1319,6 +1333,19 @@ async def _refresh_snapchat(
             failure_stage = stage
 
     try:
+        if manual:
+            await _collection(db, RUNS_COLLECTION).update_one(
+                {"user_id": user_id, "run_id": run_id},
+                {"$set": {"requested_by": "owner_manual"}},
+            )
+        if on_started is not None:
+            on_started(run_id)
+        if manual:
+            # Register the durable run before waiting for heavy-work capacity,
+            # so HTTP can acknowledge it promptly while the API remains free.
+            await manual_stack.enter_async_context(
+                governor.heavy("snapchat", task_name="manual_snapchat_spend")
+            )
         accounts = await _load_canonical_scheduler_accounts(
             db,
             user_id,
@@ -1749,6 +1776,7 @@ async def _refresh_snapchat(
         await _finish_run(
             db, user_id=user_id, run_id=run_id, status=status, result=result
         )
+        finalized_status = status
         await release_snapchat_lease(db, lease, final_status=status, now=now)
         if status == "complete":
             observe_failure_stage("decision_outcomes_evaluation")
@@ -1759,6 +1787,25 @@ async def _refresh_snapchat(
             )
             result["decision_outcomes"] = decision_outcomes
         return {"run_id": run_id, **result}
+    except ResourcePressure:
+        if finalized_status is None:
+            await _finish_run(db, user_id=user_id, run_id=run_id, status="failed",
+                error={"code": "resource_pressure", "retryable": True})
+        await release_snapchat_lease(db, lease,
+            final_status=finalized_status or "failed", now=_utcnow())
+        return {"provider": SNAPCHAT_PROVIDER_ID, "run_id": run_id,
+            "status": finalized_status or "failed", "code": "resource_pressure"}
+    except asyncio.CancelledError:
+        # A supervised manual task can stop at a cooperative checkpoint. Keep
+        # already-finalized facts intact; otherwise terminalize its own run.
+        try:
+            if finalized_status is None:
+                await _finish_run(db, user_id=user_id, run_id=run_id, status="failed",
+                    error={"code": "snapchat_sync_cancelled", "retryable": True})
+        finally:
+            await release_snapchat_lease(db, lease,
+                final_status=finalized_status or "failed", now=_utcnow())
+        raise
     except SnapchatNativeSyncError as exc:
         failure_result = {
             **(exc.result if isinstance(exc.result, dict) else {}),
@@ -1889,6 +1936,8 @@ async def _refresh_snapchat(
             "status": "failed",
             "code": code,
         }
+    finally:
+        await manual_stack.aclose()
 
 
 async def _snapchat_cadence_ready(
@@ -1897,11 +1946,12 @@ async def _snapchat_cadence_ready(
     user_id: str,
     now: datetime,
 ) -> bool:
-    """Return True when the Snapchat 10-minute cadence gate is open.
+    """Return True two hours after the previous Snapchat attempt completed.
 
     The gate looks at the last non-skipped Snapchat analytics_refresh run
-    for this tenant.  If that run started within the configured minimum
-    interval, the current tick is deferred without allocating a lease.
+    for this tenant. If it finished within the selected interval, defer
+    without allocating a lease. Legacy rows without a finish timestamp use
+    their start time; completed, partial and failed attempts all cool down.
     Skipped runs (running_elsewhere or sync_in_progress) are ignored so
     a briefly-noisy replica loop cannot lock a tenant out of retries.
     """
@@ -1929,7 +1979,7 @@ async def _snapchat_cadence_ready(
         "run_type": SNAP_RUN_TYPE,
         "status": {"$in": ["complete", "partial", "failed"]},
     }
-    projection = {"_id": 0, "started_at": 1, "created_at": 1, "status": 1}
+    projection = {"_id": 0, "started_at": 1, "finished_at": 1, "created_at": 1, "status": 1}
     find = getattr(runs_collection, "find", None)
     if callable(find):
         cursor = find(query, projection)
@@ -1952,7 +2002,7 @@ async def _snapchat_cadence_ready(
         candidates = [latest] if latest else []
 
     for candidate in candidates:
-        marker = _parse_datetime(candidate.get("started_at"))
+        marker = _parse_datetime(candidate.get("finished_at")) or _parse_datetime(candidate.get("started_at"))
         if marker is None or marker > future_limit:
             continue
         return marker <= threshold
@@ -2118,6 +2168,11 @@ async def run_auto_sync_cycle(
         "skipped": skipped,
         "results": results,
         "runs_without_browser": True,
+        "snapchat": {
+            "automatic_interval_seconds": SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT,
+            "automatic_interval_minutes": SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT // 60,
+            "cadence_basis": "last_finished_at",
+        },
         "tiktok": _tiktok_scheduler_state(),
     }
 
@@ -2257,9 +2312,18 @@ async def _release_lease(
                 },
             }
         )
+    # An overrun must not turn the five-minute schedule into continuous work.
+    # Release and the next due time share one server-clock update so a second
+    # replica cannot claim between completion and the cooldown being recorded.
+    completed = {key: {"$literal": value} for key, value in patch.items()}
+    completed.update({
+        "lease_expires_at": "$$NOW",
+        "last_finished_at": "$$NOW",
+        "updated_at": "$$NOW",
+        "next_due_at": {"$add": ["$$NOW", interval_seconds() * 1000]},
+    })
     update = await _collection(db, SCHEDULER_COLLECTION).update_one(
-        _live_lease(worker_id),
-        {"$set": patch, "$currentDate": {"lease_expires_at": True, "last_finished_at": True, "updated_at": True}},
+        _live_lease(worker_id), [{"$set": completed}],
     )
     if update.matched_count != 1:
         raise _SchedulerLeaseUnconfirmed("ads scheduler lease expired or lost before final status")
@@ -2548,6 +2612,11 @@ async def auto_sync_status(db: Any, user_id: str) -> dict[str, Any]:
             ),
         },
         "providers": latest,
+        "snapchat": {
+            "automatic_interval_seconds": SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT,
+            "automatic_interval_minutes": SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT // 60,
+            "cadence_basis": "last_finished_at",
+        },
         "tiktok": _tiktok_scheduler_state(),
         "source_only": True,
         "provider_write_reached": False,
@@ -2564,6 +2633,9 @@ def attach_ads_auto_sync_scheduler(
     require_owner: Callable[[Any], dict],
 ) -> None:
     from boot_runtime import wait_for_local_readiness
+    from .snapchat_manual_spend_refresh import attach_manual_spend_routes
+
+    attach_manual_spend_routes(router, db, current_user, require_owner)
 
     task: asyncio.Task | None = None
 

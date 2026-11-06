@@ -6,6 +6,7 @@ on:
       - hotfix/prod-snap-meta-final
     paths:
       - "backend/integrations_control_center/ads_auto_sync_scheduler.py"
+      - "backend/integrations_control_center/snapchat_manual_spend_refresh.py"
       - "backend/integrations_control_center/snapchat_account_hourly_refresh.py"
       - "backend/integrations_control_center/snapchat_dashboard_summary_routes.py"
       - "backend/integrations_control_center/snapchat_native_data_common.py"
@@ -15,6 +16,12 @@ on:
       - "backend/tests/test_dashboard_eligibility_filter.py"
       - "backend/tests/test_ads_auto_sync_scheduler_v2.py"
       - "backend/tests/test_ads_auto_sync_global_lease_mongo.py"
+      - "backend/tests/test_ads_scheduler_completion_cadence.py"
+      - "backend/tests/test_snapchat_background_responsiveness.py"
+      - "backend/tests/test_snapchat_manual_spend_refresh.py"
+      - "frontend/src/components/DashboardAdsSpendCard*"
+      - "frontend/src/services/snapchatManualSpendRefresh*"
+      - "frontend/src/lib/dashboardPlatformSpendClient*"
       - "backend/tests/test_snapchat_account_hourly_refresh_v2.py"
       - "backend/tests/test_snapchat_native_data_sync_v2.py"
       - "backend/tests/test_snapchat_native_tracking_diagnostics_v2.py"
@@ -57,6 +64,9 @@ jobs:
           pytest -q
           tests/test_ads_auto_sync_scheduler_v2.py
           tests/test_ads_auto_sync_global_lease_mongo.py
+          tests/test_ads_scheduler_completion_cadence.py
+          tests/test_snapchat_background_responsiveness.py
+          tests/test_snapchat_manual_spend_refresh.py
           tests/test_snapchat_account_hourly_refresh_v2.py
           tests/test_snapchat_dashboard_summary_v2.py
           tests/test_snapchat_native_data_sync_v2.py
@@ -77,3 +87,31 @@ jobs:
             backend/integrations_control_center/snapchat_account_hourly_refresh.py
           grep -q 'day_start.*"00:00"' \
             backend/integrations_control_center/snapchat_dashboard_summary_routes.py
+
+  frontend-manual-spend:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frozen dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Verify manual refresh and preserved financial/source contracts
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/components/DashboardAdsSpendCard.manualRefresh.test.jsx
+          src/components/DashboardAdsSpendCard.test.jsx
+          src/services/snapchatManualSpendRefresh.test.js
+          src/lib/dashboardPlatformSpendClient.test.js
+          src/services/dashboardAdsSpend.test.js
+          src/lib/dashboardPlatformSpendMerge.test.js
+          src/dashboardExecutivePlatformSpendInterceptor.test.js
+          src/pages/AdvancedDashboard.latestOrders.test.jsx

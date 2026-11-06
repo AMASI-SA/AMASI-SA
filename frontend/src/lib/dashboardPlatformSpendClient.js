@@ -6,6 +6,7 @@ const DEFAULT_MAX_AGE_MS = 4 * 60 * 1000;
 
 const cache = new Map();
 const inFlight = new Map();
+let cacheGeneration = 0;
 
 function accessToken() {
     try {
@@ -75,6 +76,7 @@ export async function loadDashboardPlatformSpend({
     }
 
     const activeKey = refresh ? refreshKey : readKey;
+    const generation = cacheGeneration;
     const request = (async () => {
         const config = {
             withCredentials: true,
@@ -99,7 +101,7 @@ export async function loadDashboardPlatformSpend({
         const payload = response?.data && typeof response.data === "object"
             ? response.data
             : {};
-        cache.set(key, { loadedAt: Date.now(), payload });
+        if (generation === cacheGeneration) cache.set(key, { loadedAt: Date.now(), payload });
         return payload;
     })();
 
@@ -112,6 +114,7 @@ export async function loadDashboardPlatformSpend({
 }
 
 export function clearDashboardPlatformSpendCache() {
+    cacheGeneration += 1;
     cache.clear();
     inFlight.clear();
 }
