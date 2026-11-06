@@ -57,6 +57,29 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(delivery.FIELD, await self.workflow())
         self.external.assert_not_awaited()
 
+    async def test_last_piece_wakes_worker_only_after_completion_is_committed(self):
+        import background_worker_process
+        observed = []
+
+        async def wake(*, assembly=False):
+            self.assertTrue(assembly)
+            current = await self.workflow()
+            self.assertEqual(current["assembly_status"], "completed")
+            self.assertEqual(current[delivery.FIELD]["state"], "pending")
+            self.assertEqual(await self.on_hand(), 16)
+            observed.append(current["order_number"])
+            return True
+
+        with patch.object(background_worker_process, "wake_background_process", wake):
+            first = await self.mark_piece(self.ids[0])
+            self.assertEqual(first.status_code, 200, first.text)
+            self.assertFalse(observed)
+            last = await self.mark_piece(self.ids[1])
+            self.assertEqual(last.status_code, 200, last.text)
+        self.assertTrue(last.json()["piece_ready_confirmed"])
+        self.assertEqual(observed, ["local-assembly"])
+        self.external.assert_not_awaited()
+
     async def test_revoked_after_search_and_in_progress_gate(self):
         # Restore actual permission reads, retain injected authenticated principal.
         from ai_store_access_contract import ROLE_ASSIGNMENTS
