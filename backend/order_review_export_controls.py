@@ -417,7 +417,9 @@ def make_order_review_export_controls_router(
     ) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         user_id = _merchant_user_id(reviewer)
-        _, items_by_id = await _order_and_items(user_id, order_number)
+        order, items_by_id = await _order_and_items(user_id, order_number)
+        from order_review_product_defaults import apply_product_defaults
+        await apply_product_defaults(db, user_id=user_id, order=order, identities=list(items_by_id.values()))
         workflow = await db[WORKFLOWS].find_one(
             {"user_id": user_id, "order_number": order_number},
             {"_id": 0},
@@ -579,6 +581,10 @@ def make_order_review_export_controls_router(
                 ) from exc
 
         default_updated = False
+        if "manual_hidden_spec_keys" in payload.model_fields_set and payload.save_assignment_as_default:
+            from order_review_product_defaults import remember_hidden
+            await remember_hidden(db, user_id=user_id, actor_id=actor_id, item=item,
+                                  keys=states[order_item_id].get("manual_supplier_export_excluded_spec_keys") or [])
         if (
             payload.preparation_route is not None
             and payload.save_assignment_as_default

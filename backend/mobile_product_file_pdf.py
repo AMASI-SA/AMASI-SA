@@ -20,6 +20,7 @@ from preparation_pdf_physical_piece_overlay import expand_batch_lines_to_physica
 from preparation_supplier_dispatch import _is_manager, _require_preparation_worker
 from reviewed_preparation_batches import BATCHES, _line_from_batch_storage
 from tz_utils import utc_to_riyadh
+from preparation_file_images import hydrate_preparation_images
 
 
 def employee_product_file_name(registry: dict, quantity: int, batch_id: str) -> str:
@@ -80,7 +81,10 @@ def make_mobile_product_file_pdf_router(db: Any, current_user: Callable) -> APIR
             raise HTTPException(status_code=404, detail={"code": "preparation_batch_not_ready"})
 
         render_row = dict(batch)
-        render_row["lines"] = expand_batch_lines_to_physical_pieces(batch)
+        # Repair a previously incomplete image snapshot before exposing bytes.
+        # This is read-only and never recreates the file or reassigns a piece.
+        render_row["lines"] = await hydrate_preparation_images(db, user_id, batch.get("lines") or [])
+        render_row["lines"] = expand_batch_lines_to_physical_pieces(render_row)
         lines = [
             _line_from_batch_storage(row, render_row)
             for row in render_row.get("lines") or []

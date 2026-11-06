@@ -1192,29 +1192,14 @@ async def _build_batch_lines(
             "preparation_note": _text(state.get("preparation_note")) or None,
         })
 
-    image_cache: dict[str, tuple[bytes | None, str | None]] = {}
-    timeout = httpx.Timeout(3.0, connect=2.0)
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        async def hydrate(row: dict[str, Any]) -> tuple[bytes | None, str | None]:
-            return await _download_card_image(
-                client,
-                row.get("selected_image_url"),
-                image_cache,
-            )
-
-        hydrated = await bounded_map_ordered(
-            result,
-            hydrate,
-            concurrency=8,
-        )
-    for row, (image_bytes, image_mime) in zip(result, hydrated):
-        row["image_b64"] = (
-            base64.b64encode(image_bytes).decode("ascii")
-            if image_bytes
-            else None
-        )
-        row["image_mime"] = image_mime
-    return result
+    # The installed reference builder enriches candidates after the canonical
+    # identity/options guards. It owns one complete image job instead of making
+    # a first duplicate download pass here and another fallback pass later.
+    if context.get("_defer_preparation_images"):
+        return result
+    from preparation_file_images import hydrate_preparation_images
+    return await hydrate_preparation_images(context.get("_database"),
+        _text(context.get("_user_id")), result)
 
 
 async def _repair_new_batch_options(
@@ -1648,7 +1633,7 @@ def make_reviewed_preparation_batches_router(
             ) from exc
 
         try:
-            batch_lines = await _build_batch_lines(context, planned)
+            batch_lines = await _build_batch_lines({**context, "_database": db, "_user_id": user_id}, planned)
             option_repair = await _repair_new_batch_options(
                 db,
                 user_id=user_id,

@@ -425,6 +425,26 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO, *, loc
     )
     if local_only:
         return identities
+
+    def gallery_digest(product_id, sku, images):
+        content = json.dumps([product_id, sku, images], ensure_ascii=False, sort_keys=True,
+                             separators=(",", ":"), default=str)
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+    def single_image(images):
+        if not isinstance(images, list) or len(images) != 1:
+            return False
+        image = images[0]
+        value = image if isinstance(image, str) else (
+            image.get("url") or image.get("original") or image.get("src")
+            if isinstance(image, dict) else ""
+        )
+        return _text(value).startswith(("https://", "http://"))
+
+    # Only the exact-SKU fallback below can prove that a fresh one-image gallery
+    # is complete. Legacy partial-sync timestamps are deliberately insufficient.
+    # This media-only proof expires; it never caches order/review authority.
+    confirmed_single_pairs: set[tuple[str, str]] = set()
     candidates = {
         (_text(getattr(item, "product_id", None)), _text(getattr(item, "sku", None)))
         for item in identities
@@ -457,6 +477,7 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO, *, loc
             {
                 "_id": 0, "product_id": 1, "sku": 1,
                 "gallery_refreshed_at": 1, "images": 1,
+                "review_gallery_confirmation_v1": 1,
             },
         )
         async for cached in cursor:
@@ -467,6 +488,18 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO, *, loc
             # reviewer can choose the image matching the customer's options.
             cached_images = cached.get("images") if isinstance(cached.get("images"), list) else []
             if len(cached_images) <= 1:
+                proof = cached.get("review_gallery_confirmation_v1") or {}
+                if isinstance(proof, dict) and proof.get("source") == "exact_sku_listing" and single_image(cached_images):
+                    try:
+                        checked = datetime.fromisoformat(_text(proof.get("checked_at")).replace("Z", "+00:00"))
+                        current = datetime.fromisoformat(_now().replace("Z", "+00:00"))
+                        age = (current - checked).total_seconds() if checked.tzinfo else -1
+                    except (ValueError, TypeError, OverflowError):
+                        age = -1
+                    cached_id, cached_sku = _text(cached.get("product_id")), _text(cached.get("sku"))
+                    if (0 <= age <= 15 * 60 and cached_id and cached_sku
+                        and proof.get("digest") == gallery_digest(cached_id, cached_sku, cached_images)):
+                        confirmed_single_pairs.add((cached_id, cached_sku))
                 continue
             fresh_product_ids.add(_text(cached.get("product_id")))
             fresh_skus.add(_text(cached.get("sku")))
@@ -474,14 +507,15 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO, *, loc
     targets = {
         (product_id, sku)
         for product_id, sku in candidates
-        if (product_id, sku) in incomplete_candidates or not (
+        if (product_id, sku) not in confirmed_single_pairs and ((product_id, sku) in incomplete_candidates or not (
             (product_id and product_id in fresh_product_ids)
             or (sku and sku in fresh_skus)
-        )
+        ))
     }
     refreshed = False
     for product_id, sku in sorted(targets):
         product = None
+        from_exact_sku_listing = False
         try:
             if product_id:
                 response = await call_salla(db, user_id, "GET", f"/products/{product_id}")
@@ -503,6 +537,7 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO, *, loc
                     ),
                     None,
                 )
+                from_exact_sku_listing = isinstance(product, dict)
         except SallaError:
             # If fetching by id failed, still try the SKU listing endpoint.
             if not sku:
@@ -520,6 +555,7 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO, *, loc
                     ),
                     None,
                 )
+                from_exact_sku_listing = isinstance(product, dict)
             except SallaError:
                 continue
 
@@ -531,17 +567,24 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO, *, loc
             images or product.get("main_image") or product.get("thumbnail")
         ):
             continue
+        cached_sku = _text(product.get("sku")) or sku
+        proof = None
+        if (from_exact_sku_listing and (not product_id or product_id == cached_product_id)
+            and cached_sku == sku and single_image(product.get("images"))):
+            proof = {"source": "exact_sku_listing", "checked_at": _now(),
+                     "digest": gallery_digest(cached_product_id, cached_sku, images)}
         await db.salla_products.update_one(
             {"user_id": user_id, "product_id": cached_product_id},
             {"$set": {
                 "user_id": user_id,
                 "product_id": cached_product_id,
                 "name": _text(product.get("name")),
-                "sku": _text(product.get("sku")) or sku,
+                "sku": cached_sku,
                 "main_image": product.get("main_image") or "",
                 "thumbnail": product.get("thumbnail") or "",
                 "images": images,
                 "gallery_refreshed_at": _now(),
+                "review_gallery_confirmation_v1": proof,
             }, "$setOnInsert": {"created_at": _now()}},
             upsert=True,
         )
@@ -574,6 +617,9 @@ async def _detail(db: Any, user_id: str, order: OrderDTO, *, local_only: bool = 
     # Preserve existing explicit gallery refresh outside the read transaction.
     if not local_only:
         await _review_item_identities(db, user_id, order, local_only=False)
+    from order_review_product_defaults import apply_product_defaults
+    await apply_product_defaults(db, user_id=user_id, order=order,
+                                 identities=map_order_item_identities(order))
     raw_db = db.current() if isinstance(db, AccountingDatabase) else db
     async with await raw_db.client.start_session() as session:
         async with session.start_transaction(read_concern=ReadConcern("snapshot")):
@@ -906,6 +952,19 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
         return await _detail(db, merchant_id, order, local_only=local_only, session_context=session_context)
 
+    @router.get("/{order_number}/preparation-status")
+    async def preparation_status(order_number: str, user: dict = Depends(current_user)):
+        reviewer = _require_reviewer(user)
+        owner = _merchant_user_id(reviewer)
+        try:
+            await get_order(repository, user_id=owner, order_number=order_number)
+        except OrderNotFoundError as exc:
+            raise HTTPException(404, detail={"code": "order_not_found"}) from exc
+        from review_direct_preparation_sync import reconcile_direct_preparation_after_review
+        return await reconcile_direct_preparation_after_review(db, user_id=owner, order_number=order_number,
+            actor=reviewer, allow_dispatch=False, result={"ok": True, "order_number": order_number,
+                "provider_read_only": True, "preparation_status_sync": {"state": "not_requested", "retry_post": False}})
+
     @router.post("/{order_number}/refresh-from-salla")
     async def refresh_review_source(
         order_number: str, payload: ReviewSourceRefreshRequest,
@@ -1009,7 +1068,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             order = await get_order(repository, user_id=user_id, order_number=order_number)
         except OrderNotFoundError as exc:
             raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
-        identities = await _review_item_identities(db, user_id, order)
+        identities = await _review_item_identities(db, user_id, order, local_only=True)
         source_item = next(
             (item for item in identities if item.order_item_id == payload.source_order_item_id),
             None,
@@ -1093,6 +1152,10 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "created_by": actor_id,
         }
         operational_items.append(operational_item)
+        from order_review_product_defaults import template_for, remember_operational
+        template = template_for(source_item, operational_item)
+        if template:
+            operational_item.update(default_template_id=template["id"], default_product_key=template["product_key"])
 
         # Mark linked option/custom-field keys on the source product as moved to
         # an internal operational item. Supplier/preparation exports must omit
@@ -1152,6 +1215,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             raise
         if uploaded_image is not None:
             await remember_operational_image(db, user_id=user_id, actor_id=actor_id, image=uploaded_image)
+        await remember_operational(db, user_id=user_id, actor_id=actor_id, item=source_item, card=operational_item)
         await db[EVENTS].insert_one({
             "user_id": user_id,
             "order_number": order.order_number,
@@ -1160,7 +1224,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "occurred_at": now,
             "actor_id": actor_id,
         })
-        return await _detail(db, user_id, order)
+        return await _detail(db, user_id, order, local_only=True)
 
 
     @router.post("/{order_number}/operational-items/{operational_item_id:path}/image")
@@ -1200,7 +1264,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             order_item_id=_text(target.get("source_order_item_id")),
             stage="pending_review", actor_id=actor_id,
         )
-        identities = await _review_item_identities(db, user_id, order)
+        identities = await _review_item_identities(db, user_id, order, local_only=True)
         source_item = next(
             (item for item in identities if item.order_item_id == _text(target.get("source_order_item_id"))),
             None,
@@ -1218,6 +1282,10 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         target["image_source"] = "operational_upload"
         target["updated_at"] = now
         target["updated_by"] = actor_id
+        from order_review_product_defaults import template_for, remember_operational
+        template = template_for(source_item, target)
+        if template:
+            target.update(default_template_id=template["id"], default_product_key=template["product_key"])
         try:
             updated = await db[WORKFLOWS].update_one(
                 {"user_id": user_id, "order_number": order.order_number,
@@ -1232,12 +1300,13 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             await forget_unattached_image(db, user_id=user_id, image_id=uploaded["id"])
             raise
         await remember_operational_image(db, user_id=user_id, actor_id=actor_id, image=uploaded)
+        await remember_operational(db, user_id=user_id, actor_id=actor_id, item=source_item, card=target)
         await db[EVENTS].insert_one({
             "user_id": user_id, "order_number": order.order_number,
             "operational_item_id": operational_item_id, "event_type": "operational_image_updated",
             "image_id": uploaded["id"], "actor_id": actor_id, "occurred_at": now,
         })
-        return await _detail(db, user_id, order)
+        return await _detail(db, user_id, order, local_only=True)
 
     @router.patch("/{order_number}/operational-items/{operational_item_id:path}")
     async def update_operational_item_status(
@@ -1277,8 +1346,19 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         target = next((row for row in operational_items if _text(row.get("operational_item_id")) == operational_item_id), None)
         if target is None:
             raise HTTPException(status_code=404, detail={"code": "operational_item_not_found"})
+        if (workflow or {}).get("stage") in REVIEW_COMPLETED_STAGES:
+            raise HTTPException(409, detail={"code": "review_already_completed"})
+        order = await get_order(repository, user_id=user_id, order_number=order_number)
+        source_item = next((item for item in map_order_item_identities(order)
+                            if item.order_item_id == target.get("source_order_item_id")), None)
+        if source_item is None:
+            raise HTTPException(409, detail={"code": "operational_source_item_not_found"})
         if payload.name is not None:
             target["name"] = _text(payload.name)
+        from order_review_product_defaults import template_for, remember_operational
+        template = template_for(source_item, target)
+        if template:
+            target.update(default_template_id=template["id"], default_product_key=template["product_key"])
         target["updated_at"] = _now()
         target["updated_by"] = actor_id
         result = await db[WORKFLOWS].update_one(
@@ -1287,8 +1367,8 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         )
         if not result.matched_count:
             raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"})
-        order = await get_order(repository, user_id=user_id, order_number=order_number)
-        return await _detail(db, user_id, order)
+        await remember_operational(db, user_id=user_id, actor_id=actor_id, item=source_item, card=target)
+        return await _detail(db, user_id, order, local_only=True)
 
     @router.delete("/{order_number}/operational-items/{operational_item_id:path}")
     async def unlink_operational_item(
@@ -1341,7 +1421,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 for spec in (row.get("linked_specs") or [])
                 if isinstance(spec, dict) and _text(spec.get("key"))
             }
-            source_state["supplier_export_excluded_spec_keys"] = sorted(still_excluded)
+            source_state["supplier_export_excluded_spec_keys"] = sorted(still_excluded | set(source_state.get("manual_supplier_export_excluded_spec_keys") or []))
             source_state["revision"] = int(source_state.get("revision") or 0) + 1
             source_state["updated_at"] = _now()
             source_state["updated_by"] = actor_id
@@ -1359,6 +1439,8 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         )
         if not result.matched_count:
             raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"})
+        from order_review_product_defaults import forget_operational
+        await forget_operational(db, user_id=user_id, card=target)
         await db[EVENTS].insert_one({
             "user_id": user_id,
             "order_number": order_number,
@@ -1369,7 +1451,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "actor_id": actor_id,
         })
         order = await get_order(repository, user_id=user_id, order_number=order_number)
-        return await _detail(db, user_id, order)
+        return await _detail(db, user_id, order, local_only=True)
 
     @router.patch("/{order_number}/items/{order_item_id:path}")
     async def update_review_item(
@@ -1789,6 +1871,9 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             reapprove_operation_id=payload.reapprove_operation_id,
             expected_acceptance_fingerprint=payload.expected_acceptance_fingerprint,
         )
+        from review_direct_preparation_sync import reconcile_direct_preparation_after_review
+        result = await reconcile_direct_preparation_after_review(
+            db, user_id=user_id, order_number=order.order_number, actor=reviewer, result=result)
         if result.get("confirmation_pending"):
             from fastapi.responses import JSONResponse
             return JSONResponse(status_code=202, content=result)

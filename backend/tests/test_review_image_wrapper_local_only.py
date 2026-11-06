@@ -49,7 +49,18 @@ class ImageWrapperTests(unittest.IsolatedAsyncioTestCase):
             suffix = "" if value is None else "?local_only=" + str(value).lower()
             response = await self.client.get("/order-reviews-v1/wrapper-test" + suffix)
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(original.await_args.kwargs, {"local_only": bool(value)})
+        # Non-local detail refreshes the gallery before entering its read
+        # snapshot; the snapshot itself must always use local-only identities.
+        # The previous last-call assertion already failed for default/false at
+        # immutable 8e981747b9c65567e893ea9f25da78aa49e1b85b (2 failed, 1 passed).
+        calls = original.await_args_list
+        self.assertTrue(calls)
+        if value:
+            self.assertTrue(all(call.kwargs == {"local_only": True} for call in calls))
+        else:
+            self.assertEqual(calls[0].kwargs, {"local_only": False})
+            self.assertGreaterEqual(len(calls), 2, "A separate snapshot-local identity read is required")
+            self.assertTrue(all(call.kwargs == {"local_only": True} for call in calls[1:]))
         if value:
             refresh.assert_not_awaited()
             transport.assert_not_awaited()

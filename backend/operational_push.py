@@ -312,6 +312,8 @@ async def deliver_one(db, sender=send_to_provider):
 
 
 async def run(db):
+    await db["operational_instruction_notifications_v1"].create_index([
+        ("merchant_id", 1), ("recipient_id", 1), ("read_at", 1), ("created_at", -1), ("id", -1)])
     await db[DEVICES].create_index([("actor_id", 1), ("active", 1)])
     await db[OUTBOX].create_index([("actor_id", 1), ("event_id", 1)])
     await db[OUTBOX].create_index([("status", 1), ("next_at", 1)])

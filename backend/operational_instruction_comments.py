@@ -48,7 +48,8 @@ async def notify_comment(db, row):
         targets.add(task.get("assignee_id"))
     targets -= {None, "", row["author_id"]}
     await emit_instruction_notification(db, merchant_id=row["merchant_id"],
-        instruction={**instruction, "notification_revision": row["id"]}, event_type="comment", recipient_ids=targets)
+        instruction={**instruction, "notification_revision": row["id"], "notification_metadata": {"task_id": row["task_id"]}},
+        event_type="comment", recipient_ids=targets, sender_id=row["author_id"])
     await db[COMMENTS].update_one({"_id": row["id"]}, {"$set": {"notification_pending": False}})
 
 

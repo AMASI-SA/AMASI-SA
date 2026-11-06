@@ -472,7 +472,7 @@ async def build_reference_batch_lines(
     builder = _ORIGINAL_BATCH_LINE_BUILDER or batch._build_batch_lines
     if builder is build_reference_batch_lines:
         raise RuntimeError("canonical_preparation_batch_builder_unavailable")
-    result = await builder(context, planned)
+    result = await builder({**context, "_defer_preparation_images": True}, planned)
 
     workflows_by_number = {
         batch._text(workflow.get("order_number")): workflow
@@ -495,87 +495,27 @@ async def build_reference_batch_lines(
         (row, planned[index] if index < len(planned) else {})
         for index, row in enumerate(result)
     ]
-    image_cache: dict[str, tuple[bytes | None, str | None]] = {}
-    # Keep the optional fallback bounded. The canonical builder already tried
-    # the primary image; this layer must never push file creation toward the
-    # proxy timeout merely because several secondary images are unavailable.
-    timeout = httpx.Timeout(3.0, connect=2.0)
-    async with httpx.AsyncClient(
-        timeout=timeout,
-        follow_redirects=True,
-        headers=_IMAGE_REQUEST_HEADERS,
-    ) as client:
-        async def hydrate(
-            pair: tuple[dict[str, Any], dict[str, Any]],
-        ) -> tuple[list[str], bytes | None, str | None, str | None]:
-            row, allocation = pair
-            order_number = batch._text(row.get("order_number"))
-            workflow = workflows_by_number.get(order_number) or {}
-            states = {
-                batch._text(state_row.get("order_item_id")): dict(state_row)
-                for state_row in workflow.get("items") or []
-                if isinstance(state_row, dict)
-                and batch._text(state_row.get("order_item_id"))
-            }
-            state = states.get(batch._text(row.get("order_item_id")), {})
-            source_line = allocation.get("line") or {}
-            frozen = source_line.get("ready_item_identity") or source_line.get("review_snapshot_identity") or {}
-            live_identity = live_identities.get((
-                order_number,
-                batch._text(row.get("order_item_id")),
-            ))
-            if live_identity is None:
-                live_identity = SimpleNamespace(
-                    image_url=(
-                        frozen.get("selected_image_url")
-                        if isinstance(frozen, dict)
-                        else None
-                    ),
-                    image_urls=[],
-                )
-            candidates = image_candidate_urls(
-                state,
-                live_identity,
-                source_line,
-            )
-            for value in (row.get("selected_image_url"), row.get("resolved_image_url")):
-                url = batch._text(value)
-                if url.startswith("//"):
-                    url = f"https:{url}"
-                if url and url not in candidates:
-                    candidates.append(url)
-
-            if row.get("image_b64"):
-                return candidates, None, None, batch._text(row.get("resolved_image_url") or row.get("selected_image_url")) or None
-            image_bytes, image_mime, resolved_image_url = await _download_first_product_image(
-                client,
-                candidates,
-                image_cache,
-                batch,
-                context,
-            )
-            return candidates, image_bytes, image_mime, resolved_image_url
-
-        hydrated = await batch.bounded_map_ordered(
-            row_allocations,
-            hydrate,
-            concurrency=8,
-        )
-
-    for row, (candidates, image_bytes, image_mime, resolved_image_url) in zip(result, hydrated):
+    for row, allocation in row_allocations:
+        order_number = batch._text(row.get("order_number"))
+        workflow = workflows_by_number.get(order_number) or {}
+        states = {batch._text(state.get("order_item_id")): dict(state)
+            for state in workflow.get("items") or [] if isinstance(state, dict)}
+        state = states.get(batch._text(row.get("order_item_id")), {})
+        source_line = allocation.get("line") or {}
+        frozen = source_line.get("ready_item_identity") or source_line.get("review_snapshot_identity") or {}
+        identity = live_identities.get((order_number, batch._text(row.get("order_item_id"))))
+        if identity is None:
+            identity = SimpleNamespace(image_url=frozen.get("selected_image_url") if isinstance(frozen, dict) else None, image_urls=[])
+        candidates = image_candidate_urls(state, identity, source_line)
+        for value in (row.get("selected_image_url"), row.get("resolved_image_url")):
+            url = batch._text(value)
+            if url.startswith("//"):
+                url = f"https:{url}"
+            if url and url not in candidates:
+                candidates.append(url)
         row["image_candidates"] = candidates
-        if row.get("image_b64"):
-            row["image_missing"] = False
-            row["resolved_image_url"] = resolved_image_url
-            continue
-        row["resolved_image_url"] = resolved_image_url
-        row["image_b64"] = (
-            base64.b64encode(image_bytes).decode("ascii")
-            if image_bytes else None
-        )
-        row["image_mime"] = image_mime
-        row["image_missing"] = image_bytes is None
-    return result
+    from preparation_file_images import hydrate_preparation_images
+    return await hydrate_preparation_images(context.get("_database"), batch._text(context.get("_user_id")), result)
 
 
 _INSTALLED = False
