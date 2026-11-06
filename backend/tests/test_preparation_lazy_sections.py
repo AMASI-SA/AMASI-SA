@@ -106,6 +106,28 @@ async def test_waiting_cards_page_ten_unique_headers_without_hydrating_customer_
         assert response.status_code == 400
 
 
+async def test_selected_waiting_group_reads_each_current_order_once_and_stays_fresh(db, monkeypatch):
+    await seed_order(db, "eligible", current="reviewed")
+    await seed_piece(db, "eligible", piece_id="available-abaya", product_id="abaya")
+    await seed_order(db, "old", current="completed")
+    for index in range(45):
+        await seed_piece(db, "old", piece_id=f"old-abaya-{index}", product_id="abaya")
+    annotate = dispatch.annotate_waiting_pieces
+    checked = []
+    async def observe(db, *, user_id, pieces):
+        checked.extend(row["order_number"] for row in pieces)
+        return await annotate(db, user_id=user_id, pieces=pieces)
+    monkeypatch.setattr(dispatch, "annotate_waiting_pieces", observe)
+    response = await request(db, "waiting-page", group="product:abaya")
+    assert response.status_code == 200, response.text
+    assert [row["piece_id"] for file in response.json()["files"] for row in file["products"]] == ["available-abaya"]
+    assert checked.count("old") == 1, "historical sibling pieces must share one current-order read within the page"
+    assert checked.count("eligible") == 1
+    await seed_order(db, "eligible", current="cancelled")
+    again = await request(db, "waiting-page", group="product:abaya")
+    assert again.status_code == 200 and again.json()["files"] == [], "new requests must revalidate current status"
+
+
 async def test_progress_returns_ten_then_ten_with_whole_day_totals(db, monkeypatch):
     # Exercise the actual Production installer, including its route-history
     # validation, rather than only the unwrapped workspace implementation.

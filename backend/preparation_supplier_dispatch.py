@@ -1189,6 +1189,7 @@ async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str, gro
         query["$expr"] = {"$and": expressions}
 
     chosen = []
+    order_context: dict[str, dict[str, Any]] = {}
     cursor = db[PIECES].find(query, {"image_b64": 0}).sort("_id", -1).batch_size(10)
     try:
         while len(chosen) < 11:
@@ -1197,8 +1198,27 @@ async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str, gro
                 break
             candidates = [row for row in batch if piece_is_available_for_supplier_dispatch(row)]
             if candidates:
-                annotated = await annotate_waiting_pieces(db, user_id=user_id, pieces=candidates)
-                chosen.extend(row for row in annotated if row.get("waiting_review_eligible") is True)
+                # Eligibility is current order authority, identical for sibling
+                # pieces. One page may skip hundreds of historical pieces of
+                # the same order; do not remap that full order every ten rows.
+                # This context belongs only to this read. A later page/refresh
+                # and the actual dispatch still validate the current facts.
+                unread = {}
+                for row in candidates:
+                    number = _text(row.get("order_number"))
+                    if number not in order_context:
+                        unread.setdefault(number, row)
+                if unread:
+                    annotated = await annotate_waiting_pieces(db, user_id=user_id, pieces=list(unread.values()))
+                    for row in annotated:
+                        order_context[_text(row.get("order_number"))] = {
+                            key: row.get(key) for key in (
+                                "order_status", "order_status_native", "preparation_terminal", "waiting_review_eligible"
+                            )
+                        }
+                chosen.extend({**row, **order_context[_text(row.get("order_number"))]}
+                    for row in candidates
+                    if order_context.get(_text(row.get("order_number")), {}).get("waiting_review_eligible") is True)
     finally:
         await cursor.close()
 
