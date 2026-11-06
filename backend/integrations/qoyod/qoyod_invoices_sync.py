@@ -31,6 +31,7 @@ paginator (`api_client.list_invoices`).
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import date, datetime, timezone
 from typing import Optional
 
@@ -42,7 +43,7 @@ from integrations.qoyod.eligible_orders import (
 from integrations.qoyod.fresh_start_audit import _coerce_float, _paginate
 
 _FLOOR_DATE: date = date.fromisoformat(QOYOD_SYNC_START_DATE)
-_INVOICE_WRITE_BATCH_SIZE = 500
+_INVOICE_WRITE_BATCH_SIZE = 100
 
 
 def _trim_raw(it: dict) -> dict:
@@ -122,6 +123,7 @@ async def _write_invoice_batches(collection, rows: list[dict]) -> dict:
     fallback_batches = 0
 
     for offset in range(0, len(rows), _INVOICE_WRITE_BATCH_SIZE):
+        await asyncio.sleep(0)
         batch = rows[offset:offset + _INVOICE_WRITE_BATCH_SIZE]
         operations = [
             UpdateOne(row["filter"], row["update"], upsert=True)

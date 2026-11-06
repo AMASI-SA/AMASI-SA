@@ -453,6 +453,13 @@ export default function QoyodUnsentOrders() {
 
       </>}
 
+      <div className="rounded-lg border p-3 text-sm" data-testid="unsent-snapshot-status">
+        {data?.snapshot_available === false ? "لم يكتمل فحص شامل بعد؛ لا تعني القائمة الفارغة عدم وجود طلبات." : <>
+          آخر فحص ناجح: {data?.updated_at ? new Date(data.updated_at).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" }) : "—"}.
+          {(data?.scan?.stale || data?.scan?.last_error) && " النتيجة قديمة؛ احتُفظ بآخر فحص ناجح."}
+          {data?.counts_complete === false && " القائمة والعدادات المعروضة محدودة؛ لا تمثل كل النتائج."}
+        </>}
+      </div>
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
              data-testid="unsent-error">{String(error)}</div>

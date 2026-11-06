@@ -1007,6 +1007,10 @@ async def _upsert_order(db, user_id: str, order_number: str, incoming: dict,
         merged = _merge_into(existing, incoming, source)
         merged["user_id"] = user_id
         merged["order_number"] = order_number
+        # Durable hint shares the canonical owner transaction. No Qoyod
+        # collection may be written through a restricted operational DB.
+        merged['qoyod_followup_dirty'] = True
+        merged['qoyod_followup_revision'] = uuid.uuid4().hex
         if raw is not None:
             # Keep archived payloads and richer product options. Current
             # shipping is projected separately from this source history.

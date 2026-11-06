@@ -268,6 +268,7 @@ def install_auto_send_payment_freshness_patch() -> None:
         )
 
     original_unsent = unsent_orders.list_unsent_orders
+    unsent_orders.snapshot_builder = original_unsent
 
     async def list_unsent_orders_patched(db: Any, **kwargs: Any) -> dict[str, Any]:
         return await _list_unsent_orders_with_queue_counts(

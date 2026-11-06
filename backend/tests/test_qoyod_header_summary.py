@@ -30,21 +30,25 @@ async def test_header_100_reads_never_access_orders_or_provider_and_payload_is_b
 
 
 @pytest.mark.asyncio
-async def test_stale_wrong_owner_incomplete_or_superseded_proof_is_unknown():
+async def test_last_success_survives_expiry_or_failed_sync_but_never_crosses_owner():
     db = AsyncMongoMockClient().db
     await db.qoyod_settings.insert_one({'user_id': 'tenant', 'invoice_presence_snapshot': SNAPSHOT})
     await cache_report_summary(db, user_id='tenant', orders_user_id='owner',
         proofs=[proof('1')], from_date='2026-07-01', now=NOW)
-    for tenant, owner, now in [('other', 'owner', NOW), ('tenant', 'other', NOW),
-                               ('tenant', 'owner', NOW + timedelta(minutes=15))]:
+    for tenant, owner, now in [('other', 'owner', NOW), ('tenant', 'other', NOW)]:
         result = await read_header_summary(db, user_id=tenant, orders_user_id=owner, now=now)
         assert result['invoice_presence']['count'] is None
+    expired = await read_header_summary(db, user_id='tenant', orders_user_id='owner', now=NOW + timedelta(minutes=15))
+    assert expired['invoice_presence']['count'] == 1
+    assert expired['invoice_presence']['stale'] is True
     await db.qoyod_settings.update_one({'user_id': 'tenant'}, {'$set': {'invoice_presence_snapshot.complete': False}})
-    assert (await read_header_summary(db, user_id='tenant', orders_user_id='owner', now=NOW))['invoice_presence']['count'] is None
+    assert (await read_header_summary(db, user_id='tenant', orders_user_id='owner', now=NOW))['invoice_presence']['stale'] is True
     await db.qoyod_settings.update_one({'user_id': 'tenant'}, {'$set': {'invoice_presence_snapshot': {**SNAPSHOT, 'started_at': (NOW + timedelta(seconds=1)).isoformat()}}})
     await cache_report_summary(db, user_id='tenant', orders_user_id='owner', proofs=[proof('2')],
         from_date='2026-07-01', now=NOW, settings={'invoice_presence_snapshot': SNAPSHOT})
-    assert (await read_header_summary(db, user_id='tenant', orders_user_id='owner', now=NOW))['invoice_presence']['count'] is None
+    retained = (await read_header_summary(db, user_id='tenant', orders_user_id='owner', now=NOW))['invoice_presence']
+    assert retained['count'] == 1
+    assert retained['stale'] is True
 
 
 @pytest.mark.asyncio

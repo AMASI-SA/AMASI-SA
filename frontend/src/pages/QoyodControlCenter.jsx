@@ -232,8 +232,8 @@ export default function QoyodControlCenter() {
   }, []);
 
   useEffect(() => {
-    loadOverview();
-  }, [loadOverview]);
+    if (activeTab === "overview") loadOverview();
+  }, [loadOverview, activeTab]);
 
   const openTab = useCallback((tab) => {
     setSearchParams(tab === "overview" ? {} : { tab });

@@ -5396,6 +5396,8 @@ async def _local_startup() -> None:
             start_worker as _qoyod_plan_b_auto_start,
         )
         _qoyod_plan_b_auto_start(db, interval_sec=15.0, batch_limit=5)
+        from integrations.qoyod.scheduled_scan import scheduler as qoyod_scan_scheduler
+        app.state.qoyod_scan_scheduler = _asyncio.create_task(qoyod_scan_scheduler(db))
         logger.info("Plan-B Qoyod automatic sender started")
     except Exception as exc:
         logger.exception("Plan-B Qoyod automatic sender failed to start: %s", exc)
@@ -5486,7 +5488,8 @@ async def on_shutdown():
     await stop_salla_orders_v3_shadow_worker(
         getattr(app.state, "salla_orders_v3_shadow_task", None)
     )
-    for task_name in ("event_loop_lag_task", "operational_balance_task", "assembly_completion_delivery_task", "shipping_label_inbox_task", "payment_update_inbox_task", "operational_push_task"):
+    from integrations.qoyod.scheduled_scan import stop_scans
+    for task_name in ("qoyod_scan_scheduler", "event_loop_lag_task", "operational_balance_task", "assembly_completion_delivery_task", "shipping_label_inbox_task", "payment_update_inbox_task", "operational_push_task"):
         task = getattr(app.state, task_name, None)
         if task is not None:
             task.cancel()
@@ -5494,6 +5497,7 @@ async def on_shutdown():
                 await task
             except _asyncio.CancelledError:
                 pass
+    await stop_scans()
     campaign_ai_monitor_task = getattr(
         app.state, "campaign_ai_monitor_task", None
     )
