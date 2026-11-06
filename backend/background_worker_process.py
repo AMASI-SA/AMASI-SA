@@ -7,6 +7,7 @@ import logging
 import os
 from pathlib import Path
 import sys
+import time
 import uuid
 
 ROOT = Path(__file__).resolve().parent
@@ -65,8 +66,10 @@ class ManagedWorker:
                 await process.wait()
 
     async def _loop(self):
+        failures = 0
         while True:
             drains = []
+            started = time.monotonic()
             try:
                 env = os.environ.copy()
                 env[WORKER_FLAG] = '1'
@@ -88,13 +91,24 @@ class ManagedWorker:
                 await self._stop_child()
                 await asyncio.gather(*drains, return_exceptions=True)
             self.restarts += 1
-            await asyncio.sleep(self.restart_delay)
+            failures = 0 if time.monotonic() - started >= 60 else min(failures + 1, 5)
+            await asyncio.sleep(min(300, self.restart_delay * 2 ** max(0, failures - 1)))
 
     async def stop(self):
         if self.task is not None:
             self.task.cancel()
             with suppress(asyncio.CancelledError):
                 await self.task
+
+    async def wake(self):
+        if not self.status()['running'] or self.process.stdin is None:
+            return False
+        try:
+            self.process.stdin.write(b'wake\n')
+            await asyncio.wait_for(self.process.stdin.drain(), 1)
+            return True
+        except (BrokenPipeError, ConnectionResetError, asyncio.TimeoutError):
+            return False
 
 
 def start_background_process(app):
@@ -117,6 +131,10 @@ async def stop_background_process(app):
 
 def status():
     return _current.status() if _current else {'running': False, 'execution': 'background_process'}
+
+
+async def wake_background_process():
+    return await _current.wake() if _current is not None else False
 
 
 async def read_status(db):

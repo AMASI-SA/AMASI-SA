@@ -24,6 +24,6 @@ def test_core_salla_and_qoyod_paths_remain_enabled():
     assert 'stop_background_process(app)' in source
     assert 'salla_token_maintenance_loop' in runtime
     assert 'pipeline(db, interval_sec=5.0, batch_limit=25)' in runtime
-    assert 'automatic(db, batch_limit=5)' in runtime
+    assert 'automatic(db, batch_limit=5, wake_event=wake_event)' in runtime
     assert 'qoyod-full-scan' in runtime
     assert '_qoyod_plan_b_auto_start(db, interval_sec=15.0' not in source

@@ -5,11 +5,17 @@
   "base": "049fba51c13b902cd12808e03e87aca203649fb7",
   "reused_qoyod_source": "fa1aae7bcdc6b1fc09091a46752bd93ee7b049b1",
   "related_prs": [1776, 1785],
-  "stage": "WIP: implementation and isolated verification in progress",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1788",
+  "stage": "WIP checkpoint: all-eligible cycles and manual control implemented; broader verification running",
+  "latest_user_decision": "Each cycle must attempt all eligible invoices once, without an overall 500-invoice cutoff. Add an owner button to start a cycle at any time. Concurrent requests join the active cycle.",
   "user_requirement": "Complete platform performance fixes. Automatic Qoyod invoice sending must remain enabled according to existing settings and run every two hours.",
   "implemented": [
     "Ported PR1776 cleanly onto current Production without changing its original branch or the Production branch",
     "Server-clock Mongo cycle lease and durable two-hour completion cooldown; bounded multiple sequential send batches; crash recovery and ownership fencing",
+    "Finite durable eligible cohort, reference-only keyset preparation and exact indexed invoice evidence; resumable small work slices have no total 500-invoice cutoff",
+    "Each cohort item is terminalized after one attempt or a safety hold; all remaining eligible invoices continue within the same cycle",
+    "Linked security-owner GET/POST cycle APIs; duplicate requests join one queued/running cycle, wake the managed worker and never send invoices in HTTP",
+    "Owner run-now button with lightweight status observation, progress and Riyadh next-cycle time",
     "Separate bounded discovery/recovery loop with no invoice creation between cycles",
     "Managed child runtime for existing startup workers and advertising schedulers, with inherited canonical safety composition and existing per-job locks",
     "Per-request sanitized route-template timing logs without query/header/body/customer data",
@@ -17,20 +23,22 @@
   ],
   "fresh_verification": {
     "ported_baseline": "72 passed, 6 real-Mongo cases skipped before the isolated database was started",
-    "two_hour_cycle_real_mongo": "6 passed; loopback-only MongoDB8.0.12 single-member replica set; synthetic batches, no provider requests",
+    "two_hour_cycle_real_mongo": "9 passed, including two OS processes and cancellation after lease loss; synthetic batches only",
     "process_health_auth_readiness_timing": "28 passed from repository root with a synthetic JWT test secret",
-    "canonical_child_boot": "In progress. Test-only dependency closure initially lacked xlsxwriter; installed the repository-pinned version into an isolated D-drive target. No application dependency manifest changed."
+    "canonical_child_boot": "Passed against an empty isolated Mongo database; real canonical application booted and shutdown drained",
+    "integrated_core": "86 passed, zero skips",
+    "ads_observability": "119 passed, 12 missing-Mongo cases then ran separately with 12 passes",
+    "all_eligible_manual_and_process": "18 passed with no skips: real isolated Mongo, 606 eligible invoices attempted exactly once across slices, page replay after a crash, manual cooldown bypass/deduplication, actual owner authorization, canonical child boot",
+    "frontend": "29 passed in 7 affected suites, including real button click, disabled repeat click, lightweight progress polling and permission error"
   },
   "remaining": [
-    "Verify real canonical child startup/shutdown on isolated Mongo and fix any runtime/lifecycle defects",
-    "Add and run cross-process cycle ownership and backlog/failure regression coverage",
     "Run the integrated Qoyod/financial/worker/Snapchat/frontend affected checks and inspect the final diff",
-    "Publish a draft PR/checkpoint and inspect exact-source CI before declaring review readiness",
+    "Inspect exact-source CI and finalize draft PR/handoff with source-bound evidence",
     "Live latency/CPU/RSS comparison remains a separately governed deployment/measurement step"
   ],
   "production_changed": false,
   "deployment_or_lease_created": false,
   "provider_or_financial_test_writes": false,
   "runtime_evidence": "D:/codex-release-artifacts/mezan-background-workers-qoyod-2h-20261106",
-  "next_safe_action": "Finish the isolated canonical worker boot probe, then run integrated affected checks. Do not merge, publish, alter /app or activate any disabled worker."
+  "next_safe_action": "Finish integrated affected verification and the frontend build; inspect PR1788 exact-head CI. Do not merge, publish, alter /app, send live invoices or activate any disabled worker."
 }

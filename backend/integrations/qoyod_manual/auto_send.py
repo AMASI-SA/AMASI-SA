@@ -23,7 +23,7 @@ Safety properties:
   orders continue;
 * infrastructure and unknown errors never turn ``auto_send`` off; a failure
   with an order number is quarantined, while a round-level failure is retried
-  on the next worker tick;
+  on the next two-hour cycle (or an explicit owner-started cycle);
 * every mutating run is written to ``qoyod_manual_auto_runs`` before the first
   external request.
 """
@@ -53,6 +53,7 @@ from integrations.qoyod_manual.send import (
     manual_send_one,
 )
 from salla_integration.sync import resync_single_order
+from .auto_cycle import INTERVAL_SECONDS, POLL_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -1177,7 +1178,7 @@ async def _run_automatic_batch(db, *, batch_limit: int) -> dict[str, Any]:
     return await run_once(db, batch_limit=batch_limit)
 
 
-async def _loop(db, *, interval_sec: float, batch_limit: int) -> None:
+async def _loop(db, *, interval_sec: float, batch_limit: int, wake_event=None) -> None:
     from .auto_cycle import run_due_cycle, INTERVAL_SECONDS
     logger.info(
         "Plan-B Qoyod auto-send worker started interval=%ss batch=%s",
@@ -1185,21 +1186,31 @@ async def _loop(db, *, interval_sec: float, batch_limit: int) -> None:
     )
     while True:
         try:
-            await run_due_cycle(db, batch_limit=batch_limit)
+            cycle = await run_due_cycle(db, batch_limit=batch_limit)
+            if cycle.get('status') == 'continuing':
+                await asyncio.sleep(.05)
+                continue
         except Exception:
             # run_once already isolates failures; this protects task liveness.
             logger.exception("Plan-B Qoyod auto-send worker tick escaped")
-        await asyncio.sleep(interval_sec)
+        if wake_event is None:
+            await asyncio.sleep(interval_sec)
+        else:
+            try:
+                await asyncio.wait_for(wake_event.wait(), interval_sec)
+            except asyncio.TimeoutError:
+                pass
+            wake_event.clear()
 
 
 def start_worker(
-    db, *, interval_sec: float = 60.0, batch_limit: int = 5,
+    db, *, interval_sec: float = POLL_SECONDS, batch_limit: int = 5, wake_event=None,
 ) -> asyncio.Task:
     global _WORKER_TASK
     if _WORKER_TASK is not None and not _WORKER_TASK.done():
         return _WORKER_TASK
     _WORKER_TASK = asyncio.create_task(
-        _loop(db, interval_sec=interval_sec, batch_limit=batch_limit),
+        _loop(db, interval_sec=interval_sec, batch_limit=batch_limit, wake_event=wake_event),
         name="qoyod-plan-b-auto-send-worker",
     )
     return _WORKER_TASK
@@ -1216,7 +1227,7 @@ def liveness() -> dict[str, Any]:
         "last_run_at": _LAST_RUN_AT.isoformat() if _LAST_RUN_AT else None,
         "last_run_ok": _LAST_RUN_OK,
         "last_round": _LAST_ROUND,
-        "automatic_interval_seconds": 7200,
-        "automatic_interval_minutes": 120,
+        "automatic_interval_seconds": INTERVAL_SECONDS,
+        "automatic_interval_minutes": INTERVAL_SECONDS // int(POLL_SECONDS),
         "cadence_basis": "last_finished_at",
     }

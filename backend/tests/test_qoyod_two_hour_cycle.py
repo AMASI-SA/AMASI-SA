@@ -1,6 +1,10 @@
 """Scheduling tests use real local Mongo, synthetic batches and no provider."""
 import asyncio
 from datetime import timedelta
+import os
+from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -107,15 +111,25 @@ async def test_replaced_owner_cannot_send_a_second_batch_or_publish(real_db):
 
 
 @pytest.mark.asyncio
-async def test_budget_retains_backlog_and_no_catchup_storm_after_downtime(real_db):
+async def test_slice_resumes_same_cycle_until_all_eligible_are_attempted(real_db):
     db, _ = real_db
     await arm(db)
+    await db.test_backlog.insert_many([{'reference': str(i), 'sent': False} for i in range(15)])
     async def send(*args, **kwargs):
-        return {'ok': True, 'status': 'succeeded', 'sent_count': 5, 'results': [{}] * 5}
+        rows = await db.test_backlog.find({'sent': False}).limit(5).to_list(length=5)
+        await db.test_backlog.update_many({'_id': {'$in': [r['_id'] for r in rows]}}, {'$set': {'sent': True}})
+        return {'ok': True, 'status': 'succeeded' if rows else 'idle',
+                'sent_count': len(rows), 'results': rows}
     result = await cycles.run_due_cycle(db, batch_runner=send, max_batches=2, batch_pause=0)
-    assert result['status'] == 'budget_exhausted'
+    assert result['status'] == 'continuing'
     assert result['sent_count'] == 10
     assert result['batches'] == 2
+    assert await db.test_backlog.count_documents({'sent': False}) == 5
+    resumed = await cycles.run_due_cycle(db, batch_runner=send, batch_pause=0)
+    assert resumed['cycle_id'] == result['cycle_id']
+    assert resumed['status'] == 'idle'
+    assert resumed['sent_count'] == 15
+    assert await db.test_backlog.count_documents({'sent': False}) == 0
     assert (await cycles.run_due_cycle(db, batch_runner=send))['status'] == 'not_due'
 
 
@@ -128,3 +142,65 @@ async def test_disabled_automatic_send_never_calls_batch_or_changes_switches(rea
     assert (await cycles.run_due_cycle(db, batch_runner=forbidden))['status'] == 'not_armed'
     assert await db.qoyod_auto_cycles.count_documents({}) == 0
     assert (await db.qoyod_settings.find_one({}))['auto_send'] is False
+
+
+@pytest.mark.asyncio
+async def test_two_os_processes_create_one_cycle_and_no_duplicate_synthetic_invoices(real_db):
+    db, children = real_db
+    await arm(db)
+    path = Path(__file__).with_name('qoyod_cycle_process_worker.py')
+    for label in ('one', 'two'):
+        children.append(subprocess.Popen([sys.executable, str(path), db.name, label],
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)))
+    async with asyncio.timeout(15):
+        while await db.test_workers.count_documents({'ready': True}) != 2:
+            await asyncio.sleep(.03)
+    await db.test_control.insert_one({'_id': 'cycle-start'})
+    async with asyncio.timeout(15):
+        while await db.test_workers.count_documents({'done': True}) != 2:
+            await asyncio.sleep(.03)
+    assert await db.test_workers.count_documents({'claimed': True}) == 1
+    assert await db.test_invoice_sink.count_documents({}) == 12
+    assert len(await db.test_invoice_sink.distinct('reference')) == 12
+    assert len({row['pid'] async for row in db.test_workers.find({})}) == 2
+
+
+@pytest.mark.asyncio
+async def test_lost_heartbeat_cancels_inflight_batch_before_another_send(real_db, monkeypatch):
+    db, _ = real_db
+    await arm(db)
+    monkeypatch.setattr(cycles, 'HEARTBEAT_SECONDS', .02)
+    entered, cancelled = asyncio.Event(), asyncio.Event()
+    async def blocked(*args, **kwargs):
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+    task = asyncio.create_task(cycles.run_due_cycle(db, batch_runner=blocked))
+    await asyncio.wait_for(entered.wait(), 5)
+    await db.qoyod_auto_cycles.update_one({'_id': 'main'}, {'$set': {'owner': 'replacement'}})
+    result = await asyncio.wait_for(task, 5)
+    assert result['status'] == 'lease_lost'
+    assert cancelled.is_set()
+    assert 'finished_at' not in (await db.qoyod_auto_cycles.find_one({}))
+
+
+@pytest.mark.asyncio
+async def test_background_discovery_keeps_new_orders_without_sending_between_cycles(real_db):
+    from test_qoyod_real_mongo import canonical
+    db, _ = real_db
+    await arm(db)
+    await db.unified_orders.insert_one(canonical('waiting', qoyod_followup_dirty=True,
+                                                 qoyod_followup_revision='fresh'))
+    task = asyncio.create_task(cycles.followup_loop(db))
+    try:
+        async with asyncio.timeout(5):
+            while not await db.qoyod_order_followup.find_one({'order_number': 'waiting'}):
+                await asyncio.sleep(.02)
+        assert await db.qoyod_invoices.count_documents({}) == 0
+        assert await db.qoyod_auto_cycles.count_documents({}) == 0
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task

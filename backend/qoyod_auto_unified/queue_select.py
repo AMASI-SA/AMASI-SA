@@ -125,8 +125,12 @@ async def _load_candidate_rows_oldest_first(
             break
 
     from .incremental import defer_selected
-    await defer_selected(db, orders_user_id, snapshot['_pending_followup'],
-                         {row['order_number'] for row in candidates} | quarantined)
+    from integrations.qoyod_manual.cycle_manifest import CURRENT_CYCLE, terminalize
+    if CURRENT_CYCLE.get():
+        await terminalize(db, quarantined, 'held')
+    else:
+        await defer_selected(db, orders_user_id, snapshot['_pending_followup'],
+                             {row['order_number'] for row in candidates} | quarantined)
     authoritative_status_counts = {
         API_STATUS_TO_KEY[pending_status]: sum(
             auto_send_module._pending_row_matches_status(row, pending_status)

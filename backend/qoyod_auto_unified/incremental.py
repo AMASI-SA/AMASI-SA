@@ -83,6 +83,9 @@ async def drain_dirty_page(db, owner):
 
 
 async def discover(db, owner, audit_builder, *, clock=None):
+    from integrations.qoyod_manual.cycle_manifest import CURRENT_CYCLE, discover as cycle_discover
+    if CURRENT_CYCLE.get():
+        return await cycle_discover(db, owner, audit_builder)
     hinted = await drain_dirty_page(db, owner)
     recovered = await recover_page(db, owner)
     at = clock or now()

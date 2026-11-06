@@ -102,6 +102,10 @@ async def test_canonical_runtime_boots_against_empty_isolated_database_and_drain
     monkeypatch.setenv('MONGO_URL', uri)
     monkeypatch.setenv('DB_NAME', db.name)
     monkeypatch.setenv('JWT_SECRET', 'isolated-background-worker-test-secret')
+    monkeypatch.setenv('EMAIL_OTP_SMTP_HOST', 'smtp.example.invalid')
+    monkeypatch.setenv('EMAIL_OTP_FROM_EMAIL', 'test@example.invalid')
+    monkeypatch.delenv('EMAIL_OTP_SMTP_USERNAME', raising=False)
+    monkeypatch.delenv('EMAIL_OTP_SMTP_PASSWORD', raising=False)
     worker = ManagedWorker(restart_delay=2, shutdown_timeout=15)
     worker.start()
     try:

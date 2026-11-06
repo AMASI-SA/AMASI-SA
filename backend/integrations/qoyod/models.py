@@ -448,6 +448,16 @@ async def ensure_qoyod_indexes(db) -> None:
     auditing trivial. Each index has a `name=` so future migrations
     can target them precisely.
     """
+    await db.qoyod_auto_cycle_items.create_index(
+        [('cycle_id', 1), ('order_number', 1)], unique=True,
+        name='qoyod_cycle_reference',
+    )
+    await db.qoyod_auto_cycle_items.create_index(
+        [('cycle_id', 1), ('state', 1), ('priority', 1), ('order_date', 1), ('order_number', 1)],
+        name='qoyod_cycle_pending',
+    )
+    await db.qoyod_auto_cycle_items.create_index('expires_at', expireAfterSeconds=0,
+        name='qoyod_finished_cycle_expiry')
     await db.qoyod_order_followup.create_index(
         [('user_id', 1), ('order_number', 1)], unique=True,
         name='qoyod_followup_owner_order',

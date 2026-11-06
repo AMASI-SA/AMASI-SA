@@ -800,6 +800,12 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         payload["plan_b_auto_send_status"] = status_snapshot(payload)
         from integrations.qoyod_manual.auto_cycle import read_status as read_cycle_status
         payload["plan_b_auto_send_status"]["cycle"] = await read_cycle_status(db)
+        cycle = payload["plan_b_auto_send_status"]["cycle"]
+        worker = payload["plan_b_auto_send_status"]["worker"]
+        if cycle.get("status"):
+            worker["last_run_at"] = cycle.get("finished_at") or cycle.get("started_at")
+            worker["last_run_ok"] = cycle["status"] not in {"round_failed", "lease_lost"}
+            worker["last_round"] = {"status": cycle["status"], "sent_count": cycle.get("sent_count", 0)}
         return payload
 
     async def _recover_auto_send_after_credential_save(
@@ -1677,6 +1683,25 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         worker = background.get("qoyod_pipeline") or liveness()
         return {"ok": True, "worker": {**worker, "execution": "background_process"},
                 "background": background}
+
+    @router.get('/auto-send/cycle')
+    async def automatic_cycle_status(user=Depends(current_user)):
+        await require_qoyod_security_owner(db, user)
+        from integrations.qoyod_manual.auto_cycle import read_status
+        return {'ok': True, 'cycle': await read_status(db)}
+
+    @router.post('/auto-send/cycle', status_code=202)
+    async def start_automatic_cycle(user=Depends(current_user)):
+        actor = await require_qoyod_security_owner(db, user)
+        from integrations.qoyod_manual.auto_cycle import request_cycle
+        from background_worker_process import wake_background_process
+        try:
+            result = await request_cycle(db, actor=actor['id'])
+        except ValueError:
+            raise HTTPException(409, detail={'code': 'automatic_sender_not_armed',
+                'message': 'فعّل إعدادات الإرسال التلقائي الآمنة قبل تشغيل الدورة.'})
+        await wake_background_process()
+        return result
 
     @router.post("/worker/run-now")
     async def worker_run_now(user=Depends(current_user)):

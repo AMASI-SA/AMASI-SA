@@ -7,7 +7,7 @@ remain the authority across replicas; no disabled legacy/AI job is enabled.
 import asyncio
 
 
-async def start_tasks(db):
+async def start_tasks(db, *, wake_event=None):
     tasks = []
     try:
         from salla_orders_v3.worker import start_salla_orders_v3_shadow_runtime
@@ -17,7 +17,7 @@ async def start_tasks(db):
         from integrations.qoyod.worker import start_worker as pipeline
         tasks.append(pipeline(db, interval_sec=5.0, batch_limit=25))
         from integrations.qoyod_manual.auto_send import start_worker as automatic
-        tasks.append(automatic(db, batch_limit=5))
+        tasks.append(automatic(db, batch_limit=5, wake_event=wake_event))
         from integrations.qoyod_manual.auto_cycle import followup_loop
         from integrations.qoyod.scheduled_scan import scheduler
         from salla_integration.service import salla_token_maintenance_loop
