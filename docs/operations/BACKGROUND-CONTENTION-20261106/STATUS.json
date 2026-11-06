@@ -1,6 +1,6 @@
 {
   "task_id": "BACKGROUND-CONTENTION-20261106",
-  "state": "wip_manual_refresh_implemented_timing_and_full_verification_pending",
+  "state": "controlled_parity_and_responsiveness_verified_full_checks_pending",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1785",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/mezan-background-contention-20261106",
@@ -70,6 +70,8 @@
     "frontend/src/lib/dashboardPlatformSpendClient.js",
     "frontend/src/lib/dashboardPlatformSpendClient.test.js",
     "backend/tests/test_ads_auto_sync_scheduler_v2.py",
+    "backend/tests/test_dashboard_snapchat_spend_issue_727.py",
+    "scripts/benchmark_snapchat_reporting.py",
     ".github/workflows/ads-auto-sync-5min-v2.yml"
   ],
   "first_fix": "Cycle completion, lease expiry and next due time are one atomic Mongo server-clock update. Every successful, partial or failed completed cycle leaves the configured interval before another replica can start; data results and owner fencing are preserved.",
@@ -85,6 +87,24 @@
     "cooperative_reporting": {"before_failed": 3, "after_passed": 24, "exit_code": 0, "covers": "Real provider-page seam, unrelated callback opportunities in both folds, exact independent monetary/conversion totals, cancellation before any fact write, existing hourly v2 cases"},
     "manual_backend": {"before_failed": 4, "after_passed": 5, "real_mongo": true, "exit_code": 0, "covers": "HTTP 202 before completion, duplicate join, owner scope/employee denial, range validation; real canonical writer bypasses only automatic cadence, retains provider exclusion and terminalizes/releases its own cancelled run"},
     "manual_frontend": {"before_failed_card": 3, "before_failed_cache": 1, "after_passed": 42, "suites": 4, "exit_code": 0, "covers": "Labelled circular button, no provider refresh on open, explicit POST then status reads, saved-fact reload, abort on period change, retained data on failure and rejection of old cache writes after invalidation"},
+    "controlled_comparison": {
+      "exit_code": 0,
+      "synthetic_health_arrivals": 800,
+      "row_sizes": [14400, 72000],
+      "counterbalanced_rounds": 2,
+      "full_output_sha256_parity": true,
+      "independent_spend_total_parity": true,
+      "includes_unchanged_v6_freshness_scan": true,
+      "health_p95_ms_72000_rows": {"round_1_before": 1383.327, "round_1_after": 94.365, "round_2_before": 1346.405, "round_2_after": 71.273},
+      "limitation": "Local reporting computation plus ASGI health control; no external provider/database calls. Does not establish hosted employee latency or an overall live percentage. Total reporting wall time can increase while other work receives turns."
+    },
+    "preexisting_ci_fixture_failure": {
+      "job": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/42154942922/job/127686733336",
+      "reproduced_on_current_and_production_base": "1 failure / 54 passes in the same four-module CI command, in independent processes",
+      "cause": "Mock product_cost omitted missing_all_cost_products_count required by the unchanged endpoint",
+      "repair": "Complete the fixture with zero missing-cost products; preserve all null-profit/fee assertions and leave dashboard runtime unchanged",
+      "fresh_checks": "pending"
+    },
     "synchronous_profile": {"synthetic_only": true, "network_or_database_requests": 0, "rows_14400_ms": 611.04, "rows_72000_ms": 3034.74, "note": "Measured synchronous extraction plus two folds; controlled comparison and complete v6 path still pending"},
     "limitation": "Cadence correctness is proven; live employee latency impact and CPU/memory inside a running cycle remain unmeasured"
   },

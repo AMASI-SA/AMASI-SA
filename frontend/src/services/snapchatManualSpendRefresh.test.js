@@ -56,3 +56,13 @@ test("leaving the card cancels status reads without starting another provider re
     expect(api.get).not.toHaveBeenCalled();
     expect(clearDashboardPlatformSpendCache).not.toHaveBeenCalled();
 });
+
+test("a malformed status reply fails promptly without replacing the saved spend cache", async () => {
+    api.get.mockResolvedValueOnce({ data: "unexpected SPA response" });
+    const request = refreshSnapchatSpend(period);
+    const assertion = expect(request).rejects.toThrow();
+    await flush(); jest.advanceTimersByTime(2000); await flush();
+    await assertion;
+    expect(api.get).toHaveBeenCalledTimes(1);
+    expect(clearDashboardPlatformSpendCache).not.toHaveBeenCalled();
+});
