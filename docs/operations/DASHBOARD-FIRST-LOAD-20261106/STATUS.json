@@ -1,0 +1,51 @@
+{
+  "task_id": "DASHBOARD-FIRST-LOAD-20261106",
+  "state": "wip_first_slice_focused_pass_broader_checks_pending",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/mezan-dashboard-first-load-20261106",
+  "base_sha": "b0b23a5ca62efe934d7eded08d2b7abdca9a9389",
+  "user_requirement": "Dashboard still slow before figures, executive summary, chart cards and bestselling products. Continue the authorized performance fix; preserve financial authority and native grouped/on-demand loading.",
+  "first_confirmed_mechanism": "AdvancedDashboard waits for saved platform spend after the main backend snapshot. That read may join an external provider refresh, and its 12-second timeout only starts after the primary response. An additional canonical recomputation also precedes the first publication.",
+  "implementation": "Publish the current-range backend snapshot immediately; preserve null/unverified financial fields; refresh canonical advertising/profit later using the existing same-range backend path; retain primary data on follow-up failure and invalidate late work on unmount or period change.",
+  "scope": [
+    "frontend/src/pages/AdvancedDashboard.jsx",
+    "frontend/src/pages/AdvancedDashboard.firstLoad.test.jsx",
+    "frontend/src/pages/AdvancedDashboard.latestOrders.test.jsx",
+    ".github/workflows/page-performance-regressions.yml"
+  ],
+  "verification": {
+    "new_regressions_before": {
+      "failed": 4,
+      "reason": "Real summary/product UI stays pending; no initial data while canonical recompute waits; follow-up failure hides primary; unmount starts a late second GET"
+    },
+    "new_regressions_after": {
+      "passed": 4,
+      "exit_code": 0
+    },
+    "broader_existing_suites": "pending; expected observations updated to assert initial snapshot then final canonical values"
+  },
+  "invariants": [
+    "No financial formula or backend contract change",
+    "Null/incomplete profit remains null/incomplete until canonical data is available",
+    "No stale or wrong-range response overwrites new filters",
+    "No native mobile source changes",
+    "No provider refresh or business write added"
+  ],
+  "production_changed_by_this_followup": false,
+  "shared_app_or_lease_changed": false,
+  "live_dashboard_api_timings": "Asked user to capture Network Time for dashboard-v2 and ads-platform-spend; pending",
+  "remaining": [
+    "Run affected suites and inspect timing-sensitive financial tests",
+    "Measure initial-ready latency at the public UI seam",
+    "Inspect real API latency; server-side dashboard stage remains unprofiled",
+    "CI/governed release only after final scope is verified; no new intent frozen"
+  ],
+  "previous_release": {
+    "pr": 1782,
+    "source": "1abcb8b30ec689c7c61e0890f06c1eb8ab05b9f2",
+    "deployment": "b0b23a5ca62efe934d7eded08d2b7abdca9a9389",
+    "user_supplied_verify_tail_and_status_active_false": true,
+    "preview_restart_command_given": true
+  },
+  "next_safe_action": "Run focused + existing dashboard financial/freshness/request-lifecycle suites; keep backend diagnosis open until Network timing evidence arrives. Freeze a new v5 intent only after a final source checkpoint and exact-head CI."
+}

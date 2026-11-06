@@ -629,7 +629,9 @@ test.each([0, 307.11])("new full provisional spend %s triggers one same-filter c
     }
     expect(platformSpendLoader).toHaveBeenCalledTimes(1);
     expect(platformSpendLoader).toHaveBeenCalledWith({ dateFrom: "2026-10-26", dateTo: "2026-10-26", refresh: false });
-    const result = setData.mock.calls[0][0];
+    expect(setData.mock.calls[0][0]).toBe(pending);
+    expect(setData.mock.calls[0][0].totals.net_profit).toBeNull();
+    const result = setData.mock.calls.at(-1)[0];
     expect(result.totals).toBe(recomputed.totals);
     expect(result.totals.net_profit).toBe(600.23);
     expect(result.totals.ads_spend_amount_available).toBe(true);
@@ -677,10 +679,12 @@ test("a late canonical recomputation cannot overwrite a newer period", async () 
         platformSpendLoader: jest.fn().mockResolvedValue(currentProvisionalPlatform()),
         setData, setLoading: jest.fn(), setLoadError: jest.fn(), now: () => 1 });
     await recomputationEntered;
+    expect(setData).toHaveBeenCalledTimes(1);
+    expect(setData).toHaveBeenLastCalledWith(pendingAdDashboard());
     latest = 2;
     resolveRecomputed(recomputedProvisionalDashboard());
     await request;
-    expect(setData).not.toHaveBeenCalled();
+    expect(setData).toHaveBeenCalledTimes(1);
     expect(apiClient.get).toHaveBeenCalledTimes(2);
 });
 
@@ -694,7 +698,8 @@ test("broker-returned canonical data for another range is never applied", async 
         requestSequence: 1, isLatest: () => true, apiClient,
         platformSpendLoader: jest.fn().mockResolvedValue(currentProvisionalPlatform()),
         setData, setLoading: jest.fn(), setLoadError: jest.fn(), now: () => 1 });
-    expect(setData).not.toHaveBeenCalled();
+    expect(setData).toHaveBeenCalledTimes(1);
+    expect(setData).toHaveBeenLastCalledWith(pendingAdDashboard());
     expect(apiClient.get).toHaveBeenCalledTimes(2);
 });
 
@@ -769,7 +774,8 @@ test("provisional operational Snapchat to complete spend uses one backend read w
     expect(apiClient.get).toHaveBeenCalledTimes(2);
     expect(loader).toHaveBeenCalledTimes(1);
     expect(loader).toHaveBeenCalledWith({ dateFrom: "2026-10-26", dateTo: "2026-10-26", refresh: false });
-    const result = setData.mock.calls[0][0];
+    expect(setData.mock.calls[0][0]).toBe(initial);
+    const result = setData.mock.calls.at(-1)[0];
     expect(result.totals).toBe(recomputed.totals);
     expect(result.totals.net_profit).toBe(511.25);
     expect(result.totals.total_payment_fees).toBe(7.66);

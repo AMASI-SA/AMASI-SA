@@ -1,0 +1,81 @@
+FAIL src/pages/AdvancedDashboard.firstLoad.test.jsx (8.33 s)
+  × summary figures and top products appear before an unrelated spend read finishes (406 ms)
+  × core data is usable while profit waits for the same-period backend recomputation (27 ms)
+  × a failed follow-up read keeps the already delivered core snapshot visible (15 ms)
+  × unmounting prevents a late spend read from starting another summary request (95 ms)
+
+  ● summary figures and top products appear before an unrelated spend read finishes
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "1,234.50"
+    Received string:    "ملخص الفترةطلبات الشهر—مبيعات الشهر—👻سناب: —متوسط: —♪تيك توك: —متوسط: —∞Meta: —متوسط: —GGoogle: —متوسط: —جارٍ مزامنة تكاليف المنتجات…"
+
+      85 |     await act(async () => root.render(<AdvancedDashboard />));
+      86 |
+    > 87 |     expect(host.querySelector('[data-testid="advanced-period-summary"]').textContent).toContain("1,234.50");
+         |                                                                                       ^
+      88 |     expect(host.querySelector('[data-testid="advanced-top-product-row-visible-product"]')).not.toBeNull();
+      89 |     expect(host.querySelector('[aria-label="تحديث بيانات الفترة"] .animate-spin')).toBeNull();
+      90 |     expect(api.get.mock.calls.filter(([url]) => url.startsWith("/dashboard-v2?"))).toHaveLength(1);
+
+      at Object.<anonymous> (src/pages/AdvancedDashboard.firstLoad.test.jsx:87:87)
+
+  ● core data is usable while profit waits for the same-period backend recomputation
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: {"ads_v2": {"spend_quality": {"amount_available": false, "status": "incomplete"}, "total": null}, "month_kpis": {"total_orders": 7, "total_sales": 1234.5}, "product_cost_v2": {"product_profit_summary": {"product_count": 1, "total_cost": 123}, "product_rows": [{"cost_status": "complete", "identity": "visible-product", "net_profit": null, "total_cost": 123, "total_sales": 1234.5, "units_sold": 3}]}, "totals": {"ads_spend_amount_available": false, "net_profit": null, "net_sales": null, "total_ads_cost": null, "total_orders": 7, "total_sales": 1234.5}}
+
+    Number of calls: 0
+
+      104 |     await flush();
+      105 |
+    > 106 |     expect(setData).toHaveBeenCalledWith(first);
+          |                     ^
+      107 |     expect(setLoading).toHaveBeenLastCalledWith(false);
+      108 |     expect(setData.mock.calls[0][0].totals.net_profit).toBeNull();
+      109 |     expect(apiClient.get).toHaveBeenCalledTimes(2);
+
+      at Object.<anonymous> (src/pages/AdvancedDashboard.firstLoad.test.jsx:106:21)
+
+  ● a failed follow-up read keeps the already delivered core snapshot visible
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: {"ads_v2": {"spend_quality": {"amount_available": false, "status": "incomplete"}, "total": null}, "month_kpis": {"total_orders": 7, "total_sales": 1234.5}, "product_cost_v2": {"product_profit_summary": {"product_count": 1, "total_cost": 123}, "product_rows": [{"cost_status": "complete", "identity": "visible-product", "net_profit": null, "total_cost": 123, "total_sales": 1234.5, "units_sold": 3}]}, "totals": {"ads_spend_amount_available": false, "net_profit": null, "net_sales": null, "total_ads_cost": null, "total_orders": 7, "total_sales": 1234.5}}
+
+    Number of calls: 0
+
+      123 |         apiClient, platformSpendLoader: async () => completeSpend(),
+      124 |         setData, setLoading: jest.fn(), setLoadError, now: () => 1 });
+    > 125 |     expect(setData).toHaveBeenCalledWith(first);
+          |                     ^
+      126 |     expect(setLoadError.mock.calls.every(([message]) => message === null)).toBe(true);
+      127 | });
+      128 |
+
+      at Object.<anonymous> (src/pages/AdvancedDashboard.firstLoad.test.jsx:125:21)
+
+  ● unmounting prevents a late spend read from starting another summary request
+
+    expect(received).toHaveLength(expected)
+
+    Expected length: 1
+    Received length: 2
+    Received array:  [["/dashboard-v2?from_date=2026-11-06&to_date=2026-11-06&_refresh=1793925169303", {"headers": {"Cache-Control": "no-cache", "Pragma": "no-cache"}}], ["/dashboard-v2?from_date=2026-11-06&to_date=2026-11-06&_refresh=1793925169303-spend-recompute", {"headers": {"Cache-Control": "no-cache", "Pragma": "no-cache"}}]]
+
+      133 |     await act(async () => root.unmount());
+      134 |     await act(async () => { spend.resolve(completeSpend()); await flush(); });
+    > 135 |     expect(api.get.mock.calls.filter(([url]) => url.startsWith("/dashboard-v2?"))).toHaveLength(1);
+          |                                                                                    ^
+      136 | });
+      137 |
+
+      at Object.<anonymous> (src/pages/AdvancedDashboard.firstLoad.test.jsx:135:84)
+
+Test Suites: 1 failed, 1 total
+Tests:       4 failed, 4 total
+Snapshots:   0 total
+Time:        10.014 s
+Ran all test suites within paths "src/pages/AdvancedDashboard.firstLoad.test.jsx".

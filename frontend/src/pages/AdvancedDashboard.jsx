@@ -730,6 +730,7 @@ export async function loadDashboardPeriodSnapshot({
         setLoading(true);
         setLoadError(null);
     }
+    let primaryPublished = false;
     try {
         const query = new URLSearchParams(filtersToQueryString(next));
         query.set("_refresh", String(now()));
@@ -744,6 +745,14 @@ export async function loadDashboardPeriodSnapshot({
         const matchesRange = (response) => !response?.config
             || dashboardRequestRangeKey(response.config) === dashboardRequestRangeKey({ url: `/dashboard-v2?${query.toString()}` });
         let response = await apiClient.get(`/dashboard-v2?${query.toString()}`, requestConfig);
+        if (!isLatest(requestSequence) || !matchesRange(response)) return;
+        // This is the backend's complete selected-period snapshot. Show its
+        // sales/products now; missing ad-dependent profit remains null. Saved
+        // spend (which may join a provider refresh) must not hold every card.
+        setData(response.data);
+        setLoadError(null);
+        setLoading(false);
+        primaryPublished = true;
         let timeoutId;
         const platformSpend = await Promise.race([
             platformSpendPromise,
@@ -754,7 +763,8 @@ export async function loadDashboardPeriodSnapshot({
         if (!isLatest(requestSequence) || !matchesRange(response)) return;
         const sameRangeSpend = platformSpend?.date_from === next.from
             && platformSpend?.date_to === (next.to || next.from) ? platformSpend : null;
-        if (sameRangeSpend && needsCanonicalDashboardSpendRefresh(response.data, sameRangeSpend)) {
+        if (!sameRangeSpend) return;
+        if (needsCanonicalDashboardSpendRefresh(response.data, sameRangeSpend)) {
             // Recompute profit and fees on the backend after saved spend proof
             // becomes available. Never derive them from a null prior base or
             // request another native platform refresh solely for this read.
@@ -770,7 +780,7 @@ export async function loadDashboardPeriodSnapshot({
             setLoadError(null);
         }
     } catch {
-        if (!background && isLatest(requestSequence)) {
+        if (!primaryPublished && !background && isLatest(requestSequence)) {
             setLoadError("تعذر تحميل بيانات الفترة المحددة");
         }
     } finally {
@@ -816,7 +826,10 @@ export default function AdvancedDashboard() {
     ) return;
     void loadPeriod(filters, { background: true });
   }, [filters, loadPeriod]);
-    useEffect(() => { loadPeriod(filters); }, [filters, loadPeriod]);
+    useEffect(() => {
+        loadPeriod(filters);
+        return () => { requestSequenceRef.current += 1; };
+    }, [filters, loadPeriod]);
     useEffect(() => { dashboardDataRef.current = data; }, [data]);
     useEffect(() => {
         const previousSignature = lastOrderSignatureRef.current;

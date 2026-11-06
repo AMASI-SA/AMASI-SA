@@ -1,0 +1,11 @@
+PASS src/pages/AdvancedDashboard.firstLoad.test.jsx (6.457 s)
+  √ summary figures and top products appear before an unrelated spend read finishes (509 ms)
+  √ core data is usable while profit waits for the same-period backend recomputation (61 ms)
+  √ a failed follow-up read keeps the already delivered core snapshot visible (11 ms)
+  √ unmounting prevents a late spend read from starting another summary request (240 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       4 passed, 4 total
+Snapshots:   0 total
+Time:        7.865 s, estimated 9 s
+Ran all test suites within paths "src/pages/AdvancedDashboard.firstLoad.test.jsx".
