@@ -6,8 +6,10 @@
   "reused_qoyod_source": "fa1aae7bcdc6b1fc09091a46752bd93ee7b049b1",
   "related_prs": [1776, 1785],
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1788",
-  "stage": "Confirmed /app filesystem byte exhaustion (9.8GiB full), not inode exhaustion. Preserve other worktrees; identify disposable build artifacts and their mounts before freeing space. Publishing and verification pending",
+  "stage": "Cache-preservation recovery helper verified and ready: preserve the old root Yarn cache on /tmp, free its original volume, then rerun the unchanged v5 deployment helper. Owner execution, publish and verify pending",
   "storage_diagnosis": {"owner_guard_status": "active=false", "app_device": "/dev/nvme0n27", "app_size": "9.8G", "app_available": "0", "app_used_percent": 100, "app_inode_used_percent": 59, "app_free_inodes": 270185, "tmp_device": "overlay", "tmp_available": "231G", "app_worktrees": "5.1G", "app_du_total": "5.5G", "root_yarn_cache": "960M; backing filesystem not yet confirmed", "root_toolchain_cache": "235M; backing filesystem not yet confirmed", "source_of_remaining_df_vs_du_difference": "Not confirmed; inspect deleted-open files and mount roots without terminating processes", "safe_boundary": "Do not delete or relocate other conversations' source worktrees. Prefer verified disposable build caches or an approved external build path while retaining all official release gates."},
+  "latest_storage_observation": {"root_yarn_cache_mount": "/dev/nvme0n27, same full filesystem as /app", "root_toolchain_cache_mount": "/dev/nvme0n27", "other_worktrees": "Historical source/release/test worktrees, including Mongo fixtures; all retained", "open_deleted_file_output": "No output; do not infer process absence or terminate anything", "recovery_scope": "Only /root/.cache/yarn; Node toolchains, all worktrees, application source/configuration and live data are untouched", "comparable_dependency_logical_bytes": 383398384, "measurement_limit": "Same-lock local Windows dependency size is indicative only, not an exact Linux ARM64 allocation budget"},
+  "storage_recovery_helper": {"file": "RECOVER-YARN-CACHE.py", "sha256": "64dd52ebf1770776956bacd14dfcc21fe5c9f4fdb01999ad423e3285ce71b1f6", "mechanism": "Exact source/lease/hash checks; reject an active cache reader/writer; copy to a private /tmp directory; compare complete file hashes/types/modes and symlink targets; recheck original snapshot, lease, source inode and busy state before cache eviction; recreate the empty normal cache directory; retain verified backup and receipt", "minimum_app_free_bytes": 805306368, "resume": "Only with >=768MiB available: execute the unchanged pinned DEPLOY-EMERGENT.sh; child TMPDIR and XDG_CACHE_HOME use the spacious /tmp filesystem", "bootstrap": "Download anonymously over HTTPS and check the exact SHA256 in memory; no Git fetch or file write on the full /app is needed to obtain this recovery helper", "validation": "6 native filesystem acceptance cases passed, no skips: exact-byte retention, copy failure, corrupt copy, concurrent source change, new release lease, wrong source/backup nesting. These tests do not execute /app/root-cache/provider/network actions."},
   "implementation_checkpoint": "c24ed63e0836d919110e1e5042ae473484817066",
   "verified_pr_source": "76779980d38bcf5feb251888f63b1f85fabd6b1e",
   "merged_source_A": "9e22418cf2350fe09a4bb61acfabaefb7748dede",
@@ -62,8 +64,7 @@
   "complete_premerge_ci": "48 successful checks and six expected scope skips; zero failed or pending checks at exact source 76779980d38bcf5feb251888f63b1f85fabd6b1e",
   "owned_test_mongo": "Stopped gracefully after verifying exact loopback port 49417, replica set mezan_bg_test_rs and the owned data directory; no other runtime stopped",
   "remaining": [
-    "Obtain worktree subdirectory sizes, registered worktree names, cache backing filesystems and deleted-open file metadata from the owner; no remote terminal control tool is available here",
-    "Free or relocate only verified reproducible build caches after diagnosis, or use available capacity; rerun the same exact-source governed build and preparation without weakening release gates",
+    "Owner runs the hash-pinned RECOVER-YARN-CACHE.py helper; it backs up and verifies only the old Yarn download cache, then resumes the original guarded deployment helper",
     "Confirm postmerge checks, inspect helper output and run a fresh prepublish immediately before the owner's one Re-publish click",
     "Require a newer visible Deployment Succeeded plus the official three-probe verify and closed lease; measure live performance afterward"
   ],
@@ -72,5 +73,5 @@
   "provider_or_financial_test_writes": false,
   "runtime_evidence": "D:/codex-release-artifacts/mezan-background-workers-qoyod-2h-20261106",
   "known_ci_diagnosis": "Source-only A push intentionally fails reviewed-B classification; B has now been frozen, verified and merged without changing source. The new exact-deployment postmerge workflow must finish. Windows POSIX-loader permissions were not weakened; official validation ran successfully on Linux.",
-  "next_safe_action": "Inspect du -xhd2 /app/.worktrees, git worktree list, df for /root/.cache/{yarn,mezan-release-toolchains} and deleted-open file metadata. Free only verified disposable artifacts or preserve them on the spacious /tmp filesystem, then rerun exact-source governed preparation. Do not publish before prepare/prepublish."
+  "next_safe_action": "Owner executes the exact-commit/hash-verified recovery helper from memory. Inspect cache backup/capacity and complete build/prepare/prepublish output. Before the one Re-publish click require a fresh prepublish; then visible newer Deployment Succeeded and official verify3 plus closed lease."
 }
