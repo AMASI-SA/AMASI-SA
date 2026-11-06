@@ -9,6 +9,7 @@ from __future__ import annotations
 import latency_evidence
 
 from dataclasses import dataclass
+from collections.abc import Generator
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -384,7 +385,7 @@ async def extract_account_hour_rows_cooperative(
 
 def _extract_account_hour_rows_steps(
     payload: dict[str, Any],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+) -> Generator[None, None, tuple[list[dict[str, Any]], list[dict[str, Any]], int]]:
     """Extract campaign HOUR rows and provider sub-request errors."""
     if not isinstance(payload, dict) or str(
         payload.get("request_status") or ""
@@ -754,7 +755,7 @@ def _aggregate_account_hours_steps(
     *,
     start_date: date,
     end_date: date,
-) -> dict[str, dict[str, Any]]:
+) -> Generator[None, None, dict[str, dict[str, Any]]]:
     """Fold provider-native hourly campaign facts into Riyadh dates."""
     business_tz = _timezone(BUSINESS_TIMEZONE)
     daily: dict[str, dict[str, Any]] = {}
@@ -805,7 +806,7 @@ def _aggregate_campaign_hours_steps(
     *,
     start_date: date,
     end_date: date,
-) -> dict[tuple[str, str], dict[str, Any]]:
+) -> Generator[None, None, dict[tuple[str, str], dict[str, Any]]]:
     """Fold the already-fetched HOUR rows into campaign/Riyadh-day facts.
 
     This deliberately consumes the same rows used for the account total.  It

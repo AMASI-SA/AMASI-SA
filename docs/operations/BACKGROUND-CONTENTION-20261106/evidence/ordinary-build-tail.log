@@ -1,0 +1,10 @@
+build/assets/index-BTgKJCWJ.js                                     991.71 kB │ gzip: 277.42 kB
+
+[INEFFECTIVE_DYNAMIC_IMPORT] src/lib/sidebarVisibility.js is dynamically imported by src/components/Sidebar.jsx but also statically imported by src/components/Sidebar.jsx, src/components/SidebarVisibilityDialog.jsx, dynamic import will not move module into another chunk.
+
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 5.77s

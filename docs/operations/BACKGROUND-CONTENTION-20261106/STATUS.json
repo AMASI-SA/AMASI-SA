@@ -1,6 +1,6 @@
 {
   "task_id": "BACKGROUND-CONTENTION-20261106",
-  "state": "controlled_parity_and_responsiveness_verified_full_checks_pending",
+  "state": "source_review_and_affected_checks_complete_final_candidate_ci_pending",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1785",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/mezan-background-contention-20261106",
@@ -50,7 +50,7 @@
   "invariants": [
     "No Qoyod source, schedules, locks, sending, reconciliation or financial behavior changes",
     "No Salla/order/shipping/payment/employee writer changes",
-    "No dashboard UI modifications",
+    "Only the explicitly requested advertising-chart manual spending control; general dashboard changes remain stopped",
     "No provider campaign/budget/bid writes in testing",
     "Preserve provider facts, completeness/unknown policies, ownership fencing and exact source calculations",
     "No unreviewed worker activation, /app mutation, lease or production configuration change"
@@ -85,10 +85,12 @@
     "queued_manual_admission_followup": {"passed": 73, "exit_code": 0, "includes": "Durable registration before heavy-capacity wait; actual provider exclusion; resource pressure leaves connection health intact; own lease cleanup on cancellation and rejection"},
     "before": {"failed": 3, "exit_code": 1, "reason": "Another replica immediately starts after a 20-minute completed/partial/failed cycle"},
     "after": {"passed": 87, "exit_code": 0, "real_loopback_mongo": true, "includes": "New cooldown cases, real global lease race/skew/fencing, scheduler v2, target recovery, TikTok and resource governor"},
-    "ci": "Not yet run for this source checkpoint",
+    "ci": {"verified_checkpoint": "9015721d5f46dfbab044b8f0000d11c76b6e8cc6", "success": 36, "skipped": 6, "failures": 0, "final_source_candidate": "Pending after the type-annotation and evidence-only final source checkpoint; source A must pass before intent B is frozen"},
+    "final_reporting_check": {"passed": 24, "result": "24 passed, 1 warning in 3.67s", "includes": "Cooperative reporting and existing hourly v2 cases after private generator return-annotation correction", "log": "evidence/final-reporting-tests.log"},
+    "ordinary_frontend_build": {"result": "Vite completed: built in 5.77s", "log": "evidence/ordinary-build-tail.log", "limitation": "Ordinary local build; governed Linux A/B release and both clean-clone host rehearsals remain required"},
     "two_hour_policy": {"before_failed": 3, "after_passed": 90, "exit_code": 0, "real_mongo": true},
     "cooperative_reporting": {"before_failed": 3, "after_passed": 24, "exit_code": 0, "covers": "Real provider-page seam, unrelated callback opportunities in both folds, exact independent monetary/conversion totals, cancellation before any fact write, existing hourly v2 cases"},
-    "manual_backend": {"before_failed": 4, "after_passed": 5, "real_mongo": true, "exit_code": 0, "covers": "HTTP 202 before completion, duplicate join, owner scope/employee denial, range validation; real canonical writer bypasses only automatic cadence, retains provider exclusion and terminalizes/releases its own cancelled run"},
+    "manual_backend": {"before_failed": 4, "after_passed": 6, "real_mongo": true, "exit_code": 0, "covers": "HTTP 202 before completion and before occupied heavy capacity; duplicate join, owner scope/employee denial, range validation; real canonical writer bypasses only automatic cadence, retains provider exclusion, preserves connection health on admission rejection, and terminalizes/releases its own cancelled run"},
     "manual_frontend": {"before_failed_card": 3, "before_failed_cache": 1, "after_passed": 42, "suites": 4, "exit_code": 0, "covers": "Labelled circular button, no provider refresh on open, explicit POST then status reads, saved-fact reload, abort on period change, retained data on failure and rejection of old cache writes after invalidation"},
     "controlled_comparison": {
       "exit_code": 0,
@@ -108,7 +110,7 @@
       "repair": "Complete the fixture with zero missing-cost products; preserve all null-profit/fee assertions and leave dashboard runtime unchanged",
       "fresh_checks": "Repaired fixture passes within the 210-case affected backend run; all financial assertions retained"
     },
-    "synchronous_profile": {"synthetic_only": true, "network_or_database_requests": 0, "rows_14400_ms": 611.04, "rows_72000_ms": 3034.74, "note": "Measured synchronous extraction plus two folds; controlled comparison and complete v6 path still pending"},
+    "synchronous_profile": {"synthetic_only": true, "network_or_database_requests": 0, "rows_14400_ms": 611.04, "rows_72000_ms": 3034.74, "note": "Initial cold synchronous stage profile; the separate counterbalanced comparison above includes the unchanged v6 freshness scan and must not be confused with total reporting-job duration"},
     "limitation": "Cadence correctness is proven; live employee latency impact and CPU/memory inside a running cycle remain unmeasured"
   },
   "manual_refresh_implementation": {
@@ -119,5 +121,7 @@
     "ui": "Existing advertising-chart icon becomes a labelled circular refresh pill; initial card opening reads saved data only. Only explicit clicks start provider work. Status reads abort on leave/period change and pause while hidden/offline.",
     "general_dashboard_source_unchanged": true
   },
-  "next_safe_action": "Measure controlled before/after responsiveness and exact full output parity; perform a fresh source review and all affected frontend/backend checks, inspect exact-source CI, then freeze a new governed source/intent pair only when final. No /app mutation or lease yet."
+  "latest_verified_remote_checkpoint": "9015721d5f46dfbab044b8f0000d11c76b6e8cc6",
+  "source_review": "Reviewed runtime diff and manual ownership/admission/cancellation lifecycle; only requested UI card/service/cache changed. AdvancedDashboard, mobile, Qoyod and operational writers are untouched. Full-output benchmark parity and affected backend/frontend checks are complete.",
+  "next_safe_action": "Commit and push the final annotation/evidence source checkpoint A; record its exact SHA on PR1785. Inspect all exact-A checks and hash-validate the governed Linux candidate. Commit B with only release/release-intent-v5.json; require both clean-clone host rehearsals and all B checks before reviewed merge. Fresh /app status must be inactive before any workspace mutation or lease. No deployment has occurred in this task."
 }
