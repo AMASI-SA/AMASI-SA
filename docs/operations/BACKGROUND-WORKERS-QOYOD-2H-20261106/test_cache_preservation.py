@@ -134,7 +134,7 @@ class ReadOnlyWorkspaceTests(unittest.TestCase):
     def test_read_only_check_still_refuses_unstaged_source_edits(self):
         self.file.write_bytes(b'changed source\n')
         before = (self.root / '.git' / 'index').read_bytes()
-        with self.assertRaises(subprocess.CalledProcessError):
+        with self.assertRaisesRegex(RuntimeError, 'tracked.txt'):
             self.check_workspace()
         self.assertEqual((self.root / '.git' / 'index').read_bytes(), before)
 
@@ -142,9 +142,27 @@ class ReadOnlyWorkspaceTests(unittest.TestCase):
         self.file.write_bytes(b'changed staged source\n')
         self.git('add', 'tracked.txt')
         before = (self.root / '.git' / 'index').read_bytes()
-        with self.assertRaises(subprocess.CalledProcessError):
+        with self.assertRaisesRegex(RuntimeError, 'tracked.txt'):
             self.check_workspace()
         self.assertEqual((self.root / '.git' / 'index').read_bytes(), before)
+
+    def test_cache_recovery_preserves_dirty_source_and_build_gate_still_refuses(self):
+        self.file.write_bytes(b'keep unrelated operator edit\n')
+        cache = self.root / 'cache'
+        cache.mkdir()
+        (cache / 'download.bin').write_bytes(b'old reproducible package')
+        backup = self.root / 'backup'
+        backup.mkdir()
+        with contextlib.chdir(self.root), patch.object(helper, 'DEPLOYMENT', self.head):
+            helper.require_release_position()
+            receipt = helper.preserve_cache(cache, backup, allowed_source=cache,
+                before_remove=helper.require_release_position)
+            with self.assertRaisesRegex(RuntimeError, 'tracked.txt'):
+                helper.require_workspace()
+        self.assertEqual(self.file.read_bytes(), b'keep unrelated operator edit\n')
+        self.assertEqual(list(cache.iterdir()), [])
+        self.assertEqual((Path(receipt['backup']) / 'download.bin').read_bytes(),
+                         b'old reproducible package')
 
 
 if __name__ == '__main__':

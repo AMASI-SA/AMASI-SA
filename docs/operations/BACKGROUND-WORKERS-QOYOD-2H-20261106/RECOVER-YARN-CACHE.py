@@ -88,7 +88,12 @@ def preserve_cache(source, backup_root, *, allowed_source, before_remove,
     return receipt
 
 
-def require_workspace():
+def require_release_position():
+    """Cache maintenance may preserve storage while source edits are present.
+
+    It still requires the exact release checkout and a free lease. No source
+    edit is ever restored, staged, stashed or discarded by this helper.
+    """
     state = json.loads(subprocess.check_output(
         ['python', 'scripts/production_release_guard.py', 'status'], text=True))
     if state.get('active') is not False or state.get('incomplete_lease_directory'):
@@ -96,11 +101,22 @@ def require_workspace():
     head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
     if head != DEPLOYMENT:
         raise RuntimeError('STOP: the reviewed /app checkout changed')
-    # A clean diff may refresh the index by default. Space recovery must not
-    # need an index.lock write before it can free any capacity.
-    readonly_git = ['git', '--no-optional-locks', '-c', 'diff.autoRefreshIndex=false']
-    subprocess.run([*readonly_git, 'diff', '--quiet'], check=True)
-    subprocess.run([*readonly_git, 'diff', '--cached', '--quiet'], check=True)
+
+
+def require_workspace():
+    require_release_position()
+    # Use the same staged/unstaged cleanliness policy as the official guard,
+    # but do not refresh the on-disk index. Porcelain status also reports
+    # actionable path names instead of only a bare diff exit code.
+    dirty = subprocess.check_output([
+        'git', '--no-pager', '--no-optional-locks', 'status',
+        '--porcelain=v1', '--untracked-files=no',
+    ], text=True)
+    if dirty:
+        paths = dirty.splitlines()
+        raise RuntimeError('STOP: cache is preserved; tracked source changes '
+            'must be inspected before building (' + str(len(paths)) + ' paths):\n'
+            + '\n'.join(paths[:40]))
 
 
 def require_cache_idle():
@@ -123,7 +139,7 @@ def require_cache_idle():
 
 def main():
     os.chdir('/app')
-    require_workspace()
+    require_release_position()
     helper = subprocess.check_output(['git', 'show', HELPER])
     if hashlib.sha256(helper).hexdigest() != HELPER_SHA256:
         raise RuntimeError('STOP: reviewed deployment helper hash differs')
@@ -136,7 +152,7 @@ def main():
         require_cache_idle()
         backup = Path(tempfile.mkdtemp(prefix='mezan-qoyod-yarn-preserved-', dir='/tmp'))
         def recheck():
-            require_workspace()
+            require_release_position()
             require_cache_idle()
         preserve_cache(CACHE, backup, allowed_source=CACHE, before_remove=recheck)
     free = shutil.disk_usage('/app').free
