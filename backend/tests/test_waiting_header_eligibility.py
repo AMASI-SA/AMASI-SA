@@ -90,6 +90,37 @@ async def test_local_pending_review_keeps_exact_durable_proof_and_payment_policy
     assert bool((await request(db, "waiting-groups", cards_only="true")).json()["groups"]) is expected
 
 
+@pytest.mark.parametrize("current,custom,expected", [
+    ("under_review", "تم المراجعة", True),
+    ("completed", "تم المراجعة", False),
+    ("shipping", "تم المراجعة", False),
+    ("processing", "تم المراجعة", True),
+    ("under_review", "بانتظار المراجعة", False),
+])
+async def test_header_uses_native_current_status_precedence(db, current, custom, expected):
+    await seed_order(db, current=current, raw_status="under_review", raw_name="بانتظار المراجعة")
+    await seed_piece(db)
+    await db.raw.unified_orders.update_one({"order_number": "A"}, {"$set": {
+        "raw_by_source.salla_direct.status.customized": {"name": custom}}})
+    canonical = await dispatch.annotate_waiting_pieces(db, user_id=OWNER["id"], pieces=[{"order_number": "A"}])
+    assert canonical[0]["waiting_review_eligible"] is expected
+    assert bool((await request(db, "waiting-groups", cards_only="true")).json()["groups"]) is expected
+
+
+async def test_status_slug_fallback_and_physical_availability_are_preserved(db):
+    await seed_order(db, current="")
+    await db.raw.unified_orders.update_one({"order_number": "A"}, {
+        "$unset": {"raw_by_source.salla_direct.status": ""},
+        "$set": {"raw_by_source.salla_direct.status_slug": "processing"}})
+    await seed_piece(db)
+    assert (await request(db, "waiting-groups", cards_only="true")).json()["groups"]
+    for fields in ({"status": " blocked "}, {"assignment_status": " unassigned "},
+                   {"supplier_dispatch_status": "sent"}, {"supplier_receiving_session_id": "draft"}):
+        await db.raw[dispatch.PIECES].update_one({"order_number": "A"}, {"$set": fields})
+        assert (await request(db, "waiting-groups", cards_only="true")).json()["groups"] == []
+        await db.raw[dispatch.PIECES].update_one({"order_number": "A"}, {"$unset": {key: "" for key in fields}})
+
+
 async def test_header_reads_do_not_load_options_images_or_full_workflow_and_remain_tenant_scoped(db, monkeypatch):
     await seed_order(db)
     await seed_piece(db)
@@ -105,19 +136,20 @@ async def test_header_reads_do_not_load_options_images_or_full_workflow_and_rema
     monkeypatch.setattr(ObservedCollection, "find", observe)
     result = await request(db, "waiting-groups", cards_only="true")
     assert result.status_code == 200, result.text
-    assert len(result.json()["groups"]) == 1 and len(projections) == 2
+    assert len(result.json()["groups"]) == 1 and len(projections) == 3
     assert result.json()["suppliers"] == [] and "files" not in result.json()
 
 
 async def test_first_page_checks_only_small_candidate_batch_even_with_many_live_groups(db):
-    await seed_order(db)
     for index in range(80):
-        await seed_piece(db, piece_id=f"p-{index:03}", product_id=f"p-{index:03}")
+        await seed_order(db, str(index))
+        await seed_piece(db, str(index), piece_id=f"p-{index:03}", product_id=f"p-{index:03}")
     db.reads.clear()
     first = await request(db, "waiting-groups", cards_only="true")
     assert first.status_code == 200, first.text
     assert len(first.json()["groups"]) == 10 and first.json()["next_cursor"]
-    assert len([query for name, query in db.reads if name == "unified_orders"]) == 1
+    queries = [query for name, query in db.reads if name == "unified_orders"]
+    assert len(queries) == 2 and len(queries[1]["order_number"]["$in"]) <= 16
 
 
 async def test_invalid_recent_local_member_does_not_promote_an_old_product_or_skip_later_pages(db):

@@ -222,8 +222,7 @@ async def waiting_count(db: Any, *, user_id: str, employee_id: str, group: str) 
 
 async def waiting_cards(db: Any, *, user_id: str, employee_id: str, after: str = "") -> dict[str, Any]:
     from preparation_supplier_dispatch import PIECES, _waiting_query, _waiting_group_expression
-    from supplier_dispatch_waiting_policy import waiting_header_order_fields
-    from order_engine.repository import _normalized_status_expression
+    from supplier_dispatch_waiting_policy import waiting_header_order_fields, waiting_header_order_dates
     from fastapi import HTTPException
     from base64 import urlsafe_b64decode, urlsafe_b64encode
     import json
@@ -263,70 +262,68 @@ async def waiting_cards(db: Any, *, user_id: str, employee_id: str, after: str =
             "product_id": {"$first": "$product_id"}, "product_name": {"$first": "$product_name"},
             "sku": {"$first": "$sku"}, "image_url": {"$first": {"$ifNull": [
                 "$selected_image_url", {"$ifNull": ["$resolved_image_url", "$image_url"]}]}}}},
-        # Tenant-scoped indexed metadata join rejects stale external states
-        # before grouping/paging. It supplies only a date and never grants
-        # local review/payment authority; those are checked below.
-        {"$lookup": {"from": "unified_orders", "let": {"number": "$_id.order"}, "pipeline": [
-            {"$match": {"user_id": user_id, "raw_by_source.salla_direct": {"$type": "object"},
-                "$expr": {"$eq": ["$order_number", "$$number"]}}},
-            {"$match": {"$expr": {"$not": [{"$regexMatch": {
-                "input": _normalized_status_expression(), "options": "i",
-                "regex": "|".join(_STATUS_PATTERNS[group] for group in ("completed", "shipping", "cancelled", "refunded")),
-            }}]}}},
-            {"$project": {"_id": 0, "date": {"$dateToString": {
-                "date": {"$convert": {"input": "$order_date", "to": "date", "onError": None, "onNull": None}},
-                "format": "%Y-%m-%dT%H:%M:%S.%LZ", "onNull": ""}}}},
-        ], "as": "order"}},
-        {"$unwind": "$order"},
-        {"$match": {"order.date": {"$ne": ""}}},
-        {"$sort": {"order.date": 1}},
-        {"$group": {"_id": "$_id.group", "date": {"$max": "$order.date"},
-            "members": {"$push": {"order": "$_id.order", "date": "$order.date", "product_id": "$product_id",
-                "product_name": "$product_name", "sku": "$sku", "image_url": "$image_url"}}}},
     ]
     if legacy_after:
-        pipeline.append({"$match": {"_id": {"$gt": legacy_after}}})
-    pipeline.append({"$sort": {"date": -1, "_id": 1}})
-    groups = []
-    eligibility = {}
-    cursor = db[PIECES].aggregate(pipeline, batchSize=16)
+        pipeline.append({"$match": {"_id.group": {"$gt": legacy_after}}})
+    candidates = []
+    cursor = db[PIECES].aggregate(pipeline, batchSize=256)
     try:
-        while rows := await cursor.to_list(16):
-            pending = list(rows)
-            accepted = {}
-            while pending:
-                # One representative per group first. A rejected order must
-                # not hide another live member of the same product group.
-                numbers = sorted({row["members"][-1]["order"] for row in pending} - set(eligibility))
-                if numbers:
-                    eligibility.update(await waiting_header_order_fields(db, user_id=user_id, order_numbers=numbers))
-                remaining = []
-                for row in pending:
-                    member = row["members"].pop()
-                    if eligibility[member.pop("order")]["waiting_review_eligible"] is True:
-                        accepted[row["_id"]] = {"key": row["_id"], **member, "lazy": True}
-                    elif row["members"]:
-                        remaining.append(row)
-                pending = remaining
-            groups.extend(accepted[row["_id"]] for row in rows if row["_id"] in accepted)
-            if boundary:
-                date, key = boundary
-                groups = [row for row in groups if row["date"] < date
-                          or (row["date"] == date and row["key"] > key)]
-            groups.sort(key=lambda row: row["key"])
-            groups.sort(key=lambda row: row["date"], reverse=True)
-            groups = groups[:11]
-            # A candidate's newest possible date is an upper bound. Continue
-            # if rejected local proof/payment could move it behind a later
-            # candidate. Stop only when no unseen group can enter this page.
-            if len(groups) == 11:
-                cutoff = groups[-1]
-                last = rows[-1]
-                if (last["date"] < cutoff["date"]
-                        or (last["date"] == cutoff["date"] and last["_id"] >= cutoff["key"])):
-                    break
+        while rows := await cursor.to_list(256):
+            candidates.extend(rows)
     finally:
         await cursor.close()
+    numbers = sorted({row["_id"]["order"] for row in candidates})
+    dates = await waiting_header_order_dates(db, user_id=user_id, order_numbers=numbers) if numbers else {}
+    by_group = {}
+    for row in candidates:
+        identity = row.pop("_id")
+        key, number = identity["group"], identity["order"]
+        if number not in dates:
+            continue
+        group = by_group.setdefault(key, {"_id": key, "date": dates[number], "members": []})
+        group["date"] = max(group["date"], dates[number])
+        group["members"].append({"order": number, "date": dates[number], **row})
+    candidates = sorted(by_group.values(), key=lambda row: row["_id"])
+    candidates.sort(key=lambda row: row["date"], reverse=True)
+    for row in candidates:
+        row["members"].sort(key=lambda member: member["date"])
+    groups = []
+    eligibility = {}
+    for offset in range(0, len(candidates), 16):
+        rows = candidates[offset:offset + 16]
+        pending = list(rows)
+        accepted = {}
+        while pending:
+            # One representative per group first. A rejected order must
+            # not hide another live member of the same product group.
+            numbers = sorted({row["members"][-1]["order"] for row in pending} - set(eligibility))
+            if numbers:
+                eligibility.update(await waiting_header_order_fields(db, user_id=user_id, order_numbers=numbers))
+            remaining = []
+            for row in pending:
+                member = row["members"].pop()
+                if eligibility[member.pop("order")]["waiting_review_eligible"] is True:
+                    accepted[row["_id"]] = {"key": row["_id"], **member, "lazy": True}
+                elif row["members"]:
+                    remaining.append(row)
+            pending = remaining
+        groups.extend(accepted[row["_id"]] for row in rows if row["_id"] in accepted)
+        if boundary:
+            date, key = boundary
+            groups = [row for row in groups if row["date"] < date
+                      or (row["date"] == date and row["key"] > key)]
+        groups.sort(key=lambda row: row["key"])
+        groups.sort(key=lambda row: row["date"], reverse=True)
+        groups = groups[:11]
+        # A candidate's newest possible date is an upper bound. Continue
+        # if rejected local proof/payment could move it behind a later
+        # candidate. Stop only when no unseen group can enter this page.
+        if len(groups) == 11:
+            cutoff = groups[-1]
+            last = rows[-1]
+            if (last["date"] < cutoff["date"]
+                    or (last["date"] == cutoff["date"] and last["_id"] >= cutoff["key"])):
+                break
     # Newest eligible order first; no global sales/count calculation on entry.
     page = groups[:10]
     next_cursor = None

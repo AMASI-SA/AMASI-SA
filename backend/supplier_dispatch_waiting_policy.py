@@ -101,12 +101,39 @@ class _HeaderOrderRepository(MongoOrderRepository):
             native = order_service._provider_status_native(raw, current_status=row.get("order_status"))
             # Negative prefilter only; positive membership still requires the
             # same current-order/local-proof policy as details and dispatch.
-            if not execution_status_allowed("", native):
+            if native and not execution_status_allowed("", native):
                 continue
             mapped = self._to_discovery_row(row)
             if mapped is not None:
                 result.append(mapped)
         return result
+
+
+async def waiting_header_order_dates(db: Any, *, user_id: str, order_numbers: list[str]) -> dict[str, str]:
+    """Cheap status/date candidates only; positive eligibility is checked later.
+
+    One indexed batch read avoids a per-order aggregation lookup and avoids
+    mapping historical orders or loading local payment/review proof globally.
+    """
+    from datetime import timezone
+    from order_engine.mapper import _parse_datetime
+
+    projection = {"_id": 0, "order_number": 1, "order_date": 1, "order_status": 1,
+        **{"raw_by_source.salla_direct." + key: 1 for key in (
+            "status", "status_slug", "date", "created_at", "order_date",
+        )}}
+    rows = db.unified_orders.find({"user_id": user_id, "order_number": {"$in": order_numbers},
+        "raw_by_source.salla_direct": {"$type": "object"}}, projection).batch_size(256)
+    result = {}
+    async for row in rows:
+        raw = row["raw_by_source"]["salla_direct"]
+        native = order_service._provider_status_native(raw, current_status=row.get("order_status"))
+        if not execution_status_allowed("", native or raw.get("status_slug")) or not _text(row.get("order_date")):
+            continue
+        created = _parse_datetime(raw.get("date") or raw.get("created_at") or raw.get("order_date"))
+        if created:
+            result[_text(row["order_number"])] = created.astimezone(timezone.utc).isoformat()
+    return result
 
 
 async def waiting_header_order_fields(db: Any, *, user_id: str, order_numbers: list[str]) -> dict[str, dict]:
