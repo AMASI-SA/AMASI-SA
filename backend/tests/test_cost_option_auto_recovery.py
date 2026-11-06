@@ -177,3 +177,28 @@ async def test_disconnected_owner_never_fetches():
     with patch('salla_integration.sync._fetch_salla_order_items', AsyncMock()) as fetch:
         await recovery.run_once(db)
         fetch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_new_arrival_is_not_blocked_by_historical_cursor_or_other_tenant_binding():
+    from product_option_cost_routes import BINDINGS
+    db = AsyncMongoMockClient().db
+    await db.salla_integrations.insert_one({'user_id': 'owner', 'status': 'connected'})
+    await db[BINDINGS].insert_one({'user_id': 'owner', 'salla_product_id': 'product'})
+    old, _ = fixture()
+    old['products'][0]['options'] = [{'name': 'already resolved'}]
+    old_id = (await db.unified_orders.insert_one(old)).inserted_id
+    await db[recovery.COLLECTION].insert_one({'_id': 'scan', 'cursor': old_id,
+        'due_at': recovery.now() - timedelta(seconds=1)})
+    new, _ = fixture()
+    new['order_number'] = 'new'
+    new['raw_by_source']['salla_direct']['reference_id'] = 'new'
+    await db.unified_orders.insert_one(new)
+    foreign = deepcopy(new)
+    foreign['user_id'] = 'other-owner'
+    foreign.pop('_id', None)
+    await db.unified_orders.insert_one(foreign)
+    await db.salla_integrations.insert_one({'user_id': 'other-owner', 'status': 'connected'})
+    with patch('salla_integration.sync._fetch_salla_order_items', AsyncMock(return_value=[])) as fetch:
+        await recovery.run_once(db)
+        fetch.assert_awaited_once_with(db, 'owner', 'native')

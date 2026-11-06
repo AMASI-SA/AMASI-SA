@@ -16,14 +16,17 @@ existing component owner transaction. Only empty choices are filled; all other
 source/cost/status fields remain unchanged. Existing component revision handling
 invalidates material operational contracts rather than executing fulfillment.
 
-Local verification: 41 passed, 11 skipped in cost recovery, report identity/raw
-recovery, sold report, and source-fence suites. Twelve new unit/worker tests pass.
+Local verification: 42 passed, 11 skipped in cost recovery, report identity/raw
+recovery, sold report, and source-fence suites. Thirteen new unit/worker tests pass.
 Two real Mongo integration cases added to the existing source-fence suite; they
 require CI. Local mongod cannot start (storage open: Operation not permitted).
 
 Remaining before readiness:
-- Verify independent new-order (20 scanned / two fetches) and historical
-  (80 scanned / two fetches) lanes under concurrent arrival and restart.
+Independent new-order (20 scanned / two fetches) and historical (80 scanned /
+two fetches) lanes tested: a newly inserted order is picked up while a historic
+cursor is active; a foreign tenant binding is never reused.
+
+Remaining checks:
 - Verify real owner transactions and operational effects in CI.
 - Review paused owner behavior, payload bounds and partial-selection scope.
 - Production source has concurrent updates; refresh/reconcile before release.

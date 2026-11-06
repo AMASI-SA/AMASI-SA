@@ -20,7 +20,6 @@ from report_option_recovery import attach_report_option_evidence, _has_options
 COLLECTION = 'salla_cost_option_recovery'
 POLL_SECONDS = 60
 SCAN_LIMIT = 100
-FETCH_LIMIT = 4
 log = logging.getLogger(__name__)
 
 
@@ -29,7 +28,9 @@ def now():
 
 
 def raw_order(order):
-    return (order.get('raw_by_source') or {}).get('salla_direct') or {}
+    sources = order.get('raw_by_source')
+    raw = sources.get('salla_direct') if isinstance(sources, dict) else None
+    return raw if isinstance(raw, dict) else {}
 
 
 def source_digest(order):
