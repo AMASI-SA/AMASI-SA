@@ -1,0 +1,46 @@
+{
+  "task_id": "SUPPLIER-RELIABILITY-20261106",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/fix-supplier-preview-images-20261106",
+  "base": "049fba51c13b902cd12808e03e87aca203649fb7",
+  "previous_source_checkpoint": "e22aa5b8869033b8b2d19f3fb5a1d4c90c701d3f",
+  "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1789",
+  "companion_mobile": {
+    "repository": "AMASI-SA/amasi-mobile",
+    "branch": "codex/fix-supplier-session-recovery-20261106",
+    "checkpoint": "e9d7f0a9438f3d06c3224cfd2e45089a21275e6f",
+    "pull_request": "https://github.com/AMASI-SA/amasi-mobile/pull/341"
+  },
+  "state": "draft_review_only",
+  "completed": [
+    "Selected immutable supplier-file photos hydrate completely before PDF rendering; no live product substitutions.",
+    "Exact-piece supplier preview reads selected employee/file/piece scope only.",
+    "Waiting detail eligibility reuses current order reads only within each request.",
+    "Owned uncategorized products may be dispatched; explicit category mismatches, foreign and ambiguous product identities retain existing refusals.",
+    "Synthetic uncategorized assigned/direct receipt accepts another piece, refreshes current prices, and posts one exact invoice without modifying classifications."
+  ],
+  "verification": {
+    "previous_pdf_preview_request_checks": {"passed": 34, "exit_code": 0},
+    "previous_real_mongo_waiting_checks": {"passed": 69, "exit_code": 0},
+    "category_red_regression": "Three missing/empty/whitespace category cases reproduced the 409 before the source change.",
+    "uncategorized_invoice_http": {"passed": 2, "exit_code": 0},
+    "expanded_category_receipt_invoice_http": {
+      "passed": 94,
+      "failed": 1,
+      "exit_code": 1,
+      "failure": "Unchanged test_prior_component_lookup_is_owner_scoped_and_matches_each_invoice_line: local Mongo8/Windows explain response raises InvalidBSON UTF-8 decode. HTTP business assertions preceding explain pass; do not count as green. Linux pinned-Mongo CI remains required."
+    },
+    "previous_source_ci": "Supplier recovery, PDF, waiting and release-readiness workflows passed for e22aa5b; security still in progress at last observation. These results do not certify subsequent commits."
+  },
+  "incomplete": [
+    "Current-status parity for the single stale waiting product header.",
+    "In-session draft refresh/search timeout investigation and recovery-button regression.",
+    "Fresh exact-head CI after all source changes.",
+    "Authenticated historical preparation-file inspection and phone UAT unavailable in this chat."
+  ],
+  "continuation_ledger": "Issue1006 reached GitHub's 2500-comment limit; use this status record and PR1789 comments.",
+  "next_safe_action": "Finish focused category verification and push a review checkpoint; then reproduce the refresh-button recovery defect using actual mobile TSX and synthetic transport.",
+  "production_changed": false,
+  "release": {"merge": false, "lease": false, "deployment": false, "financial_or_provider_writes": false},
+  "authorization": "Commit, push task branches, Draft PRs and continuation records only. No merge or deployment."
+}

@@ -5,6 +5,9 @@ on:
   pull_request:
     paths:
       - 'backend/supplier_receiving_routes.py'
+      - 'backend/supplier_category_service_policy.py'
+      - 'backend/tests/test_supplier_category_contract.py'
+      - 'backend/tests/test_supplier_uncategorized_receipt.py'
       - 'backend/tests/test_supplier_scan_recovery.py'
       - 'backend/tests/test_supplier_optional_unstarted_receipt.py'
       - 'backend/tests/test_supplier_receiving_entry.py'
@@ -72,6 +75,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/build20-scan-recovery"
           git rev-parse HEAD HEAD^{tree} > "$RUNNER_TEMP/build20-scan-recovery/identity.txt"
+          python -m pytest tests/test_supplier_category_contract.py tests/test_supplier_uncategorized_receipt.py -v --tb=short
           python -m pytest test_supplier_dispatch_order_group_guard.py tests/test_supplier_dispatch_preview_scope.py tests/test_supplier_dispatch_pdf_images.py tests/test_supplier_dispatch_remaining_pdf.py -v --tb=short
           python -m pytest tests/test_supplier_receiving_entry.py tests/test_monitoring_lazy_directory.py tests/test_preparation_lazy_sections.py tests/test_reviewed_product_pages.py -v --tb=short
           python -m pytest tests/test_supplier_receiving_concurrency.py tests/test_review_product_defaults.py tests/test_review_gallery_read_performance.py tests/test_order_review_operational_images.py tests/test_order_review_export_controls.py -v --tb=short

@@ -124,7 +124,6 @@ async def test_dispatch_without_services_accepts_each_selected_category(catalog)
 @pytest.mark.parametrize("product,expected", [
     ({"user_id": "owner", "id": "p1", "cost_category_id": "plated"}, "supplier_dispatch_category_mismatch"),
     ({"user_id": "other", "id": "p1", "cost_category_id": "clothes"}, "supplier_dispatch_product_category_required"),
-    ({"user_id": "owner", "id": "p1"}, "supplier_dispatch_product_category_required"),
 ])
 async def test_dispatch_rejects_wrong_unknown_or_foreign_category(catalog, product, expected):
     db, _, raw = catalog
@@ -134,6 +133,35 @@ async def test_dispatch_rejects_wrong_unknown_or_foreign_category(catalog, produ
         await require_supplier_product_categories(db, user_id="owner", supplier={"category_ids": ["clothes"]}, pieces=[{"product_id": "p1"}])
     assert caught.value.detail["code"] == expected
     assert list(raw[MEZAN_SUPPLIERS_V2].find({})) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("category", [None, "", "   "])
+async def test_uncategorized_owned_product_can_be_assigned_without_changing_its_category(catalog, category):
+    db, _, raw = catalog
+    product = {"user_id": "owner", "id": "p1", "salla_product_id": "s1"}
+    if category is not None:
+        product["cost_category_id"] = category
+    await db[PRODUCTS].insert_one(product)
+    before = list(raw[PRODUCTS].find({}))
+    supplier = {"category_ids": ["clothes"], "service_ids": []}
+    await require_supplier_product_categories(
+        db, user_id="owner", supplier=supplier, pieces=[{"product_id": "s1"}])
+    assert list(raw[PRODUCTS].find({})) == before
+    assert supplier == {"category_ids": ["clothes"], "service_ids": []}
+
+
+@pytest.mark.asyncio
+async def test_uncategorized_product_does_not_bypass_ambiguous_owned_identity(catalog):
+    db, _, _ = catalog
+    await db[PRODUCTS].insert_many([
+        {"user_id": "owner", "id": "p1"},
+        {"user_id": "owner", "id": "different", "salla_product_id": "p1"},
+    ])
+    with pytest.raises(HTTPException) as caught:
+        await require_supplier_product_categories(
+            db, user_id="owner", supplier={"category_ids": ["clothes"]}, pieces=[{"product_id": "p1"}])
+    assert caught.value.detail["code"] == "supplier_dispatch_product_category_required"
 
 
 @pytest.mark.asyncio
