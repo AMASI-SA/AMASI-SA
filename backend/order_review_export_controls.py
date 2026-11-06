@@ -417,7 +417,9 @@ def make_order_review_export_controls_router(
     ) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         user_id = _merchant_user_id(reviewer)
-        _, items_by_id = await _order_and_items(user_id, order_number)
+        order, items_by_id = await _order_and_items(user_id, order_number)
+        from order_review_product_defaults import apply_product_defaults
+        await apply_product_defaults(db, user_id=user_id, order=order, identities=list(items_by_id.values()))
         workflow = await db[WORKFLOWS].find_one(
             {"user_id": user_id, "order_number": order_number},
             {"_id": 0},
@@ -531,6 +533,7 @@ def make_order_review_export_controls_router(
             effective_values["assigned_employee_id"] = None
         effective_payload = ReviewExportControlPatch(**effective_values)
 
+        previous_manual = normalize_spec_keys(current.get("manual_supplier_export_excluded_spec_keys") or [])
         states[order_item_id] = apply_export_control_patch(
             current,
             effective_payload,
@@ -539,6 +542,11 @@ def make_order_review_export_controls_router(
             actor_id=actor_id,
         )
         now = _now()
+        from order_review_product_defaults import hidden_action, append_action, flush_default_actions
+        default_action = None
+        if "manual_hidden_spec_keys" in payload.model_fields_set and payload.save_assignment_as_default:
+            default_action = await hidden_action(db, user_id=user_id, actor_id=actor_id, item=item,
+                previous_keys=previous_manual, keys=states[order_item_id].get("manual_supplier_export_excluded_spec_keys") or [])
 
         if workflow:
             result = await db[WORKFLOWS].update_one(
@@ -549,6 +557,7 @@ def make_order_review_export_controls_router(
                 },
                 {"$inc": {"revision": 1}, "$set": {
                     "items": list(states.values()),
+                    "default_actions": append_action(workflow, default_action),
                     "updated_at": now,
                     "updated_by": actor_id,
                 }},
@@ -568,6 +577,7 @@ def make_order_review_export_controls_router(
                     "revision": 1,
                     "items": list(states.values()),
                     "operational_items": [],
+                    "default_actions": append_action(workflow, default_action),
                     "created_at": now,
                     "updated_at": now,
                     "updated_by": actor_id,
@@ -579,6 +589,7 @@ def make_order_review_export_controls_router(
                 ) from exc
 
         default_updated = False
+        await flush_default_actions(db, user_id=user_id, product_keys=[product_key])
         if (
             payload.preparation_route is not None
             and payload.save_assignment_as_default

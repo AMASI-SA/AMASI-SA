@@ -86,6 +86,10 @@ def direct_assignment_patch(
         "sent_to_supplier_by_id": actor_id,
         "sent_to_supplier_by_name": text(actor_name) or "الموظف الحالي",
     }
+    if text(piece.get("status")) == "assigned":
+        # Consent starts this physical piece as part of the reversible draft.
+        # The scan event's previous state restores assigned on cancel/remove.
+        patch["status"] = "in_progress"
     # Employee responsibility intentionally stays with its current owner until
     # the supplier invoice is approved. The existing invoice-finalization
     # custody wrapper transfers it and records assignment history atomically.

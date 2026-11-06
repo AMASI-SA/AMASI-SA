@@ -369,6 +369,7 @@ def make_mobile_operations_monitoring_router(
     async def preparation_summary(
         from_at: str | None = Query(default=None),
         to_at: str | None = Query(default=None),
+        directory_only: bool = False,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner_id, _ = await require_monitoring_access(user)
@@ -426,6 +427,17 @@ def make_mobile_operations_monitoring_router(
                 "department": None,
                 "status": "active",
             })
+        if directory_only:
+            return {
+                "ok": True, "read_only": True, "directory_only": True,
+                "employees": [{
+                    "employee_id": _text(row.get("id")),
+                    "employee_name": _text(row.get("display_name")) or "موظف",
+                    "job_title": _text(row.get("job_title")) or None,
+                    "department": _text(row.get("department")) or None,
+                    "status": _text(row.get("status")) or None,
+                } for row in employees],
+            }
         account_ids = sorted({monitored_work_account_id(row) for row in employees})
         pieces = await _active_preparation_pieces(
             db, owner_id=owner_id, account_ids=account_ids, limit=50000,
@@ -529,6 +541,7 @@ def make_mobile_operations_monitoring_router(
     async def courier_summary(
         from_at: str | None = Query(default=None),
         to_at: str | None = Query(default=None),
+        directory_only: bool = False,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner_id, _ = await require_monitoring_access(user)
@@ -541,6 +554,17 @@ def make_mobile_operations_monitoring_router(
             {"user_id": owner_id},
             {"_id": 0, "id": 1, "name": 1, "phone": 1, "city": 1, "status": 1},
         ).sort("name", 1).to_list(5000)
+        if directory_only:
+            return {
+                "ok": True, "read_only": True, "directory_only": True,
+                "couriers": [{
+                    "driver_id": _text(row.get("id")),
+                    "driver_name": _text(row.get("name")) or "موصل",
+                    "phone": _text(row.get("phone")) or None,
+                    "city": _text(row.get("city")) or None,
+                    "status": _text(row.get("status")) or None,
+                } for row in drivers],
+            }
         driver_ids = [_text(row.get("id")) for row in drivers if _text(row.get("id"))]
         assignments = await db[ASSIGNMENTS].find(
             {"user_id": owner_id, "driver_id": {"$in": driver_ids}},

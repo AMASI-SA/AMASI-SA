@@ -795,6 +795,36 @@ def make_preparation_file_failure_safety_router(
             reason="client_observed_file_creation_failure",
         )
 
+    @router.get("/requests/{client_request_id}/status")
+    async def request_status(client_request_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+        """Read the original request after a lost response; never starts work.
+
+        A numbered registry alone can precede allocation commitment. Report a
+        completed file only when both immutable identities and the exact unit
+        count agree. No release, provider reconciliation or POST replay occurs.
+        """
+        reviewer = _require_reviewer(user)
+        owner = _merchant_user_id(reviewer)
+        selector = {"user_id": owner, "client_request_id": client_request_id}
+        registry = await db[REGISTRY].find_one(selector, {"_id": 0})
+        batch = await db[BATCHES].find_one(selector, {"_id": 0, "lines": 0})
+        result = {"ok": True, "contract": "preparation_file_request_v1", "read_only": True,
+                  "client_request_id": client_request_id, "state": "ABSENT" if not registry and not batch else "PENDING"}
+        if registry:
+            result["file"] = _safe_draft_view(registry)
+        if batch:
+            result["batch"] = {"batch_id": _text(batch.get("id")), "status": _text(batch.get("status")),
+                "allocated_quantity": int(batch.get("allocated_quantity") or 0),
+                "selections": batch.get("selections") or []}
+        if (registry and batch and _text(registry.get("status")) == "ready"
+                and _text(batch.get("status")) == "ready" and _text(registry.get("batch_id")) == _text(batch.get("id"))):
+            expected = int(registry.get("expected_quantity") or registry.get("allocated_quantity") or 0)
+            committed = await db[PREPARATION_UNIT_ALLOCATIONS].count_documents({
+                "user_id": owner, "batch_id": batch["id"], "status": "committed"})
+            if expected > 0 and expected == committed == int(batch.get("allocated_quantity") or 0):
+                result["state"] = "COMMITTED"
+        return result
+
     @router.post("/recover-stale")
     async def recover_stale(
         user: dict = Depends(current_user),

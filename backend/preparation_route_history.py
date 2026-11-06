@@ -373,25 +373,42 @@ def install_supplier_dispatch_route_guard() -> None:
         employee_id: str,
         limit: int,
         piece_grain: bool = False,
+        batch_ids: set[str] | None = None,
+        piece_ids: set[str] | None = None,
+        dispatch_rows: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        internal_limit = max(limit, _INTERNAL_WORKSPACE_LIMIT) if piece_grain else limit
+        scoped = batch_ids is not None or piece_ids is not None
+        internal_limit = max(limit, _INTERNAL_WORKSPACE_LIMIT) if piece_grain and not scoped else limit
+        options = {}
+        if batch_ids is not None:
+            options["batch_ids"] = batch_ids
+        if piece_ids is not None:
+            options["piece_ids"] = piece_ids
+        if dispatch_rows is not None:
+            options["dispatch_rows"] = dispatch_rows
         result = await original(
             db,
             user_id=user_id,
             employee_id=employee_id,
             limit=internal_limit,
             piece_grain=piece_grain,
+            **options,
         )
         if not piece_grain:
             return result
 
-        raw_pieces = await db[PIECES].find(
-            {
+        query = {
                 "user_id": user_id,
                 "responsible_employee_id": employee_id,
                 "experiment_archived_at": None,
                 "status": {"$ne": base.PIECE_STATUS_CANCELLED},
-            },
+            }
+        if batch_ids is not None:
+            query["batch_id"] = {"$in": sorted(batch_ids)}
+        if piece_ids is not None:
+            query["piece_id"] = {"$in": sorted(piece_ids)}
+        raw_pieces = await db[PIECES].find(
+            query,
             {"_id": 0, "user_id": 0, "image_b64": 0},
         ).sort("updated_at", -1).limit(50000).to_list(50000)
         eligible, outside = await reconcile_employee_workspace_route(

@@ -18,7 +18,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
-from pymongo import ASCENDING, DESCENDING, ReturnDocument, UpdateOne
+from pymongo import ASCENDING, DESCENDING, IndexModel, ReturnDocument, UpdateOne
 from pymongo.errors import DuplicateKeyError
 
 from supplier_scan_attempts import run_scan, read_outcome, install_reconciler, ATTEMPTS, transaction
@@ -1189,6 +1189,22 @@ def piece_scan_blocker(piece: dict[str, Any]) -> dict[str, Any] | None:
         "message": "حالة القطعة الحالية لا تسمح بالاستلام.",
         "status": status,
     }
+
+
+def _receiving_piece_scan_blocker(
+    piece: dict[str, Any], *, allow_direct_assignment: bool = False,
+) -> dict[str, Any] | None:
+    """Only optional, supplier-unassigned draft offers may start an assigned piece."""
+    blocker = piece_scan_blocker(piece)
+    if (
+        allow_direct_assignment
+        and blocker
+        and blocker.get("code") == "supplier_piece_not_started"
+        and _text(piece.get("status")) == PIECE_STATUS_ASSIGNED
+        and not _text(piece.get("active_hold_id"))
+    ):
+        return None
+    return blocker
 
 
 def supplier_invoice_experiment_run_id(
@@ -2659,21 +2675,22 @@ async def _apply_permanent_supplier_invoice_service(
 
 @profiled("indexes")
 async def ensure_supplier_receiving_indexes(db: Any) -> None:
-    await db[SESSIONS].create_index(
-        [("user_id", ASCENDING), ("client_request_id", ASCENDING)],
-        unique=True,
-        name="uq_supplier_receiving_request_v1",
-    )
-    await db[SESSIONS].create_index(
-        [("user_id", ASCENDING), ("opened_by", ASCENDING), ("status", ASCENDING)],
-        unique=True,
-        partialFilterExpression={"status": "open"},
-        name="uq_supplier_receiving_open_actor_v1",
-    )
-    await db[SESSIONS].create_index(
-        [("user_id", ASCENDING), ("opened_at", DESCENDING)],
-        name="ix_supplier_receiving_history_v1",
-    )
+    # Both open/cancelling lookup and closed history are personal. The legacy
+    # tenant/date index scans colleagues' drafts as the shared tenant grows;
+    # the unique open-only index cannot answer an open-or-cancelling read.
+    # Build all session definitions in one Mongo command/collection pass. Keep
+    # the existing names, keys and unique/partial predicates exactly intact.
+    await db[SESSIONS].create_indexes([
+        IndexModel([("user_id", ASCENDING), ("client_request_id", ASCENDING)],
+            unique=True, name="uq_supplier_receiving_request_v1"),
+        IndexModel([("user_id", ASCENDING), ("opened_by", ASCENDING), ("status", ASCENDING)],
+            unique=True, partialFilterExpression={"status": "open"}, name="uq_supplier_receiving_open_actor_v1"),
+        IndexModel([("user_id", ASCENDING), ("opened_at", DESCENDING)], name="ix_supplier_receiving_history_v1"),
+        IndexModel([("user_id", ASCENDING), ("opened_by", ASCENDING), ("status", ASCENDING), ("opened_at", DESCENDING)],
+            name="ix_supplier_receiving_actor_active_v1"),
+        IndexModel([("user_id", ASCENDING), ("opened_by", ASCENDING), ("status", ASCENDING), ("closed_at", DESCENDING), ("id", DESCENDING)],
+            name="ix_supplier_receiving_actor_history_v1"),
+    ])
     await db[RECEIVING_EVENTS].create_index(
         [
             ("user_id", ASCENDING),
@@ -2791,6 +2808,7 @@ def _supplier_receiving_search_piece_view(
     piece: dict[str, Any],
     *,
     session: dict[str, Any],
+    allow_direct_assignment: bool = False,
 ) -> dict[str, Any]:
     piece_id = _text(piece.get("piece_id") or piece.get("id")).lower()
     session_id = _text(session.get("id"))
@@ -2802,6 +2820,10 @@ def _supplier_receiving_search_piece_view(
 
     blocker: dict[str, Any] | None = None
     requires_reassignment = False
+    direct_offer = direct_assignment_offer(
+        piece, session, actor_id=_text(session.get("opened_by")),
+        actor_name=_text(session.get("opened_by_name")),
+    ) if allow_direct_assignment else None
     if reserved_session_id:
         blocker = {
             "code": "supplier_piece_already_in_receiving_session",
@@ -2812,9 +2834,13 @@ def _supplier_receiving_search_piece_view(
             ),
         }
     else:
-        blocker = piece_scan_blocker(piece)
+        blocker = _receiving_piece_scan_blocker(
+            piece, allow_direct_assignment=direct_offer is not None,
+        )
         if blocker is None:
-            dispatch_blocker = supplier_receiving_dispatch_blocker(piece, supplier_id)
+            dispatch_blocker = (
+                None if direct_offer else supplier_receiving_dispatch_blocker(piece, supplier_id)
+            )
             if (
                 dispatch_blocker
                 and _text(dispatch_blocker.get("code"))
@@ -2847,6 +2873,7 @@ def _supplier_receiving_search_piece_view(
         "in_current_draft": reserved_session_id == session_id,
         "already_received": _text((blocker or {}).get("code")) == "supplier_piece_already_received",
         "requires_supplier_reassignment_confirmation": requires_reassignment,
+        "requires_direct_assignment_confirmation": bool(direct_offer and blocker is None),
         "current_supplier_id": supplier_id or None,
         "current_supplier_name": _text(
             (session.get("supplier_snapshot") or {}).get("company_name")
@@ -2918,8 +2945,11 @@ async def _supplier_receiving_search(
             detail={"code": "supplier_receiving_order_not_found"},
         )
 
+    supplier_assignment_optional = await is_optional(db, user_id, FIELD_SUPPLIER)
     public_rows = [
-        _supplier_receiving_search_piece_view(row, session=session)
+        _supplier_receiving_search_piece_view(
+            row, session=session, allow_direct_assignment=supplier_assignment_optional,
+        )
         for row in rows
     ]
     public_rows.sort(key=lambda row: (
@@ -2973,6 +3003,7 @@ def _supplier_receiving_search_piece_view(
     piece: dict[str, Any],
     *,
     session: dict[str, Any],
+    allow_direct_assignment: bool = False,
 ) -> dict[str, Any]:
     piece_id = _text(piece.get("piece_id") or piece.get("id")).lower()
     session_id = _text(session.get("id"))
@@ -2984,6 +3015,10 @@ def _supplier_receiving_search_piece_view(
 
     blocker: dict[str, Any] | None = None
     requires_reassignment = False
+    direct_offer = direct_assignment_offer(
+        piece, session, actor_id=_text(session.get("opened_by")),
+        actor_name=_text(session.get("opened_by_name")),
+    ) if allow_direct_assignment else None
     if reserved_session_id:
         blocker = {
             "code": "supplier_piece_already_in_receiving_session",
@@ -2994,9 +3029,13 @@ def _supplier_receiving_search_piece_view(
             ),
         }
     else:
-        blocker = piece_scan_blocker(piece)
+        blocker = _receiving_piece_scan_blocker(
+            piece, allow_direct_assignment=direct_offer is not None,
+        )
         if blocker is None:
-            dispatch_blocker = supplier_receiving_dispatch_blocker(piece, supplier_id)
+            dispatch_blocker = (
+                None if direct_offer else supplier_receiving_dispatch_blocker(piece, supplier_id)
+            )
             if (
                 dispatch_blocker
                 and _text(dispatch_blocker.get("code"))
@@ -3029,6 +3068,7 @@ def _supplier_receiving_search_piece_view(
         "in_current_draft": reserved_session_id == session_id,
         "already_received": _text((blocker or {}).get("code")) == "supplier_piece_already_received",
         "requires_supplier_reassignment_confirmation": requires_reassignment,
+        "requires_direct_assignment_confirmation": bool(direct_offer and blocker is None),
         "current_supplier_id": supplier_id or None,
         "current_supplier_name": _text(
             (session.get("supplier_snapshot") or {}).get("company_name")
@@ -3100,8 +3140,11 @@ async def _supplier_receiving_search(
             detail={"code": "supplier_receiving_order_not_found"},
         )
 
+    supplier_assignment_optional = await is_optional(db, user_id, FIELD_SUPPLIER)
     public_rows = [
-        _supplier_receiving_search_piece_view(row, session=session)
+        _supplier_receiving_search_piece_view(
+            row, session=session, allow_direct_assignment=supplier_assignment_optional,
+        )
         for row in rows
     ]
     public_rows.sort(key=lambda row: (
@@ -3232,6 +3275,9 @@ async def supplier_scan_group_candidates(
     order_item_id = _text(scanned_piece.get("order_item_id"))
     if not group_key or not batch_id or not order_item_id:
         return [scanned_piece]
+    candidate_statuses = set(ELIGIBLE_PIECE_STATUSES)
+    if allow_direct_assignment:
+        candidate_statuses.add(PIECE_STATUS_ASSIGNED)
     rows = (
         await db[PIECES]
         .find(
@@ -3240,7 +3286,7 @@ async def supplier_scan_group_candidates(
                 "group_key": group_key,
                 "batch_id": batch_id,
                 "order_item_id": order_item_id,
-                "status": {"$in": sorted(ELIGIBLE_PIECE_STATUSES)},
+                "status": {"$in": sorted(candidate_statuses)},
                 "$and": [{
                     "$or": [
                         {"experiment_archived_at": {"$exists": False}},
@@ -3265,7 +3311,13 @@ async def supplier_scan_group_candidates(
     )
     eligible_rows = []
     for row in rows:
-        if piece_scan_blocker(row):
+        direct_offer = direct_assignment_offer(
+            row, session, actor_id=_text(session.get("opened_by")),
+            actor_name=_text(session.get("opened_by_name")),
+        ) if allow_direct_assignment else None
+        if _receiving_piece_scan_blocker(
+            row, allow_direct_assignment=direct_offer is not None,
+        ):
             continue
         # A quantity choice on a dispatched card is not consent to assign an
         # unowned sibling, including legacy rows with an empty dispatch state.
@@ -3281,10 +3333,6 @@ async def supplier_scan_group_candidates(
             != _text(scanned_piece.get("responsible_employee_id"))
         ):
             continue
-        direct_offer = direct_assignment_offer(
-            row, session, actor_id=_text(session.get("opened_by")),
-            actor_name=_text(session.get("opened_by_name")),
-        )
         dispatch_blocker = supplier_receiving_dispatch_blocker(row, supplier_id)
         if allow_direct_assignment and direct_offer is None:
             continue
@@ -3925,6 +3973,8 @@ def make_supplier_receiving_router(
     @router.get("/catalog")
     async def catalog(
         limit: int = Query(default=50, ge=1, le=200),
+        entry_only: bool = False,
+        session_only: bool = False,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
@@ -3943,7 +3993,16 @@ def make_supplier_receiving_router(
             {"_id": 0},
             sort=[("opened_at", DESCENDING)],
         )
-        sessions = (
+        if entry_only:
+            suppliers = await db[SUPPLIERS].find(
+                {"user_id": merchant_id, "status": {"$ne": "inactive"}},
+                {"_id": 0, "id": 1, "company_name": 1, "contact_person": 1, "phone": 1},
+            ).sort("company_name", 1).to_list(2000)
+            # Navigation only. It cannot bootstrap an invoice, scanned piece
+            # list or financial authority; the selected child must read fresh.
+            return {"ok": True, "entry_only": True, "read_only": True,
+                    "suppliers": suppliers, "active_session": _public_session(active)}
+        sessions = [] if session_only else (
             await db[SESSIONS]
             .find(
                 {
@@ -3964,6 +4023,7 @@ def make_supplier_receiving_router(
                 {
                     "user_id": merchant_id,
                     "status": {"$ne": "inactive"},
+                    **({"id": _text((active or {}).get("supplier_id"))} if session_only else {}),
                 },
                 {
                     "_id": 0,
@@ -4006,7 +4066,7 @@ def make_supplier_receiving_router(
             if supplier_service_ids
             else []
         )
-        eligible_count = await db[PIECES].count_documents(
+        eligible_count = None if session_only else await db[PIECES].count_documents(
             {
                 "user_id": merchant_id,
                 "status": {"$in": sorted(ELIGIBLE_PIECE_STATUSES)},
@@ -4035,7 +4095,7 @@ def make_supplier_receiving_router(
                     session_id=_text(active.get("id")),
                     limit=MAX_SESSION_SCANS,
                 )
-                if active
+                if active and not session_only
                 else []
             ),
             "sessions": [
@@ -4043,7 +4103,8 @@ def make_supplier_receiving_router(
                 for row in sessions
                 if (view := _catalog_session_view(row, context=context)) is not None
             ],
-            "eligible_piece_count": eligible_count,
+            **({"session_only": True, "session_refresh_required": True}
+               if session_only else {"eligible_piece_count": eligible_count}),
             "permissions": {
                 "can_open": True,
                 "can_scan": True,
@@ -4841,7 +4902,19 @@ def make_supplier_receiving_router(
                 user_id=context["merchant_id"],
                 barcode=barcode,
             )
-            scanned_blocker = piece_scan_blocker(scanned_piece)
+            # Read CURRENT merchant policy before interpreting an unstarted
+            # piece. Explicit consent below still precedes every reservation.
+            supplier_assignment_optional = await is_optional(
+                db, context["merchant_id"], FIELD_SUPPLIER,
+            )
+            offered = direct_assignment_offer(
+                scanned_piece, session,
+                actor_id=context["actor_id"], actor_name=_actor_name(user),
+            )
+            direct_offer = offered if supplier_assignment_optional else None
+            scanned_blocker = _receiving_piece_scan_blocker(
+                scanned_piece, allow_direct_assignment=direct_offer is not None,
+            )
             if scanned_blocker:
                 raise HTTPException(status_code=409, detail=scanned_blocker)
             scanned_reserved_session_id = _text(
@@ -4886,17 +4959,6 @@ def make_supplier_receiving_router(
                         ),
                     },
                 )
-            # The manager's CURRENT merchant policy, not an Android boolean,
-            # decides whether employees may assign a previously unsent piece.
-            supplier_assignment_optional = await is_optional(
-                db, context["merchant_id"], FIELD_SUPPLIER,
-            )
-            offered = direct_assignment_offer(
-                scanned_piece,
-                session,
-                actor_id=context["actor_id"],
-                actor_name=_actor_name(user),
-            )
             if offered and not supplier_assignment_optional:
                 raise HTTPException(status_code=409, detail={
                     "code": "supplier_piece_not_dispatched",
@@ -4905,7 +4967,6 @@ def make_supplier_receiving_router(
                         scanned_piece.get("supplier_dispatch_status")
                     ),
                 })
-            direct_offer = offered if supplier_assignment_optional else None
             if direct_offer and not payload.confirm_direct_receiving_assignment:
                 raise HTTPException(status_code=409, detail=direct_offer)
             if (
@@ -4960,7 +5021,9 @@ def make_supplier_receiving_router(
                 stage="supplier_receiving",
                 actor_id=context["actor_id"],
             )
-            blocker = piece_scan_blocker(piece)
+            blocker = _receiving_piece_scan_blocker(
+                piece, allow_direct_assignment=direct_offer is not None,
+            )
             if blocker:
                 raise HTTPException(status_code=409, detail=blocker)
             dispatch_blocker = supplier_receiving_dispatch_blocker(
@@ -5177,14 +5240,19 @@ def make_supplier_receiving_router(
                         "supplier_reassigned_by_name": _actor_name(user),
                         "supplier_reassignment_session_id": session_id,
                     })
+                reservation_statuses = set(ELIGIBLE_PIECE_STATUSES)
+                if candidate_direct_offer and payload.confirm_direct_receiving_assignment:
+                    reservation_statuses.add(PIECE_STATUS_ASSIGNED)
                 updated_piece = await db[PIECES].find_one_and_update(
                     {
                         "user_id": context["merchant_id"],
                         "piece_id": piece_id,
-                        "status": {"$in": sorted(ELIGIBLE_PIECE_STATUSES)},
+                        "status": {"$in": sorted(reservation_statuses)},
                         "supplier_id": original_piece.get("supplier_id"),
                         "supplier_dispatch_status": original_piece.get("supplier_dispatch_status"),
                         "responsible_employee_id": original_piece.get("responsible_employee_id"),
+                        **({"active_hold_id": {"$in": [None, ""]}}
+                           if candidate_direct_offer else {}),
                         "$or": [
                             {"supplier_receiving_session_id": {"$exists": False}},
                             {"supplier_receiving_session_id": None},
