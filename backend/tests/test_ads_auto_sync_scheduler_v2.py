@@ -1549,7 +1549,11 @@ def test_router_registers_status_and_backend_lifecycle(monkeypatch):
         for route in router.routes
     )
     assert len(router.on_startup) == before_startup + 1
-    assert len(router.on_shutdown) == before_shutdown + 1
+    assert len(router.on_shutdown) == before_shutdown + 2
+    assert any(route.path == "/integrations-v2/ads-auto-sync/snapchat/refresh" and "POST" in route.methods
+               for route in router.routes)
+    assert any(route.path == "/integrations-v2/ads-auto-sync/snapchat/refresh/{run_id}" and "GET" in route.methods
+               for route in router.routes)
 
 
 def test_safe_summary_preserves_account_error_samples():

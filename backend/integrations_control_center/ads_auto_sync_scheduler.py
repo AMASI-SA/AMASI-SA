@@ -1270,10 +1270,12 @@ async def _refresh_snapchat(
     end_date: date,
     now: datetime,
     on_progress: Callable[[], None] | None = None,
+    manual: bool = False,
+    on_started: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     if not snapchat_oauth_configured() or not snapchat_native_sync_enabled():
         return {"provider": SNAPCHAT_PROVIDER_ID, "status": "skipped", "reason": "disabled"}
-    if not await _snapchat_cadence_ready(db, user_id=user_id, now=now):
+    if not manual and not await _snapchat_cadence_ready(db, user_id=user_id, now=now):
         return {
             "provider": SNAPCHAT_PROVIDER_ID,
             "status": "skipped",
@@ -1315,6 +1317,7 @@ async def _refresh_snapchat(
     )
     await bind_run_to_lease(db, lease, run_id=run_id)
     failure_stage = SNAPCHAT_DEFAULT_FAILURE_STAGE
+    finalized_status: str | None = None
 
     def observe_failure_stage(stage: str) -> None:
         nonlocal failure_stage
@@ -1322,6 +1325,13 @@ async def _refresh_snapchat(
             failure_stage = stage
 
     try:
+        if manual:
+            await _collection(db, RUNS_COLLECTION).update_one(
+                {"user_id": user_id, "run_id": run_id},
+                {"$set": {"requested_by": "owner_manual"}},
+            )
+        if on_started is not None:
+            on_started(run_id)
         accounts = await _load_canonical_scheduler_accounts(
             db,
             user_id,
@@ -1752,6 +1762,7 @@ async def _refresh_snapchat(
         await _finish_run(
             db, user_id=user_id, run_id=run_id, status=status, result=result
         )
+        finalized_status = status
         await release_snapchat_lease(db, lease, final_status=status, now=now)
         if status == "complete":
             observe_failure_stage("decision_outcomes_evaluation")
@@ -1762,6 +1773,17 @@ async def _refresh_snapchat(
             )
             result["decision_outcomes"] = decision_outcomes
         return {"run_id": run_id, **result}
+    except asyncio.CancelledError:
+        # A supervised manual task can stop at a cooperative checkpoint. Keep
+        # already-finalized facts intact; otherwise terminalize its own run.
+        try:
+            if finalized_status is None:
+                await _finish_run(db, user_id=user_id, run_id=run_id, status="failed",
+                    error={"code": "snapchat_sync_cancelled", "retryable": True})
+        finally:
+            await release_snapchat_lease(db, lease,
+                final_status=finalized_status or "failed", now=_utcnow())
+        raise
     except SnapchatNativeSyncError as exc:
         failure_result = {
             **(exc.result if isinstance(exc.result, dict) else {}),
@@ -2582,6 +2604,9 @@ def attach_ads_auto_sync_scheduler(
     require_owner: Callable[[Any], dict],
 ) -> None:
     from boot_runtime import wait_for_local_readiness
+    from .snapchat_manual_spend_refresh import attach_manual_spend_routes
+
+    attach_manual_spend_routes(router, db, current_user, require_owner)
 
     task: asyncio.Task | None = None
 

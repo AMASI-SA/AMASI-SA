@@ -20,6 +20,7 @@ import {
     DASHBOARD_ADS_PROVIDERS,
     getDashboardAdsSpend,
 } from "../services/dashboardAdsSpend";
+import { refreshSnapchatSpend } from "../services/snapchatManualSpendRefresh";
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
 const PROVIDER_META = Object.freeze({
@@ -193,6 +194,7 @@ export function DashboardAdsSpendCardContent({
     refreshing = false,
     error = "",
     onRefresh,
+    refreshStatus = "",
     collapsible = false,
 }) {
     const singleDay = isSingleDay(fromDate, toDate);
@@ -255,19 +257,22 @@ export function DashboardAdsSpendCardContent({
                     type="button"
                     onClick={onRefresh}
                     disabled={refreshing}
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-black/10 bg-white/80 transition hover:bg-white disabled:opacity-50"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-black/10 bg-white/80 px-2.5 py-1 text-[10px] font-extrabold transition hover:bg-white disabled:cursor-wait disabled:opacity-50"
                     aria-label="تحديث صرفيات الإعلانات"
+                    title="جلب صرف سناب الآن وتحديث البطاقة"
                     data-testid="dashboard-ads-spend-refresh"
                 >
                     <ArrowsClockwise
-                        size={17}
+                        size={14}
                         weight="bold"
                         className={refreshing ? "animate-spin" : ""}
                     />
+                    تحديث
                 </button>
             </div>
 
             <div className="p-3 sm:p-4">
+                {refreshStatus && <p role="status" className="mb-3 text-xs font-bold text-amber-800" data-testid="dashboard-ads-manual-refresh-status">{refreshStatus}</p>}
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <div>
                         <div className="text-xs font-extrabold text-slate-800" data-testid="dashboard-ads-spend-period">
@@ -450,6 +455,10 @@ export default function DashboardAdsSpendCard({ fromDate, toDate, collapsible = 
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState("");
     const requestId = useRef(0);
+    const [manualRefreshing, setManualRefreshing] = useState(false);
+    const [refreshStatus, setRefreshStatus] = useState("");
+    const manualController = useRef(null);
+    const manualSequence = useRef(0);
 
     const load = useCallback(async ({ silent = false, refresh = !silent } = {}) => {
         const currentRequest = requestId.current + 1;
@@ -465,6 +474,7 @@ export default function DashboardAdsSpendCard({ fromDate, toDate, collapsible = 
             if (requestId.current !== currentRequest) return;
             setData(next);
             setError("");
+            return true;
         } catch (requestError) {
             if (requestId.current !== currentRequest) return;
             const detail = requestError?.response?.data?.detail;
@@ -473,6 +483,7 @@ export default function DashboardAdsSpendCard({ fromDate, toDate, collapsible = 
                 || requestError?.message
                 || "تعذر قراءة صرفيات منصات الإعلانات.",
             );
+            return false;
         } finally {
             if (requestId.current === currentRequest) {
                 setLoading(false);
@@ -481,8 +492,47 @@ export default function DashboardAdsSpendCard({ fromDate, toDate, collapsible = 
         }
     }, [data, fromDate, toDate]);
 
+    const refreshManually = useCallback(async () => {
+        if (manualController.current) return;
+        const controller = new AbortController();
+        manualController.current = controller;
+        const sequence = ++manualSequence.current;
+        setManualRefreshing(true);
+        setError("");
+        setRefreshStatus("جارٍ جلب صرف سناب…");
+        try {
+            const job = await refreshSnapchatSpend({ dateFrom: fromDate,
+                dateTo: toDate || fromDate, signal: controller.signal });
+            if (sequence !== manualSequence.current) return;
+            const loaded = await load({ refresh: false });
+            if (sequence !== manualSequence.current) return;
+            setRefreshStatus(!loaded ? "اكتمل جلب سناب، وتعذر قراءة البيانات الجديدة. أعد المحاولة."
+                : job.status === "partial" ? "اكتمل جلب سناب ببيانات غير مكتملة."
+                    : "اكتمل جلب صرف سناب.");
+        } catch (requestError) {
+            if (controller.signal.aborted || sequence !== manualSequence.current) return;
+            const detail = requestError?.response?.data?.detail;
+            setError((typeof detail === "object" ? detail?.message : detail)
+                || requestError?.message || "تعذر جلب صرف سناب الآن.");
+            setRefreshStatus("");
+        } finally {
+            if (manualController.current === controller) manualController.current = null;
+            if (sequence === manualSequence.current) setManualRefreshing(false);
+        }
+    }, [fromDate, toDate, load]);
+
     useEffect(() => {
-        load({ refresh: true });
+        manualController.current?.abort();
+        manualSequence.current += 1;
+        setManualRefreshing(false);
+        setRefreshStatus("");
+        load({ refresh: false });
+        return () => {
+            requestId.current += 1;
+            manualSequence.current += 1;
+            manualController.current?.abort();
+            manualController.current = null;
+        };
     }, [fromDate, toDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
@@ -510,9 +560,10 @@ export default function DashboardAdsSpendCard({ fromDate, toDate, collapsible = 
             fromDate={fromDate}
             toDate={toDate}
             loading={loading}
-            refreshing={refreshing}
+            refreshing={refreshing || manualRefreshing}
             error={error}
-            onRefresh={() => load({ refresh: true })}
+            onRefresh={refreshManually}
+            refreshStatus={refreshStatus}
         />
     );
 }
