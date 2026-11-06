@@ -1,13 +1,16 @@
 """Recipient-only HTTP metadata and paging on disposable loopback Mongo."""
 import os
 import unittest
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
+from bson.codec_options import CodecOptions
 from fastapi import FastAPI, Request
 from httpx import ASGITransport, AsyncClient
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.monitoring import CommandListener
 
 import operational_instruction_notifications as notices
 import order_tracking_notes_routes as routes
@@ -16,13 +19,23 @@ from mobile_app_request_context import mobile_app_request_user
 from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS
 
 
+class QueryTrace(CommandListener):
+    def __init__(self): self.pipelines = []
+    def started(self, event):
+        if event.command_name == "aggregate" and event.command.get("aggregate") == notices.NOTIFICATIONS:
+            self.pipelines.append(deepcopy(event.command["pipeline"]))
+    def succeeded(self, event): pass
+    def failed(self, event): pass
+
+
 class NotificationSenderDirectoryTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         uri = os.environ.get("MZ2_TEST_MONGO_URI", "")
         if not uri:
             self.skipTest("MZ2_TEST_MONGO_URI required; no production fallback")
         self.assertTrue(uri.startswith("mongodb://127.0.0.1:"))
-        self.mongo = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000)
+        self.trace = QueryTrace()
+        self.mongo = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000, event_listeners=[self.trace])
         self.db = self.mongo["notification_directory_" + uuid4().hex]
         self.addCleanup(self.mongo.close)
         self.actor = {"id": "recipient", "created_by": "owner", "role": "operations", "_session_client": "amasi_mobile"}
@@ -124,3 +137,45 @@ class NotificationSenderDirectoryTests(unittest.IsolatedAsyncioTestCase):
     async def test_count_mode_contains_no_notification_payload(self):
         response = await self.client.get("/api/order-tracking-notes/notifications/me?count_only=true")
         self.assertEqual(response.json(), {"count_only": True, "unread_count": 7})
+
+    async def test_legacy_creator_is_resolved_without_inventing_comment_sender(self):
+        await self.db[notices.NOTIFICATIONS].insert_many([
+            {"id": "legacy-created", "merchant_id": "owner", "recipient_id": "recipient", "instruction_id": "instruction",
+             "event_type": "created", "message": "legacy authored note", "created_at": self.when, "read_at": None},
+            {"id": "legacy-comment", "merchant_id": "owner", "recipient_id": "recipient", "instruction_id": "instruction",
+             "event_type": "comment", "message": "legacy author was not stored", "created_at": self.when, "read_at": None},
+        ])
+        directory = (await self.client.get("/api/order-tracking-notes/notifications/me?directory_only=true")).json()
+        self.assertEqual({item["id"]: item["total"] for item in directory["items"]}, {"a": 12, "b": 1, "__system__": 1})
+        system = await self.client.get("/api/order-tracking-notes/notifications/me?sender_id=__system__")
+        self.assertEqual([row["id"] for row in system.json()["items"]], ["legacy-comment"])
+        self.actor = {"id": "owner", "role": "owner", "_session_client": "amasi_mobile"}
+        response = await self.client.post("/api/order-tracking-notes/notifications/legacy-comment/read", json={})
+        self.assertEqual(response.status_code, 404, "Merchant ownership cannot mark an employee's notice as read")
+
+    async def test_selected_sender_query_does_not_scan_other_known_sender_bodies(self):
+        await self.db[notices.NOTIFICATIONS].create_index([
+            ("merchant_id", 1), ("recipient_id", 1), ("sender_id", 1), ("created_at", -1), ("id", -1)])
+        await self.db[notices.NOTIFICATIONS].insert_many([
+            {"id": f"other-{index}", "merchant_id": "owner", "recipient_id": "recipient", "sender_id": "b",
+             "instruction_id": "instruction", "created_at": self.when, "read_at": None, "message": "Unselected body " * 200}
+            for index in range(1000)
+        ])
+        response = await self.client.get("/api/order-tracking-notes/notifications/me?sender_id=a")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(len(response.json()["items"]), 10)
+        self.assertNotIn("Unselected body", response.text)
+        captured = self.trace.pipelines[-1]
+        # This Windows Mongo build emits invalid UTF-8 in EXPLAIN diagnostic
+        # labels. Only that diagnostic document tolerates replacement; HTTP data
+        # reads above retain strict BSON decoding and budget metrics stay numeric.
+        proof = await self.db.command({"explain": {"aggregate": notices.NOTIFICATIONS, "pipeline": captured, "cursor": {}},
+                                       "verbosity": "executionStats"},
+                                      codec_options=CodecOptions(unicode_decode_error_handler="replace"))
+        stats = proof.get("executionStats") or next((stage["$cursor"]["executionStats"]
+            for stage in proof.get("stages", []) if "$cursor" in stage), None)
+        self.assertIsNotNone(stats)
+        self.assertIs(type(stats["totalDocsExamined"]), int)
+        self.assertIs(type(stats["nReturned"]), int)
+        self.assertGreater(stats["nReturned"], 0)
+        self.assertLessEqual(stats["totalDocsExamined"], 20, "Selected sender must use tenant/recipient/sender index before legacy joins")

@@ -18,7 +18,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
-from pymongo import ASCENDING, DESCENDING, ReturnDocument, UpdateOne
+from pymongo import ASCENDING, DESCENDING, IndexModel, ReturnDocument, UpdateOne
 from pymongo.errors import DuplicateKeyError
 
 from supplier_scan_attempts import run_scan, read_outcome, install_reconciler, ATTEMPTS, transaction
@@ -2675,34 +2675,22 @@ async def _apply_permanent_supplier_invoice_service(
 
 @profiled("indexes")
 async def ensure_supplier_receiving_indexes(db: Any) -> None:
-    await db[SESSIONS].create_index(
-        [("user_id", ASCENDING), ("client_request_id", ASCENDING)],
-        unique=True,
-        name="uq_supplier_receiving_request_v1",
-    )
-    await db[SESSIONS].create_index(
-        [("user_id", ASCENDING), ("opened_by", ASCENDING), ("status", ASCENDING)],
-        unique=True,
-        partialFilterExpression={"status": "open"},
-        name="uq_supplier_receiving_open_actor_v1",
-    )
-    await db[SESSIONS].create_index(
-        [("user_id", ASCENDING), ("opened_at", DESCENDING)],
-        name="ix_supplier_receiving_history_v1",
-    )
     # Both open/cancelling lookup and closed history are personal. The legacy
     # tenant/date index scans colleagues' drafts as the shared tenant grows;
     # the unique open-only index cannot answer an open-or-cancelling read.
-    await db[SESSIONS].create_index(
-        [("user_id", ASCENDING), ("opened_by", ASCENDING),
-         ("status", ASCENDING), ("opened_at", DESCENDING)],
-        name="ix_supplier_receiving_actor_active_v1",
-    )
-    await db[SESSIONS].create_index(
-        [("user_id", ASCENDING), ("opened_by", ASCENDING),
-         ("status", ASCENDING), ("closed_at", DESCENDING), ("id", DESCENDING)],
-        name="ix_supplier_receiving_actor_history_v1",
-    )
+    # Build all session definitions in one Mongo command/collection pass. Keep
+    # the existing names, keys and unique/partial predicates exactly intact.
+    await db[SESSIONS].create_indexes([
+        IndexModel([("user_id", ASCENDING), ("client_request_id", ASCENDING)],
+            unique=True, name="uq_supplier_receiving_request_v1"),
+        IndexModel([("user_id", ASCENDING), ("opened_by", ASCENDING), ("status", ASCENDING)],
+            unique=True, partialFilterExpression={"status": "open"}, name="uq_supplier_receiving_open_actor_v1"),
+        IndexModel([("user_id", ASCENDING), ("opened_at", DESCENDING)], name="ix_supplier_receiving_history_v1"),
+        IndexModel([("user_id", ASCENDING), ("opened_by", ASCENDING), ("status", ASCENDING), ("opened_at", DESCENDING)],
+            name="ix_supplier_receiving_actor_active_v1"),
+        IndexModel([("user_id", ASCENDING), ("opened_by", ASCENDING), ("status", ASCENDING), ("closed_at", DESCENDING), ("id", DESCENDING)],
+            name="ix_supplier_receiving_actor_history_v1"),
+    ])
     await db[RECEIVING_EVENTS].create_index(
         [
             ("user_id", ASCENDING),

@@ -537,11 +537,13 @@ def install_preparation_pdf_reference_layout() -> None:
         *,
         user_id: str,
         limit: int,
+        order_numbers: list[str] | None = None,
     ) -> dict[str, Any]:
         context = await _ORIGINAL_CONTEXT_LOADER(
             database,
             user_id=user_id,
             limit=limit,
+            **({"order_numbers": order_numbers} if order_numbers is not None else {}),
         )
         context["_database"] = database
         context["_user_id"] = user_id

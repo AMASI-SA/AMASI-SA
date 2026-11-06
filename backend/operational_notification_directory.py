@@ -17,9 +17,18 @@ def pipeline(merchant_id, actor_id, *, directory=False):
     if directory:
         stages.append({"$project": {"id": 1, "instruction_id": 1, "event_type": 1,
             "sender_id": 1, "sender_name": 1, "read_at": 1, "created_at": 1, "metadata.actor_id": 1}})
+        # Collapse repeated alerts/comments before resolving legacy authors.
+        # Neither notification bodies nor operational task payloads enter this read.
+        stages += [{"$group": {"_id": {"sender_id": "$sender_id", "instruction_id": "$instruction_id",
+            "event_type": "$event_type", "actor_id": "$metadata.actor_id"},
+            "_total": {"$sum": 1}, "_unread": {"$sum": {"$cond": [
+                {"$eq": [{"$ifNull": ["$read_at", None]}, None]}, 1, 0]}}}},
+            {"$set": {"sender_id": "$_id.sender_id", "instruction_id": "$_id.instruction_id",
+                "event_type": "$_id.event_type", "metadata.actor_id": "$_id.actor_id"}}]
     stages += [
-        {"$lookup": {"from": ORDER_TRACKING_INSTRUCTIONS, "let": {"instruction": "$instruction_id"},
-            "pipeline": [{"$match": {"user_id": merchant_id, "$expr": {"$eq": ["$id", "$$instruction"]}}},
+        {"$lookup": {"from": ORDER_TRACKING_INSTRUCTIONS, "let": {"instruction": "$instruction_id",
+            "legacy_creator": {"$and": [{"$eq": [{"$ifNull": ["$sender_id", ""]}, ""]}, {"$in": ["$event_type", CREATOR_EVENTS]}]}},
+            "pipeline": [{"$match": {"user_id": merchant_id, "$expr": {"$and": ["$$legacy_creator", {"$eq": ["$id", "$$instruction"]}]}}},
                          {"$project": {"_id": 0, "created_by": 1, "created_by_name": 1}}], "as": "_source"}},
         {"$set": {"_sender": {"$ifNull": ["$sender_id", {"$cond": [
             {"$in": ["$event_type", CREATOR_EVENTS]},
@@ -48,8 +57,8 @@ async def sender_names(db, merchant_id, ids):
 
 async def sender_directory(db, *, merchant_id, actor_id):
     rows = await db[NOTIFICATIONS].aggregate(pipeline(merchant_id, actor_id, directory=True) + [
-        {"$group": {"_id": "$_sender", "total": {"$sum": 1},
-            "unread_count": {"$sum": {"$cond": [{"$eq": [{"$ifNull": ["$read_at", None]}, None]}, 1, 0]}}}},
+        {"$group": {"_id": "$_sender", "total": {"$sum": "$_total"},
+            "unread_count": {"$sum": "$_unread"}}},
     ]).to_list(None)
     names = await sender_names(db, merchant_id, [row["_id"] for row in rows if row["_id"] != SYSTEM])
     items = []
@@ -88,6 +97,23 @@ async def sender_page(db, *, merchant_id, actor_id, sender_id, read_state="all",
     if sender_id != SYSTEM and sender_id not in names:
         raise HTTPException(404, detail={"code": "notification_sender_not_found"})
     stages = pipeline(merchant_id, actor_id)
+    early = []
+    if sender_id != SYSTEM:
+        # Known other senders cannot contribute. Retain missing legacy authors
+        # until the minimal author lookup has resolved them correctly.
+        early.append({"$match": {"$or": [{"sender_id": sender_id}, {"sender_id": {"$in": [None, ""]}}]}})
+    if read_state == "unread":
+        early.append({"$match": {"read_at": None}})
+    elif read_state == "read":
+        early.append({"$match": {"read_at": {"$ne": None}}})
+    boundary = _decode_cursor(cursor)
+    if boundary:
+        at, identity = boundary
+        early.append({"$match": {"$or": [
+            {"created_at": {"$type": "date", "$lt": at}}, {"created_at": at, "id": {"$lt": identity}},
+            {"created_at": {"$not": {"$type": "date"}}},  # legacy strings are normalized below
+        ]}})
+    stages[1:1] = early
     stages.append({"$match": {"_sender": sender_id}})
     if read_state == "unread":
         stages.append({"$match": {"read_at": None}})
@@ -95,7 +121,6 @@ async def sender_page(db, *, merchant_id, actor_id, sender_id, read_state="all",
         stages.append({"$match": {"read_at": {"$ne": None}}})
     elif read_state != "all":
         raise HTTPException(422, detail={"code": "notification_read_state_invalid"})
-    boundary = _decode_cursor(cursor)
     if boundary:
         at, identity = boundary
         stages.append({"$match": {"$or": [{"_sort_at": {"$lt": at}}, {"_sort_at": at, "id": {"$lt": identity}}]}})

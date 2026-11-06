@@ -14,6 +14,12 @@ on:
       - 'backend/mobile_employee_monitoring_workspace_routes.py'
       - 'backend/reviewed_product_pages.py'
       - 'backend/reviewed_products_catalog.py'
+      - 'backend/review_direct_preparation_sync.py'
+      - 'backend/order_review_product_defaults.py'
+      - 'backend/operational_notification_directory.py'
+      - 'backend/preparation_file_images.py'
+      - 'backend/reviewed_product_sorting.py'
+      - 'backend/tests/test_review_product_defaults_regressions.py'
       - 'backend/tests/test_supplier_receiving.py'
       - 'backend/tests/test_supplier_invoice_financial_integrity.py'
       - '.github/workflows/build20-supplier-scan-recovery.yml'
@@ -63,6 +69,7 @@ jobs:
           git rev-parse HEAD HEAD^{tree} > "$RUNNER_TEMP/build20-scan-recovery/identity.txt"
           python -m pytest tests/test_supplier_receiving_entry.py tests/test_monitoring_lazy_directory.py tests/test_preparation_lazy_sections.py tests/test_reviewed_product_pages.py -v --tb=short
           python -m pytest tests/test_supplier_receiving_concurrency.py tests/test_review_product_defaults.py tests/test_review_gallery_read_performance.py tests/test_order_review_operational_images.py tests/test_order_review_export_controls.py -v --tb=short
+          python -m pytest tests/test_preparation_file_images.py tests/test_preparation_request_outcome.py tests/test_preparation_selected_order_scope.py tests/test_notification_sender_directory.py tests/test_review_direct_preparation_sync.py tests/test_review_product_defaults_regressions.py tests/test_review_readback_v2.py -v --tb=short
           python -m pytest             tests/test_supplier_optional_unstarted_receipt.py             tests/test_supplier_scan_recovery.py             tests/test_supplier_scan_lock.py             tests/test_supplier_scan_approval.py             tests/test_supplier_receiving.py             tests/test_supplier_invoice_financial_integrity.py             tests/test_supplier_multi_supplier_lifecycle.py             tests/test_supplier_invoice_live_cost_session.py             tests/test_supplier_invoice_service_eligibility.py             -v --tb=short --junitxml="$RUNNER_TEMP/build20-scan-recovery/pytest.xml"             2>&1 | tee "$RUNNER_TEMP/build20-scan-recovery/pytest.log"
       - name: Stop disposable Mongo
         if: always()

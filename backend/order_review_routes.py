@@ -644,6 +644,8 @@ async def _display_detail(db: Any, user_id: str, order: OrderDTO, *, session_con
     workflow = await db[WORKFLOWS].find_one(
         {"user_id": user_id, "order_number": order.order_number}, {"_id": 0}
     )
+    from order_review_product_defaults import assert_pending_auto_cards_current
+    assert_pending_auto_cards_current(workflow, identities)
     states = _state_map(workflow)
     preferences = await _preference_map(db, user_id, identities)
     item_views = []
@@ -1152,10 +1154,12 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "created_by": actor_id,
         }
         operational_items.append(operational_item)
-        from order_review_product_defaults import template_for, remember_operational
+        from order_review_product_defaults import template_for, operational_action, append_action
         template = template_for(source_item, operational_item)
         if template:
             operational_item.update(default_template_id=template["id"], default_product_key=template["product_key"])
+        default_action = await operational_action(db, user_id=user_id, actor_id=actor_id,
+            item=source_item, card=operational_item, allow_create=True)
 
         # Mark linked option/custom-field keys on the source product as moved to
         # an internal operational item. Supplier/preparation exports must omit
@@ -1191,6 +1195,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "revision": revision + 1,
             "items": list(states.values()),
             "operational_items": operational_items,
+            "default_actions": append_action(workflow, default_action),
             "updated_at": now,
             "updated_by": actor_id,
         }
@@ -1215,7 +1220,6 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             raise
         if uploaded_image is not None:
             await remember_operational_image(db, user_id=user_id, actor_id=actor_id, image=uploaded_image)
-        await remember_operational(db, user_id=user_id, actor_id=actor_id, item=source_item, card=operational_item)
         await db[EVENTS].insert_one({
             "user_id": user_id,
             "order_number": order.order_number,
@@ -1282,16 +1286,18 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         target["image_source"] = "operational_upload"
         target["updated_at"] = now
         target["updated_by"] = actor_id
-        from order_review_product_defaults import template_for, remember_operational
+        from order_review_product_defaults import template_for, operational_action, append_action
         template = template_for(source_item, target)
         if template:
             target.update(default_template_id=template["id"], default_product_key=template["product_key"])
+        default_action = await operational_action(db, user_id=user_id, actor_id=actor_id,
+            item=source_item, card=target, allow_create=False)
         try:
             updated = await db[WORKFLOWS].update_one(
                 {"user_id": user_id, "order_number": order.order_number,
                  "revision": revision, "stage": "pending_review",
                  "operational_items.operational_item_id": operational_item_id},
-                {"$set": {"operational_items": operational_rows, "updated_at": now,
+                {"$set": {"operational_items": operational_rows, "default_actions": append_action(workflow, default_action), "updated_at": now,
                           "updated_by": actor_id}, "$inc": {"revision": 1}},
             )
             if updated.matched_count != 1:
@@ -1300,7 +1306,6 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             await forget_unattached_image(db, user_id=user_id, image_id=uploaded["id"])
             raise
         await remember_operational_image(db, user_id=user_id, actor_id=actor_id, image=uploaded)
-        await remember_operational(db, user_id=user_id, actor_id=actor_id, item=source_item, card=target)
         await db[EVENTS].insert_one({
             "user_id": user_id, "order_number": order.order_number,
             "operational_item_id": operational_item_id, "event_type": "operational_image_updated",
@@ -1355,19 +1360,20 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             raise HTTPException(409, detail={"code": "operational_source_item_not_found"})
         if payload.name is not None:
             target["name"] = _text(payload.name)
-        from order_review_product_defaults import template_for, remember_operational
+        from order_review_product_defaults import template_for, operational_action, append_action
         template = template_for(source_item, target)
         if template:
             target.update(default_template_id=template["id"], default_product_key=template["product_key"])
+        default_action = await operational_action(db, user_id=user_id, actor_id=actor_id,
+            item=source_item, card=target, allow_create=False)
         target["updated_at"] = _now()
         target["updated_by"] = actor_id
         result = await db[WORKFLOWS].update_one(
             {"user_id": user_id, "order_number": order_number, "revision": revision},
-            {"$set": {"operational_items": operational_items, "revision": revision + 1, "updated_at": _now(), "updated_by": actor_id}},
+            {"$set": {"operational_items": operational_items, "default_actions": append_action(workflow, default_action), "revision": revision + 1, "updated_at": _now(), "updated_by": actor_id}},
         )
         if not result.matched_count:
             raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"})
-        await remember_operational(db, user_id=user_id, actor_id=actor_id, item=source_item, card=target)
         return await _detail(db, user_id, order, local_only=True)
 
     @router.delete("/{order_number}/operational-items/{operational_item_id:path}")
@@ -1404,6 +1410,8 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         if target is None:
             raise HTTPException(status_code=404, detail={"code": "operational_item_not_found"})
         remaining = [row for row in operational_items if _text(row.get("operational_item_id")) != operational_item_id]
+        from order_review_product_defaults import forget_action, append_action
+        default_action = await forget_action(db, user_id=user_id, actor_id=actor_id, card=target)
 
         states = _state_map(workflow)
         source_item_id = _text(target.get("source_order_item_id"))
@@ -1431,6 +1439,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             {"user_id": user_id, "order_number": order_number, "revision": revision},
             {"$set": {
                 "operational_items": remaining,
+                "default_actions": append_action(workflow, default_action),
                 "items": list(states.values()),
                 "revision": revision + 1,
                 "updated_at": _now(),
@@ -1439,8 +1448,6 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         )
         if not result.matched_count:
             raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"})
-        from order_review_product_defaults import forget_operational
-        await forget_operational(db, user_id=user_id, card=target)
         await db[EVENTS].insert_one({
             "user_id": user_id,
             "order_number": order_number,

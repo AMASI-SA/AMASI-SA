@@ -1,9 +1,7 @@
-"""Coalesce product setup reads in one draft response or receiving transaction.
+"""Memoize immutable product setup reads inside one receiving transaction.
 
 Never caches pieces, source events, sessions, invoices or accounting data.
-Each caller creates and discards its own scope; there is no cross-request TTL.
-Read-only draft responses may use no transaction. Financial refresh and approval
-must retain their real snapshot transaction. Discard before product setup writes.
+The caller must discard this object before changing product setup.
 """
 from copy import deepcopy
 from bson import json_util

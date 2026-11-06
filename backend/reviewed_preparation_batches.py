@@ -80,6 +80,7 @@ class PreparationProductSelection(BaseModel):
     group_key: str = Field(min_length=1, max_length=500)
     quantity: int = Field(ge=1, le=MAX_BATCH_UNITS)
     revision: str | None = Field(default=None, min_length=64, max_length=64)
+    order_number: str | None = Field(default=None, min_length=1, max_length=80)
 
 
 class CreatePreparationBatchRequest(BaseModel):
@@ -102,6 +103,10 @@ class CreatePreparationBatchRequest(BaseModel):
             raise ValueError("duplicate_product_group")
         if sum(value.quantity for value in values) > MAX_BATCH_UNITS:
             raise ValueError("batch_unit_limit_exceeded")
+        anchored = [value for value in values if value.order_number is not None]
+        if anchored and (len(anchored) != len(values) or len(values) > 50
+                or any(value.quantity != 1 or not value.revision or not _text(value.order_number) for value in values)):
+            raise ValueError("anchored_preparation_selection_incomplete")
         return values
 
 
@@ -381,6 +386,10 @@ def plan_preparation_allocations(
         product = by_key.get(group_key)
         if not product:
             raise ValueError("reviewed_product_not_available")
+        anchor = _text(selection.get("order_number"))
+        if anchor and (not product.get("piece_level") or len(product.get("source_lines") or []) != 1
+                or _text(product["source_lines"][0].get("order_number")) != anchor):
+            raise ValueError("reviewed_selection_stale")
         expected_revision = _text(selection.get("revision"))
         current_revision = _text(product.get("revision"))
         if expected_revision and expected_revision != current_revision:
@@ -1444,6 +1453,13 @@ def make_reviewed_preparation_batches_router(
         user_id = _merchant_user_id(reviewer)
         await ensure_preparation_batch_indexes(db)
         await _cleanup_stale_builds(db, user_id)
+        selected_numbers = sorted({_text(value.order_number) for value in payload.selections if value.order_number is not None})
+        selection_rows = [value.model_dump(exclude={"order_number"} if value.order_number is None else set()) for value in payload.selections]
+
+        def same_anchored_request(row):
+            identity = lambda values: sorted((_text(value.get("group_key")), int(value.get("quantity") or 0),
+                _text(value.get("revision")), _text(value.get("order_number"))) for value in values)
+            return identity(row.get("selections") or []) == identity(selection_rows)
 
         existing = await db[BATCHES].find_one(
             {
@@ -1453,6 +1469,9 @@ def make_reviewed_preparation_batches_router(
             {"_id": 0},
         )
         if existing:
+            if selected_numbers and not same_anchored_request(existing):
+                raise HTTPException(409, detail={"code": "preparation_request_selection_conflict",
+                    "message": "هوية الطلب تخص ملفًا باختيارات أخرى؛ لم يُنشأ ملف جديد."})
             if _text(existing.get("status")) == "ready":
                 registry = await _finalize_batch_assignment(
                     db,
@@ -1501,11 +1520,11 @@ def make_reviewed_preparation_batches_router(
                 },
             )
 
-        context = await load_reviewed_product_context(
-            db,
-            user_id=user_id,
-            limit=MAX_REVIEWED_ORDERS,
-        )
+        # Anchors bound the read, never the authority: the canonical catalog
+        # still proves every exact physical identity/revision and customer option.
+        context = await load_reviewed_product_context(db, user_id=user_id,
+            limit=len(selected_numbers) if selected_numbers else MAX_REVIEWED_ORDERS,
+            **({"order_numbers": selected_numbers} if selected_numbers else {}))
         if context.get("truncated"):
             raise HTTPException(
                 status_code=409,
@@ -1514,7 +1533,6 @@ def make_reviewed_preparation_batches_router(
                     "message": "عدد الطلبات يتجاوز الحد التشغيلي؛ لا يمكن إنشاء ملف من بيانات ناقصة.",
                 },
             )
-        selection_rows = [value.model_dump() for value in payload.selections]
         try:
             planned = plan_preparation_allocations(
                 context["catalog"].get("products") or [],
@@ -1585,6 +1603,9 @@ def make_reviewed_preparation_batches_router(
                 {"user_id": user_id, "client_request_id": payload.client_request_id},
                 {"_id": 0},
             )
+            if duplicate and selected_numbers and not same_anchored_request(duplicate):
+                raise HTTPException(409, detail={"code": "preparation_request_selection_conflict",
+                    "message": "هوية الطلب تخص ملفًا باختيارات أخرى؛ لم يُنشأ ملف جديد."})
             if duplicate and _text(duplicate.get("status")) == "ready":
                 return _batch_response(duplicate)
             raise HTTPException(
