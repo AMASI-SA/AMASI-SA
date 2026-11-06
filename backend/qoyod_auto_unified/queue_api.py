@@ -95,6 +95,8 @@ async def _execute_list(
     now: Optional[datetime] = None,
     from_date: Any = None,
     to_date: Any = None,
+    audit=None,
+    cache_summary=True,
 ) -> dict[str, Any]:
     """Execute one read model build and reuse its private audit for counts."""
     from integrations.qoyod import unsent_orders as unsent_module
@@ -117,6 +119,7 @@ async def _execute_list(
         from_date=from_date,
         to_date=to_date,
         _include_internal=True,
+        **({'_audit': audit} if audit is not None else {}),
     )
     audit = result.pop("_candidate_audit")
     failures = result.pop("_manual_failures")
@@ -143,12 +146,13 @@ async def _execute_list(
         proof_by_reference.values(), settings.get("invoice_presence_snapshot"),
         now=now, scan_truncated=audit.get("scan_truncated", False),
     )
-    await cache_report_summary(
-        db, user_id=user_id, orders_user_id=effective_owner,
-        proofs=proof_by_reference.values(), from_date=from_date, to_date=to_date,
-        search=search, salla_status=salla_status, now=now, settings=settings,
-        scan_truncated=audit.get("scan_truncated", False),
-    )
+    if cache_summary:
+        await cache_report_summary(
+            db, user_id=user_id, orders_user_id=effective_owner,
+            proofs=proof_by_reference.values(), from_date=from_date, to_date=to_date,
+            search=search, salla_status=salla_status, now=now, settings=settings,
+            scan_truncated=audit.get("scan_truncated", False),
+        )
     absent_references = set(presence["order_numbers"])
 
     counts = {SENT: 0, UNSENT: 0, FAILED: 0, DUPLICATE: 0}

@@ -1,0 +1,36 @@
+{
+  "task_id": "BACKGROUND-WORKERS-QOYOD-2H-20261106",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/mezan-background-workers-qoyod-2h-20261106",
+  "base": "049fba51c13b902cd12808e03e87aca203649fb7",
+  "reused_qoyod_source": "fa1aae7bcdc6b1fc09091a46752bd93ee7b049b1",
+  "related_prs": [1776, 1785],
+  "stage": "WIP: implementation and isolated verification in progress",
+  "user_requirement": "Complete platform performance fixes. Automatic Qoyod invoice sending must remain enabled according to existing settings and run every two hours.",
+  "implemented": [
+    "Ported PR1776 cleanly onto current Production without changing its original branch or the Production branch",
+    "Server-clock Mongo cycle lease and durable two-hour completion cooldown; bounded multiple sequential send batches; crash recovery and ownership fencing",
+    "Separate bounded discovery/recovery loop with no invoice creation between cycles",
+    "Managed child runtime for existing startup workers and advertising schedulers, with inherited canonical safety composition and existing per-job locks",
+    "Per-request sanitized route-template timing logs without query/header/body/customer data",
+    "Two-hour cadence and cycle state exposed through existing Qoyod owner settings status"
+  ],
+  "fresh_verification": {
+    "ported_baseline": "72 passed, 6 real-Mongo cases skipped before the isolated database was started",
+    "two_hour_cycle_real_mongo": "6 passed; loopback-only MongoDB8.0.12 single-member replica set; synthetic batches, no provider requests",
+    "process_health_auth_readiness_timing": "28 passed from repository root with a synthetic JWT test secret",
+    "canonical_child_boot": "In progress. Test-only dependency closure initially lacked xlsxwriter; installed the repository-pinned version into an isolated D-drive target. No application dependency manifest changed."
+  },
+  "remaining": [
+    "Verify real canonical child startup/shutdown on isolated Mongo and fix any runtime/lifecycle defects",
+    "Add and run cross-process cycle ownership and backlog/failure regression coverage",
+    "Run the integrated Qoyod/financial/worker/Snapchat/frontend affected checks and inspect the final diff",
+    "Publish a draft PR/checkpoint and inspect exact-source CI before declaring review readiness",
+    "Live latency/CPU/RSS comparison remains a separately governed deployment/measurement step"
+  ],
+  "production_changed": false,
+  "deployment_or_lease_created": false,
+  "provider_or_financial_test_writes": false,
+  "runtime_evidence": "D:/codex-release-artifacts/mezan-background-workers-qoyod-2h-20261106",
+  "next_safe_action": "Finish the isolated canonical worker boot probe, then run integrated affected checks. Do not merge, publish, alter /app or activate any disabled worker."
+}

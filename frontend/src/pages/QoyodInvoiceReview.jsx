@@ -158,7 +158,9 @@ export default function QoyodInvoiceReview() {
         throw new Error(summary.error || "فشل تحديث فواتير قيود");
       }
       setSyncSummary(summary);
-      toast.success(`تم تحديث ${summary?.in_scope ?? summary?.updated ?? 0} فاتورة من قيود`);
+      toast.success(summary?.refresh_requested
+        ? "طُلب تحديث الفحص المشترك؛ تظهر آخر نسخة محفوظة حتى اكتماله في صفحة المطابقة"
+        : `تم تحديث ${summary?.in_scope ?? summary?.updated ?? 0} فاتورة من قيود`);
       if (page === 1) await load();
       else setPage(1);
     } catch (requestError) {

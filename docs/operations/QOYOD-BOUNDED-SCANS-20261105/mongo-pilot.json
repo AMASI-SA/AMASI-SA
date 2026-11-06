@@ -1,0 +1,40 @@
+{
+  "mode": "pilot",
+  "at_utc": "2026-11-05T21:47:46.056045+00:00",
+  "engine": "MongoDB8.0.12, isolated loopback replica set, WiredTiger0.25GiB",
+  "profile_scope": "disabled; wire CommandListener only, no plan logging overhead",
+  "production_or_provider_requests": false,
+  "source_sha256": {
+    "qoyod_auto_unified/incremental.py": "84d2b85c02a3b57102b701de316eefcc8054383d8f7afa399d30a25e8f1ff00b",
+    "qoyod_auto_unified/queue_select.py": "4e1a630f7c0e0f95c6c83153b7aa20a40bb999d87f4929666330f1e130fd34bc",
+    "integrations/qoyod/candidate_orders.py": "5c1d5817002f0f5cea6cc940735bafb705caa73c42f1d9d63d44e685e910206f",
+    "integrations/qoyod/models.py": "ab485a66f3f5bb670f953de1551a86b8fe6c65b6721227a3a0812ec4b2332edf"
+  },
+  "trials": [
+    {
+      "orders": 1000,
+      "sent_history": 900,
+      "ticks": 10,
+      "selected_count": 50,
+      "collection_api_calls": {
+        "find": 61,
+        "find_one": 10,
+        "returned_documents": 1650,
+        "writes": 13
+      },
+      "wall_ms": 312.055,
+      "client_cpu_ms": 93.75,
+      "wire_commands": {
+        "find": 71,
+        "update": 13
+      },
+      "driver_command_ms": {
+        "find": 77.263,
+        "update": 149.485
+      },
+      "driver_read_ms": 77.263,
+      "driver_all_command_ms": 226.748,
+      "profiling_enabled": false
+    }
+  ]
+}

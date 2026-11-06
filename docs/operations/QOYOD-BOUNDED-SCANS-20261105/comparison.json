@@ -1,0 +1,26 @@
+{
+  "scope": "offline discovery only, not production or employee endpoints",
+  "before_medians": {
+    "cpu_ms": 4734.38,
+    "wall_ms": 4967.33,
+    "python_peak_bytes": 2458664,
+    "heartbeat_max_lag_ms": 565.22
+  },
+  "after_medians": {
+    "cpu_ms": 1000.0,
+    "wall_ms": 1147.83,
+    "python_peak_bytes": 548381,
+    "heartbeat_max_lag_ms": 99.06
+  },
+  "baseline_recheck_medians": {
+    "cpu_ms": 3078.12,
+    "wall_ms": 3499.12,
+    "python_peak_bytes": 2472101,
+    "heartbeat_max_lag_ms": 395.37
+  },
+  "returned_document_reduction_percent": 83.5,
+  "collection_read_calls_before": 30,
+  "collection_read_calls_after": 61,
+  "wire_commands_measured": false,
+  "employee_latency_measured": false
+}

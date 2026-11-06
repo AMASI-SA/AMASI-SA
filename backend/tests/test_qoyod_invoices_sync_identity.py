@@ -50,10 +50,10 @@ def test_invoice_sync_batches_database_upserts():
 
     result = asyncio.run(_write_invoice_batches(collection, rows))
 
-    assert result["created"] == 6
-    assert result["updated"] == 1195
-    assert result["write_batches"] == 3
+    assert result["created"] == 25
+    assert result["updated"] == 1176
+    assert result["write_batches"] == 13
     assert result["bulk_fallback_batches"] == 0
-    assert len(collection.bulk_calls) == 3
-    assert [len(call[0]) for call in collection.bulk_calls] == [500, 500, 201]
+    assert len(collection.bulk_calls) == 13
+    assert [len(call[0]) for call in collection.bulk_calls] == [100] * 12 + [1]
     assert all(ordered is False for _, ordered in collection.bulk_calls)

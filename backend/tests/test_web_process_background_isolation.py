@@ -19,7 +19,11 @@ def test_heavy_background_jobs_do_not_start_inside_web_process():
 
 def test_core_salla_and_qoyod_paths_remain_enabled():
     source = SERVER.read_text(encoding="utf-8")
-
-    assert "salla_token_maintenance_loop(db)" in source
-    assert "_qoyod_worker_start(db, interval_sec=5.0, batch_limit=25)" in source
-    assert "_qoyod_plan_b_auto_start(db, interval_sec=15.0, batch_limit=5)" in source
+    runtime = (SERVER.parent / 'background_worker_runtime.py').read_text(encoding='utf-8')
+    assert 'start_background_process(app)' in source
+    assert 'stop_background_process(app)' in source
+    assert 'salla_token_maintenance_loop' in runtime
+    assert 'pipeline(db, interval_sec=5.0, batch_limit=25)' in runtime
+    assert 'automatic(db, batch_limit=5)' in runtime
+    assert 'qoyod-full-scan' in runtime
+    assert '_qoyod_plan_b_auto_start(db, interval_sec=15.0' not in source

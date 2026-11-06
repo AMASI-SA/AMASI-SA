@@ -1,0 +1,102 @@
+{
+  "1000_baseline": {
+    "samples": 5,
+    "metrics": {
+      "wall_ms": {
+        "median": 694.161,
+        "min": 575.498,
+        "max": 1021.476
+      },
+      "driver_read_ms": {
+        "median": 297.257,
+        "min": 254.045,
+        "max": 436.681
+      },
+      "driver_all_command_ms": {
+        "median": 305.772,
+        "min": 261.811,
+        "max": 448.027
+      },
+      "client_cpu_ms": {
+        "median": 375.0,
+        "min": 375.0,
+        "max": 609.375
+      }
+    }
+  },
+  "1000_candidate": {
+    "samples": 5,
+    "metrics": {
+      "wall_ms": {
+        "median": 384.1,
+        "min": 322.527,
+        "max": 447.604
+      },
+      "driver_read_ms": {
+        "median": 88.728,
+        "min": 81.742,
+        "max": 126.351
+      },
+      "driver_all_command_ms": {
+        "median": 259.148,
+        "min": 249.993,
+        "max": 326.373
+      },
+      "client_cpu_ms": {
+        "median": 109.375,
+        "min": 46.875,
+        "max": 171.875
+      }
+    }
+  },
+  "5000_baseline": {
+    "samples": 5,
+    "metrics": {
+      "wall_ms": {
+        "median": 4278.804,
+        "min": 3645.273,
+        "max": 4713.384
+      },
+      "driver_read_ms": {
+        "median": 2081.5,
+        "min": 1787.09,
+        "max": 2229.318
+      },
+      "driver_all_command_ms": {
+        "median": 2094.395,
+        "min": 1797.038,
+        "max": 2244.301
+      },
+      "client_cpu_ms": {
+        "median": 2312.5,
+        "min": 1968.75,
+        "max": 2750.0
+      }
+    }
+  },
+  "5000_candidate": {
+    "samples": 5,
+    "metrics": {
+      "wall_ms": {
+        "median": 394.885,
+        "min": 367.627,
+        "max": 440.382
+      },
+      "driver_read_ms": {
+        "median": 93.437,
+        "min": 70.786,
+        "max": 102.807
+      },
+      "driver_all_command_ms": {
+        "median": 302.988,
+        "min": 265.854,
+        "max": 341.994
+      },
+      "client_cpu_ms": {
+        "median": 93.75,
+        "min": 78.125,
+        "max": 109.375
+      }
+    }
+  }
+}

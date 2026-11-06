@@ -1,7 +1,8 @@
 """Constant-size banner reads; never start an audit, provider call or worker.
 
 Full, explicitly requested reports may publish their existing evidence here.
-The banner only reads the snapshot-bound cache and fails closed on expiry.
+The banner retains historical display evidence, with an explicit stale label.
+No sender reads or authorizes a financial write from this display cache.
 """
 from datetime import datetime, timezone
 import logging
@@ -10,6 +11,8 @@ from integrations.qoyod.invoice_presence import verified_unsent_summary
 
 _FIELDS = ('count', 'verification_required', 'verified_at', 'expires_at', 'complete')
 _PROJECTION = {'_id': 0, 'invoice_presence_summary': 1,
+               'last_successful_scan_summary': 1, 'scheduled_scan_error': 1,
+               'scheduled_scan_running': 1, 'scheduled_scan_running_until': 1,
                'invoice_presence_snapshot.started_at': 1,
                'invoice_presence_snapshot.complete': 1}
 
@@ -22,20 +25,30 @@ def _unknown():
 async def read_header_summary(db, *, user_id, orders_user_id, now=None):
     # Exactly one settings read, with a bounded projection; no order collections.
     settings = await db.qoyod_settings.find_one({'user_id': str(user_id)}, _PROJECTION) or {}
-    cached = settings.get('invoice_presence_summary') or {}
+    cached = settings.get('last_successful_scan_summary') or settings.get('invoice_presence_summary') or {}
     snapshot = settings.get('invoice_presence_snapshot') or {}
     now = now or datetime.now(timezone.utc)
     try:
-        valid = (snapshot.get('complete') is True
-                 and cached.get('snapshot_started_at') == snapshot.get('started_at')
-                 and cached.get('orders_user_id') == str(orders_user_id)
+        valid = (cached.get('orders_user_id') == str(orders_user_id)
                  and cached.get('complete') is True
                  and datetime.fromisoformat(cached['verified_at']) <= now
-                 < datetime.fromisoformat(cached['expires_at'])
                  and type(cached.get('count')) is int and cached['count'] >= 0)
+        stale = (bool(settings.get('scheduled_scan_error'))
+                 or datetime.fromisoformat(cached['expires_at']) <= now
+                 or snapshot.get('complete') is not True
+                 or cached.get('snapshot_started_at') != snapshot.get('started_at'))
     except (KeyError, TypeError, ValueError):
         valid = False
-    return {'invoice_presence': {k: cached.get(k) for k in _FIELDS} if valid else _unknown()}
+        stale = True
+    presence = {k: cached.get(k) for k in _FIELDS} if valid else _unknown()
+    presence['stale'] = stale if valid else True
+    presence['updated_at'] = cached.get('updated_at') or cached.get('verified_at') if valid else None
+    try:
+        running = (settings.get('scheduled_scan_running') is True
+                   and datetime.fromisoformat(settings['scheduled_scan_running_until']) > now)
+    except (KeyError, TypeError, ValueError):
+        running = False
+    return {'invoice_presence': presence, 'scan_running': running}
 
 
 async def cache_report_summary(db, *, user_id, orders_user_id, proofs,
@@ -58,6 +71,8 @@ async def cache_report_summary(db, *, user_id, orders_user_id, proofs,
             return
         presence = verified_unsent_summary(proofs, snapshot, now=now,
                                           scan_truncated=scan_truncated)
+        if presence['complete'] is not True or type(presence['count']) is not int:
+            return  # Never replace successful display evidence with a failure.
         summary = {k: presence[k] for k in _FIELDS}
         summary.update(orders_user_id=str(orders_user_id),
                        snapshot_started_at=snapshot['started_at'])

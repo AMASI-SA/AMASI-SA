@@ -69,7 +69,7 @@ export default function QoyodReconciliation() {
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState("الكل");
   const [error, setError] = useState(null);
-  const [syncFirst, setSyncFirst] = useState(false);
+
   const [fromDate, setFromDate] = useState("2026-07-01");
   const [toDate, setToDate] = useState(todayRiyadh);
   const [page, setPage] = useState(1);
@@ -78,38 +78,31 @@ export default function QoyodReconciliation() {
   const [repairError, setRepairError] = useState(null);
 
   const runReport = useCallback(
-    async ({ withSync = true } = {}) => {
+    async ({ refresh = false } = {}) => {
       setLoading(true);
       setError(null);
       try {
-        const res = await api.get(
-          "/integrations/qoyod/reconciliation-report",
-          {
-            params: {
-              sync_first: withSync,
-              from_date: fromDate,
-              to_date: toDate,
-            },
-          },
-        );
+        const res = refresh
+          ? await api.post("/integrations/qoyod/reconciliation-refresh")
+          : await api.get("/integrations/qoyod/reconciliation-report");
         if (res.data?.ok === false) {
           setError(res.data.error || "تعذر تشغيل تقرير المطابقة");
-          setData({
-            ok: false,
-            sync_summary: res.data.sync_summary,
-            counts: {}, rows: [],
-          });
+
         } else {
           setData(res.data);
           setPage(1);
         }
       } catch (e) {
         setError(extractDetail(e));
+        setData(previous => previous ? { ...previous, scan: {
+          ...previous.scan, stale: true, last_error: 'refresh_failed',
+          running: refresh || previous.scan?.running,
+        } } : previous);
       } finally {
         setLoading(false);
       }
     },
-    [fromDate, toDate],
+    [],
   );
 
   const repairMarkers = useCallback(async () => {
@@ -121,7 +114,7 @@ export default function QoyodReconciliation() {
         "/integrations/qoyod/manual/repair-recon-markers",
       );
       setRepairResult(res.data);
-      await runReport({ withSync: false });
+      await runReport();
     } catch (e) {
       setRepairError(extractDetail(e));
     } finally {
@@ -134,15 +127,27 @@ export default function QoyodReconciliation() {
   // empty after refresh; the local `qoyod_invoices` table is
   // persistent and reconciliation must reflect it on every open.
   useEffect(() => {
-    runReport({ withSync: false });
+    runReport();
   }, [runReport]);
+
+  useEffect(() => {
+    if (!data?.scan?.running) return;
+    let pending = false;
+    const timer = window.setInterval(async () => {
+      if (pending || document.visibilityState !== "visible") return;
+      pending = true;
+      try { await runReport(); } finally { pending = false; }
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [data?.scan?.running, runReport]);
 
   const rows = useMemo(
     () =>
       (data?.rows || []).filter(
-        (r) => tab === "الكل" || r.match === tab,
+        (r) => (tab === "الكل" || r.match === tab)
+          && (!r.salla_date || (r.salla_date >= fromDate && r.salla_date.slice(0, 10) <= toDate)),
       ),
-    [data, tab],
+    [data, tab, fromDate, toDate],
   );
   const counts = data?.counts || {};
   const sync = data?.sync_summary;
@@ -169,12 +174,9 @@ export default function QoyodReconciliation() {
             تقرير المطابقة — ميزان ↔ قيود
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            مصدر الحقيقة الوحيد للمقارنة. الوضع الافتراضي يقرأ النسخة
-            المحلية فقط، ثم يطابق أرقام طلبات سلة مع حقل المرجع في قيود
-            كمجموعات فعلية. مصدر الطلبات هو{" "}
-            <code className="font-mono">unified_orders</code> (نفس مصدر
-            صفحة الطلبات). النطاق الفعلي: من{" "}
-            {data?.from_date || fromDate} إلى {data?.to_date || toDate} شاملًا.
+            يعرض آخر فحص شامل ناجح محفوظ، دون تشغيل فحص عند فتح الصفحة.
+            العدادات تشمل نطاق الفحص الكامل؛ التاريخ والتبويب يرشحان الصفوف المعروضة.
+            متابعة الطلبات الجديدة وإرسالها مستمران بصورة مستقلة.
           </p>
           <p className="text-[11px] text-slate-400 mt-1">
             🔒 لا إرسال ولا تعديل في قيود. إصلاح العلامات يكتب محلياً
@@ -215,32 +217,24 @@ export default function QoyodReconciliation() {
               ? "جاري إصلاح علامات ميزان…"
               : "إصلاح علامات ميزان محلياً"}
           </button>
-          <label
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
-            data-testid="recon-sync-first-toggle"
-          >
-            <input
-              type="checkbox"
-              checked={syncFirst}
-              onChange={(e) => setSyncFirst(e.target.checked)}
-            />
-            مزامنة قراءة قيود وحفظ النسخة المحلية أولًا
-          </label>
           <button
-            onClick={() => runReport({ withSync: syncFirst })}
-            disabled={loading}
+            onClick={() => runReport({ refresh: true })}
+            disabled={loading || data?.scan?.running}
             data-testid="recon-run-btn"
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700 disabled:opacity-50"
           >
-            {loading
-              ? syncFirst
-                ? "جاري المزامنة والمقارنة…"
-                : "جاري التحميل…"
-              : "تشغيل المطابقة الآن"}
+            {loading || data?.scan?.running ? "الفحص جارٍ…" : "تحديث الفحص الآن"}
           </button>
         </div>
       </div>
 
+      <div className="rounded-lg border p-3 text-sm" data-testid="recon-scan-status">
+        الفحص الشامل خمس مرات يوميًا. آخر نجاح: {data?.scan?.updated_at
+          ? new Date(data.scan.updated_at).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" }) : "لا توجد نتيجة ناجحة بعد"}.
+        {(data?.scan?.stale || data?.scan?.last_error) && " النتيجة قديمة؛ تعذر تحديثها أو حان موعد فحص جديد."}
+        {data?.scan?.running && " التحديث جارٍ؛ تظهر آخر نتيجة ناجحة حتى اكتماله."}
+        {data?.truncated && ` يعرض الجدول أول ${data.returned_row_count} من ${data.matched_row_count} نتيجة؛ العدادات تشمل الفحص الكامل.`}
+      </div>
       {repairError && (
         <div
           className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700"

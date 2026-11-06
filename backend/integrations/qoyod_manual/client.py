@@ -405,6 +405,10 @@ class ManualQoyodClient:
         return {}
 
 
+    def invalidate_invoice_absence(self, reference: str) -> None:
+        if self._invoice_reference_snapshot is not None and str(reference) not in self._invoice_reference_snapshot:
+            self._invoice_reference_snapshot = None
+
     async def find_invoice_by_reference(self, reference: str
                                          ) -> Optional[dict]:
         """Return the first invoice whose reference matches — used by
@@ -459,6 +463,11 @@ class ManualQoyodClient:
             match = _exact_invoice(body)
             if match is not None:
                 return match
+        if any(self._invoice_rows(body) for body in bodies):
+            # A provider may ignore an unsupported filter. A limited first
+            # page without the reference is not proof that it is absent.
+            self._invoice_reference_snapshot = await self._load_complete_invoice_reference_snapshot()
+            return self._invoice_reference_snapshot.get(normalized_reference)
         return None
 
     @staticmethod
@@ -495,6 +504,8 @@ class ManualQoyodClient:
         and a full final page at the safety cap remain UNKNOWN and propagate.
         """
         by_reference: dict[str, dict] = {}
+        seen_ids: set[str] = set()
+        expected_count = None
         for page in range(1, _INVOICE_SCAN_MAX_PAGES + 1):
             try:
                 body = await self._request(
@@ -506,7 +517,9 @@ class ManualQoyodClient:
                     },
                 )
             except ManualQoyodError as exc:
-                if exc.status_code == 404 and page > 1:
+                if page > 1 and _is_confirmed_empty_list(exc) and (
+                    expected_count is None or len(seen_ids) == expected_count
+                ):
                     return by_reference
                 raise
 
@@ -520,11 +533,31 @@ class ManualQoyodClient:
                     ),
                 )
             for row in rows:
+                invoice_id = str(row.get('id') or '').strip()
+                if not invoice_id or invoice_id in seen_ids:
+                    raise ManualQoyodError(status_code=0, endpoint='GET /invoices',
+                        response_excerpt='invoice identity/pagination unconfirmed')
+                seen_ids.add(invoice_id)
                 value = str(row.get("reference") or "").strip()
                 if value:
                     by_reference.setdefault(value, row)
 
-            if len(rows) < _INVOICE_SCAN_PAGE_SIZE:
+            meta = body.get('meta') if isinstance(body, dict) else None
+            if isinstance(meta, dict) and 'total' in meta:
+                total = meta['total']
+                if isinstance(total, str) and total.isdigit():
+                    total = int(total)
+                if type(total) is not int or total < 0 or (expected_count is not None and total != expected_count):
+                    raise ManualQoyodError(status_code=0, endpoint='GET /invoices',
+                        response_excerpt='invoice total unconfirmed')
+                expected_count = total
+            if expected_count is not None:
+                if len(seen_ids) > expected_count or (not rows and len(seen_ids) != expected_count):
+                    raise ManualQoyodError(status_code=0, endpoint='GET /invoices',
+                        response_excerpt='invoice snapshot incomplete')
+                if len(seen_ids) == expected_count:
+                    return by_reference
+            elif len(rows) < _INVOICE_SCAN_PAGE_SIZE:
                 return by_reference
             if page < _INVOICE_SCAN_MAX_PAGES \
                     and _INVOICE_SCAN_DELAY_SECONDS > 0:
