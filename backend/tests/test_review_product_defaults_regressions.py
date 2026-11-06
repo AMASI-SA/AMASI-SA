@@ -48,6 +48,28 @@ class ProductDefaultRegressionTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("SECOND-CUSTOMER", str(setting))
         self.assertNotIn("THIRD-CUSTOMER", str(setting))
 
+    async def test_arabic_card_text_is_not_saved_as_a_global_condition_and_future_text_is_fresh(self):
+        async def message_order(number, message):
+            payload = self.source_payload(number=number)
+            payload["items"][0]["options"] = [{"name": "gift box", "value": "yes"}, {"name": "نص الكرت", "value": message}]
+            self.assertTrue((await self.webhook(payload))["synced"])
+            response = await self.client.get(f"/order-reviews-v1/{number}?local_only=true")
+            self.assertEqual(response.status_code, 200, response.text)
+            return response.json()
+        first = await message_order("message-template", "PRIVATE-MESSAGE-FIRST")
+        created = await self.client.post("/order-reviews-v1/message-template/operational-items", json={
+            "expected_revision": first["revision"], "source_order_item_id": first["items"][0]["order_item_id"],
+            "name": "Synthetic card", "linked_spec_keys": ["gift box", "نص الكرت"],
+        })
+        self.assertEqual(created.status_code, 200, created.text)
+        settings = await self.db[defaults.DEFAULTS].find_one({"user_id": "owner"})
+        self.assertNotIn("PRIVATE-MESSAGE-FIRST", str(settings).upper())
+        workflow = await self.db[fixture.review.WORKFLOWS].find_one({"order_number": "message-template"})
+        self.assertNotIn("PRIVATE-MESSAGE-FIRST", str(workflow["default_actions"]).upper())
+        future = await message_order("message-future", "PRIVATE-MESSAGE-SECOND")
+        self.assertEqual(len(future["operational_items"]), 1)
+        self.assertEqual({row["key"]: row["value"] for row in future["operational_items"][0]["linked_specs"]}["نص الكرت"], "PRIVATE-MESSAGE-SECOND")
+
     async def test_unhide_on_older_order_preserves_a_different_field_saved_from_another_order(self):
         first = await self.seed("hidden-old")
         first_path = f"/order-review-export-controls-v1/hidden-old/items/{first['items'][0]['order_item_id']}"

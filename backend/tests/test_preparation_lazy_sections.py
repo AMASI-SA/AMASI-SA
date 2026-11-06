@@ -107,6 +107,12 @@ async def test_waiting_cards_page_ten_unique_headers_without_hydrating_customer_
 
 
 async def test_progress_returns_ten_then_ten_with_whole_day_totals(db, monkeypatch):
+    # Exercise the actual Production installer, including its route-history
+    # validation, rather than only the unwrapped workspace implementation.
+    import preparation_route_history as route_history
+    monkeypatch.setattr(route_history, "_INSTALLED", False)
+    monkeypatch.setattr(dispatch, "_employee_workspace", dispatch._employee_workspace)
+    route_history.install_supplier_dispatch_route_guard()
     original = await progress_seed(db, "A", "2026-11-01")
     extra = [{**original, "piece_id": f"page-piece-{index:03}", "unit_index": index + 2,
               "status": "in_progress" if index < 22 else "received",
@@ -142,3 +148,7 @@ async def test_progress_returns_ten_then_ten_with_whole_day_totals(db, monkeypat
             break
     assert counts == [10, 10, 3] and len(set(loaded)) == len(loaded) == 23
     assert batches == [10, 10, 3]
+    scoped_reads = [query for collection, query in db.reads if collection == dispatch.PIECES
+                    and "piece_id" in query and isinstance(query["piece_id"], dict)]
+    assert scoped_reads
+    assert all(len(query["piece_id"]["$in"]) <= 10 for query in scoped_reads)

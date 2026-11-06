@@ -100,8 +100,16 @@ def _conditions(specs):
             continue
         name = base._text(spec.get("name") or spec.get("key"))
         value = base._normalized(spec.get("value"))
-        question = base._normalized(name).startswith(("هل ", "do ", "would ", "want "))
-        if not base._is_personal_option(name) or (question and value in yes_no):
+        normalized = base._normalized(name)
+        question = normalized.startswith(("هل ", "do ", "would ", "want "))
+        # Free-form card text is not a reusable selection condition. Keep
+        # categorical text-style/color labels distinct from the text itself.
+        style = normalized.startswith(("نوع النص", "شكل النص", "لون النص", "خط النص", "text style", "text color", "text colour", "text font"))
+        text_label = normalized.startswith(("نص ", "النص ", "عبارة ", "العبارة ", "محتوى ", "رساله", "الرساله", "اكتب ", "أكتب ", "ادخل ", "أدخل ",
+            "card text", "gift text", "custom text", "recipient", "personalization", "personalisation")) or normalized in {"نص", "النص", "text"}
+        text_question = question and bool(set(normalized.split()).intersection({"نص", "النص", "عبارة", "العبارة", "text", "message"}))
+        personal = base._is_personal_option(name) or ((text_label or text_question) and not style)
+        if not personal or (question and value in yes_no):
             conditions[base._normalized(spec.get("key") or name)] = value
     return conditions
 
