@@ -6,8 +6,15 @@
   "reused_qoyod_source": "fa1aae7bcdc6b1fc09091a46752bd93ee7b049b1",
   "related_prs": [1776, 1785],
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1788",
-  "stage": "Implementation locally verified; CI contract adaptations verified, full remote checks pending",
+  "stage": "PR1788 merged by explicit user authorization; preparing protocol-v5 intent; waiting for the owner-provided Emergent lease status",
   "implementation_checkpoint": "c24ed63e0836d919110e1e5042ae473484817066",
+  "verified_pr_source": "76779980d38bcf5feb251888f63b1f85fabd6b1e",
+  "merged_source_A": "9e22418cf2350fe09a4bb61acfabaefb7748dede",
+  "production_git_branch_advanced": true,
+  "merge_tree_proof": "git diff --exit-code 76779980d38bcf5feb251888f63b1f85fabd6b1e 9e22418cf2350fe09a4bb61acfabaefb7748dede exited 0; merged tree is exactly the tested source tree",
+  "deployment_authorization": "User explicitly instructed merge and publish on 2026-11-06; authorization remains valid. No further approval is needed for this release.",
+  "release_base_J": "049fba51c13b902cd12808e03e87aca203649fb7",
+  "release_preparation": "An isolated GitHub Actions workflow_dispatch is preparing the candidate intent for source A and base J. Production /app, leases and publishing have not been touched.",
   "latest_user_decision": "Each cycle must attempt all eligible invoices once, without an overall 500-invoice cutoff. Add an owner button to start a cycle at any time. Concurrent requests join the active cycle.",
   "user_requirement": "Complete platform performance fixes. Automatic Qoyod invoice sending must remain enabled according to existing settings and run every two hours.",
   "implemented": [
@@ -37,15 +44,18 @@
     "workflow_lint": "actionlint 1.7.12 passed for the new disposable real-Mongo acceptance workflow",
     "diff_check": "git diff --check against the Production base passed"
   },
+  "complete_premerge_ci": "48 successful checks and six expected scope skips; zero failed or pending checks at exact source 76779980d38bcf5feb251888f63b1f85fabd6b1e",
+  "owned_test_mongo": "Stopped gracefully after verifying exact loopback port 49417, replica set mezan_bg_test_rs and the owned data directory; no other runtime stopped",
   "remaining": [
-    "Push the verified CI contract adaptations and inspect the complete exact-head check set",
-    "Finalize draft PR/handoff with source-bound evidence; stop only the owned disposable Mongo runtime after verification",
-    "Live latency/CPU/RSS comparison remains a separately governed deployment/measurement step"
+    "Obtain current /app Release Guard status from the user; no Emergent control/browser tool or browser debugging connection is available in this chat",
+    "Validate the Linux candidate intent artifact, create a dedicated intent-only B commit/PR, and complete the governed clean-clone rehearsals before merging B",
+    "Preserve existing /app platform files and local history; update only after a fresh active=false gate; run the governed build, prepare and prepublish before one Re-publish click",
+    "Require a newer visible Deployment Succeeded plus the official three-probe verify and closed lease; measure live performance afterward"
   ],
   "production_changed": false,
   "deployment_or_lease_created": false,
   "provider_or_financial_test_writes": false,
   "runtime_evidence": "D:/codex-release-artifacts/mezan-background-workers-qoyod-2h-20261106",
-  "known_ci_diagnosis": "The c24 checkpoint had two failing jobs, both caused by tests asserting the former in-web worker/GET-refresh implementation. All six failing cases were reproduced and the adjusted full test files passed locally (93 tests). Await the next exact-head jobs before claiming CI success.",
-  "next_safe_action": "Inspect PR1788 exact-head CI and finish the durable handoff. Do not merge, publish, alter /app, send live invoices or activate any disabled worker."
+  "known_ci_diagnosis": "All premerge issues are resolved. The production-source A push cannot yet qualify as reviewed B; prepare and merge the new intent-only B before any deployment. No source guard may be bypassed.",
+  "next_safe_action": "Await and inspect the candidate-intent workflow for A=9e22418cf2350fe09a4bb61acfabaefb7748dede/J=049fba51c13b902cd12808e03e87aca203649fb7. User should run: cd /app && python scripts/production_release_guard.py status. Never clear another actor's lease or discard local platform/application edits."
 }
