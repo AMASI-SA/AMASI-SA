@@ -100,11 +100,11 @@ class ManagedWorker:
             with suppress(asyncio.CancelledError):
                 await self.task
 
-    async def wake(self):
+    async def wake(self, *, assembly=False):
         if not self.status()['running'] or self.process.stdin is None:
             return False
         try:
-            self.process.stdin.write(b'wake\n')
+            self.process.stdin.write(b'assembly\n' if assembly else b'wake\n')
             await asyncio.wait_for(self.process.stdin.drain(), 1)
             return True
         except (BrokenPipeError, ConnectionResetError, asyncio.TimeoutError):
@@ -133,8 +133,8 @@ def status():
     return _current.status() if _current else {'running': False, 'execution': 'background_process'}
 
 
-async def wake_background_process():
-    return await _current.wake() if _current is not None else False
+async def wake_background_process(*, assembly=False):
+    return await _current.wake(assembly=assembly) if _current is not None else False
 
 
 async def read_status(db):

@@ -357,36 +357,54 @@ async def run_once(db, *, running=None):
         f"{FIELD}.state": "pending", f"{FIELD}.due_at": {"$lte": now().isoformat()},
         f"{FIELD}.lease_until": {"$lte": now().isoformat()}, f"{FIELD}.attempts": {"$lt": MAX_ATTEMPTS}}
     if running:
-        query["$nor"] = [{"user_id": owner, "order_number": number} for owner, number in running]
-    candidates = await db[WORKFLOWS].find(query, {"user_id": 1, "order_number": 1}).sort([
+        query["$nor"] = [{"user_id": owner, "order_number": number} for owner, number, _ in running]
+    candidates = await db[WORKFLOWS].find(query, {"user_id": 1, "order_number": 1,
+        f"{FIELD}.status_attempted": 1}).sort([
+        (f"{FIELD}.status_attempted", 1),
         (f"{FIELD}.attempts", 1), (f"{FIELD}.due_at", 1), ("_id", 1),
     ]).limit(capacity).to_list(capacity)
+    started = 0
     for row in candidates:
-        key = row["user_id"], row["order_number"]
+        # Never fill the last slot with old label/status readback. A last-piece
+        # wakeup can dispatch a new completion even while three labels stall.
+        first_attempt = (row.get(FIELD) or {}).get("status_attempted") is False
+        if (not first_attempt and len(running) >= MAX_CONCURRENT_DELIVERIES - 1
+                and not any(key[2] for key in running)):
+            continue
+        key = row["user_id"], row["order_number"], first_attempt
         running[key] = asyncio.create_task(_resume_queued(db, row), name="assembly-delivery-item")
+        started += 1
     if wait_for_batch:
         await asyncio.gather(*running.values())
-    return len(candidates)
+    return started
 
 
-async def loop(db):
+async def loop(db, *, wake_event=None):
     # Keep polling free slots while another order awaits Salla or its label.
     # The durable per-order claim in resume still excludes other replicas.
     running = {}
     try:
         while True:
+            if wake_event is not None:
+                wake_event.clear()
             try:
                 await run_once(db, running=running)
             except Exception as exc:
                 logger.warning("Assembly delivery deferred: %s", type(exc).__name__)
-            await asyncio.sleep(5)
+            if wake_event is None:
+                await asyncio.sleep(5)
+            else:
+                try:
+                    await asyncio.wait_for(wake_event.wait(), 5)
+                except asyncio.TimeoutError:
+                    pass
     finally:
         for task in running.values():
             task.cancel()
         await asyncio.gather(*running.values(), return_exceptions=True)
 
 
-async def start_worker(db):
+async def start_worker(db, *, wake_event=None):
     await db[WORKFLOWS].create_index([(f"{FIELD}.version", 1), (f"{FIELD}.state", 1),
                                     (f"{FIELD}.due_at", 1)], name="assembly_delivery_due")
-    return asyncio.create_task(loop(db), name="assembly-completion-delivery")
+    return asyncio.create_task(loop(db, wake_event=wake_event), name="assembly-completion-delivery")

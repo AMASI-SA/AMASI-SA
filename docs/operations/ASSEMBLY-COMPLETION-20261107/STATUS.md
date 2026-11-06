@@ -14,7 +14,12 @@ disable evidence checks or replay Ready to recover that record.
 The queue awaited each entire delivery sequentially, including provider/label
 waits up to 90 seconds, and stopped polling new work until that batch finished.
 The source fix retains at most four active delivery tasks, polls available slots
-every five seconds, and orders first attempts before older retries. Existing
+every five seconds, and orders first attempts before older retries. A committed
+last-piece Ready also sends a dedicated assembly wake message through the existing
+parent/worker pipe, interrupting that polling interval without waking financial
+jobs. Old readback/label retries cannot occupy the final first-attempt slot. Ready
+still waits only for the local commit and bounded pipe drain, not provider IO.
+Existing
 durable claims, provider read-before-write, source/component checks, attempt
 journal and label proof remain unchanged. Shutdown cancels and joins child tasks.
 
@@ -25,10 +30,14 @@ Fresh local evidence uses only an isolated loopback Mongo replica set:
   provider prevented new completion dispatch; old retries excluded the new order.
 - After change: all 3 scheduler tests passed in 0.450 seconds. They cover arrival
   during a blocked provider, four-task bound and shutdown, and first-attempt order.
+- Owner emphasized immediate dispatch while retaining fast Ready acknowledgement.
+  Added targeted wakeup and saturated-label regressions; both initially failed,
+  and all 5 scheduler tests then passed in 0.792 seconds.
 - `git diff --check`: passed. Wider affected integration validation is pending.
 
-Changed source: `backend/assembly_completion_delivery.py`.
-Regression: `backend/tests/test_assembly_completion_scheduling.py`.
+Changed source: assembly delivery/Ready route and the existing managed-worker
+process, pipe reader and task composition. Regressions cover scheduling, real pipe
+isolation and the last-piece post-commit boundary.
 
 Production changed by this task: **no**. No business data/provider write, lease,
 intent freeze, merge or publication has occurred. `/app` latest checked guard was

@@ -4196,6 +4196,11 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             authorize=authorize,
         )
         progress = response.get("progress") or {}
+        if progress.get("order_completed"):
+            # The owner transaction has committed. Wake only assembly delivery;
+            # provider and label IO remain outside the fast Ready request.
+            from background_worker_process import wake_background_process
+            await wake_background_process(assembly=True)
         response.update(piece_ready_confirmed=True,
                         order_completion_status=progress.get("order_completion_status", "pending"),
                         label_status=progress.get("label_status", "pending"))

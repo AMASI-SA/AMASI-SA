@@ -9,7 +9,7 @@ import sys
 import threading
 
 
-async def parent_closed(wake_event):
+async def parent_closed(wake_event, assembly_wake_event=None):
     # A real anonymous pipe, not a file path, is owned by the web parent.
     # A daemon reader does not keep asyncio.run's executor alive on SIGTERM.
     closed = asyncio.Event()
@@ -22,6 +22,9 @@ async def parent_closed(wake_event):
             if line == b'wake\n':
                 with suppress(RuntimeError):
                     loop.call_soon_threadsafe(wake_event.set)
+            elif line == b'assembly\n' and assembly_wake_event is not None:
+                with suppress(RuntimeError):
+                    loop.call_soon_threadsafe(assembly_wake_event.set)
         with suppress(RuntimeError):
             loop.call_soon_threadsafe(closed.set)
     threading.Thread(target=read_pipe, daemon=True).start()
@@ -62,8 +65,9 @@ async def run():
     monitors = []
     try:
         wake_event = asyncio.Event()
-        tasks = await start_tasks(server.db, wake_event=wake_event)
-        monitors = [asyncio.create_task(parent_closed(wake_event)), asyncio.create_task(stop.wait()),
+        assembly_wake_event = asyncio.Event()
+        tasks = await start_tasks(server.db, wake_event=wake_event, assembly_wake_event=assembly_wake_event)
+        monitors = [asyncio.create_task(parent_closed(wake_event, assembly_wake_event)), asyncio.create_task(stop.wait()),
                     asyncio.create_task(heartbeat(server.db, tasks))]
         done, _ = await asyncio.wait([*tasks, *monitors], return_when=asyncio.FIRST_COMPLETED)
         for task in done:

@@ -7,7 +7,7 @@ remain the authority across replicas; no disabled legacy/AI job is enabled.
 import asyncio
 
 
-async def start_tasks(db, *, wake_event=None):
+async def start_tasks(db, *, wake_event=None, assembly_wake_event=None):
     tasks = []
     try:
         from salla_orders_v3.worker import start_salla_orders_v3_shadow_runtime
@@ -33,7 +33,10 @@ async def start_tasks(db, *, wake_event=None):
             ('operational-balances', balances), ('operational-push', push),
         ):
             tasks.append(asyncio.create_task(factory(db), name=name))
-        for start in (review, delivery, labels, payments):
+        task = await delivery(db, wake_event=assembly_wake_event)
+        if task is not None:
+            tasks.append(task)
+        for start in (review, labels, payments):
             task = await start(db)
             if task is not None:
                 tasks.append(task)

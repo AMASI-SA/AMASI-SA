@@ -28,6 +28,7 @@ class CompletionSchedulingTests(unittest.IsolatedAsyncioTestCase):
             "user_id": "synthetic-owner", "order_number": number,
             "assembly_status": "completed", delivery.FIELD: {
                 "version": 2, "state": "pending", "attempts": attempts,
+                "status_attempted": attempts > 0,
                 "due_at": (delivery.now() - timedelta(seconds=10)).isoformat(),
                 "lease_until": "",
             },
@@ -106,6 +107,56 @@ class CompletionSchedulingTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(delivery, "resume", resume):
             self.assertEqual(await delivery.run_once(self.db), 4)
         self.assertIn("newly-ready", calls)
+
+    async def test_last_piece_wakeup_dispatches_without_waiting_for_poll_interval(self):
+        first_poll, dispatched, wake = (asyncio.Event() for _ in range(3))
+        original = delivery.run_once
+
+        async def observed_poll(*args, **kwargs):
+            result = await original(*args, **kwargs)
+            first_poll.set()
+            return result
+
+        async def resume(db, *, user_id, order_number):
+            dispatched.set()
+
+        with patch.object(delivery, "run_once", observed_poll), patch.object(delivery, "resume", resume):
+            worker = asyncio.create_task(delivery.loop(self.db, wake_event=wake))
+            try:
+                await asyncio.wait_for(first_poll.wait(), 2)
+                await self.seed("newly-ready")
+                wake.set()
+                await asyncio.wait_for(dispatched.wait(), 1)
+            finally:
+                if worker.done() and worker.exception() is not None:
+                    await worker
+                else:
+                    await self.stop(worker)
+
+    async def test_slow_label_retries_leave_capacity_for_a_new_completion(self):
+        for index in range(4):
+            await self.seed(f"retry-{index}", attempts=3)
+        retries_started, dispatched, release = (asyncio.Event() for _ in range(3))
+        started = set()
+
+        async def resume(db, *, user_id, order_number):
+            if order_number == "newly-ready":
+                dispatched.set()
+                return
+            started.add(order_number)
+            if len(started) == 3:
+                retries_started.set()
+            await release.wait()
+
+        with patch.object(delivery, "resume", resume), patch.object(delivery.asyncio, "sleep", self.poll_sleep):
+            worker = asyncio.create_task(delivery.loop(self.db))
+            try:
+                await asyncio.wait_for(retries_started.wait(), 2)
+                await self.seed("newly-ready")
+                await asyncio.wait_for(dispatched.wait(), 1)
+                self.assertEqual(len(started), 3)
+            finally:
+                await self.stop(worker)
 
 
 if __name__ == "__main__":
