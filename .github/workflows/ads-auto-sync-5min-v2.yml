@@ -15,6 +15,7 @@ on:
       - "backend/tests/test_dashboard_eligibility_filter.py"
       - "backend/tests/test_ads_auto_sync_scheduler_v2.py"
       - "backend/tests/test_ads_auto_sync_global_lease_mongo.py"
+      - "backend/tests/test_ads_scheduler_completion_cadence.py"
       - "backend/tests/test_snapchat_account_hourly_refresh_v2.py"
       - "backend/tests/test_snapchat_native_data_sync_v2.py"
       - "backend/tests/test_snapchat_native_tracking_diagnostics_v2.py"
@@ -57,6 +58,7 @@ jobs:
           pytest -q
           tests/test_ads_auto_sync_scheduler_v2.py
           tests/test_ads_auto_sync_global_lease_mongo.py
+          tests/test_ads_scheduler_completion_cadence.py
           tests/test_snapchat_account_hourly_refresh_v2.py
           tests/test_snapchat_dashboard_summary_v2.py
           tests/test_snapchat_native_data_sync_v2.py

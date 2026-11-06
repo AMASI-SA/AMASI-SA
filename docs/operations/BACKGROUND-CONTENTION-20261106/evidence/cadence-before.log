@@ -1,0 +1,28 @@
+FFF                                                                      [100%]
+================================== FAILURES ===================================
+_ test_overrun_completion_leaves_server_timed_cooldown_for_other_replica[complete] _
+tests\test_ads_scheduler_completion_cadence.py:44: in test_overrun_completion_leaves_server_timed_cooldown_for_other_replica
+    assert not await scheduler._acquire_lease(db[1], worker_id="next-replica"), (
+E   AssertionError: An overrun must not allow another replica to start again immediately after completion
+E   assert not True
+_ test_overrun_completion_leaves_server_timed_cooldown_for_other_replica[partial] _
+tests\test_ads_scheduler_completion_cadence.py:44: in test_overrun_completion_leaves_server_timed_cooldown_for_other_replica
+    assert not await scheduler._acquire_lease(db[1], worker_id="next-replica"), (
+E   AssertionError: An overrun must not allow another replica to start again immediately after completion
+E   assert not True
+_ test_overrun_completion_leaves_server_timed_cooldown_for_other_replica[error] _
+tests\test_ads_scheduler_completion_cadence.py:44: in test_overrun_completion_leaves_server_timed_cooldown_for_other_replica
+    assert not await scheduler._acquire_lease(db[1], worker_id="next-replica"), (
+E   AssertionError: An overrun must not allow another replica to start again immediately after completion
+E   assert not True
+============================== warnings summary ===============================
+C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12
+  C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_ads_scheduler_completion_cadence.py::test_overrun_completion_leaves_server_timed_cooldown_for_other_replica[complete]
+FAILED tests/test_ads_scheduler_completion_cadence.py::test_overrun_completion_leaves_server_timed_cooldown_for_other_replica[partial]
+FAILED tests/test_ads_scheduler_completion_cadence.py::test_overrun_completion_leaves_server_timed_cooldown_for_other_replica[error]
+3 failed, 1 warning in 4.55s

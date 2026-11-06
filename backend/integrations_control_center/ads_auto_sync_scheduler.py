@@ -2257,9 +2257,18 @@ async def _release_lease(
                 },
             }
         )
+    # An overrun must not turn the five-minute schedule into continuous work.
+    # Release and the next due time share one server-clock update so a second
+    # replica cannot claim between completion and the cooldown being recorded.
+    completed = {key: {"$literal": value} for key, value in patch.items()}
+    completed.update({
+        "lease_expires_at": "$$NOW",
+        "last_finished_at": "$$NOW",
+        "updated_at": "$$NOW",
+        "next_due_at": {"$add": ["$$NOW", interval_seconds() * 1000]},
+    })
     update = await _collection(db, SCHEDULER_COLLECTION).update_one(
-        _live_lease(worker_id),
-        {"$set": patch, "$currentDate": {"lease_expires_at": True, "last_finished_at": True, "updated_at": True}},
+        _live_lease(worker_id), [{"$set": completed}],
     )
     if update.matched_count != 1:
         raise _SchedulerLeaseUnconfirmed("ads scheduler lease expired or lost before final status")
