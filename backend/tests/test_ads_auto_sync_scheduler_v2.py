@@ -2268,6 +2268,12 @@ def test_status_never_exposes_global_results_from_another_tenant():
 
     result = asyncio.run(scheduler.auto_sync_status(db, "tenant-a"))
 
+    assert result["snapchat"] == {
+        "automatic_interval_seconds": 7200,
+        "automatic_interval_minutes": 120,
+        "cadence_basis": "last_finished_at",
+    }
+
     runs_projection = next(
         projection
         for name, operation, projection in db.projections

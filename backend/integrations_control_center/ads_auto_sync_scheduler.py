@@ -2612,6 +2612,11 @@ async def auto_sync_status(db: Any, user_id: str) -> dict[str, Any]:
             ),
         },
         "providers": latest,
+        "snapchat": {
+            "automatic_interval_seconds": SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT,
+            "automatic_interval_minutes": SNAPCHAT_MIN_INTERVAL_SECONDS_DEFAULT // 60,
+            "cadence_basis": "last_finished_at",
+        },
         "tiktok": _tiktok_scheduler_state(),
         "source_only": True,
         "provider_write_reached": False,

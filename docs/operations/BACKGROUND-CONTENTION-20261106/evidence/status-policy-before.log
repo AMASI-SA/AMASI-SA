@@ -1,0 +1,16 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+________ test_status_never_exposes_global_results_from_another_tenant _________
+tests\test_ads_auto_sync_scheduler_v2.py:2271: in test_status_never_exposes_global_results_from_another_tenant
+    assert result["snapchat"] == {
+           ^^^^^^^^^^^^^^^^^^
+E   KeyError: 'snapchat'
+============================== warnings summary ===============================
+C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12
+  C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_ads_auto_sync_scheduler_v2.py::test_status_never_exposes_global_results_from_another_tenant
+1 failed, 1 warning in 3.45s
