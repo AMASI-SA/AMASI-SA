@@ -1,5 +1,5 @@
 """Overrunning background cycles must leave a real cooldown across replicas."""
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import os
 from uuid import uuid4
 
@@ -60,3 +60,34 @@ async def test_overrun_completion_leaves_server_timed_cooldown_for_other_replica
         finally:
             for client in clients:
                 client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["complete", "partial", "failed"])
+async def test_snapchat_automatic_refresh_waits_two_hours_after_attempt_finishes(status, monkeypatch):
+    port = os.environ.get("ADS_LEASE_TEST_MONGO_PORT")
+    if not port:
+        pytest.skip("set ADS_LEASE_TEST_MONGO_PORT for a disposable loopback Mongo")
+    client = AsyncIOMotorClient(f"mongodb://127.0.0.1:{int(port)}/?directConnection=true", tz_aware=True)
+    name = "synthetic_snap_two_hour_" + uuid4().hex
+    db = client[name]
+    current = datetime(2026, 11, 6, 6, tzinfo=timezone.utc)
+    # Deployed environments may retain the old ten-minute setting.
+    monkeypatch.setenv(scheduler.SNAPCHAT_MIN_INTERVAL_SECONDS_ENV, "600")
+    try:
+        await db[scheduler.RUNS_COLLECTION].insert_one({
+            "user_id": "synthetic-owner", "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+            "run_type": scheduler.SNAP_RUN_TYPE, "status": status,
+            "started_at": (current - timedelta(minutes=150)).isoformat(),
+            "finished_at": (current - timedelta(minutes=30)).isoformat(),
+        })
+        assert not await scheduler._snapchat_cadence_ready(db, user_id="synthetic-owner", now=current)
+        assert not await scheduler._snapchat_cadence_ready(db, user_id="synthetic-owner", now=current + timedelta(minutes=89, seconds=59))
+        assert await scheduler._snapchat_cadence_ready(db, user_id="synthetic-owner", now=current + timedelta(minutes=90))
+        # Other owners are independent; this policy does not pause their initial reads.
+        assert await scheduler._snapchat_cadence_ready(db, user_id="another-owner", now=current)
+    finally:
+        try:
+            await client.drop_database(name)
+        finally:
+            client.close()
