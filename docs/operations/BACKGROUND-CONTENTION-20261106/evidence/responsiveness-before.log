@@ -17,7 +17,7 @@ tests\test_snapchat_background_responsiveness.py:67: in write
     assert served == [1, 2], "Each fold must let other requests run before publishing facts"
 E   AssertionError: Each fold must let other requests run before publishing facts
 E   assert [] == [1, 2]
-E     
+E
 E     Right contains 2 more items, first extra item: 1
 E     Use -v to get more diff
 _______ test_cancellation_during_aggregation_publishes_no_partial_facts _______

@@ -1,0 +1,34 @@
+FFFF                                                                     [100%]
+================================== FAILURES ===================================
+_ test_manual_job_returns_before_provider_finishes_and_duplicate_clicks_join __
+tests\test_snapchat_manual_spend_refresh.py:86: in test_manual_job_returns_before_provider_finishes_and_duplicate_clicks_join
+    assert response.status_code == 202
+E   assert 404 == 202
+E    +  where 404 = <Response [404 Not Found]>.status_code
+______ test_manual_run_lookup_is_owner_scoped_and_employee_cannot_start _______
+tests\test_snapchat_manual_spend_refresh.py:113: in test_manual_run_lookup_is_owner_scoped_and_employee_cannot_start
+    assert rejected.status_code == 403
+E   assert 404 == 403
+E    +  where 404 = <Response [404 Not Found]>.status_code
+_________ test_invalid_period_never_dispatches_provider_work[period0] _________
+tests\test_snapchat_manual_spend_refresh.py:129: in test_invalid_period_never_dispatches_provider_work
+    assert response.status_code == 422
+E   assert 404 == 422
+E    +  where 404 = <Response [404 Not Found]>.status_code
+_________ test_invalid_period_never_dispatches_provider_work[period1] _________
+tests\test_snapchat_manual_spend_refresh.py:129: in test_invalid_period_never_dispatches_provider_work
+    assert response.status_code == 422
+E   assert 404 == 422
+E    +  where 404 = <Response [404 Not Found]>.status_code
+============================== warnings summary ===============================
+C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12
+  C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_snapchat_manual_spend_refresh.py::test_manual_job_returns_before_provider_finishes_and_duplicate_clicks_join
+FAILED tests/test_snapchat_manual_spend_refresh.py::test_manual_run_lookup_is_owner_scoped_and_employee_cannot_start
+FAILED tests/test_snapchat_manual_spend_refresh.py::test_invalid_period_never_dispatches_provider_work[period0]
+FAILED tests/test_snapchat_manual_spend_refresh.py::test_invalid_period_never_dispatches_provider_work[period1]
+4 failed, 1 warning in 2.15s

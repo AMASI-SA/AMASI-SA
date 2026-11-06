@@ -1,0 +1,10 @@
+PASS src/components/DashboardAdsSpendCard.manualRefresh.test.jsx
+PASS src/components/DashboardAdsSpendCard.test.jsx
+PASS src/lib/dashboardPlatformSpendClient.test.js
+PASS src/services/snapchatManualSpendRefresh.test.js
+
+Test Suites: 4 passed, 4 total
+Tests:       42 passed, 42 total
+Snapshots:   0 total
+Time:        3.489 s
+Ran all test suites within paths "src/components/DashboardAdsSpendCard.manualRefresh.test.jsx", "src/components/DashboardAdsSpendCard.test.jsx", "src/services/snapchatManualSpendRefresh.test.js", "src/lib/dashboardPlatformSpendClient.test.js".

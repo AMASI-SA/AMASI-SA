@@ -1,0 +1,8 @@
+PASS src/lib/dashboardPlatformSpendClient.test.js
+PASS src/services/snapchatManualSpendRefresh.test.js
+
+Test Suites: 2 passed, 2 total
+Tests:       9 passed, 9 total
+Snapshots:   0 total
+Time:        1.4 s
+Ran all test suites within paths "src/lib/dashboardPlatformSpendClient.test.js", "src/services/snapchatManualSpendRefresh.test.js".
