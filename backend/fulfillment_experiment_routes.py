@@ -1,18 +1,8 @@
-"""Safe fulfillment replay and operational stop controls for Mezan 2.
+"""Operational stop controls for Mezan 2.
 
-The replay facility never reverses an approved supplier invoice or its ledger
-entries.  It archives the old operational allocations/pieces, returns only the
-Mezan review workflow to ``reviewed``, and marks the next materialised pieces as
-an experiment.  Supplier receiving can therefore exercise the real employee
-and permission flow without creating another payable or changing product cost
-defaults.  The replay permits only the order-status transition to Salla so
-operators can verify the real reviewed-to-in-progress contract; all other
-Salla writes remain disabled.
-
-Stops are operational and fail closed.  They can target a complete order, one
-order item, or one physical preparation piece.  Every affected employee gets
-an in-app alert, and supplier invoice approval re-checks the current piece
-state so a stop created after scanning still blocks the invoice.
+The replay UI and state/reset endpoints are retired. Keep this module and the
+legacy hold URLs for preparation clients and order tracking. Historical
+experiment isolation remains enforced by the receiving and accounting paths.
 """
 from __future__ import annotations
 
@@ -22,11 +12,11 @@ from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
-from pymongo import ASCENDING, DESCENDING, ReturnDocument
+from pymongo import ReturnDocument
 
 from alerts_routes import _fp, _upsert_alert
 from fulfillment_v2_routes import _actor_context
-from order_review_routes import EVENTS, WORKFLOWS
+from order_review_routes import EVENTS
 from preparation_piece_operations import (
     PIECES,
     PIECE_EVENTS,
@@ -36,16 +26,12 @@ from preparation_piece_operations import (
     PIECE_STATUS_IN_PROGRESS,
     PIECE_STATUS_READY_FOR_RECEIPT,
 )
-from reviewed_products_catalog import PREPARATION_UNIT_ALLOCATIONS
-from supplier_receiving_routes import SESSIONS
 
 
-EXPERIMENT_RUNS = "mezan_fulfillment_experiment_runs_v1"
 FULFILLMENT_HOLDS = "mezan_fulfillment_holds_v1"
 
 MANAGE_STOPS_PERMISSION = "fulfillment.stop.manage"
 SELF_STOP_PERMISSION = "preparation.assigned.stop"
-EXPERIMENT_RESET_PERMISSION = "fulfillment.experiment.reset"
 
 STOP_TYPES = {"cancel", "edit", "note", "employee"}
 STOP_TYPE_LABELS = {
@@ -68,14 +54,6 @@ def _now() -> datetime:
 
 def _text(value: Any) -> str:
     return str(value or "").strip()
-
-
-class FulfillmentExperimentResetRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    confirmation: str = Field(min_length=8, max_length=180)
-    note: str | None = Field(default=None, max_length=1000)
-    delivery_flow: Literal["salla", "store_courier"] = "salla"
 
 
 class FulfillmentHoldCreateRequest(BaseModel):
@@ -150,35 +128,6 @@ def release_piece_update(before: dict[str, Any], released_at: datetime) -> dict[
     }
 
 
-def _public_piece(row: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key: row.get(key)
-        for key in (
-            "piece_id",
-            "order_number",
-            "order_item_id",
-            "unit_index",
-            "product_id",
-            "product_name",
-            "sku",
-            "status",
-            "execution_status",
-            "file_number",
-            "batch_id",
-            "responsible_employee_id",
-            "responsible_employee_name",
-            "active_hold_id",
-            "hold_stop_type",
-            "hold_stop_label",
-            "hold_note",
-            "experiment_run_id",
-            "experiment_generation",
-            "experiment_mode",
-        )
-        if row.get(key) is not None
-    }
-
-
 def _public_hold(row: dict[str, Any]) -> dict[str, Any]:
     return {
         key: row.get(key)
@@ -203,26 +152,6 @@ def _public_hold(row: dict[str, Any]) -> dict[str, Any]:
         )
         if row.get(key) is not None
     }
-
-
-async def ensure_fulfillment_experiment_indexes(db: Any) -> None:
-    await db[EXPERIMENT_RUNS].create_index(
-        [("user_id", ASCENDING), ("order_number", ASCENDING), ("generation", DESCENDING)],
-        unique=True,
-        name="uq_fulfillment_experiment_generation_v1",
-    )
-    await db[EXPERIMENT_RUNS].create_index(
-        [("user_id", ASCENDING), ("status", ASCENDING), ("created_at", DESCENDING)],
-        name="ix_fulfillment_experiment_status_v1",
-    )
-    await db[FULFILLMENT_HOLDS].create_index(
-        [("user_id", ASCENDING), ("order_number", ASCENDING), ("status", ASCENDING)],
-        name="ix_fulfillment_hold_order_v1",
-    )
-    await db[FULFILLMENT_HOLDS].create_index(
-        [("user_id", ASCENDING), ("piece_ids", ASCENDING), ("status", ASCENDING)],
-        name="ix_fulfillment_hold_piece_v1",
-    )
 
 
 def _can_manage_stops(context: dict[str, Any]) -> bool:
@@ -308,349 +237,8 @@ def make_fulfillment_experiment_router(
 ) -> APIRouter:
     router = APIRouter(
         prefix="/fulfillment-experiments-v1",
-        tags=["Fulfillment Experiments and Stops"],
+        tags=["Fulfillment Stops"],
     )
-
-    @router.get("/orders/{order_number}")
-    async def order_state(
-        order_number: str,
-        user: dict = Depends(current_user),
-    ) -> dict[str, Any]:
-        context = await _actor_context(db, user)
-        if not (_can_manage_stops(context) or _can_self_stop(context)):
-            raise HTTPException(
-                status_code=403,
-                detail={"code": "fulfillment_stop_permission_required"},
-            )
-        await ensure_fulfillment_experiment_indexes(db)
-        merchant_id = context["merchant_id"]
-        workflow = await db[WORKFLOWS].find_one(
-            {"user_id": merchant_id, "order_number": _text(order_number)},
-            {"_id": 0},
-        )
-        pieces = await _active_pieces(
-            db,
-            merchant_id=merchant_id,
-            order_number=_text(order_number),
-        )
-        if not context["is_owner"] and not _can_manage_stops(context):
-            pieces = [
-                row for row in pieces
-                if _text(row.get("responsible_employee_id")) == context["actor_id"]
-            ]
-        runs = await db[EXPERIMENT_RUNS].find(
-            {"user_id": merchant_id, "order_number": _text(order_number)},
-            {"_id": 0},
-        ).sort("generation", -1).limit(10).to_list(10)
-        holds = await db[FULFILLMENT_HOLDS].find(
-            {"user_id": merchant_id, "order_number": _text(order_number)},
-            {"_id": 0, "before_states": 0},
-        ).sort("created_at", -1).limit(50).to_list(50)
-        return {
-            "ok": True,
-            "order_number": _text(order_number),
-            "workflow_stage": _text((workflow or {}).get("stage")) or None,
-            "workflow_revision": int((workflow or {}).get("revision") or 0),
-            "pieces": [_public_piece(row) for row in pieces],
-            "holds": [_public_hold(row) for row in holds],
-            "latest_run": runs[0] if runs else None,
-            "capabilities": {
-                "can_reset_experiment": bool(context["is_owner"]),
-                "can_manage_stops": _can_manage_stops(context),
-                "can_self_stop": _can_self_stop(context),
-            },
-        }
-
-    @router.post("/orders/{order_number}/reset")
-    async def reset_order_experiment(
-        order_number: str,
-        payload: FulfillmentExperimentResetRequest,
-        user: dict = Depends(current_user),
-    ) -> dict[str, Any]:
-        context = await _actor_context(db, user)
-        if not context["is_owner"] or EXPERIMENT_RESET_PERMISSION not in context["permissions"]:
-            raise HTTPException(
-                status_code=403,
-                detail={"code": "fulfillment_experiment_owner_required"},
-            )
-        order_number = _text(order_number)
-        if _text(payload.confirmation) != f"RESET {order_number}":
-            raise HTTPException(
-                status_code=422,
-                detail={"code": "fulfillment_experiment_confirmation_required"},
-            )
-        await ensure_fulfillment_experiment_indexes(db)
-        merchant_id = context["merchant_id"]
-        mongo_client = getattr(db, "client", None)
-        if mongo_client is None or not hasattr(mongo_client, "start_session"):
-            raise HTTPException(
-                status_code=503,
-                detail={"code": "fulfillment_experiment_atomic_transaction_required"},
-            )
-        run_id = f"fulfillment-exp-{uuid.uuid4().hex}"
-        now = _now()
-
-        async def finalize(mongo_session: Any) -> dict[str, Any]:
-            workflow = await db[WORKFLOWS].find_one(
-                {"user_id": merchant_id, "order_number": order_number},
-                {"_id": 0},
-                session=mongo_session,
-            )
-            if not workflow:
-                raise HTTPException(
-                    status_code=404,
-                    detail={"code": "fulfillment_experiment_order_not_found"},
-                )
-            pieces = await _active_pieces(
-                db,
-                merchant_id=merchant_id,
-                order_number=order_number,
-                mongo_session=mongo_session,
-            )
-            session_ids = sorted({
-                _text(row.get("supplier_receiving_session_id"))
-                for row in pieces
-                if _text(row.get("supplier_receiving_session_id"))
-            })
-            if session_ids:
-                open_session = await db[SESSIONS].find_one(
-                    {
-                        "user_id": merchant_id,
-                        "id": {"$in": session_ids},
-                        "status": {"$in": ["open", "cancelling"]},
-                    },
-                    {"_id": 0, "id": 1, "reference": 1},
-                    session=mongo_session,
-                )
-                if open_session:
-                    raise HTTPException(
-                        status_code=409,
-                        detail={
-                            "code": "fulfillment_experiment_open_receiving_session",
-                            "session_id": open_session.get("id"),
-                            "reference": open_session.get("reference"),
-                        },
-                    )
-            latest = await db[EXPERIMENT_RUNS].find_one(
-                {"user_id": merchant_id, "order_number": order_number},
-                {"_id": 0},
-                sort=[("generation", -1)],
-                session=mongo_session,
-            )
-            generation = int((latest or {}).get("generation") or 0) + 1
-            active_holds = await db[FULFILLMENT_HOLDS].count_documents(
-                {
-                    "user_id": merchant_id,
-                    "order_number": order_number,
-                    "status": "active",
-                },
-                session=mongo_session,
-            )
-            if active_holds:
-                raise HTTPException(
-                    status_code=409,
-                    detail={"code": "fulfillment_experiment_active_hold_must_release"},
-                )
-            if latest and _text(latest.get("status")) == "active":
-                await db[EXPERIMENT_RUNS].update_one(
-                    {"user_id": merchant_id, "id": latest.get("id"), "status": "active"},
-                    {"$set": {"status": "superseded", "superseded_at": now, "updated_at": now}},
-                    session=mongo_session,
-                )
-            archived_piece_count = 0
-            if pieces:
-                piece_ids = [
-                    _text(row.get("piece_id"))
-                    for row in pieces
-                    if _text(row.get("piece_id"))
-                ]
-                result = await db[PIECES].update_many(
-                    {
-                        "user_id": merchant_id,
-                        "piece_id": {"$in": piece_ids},
-                        "$or": [
-                            {"experiment_archived_at": {"$exists": False}},
-                            {"experiment_archived_at": None},
-                        ],
-                    },
-                    {"$set": {
-                        "experiment_archived_at": now,
-                        "experiment_archived_by_run_id": run_id,
-                        "updated_at": now,
-                    }},
-                    session=mongo_session,
-                )
-                archived_piece_count = int(result.modified_count)
-                if archived_piece_count != len(piece_ids):
-                    raise HTTPException(
-                        status_code=409,
-                        detail={"code": "fulfillment_experiment_piece_conflict"},
-                    )
-            allocation_rows = await db[PREPARATION_UNIT_ALLOCATIONS].find(
-                {
-                    "user_id": merchant_id,
-                    "order_number": order_number,
-                    "status": {"$in": ["reserved", "committed"]},
-                },
-                {"_id": 0},
-                session=mongo_session,
-            ).to_list(10000)
-            # The allocation collection has a unique key per physical order
-            # unit. Preserve its full snapshot, then free only this order.
-            allocation_delete_result = await db[PREPARATION_UNIT_ALLOCATIONS].delete_many(
-                {
-                    "user_id": merchant_id,
-                    "order_number": order_number,
-                    "status": {"$in": ["reserved", "committed"]},
-                },
-                session=mongo_session,
-            )
-            if int(allocation_delete_result.deleted_count) != len(allocation_rows):
-                raise HTTPException(
-                    status_code=409,
-                    detail={"code": "fulfillment_experiment_allocation_conflict"},
-                )
-            workflow_result = await db[WORKFLOWS].update_one(
-                {
-                    "user_id": merchant_id,
-                    "order_number": order_number,
-                    "revision": workflow.get("revision"),
-                },
-                {
-                    "$set": {
-                        "stage": "reviewed",
-                        "experiment_mode": True,
-                        "experiment_run_id": run_id,
-                        "experiment_generation": generation,
-                        "experiment_reset_at": now,
-                        "experiment_reset_by": context["actor_id"],
-                        "experiment_delivery_flow": payload.delivery_flow,
-                        "salla_status_writes_allowed": True,
-                        "preparation_assignment_status": "unassigned",
-                        "preparation_batch_ids": [],
-                        "updated_at": now,
-                    },
-                    "$unset": {
-                        "in_progress_at": "",
-                        "in_progress_by": "",
-                        "in_progress_by_name": "",
-                        "preparation_fully_allocated_at": "",
-                        "preparation_progress": "",
-                        "completed_at": "",
-                        "completed_by": "",
-                        "delivery_flow": "",
-                        "carrier_label_status": "",
-                        "carrier_label_ready": "",
-                        "carrier_label_url": "",
-                        "carrier_label_type": "",
-                        "carrier_name": "",
-                        "carrier_tracking_number": "",
-                        "carrier_shipment_id": "",
-                        "carrier_label_message": "",
-                        "carrier_label_error_code": "",
-                        "carrier_label_error_message": "",
-                        "carrier_label_verified_at": "",
-                        "carrier_label_print_confirmed": "",
-                        "carrier_label_print_confirmed_at": "",
-                        "carrier_label_print_confirmed_by_id": "",
-                        "carrier_label_print_confirmed_by_name": "",
-                        "carrier_label_barcode": "",
-                        "carrier_label_print_data": "",
-                        "carrier_handoff_state": "",
-                        "carrier_handoff_employee_id": "",
-                        "carrier_handoff_employee_name": "",
-                        "carrier_handoff_scanned_at": "",
-                        "carrier_handoff_released_at": "",
-                        "carrier_handoff_release_source": "",
-                        "store_courier_assignment_state": "",
-                        "store_courier_assignee_id": "",
-                        "store_courier_assignee_name": "",
-                        "store_courier_assigned_at": "",
-                        "store_courier_assigned_by_id": "",
-                        "store_courier_assigned_by_name": "",
-                        "store_courier_assignment_barcode": "",
-                        "store_courier_label_verified_at": "",
-                        "store_courier_label_verified_by_id": "",
-                        "delivering_at": "",
-                        "delivered_at": "",
-                    },
-                    "$inc": {"revision": 1},
-                },
-                session=mongo_session,
-            )
-            if not workflow_result.modified_count:
-                raise HTTPException(
-                    status_code=409,
-                    detail={"code": "fulfillment_experiment_workflow_conflict"},
-                )
-            run = {
-                "id": run_id,
-                "user_id": merchant_id,
-                "order_number": order_number,
-                "generation": generation,
-                "status": "active",
-                "mode": "financially_isolated",
-                "delivery_flow": payload.delivery_flow,
-                "source_workflow_stage": _text(workflow.get("stage")),
-                "source_workflow_revision": int(workflow.get("revision") or 0),
-                "archived_piece_count": archived_piece_count,
-                "archived_allocation_count": int(allocation_delete_result.deleted_count),
-                "archived_allocation_snapshot": allocation_rows,
-                "financial_writes_allowed": False,
-                "supplier_payable_allowed": False,
-                "salla_writes_allowed": False,
-                "salla_status_writes_allowed": True,
-                "qoyod_writes_allowed": False,
-                "note": _text(payload.note) or None,
-                "created_at": now,
-                "created_by": context["actor_id"],
-                "created_by_name": _text(user.get("name") or user.get("email")),
-                "updated_at": now,
-            }
-            await db[EXPERIMENT_RUNS].insert_one(dict(run), session=mongo_session)
-            await db[EVENTS].insert_one({
-                "id": uuid.uuid4().hex,
-                "user_id": merchant_id,
-                "order_number": order_number,
-                "event_type": "fulfillment_experiment_reset",
-                "experiment_run_id": run_id,
-                "experiment_generation": generation,
-                "experiment_delivery_flow": payload.delivery_flow,
-                "archived_piece_count": archived_piece_count,
-                "archived_allocation_count": int(allocation_delete_result.deleted_count),
-                "actor_id": context["actor_id"],
-                "actor_name": _text(user.get("name") or user.get("email")),
-                "occurred_at": now,
-                "mezan_only": True,
-                "salla_updated": False,
-                "qoyod_updated": False,
-            }, session=mongo_session)
-            return {
-                "ok": True,
-                "run": {key: value for key, value in run.items() if key != "user_id"},
-                "workflow_stage": "reviewed",
-                "experiment_delivery_flow": payload.delivery_flow,
-                "archived_piece_count": archived_piece_count,
-                "archived_allocation_count": int(allocation_delete_result.deleted_count),
-                "financial_writes": 0,
-                "salla_status_writes_allowed": True,
-                "salla_updated": False,
-                "qoyod_updated": False,
-            }
-
-        try:
-            async with await mongo_client.start_session() as mongo_session:
-                return await mongo_session.with_transaction(finalize)
-        except HTTPException:
-            raise
-        except Exception as exc:
-            raise HTTPException(
-                status_code=503,
-                detail={
-                    "code": "fulfillment_experiment_reset_failed",
-                    "message": "تعذّرت إعادة الطلب ذريًا؛ لم تتغير أي مرحلة.",
-                },
-            ) from exc
 
     @router.post("/orders/{order_number}/holds")
     async def create_hold(
@@ -967,15 +555,11 @@ def make_fulfillment_experiment_router(
 
 
 __all__ = [
-    "EXPERIMENT_RESET_PERMISSION",
-    "EXPERIMENT_RUNS",
     "FULFILLMENT_HOLDS",
     "MANAGE_STOPS_PERMISSION",
     "SELF_STOP_PERMISSION",
-    "FulfillmentExperimentResetRequest",
     "FulfillmentHoldCreateRequest",
     "FulfillmentHoldReleaseRequest",
-    "ensure_fulfillment_experiment_indexes",
     "hold_piece_patch",
     "make_fulfillment_experiment_router",
     "release_piece_update",

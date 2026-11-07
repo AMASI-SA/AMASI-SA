@@ -39,7 +39,6 @@ import {
 import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
 import OrderActivityPanel from "../components/orders/OrderActivityPanel";
 import BundleOperationalPanel from "../components/orders/BundleOperationalPanel";
-import FulfillmentExperimentPanel from "../components/fulfillment/FulfillmentExperimentPanel";
 import { printStoreCourierLabel } from "../lib/storeCourierLabelPrint";
 import { formatRiyadhDateTime } from "../lib/dates";
 
@@ -921,13 +920,11 @@ export default function OrderDetailsV2() {
                 {itemsLoading ? <div className="flex min-h-40 items-center justify-center"><SpinnerGap size={28} className="animate-spin text-violet-600" /></div> : itemsError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><b>تعذّر تحميل عناصر الطلب</b><p className="mt-2 text-sm">{itemsError}</p><button type="button" onClick={reloadItems} className="mt-3 rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white">إعادة المحاولة</button></div> : items.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">لا توجد عناصر مرتبطة بهذا الطلب.</div> : <div className="space-y-4">{items.map((item, index) => <ProductCard key={item.order_item_id || index} item={item} index={index} currency={currency} additionReview={additionReview} />)}</div>}
             </section>
 
-            <FulfillmentExperimentPanel orderNumber={openedOrderNumber} items={items} />
+            <OrderSummaryCard order={order} items={items} currency={currency} />
             <BundleOperationalPanel orderNumber={openedOrderNumber} canReceive={userHasPermission(user, "inventory.preparation.receive")} canChangeSource={userHasPermission(user, "products.cost.write")} />
             {(userHasPermission(user, "orders.view") || userHasPermission(user, "customer_intelligence.inbox.read")) && openedOrderNumber && (
                 <OrderTrackingNotesPanel key={openedOrderNumber} orderNumber={openedOrderNumber} embedded />
             )}
-
-            <OrderSummaryCard order={order} items={items} currency={currency} />
 
             {!returnEngineOpen ? (
                 <section className="flex flex-col gap-4 rounded-2xl border border-amber-200 bg-gradient-to-l from-amber-50 to-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between" data-testid="order-v2-return-entry">

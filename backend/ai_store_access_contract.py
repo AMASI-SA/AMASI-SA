@@ -39,7 +39,6 @@ PERMISSIONS = {
     "preparation.assigned.work",
     "preparation.assigned.stop",
     "fulfillment.stop.manage",
-    "fulfillment.experiment.reset",
     "fulfillment.ready.read",
     "fulfillment.batch.claim",
     "fulfillment.labels.print",

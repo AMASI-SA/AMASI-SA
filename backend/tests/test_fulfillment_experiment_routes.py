@@ -1,4 +1,3 @@
-import inspect
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -7,7 +6,6 @@ from fastapi import HTTPException
 
 from ai_store_access_contract import ROLE_CATALOG, effective_permissions
 from fulfillment_experiment_routes import (
-    FulfillmentExperimentResetRequest,
     STOP_TYPE_LABELS,
     hold_piece_patch,
     make_fulfillment_experiment_router,
@@ -36,7 +34,7 @@ def test_customer_service_and_preparation_roles_have_only_their_stop_scope():
     assert "fulfillment.stop.manage" not in preparation
     assert "fulfillment.stop.manage" in customer_service
     assert "preparation.assigned.work" not in customer_service
-    assert "fulfillment.experiment.reset" in ROLE_CATALOG["owner"]
+    assert "fulfillment.experiment.reset" not in ROLE_CATALOG["owner"]
 
 
 @pytest.mark.parametrize(
@@ -112,20 +110,7 @@ def test_supplier_invoice_accepts_one_experiment_run_and_rejects_mixing():
     assert multiple_runs.value.detail["code"] == "supplier_receiving_experiment_mode_mismatch"
 
 
-def test_reset_is_atomic_and_never_reverses_supplier_or_accounting_records():
-    source = inspect.getsource(make_fulfillment_experiment_router)
-
-    assert "with_transaction(finalize)" in source
-    assert "fulfillment_experiment_atomic_transaction_required" in source
-    assert "archived_allocation_snapshot" in source
-    assert '"financial_writes_allowed": False' in source
-    assert '"salla_writes_allowed": False' in source
-    assert '"salla_status_writes_allowed": True' in source
-    assert "SUPPLIER_INVOICES" not in source
-    assert "ledger" not in source.casefold()
-
-
-def test_router_exposes_state_reset_hold_and_release_operations():
+def test_router_preserves_only_operational_hold_and_release_operations():
     router = make_fulfillment_experiment_router(
         SimpleNamespace(),
         lambda: {"id": "owner-1", "role": "owner"},
@@ -136,21 +121,7 @@ def test_router_exposes_state_reset_hold_and_release_operations():
         for method in route.methods
     }
 
-    assert ("/fulfillment-experiments-v1/orders/{order_number}", "GET") in routes
-    assert ("/fulfillment-experiments-v1/orders/{order_number}/reset", "POST") in routes
+    assert ("/fulfillment-experiments-v1/orders/{order_number}", "GET") not in routes
+    assert ("/fulfillment-experiments-v1/orders/{order_number}/reset", "POST") not in routes
     assert ("/fulfillment-experiments-v1/orders/{order_number}/holds", "POST") in routes
     assert ("/fulfillment-experiments-v1/holds/{hold_id}/release", "POST") in routes
-
-
-
-def test_experiment_reset_accepts_explicit_store_courier_flow():
-    default_request = FulfillmentExperimentResetRequest(
-        confirmation="RESET 276628330",
-    )
-    courier_request = FulfillmentExperimentResetRequest(
-        confirmation="RESET 276628330",
-        delivery_flow="store_courier",
-    )
-
-    assert default_request.delivery_flow == "salla"
-    assert courier_request.delivery_flow == "store_courier"
