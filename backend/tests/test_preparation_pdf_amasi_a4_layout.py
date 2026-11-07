@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import io
 import unicodedata
+from datetime import datetime, timezone
 
 import fitz
 import pytest
 from PIL import Image
+import preparation_pdf_amasi_a4_layout as pdf_layout
 
 from preparation_pdf import ProductLine
 from preparation_pdf_amasi_a4_layout import (
@@ -87,9 +89,8 @@ def _symbols_pdf(order_date: str | None) -> bytes:
     return generate_amasi_product_file_pdf([line], file_date="2026/11/08")
 
 
-def test_new_order_pdf_keeps_arabic_punctuation_and_symbols(monkeypatch) -> None:
-    monkeypatch.setenv("PREPARATION_PDF_SYMBOLS_FROM", "2026-11-08T12:00:00+03:00")
-    with fitz.open(stream=_symbols_pdf("2026-11-08T09:00:00Z"), filetype="pdf") as doc:
+def test_new_order_pdf_keeps_arabic_punctuation_and_symbols() -> None:
+    with fitz.open(stream=_symbols_pdf("2026-11-07T21:00:00Z"), filetype="pdf") as doc:
         page = doc[0]
         printed = unicodedata.normalize("NFKC", page.get_text())
         assert "نجمة" in printed and "نورة" in printed
@@ -105,13 +106,13 @@ def test_new_order_pdf_keeps_arabic_punctuation_and_symbols(monkeypatch) -> None
         assert doc.extract_font(symbol_xref)[3]  # The viewer need not have this font installed.
 
 
-@pytest.mark.parametrize("order_date", ["2026-11-08T08:59:59Z", "2026-11-08", None])
+@pytest.mark.parametrize("order_date", ["2026-11-07T23:59:59+03:00", "2026-11-08", None])
 def test_reprinting_older_or_undated_orders_keeps_the_original_appearance(
     monkeypatch, order_date,
 ) -> None:
-    monkeypatch.delenv("PREPARATION_PDF_SYMBOLS_FROM", raising=False)
-    baseline = _symbols_pdf(order_date)
-    monkeypatch.setenv("PREPARATION_PDF_SYMBOLS_FROM", "2026-11-08T12:00:00+03:00")
+    with monkeypatch.context() as disabled:
+        disabled.setattr(pdf_layout, "SPEC_SYMBOLS_FROM", datetime.max.replace(tzinfo=timezone.utc))
+        baseline = _symbols_pdf(order_date)
     with (
         fitz.open(stream=baseline, filetype="pdf") as before,
         fitz.open(stream=_symbols_pdf(order_date), filetype="pdf") as after,

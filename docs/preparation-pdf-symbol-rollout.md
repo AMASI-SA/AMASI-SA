@@ -1,14 +1,14 @@
 # Preparation PDF symbols for newly created orders
 
-At an approved rollout, set `PREPARATION_PDF_SYMBOLS_FROM` to the rollout's
-fixed ISO 8601 timestamp with an offset, identical on all backend replicas.
-Do not advance this timestamp on a restart or subsequent release.
+The reviewed activation instant is 00:00 on 8 November 2026 in Riyadh.
+The renderer uses a fixed timezone-aware cutoff shared by all backend
+replicas. Keep this instant on restarts and subsequent releases.
 
 The PDF uses the order creation timestamp already saved with each preparation
 line. Orders created at or after the cutoff use the new symbol rendering.
 Orders created earlier, or without an unambiguous timestamp, retain their
-previous rendering even when reprinted alongside new orders. An unset or
-invalid cutoff leaves the feature inactive. There are no database changes.
+previous rendering even when reprinted alongside new orders. There are no
+database changes.
 
 The embedded print font is a BMP subset of
 [Noto Sans Symbols 2](https://github.com/notofonts/symbols), licensed under

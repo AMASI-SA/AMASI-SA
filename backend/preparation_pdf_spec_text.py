@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import lru_cache
 from itertools import groupby
 from pathlib import Path
@@ -17,7 +17,9 @@ from reportlab.pdfgen.canvas import Canvas
 from preparation_pdf import _ar
 
 
-SPEC_SYMBOLS_FROM = "PREPARATION_PDF_SYMBOLS_FROM"
+# A fixed activation instant keeps all replicas and subsequent reprints on
+# the same cutoff. Midnight in Riyadh on 8 November 2026.
+SPEC_SYMBOLS_FROM = datetime(2026, 11, 7, 21, 0, tzinfo=timezone.utc)
 _SYMBOL_FONT = "NotoSansSymbols2-Print"
 _PRESENTATION_SELECTORS = str.maketrans("", "", "\ufe0e\ufe0f")
 _HEART_COLORS = {

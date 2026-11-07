@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import base64
 import io
-import os
 from pathlib import Path
 from typing import Any
 
@@ -174,7 +173,6 @@ def generate_amasi_product_file_pdf(
     if not lines:
         raise ValueError("No product lines to render")
     font_name, font_bold = _register_font()
-    symbols_from = aware_instant(os.getenv(SPEC_SYMBOLS_FROM))
     out = io.BytesIO()
     pdf = canvas.Canvas(out, pagesize=A4)
     page_width, page_height = A4
@@ -235,8 +233,8 @@ def generate_amasi_product_file_pdf(
         # The snapshot's order creation time is independent of assignment,
         # file creation and reprint time. A file can contain orders on both
         # sides of the rollout, so decide separately for each card.
-        created_at = aware_instant(line.order_date) if symbols_from is not None else None
-        enhanced = symbols_from is not None and created_at is not None and created_at >= symbols_from
+        created_at = aware_instant(line.order_date)
+        enhanced = created_at is not None and created_at >= SPEC_SYMBOLS_FROM
         measure = specification_width if enhanced else _visual_width
         plan = build_wrapped_specification_plan(
             rows, font_name=font_name, font_bold=font_bold,
