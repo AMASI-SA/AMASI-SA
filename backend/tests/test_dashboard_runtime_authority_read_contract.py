@@ -287,3 +287,42 @@ def test_fixture_traffic_oracle_is_independent_and_preserves_existing_values_and
         runtime['json'] = json.dumps(changed, ensure_ascii=False)
         with pytest.raises(AssertionError):
             assert_runtime_read_contract(runtime, baseline)
+
+
+@pytest.mark.parametrize('kind', ['catalog', 'profile', 'product_binding', 'option_binding', 'resource', 'policy'])
+def test_populate_index_mutations_keep_both_products_on_snapchat(kind):
+    # Immutable populate(raw, 2) sets source=snapchat for BOTH orders. These
+    # mutations affect costs/catalog/policy, never source or order identity.
+    case = ('tests/test_dashboard_b_index_cooperative_correctness.py::'
+            'test_mutations_during_index_preserve_captured_catalog_and_later_reads'
+            f'[{kind}]::request-0')
+    old = {'totals': {'net_profit': 125},
+           'product_cost_v2': {'missing_all_cost_products_count': 0,
+                               'no_products_orders_count': 0,
+                               'product_rows': [{'salla_product_id': str(i), 'units_sold': 1.0,
+                                                 'total_cost': 37.5} for i in range(2)]}}
+    rendered = json.loads(expected_cost_completeness_json(json.dumps(old), fixture_case=case))
+    assert [row['traffic_sources'][0]['platform'] for row in rendered['product_cost_v2']['product_rows']] == ['snapchat', 'snapchat']
+    runtime, baseline = evidence_pair()
+    baseline['json'] = json.dumps(old)
+    runtime['json'] = json.dumps(rendered, ensure_ascii=False)
+    assert_runtime_read_contract(runtime, baseline, fixture_case=case)
+    rendered['product_cost_v2']['product_rows'][1]['traffic_sources'][0]['platform'] = 'meta'
+    runtime['json'] = json.dumps(rendered, ensure_ascii=False)
+    with pytest.raises(AssertionError, match='Unapproved JSON'):
+        assert_runtime_read_contract(runtime, baseline, fixture_case=case)
+
+
+@pytest.mark.parametrize('kind', ['status', 'payment_status', 'shipping_status', 'payment_only',
+                                  'shipping_only', 'product_profile_cost', 'embedded_order_cost',
+                                  'advertising_google', 'date_universe', 'irrelevant_note'])
+def test_independent_mutation_fixture_only_has_snapchat_product_zero(kind):
+    case = ('tests/test_dashboard_b_index_cooperative_correctness.py::'
+            f'test_existing_independent_read_mutations[{kind}]::request-0')
+    old = {'totals': {}, 'product_cost_v2': {'missing_all_cost_products_count': 0,
+           'no_products_orders_count': 0, 'product_rows': [{'salla_product_id': '0', 'units_sold': 1.0}]}}
+    rendered = json.loads(expected_cost_completeness_json(json.dumps(old), fixture_case=case))
+    assert rendered['product_cost_v2']['product_rows'][0]['traffic_sources'][0]['platform'] == 'snapchat'
+    old['product_cost_v2']['product_rows'][0]['salla_product_id'] = '1'
+    with pytest.raises(AssertionError, match='Unreviewed populate fixture product'):
+        expected_cost_completeness_json(json.dumps(old), fixture_case=case)

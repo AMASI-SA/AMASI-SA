@@ -231,7 +231,7 @@ def _expected_authority_commands(audit):
     return expected
 
 
-def expected_cost_completeness_json(historical_json):
+def expected_cost_completeness_json(historical_json, *, fixture_case=None):
     """Owner-approved response extension; all other historical bytes stay exact.
 
     Derive the new contract solely from the frozen response's cost coverage,
@@ -245,16 +245,29 @@ def expected_cost_completeness_json(historical_json):
     # to one seeded order/source, never a ledger account. The mixed seed cycles
     # these sources, with explicit overrides at 9/10 and historical alias 21.
     # Return-policy quantity is taken from the unchanged historical row.
+    # populate() gives every order Snapchat; only seed_mixed() applies the
+    # source cycle. In particular, index-mutation product 1 is not Meta.
+    fixture_family = (fixture_case.split('::')[1].split('[', 1)[0]
+                      if fixture_case is not None else 'test_dashboard_mixed_permissions_and_tenants')
+    assert fixture_family in {
+        'test_dashboard_mixed_permissions_and_tenants',
+        'test_existing_independent_read_mutations',
+        'test_mutations_during_index_preserve_captured_catalog_and_later_reads',
+    }, 'Unreviewed immutable fixture family'
+    mixed = fixture_family == 'test_dashboard_mixed_permissions_and_tenants'
     labels = {'snapchat': 'سناب شات', 'meta': 'ميتا', 'tiktok': 'تيك توك',
               'google': 'جوجل', 'direct': 'مباشر'}
     for index, row in enumerate(costs.get('product_rows', [])):
         pid = str(row['salla_product_id'])
         fixture_index = 21 if pid == 'historical' else int(pid)
         assert 0 <= fixture_index < 40, 'Unreviewed immutable fixture product'
-        platform = ('snapchat', 'meta', 'tiktok', 'google', 'direct')[fixture_index % 5]
-        if fixture_index == 9:
+        if not mixed:
+            maximum = 0 if fixture_family == 'test_existing_independent_read_mutations' else 1
+            assert 0 <= fixture_index <= maximum, 'Unreviewed populate fixture product'
+        platform = ('snapchat', 'meta', 'tiktok', 'google', 'direct')[fixture_index % 5] if mixed else 'snapchat'
+        if mixed and fixture_index == 9:
             platform = 'snapchat'
-        elif fixture_index == 10:
+        elif mixed and fixture_index == 10:
             platform = 'meta'
         source = {'platform': platform, 'platform_label': labels[platform],
                   'account_id': None,
@@ -277,10 +290,10 @@ def expected_cost_completeness_json(historical_json):
     return json.dumps(response, ensure_ascii=False, default=str)
 
 
-def assert_runtime_read_contract(runtime, baseline):
+def assert_runtime_read_contract(runtime, baseline, *, fixture_case=None):
     """Subtract only individually audited empty authority reads from raw data."""
     assert set(runtime) == set(baseline) | {'cost_authority_audit'}
-    assert runtime['json'] == expected_cost_completeness_json(baseline['json']), 'Unapproved JSON response change'
+    assert runtime['json'] == expected_cost_completeness_json(baseline['json'], fixture_case=fixture_case), 'Unapproved JSON response change'
     audit = runtime['cost_authority_audit']
     expected = _expected_authority_commands(audit)
     assert audit['commands'] == expected, 'Unexpected authority query, scope, operation or batch count'
@@ -386,10 +399,10 @@ def pytest_collection_modifyitems(session, config, items):
         if expected is not None:
             expected_json = expected[key]['json']
             if ARM == 'runtime':
-                expected_json = expected_cost_completeness_json(expected_json)
+                expected_json = expected_cost_completeness_json(expected_json, fixture_case=key)
             assert value['json'] == expected_json, key
             if ARM == 'runtime':
-                assert_runtime_read_contract(value, (read_baseline or expected)[key])
+                assert_runtime_read_contract(value, (read_baseline or expected)[key], fixture_case=key)
         return result, metrics
 
     cases.invoke = recorded
