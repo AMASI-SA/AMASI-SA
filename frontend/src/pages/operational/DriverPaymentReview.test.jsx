@@ -100,3 +100,15 @@ test('strict-mode effect replay still loads the current list and explicit option
   await render(true);expect(button('تحميل خيارات الاعتماد')).toBeDefined();await preparePos();
   expect(button('اعتماد مدفوع').disabled).toBe(false);expect(api.post).not.toHaveBeenCalled();
 });
+
+test('rejection requires a reason and preserves the pinned review context without a destination',async()=>{
+  context={...context,can_approve:false,can_reject:true,blocker:'receipt_not_eligible'};
+  const prompt=jest.spyOn(window,'prompt').mockReturnValueOnce('   ').mockReturnValueOnce('  المبلغ غير موجود بالشبكة  ');
+  await render();await click('تحميل خيارات الاعتماد');await click('رفض');
+  expect(api.post).not.toHaveBeenCalled();expect(toast.error).toHaveBeenCalledWith('اكتب سبب الرفض حتى يظهر للموصل.');
+  await click('رفض');
+  expect(api.post).toHaveBeenCalledWith('/store-delivery/payment-review/assignment',{
+    decision:'rejected',note:'المبلغ غير موجود بالشبكة',expected_financial_source:'operational',
+    expected_review_revision:1,expected_session_scope:scope});
+  expect(prompt).toHaveBeenCalledTimes(2);
+});

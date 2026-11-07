@@ -24,7 +24,7 @@ function isPosDestination(fact) {
     typeof fact.display_name === "string" && fact.display_name.trim().length > 0;
 }
 
-export default function StoreDeliveryPaymentReview() {
+export default function StoreDeliveryPaymentReview({ driverId = "", embedded = false, onReviewed }) {
   const [items, setItems] = useState([]);
   const [busyId, setBusyId] = useState("");
   const [filter, setFilter] = useState("");
@@ -36,6 +36,8 @@ export default function StoreDeliveryPaymentReview() {
   const [reviewOptions, setReviewOptions] = useState({});
   const [optionErrors, setOptionErrors] = useState({});
   const [uncertain, setUncertain] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState("");
   const inFlight = useRef(false);
   const loadVersion = useRef(0);
   const alive = useRef(true);
@@ -72,19 +74,25 @@ export default function StoreDeliveryPaymentReview() {
   async function load() {
     const version = ++loadVersion.current;
     setReviewOptions({}); setOptionErrors({}); setDestinations({});
+    setLoading(true); setListError(""); setItems([]);
     try {
-      const response = await api.get("/store-delivery/payment-review/pending", { params: filter ? { method: filter } : {} });
+      const response = await api.get("/store-delivery/payment-review/pending", {
+        params: { ...(filter ? { method: filter } : {}), ...(driverId ? { driver_id: driverId } : {}) },
+      });
       if (!alive.current || version !== loadVersion.current) return;
       setItems(response.data?.items || []);
       setUncertain(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => (response.data?.items || []).some(item => item.assignment_id === id))));
     } catch (error) {
       if (!alive.current || version !== loadVersion.current) return;
       setItems([]); setUncertain({});
+      setListError("تعذر تحميل مراجعات التحصيل. أعد تحميل القائمة قبل الاعتماد.");
       toast.error(error?.response?.data?.detail?.code || "تعذر تحميل مراجعات الدفع");
+    } finally {
+      if (alive.current && version === loadVersion.current) setLoading(false);
     }
   }
 
-  useEffect(() => { load(); }, [filter]);
+  useEffect(() => { load(); }, [filter, driverId]);
 
   async function loadOptions(item) {
     const version = loadVersion.current;
@@ -103,15 +111,17 @@ export default function StoreDeliveryPaymentReview() {
   }
 
   async function decide(item, decision, retry = false) {
-    if (inFlight.current || !validContext(item) || (!retry && decision === "approved" && !canApprove(item))) return;
+    if (inFlight.current || !validContext(item) || (!retry && decision === "approved" && !canApprove(item)) ||
+        (!retry && decision === "rejected" && optionsFor(item)?.can_reject === false)) return;
     let payload = retry ? uncertain[item.assignment_id] : null;
     if (retry && (!payload || payload.expected_session_scope !== optionsFor(item).session_scope ||
         payload.expected_financial_source !== optionsFor(item).financial_source)) return;
     if (!payload) {
       const note = decision === "rejected" ? window.prompt("سبب الرفض للموصل:", "الإيصال غير واضح") : "تمت المطابقة";
       if (decision === "rejected" && note === null) return;
+      if (decision === "rejected" && !note?.trim()) return toast.error("اكتب سبب الرفض حتى يظهر للموصل.");
       const context = optionsFor(item);
-      payload = {decision, note: note || "", expected_financial_source: context.financial_source,
+      payload = {decision, note: note.trim(), expected_financial_source: context.financial_source,
         expected_review_revision: context.expected_review_revision, expected_session_scope: context.session_scope};
       if (decision === "approved") {
         if (item.payment_method === "bank_transfer") Object.assign(payload, {
@@ -131,6 +141,7 @@ export default function StoreDeliveryPaymentReview() {
       if (!alive.current || version !== loadVersion.current) return;
       setUncertain(previous => {const next = {...previous}; delete next[item.assignment_id]; return next;});
       toast.success(payload.decision === "approved" ? "تم اعتماد الدفعة" : "تم رفض الإيصال وإعادته للموصل");
+      onReviewed?.();
       await load();
     } catch (error) {
       if (!alive.current || version !== loadVersion.current) return;
@@ -147,10 +158,12 @@ export default function StoreDeliveryPaymentReview() {
     }
   }
 
+  const Container = embedded ? "section" : "main";
+  const Heading = embedded ? "h2" : "h1";
   return (
-    <main className="space-y-5 p-4 sm:p-6" dir="rtl">
+    <Container className="space-y-5 p-4 sm:p-6" dir="rtl" aria-label="مراجعة تحصيلات الموصلين">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div><h1 className="text-2xl font-black text-slate-950">مراجعة تحصيلات الموصلين</h1><p className="mt-1 text-sm font-bold text-slate-500">الشبكة والتحويل البنكي لا يصبحان مدفوعين إلا بعد مطابقة المحاسب.</p></div>
+        <div><Heading className="text-2xl font-black text-slate-950">مراجعة تحصيلات الموصلين</Heading><p className="mt-1 text-sm font-bold text-slate-500">دفعات العملاء عند التوصيل: الشبكة والتحويل البنكي بانتظار مطابقة المحاسب. سبب الرفض يظهر للموصل.</p></div>
         <button type="button" disabled={Boolean(busyId)} onClick={load}>تحديث القائمة للتحقق</button>
         <select aria-label="طريقة التحصيل" disabled={Boolean(busyId)} value={filter} onChange={(e) => setFilter(e.target.value)} className="h-11 rounded-xl border bg-white px-3 text-sm font-bold"><option value="">الكل</option><option value="card_terminal">شبكة</option><option value="bank_transfer">تحويل بنكي</option></select>
       </header>
@@ -187,8 +200,10 @@ export default function StoreDeliveryPaymentReview() {
             <div className="mt-4 grid grid-cols-2 gap-2"><button disabled={Boolean(busyId) || Boolean(uncertain[item.assignment_id]) || !validContext(item) || optionsFor(item)?.can_reject === false} onClick={() => decide(item, "rejected")} className="flex items-center justify-center gap-2 rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 font-black text-rose-800 disabled:opacity-40"><XCircle size={20} />رفض</button><button disabled={Boolean(busyId) || Boolean(uncertain[item.assignment_id]) || !canApprove(item)} onClick={() => decide(item, "approved")} className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-4 py-3 font-black text-white disabled:opacity-40"><CheckCircle size={20} />اعتماد مدفوع</button></div>
           </article>
         ))}
-        {!items.length && <div className="rounded-3xl border border-dashed bg-white p-10 text-center text-sm font-bold text-slate-500 xl:col-span-2"><Bank className="mx-auto mb-2" size={32} />لا توجد دفعات بانتظار المراجعة.</div>}
+        {loading && <p role="status">جارٍ تحميل مراجعات التحصيل…</p>}
+        {listError && <p role="alert">{listError}</p>}
+        {!loading && !listError && !items.length && <div className="rounded-3xl border border-dashed bg-white p-10 text-center text-sm font-bold text-slate-500 xl:col-span-2"><Bank className="mx-auto mb-2" size={32} />لا توجد دفعات بانتظار المراجعة.</div>}
       </section>
-    </main>
+    </Container>
   );
 }
