@@ -4,8 +4,8 @@ Owner policy: today\'s Mezan cost per selected physical/option component applies
 to every sold unit in profit *reports*, including old unpriced orders. This is
 an estimate, NEVER evidence of supplier receipt or a historical invoice.
 
-Exact frozen, corrected and actual cost authorities continue to win. A missing
-choice, unsupported complex recipe, currency, or cost fails closed.
+Exact frozen, corrected and actual cost authorities continue to win. Missing choices and recorded-price gaps retain known evidence but remain incomplete.
+Unsupported recipes, ambiguous identities and invalid currency fail closed.
 The batch is tenant-scoped, at most two catalog reads plus one resources read,
 with no per-order Mongo queries or writes.
 """
@@ -55,7 +55,7 @@ def _options(product: dict) -> list[dict]:
     return [o for o in raw if isinstance(o, dict)]
 
 
-def _choice_pairs(item: dict, product: dict) -> set[tuple[str, str]]:
+def _choice_pairs(item: dict, product: dict, missing_choices: list | None = None) -> set[tuple[str, str]]:
     """Recover price choices from current catalog without changing provider IDs.
 
     Order-row id is NOT catalog option id. Existing valid ID wins; otherwise
@@ -161,16 +161,30 @@ def _choice_pairs(item: dict, product: dict) -> set[tuple[str, str]]:
                 any(p[0] == key[0] for p in pairs) and key not in pairs)
         if visible and (values[oid] and not any(p[0] == oid for p in pairs) or
                         not values[oid] and oid not in filled):
-            _fail("current_order_required_choice_missing")
+            if missing_choices is None:
+                _fail("current_order_required_choice_missing")
+            missing_choices.append((oid, option.get("name") or oid))
     return pairs
 
 
-def _cost(product: dict, profile: dict, variant_id: str = "") -> tuple[Decimal, bool]:
+def _cost(product: dict, profile: dict, variant_id: str = "") -> tuple[Decimal | None, bool]:
     unit, source = resolve_base_unit_cost({"variant_id": variant_id}, profile, product)
     evidence = profile if source.startswith("mezan_") else product
     cost = _sar(unit, evidence)
     if cost is None:
-        _fail("current_bundle_base_missing")
+        # A genuinely absent price is recoverable presentation evidence.
+        # A recorded but invalid price or missing currency rate is not.
+        recorded = [profile.get("base_cost")]
+        variant_costs = profile.get("variant_costs") or {}
+        if isinstance(variant_costs, dict) and variant_id:
+            recorded.append(variant_costs.get(variant_id))
+        cost_keys = ("cost_price_from_salla", "cost_price", "cost")
+        recorded.extend(product.get(key) for key in cost_keys)
+        for variant in product.get("variants") or []:
+            if isinstance(variant, dict) and variant_id and _id(variant.get("id")) == variant_id:
+                recorded.extend(variant.get(key) for key in cost_keys)
+        if unit is not None or any(value not in (None, "") for value in recorded):
+            _fail("current_bundle_base_cost_or_fx_invalid")
     return cost, source.startswith("mezan_")
 
 
@@ -179,14 +193,9 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
     quantity = _number(item.get("quantity"))
     if quantity != quantity.to_integral_value():
         _fail("current_bundle_quantity_fractional")
-    selected = _choice_pairs(item, products[root])
-    # Missing provider answers cannot prove that a formerly optional,
-    # potentially priced rose/embroidery choice was not selected.
-    raw_choices = item.get("options_raw") or item.get("selected_options") or item.get("options")
-    if not raw_choices and (any(row.get("condition") for row in
-                               (definitions.get(root) or {}).get("items") or [])
-                            or options.get(root)):
-        _fail("current_bundle_sale_selection_unavailable")
+    missing_choices = []
+    selected = _choice_pairs(item, products[root], missing_choices)
+    missing_reasons = []
     used_resources = set()
     mezan_complete = True
     detail_cells = []
@@ -195,15 +204,25 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
         detail_cells.append({"key": key, "label": str(label or key), "kind": kind,
                              "status": status, "unit_cost": _amount(amount) if amount is not None else None})
 
+    for oid, label in missing_choices:
+        cell("root:choice:" + oid, label, "service", "unresolved")
+        missing_reasons.append("current_bundle_sale_selection_unavailable:" + oid)
+
     def price(pid: str, pairs: set, variant: str, stack: tuple, scale=Decimal(1), path="root") -> tuple[Decimal, Decimal, Decimal]:
         nonlocal mezan_complete
         if pid not in products or pid in stack or len(stack) >= 5:
             _fail("current_bundle_product_missing_or_recursive")
         product, profile = products[pid], profiles.get(pid, {})
         base, from_mezan = _cost(product, profile, variant)
-        mezan_complete &= from_mezan
-        cell("root:base" if path == "root" else path, product.get("name") or pid,
-             "product" if path == "root" else "component", "costed", base * scale)
+        if base is not None:
+            mezan_complete &= from_mezan
+        base_key = "root:base" if path == "root" else path
+        cell(base_key, product.get("name") or pid,
+             "product" if path == "root" else "component",
+             "missing_cost" if base is None else "costed", base * scale if base is not None else None)
+        if base is None:
+            missing_reasons.append("current_bundle_base_missing:" + base_key)
+            base = Decimal(0)  # Known subtotal only; completeness remains false.
         physical, services = Decimal(0), Decimal(0)
         doc = definitions.get(pid)
         if doc:
@@ -245,7 +264,9 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
                         # Only another proved answer to this option proves non-selection.
                         proved = any(chosen == oid for chosen, _ in pairs)
                         if not proved:
-                            _fail("current_bundle_sale_selection_unavailable")
+                            cell(recipe_key, recipe_label, recipe_kind, "unresolved")
+                            missing_reasons.append("current_bundle_sale_selection_unavailable:" + recipe_key)
+                            continue
                         cell(recipe_key, recipe_label, recipe_kind, "not_required")
                         continue
                 count = _number(row.get("quantity", 1))
@@ -276,7 +297,11 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
                     source = resources.get(rid) or {}
                     unit = _sar(source.get("unit_cost"), source)
                     if unit is None:
-                        _fail("current_bundle_resource_cost_missing")
+                        if source.get("unit_cost") is not None:
+                            _fail("current_bundle_resource_cost_or_fx_invalid")
+                        cell(recipe_key, recipe_label, recipe_kind, "missing_cost")
+                        missing_reasons.append("current_bundle_resource_cost_missing:" + recipe_key)
+                        continue
                     cell(recipe_key, recipe_label, recipe_kind, "costed", count * unit * scale)
                     if source.get("kind") == "service" and not source.get("track_inventory"):
                         services += count * unit
@@ -304,7 +329,9 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
                     continue
                 proved = any(oid == _id(binding.get("option_id")) for oid, _ in pairs)
                 if not proved:
-                    _fail("current_bundle_sale_selection_unavailable")
+                    cell(detail_key, detail_label, detail_kind, "unresolved")
+                    missing_reasons.append("current_bundle_sale_selection_unavailable:" + detail_key)
+                    continue
                 cell(detail_key, detail_label, detail_kind, "not_required")
                 continue
             if not bid or (kind, bid) in seen_bindings:
@@ -325,7 +352,12 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
                 source = resources.get(rid) or {}
                 unit = _sar(source.get("unit_cost"), source)
             if unit is None:
-                _fail("current_bundle_binding_cost_missing")
+                raw_amount = binding.get("direct_amount") if binding.get("mode") == "direct" else source.get("unit_cost")
+                if raw_amount is not None:
+                    _fail("current_bundle_binding_cost_or_fx_invalid")
+                cell(detail_key, detail_label, detail_kind, "missing_cost")
+                missing_reasons.append("current_bundle_binding_cost_missing:" + detail_key)
+                continue
             cell(detail_key, detail_label, detail_kind, "costed", q * unit * scale)
             if kind == "component":
                 physical += q * unit
@@ -340,9 +372,9 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
     return {
         "quantity": float(quantity), "currency": "SAR", "cost_currency": "SAR",
         "base_cost_source": "current_bundle_catalog_estimate",
-        "base_complete": True, "calculation_cost_available": True,
+        "base_complete": not missing_reasons, "calculation_cost_available": not missing_reasons,
         "calculation_cost_source": "current_bundle_catalog_estimate",
-        "mezan_cost_complete": mezan_complete, "mezan_cost_missing": not mezan_complete,
+        "mezan_cost_complete": mezan_complete and not missing_reasons, "mezan_cost_missing": not mezan_complete or bool(missing_reasons),
         "uses_salla_fallback": not mezan_complete,
         "cost_semantics_version": VERSION,
         "base_total": _amount(base_total),
@@ -353,7 +385,7 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
         "cost_stage": "expected", "historical_cost_verified": False,
         "estimated_from_current_catalog": True,
         "cost_detail_cells": detail_cells,
-        "missing_cost_reasons": [],
+        "missing_cost_reasons": missing_reasons,
     }
 
 
@@ -429,7 +461,7 @@ async def load_current_bundle_estimates(
             {"id": {"$in": wanted}},
         ]},
         {"_id": 0, "id": 1, "salla_product_id": 1,
-         "mezan_product_id": 1, "options": 1,
+         "mezan_product_id": 1, "name": 1, "options": 1,
          "raw_salla": 1, "raw_salla_details": 1, "variants": 1,
          "cost_price_from_salla": 1, "cost_price": 1, "cost": 1},
     ).to_list(length=10001)

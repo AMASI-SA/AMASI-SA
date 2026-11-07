@@ -37,15 +37,23 @@ def test_selected_and_declined_services_share_stable_column_identity():
 def test_missing_optional_answer_is_never_labeled_not_required():
     opts = [{'id': oid, 'values': [{'id': 'yes', 'name': 'Yes'}, {'id': 'no', 'name': 'No'}]} for oid in ('name', 'other')]
     products = {'p': product('Shawl', 15, opts)}
-    with pytest.raises(_Unresolved, match='sale_selection_unavailable'):
-        _build_line_cost({'quantity': 1, 'options_raw': [{'option_id': 'other', 'values': [{'value_id': 'yes'}]}]},
+    result = _build_line_cost({'quantity': 1, 'options_raw': [{'option_id': 'other', 'values': [{'value_id': 'yes'}]}]},
                          'p', {}, products, {}, {'p': [{'id': 'embroidery', 'option_id': 'name', 'value_id': 'yes', 'mode': 'direct', 'direct_amount': 10}]}, {}, {})
+
+    assert result['calculation_cost_available'] is False
+    assert result['line_total'] == 15
+    assert result['cost_detail_cells'][-1]['status'] == 'unresolved'
+    assert result['missing_cost_reasons']
 
 
 def test_missing_selected_cost_still_fails_closed():
-    with pytest.raises(_Unresolved, match='resource_cost_missing'):
-        _build_line_cost({'quantity': 1}, 'p', {'p': {'items': [{'id': 'bag', 'kind': 'resource', 'resource_id': 'bag'}]}},
+    result = _build_line_cost({'quantity': 1}, 'p', {'p': {'items': [{'id': 'bag', 'kind': 'resource', 'resource_id': 'bag'}]}},
                          {'p': product('Shawl', 15)}, {}, {}, {}, {'bag': {'name': 'Bag'}})
+
+    assert result['calculation_cost_available'] is False
+    assert result['line_total'] == 15
+    assert result['cost_detail_cells'][-1]['status'] == 'missing_cost'
+    assert result['missing_cost_reasons']
 
 
 def test_missing_included_answer_does_not_make_incremental_cost_unknown():
@@ -61,7 +69,75 @@ def test_missing_included_answer_does_not_make_incremental_cost_unknown():
 
 def test_unanswered_recipe_condition_fails_even_when_other_option_answered():
     opts = [{'id': oid, 'values': [{'id': 'yes', 'name': 'Yes'}, {'id': 'no', 'name': 'No'}]} for oid in ('rose', 'other')]
-    with pytest.raises(_Unresolved, match='sale_selection_unavailable'):
-        _build_line_cost({'quantity': 1, 'options_raw': [{'option_id': 'other', 'values': [{'value_id': 'yes'}]}]},
+    result = _build_line_cost({'quantity': 1, 'options_raw': [{'option_id': 'other', 'values': [{'value_id': 'yes'}]}]},
                          'p', {'p': {'items': [{'kind': 'resource', 'resource_id': 'rose', 'condition': {'option_id': 'rose', 'value_id': 'yes'}}]}},
                          {'p': product('Shawl', 15, opts)}, {}, {}, {}, {'rose': {'unit_cost': 40}})
+
+    assert result['calculation_cost_available'] is False
+    assert result['line_total'] == 15
+    assert result['cost_detail_cells'][-1]['status'] == 'unresolved'
+    assert result['missing_cost_reasons']
+
+
+def test_required_missing_answer_retains_known_evidence():
+    result = _build_line_cost({'quantity': 2}, 'p', {}, {'p': product('Shawl', 15, [
+        {'id': 'name', 'required': True, 'values': [{'id': 'yes'}]}])}, {},
+        {'p': [{'id': 'embroidery', 'option_id': 'name', 'value_id': 'yes', 'mode': 'direct', 'direct_amount': 10}]}, {}, {})
+    assert result['line_total'] == 30
+    assert not result['calculation_cost_available']
+    assert any(c['status'] == 'unresolved' for c in result['cost_detail_cells'])
+
+
+def test_missing_fx_remains_structurally_unresolved():
+    with pytest.raises(_Unresolved, match='fx_invalid'):
+        _build_line_cost({'quantity': 1}, 'p', {'p': {'items': [
+            {'kind': 'resource', 'resource_id': 'bag'}]}}, {'p': product('Shawl', 15)}, {}, {}, {},
+            {'bag': {'unit_cost': 2, 'cost_currency': 'USD'}})
+
+
+@pytest.mark.asyncio
+async def test_loader_retains_incomplete_cost_evidence():
+    from current_bundle_reporting_estimate import load_current_bundle_estimates
+    class Collection:
+        def __init__(self, rows): self.rows = rows
+        def find(self, *args, **kwargs): return self
+        async def to_list(self, length): return self.rows
+    data = {
+        'mezan_bundle_definitions_v2': [{'product_id': 'p', 'items': [{'id': 'bag', 'kind': 'resource', 'resource_id': 'bag'}]}],
+        'mezan_products_v2': [{**product('Shawl', 15), 'salla_product_id': 'p'}],
+        'mezan_cost_resources_v2': [{'id': 'bag', 'name': 'Bag'}],
+    }
+    class DB:
+        def __getitem__(self, key): return Collection(data.get(key, []))
+    result = await load_current_bundle_estimates(DB(), 'owner', [
+        {'order_number': 'order', 'products': [{'order_item_id': 'line', 'product_id': 'p', 'quantity': 2}]}],
+        {'composite_products': ['p'], 'lines': {}})
+    cost = result[('order', 'line')]
+    assert cost['line_total'] == 30
+    assert not cost['calculation_cost_available']
+    assert cost['cost_detail_cells'][-1]['status'] == 'missing_cost'
+
+
+@pytest.mark.parametrize('missing_child', [False, True])
+def test_missing_base_retains_priced_components(missing_child):
+    products = {'p': product('Shawl', None)}
+    definitions = {}
+    bindings = {'p': [{'id': 'bag-binding', 'resource_id': 'bag'}]}
+    if missing_child:
+        products = {'p': product('Shawl', 15), 'child': product('Box', None)}
+        definitions = {'p': {'items': [{'id': 'gift', 'kind': 'product', 'product_id': 'child', 'quantity': 2}]}}
+        bindings = {'child': [{'id': 'bag-binding', 'resource_id': 'bag'}]}
+    result = _build_line_cost({'quantity': 3}, 'p', definitions, products, {}, {}, bindings,
+                             {'bag': {'name': 'Bag', 'unit_cost': 2}})
+    assert not result['calculation_cost_available']
+    assert result['line_total'] == (57 if missing_child else 6)
+    assert any(c['status'] == 'missing_cost' for c in result['cost_detail_cells'])
+    assert any('base_missing' in reason for reason in result['missing_cost_reasons'])
+    if not missing_child:
+        assert not result['uses_salla_fallback']  # absent cost is not a Salla price
+
+
+@pytest.mark.parametrize('base', ['invalid', -1])
+def test_recorded_invalid_base_stays_structurally_unresolved(base):
+    with pytest.raises(_Unresolved, match='base_cost_or_fx_invalid'):
+        _build_line_cost({'quantity': 1}, 'p', {}, {'p': product('Shawl', base)}, {}, {}, {}, {})

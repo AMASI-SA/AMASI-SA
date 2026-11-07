@@ -462,13 +462,18 @@ async def test_frozen_bundle_still_wins_over_new_current_cost_policy(db):
 
 
 @pytest.mark.asyncio
-async def test_current_bundle_without_original_choice_rows_stays_unpriced(db):
+async def test_current_bundle_without_original_choice_rows_preserves_known_cost_but_stays_incomplete(db):
     order = sale("no-selection-source", sale_line("line", 4))
     order["products"][0]["options"] = []
     result = await build_mezan_v2_product_cost(ReadOnlyDB(db), OWNER, [order])
     assert result["product_rows"][0]["cost_status"] == "missing"
-    assert result["product_rows"][0]["total_cost"] is None
+    assert result["product_rows"][0]["total_cost"] == 60  # known base, never a complete cost
     assert result["incomplete_orders_count"] == 1
+    sold = await load_sold_products(ReadOnlyDB(db), OWNER, [order])
+    assert sold[0]["cost_status"] == "incomplete"
+    assert sold[0]["total_cost"] is None
+    assert sold[0]["known_cost_total"] == 60
+    assert any(cell["status"] == "unresolved" for cell in sold[0]["cost_groups"][0]["cells"])
 
 
 @pytest.mark.asyncio
