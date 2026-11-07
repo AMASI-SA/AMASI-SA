@@ -117,7 +117,9 @@ def aggregate_sold_products(
                                 if isinstance(v, dict) and str(v.get("id") or "") == variant), {}) if variant else {}
             sku = str(item.get("sku") or variant_row.get("sku") or (product or {}).get("sku") or "").strip()
             name = str(item.get("name") or (product or {}).get("name") or "").strip()
-            key = f"{identity}:{variant or sku.casefold()}" if identity else sku.casefold() or name.casefold()
+            # One product summary across its native variants. Variant pricing
+            # still resolves against the original item and stays in detail groups.
+            key = f"product:{identity}" if identity else sku.casefold() or name.casefold()
             if not key:
                 continue
             quantity = _decimal(item.get("quantity"))
@@ -163,7 +165,8 @@ def aggregate_sold_products(
                             cost_source = "bundle_expected"
                     unit = amount / quantity if amount is not None else None
             row = aggregated.setdefault(key, {
-                "report_key": key, "name": name, "sku": sku, "product_id": identity,
+                "report_key": key, "name": (product or {}).get("name") or name,
+                "sku": (product or {}).get("sku") or sku, "product_id": identity,
                 "mezan_product_id": str((product or {}).get("mezan_product_id") or ""),
                 "catalog_product_found": bool(product),
                 "image_url": (product or {}).get("main_image") or item.get("image_url") or item.get("image") or "",

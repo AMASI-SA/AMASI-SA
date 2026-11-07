@@ -129,6 +129,8 @@ class SourceContract(unittest.TestCase):
                     'a05b89134c078eefeac5ca9bc4e0827d9f5c7ec0769bed7674eca64c71327fb5',
                     # PR1795: cost evidence plus reviewed owner-scoped traffic batches (gate audited).
                     '6f41bf4e48896bcea839d16369cbb85bb1be5e33467c702379b2e926bbfe9be0',
+                    # PR1797: owner-requested parent summaries; per-item cost authority unchanged.
+                    '031d9a792d3a6d6f9d29af4401ea2d3f6d888c7641f53a7cd50418df591a3bd3',
                 })
             else:
                 self.assertEqual(before.replace(b'\r\n', b'\n'), current)

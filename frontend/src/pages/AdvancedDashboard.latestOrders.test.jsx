@@ -916,9 +916,10 @@ test("top product source menus start hidden, toggle independently, and remain ex
         expect(buttons[0].getAttribute("aria-expanded")).toBe("true");
         const panel = document.getElementById(buttons[0].getAttribute("aria-controls"));
         expect(panel.hidden).toBe(false);
-        expect(panel.textContent).toContain("snap-account-1");
+        expect(panel.querySelector('li[aria-label*="snap-account-1"]')).not.toBeNull();
+        expect(panel.textContent).not.toContain("سناب شات");
         expect(panel.textContent).toContain("2 قطعة");
-        expect(panel.textContent).toContain("حساب غير محدد");
+        expect(panel.querySelector('li[aria-label*="حساب غير محدد"]')).not.toBeNull();
         expect(buttons[1].getAttribute("aria-expanded")).toBe("false");
         expect(container.textContent).not.toContain("snap-account-2");
         expect(panel.classList.contains("product-traffic-sources")).toBe(true);
