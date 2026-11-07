@@ -38,11 +38,18 @@ def root_db(db):
     return db.current() if isinstance(db, AccountingDatabase) else db
 
 
-async def admitted(db, owner, operation, callback):
+def standalone_writes_paused(state):
+    state = state or {}
+    return not (state.get("standalone_inventory_writes_paused") is False
+                and type(state.get("standalone_inventory_control_revision")) is int
+                and state["standalone_inventory_control_revision"] > 0)
+
+
+async def admitted(db, owner, operation, callback, *, standalone=False):
     db = root_db(db)
     if ACTIVE.get() is not None:
         raise HTTPException(409, "inventory_admission_nested")
-    if writes_paused(await read_control(db, owner)):
+    if (standalone_writes_paused if standalone else writes_paused)(await read_control(db, owner)):
         raise HTTPException(423, "physical_inventory_writes_paused")
     hello = await db.command("hello")
     if not hello.get("setName") or hello.get("logicalSessionTimeoutMinutes") is None:
@@ -65,7 +72,7 @@ async def admitted(db, owner, operation, callback):
     except (DuplicateKeyError, ExecutionTimeout):
         raise HTTPException(429, detail={"code": "inventory_owner_busy", "attempt_id": attempt,
                                         "automatic_retry": False})
-    token = ACTIVE.set((owner, attempt))
+    token = ACTIVE.set((owner, attempt, standalone))
     try:
         await db.mz2_inventory_attempts.with_options(write_concern=WriteConcern("majority")).insert_one(
             {"_id": attempt, "user_id": owner, "operation": operation,
@@ -98,7 +105,7 @@ async def fence(db, owner, session):
     if result.matched_count != 1:
         raise HTTPException(409, "inventory_admission_expired")
     state = await read_control(db, owner, session=session)
-    if writes_paused(state):
+    if (standalone_writes_paused if len(active) > 2 and active[2] else writes_paused)(state):
         raise HTTPException(423, "physical_inventory_writes_paused")
 
 

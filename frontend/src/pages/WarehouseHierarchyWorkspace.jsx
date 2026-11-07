@@ -76,7 +76,9 @@ const EMPTY_BRANCH = {
     city: "الرياض",
     district: "",
     street: "",
-    is_primary: true,
+    is_primary: false,
+    location_numbering: "cabinet-row-slot",
+    inventory_scope: "standalone",
 };
 
 const EMPTY_SECTION = {
@@ -178,24 +180,31 @@ function printablePage({ eyebrow, value, subtitle, code, barcode = false }) {
     return `<section class="print-page"><div class="brand">MEZAN OS</div><div class="eyebrow">${escapeHtml(eyebrow)}</div><div class="big-value">${escapeHtml(value)}</div>${subtitle ? `<div class="subtitle">${escapeHtml(subtitle)}</div>` : ""}${barcode && code ? code39Svg(code) : ""}${code ? `<div class="code">${escapeHtml(code)}</div>` : ""}</section>`;
 }
 
+export function cabinetLocationLabel(cabinet, index) {
+    return cabinet.location_numbering === "cabinet-row-slot"
+        ? `${cabinet.cabinet_number}-${Math.floor(index / Number(cabinet.width)) + 1}-${index % Number(cabinet.width) + 1}`
+        : String(index + 1).padStart(3, "0");
+}
+
 function printCabinetPack(branch, section, cabinet) {
     if (!branch || !section || !cabinet) return;
     const cabinetNumber = cabinet.cabinet_number || cabinet.code;
     const total = Number(cabinet.total_locations || 0);
-    const columns = Number(cabinet.width || 0);
+    const compact = cabinet.location_numbering === "cabinet-row-slot";
+    const columns = Number((compact ? cabinet.length : cabinet.width) || 0);
     const baseCode = `${branch.code}-${cabinet.code}`;
     const branchLabel = `${branch.name} — ${branch.city} — قسم ${section.section_number || section.room_number} — ${section.name}`;
     const cover = printablePage({ eyebrow: "رقم الدولاب", value: cabinetNumber, subtitle: branchLabel, code: baseCode });
     const columnPages = Array.from({ length: columns }, (_, index) => printablePage({
         eyebrow: `الدولاب ${cabinetNumber}`,
-        value: `عمود ${index + 1}`,
+        value: `${compact ? "صف" : "عمود"} ${index + 1}`,
         subtitle: branchLabel,
         code: `${baseCode}-C${String(index + 1).padStart(2, "0")}`,
     })).join("");
     const locationPages = Array.from({ length: total }, (_, index) => {
         const number = String(index + 1).padStart(3, "0");
         const code = `${baseCode}-${number}`;
-        return printablePage({ eyebrow: `الدولاب ${cabinetNumber} — الخانة`, value: number, subtitle: "امسح الباركود قبل وضع المنتج", code, barcode: true });
+        return printablePage({ eyebrow: `الدولاب ${cabinetNumber} — الخانة`, value: cabinetLocationLabel(cabinet, index), subtitle: `${branchLabel} — امسح الباركود قبل وضع المنتج`, code, barcode: true });
     }).join("");
     const printWindow = window.open("", "_blank");
     if (!printWindow) return toast.error("اسمح بفتح النوافذ المنبثقة لطباعة الملصقات");
@@ -439,7 +448,7 @@ export default function WarehouseHierarchyWorkspace() {
                             <div>
                                 <p className="text-xs font-extrabold text-violet-600">الخطوة 4 — الخانات</p>
                                 <h2 className="mt-1 text-2xl font-black text-slate-950">{selectedCabinet.name || `دولاب ${selectedCabinet.cabinet_number}`}</h2>
-                                <p className="num mt-1 text-xs text-slate-400">{selectedBranch.code}-{selectedCabinet.code}</p>
+                                <p className="num mt-1 text-xs text-slate-400">{selectedCabinet.location_numbering === "cabinet-row-slot" ? `دولاب ${selectedCabinet.cabinet_number}` : `${selectedBranch.code}-${selectedCabinet.code}`}</p>
                             </div>
                             <button type="button" onClick={() => printCabinetPack(selectedBranch, selectedSection, selectedCabinet)} className="flex items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm font-extrabold text-violet-800">
                                 <Printer size={18} /> طباعة الملصقات والباركودات
@@ -447,8 +456,8 @@ export default function WarehouseHierarchyWorkspace() {
                         </div>
                         <div className="mt-5 grid gap-3 sm:grid-cols-4">
                             <div className="rounded-2xl bg-slate-50 p-3"><span className="block text-[11px] text-slate-400">القسم</span><strong>{selectedSection.name}</strong></div>
-                            <div className="rounded-2xl bg-slate-50 p-3"><span className="block text-[11px] text-slate-400">الأعمدة</span><strong className="num">{selectedCabinet.width}</strong></div>
-                            <div className="rounded-2xl bg-slate-50 p-3"><span className="block text-[11px] text-slate-400">الخانات في العمود</span><strong className="num">{selectedCabinet.length}</strong></div>
+                            <div className="rounded-2xl bg-slate-50 p-3"><span className="block text-[11px] text-slate-400">{selectedCabinet.location_numbering === "cabinet-row-slot" ? "الخانات في الصف" : "الأعمدة"}</span><strong className="num">{selectedCabinet.width}</strong></div>
+                            <div className="rounded-2xl bg-slate-50 p-3"><span className="block text-[11px] text-slate-400">{selectedCabinet.location_numbering === "cabinet-row-slot" ? "الصفوف" : "الخانات في العمود"}</span><strong className="num">{selectedCabinet.length}</strong></div>
                             <div className="rounded-2xl bg-slate-50 p-3"><span className="block text-[11px] text-slate-400">إجمالي الخانات</span><strong className="num">{selectedCabinet.total_locations}</strong></div>
                         </div>
                     </div>
@@ -459,7 +468,7 @@ export default function WarehouseHierarchyWorkspace() {
                         </div>
                         <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(Number(selectedCabinet.width || 1), 12)}, minmax(0, 1fr))` }}>
                             {Array.from({ length: Math.min(Number(selectedCabinet.total_locations || 0), 240) }, (_, index) => (
-                                <div key={index} className="flex aspect-square items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 text-[10px] font-black text-emerald-700 num">{String(index + 1).padStart(3, "0")}</div>
+                                <div key={index} className="flex aspect-square items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 text-[10px] font-black text-emerald-700 num">{cabinetLocationLabel(selectedCabinet, index)}</div>
                             ))}
                         </div>
                     </div>
@@ -677,14 +686,14 @@ export default function WarehouseHierarchyWorkspace() {
                         </div>
                         <Field label="اسم الدولاب (اختياري)" hint="الرقم والكود تلقائيان"><Input value={cabinetForm.cabinet_name} onChange={(event) => setCabinetForm({ ...cabinetForm, cabinet_name: event.target.value })} placeholder="مثال: دولاب السلاسل" /></Field>
                         <div className="grid gap-3 md:grid-cols-2">
-                            <Field label="عدد الأعمدة"><Input required type="number" min="1" max="100" value={cabinetForm.columns} onChange={(event) => setCabinetForm({ ...cabinetForm, columns: event.target.value })} /></Field>
-                            <Field label="عدد الخانات في كل عمود"><Input required type="number" min="1" max="100" value={cabinetForm.slots_per_column} onChange={(event) => setCabinetForm({ ...cabinetForm, slots_per_column: event.target.value })} /></Field>
+                            <Field label={selectedBranch?.location_numbering === "cabinet-row-slot" ? "عدد الخانات في كل صف" : "عدد الأعمدة"}><Input required type="number" min="1" max="100" value={cabinetForm.columns} onChange={(event) => setCabinetForm({ ...cabinetForm, columns: event.target.value })} /></Field>
+                            <Field label={selectedBranch?.location_numbering === "cabinet-row-slot" ? "عدد الصفوف" : "عدد الخانات في كل عمود"}><Input required type="number" min="1" max="100" value={cabinetForm.slots_per_column} onChange={(event) => setCabinetForm({ ...cabinetForm, slots_per_column: event.target.value })} /></Field>
                             <Field label="نوع الاستخدام"><Select value={cabinetForm.purpose} onChange={(event) => setCabinetForm({ ...cabinetForm, purpose: event.target.value })}>{PURPOSES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select></Field>
                             <Field label="سعة كل خانة (اختياري)"><Input type="number" min="1" value={cabinetForm.max_items_per_location} onChange={(event) => setCabinetForm({ ...cabinetForm, max_items_per_location: event.target.value })} /></Field>
                         </div>
                         <div className="rounded-2xl bg-slate-950 p-4 text-white">
                             <div className="flex items-center justify-between"><span className="text-sm font-bold">إجمالي الخانات التي ستنشأ</span><strong className="num text-3xl">{cabinetTotal}</strong></div>
-                            <p className="mt-1 text-xs text-slate-300">{cabinetForm.columns} أعمدة × {cabinetForm.slots_per_column} خانات في العمود</p>
+                            <p className="mt-1 text-xs text-slate-300">{selectedBranch?.location_numbering === "cabinet-row-slot" ? `${cabinetForm.slots_per_column} صفوف × ${cabinetForm.columns} خانات — رقم الموقع: الدولاب-الصف-الخانة` : `${cabinetForm.columns} أعمدة × ${cabinetForm.slots_per_column} خانات في العمود`}</p>
                         </div>
                         <button disabled={loading || cabinetTotal < 1 || cabinetTotal > 5000} className="w-full rounded-xl bg-violet-700 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-50">إنشاء الدولاب والخانات</button>
                     </form>

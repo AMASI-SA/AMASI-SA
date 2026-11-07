@@ -136,13 +136,13 @@ async def context(db, user):
             'fulfillment_reason': 'inventory_valuation_reconciliation_required'}
 
 
-async def compile_preview(db, owner, request):
-    if await db[BATCHES].find_one({'_id': owner, 'user_id': owner}):
+async def compile_preview(db, owner, request, *, standalone=False):
+    if not standalone and await db[BATCHES].find_one({'_id': owner, 'user_id': owner}):
         fail('opening_inventory_already_approved', 'اعتمد المخزون الافتتاحي مسبقًا؛ يلزم مسار تسوية مستقل')
     locs = await records(db, owner, LOCATIONS)
     # No ambiguous zero/negative legacy records or previous receipts can be
     # adopted as a new opening. This is intentionally stricter than addition.
-    for location in locs:
+    for location in ([] if standalone else locs):
         occupancy = location.get('occupancy')
         if occupancy is not None and (not isinstance(occupancy, dict)
                 or occupancy.get('items') != []
@@ -151,7 +151,7 @@ async def compile_preview(db, owner, request):
             fail('opening_inventory_existing_stock', 'يوجد مخزون سابق؛ يلزم مطابقته قبل تسجيل افتتاحية')
     for name in (RECEIPTS, 'mezan_inventory_reservations_v2', 'mezan_component_consumption_units_v1',
                  'mz2_opening_inventory_initializations', 'mz2_inventory_cost_states'):
-        if await db[name].find_one({'user_id': owner}):
+        if not standalone and await db[name].find_one({'user_id': owner}):
             fail('opening_inventory_existing_stock', 'توجد حركة أو قيمة مخزون سابقة؛ يلزم مسار مطابقة')
     metadata = await products(db, owner, opening_cached_options=True)
     candidates = {(p['kind'], p['id']): p for p in metadata + await components(db, owner)}
@@ -177,6 +177,22 @@ async def compile_preview(db, owner, request):
         raw = product_matches[0]
         stored = location_matches[0]
         warehouse = warehouse_matches[0]
+        if standalone:
+            if warehouse.get('inventory_scope') != 'standalone':
+                fail('standalone_inventory_warehouse_required', 'اختر موقعًا في مخزن المخزون المستقل الجديد', 422)
+            occupancy = stored.get('occupancy')
+            if occupancy is not None:
+                if not isinstance(occupancy, dict) or not isinstance(occupancy.get('items'), list):
+                    fail('standalone_inventory_occupancy_invalid', 'بيانات الموقع تحتاج مطابقة', 409)
+                items = occupancy['items']
+                if any(not isinstance(item, dict) or item.get('source_type') != 'standalone_inventory_entry'
+                       or item.get('valuation_status') != PENDING or not valid_quantity(item) for item in items):
+                    fail('standalone_inventory_occupancy_invalid', 'الموقع يحتوي مخزونًا من مسار آخر؛ اختر موقعًا مستقلًا', 409)
+                total = occupancy.get('total_quantity')
+                if (type(total) not in (int, float) or not math.isfinite(total) or total < 0
+                        or abs(Decimal(str(total)) - sum((Decimal(str(i['quantity'])) for i in items), Decimal(0))) > Decimal('.000001')):
+                    fail('standalone_inventory_occupancy_invalid', 'كمية الموقع تحتاج مطابقة', 409)
+                capacity.setdefault(location['id'], Decimal(str(total)))
         from operational_balance_sources import usable
         if not usable(warehouse) or warehouse.get('status') == 'disabled' or warehouse.get('deleted_at'):
             fail('opening_inventory_warehouse_unavailable', 'المستودع غير متاح؛ اختر موقعًا في مستودع نشط', 409)
@@ -286,49 +302,22 @@ async def approve(db, user, payload):
             'source_type': SOURCE, 'schema_version': SCHEMA, 'request_hash': fingerprint,
             'preview_hash': expected, 'result': result, 'financial_effect': 'none',
             'recorded_by': owner, 'recorded_at': timestamp})
-        for index, line in enumerate(compiled['lines']):
-            rid = digest([SOURCE, owner, index]); identity = line['inventory_identity']
-            proof = {'_id': rid, 'id': rid, 'user_id': owner, 'source_type': SOURCE,
-                'schema_version': SCHEMA, 'source_id': batch_id, 'source_line_id': str(index),
-                'status': 'posted', 'valuation_status': PENDING, 'financial_effect': 'none',
-                'inventory_identity': identity, **identity, 'quantity': line['quantity'], 'unit': line['unit'],
-                'location_id': line['location_id'], 'warehouse_id': line['warehouse_id'],
-                'preparation_state': line['preparation_state'], 'specifications': line['specifications'],
-                'operational_unit_cost': line['unit_cost'], 'operational_total_cost': line['total_cost'],
-                'currency': 'SAR', 'recorded_by': owner, 'created_at': timestamp}
-            await scoped[RECEIPTS].insert_one(proof)
-            item = {**identity, 'receipt_id': rid, 'lot_id': rid, 'source_type': SOURCE,
-                    'source_id': batch_id, 'source_line_id': str(index), 'valuation_status': PENDING,
-                    'quantity': line['quantity'], 'unit': line['unit'], 'preparation_state': line['preparation_state'],
-                    'specifications': line['specifications'], 'condition': 'good', 'placed_at': timestamp}
-            # Explicit owner selection is not a barcode scan. Preserve scan
-            # evidence rather than manufacturing last_verified_scan metadata.
-            await scoped[LOCATIONS].update_one({'id': line['location_id'], 'user_id': owner, 'occupancy': None},
-                {'$set': {'occupancy': {'items': [], 'total_quantity': 0}}})
-            placed = await scoped[LOCATIONS].update_one({'id': line['location_id'], 'user_id': owner,
-                'state': {'$ne': 'disabled'}, 'occupancy.items.receipt_id': {'$ne': rid}},
-                {'$push': {'occupancy.items': item}, '$inc': {'occupancy.total_quantity': line['quantity']},
-                 '$set': {'state': 'occupied', 'updated_at': timestamp}})
-            if placed.matched_count != 1:
-                fail('opening_inventory_location_changed', 'تغير الموقع؛ أعد المعاينة')
-            await scoped['warehouse_location_events'].insert_one({'_id': rid, 'id': rid, 'user_id': owner,
-                'event_type': SOURCE, 'receipt_id': rid, 'quantity': line['quantity'], 'recorded_by': owner,
-                'occurred_at': timestamp})
+        await place_compiled(scoped, owner, compiled, timestamp, batch_id)
         return result
     return await admitted(db, owner, SOURCE, lambda: operational_owner(db, owner, commit, profile='opening_inventory'))
 
 
-def validate_insert(name, doc):
-    if name == BATCHES:
+def validate_insert(name, doc, *, source=SOURCE, batches=BATCHES):
+    if name == batches:
         return (set(doc) == {'_id','id','user_id','source_type','schema_version','request_hash','preview_hash','result','financial_effect','recorded_by','recorded_at'}
-                and doc.get('source_type') == SOURCE and doc.get('schema_version') == SCHEMA and doc.get('financial_effect') == 'none')
+                and doc.get('source_type') == source and doc.get('schema_version') == SCHEMA and doc.get('financial_effect') == 'none')
     if name == RECEIPTS:
         allowed = {'_id','id','user_id','source_type','schema_version','source_id','source_line_id','status','valuation_status','financial_effect','inventory_identity','quantity','location_id','warehouse_id','preparation_state','specifications','operational_unit_cost','operational_total_cost','currency','recorded_by','created_at'} | identity_fields(doc)
         if 'unit' in doc:
             allowed.add('unit')
-        return (valid_quantity(doc) and set(doc) == allowed and doc.get('source_type') == SOURCE and doc.get('schema_version') == SCHEMA
+        return (valid_quantity(doc) and set(doc) == allowed and doc.get('source_type') == source and doc.get('schema_version') == SCHEMA
                 and doc.get('valuation_status') == PENDING and doc.get('financial_effect') == 'none' and doc.get('status') == 'posted')
-    return name == 'warehouse_location_events' and set(doc) == {'_id','id','user_id','event_type','receipt_id','quantity','recorded_by','occurred_at'} and doc.get('event_type') == SOURCE
+    return name == 'warehouse_location_events' and set(doc) == {'_id','id','user_id','event_type','receipt_id','quantity','recorded_by','occurred_at'} and doc.get('event_type') == source
 
 
 def identity_fields(doc):
@@ -347,7 +336,7 @@ def valid_quantity(doc):
         return False
 
 
-async def validate_update(db, owner, name, query, update):
+async def validate_update(db, owner, name, query, update, *, source=SOURCE):
     if name != LOCATIONS:
         return False
     if update == {'$set': {'occupancy': {'items': [], 'total_quantity': 0}}}:
@@ -360,7 +349,7 @@ async def validate_update(db, owner, name, query, update):
     allowed = {'receipt_id','lot_id','source_type','source_id','source_line_id','valuation_status','quantity','preparation_state','specifications','condition','placed_at'} | identity_fields(item)
     if 'unit' in item:
         allowed.add('unit')
-    if (not isinstance(item, dict) or set(item) != allowed or item.get('source_type') != SOURCE
+    if (not isinstance(item, dict) or set(item) != allowed or item.get('source_type') != source
             or item.get('valuation_status') != PENDING or not valid_quantity(item)
             or update['$inc']['occupancy.total_quantity'] != item['quantity']
             or set(update['$set']) != {'state','updated_at'}
@@ -378,7 +367,7 @@ async def validate_update(db, owner, name, query, update):
             or any(row.get('receipt_id') == item['receipt_id'] for row in occupancy.get('items', []))):
         return False
     proof = await db[RECEIPTS].find_one({'_id': item['receipt_id'], 'user_id': owner})
-    return bool(proof and validate_insert(RECEIPTS, {k:v for k,v in proof.items()})
+    return bool(proof and validate_insert(RECEIPTS, {k:v for k,v in proof.items()}, source=source)
         and proof['location_id'] == query.get('id') and item['lot_id'] == proof['id']
         and all(item.get(k) == v for k,v in proof['inventory_identity'].items())
         and all(item.get(k) == proof.get(k) for k in ('quantity','unit','source_id','source_line_id','preparation_state','specifications')))
@@ -390,10 +379,11 @@ def projected_evidence(location, item, witnesses):
     Native MWA unit_cost/inventory_value remain unknown. No sale permission is
     derived from this evidence, and legacy/adopted native sources are unchanged.
     """
-    if item.get('source_type') != SOURCE or len(witnesses) != 1:
+    source = item.get('source_type')
+    if source not in {SOURCE, 'standalone_inventory_entry'} or len(witnesses) != 1:
         return {}
     proof = witnesses[0]
-    if (not validate_insert(RECEIPTS, proof) or proof.get('id') != item.get('receipt_id')
+    if (not validate_insert(RECEIPTS, proof, source=source) or proof.get('id') != item.get('receipt_id')
             or proof.get('location_id') != location.get('id')
             or proof.get('warehouse_id') != location.get('warehouse_id')
             or any(item.get(k) != v for k,v in proof['inventory_identity'].items())
@@ -410,3 +400,34 @@ def projected_evidence(location, item, witnesses):
             'operational_cost_basis': SCHEMA, 'operational_currency': 'SAR',
             **({'unit': proof['unit']} if proof.get('unit') else {}),
             'financial_effect': 'none', 'fulfillment_eligible': False}
+
+
+async def place_compiled(scoped, owner, compiled, timestamp, batch_id, *, source=SOURCE):
+    for index, line in enumerate(compiled['lines']):
+        rid = digest([source, owner, index] if source == SOURCE else [source, owner, batch_id, index]); identity = line['inventory_identity']
+        proof = {'_id': rid, 'id': rid, 'user_id': owner, 'source_type': source,
+            'schema_version': SCHEMA, 'source_id': batch_id, 'source_line_id': str(index),
+            'status': 'posted', 'valuation_status': PENDING, 'financial_effect': 'none',
+            'inventory_identity': identity, **identity, 'quantity': line['quantity'], 'unit': line['unit'],
+            'location_id': line['location_id'], 'warehouse_id': line['warehouse_id'],
+            'preparation_state': line['preparation_state'], 'specifications': line['specifications'],
+            'operational_unit_cost': line['unit_cost'], 'operational_total_cost': line['total_cost'],
+            'currency': 'SAR', 'recorded_by': owner, 'created_at': timestamp}
+        await scoped[RECEIPTS].insert_one(proof)
+        item = {**identity, 'receipt_id': rid, 'lot_id': rid, 'source_type': source,
+                'source_id': batch_id, 'source_line_id': str(index), 'valuation_status': PENDING,
+                'quantity': line['quantity'], 'unit': line['unit'], 'preparation_state': line['preparation_state'],
+                'specifications': line['specifications'], 'condition': 'good', 'placed_at': timestamp}
+        # Explicit owner selection is not a barcode scan. Preserve scan
+        # evidence rather than manufacturing last_verified_scan metadata.
+        await scoped[LOCATIONS].update_one({'id': line['location_id'], 'user_id': owner, 'occupancy': None},
+            {'$set': {'occupancy': {'items': [], 'total_quantity': 0}}})
+        placed = await scoped[LOCATIONS].update_one({'id': line['location_id'], 'user_id': owner,
+            'state': {'$ne': 'disabled'}, 'occupancy.items.receipt_id': {'$ne': rid}},
+            {'$push': {'occupancy.items': item}, '$inc': {'occupancy.total_quantity': line['quantity']},
+             '$set': {'state': 'occupied', 'updated_at': timestamp}})
+        if placed.matched_count != 1:
+            fail('opening_inventory_location_changed', 'تغير الموقع؛ أعد المعاينة')
+        await scoped['warehouse_location_events'].insert_one({'_id': rid, 'id': rid, 'user_id': owner,
+            'event_type': source, 'receipt_id': rid, 'quantity': line['quantity'], 'recorded_by': owner,
+            'occurred_at': timestamp})

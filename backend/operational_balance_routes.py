@@ -521,6 +521,26 @@ def make_operational_balance_router(db, current_user):
         from operational_purchase_metadata import products, locations
         return {'items':await catalog(db,owner,components_only=configured), 'products':await products(db,owner), 'locations':await locations(db,owner)}
 
+    @router.get('/standalone-inventory/context')
+    async def standalone_inventory_context(user=Depends(current_user)):
+        from standalone_inventory_entry import context
+        return await context(db, user)
+
+    @router.post('/standalone-inventory/control')
+    async def standalone_inventory_control(payload: dict, user=Depends(current_user)):
+        from standalone_inventory_entry import set_control
+        return await set_control(db, user, payload)
+
+    @router.post('/standalone-inventory/preview')
+    async def standalone_inventory_preview(payload: StockOpeningRequest, user=Depends(current_user)):
+        from standalone_inventory_entry import preview
+        return await preview(db, user, payload.model_dump())
+
+    @router.post('/standalone-inventory/save')
+    async def standalone_inventory_save(payload: StockOpeningApproval, user=Depends(current_user)):
+        from standalone_inventory_entry import save
+        return await save(db, user, payload.model_dump())
+
     @router.get('/inventory-opening/context')
     async def inventory_opening_context(user=Depends(current_user)):
         from operational_opening_inventory import context
