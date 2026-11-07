@@ -25,9 +25,11 @@ async def test_recovery_requires_current_completed_store_courier(monkeypatch, la
     async def refresh(*args, **kwargs): return {"label_type": label_type, "ready": ready, "order_status_completed": True}
     async def get_baseline(*args, **kwargs): return baseline
     async def status(*args, **kwargs): return "completed"
+    async def courier_name(*args, **kwargs): return "مندوب الرياض"
     async def owner(db, user_id, fn): return await fn(db)
     monkeypatch.setattr(shipping, "_assert_current_print_status", get_fence)
     monkeypatch.setattr(compat, "local_mezan_courier_label", refresh)
+    monkeypatch.setattr(compat, "mezan_courier_name", courier_name)
     monkeypatch.setattr(shipping, "_label_baseline", get_baseline)
     monkeypatch.setattr(assembly_status_policy, "source_status", status)
     monkeypatch.setattr(operational_atomic, "operational_owner", owner)
@@ -44,9 +46,11 @@ async def test_recovery_refuses_changed_shipping_snapshot(monkeypatch):
     async def refresh(*args, **kwargs): return {"label_type": "store_courier", "ready": True, "order_status_completed": True}
     async def get_baseline(*args, **kwargs): return {"carrier": "new"}
     async def status(*args, **kwargs): return "completed"
+    async def courier_name(*args, **kwargs): return "مندوب الرياض"
     async def owner(db, user_id, fn): return await fn(db)
     monkeypatch.setattr(shipping, "_assert_current_print_status", get_fence)
     monkeypatch.setattr(compat, "local_mezan_courier_label", refresh)
+    monkeypatch.setattr(compat, "mezan_courier_name", courier_name)
     monkeypatch.setattr(shipping, "_label_baseline", get_baseline)
     monkeypatch.setattr(assembly_status_policy, "source_status", status)
     monkeypatch.setattr(operational_atomic, "operational_owner", owner)
