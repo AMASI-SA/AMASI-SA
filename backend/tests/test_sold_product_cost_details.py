@@ -115,3 +115,25 @@ def test_variant_rows_have_distinct_stable_report_keys():
     rows = report([{**item(1), 'variant_id': 'red'}, {**item(1), 'variant_id': 'blue'}])
     assert len(rows) == 2
     assert {row['report_key'] for row in rows} == {'p:red', 'p:blue'}
+
+
+def test_customer_names_and_unpriced_colours_do_not_split_equal_costs():
+    lines = []
+    for index in range(17):
+        line = item(1, 'yes')
+        line['options_raw'] += [
+            {'option_id': 'engraved-text', 'value': f'اسم {index}'},
+            {'option_id': 'colour', 'value_id': 'red' if index % 2 else 'blue'},
+        ]
+        lines.append(line)
+    row = report(lines)[0]
+    assert len(row['cost_groups']) == 1
+    group = row['cost_groups'][0]
+    assert (group['quantity'], group['unit_cost'], group['total_cost']) == (17, 35, 595)
+    assert next(c for c in group['cells'] if c['key'] == 'option:name')['unit_cost'] == 10
+
+
+def test_selected_name_service_and_without_service_keep_separate_rows():
+    row = report([item(3, 'yes'), item(2), item(4, 'yes')])[0]
+    assert [(g['quantity'], g['unit_cost'], g['total_cost']) for g in row['cost_groups']] == [(7, 35, 245), (2, 25, 50)]
+    assert any(c['kind'] == 'service' and c['key'] == 'option:name' for c in row['cost_columns'])

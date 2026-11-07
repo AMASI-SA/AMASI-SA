@@ -40,14 +40,25 @@ export function CostSummary({ rows, final = false }) {
     </div>;
 }
 
-function CostCell({ cell, kind }) {
+function CostCell({ cell, kind, quantity = 1 }) {
     if (!cell) return <span className="text-slate-500">تفصيل غير متاح</span>;
     if (cell.status === "unresolved") return <span className="text-amber-800">اختيار غير متحقق</span>;
     if (cell.status === "included_in_base") return <span className="text-slate-500">ضمن تكلفة المنتج</span>;
     if (cell.status === "historical_unavailable") return <span className="text-slate-500">تفصيل غير متاح</span>;
-    if (cell.status === "not_required") return <span className="text-slate-500">{kind === "service" ? "غير مطلوبة" : "غير مطلوب"}</span>;
+    if (cell.status === "not_required") return <span className="text-slate-500">{kind === "service" ? "غير محدد" : "غير مطلوب"}</span>;
     if (cell.status === "missing_cost" || cell.unit_cost == null) return <span className="text-amber-800">تكلفة ناقصة</span>;
-    return formatMoney(cell.unit_cost);
+    return formatMoney(cell.unit_cost * quantity);
+}
+
+function ColumnTotal({ column, groups }) {
+    let total = 0;
+    let missing = false;
+    for (const group of groups) {
+        const cell = group.cells?.find(value => value.key === column.key);
+        if (cell?.status === "costed" && cell.unit_cost != null) total += cell.unit_cost * group.quantity;
+        else if (!["not_required", "included_in_base"].includes(cell?.status)) missing = true;
+    }
+    return missing ? <><span className="text-amber-800">غير مكتمل</span><small className="block">المعروف {formatMoney(total)}</small></> : formatMoney(total);
 }
 
 function columnTitle(column) {
@@ -60,20 +71,20 @@ export function CostDetails({ row }) {
     const columns = row.cost_columns || [];
     const groups = row.cost_groups || [];
     return <div className="p-4 bg-slate-50" data-testid="sold-product-cost-details">
-        <p className="mb-3 text-xs text-slate-600">جميع المبالغ بالريال. تكاليف المنتج والخدمات والمكونات للقطعة الواحدة، والقطع ذات الخيارات والتكاليف المتطابقة مجمّعة في صف واحد.</p>
+        <p className="mb-3 text-xs text-slate-600">جميع المبالغ بالريال. أعمدة المنتج والخدمات والمكونات تعرض إجمالي التكلفة لكمية الصف. تتجمع القطع ذات الخدمات والمكونات وتكلفة كل بند المتطابقة، مهما اختلف الاسم أو النص المطلوب. الخدمة غير المختارة تظهر «غير محدد».</p>
         {!groups.length ? <p className="text-amber-800">تفاصيل التكلفة غير متاحة — حدّث التكاليف للتحقق.</p> : <div className="overflow-x-auto sold-details-scroll">
             <table className="w-full text-right text-xs border-collapse" aria-label={`تفاصيل تكلفة ${row.name}`}>
                 <thead className="bg-violet-100"><tr>
-                    {columns.map(column => <th key={column.key} className="border p-3">{columnTitle(column)}</th>)}
+                    {columns.map(column => <th key={column.key} className="border p-3">إجمالي {columnTitle(column)}</th>)}
                     <th className="border p-3">تكلفة القطعة</th><th className="border p-3">الكمية</th><th className="border p-3">الإجمالي</th>
                 </tr></thead>
                 <tbody>{groups.map((group, index) => <tr key={group.key || index}>
-                    {columns.map(column => <td key={column.key} className="border p-3"><CostCell cell={group.cells?.find(cell => cell.key === column.key)} kind={column.kind} /></td>)}
+                    {columns.map(column => <td key={column.key} className="border p-3"><CostCell cell={group.cells?.find(cell => cell.key === column.key)} kind={column.kind} quantity={group.quantity} /></td>)}
                     <td className="border p-3">{group.complete && group.unit_cost != null ? formatMoney(group.unit_cost) : <><span className="text-amber-800">غير مكتملة</span>{group.known_unit_cost != null && <small className="block">المعروف {formatMoney(group.known_unit_cost)}</small>}</>}</td>
                     <td className="border p-3">{formatInt(group.quantity)}</td>
                     <td className="border p-3">{group.complete && group.total_cost != null ? formatMoney(group.total_cost) : <><span className="text-amber-800">غير مكتمل</span>{group.known_total_cost != null && <small className="block">المعروف {formatMoney(group.known_total_cost)}</small>}</>}</td>
                 </tr>)}</tbody>
-                <tfoot className="font-bold bg-violet-50"><tr><td colSpan={columns.length + 1} className="border p-3">الإجمالي</td><td className="border p-3">{formatInt(row.units_sold)}</td><td className="border p-3">{complete(row) ? formatMoney(row.total_cost) : "غير مكتمل"}</td></tr></tfoot>
+                <tfoot className="font-bold bg-violet-50"><tr>{columns.map(column => <td key={column.key} className="border p-3"><ColumnTotal column={column} groups={groups} /></td>)}<td className="border p-3">الإجمالي</td><td className="border p-3">{formatInt(row.units_sold)}</td><td className="border p-3">{complete(row) ? formatMoney(row.total_cost) : "غير مكتمل"}</td></tr></tfoot>
             </table>
         </div>}
         {!complete(row) && <p className="mt-3 text-amber-800">{[...new Set((row.missing_cost_reasons || []).map(costReasonLabel))].join("، ") || "تكلفة ناقصة"}. تُستكمل الخيارات المفقودة القابلة للاسترجاع تلقائيًا؛ أما التكلفة غير المسجلة فتحتاج إضافتها في المنتج.</p>}

@@ -3,8 +3,7 @@ import hashlib
 import json
 from decimal import Decimal
 
-from order_cost_authority import decimal, _economic_tokens
-from report_option_recovery import report_cost_item
+from order_cost_authority import decimal
 
 
 def detail_group(cost, item, quantity):
@@ -44,9 +43,13 @@ def detail_group(cost, item, quantity):
         else:
             cells = [{"key": "unresolved-cost", "label": "بيانات التكلفة",
                       "kind": "product", "status": "unresolved", "unit_cost": None}]
-    signature = {"cells": sorted(cells, key=lambda c: c["key"]),
-                 "choices": _economic_tokens(report_cost_item(item)),
-                 "authority": cost.get("cost_authority"), "stage": cost.get("cost_stage"),
+    # Group by the priced composition, not customer-entered names, messages,
+    # colour labels, order identities or the provenance of an equal price.
+    # Distinct services and applicability states remain distinct even when
+    # their overall unit totals happen to match.
+    signature = {"cells": sorted([
+                    {k: c.get(k) for k in ("key", "kind", "status", "unit_cost")}
+                    for c in cells], key=lambda c: c["key"]),
                  "complete": complete, "unit": str(known / quantity),
                  "reasons": sorted(cost.get("missing_cost_reasons") or [])}
     key = hashlib.sha256(json.dumps(signature, sort_keys=True, ensure_ascii=False).encode()).hexdigest()

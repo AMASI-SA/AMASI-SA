@@ -31,7 +31,7 @@ test("distinguishes not requested, unresolved, missing, included and unavailable
         cost_status: "incomplete", total_cost: null,
     });
     const html = renderToStaticMarkup(<CostDetails row={row} />);
-    for (const label of ["غير مطلوبة", "اختيار غير متحقق", "تكلفة ناقصة", "ضمن تكلفة المنتج", "تفصيل غير متاح"]) expect(html).toContain(label);
+    for (const label of ["غير محدد", "اختيار غير متحقق", "تكلفة ناقصة", "ضمن تكلفة المنتج", "تفصيل غير متاح"]) expect(html).toContain(label);
 });
 
 test("keeps partial known costs in summary while withholding a complete total", () => {
@@ -47,7 +47,7 @@ test("collapsed products omit details on screen but details print includes all r
     const details = renderToStaticMarkup(<SoldTable rows={rows} printable allDetails />);
     expect(screen).not.toContain('data-testid="sold-product-cost-details"');
     expect(screen).toContain('aria-expanded="false"');
-    expect(summary).not.toContain("غير مطلوبة");
+    expect(summary).not.toContain("غير محدد");
     expect(details.match(/data-testid="sold-product-cost-details"/g)).toHaveLength(2);
 });
 
@@ -69,7 +69,7 @@ test("refreshes every filtered product including unopened later pages and prints
     const print = [...host.querySelectorAll("button")].find(button => button.textContent === "طباعة مع تفاصيل التكاليف");
     await act(async () => { print.click(); });
     expect(mockPrint.mock.calls.at(-1)[0]).toContain("SKU20");
-    expect(mockPrint.mock.calls.at(-1)[0]).toContain("غير مطلوبة");
+    expect(mockPrint.mock.calls.at(-1)[0]).toContain("غير محدد");
     await act(async () => root.unmount()); host.remove();
 });
 
@@ -164,4 +164,35 @@ test("source quantities preserve fractional return-policy units and unavailable 
         expect(printed).not.toContain("تعذر تحديث المصدر");
         expect(printed).not.toContain("fractional-account");
     }
+});
+
+test("cost columns show quantity totals and footer sums while unit cost stays per piece", () => {
+    const row = product("SHAWL", {
+        units_sold: 5, total_cost: 105, cost_status: "complete",
+        cost_columns: [{key:"base",label:"شال",kind:"product"},{key:"name",label:"تطريز الاسم",kind:"service"},{key:"bag",label:"كيس",kind:"component"}],
+        cost_groups: [
+            {key:"yes",quantity:3,complete:true,unit_cost:25,total_cost:75,cells:[{key:"base",status:"costed",unit_cost:15},{key:"name",status:"costed",unit_cost:8},{key:"bag",status:"costed",unit_cost:2}]},
+            {key:"no",quantity:2,complete:true,unit_cost:15,total_cost:30,cells:[{key:"base",status:"costed",unit_cost:13},{key:"name",status:"not_required",unit_cost:null},{key:"bag",status:"costed",unit_cost:2}]},
+        ],
+    });
+    const host = document.createElement("div");
+    host.innerHTML = renderToStaticMarkup(<CostDetails row={row} />);
+    const rows = [...host.querySelectorAll('tbody tr')].map(tr => [...tr.children].map(td => td.textContent));
+    expect(rows).toEqual([["45.00","24.00","6.00","25.00","3","75.00"],["26.00","غير محدد","4.00","15.00","2","30.00"]]);
+    expect([...host.querySelectorAll('tfoot td')].map(td => td.textContent)).toEqual(["71.00","24.00","10.00","الإجمالي","5","105.00"]);
+});
+
+test("platforms use compact icons and counts while direct and unknown remain text", () => {
+    const row = product("icons", { traffic_sources: [
+        {platform:"snapchat",platform_label:"سناب شات",account_id:"snap-1",account_status:"confirmed",units_sold:3},
+        {platform:"tiktok",platform_label:"تيك توك",account_status:"unknown",units_sold:2},
+        {platform:"direct",platform_label:"مباشر",account_status:"not_applicable",units_sold:1},
+        {platform:"unknown",platform_label:"غير معروف",account_status:"unknown",units_sold:4},
+    ]});
+    const host = document.createElement("div"); host.innerHTML = renderToStaticMarkup(<SoldTable rows={[row]} expanded={{}} onToggle={() => {}} />);
+    const list = host.querySelector('.product-traffic-sources ul');
+    expect(list.textContent).not.toContain("سناب شات"); expect(list.textContent).not.toContain("تيك توك"); expect(list.textContent).not.toContain("حساب غير محدد");
+    expect(list.textContent).toContain("3 قطعة"); expect(list.textContent).toContain("مباشر"); expect(list.textContent).toContain("غير معروف");
+    expect(list.querySelector('li[aria-label*="snap-1"]').getAttribute('title')).toContain("سناب شات");
+    expect(list.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
 });
