@@ -148,7 +148,7 @@ def test_two_concurrent_initial_batches_cannot_duplicate_stock():
 def test_approval_rolls_back_entire_batch_on_event_failure(monkeypatch):
     import operational_opening_inventory as service
     original = service.validate_insert
-    monkeypatch.setattr(service, 'validate_insert', lambda name, doc: name != 'warehouse_location_events' and original(name, doc))
+    monkeypatch.setattr(service, 'validate_insert', lambda name, doc, **kwargs: name != 'warehouse_location_events' and original(name, doc, **kwargs))
     async def scenario(db):
         await seed(db); p = await preview(db, OWNER, request())
         with pytest.raises(HTTPException):
