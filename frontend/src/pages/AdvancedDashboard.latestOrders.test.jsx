@@ -181,7 +181,8 @@ test("top products header shows period counts and only five rows initially", () 
     expect(markup).toContain("6,979.00 ر.س");
     expect(markup).toContain("280.00 ر.س");
     expect(markup).toContain("5,880.00 ر.س");
-    expect(markup).not.toContain("منتج 1");
+    const visible = document.createElement("div"); visible.innerHTML = markup;
+    expect(visible.textContent).not.toContain("منتج 1");
     expect(markup).toContain('data-testid="advanced-top-product-row-product-5"');
     expect(markup).not.toContain('data-testid="advanced-top-product-row-product-6"');
 });
@@ -207,7 +208,9 @@ test("top products removes visible names and opens an unpriced product in a new 
         />
     );
 
-    expect(markup).not.toContain("اسم يجب ألا يظهر");
+    const visible = document.createElement("div"); visible.innerHTML = markup;
+    expect(visible.textContent).not.toContain("اسم يجب ألا يظهر");
+    expect(visible.querySelector('button[aria-label="مصادر مبيعات اسم يجب ألا يظهر"]')).not.toBeNull();
     expect(markup).toContain("https://cdn.example.com/missing-product.png");
     expect(markup).toContain("بدون تكلفة");
     expect(markup).toContain('target="_blank"');
@@ -890,6 +893,17 @@ test("top product source menus start hidden, toggle independently, and remain ex
     const root = createRoot(container);
     try {
         await act(async () => root.render(<TopProductsCard rows={rows} />));
+        const header = container.querySelector(".dashboard-panel-header");
+        expect(header.tagName).toBe("DIV");
+        expect(header.textContent).toContain("المنتجات الأكثر مبيعًا");
+        const collapse = header.querySelector('button[aria-label="طي بطاقة المنتجات الأكثر مبيعًا"]');
+        expect(collapse).not.toBeNull();
+        const body = document.getElementById(collapse.getAttribute("aria-controls"));
+        await act(async () => collapse.click());
+        expect(body.hidden).toBe(true);
+        await act(async () => collapse.click());
+        expect(body.hidden).toBe(false);
+        expect(container.textContent).not.toContain("[object Object]");
         const buttons = [...container.querySelectorAll('button[aria-controls^="product-sources-"]')];
         expect(buttons).toHaveLength(2);
         expect(buttons[0].textContent).toBe("⋮");

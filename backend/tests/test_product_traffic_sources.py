@@ -191,3 +191,29 @@ async def test_attribution_programming_errors_are_not_suppressed():
         def __getitem__(self, name): raise TypeError('programming error')
     with pytest.raises(TypeError, match='programming error'):
         await load_product_traffic_sources(DB(), 'owner', [order('a')])
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('source_payload', [
+    {'source': 'facebook'},
+    {'source': {'name': 'facebook'}},
+    {'marketing': {'source': 'facebook'}},
+    {'marketing': {'source': {'name': 'facebook'}}},
+])
+async def test_mongo_projection_preserves_scalar_and_object_marketing_source(source_payload):
+    db = AsyncMongoMockClient().db
+    entry = order('scalar-source', 2)
+    await db.unified_orders.insert_one({**entry, 'raw_by_source': {'salla_direct': {
+        **source_payload, 'customer': {'name': 'private'}, 'payment': {'private': 'excluded'}}}})
+    readonly = ReadDB(db)
+    result = await load_product_traffic_sources(readonly, 'owner', [entry])
+    assert result[id(entry)]['platform'] == 'meta'
+    assert result[id(entry)]['account_id'] is None
+    projection = readonly.calls[0][2]
+    assert projection['raw_by_source.salla_direct.source'] == 1
+    assert 'raw_by_source.salla_direct.source.name' not in projection
+    assert 'raw_by_source.salla_direct' not in projection
+    projected = await db.unified_orders.find({'order_number': 'scalar-source'}, projection).to_list(length=1)
+    assert 'customer' not in projected[0]['raw_by_source']['salla_direct']
+    assert 'payment' not in projected[0]['raw_by_source']['salla_direct']

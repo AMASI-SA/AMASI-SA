@@ -76,6 +76,14 @@ async def _load_product_traffic_sources(db, owner, orders, *, budget=None):
                   'raw_by_source.salla_direct.id': 1,
                   'raw_by_source.salla_direct.reference_id': 1,
                   'raw_by_source.salla_direct.order_number': 1}
+    # Salla source is polymorphic: scalar "facebook" or {name: "facebook"}.
+    # Projecting only source.name drops scalars in MongoDB. Read only these
+    # already-approved marketing source fields, never their raw parent object.
+    source_paths = {path.split('.source.', 1)[0] + '.source'
+                    for path in projection if '.source.' in path}
+    projection = {path: value for path, value in projection.items()
+                  if not any(path.startswith(source + '.') for source in source_paths)}
+    projection.update({path: 1 for path in source_paths})
     raw_rows = await db['unified_orders'].find(
         {'user_id': owner, 'order_number': {'$in': numbers}}, projection,
     ).to_list(length=2 * len(numbers) + 1) if numbers else []

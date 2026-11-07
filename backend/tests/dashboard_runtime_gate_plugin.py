@@ -25,7 +25,9 @@ sequence = 0
 active_authority_audit = ContextVar('dashboard_authority_audit', default=None)
 active_traffic_audit = ContextVar('dashboard_traffic_audit', default=None)
 TRAFFIC_LEDGER = 'mezan_attribution_order_ledger_v1'
-TRAFFIC_PROJECTION_SHA256 = '16e4bd73497129bfd6f8f065f8774ad3bcbcd41574c4b4902bd4516bcf732f88'
+# Reviewed polymorphic source fields preserve scalar and object source evidence.
+# All remaining projection leaves, owner scope, and the two-query limit stay pinned.
+TRAFFIC_PROJECTION_SHA256 = '9b2f00731606f76104bafa9e195b18584f5cc8cca1a514c322da4d5b916c8171'
 
 
 def _traffic_cohort(user_id, orders):
