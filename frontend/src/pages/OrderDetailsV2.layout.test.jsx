@@ -18,6 +18,7 @@ jest.mock("../components/orders/SourceAdditionReview", () => ({
     SourceAdditionReviewNotice: () => null, SourceAdditionReviewButton: () => null,
 }));
 jest.mock("../services/orderEngine", () => ({ markOrderRead: jest.fn(() => Promise.resolve()) }));
+jest.mock("../components/orders/OrderProfitabilityCard", () => () => <section data-testid="order-profitability" />);
 jest.mock("../components/orders/ReturnDecisionCard", () => () => null);
 jest.mock("../components/orders/OrderActivityPanel", () => () => null);
 jest.mock("../components/orders/BundleOperationalPanel", () => () => <section data-testid="real-bundle-workflow" />);

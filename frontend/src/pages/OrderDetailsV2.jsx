@@ -6,7 +6,6 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
     ArrowRight,
     ArrowsClockwise,
-    ChartLineUp,
     ChatCircleDots,
     CheckCircle,
     ClockCounterClockwise,
@@ -38,6 +37,7 @@ import {
 } from "../services/orderEngine";
 import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
 import OrderActivityPanel from "../components/orders/OrderActivityPanel";
+import OrderProfitabilityCard from "../components/orders/OrderProfitabilityCard";
 import BundleOperationalPanel from "../components/orders/BundleOperationalPanel";
 import { printStoreCourierLabel } from "../lib/storeCourierLabelPrint";
 import { formatRiyadhDateTime } from "../lib/dates";
@@ -797,22 +797,6 @@ function AdvancedOrderInfo({ order }) {
     );
 }
 
-function AccountingSummary({ order, currency }) {
-    const accounting = order.accounting || order.qoyod || {};
-    const totals = order.totals || {};
-    return (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="order-v2-accounting-summary">
-            <div className="mb-4 flex items-center gap-2"><ChartLineUp size={22} className="text-violet-700" weight="fill" /><h2 className="text-xl font-extrabold text-slate-950">المحاسبة والربحية</h2></div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-xl bg-slate-50 p-4"><div className="text-xs font-bold text-slate-400">حالة قيود</div><div className="mt-2 font-extrabold">{accounting.status || accounting.qoyod_status || "—"}</div></div>
-                <div className="rounded-xl bg-slate-50 p-4"><div className="text-xs font-bold text-slate-400">رقم الفاتورة</div><div className="num mt-2 font-extrabold">{accounting.invoice_number || accounting.invoice_id || "—"}</div></div>
-                <div className="rounded-xl bg-slate-50 p-4"><div className="text-xs font-bold text-slate-400">تكلفة الطلب</div><div className="num mt-2 font-extrabold">{totals.cost !== undefined ? formatMoney(totals.cost, currency) : "—"}</div></div>
-                <div className="rounded-xl bg-slate-50 p-4"><div className="text-xs font-bold text-slate-400">الربح</div><div className="num mt-2 font-extrabold">{totals.profit !== undefined ? formatMoney(totals.profit, currency) : "—"}</div></div>
-            </div>
-        </section>
-    );
-}
-
 export default function OrderDetailsV2() {
     const { user } = useAuth();
     const { orderNumber } = useParams();
@@ -962,7 +946,7 @@ export default function OrderDetailsV2() {
             )}
 
             <AdvancedOrderInfo order={order} />
-            <AccountingSummary order={order} currency={currency} />
+            <OrderProfitabilityCard key={openedOrderNumber} orderNumber={openedOrderNumber} revision={order} />
             <OrderActivityPanel
                 orderNumber={openedOrderNumber || orderNumber}
             />
