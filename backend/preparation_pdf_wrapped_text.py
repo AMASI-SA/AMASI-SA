@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A4
@@ -54,13 +54,14 @@ def _split_long_token(
     font_name: str,
     font_size: float,
     max_width: float,
+    measure: Callable[[str, str, float], float] = _visual_width,
 ) -> tuple[str, str]:
     """Split one unbroken token without dropping characters."""
     if not token:
         return "", ""
     last_fit = 0
     for index in range(1, len(token) + 1):
-        if _visual_width(token[:index], font_name, font_size) <= max_width:
+        if measure(token[:index], font_name, font_size) <= max_width:
             last_fit = index
         else:
             break
@@ -76,6 +77,7 @@ def wrap_reference_text(
     font_size: float,
     first_width: float,
     continuation_width: float | None = None,
+    measure: Callable[[str, str, float], float] = _visual_width,
 ) -> list[str]:
     """Wrap logical text completely, without ellipsis or discarded words."""
     clean = _text(value)
@@ -91,7 +93,7 @@ def wrap_reference_text(
         current: list[str] = []
         while pending:
             candidate = " ".join([*current, pending[0]])
-            if _visual_width(candidate, font_name, font_size) <= max_width:
+            if measure(candidate, font_name, font_size) <= max_width:
                 current.append(pending.pop(0))
                 continue
             if current:
@@ -101,6 +103,7 @@ def wrap_reference_text(
                 font_name=font_name,
                 font_size=font_size,
                 max_width=max_width,
+                measure=measure,
             )
             current.append(head)
             if tail:
@@ -140,24 +143,27 @@ def build_wrapped_specification_plan(
     width: float,
     available_height: float,
     max_font_size: float = MAX_BODY_FONT_SIZE,
+    measure: Callable[[str, str, float], float] = _visual_width,
 ) -> WrappedSpecificationPlan:
     """Choose the largest font that preserves every specification character."""
     def make_plan(font_size: float) -> WrappedSpecificationPlan:
         fields: list[WrappedField] = []
         for label, value in rows:
             label_text = f"{label} :"
-            label_width = _visual_width(label_text, font_bold, font_size)
+            label_width = measure(label_text, font_bold, font_size)
             # Keep enough room for the first value word. A long label gets
             # its own line(s) instead of pushing the value into the next card.
             value_below = label_width + 12 > width
             label_lines = wrap_reference_text(
                 label_text, font_name=font_bold, font_size=font_size,
                 first_width=width, continuation_width=width,
+                measure=measure,
             ) if value_below else [label_text]
             wrapped = wrap_reference_text(
                 value, font_name=font_name, font_size=font_size,
                 first_width=width if value_below else width - label_width - 2.2,
                 continuation_width=width,
+                measure=measure,
             )
             fields.append(WrappedField(
                 label=label, lines=tuple(wrapped or [""]),
