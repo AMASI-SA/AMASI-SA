@@ -27,3 +27,9 @@ No production data, configuration, release lease, merge or deployment changed. T
 
 ## Verification
 Pending focused frontend checks after locked dependency installation. Git diff whitespace validation passed. Prior review could not run Python tests because pytest was absent; not claimed as passed.
+
+## Durable checkpoint
+PR: https://github.com/AMASI-SA/AMASI-SA/pull/1796 (Draft).
+Implementation checkpoint: 1a201a7a2e35ee0ef5d1c32e8ed9a6f5bf5caee8.
+Local frozen-lockfile install did not complete; offline attempt exited 1 because @jest/environment 27.5.1 was not cached. No functional test pass claimed. CI Operational Balance Web run 42387561312 was queued at inspection; other checks were in progress. Do not infer acceptance from these statuses.
+Next: inspect exact implementation CI logs, resolve failures, then implement the isolated catalog/receiving/valuation stages above. All fulfillment integration remains deferred.
