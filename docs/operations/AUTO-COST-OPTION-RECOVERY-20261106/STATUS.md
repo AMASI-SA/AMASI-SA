@@ -1,50 +1,24 @@
-# Automatic cost option recovery — WIP
+# Automatic cost option recovery — published and verified
 
-Scope: recover completely absent Salla item selections for existing orders whose
-catalog has cost bindings or a composite definition. List Order Items only; no Order Details, provider
-writes, price changes, assumed-zero selections, or financial observers.
+Date: 2026-11-07 (Asia/Riyadh). PR #1786 merged; Emergent deployment a74c051 finished at 17:05.
 
-Observed cause: a known order had empty canonical AND raw item options. Explicit
-Mezan refresh fetched List Order Items and restored the selected adult surcharge.
-Report raw recovery cannot manufacture evidence absent from both projections.
-The legacy light auto-sync explicitly skips existing orders' item acquisition.
+Source A: d773ec9ed1193c7b57f3a7eab0b4b0217fc855f5
+Intent B: 4e26c29b9dfa3b9c6af28f9852328602780b64c7
+Production merge: 8947eb0b4ad5b0370efecdaadc044268693122da
+Runtime: rg5-0e1a85e3748603bef921f7dec1b7111695bdb6d8f500c464087d0e91dc7996d6
 
-Implementation: bounded background worker with durable global lease/cursor,
-per-order retry/backoff, four fetches per cycle, connected-owner scoping, strict
-native line/product/quantity matching, and compare-before-write under the
-existing component owner transaction. Only empty choices are filled; all other
-source/cost/status fields remain unchanged. Existing component revision handling
-invalidates material operational contracts rather than executing fulfillment.
+## Behavior
 
-Local verification: 42 passed, 11 skipped in cost recovery, report identity/raw
-recovery, sold report, and source-fence suites. Thirteen new unit/worker tests pass.
-Two real Mongo integration cases added to the existing source-fence suite; they
-require CI. Local mongod cannot start (storage open: Operation not permitted).
+An isolated background worker recovers completely absent Salla item selections for existing orders with configured option costs or bundle definitions. Uses List Order Items, strict native line/product/quantity joins, bounded new/historical scans, durable retries, and component transaction source fencing. It does not copy provider prices/status or invoke financial observers. Unknown selections remain incomplete; partially present nonempty selections are not overwritten. Recovery scans existing orders gradually; this release does not prove that all historical products have completed recovery.
 
-Remaining before readiness:
-Independent new-order (20 scanned / two fetches) and historical (80 scanned /
-two fetches) lanes tested: a newly inserted order is picked up while a historic
-cursor is active; a foreign tenant binding is never reused.
+## Evidence
 
-Remaining checks:
-- Verify real owner transactions and operational effects in CI.
-- Review paused owner behavior, payload bounds and partial-selection scope.
-- Production source has concurrent updates; refresh/reconcile before release.
-- Freeze v5 A/B intent, required CI, rehearsal, merge/publish and runtime verify.
+Reviewed-B CI: 658 tests and 345 subtests passed; separate real-Mongo source-fence suite 37 passed; acceptance guard 1 passed. Background worker startup/isolation and Host Node 20/24 clean-clone adapter rehearsals passed. Release Readiness run 42376551071.
 
-Production changed: NO. No release lease acquired; other deployments unblocked.
-No claim that this prevention is live. This is a recoverable draft checkpoint.
+Shared /app fast-forward preserved unrelated untracked files. Governed normal yarn build exited 0. Guard prepare/prepublish succeeded for actor auto-cost-options-1786. Published via Emergent management UI.
 
-## Integration checkpoint 2026-11-07
+Live production_release_guard.py verify --url https://mezansalla.com: verified=true, checks=3, matching source/runtime. Live identity flags verified_identity_available, critical_file_hashes_match and frontend_build_verified all true. Final guard status active=false. Production changed: YES. No lease remains.
 
-All 22 CI workflows passed on 0fef62325c309e1d276427e52fa4bcd1fd01adb4.
-Real-Mongo review: 657 passed + 345 subtests; separate source-fence run
-37 passed including both new recovery transaction/concurrent-source tests;
-acceptance guard 1 passed. No skips/failures in that CI job.
+Final release evidence and continuation ledger: PR #1786 comment 6708092291 (Issue #1006 previously full). The reviewed source and intent remain immutable; this status-only branch is not a deployment candidate.
 
-Integrated production a2487c339fce1c3c6f022d96e91d7d892b66f663. Its worker
-isolation supersedes the old web-process startup. Recovery now starts/stops
-inside background_worker_runtime, not server.py. Added child-readiness and
-web-isolation assertions. Exact integrated HEAD needs CI/release validation.
-The operational fence deliberately permits local corrections during financial
-pause while prohibiting financial writes; recovery uses the same boundary.
+Next safe action, if a specific product still appears incomplete: read durable recovery outcomes and that order's native selections; do not assume zero, rewrite prices, or re-publish this already verified release.
