@@ -129,6 +129,7 @@ const AIControlCenter = lazy(() => import("./pages/AIControlCenter"));
 import { Toaster } from "./components/ui/sonner";
 
 const OperationalBalances = lazy(() => import("./pages/operational/OperationalBalances"));
+const InventoryWorkspace = lazy(() => import("./pages/InventoryWorkspace"));
 const ProviderFeeSetup = lazy(() => import("./pages/operational/ProviderFeeSetup"));
 const OperationalFinancialPosition = lazy(() => import("./pages/operational/OperationalFinancialPosition"));
 const OperationalCustomerReturns = lazy(() => import("./pages/operational/CustomerReturns"));
@@ -148,6 +149,7 @@ function AppRoutes() {
     return (
         <Routes>
             <Route path="/operational-balances" element={<ProtectedRoute><Layout><OperationalBalances /></Layout></ProtectedRoute>} />
+            <Route path="/inventory-v2" element={<ProtectedRoute><Layout><InventoryWorkspace /></Layout></ProtectedRoute>} />
             <Route path="/operational-balances/provider-fees" element={<ProtectedRoute><Layout><ProviderFeeSetup /></Layout></ProtectedRoute>} />
             <Route path="/operational-balances/financial-position" element={<ProtectedRoute><Layout><OperationalFinancialPosition /></Layout></ProtectedRoute>} />
             <Route path="/operational-balances/customer-returns" element={<ProtectedRoute><Layout><OperationalCustomerReturns /></Layout></ProtectedRoute>} />

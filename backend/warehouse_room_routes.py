@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
+from warehouse_location_labels import location_label_fields
 
 from warehouse_location_routes import (
     CABINETS,
@@ -307,7 +308,7 @@ def make_warehouse_room_router(db: Any, current_user: Callable[..., Any]) -> API
             )
         branch = await _get_branch(db, warehouse_id=section["warehouse_id"], user_id=user_id)
 
-        number = await _next_number(db, f"section-cabinet:{user_id}:{section_id}")
+        number = await _next_number(db, f"cabinet:{user_id}:{section['warehouse_id']}" if branch.get("location_numbering") == "cabinet-row-slot" else f"section-cabinet:{user_id}:{section_id}")
         section_code = section.get("code") or f"S{int(section.get('section_number') or 0):02d}"
         cabinet_code = f"{section_code}-C{number:02d}"
         generated_payload = CabinetGenerate(
@@ -335,6 +336,7 @@ def make_warehouse_room_router(db: Any, current_user: Callable[..., Any]) -> API
             "section_code": section_code,
             "code": cabinet_code,
             "cabinet_number": number,
+            "location_numbering": branch.get("location_numbering", "legacy"),
             "name": (payload.cabinet_name or f"دولاب {number}").strip(),
             "length": payload.length,
             "width": payload.width,
@@ -349,6 +351,7 @@ def make_warehouse_room_router(db: Any, current_user: Callable[..., Any]) -> API
             barcode_value = row["code"]
             locations.append({
                 **row,
+                **location_label_fields(branch, number, row),
                 "id": str(uuid.uuid4()),
                 "user_id": user_id,
                 "warehouse_id": section["warehouse_id"],
