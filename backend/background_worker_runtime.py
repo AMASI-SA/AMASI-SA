@@ -26,6 +26,7 @@ async def start_tasks(db, *, wake_event=None, assembly_wake_event=None):
         from assembly_completion_delivery import start_worker as delivery
         from salla_integration.shipping_label_inbox import start_worker as labels
         from salla_integration.payment_update_inbox import start_worker as payments
+        from salla_integration.cost_option_recovery import start_worker as cost_options
         from operational_push import run as push
         for name, factory in (
             ('qoyod-followup', followup_loop), ('qoyod-full-scan', scheduler),
@@ -36,7 +37,7 @@ async def start_tasks(db, *, wake_event=None, assembly_wake_event=None):
         task = await delivery(db, wake_event=assembly_wake_event)
         if task is not None:
             tasks.append(task)
-        for start in (review, labels, payments):
+        for start in (review, labels, payments, cost_options):
             task = await start(db)
             if task is not None:
                 tasks.append(task)

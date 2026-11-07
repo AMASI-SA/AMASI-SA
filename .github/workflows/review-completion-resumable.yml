@@ -15,6 +15,8 @@ on:
       - "backend/salla_integration/sync.py"
       - "backend/tests/test_salla_orders_sync_pagination_evidence.py"
       - "backend/salla_integration/auto_sync.py"
+      - "backend/salla_integration/cost_option_recovery.py"
+      - "backend/tests/test_cost_option_auto_recovery.py"
       - "backend/tests/test_shipping_pending_snapshot_recovery.py"
       - "backend/tests/test_salla_sync_component_snapshot.py"
       - "backend/order_review*.py"
@@ -35,6 +37,8 @@ on:
       - "backend/assembly_completion_v2_readback.py"
       - "backend/assembly_status_policy.py"
       - "backend/salla_integration/auto_sync.py"
+      - "backend/salla_integration/cost_option_recovery.py"
+      - "backend/tests/test_cost_option_auto_recovery.py"
       - "backend/order_engine/shipping_label_service.py"
       - "backend/tests/test_assembly_completion_delivery.py"
       - "backend/tests/test_assembly_completion_legacy_readback.py"
@@ -160,6 +164,7 @@ jobs:
           tests/test_order_review_mobile_app_permissions.py
           tests/test_reviewed_products_catalog.py
           tests/test_salla_orders_sync_pagination_evidence.py
+          tests/test_cost_option_auto_recovery.py
           --asyncio-mode=auto --junitxml="${{ runner.temp }}/review-completion.xml"
       - name: Verify stranded print snapshot recovery and sync fences
         run: python -m unittest tests.test_assembly_option_change_notice tests.test_shipping_catalog_label_recovery tests.test_shipping_pending_snapshot_recovery tests.test_salla_sync_component_snapshot -v

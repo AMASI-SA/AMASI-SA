@@ -120,6 +120,7 @@ async def test_canonical_runtime_boots_against_empty_isolated_database_and_drain
         assert row['jobs']['qoyod-followup'] is True
         assert row['jobs']['qoyod-full-scan'] is True
         assert row['jobs']['operational-balances'] is True
+        assert row['jobs']['salla-cost-options'] is True
         assert await db.qoyod_manual_auto_runs.count_documents({}) == 0
         assert await db.qoyod_auto_cycles.count_documents({}) == 0
     finally:
