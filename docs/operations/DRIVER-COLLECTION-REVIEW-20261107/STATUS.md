@@ -5,8 +5,8 @@
 User requested owner/accountant approval or rejection of POS and customer bank-transfer receipts from the employee app, visibility in the driver account/settlement table, and rejection reasons visible to the driver.
 
 - Main base: `8947eb0b4ad5b0370efecdaadc044268693122da`, `hotfix/prod-snap-meta-final`.
-- Main task branch: `codex/driver-collection-review-app-20261107`, Draft PR1794. Initial durable web/summary checkpoint: `00907a1a3e863a17e3833caba3c8f68f15b5737e`; this document accompanies the combined source checkpoint built on it. The PR and Issue1006 carry its exact final SHA.
-- Companion employee app: AMASI-SA/amasi-mobile Draft PR344, branch `codex/driver-collection-review-app-20261107`, source `ebd88b6d040d6a926ad502a4507b9aec565c6ff0`, based on Android75 `b9fc2972a4582c93021bcb8d50f6dda8488fd45a`.
+- Main task branch: `codex/driver-collection-review-app-20261107`, Draft PR1794. Initial durable web/summary checkpoint: `00907a1a3e863a17e3833caba3c8f68f15b5737e`; the final code checkpoint is `3113c5920384e0c01360526026403b12fccfad7e`. This final evidence-only branch is `codex/driver-collection-review-evidence-20261107`; it changes this status document only and does not move either reviewed code branch.
+- Companion employee app: AMASI-SA/amasi-mobile Draft PR344, branch `codex/driver-collection-review-app-20261107`, source `137b95fcc621b00381a21b8885e67e4379cb8d3b`, based on Android75 `b9fc2972a4582c93021bcb8d50f6dda8488fd45a`.
 - User explicitly said an important release has priority and not to reserve publication. The hold remains: no prepare, prepublish, lease, shared `/app` mutation, production merge, publication, APK distribution or OTA update.
 - No real receipt was approved/rejected, no bank or POS balance was changed, and no opening balance/backfill was created. Separate cost/shipping Draft PR1781 and all unrelated work remain untouched.
 
@@ -46,6 +46,10 @@ All tests used synthetic data or a disposable local Mongo replica set; none cont
 | Total unique backend tests across these sets | 190 passed |
 | Web settlement, payment-review and operational-review suites | 39 passed across 3 suites |
 | Employee app existing courier contract + new focused suite | Contract passed + 22 checks passed |
+| Existing app scanner fallback regression | 13 passed |
+| Main source CI on 3113c5920384e0c01360526026403b12fccfad7e | All 15 triggered workflows succeeded |
+| Main full operational CI suites | 3166 backend tests; 449 frontend tests across 38 suites passed |
+| App source CI on 137b95fcc621b00381a21b8885e67e4379cb8d3b | All 4 applicable source workflows succeeded; release bundle skipped |
 | Independent main/mobile source review | No blocking finding |
 | Diff whitespace check and changed TS/TSX parse | Passed |
 
@@ -71,12 +75,12 @@ Real-Mongo groups, using the repository test URI contract and a disposable repli
 
 The isolated runner `/workspace/scratch/17a9cc329ec0/mezan-driver-review-mongo-20261107/run_tests.py` starts and stops localhost Mongo within one execution namespace. MongoDB8.0.12 archive was verified against its official SHA256 `7665edf8ec6f0da2515c49f784da22619f686fffed990a7696c5365ee9d334b3`. URI: `mongodb://127.0.0.1:27315/?replicaSet=mezanDriverReviewTest`. The final log confirms clean shutdown, exit0.
 
-Web: Jest27.5.1 with React19.2.8 and Babel7.29.7 matching the lockfile, running `StoreDeliverySettlements.test.jsx`, `StoreDeliveryPaymentReview.test.jsx`, and `operational/DriverPaymentReview.test.jsx`. Dependencies were isolated; no manifest/lockfile changed. Full frozen Yarn installation stalled in fetching, so no full governed build is claimed.
+Web: Jest27.5.1 with React19.2.8 and Babel7.29.7 matching the lockfile, running `StoreDeliverySettlements.test.jsx`, `StoreDeliveryPaymentReview.test.jsx`, and `operational/DriverPaymentReview.test.jsx`. Dependencies were isolated; no manifest/lockfile changed. Local full frozen Yarn installation stalled in fetching and was stopped (exit130); the isolated scoped runner succeeded. The complete source CI subsequently installed dependencies and passed its normal tests/build checks. No V5 governed release build or intent is claimed.
 
-App: `npm run verify:courier-management` with TypeScript5.9.3. The new suite is included in the existing CI-facing package script. Full repository source CI/typecheck is pending at this checkpoint; no APK was built, installed or distributed.
+App: `npm run verify:courier-management` with TypeScript5.9.3. The new suite is included in the existing CI-facing package script. Full repository TypeScript, on-demand historical baseline, permission/session, scanner and general mobile CI passed on `137b95fcc621b00381a21b8885e67e4379cb8d3b`. The first app source exposed one result-union typing issue and two older test fixture import dependencies; the final source corrects them without changing runtime financial semantics or weakening baseline/assertions. No APK was built, installed or distributed.
 
 ## Handoff and next safe action
 
-Both repositories are draft-only. Check source CI on the exact PR heads and resolve any concrete failure without merging or publishing. Record CI results on the PRs and update the bounded owned continuation entry. Issue1006 is at its 2500-comment limit; its body links this task and the separate preserved PR1781. Do not edit unrelated entries or bypass publication controls.
+Both repositories are draft-only and source CI is complete on the exact code heads above. Main workflow evidence: https://github.com/AMASI-SA/AMASI-SA/actions/runs/42384116304 (operational backend/frontend), with all15 PR workflows successful. App workflow evidence: https://github.com/AMASI-SA/amasi-mobile/actions/runs/42384667915 (full mobile), plus42384668092 (courier/TypeScript/permissions),42384668270 (session/browser) and42384668081 (barcode), all successful. The release-bundle workflow42384668061 was skipped; no APK/release activation is claimed. Final results are recorded on both PRs and in the bounded owned continuation entry. The remaining safe state is to wait for the existing user publication hold to be explicitly lifted, not to reserve a slot. Issue1006 is at its 2500-comment limit; its body links this task and the separate preserved PR1781. Do not edit unrelated entries or bypass publication controls.
 
 After the user explicitly releases the publication hold, a later release must first reconcile current production/mobile bases, follow the reviewed V5 release process and accepted app release process, then perform authorized live/device acceptance. No release slot is reserved by this work.
