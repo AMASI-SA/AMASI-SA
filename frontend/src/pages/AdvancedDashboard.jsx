@@ -403,7 +403,7 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
                     </span>
                     <div id={`product-sources-${encodeURIComponent(item.identity)}`} hidden={!openSources[item.identity]} className="col-span-5 product-traffic-sources print:hidden border-t border-slate-100 pt-1.5">
                         {openSources[item.identity] && <><p className="mb-1 text-[9px] text-slate-500">القطع حسب المنصة والحساب</p>
-                        <ProductTrafficSources sources={item.traffic_sources} /></>}
+                        <ProductTrafficSources sources={item.traffic_sources} promotionContext={{ product_id: item.salla_product_id, from_date: filters.from, to_date: filters.to || filters.from, statuses: "default", report_scope: "dashboard", payment_methods: (filters.payment_methods || []).join(","), shipping_companies: (filters.shipping_companies || []).join(",") }} /></>}
                     </div>
                 </div>;
             }) : <div className="p-8 text-center text-xs text-slate-400">{loading ? "جارٍ مزامنة المنتجات المباعة…" : "لا توجد منتجات مباعة في الفترة."}</div>}
