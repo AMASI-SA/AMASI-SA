@@ -6,7 +6,7 @@ jest.mock("react-router-dom", () => ({
     Link: ({ children }) => <a>{children}</a>,
     useParams: () => ({ orderNumber: "123" }),
     useSearchParams: () => [new URLSearchParams()],
-}));
+}), { virtual: true });
 jest.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: { id: "owner" } }) }));
 jest.mock("../components/PermissionRoute", () => ({ userHasPermission: () => true }));
 jest.mock("../hooks/useOrders", () => ({ useOrder: () => ({ order: {
