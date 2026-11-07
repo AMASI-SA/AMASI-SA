@@ -63,6 +63,7 @@ export const MEZAN_V2_NAV_SECTIONS = [
         Icon: Cube,
         items: [
             { to: "/products-v2", label: "إدارة المنتجات", exactSearch: true },
+            { to: "/inventory-v2", label: "المخزون" },
             { to: "/products-v2?workspace=intake", label: "استقبال المنتجات" },
             { to: "/inventory-receiving-v2", label: "استلام المخزون" },
             { to: "/components-v2", label: "مكونات المنتجات", exactSearch: true },
@@ -148,6 +149,7 @@ const META_REVIEWER_NAV_SECTIONS = [
 ];
 
 const MEZAN_V2_PATHS = [
+    "/inventory-v2",
     "/shipping-settings-v2",
     "/operational-balances",
     "/dashboard-advanced",
