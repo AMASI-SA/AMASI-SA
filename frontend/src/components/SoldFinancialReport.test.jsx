@@ -33,3 +33,11 @@ test("zero-order periods show no average rather than a missing cost", () => {
     expect(html).toContain("—");
     expect(html).not.toContain("غير مكتمل");
 });
+
+
+test("actual nested payment rollups do not invent missing per-method VAT", () => {
+    const html = renderToStaticMarkup(<FinancialDetails data={{ totals: { total_payment_fees: 7 }, payment_breakdown: [{ name: "بطاقات", vat_amount: 1, sub_methods: [{ key: "mada", display: "مدى", total_sales: 100, fee_amount: 7, orders_count: 2 }] }] }} section="payment" />);
+    expect(html).toContain("مدى");
+    expect(html).not.toContain("غير مكتمل");
+    expect(html).not.toContain("الضريبة");
+});

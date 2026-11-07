@@ -13,7 +13,6 @@ jest.mock("../hooks/useOrders", () => ({}));
 jest.mock("../hooks/useOrderItems", () => ({}));
 jest.mock("../components/orders/ReturnDecisionCard", () => () => null);
 jest.mock("../components/orders/OrderActivityPanel", () => () => null);
-jest.mock("../components/fulfillment/FulfillmentExperimentPanel", () => () => null);
 jest.mock("../services/orderEngine", () => ({ issueShippingLabel: jest.fn(), verifyShippingLabel: jest.fn() }));
 jest.mock("../lib/storeCourierLabelPrint", () => ({ printStoreCourierLabel: jest.fn(() => true) }));
 

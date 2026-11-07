@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
+from warehouse_location_labels import location_label_fields
 
 from warehouse_location_routes import (
     CABINETS,
@@ -53,6 +54,8 @@ class WarehouseCreateV2(BaseModel):
     district: str = Field(min_length=1, max_length=120)
     street: str = Field(min_length=1, max_length=180)
     is_primary: bool = False
+    inventory_scope: Literal["shared", "standalone"] = "shared"
+    location_numbering: Literal["legacy", "cabinet-row-slot"] = "legacy"
 
 
 class CabinetCreateV2(BaseModel):
@@ -139,6 +142,8 @@ def make_warehouse_location_v2_router(db: Any, current_user: Callable[..., Any])
             "warehouse_number": str(number), "warehouse_number_int": number,
             "address_label": " > ".join([payload.country, payload.city, payload.district.strip(), payload.street.strip(), str(number)]),
             "is_primary": payload.is_primary, "status": "active",
+            "location_numbering": payload.location_numbering,
+            "inventory_scope": payload.inventory_scope,
             "created_at": now, "updated_at": now, "created_by": _text(actor.get("id")),
         }
         try:
@@ -175,6 +180,7 @@ def make_warehouse_location_v2_router(db: Any, current_user: Callable[..., Any])
         cabinet = {
             "id": cabinet_id, "user_id": user_id, "warehouse_id": payload.warehouse_id,
             "warehouse_code": warehouse["code"], "code": cabinet_code, "cabinet_number": number,
+            "location_numbering": warehouse.get("location_numbering", "legacy"),
             "name": (payload.cabinet_name or f"دولاب {number}").strip(),
             "length": payload.length, "width": payload.width, "purpose": payload.purpose,
             "total_locations": len(generated), "status": "active", "created_at": now,
@@ -184,7 +190,7 @@ def make_warehouse_location_v2_router(db: Any, current_user: Callable[..., Any])
         for row in generated:
             barcode_value = row["code"]
             locations.append({
-                **row, "id": str(uuid.uuid4()), "user_id": user_id,
+                **row, **location_label_fields(warehouse, number, row), "id": str(uuid.uuid4()), "user_id": user_id,
                 "warehouse_id": payload.warehouse_id, "warehouse_code": warehouse["code"],
                 "cabinet_id": cabinet_id, "cabinet_code": cabinet_code,
                 "barcode_value": barcode_value, "barcode_symbology": "CODE39",

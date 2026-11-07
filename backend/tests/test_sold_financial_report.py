@@ -44,6 +44,12 @@ from test_dashboard_bundle_cost_authority import db, ReadOnlyDB, OWNER, sale, sa
 
 @pytest.mark.asyncio
 async def test_http_summary_and_product_table_share_status_cohort(db, monkeypatch):
+    # This cohort contract must not depend on unrelated processes consuming the
+    # host cgroup. Keep the real admission policy, with a deterministic sample.
+    import resource_governor
+    from dataclasses import replace
+    healthy = replace(resource_governor.memory_snapshot(), usage_ratio=0.25)
+    monkeypatch.setattr(resource_governor, 'memory_snapshot', lambda: healthy)
     from auth import DEFAULT_PAYMENT_METHODS, PAYMENT_FEE_DEFAULTS_VERSION
     await db.settings.insert_one({'user_id': OWNER, 'payment_methods': deepcopy(DEFAULT_PAYMENT_METHODS), 'payment_fee_defaults_version': PAYMENT_FEE_DEFAULTS_VERSION, 'report_included_statuses': ['قيد التنفيذ']})
     await db.unified_orders.insert_many([

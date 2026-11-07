@@ -14,7 +14,7 @@ async def locations(db,owner):
     if len(warehouses)>20000 or len(stored)>20000:fail('inventory_locations_incomplete','تعذر قراءة المواقع كاملة',409)
     if any(n>1 for n in Counter(w.get('id') for w in warehouses).values()) or any(n>1 for n in Counter(l.get('id') for l in stored).values()):fail('inventory_locations_ambiguous','هوية الموقع غير محسومة في ميزان 2',409)
     by_id={w['id']:w for w in warehouses if w.get('id')}
-    return [{'id':l['id'],'name':str(l.get('name') or l.get('code') or l['id']),'code':str(l.get('code') or l['id']),'warehouse_id':l['warehouse_id'],'warehouse_name':str(by_id[l['warehouse_id']].get('name') or l['warehouse_id'])} for l in stored if l.get('id') and l.get('warehouse_id') in by_id]
+    return [{'id':l['id'],'name':str(l.get('display_code') or l.get('name') or l.get('code') or l['id']),'code':str(l.get('code') or l['id']),'warehouse_id':l['warehouse_id'],'warehouse_name':str(by_id[l['warehouse_id']].get('name') or l['warehouse_id'])} for l in stored if l.get('id') and l.get('warehouse_id') in by_id]
 
 
 def option_contract(row):

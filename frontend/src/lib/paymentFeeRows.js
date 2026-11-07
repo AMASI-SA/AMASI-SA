@@ -34,4 +34,3 @@ export function buildPaymentFeeRows(paymentBreakdown = [], { preserveUnknown = f
     });
     return output;
 }
-

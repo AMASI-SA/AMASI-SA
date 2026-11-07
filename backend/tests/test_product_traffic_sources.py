@@ -100,11 +100,13 @@ async def test_sold_and_both_executive_reducers_keep_same_unit_attribution():
     db = AsyncMongoMockClient().db
     await db.mezan_products_v2.insert_one({'user_id': 'owner', 'salla_product_id': 'p', 'name': 'Shawl', 'cost_price': 5})
     orders = [order('snap', 3, utm_source='snapchat'), order('unknown', 2)]
-    await db[LEDGER_COLLECTION].insert_one({'user_id': 'owner', 'order_key': 'snap', **ledger()})
+    await db[LEDGER_COLLECTION].insert_one({'user_id': 'owner', 'order_key': 'snap', **ledger(campaign_id='winter', campaign_name='Winter campaign')})
     sold = (await load_sold_products(db, 'owner', orders))[0]
     normal = (await build_mezan_v2_product_cost(db, 'owner', orders))['product_rows'][0]
     cooperative = (await build_mezan_v2_product_cost_cooperative(db, 'owner', orders))['product_rows'][0]
     assert sold['traffic_sources'] == normal['traffic_sources'] == cooperative['traffic_sources']
+    assert next(source for source in sold['traffic_sources'] if source['platform'] == 'snapchat')['campaigns'] == [
+        {'campaign_id': 'winter', 'campaign_name': 'Winter campaign', 'attribution_status': 'confirmed', 'units_sold': 3}]
     assert sum(row['units_sold'] for row in sold['traffic_sources']) == sold['units_sold'] == normal['units_sold'] == 5
 
 
@@ -217,3 +219,79 @@ async def test_mongo_projection_preserves_scalar_and_object_marketing_source(sou
     projected = await db.unified_orders.find({'order_number': 'scalar-source'}, projection).to_list(length=1)
     assert 'customer' not in projected[0]['raw_by_source']['salla_direct']
     assert 'payment' not in projected[0]['raw_by_source']['salla_direct']
+
+
+def test_campaign_breakdown_counts_pieces_and_merges_stable_campaign_identity():
+    from product_traffic_sources import add_traffic_units, traffic_sources
+    row = {}
+    for campaign_id, name, quantity in [('a', 'Winter', 3), ('a', 'Winter renamed', 2), ('b', 'Winter', 4)]:
+        source = resolve_traffic_source({'utm_source': 'snapchat'},
+            [ledger(campaign_id=campaign_id, campaign_name=name)])
+        add_traffic_units(row, source, quantity)
+    # Platform/account is confirmed even when the campaign itself is unknown.
+    add_traffic_units(row, resolve_traffic_source({'utm_source': 'snapchat'}, [ledger()]), 1)
+    source = traffic_sources(row)[0]
+    assert source['units_sold'] == 10
+    assert {c['campaign_id']: c['units_sold'] for c in source['campaigns']} == {'a': 5, 'b': 4, None: 1}
+    assert len([c for c in source['campaigns'] if c['campaign_id'] == 'a']) == 1
+    assert next(c for c in source['campaigns'] if c['campaign_id'] is None)['attribution_status'] == 'unknown'
+
+
+def test_campaign_names_without_confirmed_id_never_manufacture_attribution():
+    from product_traffic_sources import add_traffic_units, traffic_sources
+    for source in [
+        resolve_traffic_source({'utm_source': 'snapchat', 'utm_campaign': 'Raw name'}),
+        resolve_traffic_source({'utm_source': 'snapchat'}, [ledger(campaign_name='Name only')]),
+        resolve_traffic_source({'utm_source': 'snapchat'}, [ledger(campaign_id='a', campaign_name='Inferred', quality='inferred', decision_safe=False)]),
+    ]:
+        row = {}
+        add_traffic_units(row, source, 2)
+        campaign = traffic_sources(row)[0]['campaigns'][0]
+        assert campaign == {'campaign_id': None, 'campaign_name': None, 'attribution_status': 'unknown', 'units_sold': 2}
+
+
+def test_campaign_conflict_unavailable_and_direct_are_explicit():
+    from product_traffic_sources import add_traffic_units, traffic_sources
+    cases = [(resolve_traffic_source({'utm_source': 'tiktok'}, [ledger(campaign_id='a')]), 'conflict'),
+             ({'platform': 'unknown', 'account_id': None, 'account_status': 'unknown', 'attribution_status': 'unavailable'}, 'unavailable'),
+             (resolve_traffic_source({'utm_source': 'direct'}), 'not_applicable')]
+    for source, status in cases:
+        row = {}
+        add_traffic_units(row, source, 3)
+        assert traffic_sources(row)[0]['campaigns'] == [{'campaign_id': None, 'campaign_name': None, 'attribution_status': status, 'units_sold': 3}]
+
+
+def test_campaign_rounding_reconciles_each_platform_and_grand_total():
+    from decimal import Decimal
+    from product_traffic_sources import add_traffic_units, traffic_sources
+    row = {}
+    for platform in ('snapchat', 'tiktok', 'meta'):
+        for index in range(3):
+            add_traffic_units(row, resolve_traffic_source({'utm_source': platform},
+                [ledger(platform, campaign_id=str(index), campaign_name=f'Campaign {index}')]), Decimal(1) / Decimal(9))
+    sources = traffic_sources(row, total_units=1)
+    assert sum(Decimal(str(s['units_sold'])) for s in sources) == 1
+    for source in sources:
+        assert sum(Decimal(str(c['units_sold'])) for c in source['campaigns']) == Decimal(str(source['units_sold']))
+
+
+@pytest.mark.asyncio
+async def test_campaign_loader_keeps_two_reads_and_owner_isolation():
+    from product_traffic_sources import add_traffic_units, traffic_sources
+    db = AsyncMongoMockClient().db
+    orders = [order('a', 5, utm_source='snapchat'), order('b', 2, utm_source='snapchat')]
+    await db.unified_orders.insert_many(orders)
+    await db[LEDGER_COLLECTION].insert_many([
+        {'user_id': 'owner', 'order_key': 'a', **ledger(campaign_id='safe', campaign_name='Owner campaign')},
+        {'user_id': 'other-owner', 'order_key': 'b', **ledger(campaign_id='foreign', campaign_name='Private foreign campaign')}])
+    readonly = ReadDB(db)
+    sources = await load_product_traffic_sources(readonly, 'owner', orders)
+    row = {}
+    for entry in orders:
+        add_traffic_units(row, sources[id(entry)], entry['products'][0]['quantity'])
+    final = traffic_sources(row)
+    assert len(readonly.calls) == 2
+    assert sum(s['units_sold'] for s in final) == 7
+    campaigns = [c for s in final for c in s['campaigns']]
+    assert {c['campaign_id']: c['units_sold'] for c in campaigns} == {'safe': 5, None: 2}
+    assert 'foreign' not in str(final)
