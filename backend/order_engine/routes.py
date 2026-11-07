@@ -478,6 +478,12 @@ def make_order_engine_router(
         _require_owner(user)
         raise HTTPException(410, detail={"code": "shipping_label_route_retired"})
 
+    @router.get("/{order_number}/profitability")
+    async def order_profitability(order_number: str, user: dict = Depends(current_user)):
+        from order_profitability_summary import build_order_profitability_summary
+        owner = _require_owner(user)
+        return await build_order_profitability_summary(db, str(owner["id"]), order_number)
+
     @router.get("/{order_number}", response_model=OrderDTO)
     async def get_order_row(
         order_number: str,
