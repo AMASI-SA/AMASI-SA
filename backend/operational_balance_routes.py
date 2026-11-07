@@ -18,6 +18,7 @@ from operational_balance_service import (entity, save_opening, create_movement, 
 
 
 from operational_opening_inventory import OpeningRequest as StockOpeningRequest, OpeningApproval as StockOpeningApproval
+from standalone_inventory_entry import EntryControl
 
 
 class Input(BaseModel):
@@ -527,9 +528,9 @@ def make_operational_balance_router(db, current_user):
         return await context(db, user)
 
     @router.post('/standalone-inventory/control')
-    async def standalone_inventory_control(payload: dict, user=Depends(current_user)):
+    async def standalone_inventory_control(payload: EntryControl, user=Depends(current_user)):
         from standalone_inventory_entry import set_control
-        return await set_control(db, user, payload)
+        return await set_control(db, user, payload.model_dump())
 
     @router.post('/standalone-inventory/preview')
     async def standalone_inventory_preview(payload: StockOpeningRequest, user=Depends(current_user)):

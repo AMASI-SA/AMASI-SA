@@ -637,6 +637,8 @@ export default function WarehouseHierarchyWorkspace() {
                 <Modal title="إضافة فرع" subtitle="رقم الفرع ورمزه يُنشآن تلقائيًا داخل المدينة." onClose={() => setDialog(null)}>
                     <form onSubmit={createBranch} className="space-y-4">
                         <div className="grid gap-3 md:grid-cols-2">
+                            <Field label="استخدام المخزن"><select value={branchForm.inventory_scope} onChange={event => setBranchForm({...branchForm, inventory_scope: event.target.value})}><option value="standalone">مخزون مستقل — ربط الطلبات مؤجل</option><option value="shared">مخزن للمسار الحالي</option></select></Field>
+                            <p className="text-xs text-slate-500">ترقيم المواقع الجديدة: الدولاب-الصف-الخانة، مثل 1-2-7. الباركود يحتفظ بهوية الموقع.</p>
                             <Field label="اسم الفرع"><Input required value={branchForm.name} onChange={(event) => setBranchForm({ ...branchForm, name: event.target.value })} placeholder="مثال: فرع بيت العود" /></Field>
                             <Field label="الدولة"><Select value={branchForm.country} onChange={(event) => changeCountry(event.target.value)}>{catalog.countries.map((row) => <option key={row.name} value={row.name}>{row.name}</option>)}</Select></Field>
                             <Field label="المدينة"><Select value={branchForm.city} onChange={(event) => setBranchForm({ ...branchForm, city: event.target.value })}>{(countryRow?.cities || []).map((city) => <option key={city} value={city}>{city}</option>)}</Select></Field>

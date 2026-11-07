@@ -3,9 +3,10 @@ import {createRoot} from 'react-dom/client';
 import {MemoryRouter} from 'react-router-dom';
 import InventoryWorkspace from '../InventoryWorkspace';
 import {operationalApi as api} from './api';
+jest.mock('react-router-dom', () => { global.TextEncoder = require('util').TextEncoder; return jest.requireActual('react-router'); });
 jest.mock('./api', () => ({operationalApi:{context:jest.fn()}, messageFor:() => 'تعذر تحميل الصلاحيات'}));
 jest.mock('./InventoryAvailability', () => ({context}) => <div data-testid="stock">{context.session_scope}</div>);
-jest.mock('./OpeningInventory', () => () => <div data-testid="opening" />);
+jest.mock('./StandaloneInventoryEntry', () => () => <div data-testid="opening" />);
 jest.mock('./InventoryPurchases', () => ({mode='purchase'}) => <div data-testid={mode} />);
 let host, root;
 beforeEach(() => {
@@ -26,7 +27,7 @@ test('opens the existing purchase and opening screens only on explicit navigatio
   await act(async () => [...host.querySelectorAll('button')].find(b=>b.textContent==='شراء مخزون').click());
   expect(host.querySelector('[data-testid="purchase"]')).not.toBeNull();
   expect(host.querySelector('[data-testid="stock"]')).toBeNull();
-  await act(async () => [...host.querySelectorAll('button')].find(b=>b.textContent==='الجرد الافتتاحي').click());
+  await act(async () => [...host.querySelectorAll('button')].find(b=>b.textContent==='إضافة المخزون').click());
   expect(host.querySelector('[data-testid="opening"]')).not.toBeNull();
 });
 test.each(['opening','purchase','purchases','stock'])('direct tab %s cannot bypass permissions', async tab => {

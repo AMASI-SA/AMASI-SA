@@ -66,7 +66,9 @@ export default function StandaloneInventoryEntry({context}) {
       if (result?.status !== 'approved') throw Error('لم يصل تأكيد الحفظ؛ أعد المحاولة بنفس العملية.');
       localStorage.removeItem(storageKey);
       if (mounted.current) {
-        setPending(null); setLine(null); setSearch(''); setVersion(v => v + 1);
+        setPending(null); setLine(null); setSearch('');
+        setCatalog(current => ({...current, entries: [{...result, id: result.batch_id}, ...current.entries.filter(e => e.id !== result.batch_id)].slice(0, 100)}));
+        setVersion(v => v + 1);
         setMessage('تم تثبيت الكمية ونقل المنتج إلى جدول المخزون. يمكنك إضافة المنتج التالي.');
       }
     } catch (e) {
@@ -86,15 +88,15 @@ export default function StandaloneInventoryEntry({context}) {
     {!catalog && <button disabled={busy} onClick={() => setVersion(v => v + 1)}>تحميل بيانات المخزون</button>}
     {catalog && <>
       <p>{catalog.writer_disabled ? 'إدخال المخزون المستقل متوقف.' : 'إدخال المخزون المستقل مفعّل.'}</p>
-      <button disabled={busy || !!pending} onClick={toggleWriter}>{catalog.writer_disabled ? 'تفعيل إدخال المخزون المستقل' : 'إيقاف إدخال المخزون المستقل'}</button>
+      <button disabled={busy || (!!pending && !catalog.writer_disabled)} onClick={toggleWriter}>{catalog.writer_disabled ? 'تفعيل إدخال المخزون المستقل' : 'إيقاف إدخال المخزون المستقل'}</button>
       {!catalog.locations.length && <p role="alert">أنشئ المخزن والدواليب أولًا من <Link to="/components-v2?workspace=warehouse">إدارة المخازن</Link>؛ تظهر هنا مواقع المخازن المستقلة فقط.</p>}
       {pending && <div role="alert">توجد عملية حفظ بانتظار تأكيد نتيجتها. إعادة المحاولة بنفس المرجع تمنع تكرار الكمية.<button disabled={busy || catalog.writer_disabled} onClick={save}>إعادة محاولة الحفظ</button></div>}
-      <fieldset disabled={busy || !!pending || !!recovery.error || catalog.writer_disabled || !catalog.locations.length}>
+      <fieldset className="op-stock-form" disabled={busy || !!pending || !!recovery.error || catalog.writer_disabled || !catalog.locations.length}>
         <legend>إدخال منتج واحد</legend>
         {!line ? <>
           <Field label="نوع الصنف"><select value={kind} onChange={e => {setKind(e.target.value); setSearch('');}}><option value="product">منتجات</option><option value="component">مكونات</option></select></Field>
           <Field label="بحث بالاسم أو الرقم المخزني"><input value={search} onChange={e => setSearch(e.target.value)}/></Field>
-          <ul>{matches.slice(0, 30).map(p => <li key={p.id}>{p.name} · {p.sku}<button onClick={() => setLine({...p, kind, quantity: '1', unit_cost: '', location_id: '', purchase_configuration: {state: kind === 'product' ? 'ready' : 'raw', selections: [], inputs: []}})}>اختيار {p.name}</button></li>)}</ul>
+          <ul className="op-stock-results">{matches.slice(0, 30).map(p => <li key={p.id}>{p.name} · {p.sku}<button onClick={() => setLine({...p, kind, quantity: '1', unit_cost: '', location_id: '', purchase_configuration: {state: kind === 'product' ? 'ready' : 'raw', selections: [], inputs: []}})}>اختيار {p.name}</button></li>)}</ul>
         </> : <div className="op-card">
           <h3>{line.name} · {line.sku}</h3>
           {!!line.configuration_issues?.length && <p role="alert">{line.configuration_issues.join(' · ')}</p>}
@@ -103,7 +105,7 @@ export default function StandaloneInventoryEntry({context}) {
           {(line.options || []).map(o => choices.includes(o.type) ? <Field key={o.id} label={o.name}><select value={line.purchase_configuration.selections.find(s => s.option_id === o.id)?.value_id || ''} onChange={e => configure({selections: [...line.purchase_configuration.selections.filter(s => s.option_id !== o.id), ...(e.target.value ? [{option_id: o.id, value_id: e.target.value}] : [])]})}><option value="">غير محدد</option>{o.values.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></Field> : texts.includes(o.type) && line.purchase_configuration.state === 'ready' ? <Field key={o.id} label={o.name}><input maxLength={o.type === 'textarea' ? 1000 : 100} value={line.purchase_configuration.inputs.find(s => s.option_id === o.id)?.value || ''} onChange={e => configure({inputs: [...line.purchase_configuration.inputs.filter(s => s.option_id !== o.id), ...(e.target.value ? [{option_id: o.id, value: e.target.value}] : [])]})}/></Field> : null)}
           <Field label={`الكمية (${unitLabel(line.unit || 'piece')})`}><input inputMode="decimal" value={line.quantity} onChange={e => update({quantity: e.target.value})}/></Field>
           <Field label="تكلفة الوحدة بالريال"><input inputMode="decimal" value={line.unit_cost} onChange={e => update({unit_cost: e.target.value})}/></Field>
-          <button onClick={save}>حفظ المنتج في المخزون</button><button onClick={() => setLine(null)}>إلغاء الإدخال</button>
+          <button className="op-primary" onClick={save}>حفظ المنتج في المخزون</button><button onClick={() => setLine(null)}>إلغاء الإدخال</button>
         </div>}
       </fieldset>
       <div className="op-table"><table><caption>آخر 100 إضافة مثبتة — جميع الكميات في صفحة المخزون الحالي</caption>

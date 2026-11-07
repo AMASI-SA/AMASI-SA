@@ -18,11 +18,6 @@ SOURCE = 'standalone_inventory_entry'
 ENTRIES = 'mz2_standalone_inventory_entries_v1'
 
 
-class EntryRequest(OpeningRequest):
-    # One save is one actual stock item. Color/configuration stays in its identity.
-    lines: list = Field(min_length=1, max_length=1)
-
-
 class EntryControl(BaseModel):
     model_config = ConfigDict(extra='forbid')
     revision: int = Field(ge=0, strict=True)

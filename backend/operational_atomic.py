@@ -554,9 +554,11 @@ async def operational_owner(db, owner, callback, *, profile="fulfillment", revie
         return await callback(db)
     if not isinstance(owner, str) or not owner:
         raise HTTPException(409, detail={"code": "operational_owner_required"})
+    from inventory_write_gate import ACTIVE as INVENTORY_ADMISSION
+    admission = INVENTORY_ADMISSION.get()
+    if admission and len(admission) > 2 and admission[2] and profile != "standalone_inventory":
+        raise HTTPException(409, detail={"code": "standalone_inventory_profile_required"})
     if profile in {"opening_inventory", "standalone_inventory"}:
-        from inventory_write_gate import ACTIVE as INVENTORY_ADMISSION
-        admission = INVENTORY_ADMISSION.get()
         if (admission is None or admission[0] != owner
                 or (bool(admission[2]) if len(admission) > 2 else False) != (profile == "standalone_inventory")):
             raise HTTPException(409, detail={"code": "opening_inventory_admission_required"})

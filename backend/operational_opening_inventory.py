@@ -256,7 +256,7 @@ async def compile_preview(db, owner, request, *, standalone=False):
                      'sku': sku, 'image_url': product.get('image_url'), 'unit': unit,
                      'component_type': product.get('component_type'),
                      'location_id': location['id'], 'warehouse_id': location['warehouse_id'],
-                     'location_name': location['name'], 'quantity': quantity, 'unit_cost': format(cost, '.2f'),
+                     'location_name': (location['name'] + ' — ' + location['warehouse_name']) if standalone else location['name'], 'quantity': quantity, 'unit_cost': format(cost, '.2f'),
                      'total_cost': line_total(cost, quantity), 'inventory_identity': identity,
                      'preparation_state': state, 'specifications': specs, 'purchase_configuration': config})
         snapshots.append([raw, stored, definition, location, warehouse])
@@ -269,6 +269,8 @@ async def compile_preview(db, owner, request, *, standalone=False):
               'total_cost': format(sum((Decimal(r['total_cost']) for r in rows), Decimal(0)), '.2f'),
               'currency': 'SAR', 'financial_effect': 'none', 'fulfillment_eligible': False,
               'fulfillment_reason': 'inventory_valuation_reconciliation_required'}
+    if standalone:
+        result['entry_mode'] = 'standalone'
     result['preview_hash'] = digest([SCHEMA, owner, request, result, snapshots])
     return result
 
