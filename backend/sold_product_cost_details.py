@@ -17,17 +17,18 @@ def detail_group(cost, item, quantity):
         base = decimal(cost.get("base_total"))
         components = decimal(cost.get("components_total"))
         saved = []
+        invalid_saved = False
         for kind, records in (("component", cost["applied_product_resources"]), ("service", cost["applied_option_costs"])):
             for record in records:
                 amount = decimal(record.get("resolved_amount"))
                 if amount is None:
-                    saved = []
+                    invalid_saved = True
                     break
                 identity = str(record.get("binding_id") or record.get("resource_id") or len(saved))
                 saved.append({"key": "saved:" + kind + ":" + identity, "label": identity,
                               "kind": kind, "status": "costed", "unit_cost": float(amount),
                               "resource_id": record.get("resource_id")})
-        if base is not None and components is not None and sum((decimal(c["unit_cost"]) for c in saved), Decimal(0)) * quantity == components:
+        if not invalid_saved and base is not None and components is not None and sum((decimal(c["unit_cost"]) for c in saved), Decimal(0)) * quantity == components:
             cells = [{"key": "base", "label": "المنتج (تكلفة محفوظة)", "kind": "product", "status": "costed", "unit_cost": float(base / quantity)}, *saved]
     if not cells:
         # Old frozen records may contain only totals. Display their actual
@@ -50,11 +51,27 @@ def detail_group(cost, item, quantity):
                  "reasons": sorted(cost.get("missing_cost_reasons") or [])}
     key = hashlib.sha256(json.dumps(signature, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     return {"key": key, "cells": cells, "quantity": float(quantity),
-            "unit_cost": round(float(known / quantity), 2) if complete else None,
-            "total_cost": round(float(known), 2) if complete else None,
-            "known_unit_cost": round(float(known / quantity), 2), "known_total_cost": round(float(known), 2),
+            "unit_cost": float(known / quantity) if complete else None,
+            "total_cost": float(known) if complete else None,
+            "known_unit_cost": float(known / quantity), "known_total_cost": float(known),
             "complete": complete, "cost_stage": cost.get("cost_stage"),
             "missing_cost_reasons": cost.get("missing_cost_reasons") or []}
+
+
+def detail_groups(cost, item, quantity):
+    """Split proven actual units only when their coverage matches authority."""
+    entries = cost.get("cost_detail_units") or []
+    if entries and cost.get("calculation_cost_available"):
+        counts = [decimal(entry.get("quantity")) for entry in entries]
+        amounts = [decimal(entry.get("line_total")) for entry in entries]
+        if (all(count is not None and count > 0 for count in counts)
+                and all(amount is not None for amount in amounts)
+                and sum(counts, Decimal(0)) == quantity
+                and sum(amounts, Decimal(0)) == decimal(cost.get("line_total"))
+                and all(entry.get("cost_detail_cells") for entry in entries)):
+            return [detail_group({**cost, **entry}, item, count)
+                    for entry, count in zip(entries, counts)]
+    return [detail_group(cost, item, quantity)]
 
 
 def add_group(row, group):
@@ -63,7 +80,7 @@ def add_group(row, group):
         row["_groups"][group["key"]] = group
     else:
         previous["quantity"] += group["quantity"]
-        previous["known_total_cost"] = round(previous["known_total_cost"] + group["known_total_cost"], 2)
+        previous["known_total_cost"] = float(decimal(previous["known_total_cost"]) + decimal(group["known_total_cost"]))
         if previous["complete"]:
             previous["total_cost"] = previous["known_total_cost"]
     row["_reasons"].update(group["missing_cost_reasons"])

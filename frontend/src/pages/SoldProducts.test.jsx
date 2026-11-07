@@ -102,3 +102,24 @@ test("labels dynamic columns by kind and never invents missing frozen breakdown 
     expect(html).toContain("المنتج: شال"); expect(html).toContain("خدمة: تطريز"); expect(html).toContain("مكوّن: كيس");
     expect(html).toContain("تفصيل غير متاح"); expect(html).not.toContain("اختيار غير متحقق");
 });
+
+test("variants sharing product and SKU keep separate accordion and refresh identities", async () => {
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    const first = product("SAME", { report_key: "product:variant-1", name: "المتغير الأول" });
+    const second = product("SAME", { report_key: "product:variant-2", name: "المتغير الثاني", cost_status: "incomplete", total_cost: null, missing_cost_reasons: ["base_cost_or_fx_missing"] });
+    api.get.mockResolvedValueOnce({ data: { items: [first, second], count: 2 } });
+    api.get.mockResolvedValueOnce({ data: { items: [first, { ...second, cost_status: "complete", total_cost: 50 }], count: 2 } });
+    const host = document.createElement("div"); document.body.appendChild(host);
+    const root = createRoot(host);
+    await act(async () => { root.render(<SoldProducts />); });
+    const toggles = host.querySelectorAll('main > section button[aria-controls]');
+    await act(async () => { toggles[0].click(); });
+    expect(toggles[0].getAttribute("aria-expanded")).toBe("true");
+    expect(toggles[1].getAttribute("aria-expanded")).toBe("false");
+    expect(host.querySelectorAll('main > section [data-testid="sold-product-cost-details"]')).toHaveLength(1);
+    const refresh = [...host.querySelectorAll("button")].find(button => button.textContent.includes("تحديث جميع التكاليف"));
+    await act(async () => { refresh.click(); });
+    expect(host.textContent).toContain("اكتملت تكلفة 1 منتج؛ المتبقي 0");
+    expect(host.textContent).not.toContain("اكتملت تكلفة 2 منتج");
+    await act(async () => root.unmount()); host.remove();
+});

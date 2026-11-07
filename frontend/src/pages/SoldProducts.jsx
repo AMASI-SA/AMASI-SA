@@ -14,7 +14,7 @@ const STATUS_OPTIONS = [
 ];
 const money = value => `${formatMoney(value)} ر.س`;
 const complete = row => row.cost_status === "complete" && row.total_cost != null;
-const rowKey = row => `${row.product_id}:${row.sku || ""}`;
+const rowKey = row => row.report_key || `${row.product_id}:${row.sku || ""}`;
 
 export function costReasonLabel(reason) {
     const value = String(reason || "");

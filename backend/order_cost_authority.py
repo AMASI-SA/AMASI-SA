@@ -332,6 +332,19 @@ def _bundle_cost(snapshot: dict, quantity: Any, units: list[dict] | None = None)
                   uses_salla_fallback=fallback, missing_cost_reasons=[],
                   components_total=_amount(total), product_components_total=_amount(total),
                   line_total=_amount(total), bundle_revision=snapshot.get("revision"))
+    if stage == "actual":
+        # Keep each consumed physical unit's frozen amounts; averaging here
+        # would hide differences in inventory consumption costs.
+        from bundle_fulfillment_v2 import leaf_key
+        detail_units = []
+        for unit in units:
+            unit_leaves = sorted(unit.get("bundle_leaves") or [], key=leaf_key)
+            unit_total = sum((decimal(leaf["actual_cost"]) for leaf in unit_leaves), Decimal(0))
+            cells = _bundle_detail_cells(
+                [{**leaf, "line_cost_sar": str(leaf["actual_cost"])} for leaf in unit_leaves], unit_total)
+            detail_units.append({"quantity": 1, "line_total": str(unit_total), "cost_detail_cells": cells})
+        if all(entry["cost_detail_cells"] for entry in detail_units):
+            result["cost_detail_units"] = detail_units
     if stage == "expected":
         leaves = []
         for leaf in snapshot.get("leaves") or []:

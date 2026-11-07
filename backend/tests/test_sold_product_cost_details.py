@@ -62,3 +62,56 @@ def test_frozen_price_difference_preserved_and_separately_grouped():
     assert rows[0]['total_cost'] == 50
     assert rows[0]['unit_cost_varies']
     assert [g['unit_cost'] for g in rows[0]['cost_groups']] == [15, 20]
+
+
+def actual_bundle_report(amounts):
+    from order_cost_authority import _bundle_cost, line_fingerprint
+    line = {**item(len(amounts)), 'order_item_id': 'actual'}
+    units = [{'unit_index': index, 'state': 'consumed', 'bundle_leaves': [
+        {'leaf_id': 'frozen-shirt', 'kind': 'product', 'product_id': 'shirt',
+         'actual_cost': amount, 'name': 'القميص'}]} for index, amount in enumerate(amounts)]
+    cost = _bundle_cost({'estimated_cost': 999}, len(amounts), units)
+    snapshot = {'quantity': len(amounts), 'cost': cost, 'line_fingerprint': line_fingerprint(line)}
+    return aggregate_sold_products([{'order_number': 'o', 'products': [line]}],
+        [{'salla_product_id': 'p'}], [{'salla_product_id': 'p', 'base_cost': 9999}],
+        authority={'lines': {('o', 'actual'): snapshot}})[0]
+
+
+def test_actual_units_with_different_frozen_costs_split_without_repricing():
+    row = actual_bundle_report([20, 30])
+    assert row['total_cost'] == 50
+    assert row['unit_cost_varies']
+    assert [(g['unit_cost'], g['quantity'], g['total_cost']) for g in row['cost_groups']] == [(20, 1, 20), (30, 1, 30)]
+    assert [g['cells'][0]['unit_cost'] for g in row['cost_groups']] == [20, 30]
+
+
+def test_actual_units_with_identical_frozen_costs_merge():
+    row = actual_bundle_report([20, 20])
+    assert row['total_cost'] == 40
+    assert not row['unit_cost_varies']
+    assert [(g['unit_cost'], g['quantity'], g['total_cost']) for g in row['cost_groups']] == [(20, 2, 40)]
+
+
+def test_unit_details_must_cover_authoritative_quantity_and_amount():
+    from decimal import Decimal
+    from sold_product_cost_details import detail_groups
+    cost = {'calculation_cost_available': True, 'line_total': 50, 'base_total': 0, 'components_total': 50,
+            'cost_detail_units': [{'quantity': 1, 'line_total': 20, 'cost_detail_cells': [
+                {'key': 'x', 'label': 'x', 'kind': 'product', 'status': 'costed', 'unit_cost': 20}]}]}
+    groups = detail_groups(cost, item(2), Decimal(2))
+    assert len(groups) == 1
+    assert groups[0]['total_cost'] == 50
+    assert groups[0]['quantity'] == 2
+
+
+def test_actual_unit_precision_is_not_rounded_before_group_addition():
+    row = actual_bundle_report(['20.005', '20.005'])
+    assert row['total_cost'] == 40.01
+    assert row['cost_groups'][0]['total_cost'] == 40.01
+    assert row['cost_groups'][0]['unit_cost'] == 20.005
+
+
+def test_variant_rows_have_distinct_stable_report_keys():
+    rows = report([{**item(1), 'variant_id': 'red'}, {**item(1), 'variant_id': 'blue'}])
+    assert len(rows) == 2
+    assert {row['report_key'] for row in rows} == {'p:red', 'p:blue'}
