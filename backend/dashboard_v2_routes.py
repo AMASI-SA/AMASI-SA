@@ -2236,6 +2236,42 @@ def make_dashboard_v2_router(
             "source_only": True,
         }
 
+    @router.get("/dashboard-v2/product-promotion-estimates")
+    @_heavy_dashboard_stage("product_promotion_estimates")
+    async def product_promotion_estimates(
+        from_date: str = Query(..., max_length=10),
+        to_date: str = Query(..., max_length=10),
+        product_id: str = Query(..., min_length=1, max_length=160),
+        platform: str = Query(..., max_length=20),
+        account_id: str = Query(..., min_length=1, max_length=160),
+        statuses: str = Query("default", max_length=160),
+        report_scope: str = Query("sold", max_length=20),
+        payment_methods: str | None = Query(None, max_length=2000),
+        shipping_companies: str | None = Query(None, max_length=2000),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        current = owner(user)
+        from sold_financial_report import validate_report_statuses
+        selected = validate_report_statuses(statuses)
+        try:
+            first, last = date.fromisoformat(from_date), date.fromisoformat(to_date)
+        except ValueError as exc:
+            raise HTTPException(422, "تاريخ غير صالح") from exc
+        if first.isoformat() != from_date or last.isoformat() != to_date or first > last:
+            raise HTTPException(422, "نطاق التاريخ غير صالح")
+        if platform not in {"snapchat", "tiktok", "meta", "google"} or report_scope not in {"sold", "dashboard"}:
+            raise HTTPException(422, "مصدر التقرير غير صالح")
+        from product_promotion_estimates import build_product_promotion_estimates
+        try:
+            return await asyncio.wait_for(build_product_promotion_estimates(
+                db, str(current["id"]), from_date=from_date, to_date=to_date,
+                product_id=product_id, platform=platform, account_id=account_id,
+                statuses=selected, report_scope=report_scope,
+                payment_methods=payment_methods, shipping_companies=shipping_companies,
+            ), timeout=15)
+        except asyncio.TimeoutError as exc:
+            raise HTTPException(503, detail={"code": "promotion_estimate_timeout", "data_complete": False}) from exc
+
     @router.get("/dashboard-v2/sold-products")
     @_heavy_dashboard_stage("sold_products_report")
     async def sold_products_report(

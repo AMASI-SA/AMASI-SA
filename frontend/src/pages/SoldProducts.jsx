@@ -92,7 +92,7 @@ export function CostDetails({ row }) {
     </div>;
 }
 
-export function SoldTable({ rows, printable = false, allDetails = false, expanded = {}, onToggle }) {
+export function SoldTable({ rows, printable = false, allDetails = false, expanded = {}, onToggle, range }) {
     return <table className="w-full text-sm text-right border-collapse min-w-[760px]">
         <thead className="bg-slate-100 text-slate-700"><tr>{[...(!printable ? ["التفاصيل"] : []), "المنتج", "القطع المباعة", ...(!printable ? ["القطع حسب المنصة والحساب"] : []), "تكلفة القطعة", "إجمالي التكلفة", "الحالة"].map(label => <th key={label} className={`p-3 border-b border-slate-200 ${label === "القطع حسب المنصة والحساب" ? "product-traffic-sources-heading print:hidden" : ""}`}>{label}</th>)}</tr></thead>
         <tbody>{rows.map((row, index) => {
@@ -104,7 +104,7 @@ export function SoldTable({ rows, printable = false, allDetails = false, expande
                     {!printable && <td className="p-2 w-12"><button type="button" aria-expanded={!!open} aria-controls={detailId} aria-label={`تفاصيل تكلفة ${row.name}`} onClick={() => onToggle(key)} className="rounded border border-violet-200 p-2 text-violet-800 hover:bg-violet-50">{open ? "▼" : "◀"}</button></td>}
                     <td className="p-3"><div className="flex items-center gap-3">{row.image_url && <img src={row.image_url} alt="" className="h-12 w-12 object-cover rounded" />}<div className="font-semibold">{printable ? row.name : <Link target="_blank" rel="noopener noreferrer" className="text-violet-800 underline" to={row.mezan_product_id ? `/products-v2?product=${encodeURIComponent(row.mezan_product_id)}&focus=cost` : `/products-v2?view=list&lookup_sku=${encodeURIComponent(row.sku || row.name || "")}`}>{row.name || "بدون اسم"}</Link>}<span className="block text-xs font-normal text-slate-500" dir="ltr">{row.sku || "—"}</span></div></div></td>
                     <td className="p-3 tabular-nums">{formatInt(row.units_sold)}</td>
-                    {!printable && <td className="p-3 product-traffic-sources print:hidden"><ProductTrafficSources sources={row.traffic_sources} /></td>}
+                    {!printable && <td className="p-3 product-traffic-sources print:hidden"><ProductTrafficSources sources={row.traffic_sources} promotionContext={{ product_id: row.product_id, from_date: range?.from, to_date: range?.to, statuses: range?.statuses || "default", report_scope: "sold" }} /></td>}
                     <td className="p-3 tabular-nums">{!complete(row) ? "غير مكتملة" : row.unit_cost_varies ? "تختلف حسب الخيارات" : row.unit_cost == null ? "غير مكتملة" : money(row.unit_cost)}</td>
                     <td className="p-3 tabular-nums">{complete(row) ? money(row.total_cost) : <><span className="text-amber-800">الإجمالي غير مكتمل</span><small className="block">المعروف {money(row.known_cost_total ?? 0)}</small></>}</td>
                     <td className="p-3"><span className={`rounded-full px-2 py-1 text-xs ${complete(row) ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{complete(row) ? "مكتمل" : [...new Set((row.missing_cost_reasons || []).map(costReasonLabel))].join("، ") || "تكلفة ناقصة"}</span></td>
@@ -219,7 +219,7 @@ export default function SoldProducts() {
         {error && <p role="alert" className="text-red-700">{error}</p>}
         {loading ? <p role="status">جارٍ تحميل المنتجات…</p> : data && <section className="rounded-xl border border-slate-200 bg-white overflow-hidden">
             <div className="p-4 text-sm text-slate-600">من {range.from} إلى {range.to} · {selectedStatusLabel} · {count} منتج · غير مكتمل التكلفة أولًا، ثم حسب عدد القطع</div>
-            {count ? <div className="overflow-x-auto"><SoldTable rows={pageRows} expanded={expanded} onToggle={key => setExpanded(values => ({ ...values, [key]: !values[key] }))} /></div> : <p className="p-8 text-center">لا توجد منتجات في هذه الفترة والحالة.</p>}
+            {count ? <div className="overflow-x-auto"><SoldTable rows={pageRows} range={range} expanded={expanded} onToggle={key => setExpanded(values => ({ ...values, [key]: !values[key] }))} /></div> : <p className="p-8 text-center">لا توجد منتجات في هذه الفترة والحالة.</p>}
             {count > 0 && <CostSummary rows={pageRows} />}
             {pages > 1 && <nav aria-label="صفحات المنتجات" className="flex flex-wrap justify-center items-center gap-2 p-4"><button disabled={current === 1} onClick={() => setPage(current - 1)} className="px-3 py-2 border rounded disabled:opacity-40">السابق</button>{Array.from({ length: pages }, (_, i) => <button key={i} aria-current={current === i + 1 ? "page" : undefined} onClick={() => setPage(i + 1)} className={`px-3 py-2 border rounded ${current === i + 1 ? "bg-violet-700 text-white" : ""}`}>{i + 1}</button>)}<button disabled={current === pages} onClick={() => setPage(current + 1)} className="px-3 py-2 border rounded disabled:opacity-40">التالي</button></nav>}
             <CostSummary rows={data.items} final />

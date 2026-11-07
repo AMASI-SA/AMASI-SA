@@ -211,3 +211,18 @@ test("period expenses can be printed even when no products were sold", async () 
     expect(mockPrint.mock.calls.at(-1)[0]).toContain("تفاصيل المصروفات التشغيلية");
     await act(async () => root.unmount()); host.remove();
 });
+
+test("source hover uses the applied product period and order status cohort", async () => {
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    const row = product("source-product", { traffic_sources: [{ platform: "snapchat", platform_label: "سناب شات", account_id: "account-1", account_status: "confirmed", attribution_status: "confirmed", units_sold: 2 }] });
+    mockProductsGet.mockResolvedValue({ data: { currency: "SAR", allocation_method: "product_sales_share", rows: [] } });
+    const host = document.createElement("div"); document.body.appendChild(host);
+    const root = createRoot(host);
+    try {
+        await act(async () => root.render(<SoldTable rows={[row]} range={{ from: "2026-11-02", to: "2026-11-05", statuses: "reviewed,in_progress" }} />));
+        expect(api.get).not.toHaveBeenCalled();
+        await act(async () => host.querySelector('.product-traffic-sources button').click());
+        await act(async () => { await new Promise(resolve => setTimeout(resolve, 230)); });
+        expect(api.get).toHaveBeenCalledWith("/dashboard-v2/product-promotion-estimates", expect.objectContaining({ params: expect.objectContaining({ product_id: "source-product", from_date: "2026-11-02", to_date: "2026-11-05", statuses: "reviewed,in_progress", report_scope: "sold" }) }));
+    } finally { await act(async () => root.unmount()); host.remove(); }
+});
