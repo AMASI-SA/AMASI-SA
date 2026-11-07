@@ -1,6 +1,6 @@
 # Preparation PDF symbols for newly created orders
 
-The reviewed activation instant is 00:00 on 8 November 2026 in Riyadh.
+The reviewed activation instant is 02:00 on 8 November 2026 in Riyadh.
 The renderer uses a fixed timezone-aware cutoff shared by all backend
 replicas. Keep this instant on restarts and subsequent releases.
 

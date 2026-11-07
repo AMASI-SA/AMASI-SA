@@ -18,8 +18,8 @@ from preparation_pdf import _ar
 
 
 # A fixed activation instant keeps all replicas and subsequent reprints on
-# the same cutoff. Midnight in Riyadh on 8 November 2026.
-SPEC_SYMBOLS_FROM = datetime(2026, 11, 7, 21, 0, tzinfo=timezone.utc)
+# the same cutoff. 02:00 in Riyadh on 8 November 2026.
+SPEC_SYMBOLS_FROM = datetime(2026, 11, 7, 23, 0, tzinfo=timezone.utc)
 _SYMBOL_FONT = "NotoSansSymbols2-Print"
 _PRESENTATION_SELECTORS = str.maketrans("", "", "\ufe0e\ufe0f")
 _HEART_COLORS = {

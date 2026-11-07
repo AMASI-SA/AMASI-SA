@@ -90,7 +90,7 @@ def _symbols_pdf(order_date: str | None) -> bytes:
 
 
 def test_new_order_pdf_keeps_arabic_punctuation_and_symbols() -> None:
-    with fitz.open(stream=_symbols_pdf("2026-11-07T21:00:00Z"), filetype="pdf") as doc:
+    with fitz.open(stream=_symbols_pdf("2026-11-07T23:00:00Z"), filetype="pdf") as doc:
         page = doc[0]
         printed = unicodedata.normalize("NFKC", page.get_text())
         assert "نجمة" in printed and "نورة" in printed
@@ -106,7 +106,7 @@ def test_new_order_pdf_keeps_arabic_punctuation_and_symbols() -> None:
         assert doc.extract_font(symbol_xref)[3]  # The viewer need not have this font installed.
 
 
-@pytest.mark.parametrize("order_date", ["2026-11-07T23:59:59+03:00", "2026-11-08", None])
+@pytest.mark.parametrize("order_date", ["2026-11-08T01:59:59+03:00", "2026-11-08", None])
 def test_reprinting_older_or_undated_orders_keeps_the_original_appearance(
     monkeypatch, order_date,
 ) -> None:
