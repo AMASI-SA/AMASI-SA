@@ -67,7 +67,7 @@ test("refreshes every filtered product including unopened later pages and prints
     await act(async () => { refresh.click(); });
     expect(mockProductsGet).toHaveBeenLastCalledWith("/dashboard-v2/sold-products", { params: { from_date: "2026-11-01", to_date: "2026-11-07", statuses: "default", refresh_costs: true } });
     expect(host.textContent).toContain("اكتملت تكلفة 1 منتج؛ المتبقي 0");
-    const print = [...host.querySelectorAll("button")].find(button => button.textContent === "طباعة مع تفاصيل التكاليف");
+    const print = [...host.querySelectorAll("button")].find(button => button.textContent === "طباعة التقرير مع التفاصيل");
     await act(async () => { print.click(); });
     expect(mockPrint.mock.calls.at(-1)[0]).toContain("SKU20");
     expect(mockPrint.mock.calls.at(-1)[0]).toContain("غير محدد");
@@ -196,4 +196,18 @@ test("platforms use compact icons and counts while direct and unknown remain tex
     expect(list.textContent).toContain("3 قطعة"); expect(list.textContent).toContain("مباشر"); expect(list.textContent).toContain("غير معروف");
     expect(list.querySelector('li[aria-label*="snap-1"]').getAttribute('title')).toContain("سناب شات");
     expect(list.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
+});
+
+test("period expenses can be printed even when no products were sold", async () => {
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    mockProductsGet.mockResolvedValue({ data: { items: [], count: 0 } });
+    const host = document.createElement("div"); document.body.appendChild(host);
+    const root = createRoot(host);
+    await act(async () => { root.render(<SoldProducts />); });
+    const print = [...host.querySelectorAll("button")].find(button => button.textContent === "طباعة التقرير مع التفاصيل");
+    expect(print.disabled).toBe(false);
+    await act(async () => { print.click(); });
+    expect(mockPrint.mock.calls.at(-1)[0]).toContain("الملخص المالي للفترة");
+    expect(mockPrint.mock.calls.at(-1)[0]).toContain("تفاصيل المصروفات التشغيلية");
+    await act(async () => root.unmount()); host.remove();
 });

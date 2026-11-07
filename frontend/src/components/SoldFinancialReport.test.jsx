@@ -26,3 +26,10 @@ test("missing payment amounts remain unknown in the financial table", () => {
     expect(html).toContain("غير مكتمل");
     expect(html).not.toContain("0.00 ر.س");
 });
+
+test("zero-order periods show no average rather than a missing cost", () => {
+    const html = renderToStaticMarkup(<SoldFinancialReport data={{ ...data, totals: { ...data.totals, total_orders: 0 } }} products={[]} printable />);
+    expect(html).toContain("متوسط التكلفة الكلية للطلب");
+    expect(html).toContain("—");
+    expect(html).not.toContain("غير مكتمل");
+});
