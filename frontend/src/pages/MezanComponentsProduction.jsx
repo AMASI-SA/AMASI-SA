@@ -26,6 +26,7 @@ import {
   newComponentForm,
   toggleComponentCategory,
 } from "../lib/componentCreationRules";
+import { resourceKind } from "../components/products/resourceKind";
 
 function costCopy(component) {
   if (!component?.track_inventory) {
@@ -58,6 +59,7 @@ export default function MezanComponentsProduction() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
+  const [kindFilter, setKindFilter] = useState("component");
   const [selectedId, setSelectedId] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -74,9 +76,12 @@ export default function MezanComponentsProduction() {
       const result = await getMezanComponentWorkspace();
       const components = result?.components || [];
       setWorkspace(result || { components: [], categories: [], products: [], meta: {} });
-      const nextId = preferredId || selectedId || components[0]?.id || "";
-      setSelectedId(nextId);
-      const selected = components.find((row) => row.id === nextId) || components[0];
+      const preferred = components.find((row) => row.id === preferredId);
+      const nextKind = preferred ? resourceKind(preferred) : kindFilter;
+      setKindFilter(nextKind);
+      const candidates = filterMezanComponents(components.filter(row => resourceKind(row) === nextKind), { query, filter: "all", status: statusFilter });
+      const selected = candidates.find((row) => row.id === (preferredId || selectedId)) || candidates[0] || null;
+      setSelectedId(selected?.id || "");
       setCostDraft(selected?.track_inventory
         ? (selected?.initial_unit_cost ?? selected?.reference_cost?.amount ?? "")
         : (selected?.reference_cost?.amount ?? ""));
@@ -93,8 +98,8 @@ export default function MezanComponentsProduction() {
   const components = useMemo(() => workspace.components || [], [workspace.components]);
   const categories = useMemo(() => workspace.categories || [], [workspace.categories]);
   const visible = useMemo(
-    () => filterMezanComponents(components, { query, filter: "all", status: statusFilter }),
-    [components, query, statusFilter],
+    () => filterMezanComponents(components.filter(row => resourceKind(row) === kindFilter), { query, filter: "all", status: statusFilter }),
+    [components, query, statusFilter, kindFilter],
   );
   const summary = useMemo(() => summarizeMezanComponents(components), [components]);
   const selected = visible.find((row) => row.id === selectedId) || visible[0] || null;
@@ -274,8 +279,12 @@ export default function MezanComponentsProduction() {
 
   return (
     <div className="space-y-5" dir="rtl">
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><h1 className="text-2xl font-black text-slate-950">مكونات وتكاليف Mezan OS</h1><p className="mt-1 text-sm text-slate-500">كل خدمة أو مكوّن يجب أن يتبع تصنيف تجهيز واحدًا على الأقل، ويمكن مشاركته بين عدة تصنيفات.</p></div><button onClick={() => { setForm(newComponentForm()); setAddOpen(true); }} className="rounded-xl bg-violet-700 px-5 py-3 font-black text-white"><Plus className="ml-2 inline" />إضافة مكوّن أو خدمة</button></div></section>
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><h1 className="text-2xl font-black text-slate-950">مكونات وتكاليف Mezan OS</h1><p className="mt-1 text-sm text-slate-500">كل خدمة أو مكوّن يجب أن يتبع تصنيف تجهيز واحدًا على الأقل، ويمكن مشاركته بين عدة تصنيفات.</p></div><button onClick={() => { setForm(changeComponentKind(newComponentForm(), kindFilter === "component" ? "stock_component" : "service")); setAddOpen(true); }} className="rounded-xl bg-violet-700 px-5 py-3 font-black text-white"><Plus className="ml-2 inline" />إضافة مكوّن أو خدمة</button></div></section>
 
+      <section className="rounded-2xl border bg-white p-4"><label className="block text-sm font-black">عرض الكتالوج
+        <select aria-label="عرض الكتالوج" value={kindFilter} onChange={event => { setKindFilter(event.target.value); setSelectedId(""); }} className="mt-2 w-full rounded-xl border bg-white p-3 sm:max-w-sm">
+          <option value="component">المكونات</option><option value="service">الخدمات</option>
+        </select></label></section>
       {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 font-bold text-rose-800">{error}</div>}
 
       <section className="grid gap-3 sm:grid-cols-4"><div className="rounded-2xl border bg-white p-4"><div className="text-xs text-slate-500">إجمالي العناصر</div><div className="mt-1 text-2xl font-black">{summary.total}</div></div><div className="rounded-2xl border bg-white p-4"><div className="text-xs text-slate-500">العناصر الفعالة</div><div className="mt-1 text-2xl font-black text-emerald-700">{summary.active}</div></div><div className="rounded-2xl border bg-white p-4"><div className="text-xs text-slate-500">العناصر الموقوفة</div><div className="mt-1 text-2xl font-black text-rose-700">{summary.inactive}</div></div><div className="rounded-2xl border bg-white p-4"><div className="text-xs text-slate-500">تحتاج تكلفة</div><div className="mt-1 text-2xl font-black">{summary.missing_cost}</div></div></section>

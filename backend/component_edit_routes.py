@@ -132,6 +132,12 @@ def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> API
             **component_cost_metadata(track_inventory=track_inventory, amount=amount, purchase_cost=purchase_cost),
             "updated_at": now,
         }
+        from employee_price_approval import requires_mobile_price_approval, propose_mobile_service_cost
+        proposal = {}
+        if requires_mobile_price_approval(user) and (kind == "service" or before.get("kind") == "service"):
+            proposal = await propose_mobile_service_cost(db, user=user, resource=before, amount=amount, client_request_id=payload.get("client_request_id"))
+            for key in component_cost_metadata(track_inventory=track_inventory, amount=amount, purchase_cost=purchase_cost):
+                patch.pop(key, None)
         await db[RESOURCES].update_one({"user_id": user_id, "id": resource_id}, {"$set": patch})
         option_impacted = await db[BINDINGS].count_documents(
             {"user_id": user_id, "resource_id": resource_id}
@@ -153,7 +159,7 @@ def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> API
             "created_at": now,
         })
         saved = await db[RESOURCES].find_one({"user_id": user_id, "id": resource_id}, {"_id": 0})
-        return {"ok": True, "resource": saved, "impacted_bindings": impacted}
+        return {"ok": True, "resource": saved, "impacted_bindings": impacted, **proposal}
 
     @router.put("/components-v2/{resource_id}/cost")
     async def update_component_cost(resource_id: str, payload: dict = Body(...), user: dict = Depends(current_user)) -> dict[str, Any]:
@@ -165,6 +171,9 @@ def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> API
         require_active_component(before)
         if before.get("track_inventory") and before.get("cost_source") == "purchase_invoice" and before.get("cost_authoritative"):
             raise HTTPException(status_code=409, detail={"code": "purchase_cost_authoritative"})
+        from employee_price_approval import requires_mobile_price_approval, propose_mobile_service_cost
+        if requires_mobile_price_approval(user) and before.get("kind") == "service":
+            return {**await propose_mobile_service_cost(db, user=user, resource=before, amount=amount, client_request_id=payload.get("client_request_id")), "amount": before.get("unit_cost")}
         metadata = component_cost_metadata(track_inventory=bool(before.get("track_inventory")), amount=amount)
         now = _now()
         await db[RESOURCES].update_one({"user_id": user_id, "id": resource_id}, {"$set": {**metadata, "updated_at": now}})

@@ -82,6 +82,8 @@ def make_order_engine_router(*args, **kwargs):
     from preparation_piece_execution_guard import install_preparation_piece_execution_guard
     from supplier_debit_identity_v2 import make_supplier_debit_router
     from supplier_receiving_routes import make_supplier_receiving_router
+    from employee_price_approval import make_price_change_router
+    from product_component_category_share import make_product_component_category_share_router
     from fulfillment_experiment_routes import make_fulfillment_experiment_router
     from mezan_supplier_management_routes import make_mezan_supplier_management_router
     from preparation_file_failure_safety import install_preparation_finalize_safety, make_preparation_file_failure_safety_router
@@ -196,6 +198,8 @@ def make_order_engine_router(*args, **kwargs):
         make_fulfillment_experiment_router(db, current_user),
         make_supplier_debit_router(db, current_user),
         make_supplier_receiving_router(db, current_user),
+        make_price_change_router(db, current_user),
+        make_product_component_category_share_router(db, current_user),
         make_fulfillment_v2_router(db, current_user),
         make_store_delivery_driver_router(db, current_user),
         make_store_delivery_handover_router(db, current_user),

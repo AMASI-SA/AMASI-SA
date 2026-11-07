@@ -8,6 +8,7 @@ import {
     refreshProductV2Details,
     saveProductOptionCost,
 } from "../../services/mezanProductsV2";
+import { resourceKind } from "./resourceKind";
 
 function money(value) {
     if (value === null || value === undefined || value === "") return "—";
@@ -63,7 +64,10 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
                 getProductOptionCosts(productId),
                 refreshProductV2Details(productId),
             ]);
-            setData(costResult);
+            setData({ ...costResult,
+                cost_category_id: Object.prototype.hasOwnProperty.call(costResult, "cost_category_id")
+                    ? costResult.cost_category_id : detailResult?.product?.cost_category_id,
+            });
             setDetailFields(detailResult?.product?.custom_fields || customFields || []);
             setDetailOptions(detailResult?.product?.options || options || []);
         } catch (error) {
@@ -90,19 +94,33 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
         () => [...optionSubjects(detailOptions), ...customFieldSubjects(detailFields)],
         [detailFields, detailOptions],
     );
+    const categoryId = data.cost_category_id == null ? "" : String(data.cost_category_id);
+    const categoryResources = useMemo(() => (data.resources || []).filter(row => categoryId
+        && (row.category_ids || []).map(String).includes(categoryId)), [data.resources, categoryId]);
+    const editorResources = editing ? (data.resources || []).filter(row => resourceKind(row) === editing.resource_kind
+        && (categoryResources.some(item => item.id === row.id)
+            || bindings.get(`${editing.option.id}:${editing.value.id}`)?.resource_id === row.id)) : [];
 
     function openEditor(option, value) {
         const current = bindings.get(`${option.id}:${value.id}`);
-        const firstActiveResource = (data.resources || []).find((row) => (
-            row.status !== "inactive" && row.available_for_option_link !== false
-        ));
+        const currentResource = (data.resources || []).find(row => row.id === current?.resource_id);
+        const kind = currentResource ? resourceKind(currentResource) : "component";
+        const firstActiveResource = categoryResources.find(row => resourceKind(row) === kind
+            && row.status !== "inactive" && !row.linked_to_product && row.available_for_option_link !== false);
         setEditing({
             option, value,
             mode: current?.mode || "resource",
+            resource_kind: kind,
             resource_id: current?.resource_id || firstActiveResource?.id || "",
             direct_amount: current?.direct_amount ?? "",
             quantity: current?.quantity || 1,
         });
+    }
+
+    function chooseResourceKind(kind) {
+        const first = categoryResources.find(row => resourceKind(row) === kind && row.status !== "inactive"
+            && !row.linked_to_product && row.available_for_option_link !== false);
+        setEditing(row => ({ ...row, mode: "resource", resource_kind: kind, resource_id: first?.id || "" }));
     }
 
     async function save() {
@@ -176,13 +194,16 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
                     <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
                         <h3 className="text-lg font-black">{editing.option.name}: {editing.value.name}</h3>
                         <p className="mt-1 text-xs text-slate-500">{editing.option.isFillField ? "تُضاف هذه التكلفة فقط عندما يرسل العميل قيمة غير فارغة في هذا الحقل." : "تُضاف هذه التكلفة فقط عند اختيار العميل لهذه القيمة."}</p>
-                        <div className="mt-5 grid grid-cols-2 gap-2">
-                            <button onClick={() => setEditing((row) => ({ ...row, mode: "resource" }))} className={`rounded-xl border p-3 text-sm font-bold ${editing.mode === "resource" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}>مكوّن مشترك</button>
+                        <div className="mt-5 grid grid-cols-3 gap-2">
+                            <button type="button" onClick={() => chooseResourceKind("component")} className={`rounded-xl border p-3 text-sm font-bold ${editing.mode === "resource" && editing.resource_kind === "component" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}>مكوّن</button>
+                            <button type="button" onClick={() => chooseResourceKind("service")} className={`rounded-xl border p-3 text-sm font-bold ${editing.mode === "resource" && editing.resource_kind === "service" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}>خدمة</button>
                             <button onClick={() => setEditing((row) => ({ ...row, mode: "direct" }))} className={`rounded-xl border p-3 text-sm font-bold ${editing.mode === "direct" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}>مبلغ مباشر</button>
                         </div>
                         {editing.mode === "resource" ? (
                             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                <label className="text-xs font-bold text-slate-500">المكوّن أو الخدمة<select value={editing.resource_id} onChange={(e) => setEditing((row) => ({ ...row, resource_id: e.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm text-slate-900"><option value="">اختر المكوّن</option>{(data.resources || []).map((resource) => <option key={resource.id} value={resource.id} disabled={resource.linked_to_product || resource.status === "inactive" || resource.available_for_option_link === false}>{resource.name} — {money(resource.unit_cost)}{resource.status === "inactive" ? " — موقوف" : resource.linked_to_product ? " — مرتبط بالمنتج" : ""}</option>)}</select></label>
+                                <label className="text-xs font-bold text-slate-500">{editing.resource_kind === "component" ? "المكوّن" : "الخدمة"}<select aria-label={editing.resource_kind === "component" ? "مكوّن خيار العميل" : "خدمة خيار العميل"} value={editing.resource_id} onChange={(e) => setEditing((row) => ({ ...row, resource_id: e.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm text-slate-900"><option value="">{editing.resource_kind === "component" ? "اختر المكوّن" : "اختر الخدمة"}</option>{editorResources.map((resource) => <option key={resource.id} value={resource.id} disabled={resource.linked_to_product || resource.status === "inactive" || resource.available_for_option_link === false}>{resource.name} — {money(resource.unit_cost)}{resource.status === "inactive" ? " — موقوف" : resource.linked_to_product ? " — مرتبط بالمنتج" : !categoryResources.some(row => row.id === resource.id) ? " — الربط الحالي" : ""}</option>)}</select>
+                                    {!categoryId && <span className="mt-2 block text-amber-700">حدد تصنيف المنتج لعرض المكونات والخدمات المناسبة.</span>}
+                                </label>
                                 <label className="text-xs font-bold text-slate-500">الكمية<input type="number" min="0.0001" step="0.01" value={editing.quantity} onChange={(e) => setEditing((row) => ({ ...row, quantity: e.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm text-slate-900" /></label>
                             </div>
                         ) : <label className="mt-4 block text-xs font-bold text-slate-500">التكلفة الإضافية<input type="number" min="0" step="0.01" value={editing.direct_amount} onChange={(e) => setEditing((row) => ({ ...row, direct_amount: e.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm text-slate-900" /></label>}

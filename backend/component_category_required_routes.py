@@ -230,6 +230,14 @@ def make_component_category_required_router(
             ),
             "updated_at": now,
         }
+        from employee_price_approval import requires_mobile_price_approval, propose_mobile_service_cost
+        proposal = {}
+        if requires_mobile_price_approval(user) and (kind == "service" or before.get("kind") == "service"):
+            proposal = await propose_mobile_service_cost(db, user=user, resource=before, amount=amount, client_request_id=payload.get("client_request_id"))
+            # Metadata remains editable; shared financial defaults are owned
+            # exclusively by the separate dashboard approval transaction.
+            for key in component_cost_metadata(track_inventory=track_inventory, amount=amount, purchase_cost=purchase_cost):
+                patch.pop(key, None)
         await db[RESOURCES].update_one(selector, {"$set": patch})
         await bump_product_cost_revision(db, user_id)
         option_impacted = await db[BINDINGS].count_documents(
@@ -278,7 +286,17 @@ def make_component_category_required_router(
             "created_at": now,
         })
         saved = await db[RESOURCES].find_one(selector, {"_id": 0})
-        return {"ok": True, "resource": saved, "impacted_bindings": impacted}
+        return {"ok": True, "resource": saved, "impacted_bindings": impacted, **proposal}
+
+    @router.put("/components-v2/{resource_id}/price-review")
+    async def request_component_price_review(resource_id: str, payload: dict = Body(...), user: dict = Depends(current_user)):
+        from employee_price_approval import requires_mobile_price_approval
+        if not requires_mobile_price_approval(user):
+            raise HTTPException(403, detail={"code": "mobile_price_proposal_required"})
+        resource = await db[RESOURCES].find_one({"user_id": str(user["id"]), "id": resource_id}, {"_id": 0})
+        if not resource or resource.get("kind") != "service" or payload.get("kind", "service") != "service":
+            raise HTTPException(422, detail={"code": "service_price_proposal_required"})
+        return await update_component(resource_id, payload, user)
 
     @router.put("/components-v2/{resource_id}/status")
     async def update_component_status(

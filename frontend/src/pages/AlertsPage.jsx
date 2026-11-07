@@ -31,6 +31,7 @@ const TYPE_LABEL = {
     unmatched_order: "طلب غير مطابق",
     high_ad_debt: "مديونية إعلانات مرتفعة",
     fulfillment_stop: "إيقاف تجهيز طلب",
+    employee_price_change: "طلب تغيير سعر",
 };
 
 
@@ -84,6 +85,11 @@ export default function AlertsPage() {
         }
     };
 
+    const openAlert = (a) => {
+        if (a.alert_type !== "employee_price_change") onAction(a, "read");
+        navigate(a.related_entity_url);
+    };
+
     const visible = data.alerts.filter((a) => {
         if (filter.severity !== "all" && a.severity !== filter.severity) return false;
         if (filter.type !== "all" && a.alert_type !== filter.type) return false;
@@ -99,7 +105,7 @@ export default function AlertsPage() {
                         التنبيهات الذكية
                     </h1>
                     <p className="text-xs sm:text-sm text-slate-600 mt-1">
-                        كل أحداث التسويات والمديونيات التي تحتاج انتباهك في مكان واحد.
+                        طلبات تغيير الأسعار وأحداث التسويات والمديونيات التي تحتاج انتباهك في مكان واحد.
                     </p>
                 </div>
                 <button
@@ -185,7 +191,11 @@ export default function AlertsPage() {
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-start justify-between gap-2">
                                             <div>
-                                                <div className="text-sm font-extrabold text-slate-900">{a.title}</div>
+                                                {a.alert_type === "employee_price_change" && a.related_entity_url ? (
+                                                    <button onClick={() => openAlert(a)} className="text-start text-sm font-extrabold text-slate-900 hover:underline">{a.title}</button>
+                                                ) : (
+                                                    <div className="text-sm font-extrabold text-slate-900">{a.title}</div>
+                                                )}
                                                 <div className="text-xs text-slate-600 mt-0.5">{a.message}</div>
                                                 <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-1">
                                                     <span>{TYPE_LABEL[a.alert_type] || a.alert_type}</span>
@@ -199,8 +209,8 @@ export default function AlertsPage() {
 
                                         <div className="flex flex-wrap items-center gap-2 mt-3">
                                             {a.related_entity_url && (
-                                                <button onClick={() => { onAction(a, "read"); navigate(a.related_entity_url); }} className="text-[11px] bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-2.5 py-1 rounded font-bold inline-flex items-center gap-1" data-testid={`alerts-page-goto-${a.id}`}>
-                                                    <ArrowSquareOut size={11} weight="bold" /> فتح المعني
+                                                <button onClick={() => openAlert(a)} className="text-[11px] bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-2.5 py-1 rounded font-bold inline-flex items-center gap-1" data-testid={`alerts-page-goto-${a.id}`}>
+                                                    <ArrowSquareOut size={11} weight="bold" /> {a.alert_type === "employee_price_change" ? "مراجعة تغيير السعر" : "فتح المعني"}
                                                 </button>
                                             )}
                                             {a.status === "new" && (

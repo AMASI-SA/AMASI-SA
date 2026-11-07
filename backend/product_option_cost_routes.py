@@ -233,6 +233,12 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
         now = _now()
         before = await db[RESOURCES].find_one({"user_id": user_id, "id": resource_id}, {"_id": 0})
         require_active_component(before)
+        from employee_price_approval import propose_mobile_service_cost, requires_mobile_price_approval
+        if requires_mobile_price_approval(user) and str(before.get("kind") or "") == "service":
+            return await propose_mobile_service_cost(
+                db, user=user, resource=before, amount=amount,
+                client_request_id=payload.get("client_request_id"),
+            )
         await db[RESOURCES].update_one(
             {"user_id": user_id, "id": resource_id},
             {"$set": {"unit_cost": amount, "updated_at": now}},
@@ -294,6 +300,8 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             resources.append(row)
         return {
             "salla_product_id": salla_product_id,
+            "cost_category_id": product.get("cost_category_id"),
+            "cost_category_name": product.get("cost_category_name"),
             "bindings": [await _binding_view(db, row) for row in bindings],
             "product_links": [_serialize(row) for row in product_links],
             "product_resource_ids": sorted(product_resource_ids),
@@ -309,6 +317,13 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
         mode = _text(payload.get("mode"))
         if mode not in {"resource", "direct"}:
             raise HTTPException(status_code=422, detail={"code": "invalid_cost_mode"})
+        from employee_price_approval import requires_mobile_price_approval
+        if mode == "resource" and requires_mobile_price_approval(user):
+            existing = await db[BINDINGS].find_one({"user_id": user_id, "salla_product_id": str(product["salla_product_id"]),
+                "option_id": str(option_id), "value_id": str(value_id)}, {"_id": 0})
+            if existing and existing.get("mode") == "direct":
+                raise HTTPException(409, detail={"code": "direct_cost_removal_requires_approval",
+                    "message": "اعتمد إزالة السعر المباشر أولًا قبل استبداله بخدمة أو مكوّن."})
         resource_id = _text(payload.get("resource_id")) or None
         direct_amount = _number(payload.get("direct_amount"))
         quantity = _number(payload.get("quantity")) or 1.0
@@ -356,6 +371,9 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             "quantity": quantity,
             "updated_at": now,
         }
+        from employee_price_approval import requires_mobile_price_approval, propose_mobile_option_cost
+        if mode == "direct" and requires_mobile_price_approval(user):
+            return await propose_mobile_option_cost(db, user=user, product=product, patch=patch, client_request_id=payload.get("client_request_id"))
         await db[BINDINGS].update_one(
             selector,
             {"$set": patch, "$setOnInsert": {"id": uuid.uuid4().hex, "created_at": now}},
@@ -365,10 +383,24 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
         saved = await db[BINDINGS].find_one(selector, {"_id": 0})
         return {"ok": True, "binding": await _binding_view(db, saved or patch)}
 
+    @router.put("/products-v2/{product_id}/option-costs/{option_id}/{value_id}/review")
+    async def request_option_cost_review(product_id: str, option_id: str, value_id: str, payload: dict = Body(...), user: dict = Depends(current_user)):
+        from employee_price_approval import requires_mobile_price_approval
+        if not requires_mobile_price_approval(user) or payload.get("mode") != "direct":
+            raise HTTPException(403, detail={"code": "mobile_direct_price_proposal_required"})
+        return await save_option_cost(product_id, option_id, value_id, payload, user)
+
     @router.delete("/products-v2/{product_id}/option-costs/{option_id}/{value_id}")
-    async def delete_option_cost(product_id: str, option_id: str, value_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+    async def delete_option_cost(product_id: str, option_id: str, value_id: str, user: dict = Depends(current_user), payload: dict | None = Body(None)) -> dict[str, Any]:
         user_id = str(user["id"])
         product = await _product(db, user_id, product_id)
+        from employee_price_approval import requires_mobile_price_approval, propose_mobile_option_removal
+        if requires_mobile_price_approval(user):
+            binding = await db[BINDINGS].find_one({"user_id": user_id, "salla_product_id": str(product["salla_product_id"]),
+                "option_id": str(option_id), "value_id": str(value_id)}, {"_id": 0})
+            if binding and binding.get("mode") == "direct":
+                return await propose_mobile_option_removal(db, user=user, product=product, binding=binding,
+                    client_request_id=(payload or {}).get("client_request_id"))
         result = await db[BINDINGS].delete_one({
             "user_id": user_id,
             "salla_product_id": str(product["salla_product_id"]),
@@ -378,6 +410,19 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
         if result.deleted_count:
             await bump_product_cost_revision(db, user_id)
         return {"ok": True, "deleted": result.deleted_count}
+
+    @router.delete("/products-v2/{product_id}/option-costs/{option_id}/{value_id}/review")
+    async def request_option_removal_review(product_id: str, option_id: str, value_id: str,
+                                            payload: dict = Body(...), user: dict = Depends(current_user)):
+        from employee_price_approval import requires_mobile_price_approval
+        if not requires_mobile_price_approval(user):
+            raise HTTPException(403, detail={"code": "mobile_direct_price_proposal_required"})
+        product = await _product(db, str(user["id"]), product_id)
+        binding = await db[BINDINGS].find_one({"user_id": str(user["id"]), "salla_product_id": str(product["salla_product_id"]),
+            "option_id": str(option_id), "value_id": str(value_id)}, {"_id": 0})
+        if not binding or binding.get("mode") != "direct":
+            raise HTTPException(409, detail={"code": "direct_cost_binding_required"})
+        return await delete_option_cost(product_id, option_id, value_id, user, payload)
 
     @router.post("/products-v2/{product_id}/calculate-cost")
     async def calculate_selected_cost(product_id: str, payload: dict = Body(...), user: dict = Depends(current_user)) -> dict[str, Any]:
