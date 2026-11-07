@@ -8,6 +8,7 @@ facts (with Google kept as an explicitly labelled transitional read). Salaries, 
 payment fee formulae stay inherited from the legacy dashboard response.
 """
 from __future__ import annotations
+from product_traffic_sources import load_product_traffic_sources, resolve_traffic_source, add_traffic_units, traffic_sources
 
 import asyncio
 import functools
@@ -389,6 +390,7 @@ def _finalize_product_profit_rows(
             "sku": raw.get("sku") or "",
             "image_url": raw.get("image_url") or "",
             "units_sold": round(units, 2),
+            "traffic_sources": traffic_sources(raw, total_units=round(units, 2)),
             "orders_count": int(raw.get("orders_count") or 0),
             "average_unit_cost": average_unit_cost,
             "total_sales": sales,
@@ -561,6 +563,7 @@ async def build_mezan_v2_product_cost(
     authority = await load_order_cost_authority(
         db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
     )
+    traffic_by_order = await load_product_traffic_sources(db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS))
 
     totals = defaultdict(float)
     source_lines = defaultdict(int)
@@ -720,6 +723,7 @@ async def build_mezan_v2_product_cost(
                 "cost_sources": set(),
             })
             row["units_sold"] += _float(line["quantity"]) * product_scale
+            add_traffic_units(row, traffic_by_order.get(id(order)) or resolve_traffic_source(order), _float(line["quantity"]) * product_scale)
             if line["line_sales"] is None:
                 row["sales_conversion_complete"] = False
             else:
@@ -871,6 +875,7 @@ async def build_mezan_v2_product_cost_cooperative(
     authority = await load_order_cost_authority(
         db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
     )
+    traffic_by_order = await load_product_traffic_sources(db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS))
 
     totals = defaultdict(float)
     source_lines = defaultdict(int)
@@ -1032,6 +1037,7 @@ async def build_mezan_v2_product_cost_cooperative(
                 "cost_sources": set(),
             })
             row["units_sold"] += _float(line["quantity"]) * product_scale
+            add_traffic_units(row, traffic_by_order.get(id(order)) or resolve_traffic_source(order), _float(line["quantity"]) * product_scale)
             if line["line_sales"] is None:
                 row["sales_conversion_complete"] = False
             else:
@@ -2227,6 +2233,7 @@ def make_dashboard_v2_router(
         from_date: str = Query(...),
         to_date: str = Query(...),
         statuses: str = Query("default"),
+        refresh_costs: bool = Query(False),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         current = owner(user)
@@ -2263,6 +2270,8 @@ def make_dashboard_v2_router(
         return {
             "range": {"from_date": from_date, "to_date": to_date, "statuses": selected},
             "items": rows, "count": len(rows),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "complete_count": sum(row["cost_status"] == "complete" for row in rows),
             "incomplete_count": sum(row["cost_status"] != "complete" for row in rows),
             "totals": summarize(rows),
             "source": "unified_orders.quantity + frozen_order_cost_authority_with_catalog_fallback",

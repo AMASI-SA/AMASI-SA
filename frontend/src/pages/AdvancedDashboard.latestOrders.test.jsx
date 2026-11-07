@@ -181,7 +181,8 @@ test("top products header shows period counts and only five rows initially", () 
     expect(markup).toContain("6,979.00 ر.س");
     expect(markup).toContain("280.00 ر.س");
     expect(markup).toContain("5,880.00 ر.س");
-    expect(markup).not.toContain("منتج 1");
+    const visible = document.createElement("div"); visible.innerHTML = markup;
+    expect(visible.textContent).not.toContain("منتج 1");
     expect(markup).toContain('data-testid="advanced-top-product-row-product-5"');
     expect(markup).not.toContain('data-testid="advanced-top-product-row-product-6"');
 });
@@ -207,7 +208,9 @@ test("top products removes visible names and opens an unpriced product in a new 
         />
     );
 
-    expect(markup).not.toContain("اسم يجب ألا يظهر");
+    const visible = document.createElement("div"); visible.innerHTML = markup;
+    expect(visible.textContent).not.toContain("اسم يجب ألا يظهر");
+    expect(visible.querySelector('button[aria-label="مصادر مبيعات اسم يجب ألا يظهر"]')).not.toBeNull();
     expect(markup).toContain("https://cdn.example.com/missing-product.png");
     expect(markup).toContain("بدون تكلفة");
     expect(markup).toContain('target="_blank"');
@@ -875,4 +878,57 @@ test("executive profit hides stale numeric profit when product choices are unres
     expect(markup).toContain("بانتظار حسم خيارات المنتجات وتكاليفها");
     expect(markup).not.toContain("987,654.32");
     expect(markup).not.toContain('data-testid="advanced-profit-net-margin"');
+});
+
+test("top product source menus start hidden, toggle independently, and remain excluded from print", async () => {
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    const rows = [1, 2].map(id => ({
+        identity: `source-product-${id}`, name: `شال ${id}`, units_sold: 3, total_sales: 100, total_cost: 30, net_profit: 70, cost_status: "complete",
+        traffic_sources: [
+            { platform: "snapchat", platform_label: "سناب شات", account_id: `snap-account-${id}`, account_status: "confirmed", attribution_status: "confirmed", units_sold: 2 },
+            { platform: "unknown", platform_label: "مصدر غير متحقق", account_id: null, account_status: "unknown", attribution_status: "unknown", units_sold: 1 },
+        ],
+    }));
+    const container = document.createElement("div"); document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+        await act(async () => root.render(<TopProductsCard rows={rows} />));
+        const header = container.querySelector(".dashboard-panel-header");
+        expect(header.tagName).toBe("DIV");
+        expect(header.textContent).toContain("المنتجات الأكثر مبيعًا");
+        const collapse = header.querySelector('button[aria-label="طي بطاقة المنتجات الأكثر مبيعًا"]');
+        expect(collapse).not.toBeNull();
+        const body = document.getElementById(collapse.getAttribute("aria-controls"));
+        await act(async () => collapse.click());
+        expect(body.hidden).toBe(true);
+        await act(async () => collapse.click());
+        expect(body.hidden).toBe(false);
+        expect(container.textContent).not.toContain("[object Object]");
+        const buttons = [...container.querySelectorAll('button[aria-controls^="product-sources-"]')];
+        expect(buttons).toHaveLength(2);
+        expect(buttons[0].textContent).toBe("⋮");
+        for (const button of buttons) {
+            expect(button.getAttribute("aria-expanded")).toBe("false");
+            expect(document.getElementById(button.getAttribute("aria-controls")).hidden).toBe(true);
+        }
+        expect(container.textContent).not.toContain("snap-account-1");
+        await act(async () => buttons[0].click());
+        expect(buttons[0].getAttribute("aria-expanded")).toBe("true");
+        const panel = document.getElementById(buttons[0].getAttribute("aria-controls"));
+        expect(panel.hidden).toBe(false);
+        expect(panel.textContent).toContain("snap-account-1");
+        expect(panel.textContent).toContain("2 قطعة");
+        expect(panel.textContent).toContain("حساب غير محدد");
+        expect(buttons[1].getAttribute("aria-expanded")).toBe("false");
+        expect(container.textContent).not.toContain("snap-account-2");
+        expect(panel.classList.contains("product-traffic-sources")).toBe(true);
+        expect(buttons[0].classList.contains("product-traffic-sources")).toBe(true);
+        expect(container.querySelector("style").textContent).toContain("@media print { .product-traffic-sources { display: none !important; } }");
+        await act(async () => buttons[0].click());
+        expect(panel.hidden).toBe(true);
+        expect(container.textContent).not.toContain("snap-account-1");
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+    }
 });

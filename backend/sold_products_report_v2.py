@@ -23,6 +23,8 @@ from product_catalog_cost_resolution import (
 )
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS
+from product_traffic_sources import load_product_traffic_sources, resolve_traffic_source, add_traffic_units, traffic_sources
+from sold_product_cost_details import detail_group, detail_groups, add_group, finish_groups
 
 CATALOG_FIELDS = {
     "_id": 0, "id": 1, "salla_product_id": 1, "mezan_product_id": 1,
@@ -77,7 +79,7 @@ def _decimal(value: Any) -> Decimal | None:
 def summarize(rows: list[dict]) -> dict:
     units = sum((_decimal(row["units_sold"]) or Decimal(0) for row in rows), Decimal(0))
     costed = [row for row in rows if row["total_cost"] is not None]
-    known = sum((_decimal(row["total_cost"]) or Decimal(0) for row in costed), Decimal(0))
+    known = sum((_decimal(row.get("known_cost_total", row["total_cost"])) or Decimal(0) for row in rows), Decimal(0))
     missing = len(costed) != len(rows)
     return {
         "units_sold": float(units),
@@ -94,12 +96,14 @@ def aggregate_sold_products(
     *,
     authority: Any = None,
     catalog_context: dict[str, Any] | None = None,
+    traffic_by_order: dict | None = None,
 ) -> list[dict]:
     by_id, by_variant, by_sku = index_current_catalog_products(products)
     profile_map = {str(row.get("salla_product_id")): row for row in profiles}
     aggregated: dict[str, dict] = {}
     context = catalog_context or {}
     for order in orders:
+        traffic = (traffic_by_order or {}).get(id(order)) or resolve_traffic_source(order)
         for item in order.get("products") or []:
             if not isinstance(item, dict):
                 continue
@@ -159,24 +163,39 @@ def aggregate_sold_products(
                             cost_source = "bundle_expected"
                     unit = amount / quantity if amount is not None else None
             row = aggregated.setdefault(key, {
-                "name": name, "sku": sku, "product_id": identity,
+                "report_key": key, "name": name, "sku": sku, "product_id": identity,
                 "mezan_product_id": str((product or {}).get("mezan_product_id") or ""),
                 "catalog_product_found": bool(product),
                 "image_url": (product or {}).get("main_image") or item.get("image_url") or item.get("image") or "",
                 "units_sold": Decimal(0), "_known_cost": Decimal(0),
                 "unit_cost": None, "cost_status": "complete", "cost_source": "",
+                "_groups": {}, "_reasons": set(),
             })
+            groups = detail_groups(cost, item, quantity)
+            # The legacy explicit bundle map is used by pure-helper callers.
+            if authority is None and bundle_costs is not None and bundle_known:
+                legacy_cost = {"calculation_cost_available": amount is not None,
+                    "line_total": float(amount or 0), "cost_authority": cost_source,
+                    "missing_cost_reasons": [] if amount is not None else ["bundle_cost_incomplete"]}
+                groups = [detail_group(legacy_cost, item, quantity)]
+            for group in groups:
+                add_group(row, group)
+                row["_known_cost"] += _decimal(group["known_total_cost"]) or Decimal(0)
             row["units_sold"] += quantity
+            add_traffic_units(row, traffic, quantity)
             if unit is None:
                 row["cost_status"] = "incomplete"
             else:
                 row["unit_cost"] = round(float(unit), 2)
                 row["cost_source"] = cost_source
-                row["_known_cost"] += unit * quantity
     rows = list(aggregated.values())
     for row in rows:
         row["units_sold"] = float(row["units_sold"])
         known_cost = row.pop("_known_cost")
+        row["known_cost_total"] = round(float(known_cost), 2)
+        finish_groups(row, context.get("resources"))
+        row["traffic_sources"] = traffic_sources(row)
+        row.pop("_traffic_sources", None)
         row["total_cost"] = round(float(known_cost), 2) if row["cost_status"] == "complete" else None
         if row["cost_status"] == "complete":
             row["unit_cost"] = round(float(known_cost / Decimal(str(row["units_sold"]))), 2)
@@ -216,4 +235,5 @@ async def load_sold_products(db: Any, user_id: str, orders: list[dict]) -> list[
     authority = await load_order_cost_authority(
         db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
     )
-    return aggregate_sold_products(orders, products, profiles, authority=authority, catalog_context=context)
+    traffic = await load_product_traffic_sources(db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS))
+    return aggregate_sold_products(orders, products, profiles, authority=authority, catalog_context=context, traffic_by_order=traffic)
