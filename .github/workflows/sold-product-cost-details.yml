@@ -4,6 +4,10 @@ on:
     branches: [hotfix/prod-snap-meta-final]
     paths:
       - 'frontend/src/pages/SoldProducts*'
+      - 'frontend/src/pages/AdvancedDashboard*'
+      - 'frontend/src/components/ProductTrafficSources.jsx'
+      - 'backend/product_traffic_sources.py'
+      - 'backend/tests/test_product_traffic_sources.py'
       - 'backend/sold_product*'
       - 'backend/order_cost_authority.py'
       - 'backend/current_bundle_reporting_estimate.py'
@@ -32,7 +36,7 @@ jobs:
       - name: Verify accordion, refresh all filtered products and both print views
         env:
           CI: 'true'
-        run: yarn --cwd frontend test --watchAll=false --runInBand --resetMocks=false --runTestsByPath src/pages/SoldProducts.test.jsx
+        run: yarn --cwd frontend test --watchAll=false --runInBand --resetMocks=false --runTestsByPath src/pages/SoldProducts.test.jsx src/pages/AdvancedDashboard.latestOrders.test.jsx
       - run: >-
           python -m pip install pytest==9.1.1 pytest-asyncio==1.3.0 fastapi==0.142.2
           pydantic==2.13.5 httpx==0.28.1 motor==3.7.1 pymongo==4.18.2
@@ -46,6 +50,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE: '1'
         run: >-
           python -B -m pytest -q
+          backend/tests/test_product_traffic_sources.py
           backend/tests/test_sold_product_cost_details.py
           backend/tests/test_sold_products_report_v2.py
           backend/tests/test_order_cost_authority.py

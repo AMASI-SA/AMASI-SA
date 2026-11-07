@@ -123,3 +123,45 @@ test("variants sharing product and SKU keep separate accordion and refresh ident
     expect(host.textContent).not.toContain("اكتملت تكلفة 2 منتج");
     await act(async () => root.unmount()); host.remove();
 });
+
+test("shows per-account source units on screen and excludes them from both print modes", () => {
+    const rows = [product("sources", { units_sold: 6, traffic_sources: [
+        { platform: "snapchat", platform_label: "سناب شات", account_id: "account-123", account_status: "confirmed", attribution_status: "confirmed", units_sold: 2 },
+        { platform: "tiktok", platform_label: "تيك توك", account_id: null, account_status: "unknown", attribution_status: "platform_only", units_sold: 1 },
+        { platform: "direct", platform_label: "مباشر", account_id: null, account_status: "not_applicable", attribution_status: "confirmed", units_sold: 3 },
+    ] })];
+    const screen = renderToStaticMarkup(<SoldTable rows={rows} onToggle={() => {}} />);
+    expect(screen).toContain("account-123");
+    expect(screen).toContain("حساب غير محدد");
+    expect(screen).toContain("مباشر");
+    for (const count of [1, 2, 3]) expect(screen).toContain(`${count} قطعة`);
+    for (const allDetails of [false, true]) {
+        const printed = renderToStaticMarkup(<SoldTable rows={rows} printable allDetails={allDetails} />);
+        for (const value of ["account-123", "سناب شات", "تيك توك", "مباشر", "product-traffic-sources", "القطع حسب المنصة والحساب"]) expect(printed).not.toContain(value);
+    }
+});
+
+test("missing source data remains explicitly unknown instead of direct", () => {
+    const screen = renderToStaticMarkup(<SoldTable rows={[product("unknown")]} onToggle={() => {}} />);
+    expect(screen).toContain("مصدر القطع غير متحقق");
+    expect(screen).not.toContain("مباشر");
+    expect(screen).toContain("@media print { .product-traffic-sources");
+});
+
+
+test("source quantities preserve fractional return-policy units and unavailable attribution stays explicit", () => {
+    const rows = [product("fractional-sources", { units_sold: 2, traffic_sources: [
+        { platform: "snapchat", platform_label: "سناب شات", account_id: "fractional-account", account_status: "confirmed", attribution_status: "confirmed", units_sold: 0.5 },
+        { platform: "direct", platform_label: "مباشر", account_id: null, account_status: "not_applicable", attribution_status: "unavailable", units_sold: 1.5 },
+    ] })];
+    const screen = renderToStaticMarkup(<SoldTable rows={rows} onToggle={() => {}} />);
+    expect(screen).toContain("0.5 قطعة");
+    expect(screen).toContain("1.5 قطعة");
+    expect(screen).toContain("تعذر تحديث المصدر");
+    expect(screen).not.toContain("مباشر");
+    for (const allDetails of [false, true]) {
+        const printed = renderToStaticMarkup(<SoldTable rows={rows} printable allDetails={allDetails} />);
+        expect(printed).not.toContain("تعذر تحديث المصدر");
+        expect(printed).not.toContain("fractional-account");
+    }
+});

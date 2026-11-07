@@ -23,6 +23,7 @@ from product_catalog_cost_resolution import (
 )
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS
+from product_traffic_sources import load_product_traffic_sources, resolve_traffic_source, add_traffic_units, traffic_sources
 from sold_product_cost_details import detail_group, detail_groups, add_group, finish_groups
 
 CATALOG_FIELDS = {
@@ -95,12 +96,14 @@ def aggregate_sold_products(
     *,
     authority: Any = None,
     catalog_context: dict[str, Any] | None = None,
+    traffic_by_order: dict | None = None,
 ) -> list[dict]:
     by_id, by_variant, by_sku = index_current_catalog_products(products)
     profile_map = {str(row.get("salla_product_id")): row for row in profiles}
     aggregated: dict[str, dict] = {}
     context = catalog_context or {}
     for order in orders:
+        traffic = (traffic_by_order or {}).get(id(order)) or resolve_traffic_source(order)
         for item in order.get("products") or []:
             if not isinstance(item, dict):
                 continue
@@ -179,6 +182,7 @@ def aggregate_sold_products(
                 add_group(row, group)
                 row["_known_cost"] += _decimal(group["known_total_cost"]) or Decimal(0)
             row["units_sold"] += quantity
+            add_traffic_units(row, traffic, quantity)
             if unit is None:
                 row["cost_status"] = "incomplete"
             else:
@@ -190,6 +194,8 @@ def aggregate_sold_products(
         known_cost = row.pop("_known_cost")
         row["known_cost_total"] = round(float(known_cost), 2)
         finish_groups(row, context.get("resources"))
+        row["traffic_sources"] = traffic_sources(row)
+        row.pop("_traffic_sources", None)
         row["total_cost"] = round(float(known_cost), 2) if row["cost_status"] == "complete" else None
         if row["cost_status"] == "complete":
             row["unit_cost"] = round(float(known_cost / Decimal(str(row["units_sold"]))), 2)
@@ -229,4 +235,5 @@ async def load_sold_products(db: Any, user_id: str, orders: list[dict]) -> list[
     authority = await load_order_cost_authority(
         db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
     )
-    return aggregate_sold_products(orders, products, profiles, authority=authority, catalog_context=context)
+    traffic = await load_product_traffic_sources(db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS))
+    return aggregate_sold_products(orders, products, profiles, authority=authority, catalog_context=context, traffic_by_order=traffic)

@@ -6,6 +6,7 @@ Only server startup/decorators are excluded by the existing handler loader.
 """
 import asyncio
 import copy
+import hashlib
 import json
 import os
 import time
@@ -22,6 +23,54 @@ calls = Counter()
 current_test = None
 sequence = 0
 active_authority_audit = ContextVar('dashboard_authority_audit', default=None)
+active_traffic_audit = ContextVar('dashboard_traffic_audit', default=None)
+TRAFFIC_LEDGER = 'mezan_attribution_order_ledger_v1'
+TRAFFIC_PROJECTION_SHA256 = '16e4bd73497129bfd6f8f065f8774ad3bcbcd41574c4b4902bd4516bcf732f88'
+
+
+def _traffic_cohort(user_id, orders):
+    numbers = []
+    for order in orders:
+        assert order.get('user_id') in (None, user_id)
+        # The immutable fixture has business order numbers and no provider IDs.
+        assert not any(order.get(key) for key in ('order_id', 'id', 'reference_id'))
+        number = str(order.get('order_number') or '')
+        if number:
+            numbers.append(number)
+    assert len(numbers) == len(set(numbers))
+    return {'user_id': str(user_id), 'numbers': sorted(numbers)}
+
+
+def _traffic_command(operation, command, *, database_name):
+    collection = command.get(operation)
+    projection = copy.deepcopy(command.get('projection', {}))
+    return {'operation': operation, 'collection': collection,
+            'database': database_name, 'command_database': command.get('$db'),
+            'filter': copy.deepcopy(command.get('filter', {})),
+            'projection_sha256': hashlib.sha256(json.dumps(projection, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
+            'unreviewed_fields': sorted(set(command) - {'find', 'filter', 'projection', '$db', 'lsid', '$clusterTime'})}
+
+
+def _expected_traffic_commands(audit):
+    cohorts = audit['traffic_cohorts']
+    assert len(cohorts) <= 1, 'Traffic must load once per request cohort'
+    expected = []
+    for cohort in cohorts:
+        owner, numbers = cohort['user_id'], cohort['numbers']
+        assert owner == audit['owner_id']
+        assert numbers == sorted(set(numbers)) and all(numbers)
+        assert numbers == [row['order_number'] for row in audit['cohorts'][0]['orders']]
+        if not numbers:
+            continue
+        for collection, query, projection_hash in (
+            ('unified_orders', {'user_id': owner, 'order_number': {'$in': numbers}}, TRAFFIC_PROJECTION_SHA256),
+            (TRAFFIC_LEDGER, {'user_id': owner, 'order_key': {'$in': numbers}},
+             hashlib.sha256(json.dumps({'_id': 0, 'user_id': 1, 'order_key': 1, 'attribution': 1}, sort_keys=True, separators=(',', ':')).encode()).hexdigest()),
+        ):
+            expected.append({'operation': 'find', 'collection': collection,
+                             'database': audit['database'], 'command_database': audit['database'],
+                             'filter': query, 'projection_sha256': projection_hash, 'unreviewed_fields': []})
+    return expected
 
 # This is an explicit read-contract extension for MZ2 historical cost authority,
 # not a new JSON oracle. The immutable fixtures contain no historical cost rows.
@@ -190,6 +239,32 @@ def expected_cost_completeness_json(historical_json):
     if 'product_cost_v2' not in response or 'totals' not in response:
         return historical_json
     costs = response['product_cost_v2']
+    # Independent oracle for immutable 05b159dc fixtures: each product belongs
+    # to one seeded order/source, never a ledger account. The mixed seed cycles
+    # these sources, with explicit overrides at 9/10 and historical alias 21.
+    # Return-policy quantity is taken from the unchanged historical row.
+    labels = {'snapchat': 'سناب شات', 'meta': 'ميتا', 'tiktok': 'تيك توك',
+              'google': 'جوجل', 'direct': 'مباشر'}
+    for index, row in enumerate(costs.get('product_rows', [])):
+        pid = str(row['salla_product_id'])
+        fixture_index = 21 if pid == 'historical' else int(pid)
+        assert 0 <= fixture_index < 40, 'Unreviewed immutable fixture product'
+        platform = ('snapchat', 'meta', 'tiktok', 'google', 'direct')[fixture_index % 5]
+        if fixture_index == 9:
+            platform = 'snapchat'
+        elif fixture_index == 10:
+            platform = 'meta'
+        source = {'platform': platform, 'platform_label': labels[platform],
+                  'account_id': None,
+                  'account_status': 'not_applicable' if platform == 'direct' else 'unknown',
+                  'attribution_status': 'confirmed' if platform == 'direct' else 'platform_only',
+                  'units_sold': float(row['units_sold'])}
+        expanded = {}
+        for key, value in row.items():
+            expanded[key] = value
+            if key == 'units_sold':
+                expanded['traffic_sources'] = [source]
+        costs['product_rows'][index] = expanded
     complete = (costs['missing_all_cost_products_count'] == 0
                 and costs['no_products_orders_count'] == 0)
     response['totals']['product_cost_complete'] = complete
@@ -207,23 +282,35 @@ def assert_runtime_read_contract(runtime, baseline):
     audit = runtime['cost_authority_audit']
     expected = _expected_authority_commands(audit)
     assert audit['commands'] == expected, 'Unexpected authority query, scope, operation or batch count'
+    traffic_expected = _expected_traffic_commands(audit)
+    assert audit['traffic_commands'] == traffic_expected, 'Unexpected traffic query, scope, projection or count'
     response = json.loads(runtime['json'])
     assert len(audit['cohorts']) == (0 if 'http_error' in response else 1)
+    assert len(audit['traffic_cohorts']) == len(audit['cohorts'])
     assert not (set(baseline['collections']) & AUTHORITY_COLLECTIONS)
     for collection in AUTHORITY_COLLECTIONS:
         assert runtime['collections'].get(collection, 0) == 0, 'Legacy fixture unexpectedly read historical cost rows'
     observed_collections = set(runtime['collections']) & AUTHORITY_COLLECTIONS
     assert observed_collections == {row['collection'] for row in expected}
+    assert TRAFFIC_LEDGER not in baseline['collections']
+    if traffic_expected:
+        assert runtime['collections'].get(TRAFFIC_LEDGER) == 0, 'Immutable fixture has no account attribution ledger rows'
+    else:
+        assert TRAFFIC_LEDGER not in runtime['collections']
     normalized = {key: copy.deepcopy(value) for key, value in runtime.items()
                   if key != 'cost_authority_audit'}
     normalized['json'] = baseline['json']  # Validated exact approved extension above.
-    for operation, count in Counter(row['operation'] for row in expected).items():
+    for operation, count in Counter(row['operation'] for row in expected + traffic_expected).items():
         assert normalized['commands'].get(operation, 0) >= count
         normalized['commands'][operation] -= count
         if normalized['commands'][operation] == 0:
             del normalized['commands'][operation]
     normalized['collections'] = {key: value for key, value in normalized['collections'].items()
-                                 if key not in AUTHORITY_COLLECTIONS}
+                                 if key not in AUTHORITY_COLLECTIONS and key != TRAFFIC_LEDGER}
+    extra_documents = sum(len(cohort['numbers']) for cohort in audit['traffic_cohorts'])
+    if extra_documents:
+        normalized['documents'] -= extra_documents
+        normalized['collections']['unified_orders'] -= extra_documents
     assert normalized == baseline, 'Existing Mongo commands or document counts changed'
 
 
@@ -258,12 +345,17 @@ def pytest_collection_modifyitems(session, config, items):
         if ARM == 'runtime':
             user = kwargs.get('user', args[4] if len(args) > 4 else cases.OWNER)
             audit = {'version': 1, 'owner_id': str(user['id']),
-                     'database': _fixture_database_name(args[0]), 'cohorts': [], 'commands': []}
+                     'database': _fixture_database_name(args[0]), 'cohorts': [], 'commands': [],
+                     'traffic_cohorts': [], 'traffic_commands': []}
             commands = args[1]
             original_started = commands.started
 
             def started(event):
                 original_started(event)
+                if active_traffic_audit.get() is audit:
+                    audit['traffic_commands'].append(_traffic_command(event.command_name, event.command,
+                                                                     database_name=event.database_name))
+                    return
                 command = _authority_command(event.command_name, event.command,
                                              database_name=event.database_name)
                 if command is not None:
@@ -315,6 +407,7 @@ def pytest_collection_modifyitems(session, config, items):
         original_index = dash.index_current_catalog_products_cooperative
         original_ads = dash.build_salla_ads_executive_breakdown_cooperative
         original_cost = dash.build_mezan_v2_product_cost_cooperative
+        original_traffic = getattr(dash, 'load_product_traffic_sources', None)
 
         class ForcedBudget(cpu.CPUWorkBudget):
             async def checkpoint(self):
@@ -347,6 +440,17 @@ def pytest_collection_modifyitems(session, config, items):
             calls['parser'] += 1
             return await orders_db.orders_to_parsed_cooperative(orders)
 
+        async def traffic(db, user_id, orders, **kwargs):
+            audit = active_authority_audit.get()
+            if audit is None:
+                return await original_traffic(db, user_id, orders, **kwargs)
+            audit['traffic_cohorts'].append(_traffic_cohort(user_id, orders))
+            token = active_traffic_audit.set(audit)
+            try:
+                return await original_traffic(db, user_id, orders, **kwargs)
+            finally:
+                active_traffic_audit.reset(token)
+
         @contextmanager
         def actual(db, scope):
             handler = legacy_handler(db)
@@ -360,7 +464,8 @@ def pytest_collection_modifyitems(session, config, items):
         with patch.object(computation, 'candidate', actual), \
              patch.object(dash, 'index_current_catalog_products_cooperative', index), \
              patch.object(dash, 'build_salla_ads_executive_breakdown_cooperative', ads), \
-             patch.object(dash, 'build_mezan_v2_product_cost_cooperative', cost):
+             patch.object(dash, 'build_mezan_v2_product_cost_cooperative', cost), \
+             patch.object(dash, 'load_product_traffic_sources', traffic, create=True):
             yield
 
     cases.configured = configured

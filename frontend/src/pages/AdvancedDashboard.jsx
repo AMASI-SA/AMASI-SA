@@ -8,6 +8,7 @@ import {
 import { User } from "@phosphor-icons/react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import api from "../lib/api";
+import ProductTrafficSources from "../components/ProductTrafficSources";
 import DashboardPanel from "../components/DashboardPanel";
 import DashboardTableScroll from "../components/DashboardTableScroll";
 import CampaignResearchStatus from "../components/marketing/CampaignResearchStatus";
@@ -315,6 +316,7 @@ export function AbandonedCartsCard({ carts, summary = {} }) {
 
 export function TopProductsCard({ rows, summary = {}, filters = {}, loading = false }) {
     const [visibleCount, setVisibleCount] = useState(5);
+    const [openSources, setOpenSources] = useState({});
     const products = [...(rows || [])].sort((a, b) => Number(b.units_sold || 0) - Number(a.units_sold || 0));
     const productSummary = summary?.product_profit_summary || {};
     const productCount = Math.max(Number(productSummary.product_count || 0), products.length);
@@ -347,6 +349,7 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
     useEffect(() => { setVisibleCount(5); }, [rows]);
     return (
         <Panel className="border-indigo-200" testid="advanced-top-products" title="المنتجات الأكثر مبيعًا">
+            <style>{"@media print { .product-traffic-sources { display: none !important; } }"}</style>
             <div className="flex h-14 items-center justify-between border-b border-indigo-800 bg-indigo-700 px-4 text-white"><h2 className="font-extrabold"><Link to={`/products-v2/sold?from=${encodeURIComponent(filters.from || "")}&to=${encodeURIComponent(filters.to || "")}`} className="flex items-center gap-2 rounded hover:underline focus-visible:outline-2" data-testid="advanced-top-products-report-link"><Trophy className="h-5 w-5" />المنتجات الأكثر مبيعًا ↗</Link></h2><div className="text-left text-[9px] font-bold leading-4"><p>{loading && !rows ? "—" : integer(productCount)} منتجًا خلال الفترة</p><p className="text-indigo-100">بتكلفة سلة {loading && !rows ? "—" : integer(summary.salla_fallback_products_count)} · تكلفة ناقصة {loading && !rows ? "—" : integer(summary.missing_all_cost_products_count)}</p></div></div>
             <div className="dashboard-products-table" tabIndex={0} role="region" aria-label="جدول المنتجات الأكثر مبيعًا"><div className="grid grid-cols-[48px_48px_minmax(80px,1fr)_minmax(86px,1fr)_minmax(86px,1fr)] gap-1.5 border-b px-3 py-2 text-center text-[8px] font-bold leading-4 text-slate-400">
                 <span>المنتج</span>
@@ -371,7 +374,11 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
                     className={`grid min-h-[66px] grid-cols-[48px_48px_minmax(80px,1fr)_minmax(86px,1fr)_minmax(86px,1fr)] items-center gap-1.5 border-b px-3 py-2 last:border-0 ${missingMezanCost ? "bg-amber-50/40" : ""}`}
                     data-testid={`advanced-top-product-row-${item.identity}`}
                 >
-                    <div className="flex justify-center">
+                    <div className="relative flex justify-center">
+                        <button type="button" className="product-traffic-sources print:hidden absolute -left-1 -top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-lg leading-none text-slate-700 shadow-sm"
+                            aria-label={`مصادر مبيعات ${item.name || "المنتج"}`} aria-expanded={!!openSources[item.identity]}
+                            aria-controls={`product-sources-${encodeURIComponent(item.identity)}`}
+                            onClick={() => setOpenSources(current => ({ ...current, [item.identity]: !current[item.identity] }))}>⋮</button>
                         {canOpenProduct ? (
                             <Link
                                 to={buildMezanProductCostHref(item, filters)}
@@ -394,6 +401,10 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
                     <span className={`num whitespace-nowrap text-center text-[10px] font-black ${item.net_profit == null ? "text-slate-400" : Number(item.net_profit) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
                         {item.net_profit == null ? "—" : `${money(item.net_profit)} ر.س`}
                     </span>
+                    <div id={`product-sources-${encodeURIComponent(item.identity)}`} hidden={!openSources[item.identity]} className="col-span-5 product-traffic-sources print:hidden border-t border-slate-100 pt-1.5">
+                        {openSources[item.identity] && <><p className="mb-1 text-[9px] text-slate-500">القطع حسب المنصة والحساب</p>
+                        <ProductTrafficSources sources={item.traffic_sources} /></>}
+                    </div>
                 </div>;
             }) : <div className="p-8 text-center text-xs text-slate-400">{loading ? "جارٍ مزامنة المنتجات المباعة…" : "لا توجد منتجات مباعة في الفترة."}</div>}
             </div>

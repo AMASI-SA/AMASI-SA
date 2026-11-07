@@ -78,11 +78,12 @@ class SourceContract(unittest.TestCase):
                 elif name == 'build_mezan_v2_product_cost' and ast.dump(before) != ast.dump(current_function):
                     # MZ2 bundle-cost correction intentionally reads immutable
                     # order authority in one batch before the existing reducer.
+                    # PR1795 also adds audited unit attribution; financial amounts stay unchanged.
                     # Keep exact reviewed source and cooperative scheduling
                     # parity; behavioral acceptance is in the bundle-cost suite.
                     reviewed = ast.get_source_segment(current, current_function)
                     self.assertEqual(hashlib.sha256(reviewed.encode('utf8')).hexdigest(),
-                        'da8a829b9d68a1f9dc9f71b74c689ddf52f29c22c1777d7180a17b1d336eed48')
+                        '9328bb53c707ed88b66b7b72c23ec466039215e715e8d1c0ec06c316f9040daa')
                     before = current_function
                 else:
                     self.assertEqual(ast.dump(before), ast.dump(current_function))
@@ -126,6 +127,8 @@ class SourceContract(unittest.TestCase):
                     '20617f7ddae35f363ad80fb9406377fe28393e38b3bf9f16b8754ebe56953359',
                     # PR1775: explicit report-only option recovery opt-in; no other reader changes.
                     'a05b89134c078eefeac5ca9bc4e0827d9f5c7ec0769bed7674eca64c71327fb5',
+                    # PR1795: cost evidence plus reviewed owner-scoped traffic batches (gate audited).
+                    '6f41bf4e48896bcea839d16369cbb85bb1be5e33467c702379b2e926bbfe9be0',
                 })
             else:
                 self.assertEqual(before.replace(b'\r\n', b'\n'), current)

@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useReactToPrint } from "react-to-print";
 import api from "../lib/api";
+import ProductTrafficSources from "../components/ProductTrafficSources";
 import { addDaysISO, todaySA } from "../lib/dates";
 import { formatMoney, formatInt } from "../lib/format";
 import DateInput, { isValidISODate } from "../components/DateInput";
@@ -81,7 +82,7 @@ export function CostDetails({ row }) {
 
 export function SoldTable({ rows, printable = false, allDetails = false, expanded = {}, onToggle }) {
     return <table className="w-full text-sm text-right border-collapse min-w-[760px]">
-        <thead className="bg-slate-100 text-slate-700"><tr>{[...(!printable ? ["التفاصيل"] : []), "المنتج", "القطع المباعة", "تكلفة القطعة", "إجمالي التكلفة", "الحالة"].map(label => <th key={label} className="p-3 border-b border-slate-200">{label}</th>)}</tr></thead>
+        <thead className="bg-slate-100 text-slate-700"><tr>{[...(!printable ? ["التفاصيل"] : []), "المنتج", "القطع المباعة", ...(!printable ? ["القطع حسب المنصة والحساب"] : []), "تكلفة القطعة", "إجمالي التكلفة", "الحالة"].map(label => <th key={label} className={`p-3 border-b border-slate-200 ${label === "القطع حسب المنصة والحساب" ? "product-traffic-sources-heading print:hidden" : ""}`}>{label}</th>)}</tr></thead>
         <tbody>{rows.map((row, index) => {
             const key = rowKey(row);
             const open = allDetails || (!printable && expanded[key]);
@@ -91,11 +92,12 @@ export function SoldTable({ rows, printable = false, allDetails = false, expande
                     {!printable && <td className="p-2 w-12"><button type="button" aria-expanded={!!open} aria-controls={detailId} aria-label={`تفاصيل تكلفة ${row.name}`} onClick={() => onToggle(key)} className="rounded border border-violet-200 p-2 text-violet-800 hover:bg-violet-50">{open ? "▼" : "◀"}</button></td>}
                     <td className="p-3"><div className="flex items-center gap-3">{row.image_url && <img src={row.image_url} alt="" className="h-12 w-12 object-cover rounded" />}<div className="font-semibold">{printable ? row.name : <Link target="_blank" rel="noopener noreferrer" className="text-violet-800 underline" to={row.mezan_product_id ? `/products-v2?product=${encodeURIComponent(row.mezan_product_id)}&focus=cost` : `/products-v2?view=list&lookup_sku=${encodeURIComponent(row.sku || row.name || "")}`}>{row.name || "بدون اسم"}</Link>}<span className="block text-xs font-normal text-slate-500" dir="ltr">{row.sku || "—"}</span></div></div></td>
                     <td className="p-3 tabular-nums">{formatInt(row.units_sold)}</td>
+                    {!printable && <td className="p-3 product-traffic-sources print:hidden"><ProductTrafficSources sources={row.traffic_sources} /></td>}
                     <td className="p-3 tabular-nums">{!complete(row) ? "غير مكتملة" : row.unit_cost_varies ? "تختلف حسب الخيارات" : row.unit_cost == null ? "غير مكتملة" : money(row.unit_cost)}</td>
                     <td className="p-3 tabular-nums">{complete(row) ? money(row.total_cost) : <><span className="text-amber-800">الإجمالي غير مكتمل</span><small className="block">المعروف {money(row.known_cost_total ?? 0)}</small></>}</td>
                     <td className="p-3"><span className={`rounded-full px-2 py-1 text-xs ${complete(row) ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{complete(row) ? "مكتمل" : [...new Set((row.missing_cost_reasons || []).map(costReasonLabel))].join("، ") || "تكلفة ناقصة"}</span></td>
                 </tr>
-                {open && <tr id={detailId} className="sold-details-row"><td colSpan={printable ? 5 : 6}><CostDetails row={row} /></td></tr>}
+                {open && <tr id={detailId} className="sold-details-row"><td colSpan={printable ? 5 : 7}><CostDetails row={row} /></td></tr>}
             </Fragment>;
         })}</tbody>
     </table>;
