@@ -24,7 +24,7 @@ function isPosDestination(fact) {
     typeof fact.display_name === "string" && fact.display_name.trim().length > 0;
 }
 
-export default function StoreDeliveryPaymentReview() {
+export default function StoreDeliveryPaymentReview({ driverId = "", embedded = false, onReviewed }) {
   const [items, setItems] = useState([]);
   const [busyId, setBusyId] = useState("");
   const [filter, setFilter] = useState("");
@@ -36,12 +36,17 @@ export default function StoreDeliveryPaymentReview() {
   const [reviewOptions, setReviewOptions] = useState({});
   const [optionErrors, setOptionErrors] = useState({});
   const [uncertain, setUncertain] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState("");
   const inFlight = useRef(false);
   const loadVersion = useRef(0);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; loadVersion.current += 1; }; }, []);
   const optionsFor = item => reviewOptions[item.assignment_id];
   const posFor = item => optionsFor(item)?.financial_source === "operational" ? optionsFor(item).pos_receivables || [] : posFacts;
+  const bankMovementsFor = item => (optionsFor(item)?.bank_movements || []).filter(row =>
+    row.bank_account_id === optionsFor(item)?.bank_account_id && cents(row.amount) !== null &&
+    cents(row.amount) === cents(item.amount));
   const validContext = item => {
     const value = optionsFor(item);
     return ["native", "operational"].includes(value?.financial_source) &&
@@ -72,19 +77,25 @@ export default function StoreDeliveryPaymentReview() {
   async function load() {
     const version = ++loadVersion.current;
     setReviewOptions({}); setOptionErrors({}); setDestinations({});
+    setLoading(true); setListError(""); setItems([]);
     try {
-      const response = await api.get("/store-delivery/payment-review/pending", { params: filter ? { method: filter } : {} });
+      const response = await api.get("/store-delivery/payment-review/pending", {
+        params: { ...(filter ? { method: filter } : {}), ...(driverId ? { driver_id: driverId } : {}) },
+      });
       if (!alive.current || version !== loadVersion.current) return;
       setItems(response.data?.items || []);
       setUncertain(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => (response.data?.items || []).some(item => item.assignment_id === id))));
     } catch (error) {
       if (!alive.current || version !== loadVersion.current) return;
       setItems([]); setUncertain({});
+      setListError("تعذر تحميل مراجعات التحصيل. أعد تحميل القائمة قبل الاعتماد.");
       toast.error(error?.response?.data?.detail?.code || "تعذر تحميل مراجعات الدفع");
+    } finally {
+      if (alive.current && version === loadVersion.current) setLoading(false);
     }
   }
 
-  useEffect(() => { load(); }, [filter]);
+  useEffect(() => { load(); }, [filter, driverId]);
 
   async function loadOptions(item) {
     const version = loadVersion.current;
@@ -95,6 +106,11 @@ export default function StoreDeliveryPaymentReview() {
       if (data.assignment_id !== item.assignment_id || data.payment_method !== item.payment_method ||
           cents(data.amount) === null || cents(data.amount) !== cents(item.amount)) throw Error("review_context_mismatch");
       setReviewOptions(previous => ({...previous, [item.assignment_id]: data}));
+      if (data.financial_source === "operational" && item.payment_method === "bank_transfer" && data.bank_account_id) {
+        setDestinations(previous => ({...previous, [item.assignment_id]: {
+          ...previous[item.assignment_id], bank: data.bank_account_id,
+        }}));
+      }
     } catch (error) {
       if (!alive.current || version !== loadVersion.current) return;
       setReviewOptions(previous => ({...previous, [item.assignment_id]: null}));
@@ -103,15 +119,17 @@ export default function StoreDeliveryPaymentReview() {
   }
 
   async function decide(item, decision, retry = false) {
-    if (inFlight.current || !validContext(item) || (!retry && decision === "approved" && !canApprove(item))) return;
+    if (inFlight.current || !validContext(item) || (!retry && decision === "approved" && !canApprove(item)) ||
+        (!retry && decision === "rejected" && optionsFor(item)?.can_reject === false)) return;
     let payload = retry ? uncertain[item.assignment_id] : null;
     if (retry && (!payload || payload.expected_session_scope !== optionsFor(item).session_scope ||
         payload.expected_financial_source !== optionsFor(item).financial_source)) return;
     if (!payload) {
       const note = decision === "rejected" ? window.prompt("سبب الرفض للموصل:", "الإيصال غير واضح") : "تمت المطابقة";
       if (decision === "rejected" && note === null) return;
+      if (decision === "rejected" && !note?.trim()) return toast.error("اكتب سبب الرفض حتى يظهر للموصل.");
       const context = optionsFor(item);
-      payload = {decision, note: note || "", expected_financial_source: context.financial_source,
+      payload = {decision, note: note.trim(), expected_financial_source: context.financial_source,
         expected_review_revision: context.expected_review_revision, expected_session_scope: context.session_scope};
       if (decision === "approved") {
         if (item.payment_method === "bank_transfer") Object.assign(payload, {
@@ -131,6 +149,7 @@ export default function StoreDeliveryPaymentReview() {
       if (!alive.current || version !== loadVersion.current) return;
       setUncertain(previous => {const next = {...previous}; delete next[item.assignment_id]; return next;});
       toast.success(payload.decision === "approved" ? "تم اعتماد الدفعة" : "تم رفض الإيصال وإعادته للموصل");
+      onReviewed?.();
       await load();
     } catch (error) {
       if (!alive.current || version !== loadVersion.current) return;
@@ -147,10 +166,12 @@ export default function StoreDeliveryPaymentReview() {
     }
   }
 
+  const Container = embedded ? "section" : "main";
+  const Heading = embedded ? "h2" : "h1";
   return (
-    <main className="space-y-5 p-4 sm:p-6" dir="rtl">
+    <Container className="space-y-5 p-4 sm:p-6" dir="rtl" aria-label="مراجعة تحصيلات الموصلين">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div><h1 className="text-2xl font-black text-slate-950">مراجعة تحصيلات الموصلين</h1><p className="mt-1 text-sm font-bold text-slate-500">الشبكة والتحويل البنكي لا يصبحان مدفوعين إلا بعد مطابقة المحاسب.</p></div>
+        <div><Heading className="text-2xl font-black text-slate-950">مراجعة تحصيلات الموصلين</Heading><p className="mt-1 text-sm font-bold text-slate-500">دفعات العملاء عند التوصيل: الشبكة والتحويل البنكي بانتظار مطابقة المحاسب. سبب الرفض يظهر للموصل.</p></div>
         <button type="button" disabled={Boolean(busyId)} onClick={load}>تحديث القائمة للتحقق</button>
         <select aria-label="طريقة التحصيل" disabled={Boolean(busyId)} value={filter} onChange={(e) => setFilter(e.target.value)} className="h-11 rounded-xl border bg-white px-3 text-sm font-bold"><option value="">الكل</option><option value="card_terminal">شبكة</option><option value="bank_transfer">تحويل بنكي</option></select>
       </header>
@@ -171,8 +192,15 @@ export default function StoreDeliveryPaymentReview() {
             </div>
             {item.payment_method === "bank_transfer" ? <div className="mt-4 space-y-2">
               <label>البنك المستلم المؤكد<select value={destination(item).bank || ""} onChange={e => updateDestination(item, "bank", e.target.value)}><option value="">اختر البنك</option>{banks.map(bank => <option key={bank.id} value={bank.id}>{bank.name || bank.id}</option>)}</select></label>
+              {bankMovementsFor(item).length > 0 && <label>حركات البنك المتاحة للمطابقة<select
+                value={bankMovementsFor(item).some(row => row.id === destination(item).movement) ? destination(item).movement : ""}
+                onChange={e => updateDestination(item, "movement", e.target.value)}>
+                <option value="">اختر الحركة بعد مراجعة الكشف</option>
+                {bankMovementsFor(item).map(row => <option key={row.id} value={row.id}>{row.movement_date} · {money(row.amount)} · {row.reference || row.description || row.id}</option>)}
+              </select></label>}
               <label>معرف حركة البنك الواردة المستوردة<input value={destination(item).movement || ""} onChange={e => updateDestination(item, "movement", e.target.value)} /></label>
               <p>استخدم معرف الحركة من كشف البنك المستورد؛ رقم الإيصال أو وصف التحويل لا يثبت وصول المبلغ. يتحقق النظام من البنك والمبلغ وأصل الكشف.</p>
+              {optionsFor(item)?.bank_movements_truncated && <p>خيارات الكشف المعروضة محدودة؛ يمكنك إدخال معرف حركة مستوردة أخرى لمطابقتها.</p>}
               {bankError && <p role="alert">{bankError}</p>}
             </div> : item.payment_method === "card_terminal" ? <div className="mt-4 space-y-2">
               <label>ذمة الشبكة المختارة<select value={destination(item).pos || ""} onChange={e => updateDestination(item, "pos", e.target.value)}><option value="">اختر ذمة موثقة من الذمم المدينة الأخرى</option>{posFor(item).map(fact => <option key={fact.id} value={fact.id}>{fact.display_name}{isPosDestination(fact) ? ` · ${fact.entity_type}/${fact.entity_id}/${fact.sub_account}` : ""}</option>)}</select></label>
@@ -187,8 +215,10 @@ export default function StoreDeliveryPaymentReview() {
             <div className="mt-4 grid grid-cols-2 gap-2"><button disabled={Boolean(busyId) || Boolean(uncertain[item.assignment_id]) || !validContext(item) || optionsFor(item)?.can_reject === false} onClick={() => decide(item, "rejected")} className="flex items-center justify-center gap-2 rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 font-black text-rose-800 disabled:opacity-40"><XCircle size={20} />رفض</button><button disabled={Boolean(busyId) || Boolean(uncertain[item.assignment_id]) || !canApprove(item)} onClick={() => decide(item, "approved")} className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-4 py-3 font-black text-white disabled:opacity-40"><CheckCircle size={20} />اعتماد مدفوع</button></div>
           </article>
         ))}
-        {!items.length && <div className="rounded-3xl border border-dashed bg-white p-10 text-center text-sm font-bold text-slate-500 xl:col-span-2"><Bank className="mx-auto mb-2" size={32} />لا توجد دفعات بانتظار المراجعة.</div>}
+        {loading && <p role="status">جارٍ تحميل مراجعات التحصيل…</p>}
+        {listError && <p role="alert">{listError}</p>}
+        {!loading && !listError && !items.length && <div className="rounded-3xl border border-dashed bg-white p-10 text-center text-sm font-bold text-slate-500 xl:col-span-2"><Bank className="mx-auto mb-2" size={32} />لا توجد دفعات بانتظار المراجعة.</div>}
       </section>
-    </main>
+    </Container>
   );
 }

@@ -16,7 +16,8 @@ READS = frozenset({STATES, AUDIT_PAGES, EVENTS, 'users', 'settings', 'mz2_atomic
     'store_delivery_payment_reviews', 'store_delivery_collections', 'store_delivery_receipts',
     'store_delivery_assignments', 'unified_orders', 'store_drivers', 'mz2_financial_accounts',
     'mz2_opening_facts_v2', 'mz2_daily_movements', 'mz2_daily_movement_files', 'accounting_source_files',
-    'mz2_shipping_native_events_v2', 'mz2_courier_delivery_evidence_v1'})
+    'mz2_shipping_native_events_v2', 'mz2_courier_delivery_evidence_v1',
+    'mezan_mobile_app_access_v1', 'mezan_employees_v2'})
 META = {'financial_source', 'operational_event_id', 'operational_review_revision',
         'operational_approval_status', 'reviewed_at', 'reviewed_by'}
 SETS = {
@@ -62,6 +63,12 @@ class _Collection:
             self.__db.reject()
         if name == 'users':
             valid = isinstance(query.get('id'), str) and bool(query['id'])
+        elif name == 'mezan_mobile_app_access_v1':
+            valid = (query.get('owner_user_id') == self.__owner
+                     and isinstance(query.get('user_id'), str) and bool(query['user_id']))
+        elif name == 'mezan_employees_v2':
+            valid = (query.get('user_id') == self.__owner
+                     and isinstance(query.get('account_user_id'), str) and bool(query['account_user_id']))
         elif name == AUDIT_PAGES:
             valid = (set(query) == {'_id', 'owner_id'} and query['owner_id'] == self.__owner
                      and isinstance(query['_id'], str) and bool(query['_id']))

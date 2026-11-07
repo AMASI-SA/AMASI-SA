@@ -134,7 +134,10 @@ def test_owner_grants_and_revokes_both_permissions_independently(monkeypatch):
                 r=await c.put("/api/employees-v2/management/employees/employee-staff/mobile-app-permissions",json={"confirmation":employees.EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION,"enabled":True,"permissions":permissions,"operational_banks":{"bank_ids":["bank"],"default_bank_id":"bank"}})
                 assert r.status_code==200,r.text
                 stored = await db.mezan_mobile_app_access_v1.find_one({"owner_user_id":"owner","user_id":"staff"})
-                assert stored["operational_banks"] == ({"bank_ids":["bank"],"default_bank_id":"bank"} if WRITE in permissions else {"bank_ids":[],"default_bank_id":None})
+                assert stored["operational_banks"] == {
+                    "bank_ids": ["bank"] if WRITE in permissions or READ in permissions else [],
+                    "default_bank_id": "bank" if WRITE in permissions else None,
+                }
                 access=await mobile_app_access_for_user(db,await db.users.find_one({"id":"staff"}))
                 assert set(access["permissions"])==set(permissions)
                 assert (await db.users.find_one({"id":"staff"}))["role"]=="employee"

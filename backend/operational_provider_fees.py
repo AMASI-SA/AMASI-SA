@@ -69,6 +69,60 @@ def _events(rows, currency, kind):
     return {key: seen[key] for key in sorted(seen)}
 
 
+def _validate_policy_evidence(policy):
+    if not all(policy.get(k) for k in ('id', 'confirmed_by', 'confirmed_at', 'evidence')):
+        raise ValueError('provider_fee_policy_evidence_required')
+    try:
+        stamp = datetime.fromisoformat(str(policy['confirmed_at']).replace('Z', '+00:00'))
+        if stamp.tzinfo is None:
+            raise ValueError()
+    except (TypeError, ValueError):
+        raise ValueError('provider_fee_policy_evidence_required') from None
+
+
+def _uniform_tabby_policy(payment, candidates):
+    """Use an approved universal tariff only when all overlapping plans agree.
+
+    Equal plan rows alone do not prove which plans the merchant offers. Require
+    a separately approved all-plans contract as authority; do not infer a plan,
+    choose the lowest fee, disregard an active longer plan or alter any policy.
+    Comparison is deliberately strict, including unknown future contract keys.
+    """
+    if payment['provider'] != 'tabby' or payment.get('event_type', 'capture') != 'capture':
+        return None
+    generic = [p for p in candidates if p.get('plan_id') in (None, '')]
+    if len(candidates) < 3 or len(generic) != 1:
+        return None
+    policy_ids, plans = set(), set()
+    for policy in candidates:
+        identity = policy.get('id')
+        if (not isinstance(identity, str) or not identity.strip() or identity in policy_ids
+                or type(policy.get('fee_model_version')) is not int
+                or policy['fee_model_version'] != 2):
+            return None
+        policy_ids.add(identity)
+        plan = policy.get('plan_id')
+        if plan not in (None, ''):
+            if not isinstance(plan, str) or not plan.strip() or plan in plans:
+                return None
+            plans.add(plan)
+        _validate_policy_evidence(policy)
+    # Do not let bool/numeric equality, omitted defaults or metadata stripping
+    # silently turn distinct component/refund/tax contracts into one tariff.
+    from json import dumps
+    envelope = {'id', 'plan_id', 'confirmed_by', 'confirmed_at', 'evidence'}
+    def signature(policy):
+        return dumps({k: v for k, v in policy.items() if k not in envelope},
+                     sort_keys=True, separators=(',', ':'), allow_nan=False)
+    try:
+        common = signature(generic[0])
+        if any(signature(policy) != common for policy in candidates):
+            return None
+    except (TypeError, ValueError):
+        return None
+    return {**generic[0], '_equivalent_policy_ids': tuple(sorted(policy_ids))}
+
+
 def _select(payment, policies, transaction_date):
     if payment.get('fee_plan_issue'):
         raise ValueError('provider_payment_plan_conflict')
@@ -88,6 +142,10 @@ def _select(payment, policies, transaction_date):
             candidates = [p for p in candidates if p.get(key) in (None, '') or str(p[key]) == str(value)]
     for key, error in zip(qualifiers, ('provider_payment_method_required_for_fee', 'provider_payment_plan_required')):
         if payment.get(key) in (None, '') and any(p.get(key) not in (None, '') for p in candidates):
+            if key == 'plan_id':
+                uniform = _uniform_tabby_policy(payment, candidates)
+                if uniform is not None:
+                    return uniform
             raise ValueError(error)
     if candidates:
         def specificity(policy):
@@ -126,14 +184,7 @@ def _tax_parts(raw_fee, component, *, unrounded_fee=None):
 
 
 def _components_projection(payment, policy):
-    if not all(policy.get(k) for k in ('id', 'confirmed_by', 'confirmed_at', 'evidence')):
-        raise ValueError('provider_fee_policy_evidence_required')
-    try:
-        stamp = datetime.fromisoformat(str(policy['confirmed_at']).replace('Z', '+00:00'))
-        if stamp.tzinfo is None:
-            raise ValueError()
-    except (TypeError, ValueError):
-        raise ValueError('provider_fee_policy_evidence_required') from None
+    _validate_policy_evidence(policy)
     if any(policy.get(k) is not None for k in ('minimum', 'maximum')):
         # Allocation of aggregate caps to refundable components needs an explicit contract.
         raise ValueError('provider_component_fee_cap_unsupported')
@@ -332,6 +383,9 @@ def provider_projection(payment, policies, transaction_date, *, earliest_date=No
         result = _components_projection(payment, policy)
     else:
         result = _legacy_projection(payment, [policy], transaction_date)
+    if policy.get('_equivalent_policy_ids'):
+        result['fee_policy_resolution'] = 'approved_uniform_plan_terms'
+        result['equivalent_policy_ids'] = list(policy['_equivalent_policy_ids'])
     return _refund_processing_fees(payment, policies, result, transaction_date, earliest_date, as_of_date)
 
 

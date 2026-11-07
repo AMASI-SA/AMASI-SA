@@ -1,0 +1,42 @@
+# Financial administration integration — WIP, not released
+
+Owner authorizes completion, integration and governed V5 publication. This supersedes the old task publication holds, not another task's active lease. No courier APK is requested or required. Do not merge mobile PR344 wholesale.
+
+## Verified starting point
+
+Fresh clone of production branch: `0241e162bfe0d7d10faa85f3f4c023929a96ea2c` (PR1798). Isolated task branch: `codex/financial-admin-integration-20261108`. Original PR1794/db1082796205e018d2915d6ab0f3b979484b6663, PR1781/e33bf4dffd3a7075b0c7aca0ceaf14dede19a170, PR1801/30b2e76f64fc748aaa10a24551fb46dd9cc49f87 and mobile344/5fe6844bb3a601e97dfa84a3b6e92af47818b221 were freshly verified open/draft/unmerged. Read AGENTS, task status files, Issue1006 body and relevant PR comments. Issue comment retrieval failed transport; issue has2500comments, use bounded owned body entry.
+
+The six source commits from the three server PRs applied without conflict to latest production in isolated checkout. Original branches and frozen intents remain unchanged. This is a candidate integration, not combined acceptance. Existing production intent inherited unchanged is NOT a valid intent for this new source.
+
+## Live read-only baseline
+
+Authenticated financial-position UI read on 2026-11-08 Riyadh: saved calculation01:40, rendered report01:43; selected SAR; operational start2026-11-01 00:30. All major actual tables still display incomplete except customer wallet statement table. Provider summaries: Salla585 paid/remaining evidence,20missing collection times,25review; Tabby155/7missing times/148fee matching/8review; Tamara228/6missing times/9review. These overlapping diagnostic counts are NOT unique affected orders. No all-table monetary impact established. Aramex absent from posted company/detail selectors; live paid/cash effect remains unverified. Profit remains unavailable. Salary detail is112employee-days Nov2–8, requiring explicit comparison with opening inclusion policy, not silent backfill.
+
+No money, settings, approval/rejection, opening, backfill or provider refresh was performed. Existing approved Emkan/Aramex settings have not yet been freshly reread in this continuation; do not reapprove them.
+
+## New candidate work
+
+- Cash-only audit after-balance projection avoids rebuilding full financial report; transfer/refund arithmetic compared against existing report. Debt/POS counterparties retain existing path.
+- Conservative table-specific source dependencies and diagnostics; unknown failures still block all; prepaid failures affect cash and shipping. Provider calculation readiness distinct from settlement evidence. No new monetary values.
+- Daily financial movements page in existing operational WEB administration, independent of receipt page, with Riyadh ranges,10rows,cursor and historical unavailable states. No delivery app edits or new application.
+
+## Fresh verification and limits
+
+Performance worker:100newreceipts/5000historical movements,3runs baseline6.538319/6.342531/6.346509s; candidate1.098389/1.132492/1.158673s. All100intermediate balances equal; about82%median reduction. Isolated Mongo8.0.12 daily/approval/permission and new projection tests52passed; owned process stopped. Root independently reran new projection suite5passed,exit0. Initial incorrect harness23passed/4environmentfailures retained (missing test import path and Mongo URI), corrected without skips or waived gates. Debt-heavy performance remains unverified.
+
+Web worker actual React9tests passed,exit0. Initial harness cwd/dependency failures corrected; spreadsheet export irrelevant to page mocked, actual dates/money formatting exercised. No build/device/browser acceptance. Coverage tests and final result recorded in continuation PR.
+
+## Open work — mandatory before release
+
+1. Daily backend currently disallows non-owner browser staff even with scoped read permission; implement correct existing web authority and scope checks. Add per-currency totals before pagination, after account/date filtering. Handle unavailable native rows safely. Tests must verify account confidentiality,scope revocation,counts and totals.
+2. Finish current-store Tabby approved policy inspection and suitable selector; current PR1801 still overly conditional. Verify Emkan bank refunds and original capture/revenue idempotency; fresh Aramex policy/evidence and real debit acceptance.
+3. Complete real same-period profit collector/calculation and COD forecast coverage. They remain unavailable; do not claim implemented from new diagnostics. Payroll Nov1 requires opening-exclusion impact review under existing approved policy, not direct posting.
+4. Complete test suites and independent integrated review; scope issue mapping is candidate until checked against all source paths. Screen/export/print parity and unique live affected cases still open.
+5. Verify current mobile release/source compatibility; no courier APK. Existing administrative web is correct implementation target in this checkpoint; existing employee app optional portion not yet evaluated.
+6. Fresh production fetch, guarded V5 sourceA/build/new intent-onlyB/final-headCI/clean-clone gates/merge/publish and3officialverify remain undone.
+
+## Access / release status
+
+Emergent normal management is authenticated. Its VS Code terminal opened but password submission returned `Incorrect password`; manual authentication handoff is pending. `/app` does not exist in local runtime. Therefore shared guard status has NOT been executed and no active/inactive lease claim is made. No shared `/app` edit or release rehearsal, own lease,merge,publish or APK occurred. Git clone/fetch works; direct push lacks GitHub credentials, so checkpoint uses authorized GitHub Git-object connector, not credential discovery.
+
+Next safe action: complete terminal login; run `cd /app && python scripts/production_release_guard.py status` before any shared workspace action, respect active lease. Continue isolated missing backend/admin/calculation work from this remote checkpoint. Production changed by this task: **no**.

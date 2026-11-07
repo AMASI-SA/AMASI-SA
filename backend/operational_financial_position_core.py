@@ -14,6 +14,7 @@ from operational_prestart_cod_forecast import snapshot_cod_preview
 from operational_delivery_report_coverage import delivery_coverage_diagnostics
 from operational_profit_payroll import recorded_salary_subtotals
 from operational_provider_report_coverage import provider_evidence_coverage
+from operational_financial_table_coverage import apply_table_coverage
 
 
 ZERO = Decimal("0")
@@ -619,7 +620,9 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         parties = sorted((row for row in projection["parties"] if row["currency"] == currency), key=_party_id)
         obligations = [row for row in projection["obligations"] if row.get("currency") == currency]
         actual_complete = bool(projection["as_of"]) and not any(row.get("currency") in {None, currency} for row in projection["issues"])
-        tables = _actual_tables(parties, actual_complete)
+        # Build the same recorded amounts, then gate each table only on source
+        # failures that can affect it. The combined position still needs all.
+        tables = _actual_tables(parties, bool(projection["as_of"]))
         tables.append(_provider_table(projection["details"]["provider_balances"].get(currency, []),
                                       [row for row in projection["issues"] if row.get("currency") in {None, currency}]))
         wallet = customer_wallets.get(currency)
@@ -631,7 +634,9 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
                 notes=["الرصيد الختامي التزام علينا بتاريخ كشف سلة المحفوظ. يشمل الاستخدامات المثبتة فيه، وتحتفظ التحديثات التشغيلية بتاريخ هذا الكشف."])
             wallet_table.update(show_totals=False, totals={})
             tables.append(wallet_table)
-        tables.append(_balance_origin(parties, obligations, actual_complete))
+        tables.append(_balance_origin(parties, obligations, bool(projection["as_of"])))
+        apply_table_coverage(tables, projection["issues"], as_of=projection["as_of"],
+                             started_at=projection["started_at"], currency=currency)
         if other_tenders.get(currency):
             rows = [{"id": row["method"], **row} for row in other_tenders[currency]]
             for row in rows:
