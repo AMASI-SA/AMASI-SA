@@ -330,6 +330,105 @@ async def test_direct_option_deletion_and_resource_replacement_cannot_erase_cost
     assert (await db[approval.RESOURCES].find_one({}))["unit_cost"] == 10
 
 
+async def _approved_option_removal(monkeypatch):
+    from product_option_cost_routes import make_product_option_cost_router, BINDINGS
+    db = await seed()
+    await db[approval.PRODUCTS].update_one({}, {"$set": {"options": [{"id": "option", "name": "Add name", "values": [{"id": "yes", "name": "Yes"}]}]}})
+    await db[BINDINGS].insert_one({"user_id": "merchant", "salla_product_id": "salla-product", "option_id": "option",
+        "value_id": "yes", "mode": "direct", "direct_amount": 10, "quantity": 1})
+    async def memory_transaction(_db, work):
+        return await work(None)
+    monkeypatch.setattr(approval, "atomic_price_change", memory_transaction)
+    identity = {"user": EMPLOYEE}
+    app = FastAPI()
+    app.include_router(make_product_option_cost_router(db, lambda: identity["user"]))
+    app.include_router(approval.make_price_change_router(db, lambda: identity["user"]))
+    key = "delete-replay-001"
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        created = await client.request("DELETE", "/products-v2/product/option-costs/option/yes/review", json={"client_request_id": key})
+        assert created.status_code == 200
+        request_id = created.json()["pending_request_id"]
+        identity["user"] = OWNER
+        approved = await client.post(f"/price-change-requests-v1/{request_id}/decision", json={"decision": "approve"})
+        assert approved.status_code == 200
+    identity["user"] = EMPLOYEE
+    assert await db[BINDINGS].count_documents({}) == 0
+    return db, app, identity, key, request_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("recreated", [False, True])
+async def test_http_option_removal_retry_returns_prior_approval_without_writing_again(monkeypatch, recreated):
+    db, app, _identity, key, request_id = await _approved_option_removal(monkeypatch)
+    if recreated:
+        await db[approval.BINDINGS].insert_one({"user_id": "merchant", "salla_product_id": "salla-product", "option_id": "option",
+            "value_id": "yes", "mode": "direct", "direct_amount": 99, "quantity": 3})
+    collections = (approval.BINDINGS, approval.COST_PROFILES, approval.RESOURCES, approval.REQUESTS, approval.AUDIT, "settlement_alerts")
+    before = {name: await db[name].find({}, {"_id": 0}).to_list(20) for name in collections}
+    async def no_new_transaction(*_args, **_kwargs):
+        raise AssertionError("A replay must not create or apply another proposal")
+    monkeypatch.setattr(approval, "atomic_price_change", no_new_transaction)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        # Both product aliases resolve to the same canonical approval target.
+        for product in ("product", "salla-product"):
+            replay = await client.request("DELETE", f"/products-v2/{product}/option-costs/option/yes/review", json={"client_request_id": key})
+            assert replay.status_code == 200, replay.text
+            result = replay.json()
+            assert result["status"] == "approved" and result["catalog_updated"] is False
+            assert result["requests"][0]["id"] == request_id and result["requests"][0]["client_request_id"] == key
+            assert result["idempotent"] is True
+    after = {name: await db[name].find({}, {"_id": 0}).to_list(20) for name in collections}
+    assert after == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mismatch", [
+    "owner", "actor", "source", "client_key", "missing_key", "invalid_key",
+    "product", "canonical_product", "option", "value", "removal_kind",
+])
+async def test_http_option_removal_replay_cannot_match_another_identity_or_target(monkeypatch, mismatch):
+    db, app, identity, key, request_id = await _approved_option_removal(monkeypatch)
+    product, option, value = "product", "option", "yes"
+    body = {"client_request_id": key}
+    if mismatch == "owner":
+        copy = await db[approval.PRODUCTS].find_one({}, {"_id": 0})
+        await db[approval.PRODUCTS].insert_one({**copy, "user_id": "another-merchant"})
+        identity["user"] = {**EMPLOYEE, "id": "another-merchant", "_mobile_owner_id": "another-merchant"}
+    elif mismatch == "actor":
+        identity["user"] = {**EMPLOYEE, "_mobile_actor_id": "another-worker"}
+    elif mismatch == "source":
+        await db[approval.REQUESTS].update_one({"id": request_id}, {"$set": {"source": "mobile_product_option"}})
+    elif mismatch == "client_key":
+        body["client_request_id"] = "another-delete-key"
+    elif mismatch == "missing_key":
+        body = {}
+    elif mismatch == "invalid_key":
+        body["client_request_id"] = {"$ne": None}
+    elif mismatch == "product":
+        copy = await db[approval.PRODUCTS].find_one({}, {"_id": 0})
+        await db[approval.PRODUCTS].insert_one({**copy, "id": "other-product", "mezan_product_id": "other-product", "salla_product_id": "other-salla"})
+        product = "other-product"
+    elif mismatch == "canonical_product":
+        await db[approval.REQUESTS].update_one({"id": request_id}, {"$set": {"product_id": "another-canonical-product"}})
+    elif mismatch == "option":
+        option = "another-option"
+    elif mismatch == "value":
+        value = "another-value"
+    elif mismatch == "removal_kind":
+        await db[approval.REQUESTS].update_one({"id": request_id}, {"$set": {"removes_binding": False}})
+    collections = (approval.BINDINGS, approval.COST_PROFILES, approval.RESOURCES, approval.REQUESTS, approval.AUDIT, "settlement_alerts")
+    before = {name: await db[name].find({}, {"_id": 0}).to_list(20) for name in collections}
+    async def no_new_transaction(*_args, **_kwargs):
+        raise AssertionError("An unmatched replay must not apply or create a request")
+    monkeypatch.setattr(approval, "atomic_price_change", no_new_transaction)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.request("DELETE", f"/products-v2/{product}/option-costs/{option}/{value}/review", json=body)
+    assert response.status_code == (422 if mismatch == "invalid_key" else 409), response.text
+    assert request_id not in response.text
+    after = {name: await db[name].find({}, {"_id": 0}).to_list(20) for name in collections}
+    assert after == before
+
+
 @pytest.mark.asyncio
 async def test_option_quantity_only_change_discloses_effect_and_waits_for_owner(monkeypatch):
     from product_option_cost_routes import make_product_option_cost_router, BINDINGS

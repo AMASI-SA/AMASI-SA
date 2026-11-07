@@ -287,6 +287,32 @@ async def propose_mobile_option_removal(db: Any, *, user: dict, product: dict, b
     return await atomic_price_change(db, submit)
 
 
+async def replay_mobile_option_removal(db: Any, *, user: dict, product: dict,
+                                       option_id: str, value_id: str, client_request_id: Any) -> dict | None:
+    """Read one exact removal intent even after approval deleted its binding."""
+    if client_request_id is None:
+        return None
+    if not isinstance(client_request_id, str) or not 8 <= len(client_request_id) <= 160:
+        raise HTTPException(422, detail={"code": "price_change_request_key_invalid"})
+    owner = _text(user.get("_mobile_owner_id") or user.get("id"))
+    actor = _text(user.get("_mobile_actor_id") or user.get("id"))
+    canonical_product = _text(product.get("mezan_product_id") or product.get("id") or product.get("salla_product_id"))
+    salla_id = _text(product.get("salla_product_id") or product.get("mezan_product_id") or product.get("id"))
+    selector = {"user_id": owner, "salla_product_id": salla_id,
+                "option_id": _text(option_id), "value_id": _text(value_id)}
+    saved = await db[REQUESTS].find_one({
+        **selector, "product_id": canonical_product, "requested_by": actor,
+        "source": "mobile_product_option_removal", "client_request_id": client_request_id,
+        "change_type": "product_price", "removes_binding": True,
+        "target_amount": None, "target_present": False, "target_metadata": None,
+        "invoice_id": None, "status": {"$in": ["pending", "approved", "rejected"]},
+    }, {"_id": 0})
+    if saved is None:
+        return None
+    binding = await db[BINDINGS].find_one(selector, {"_id": 0})
+    return {**proposal_response([public_request(saved)]), "binding": binding, "deleted": 0, "idempotent": True}
+
+
 async def decide_price_change(db: Any, *, user: dict, request_id: str, decision: str, mongo_session: Any) -> dict:
     owner = _owner(user)
     if decision not in {"approve", "reject"}:

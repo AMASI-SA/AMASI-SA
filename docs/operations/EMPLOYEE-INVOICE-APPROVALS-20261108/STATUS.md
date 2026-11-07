@@ -22,14 +22,14 @@ The additional product-page request separates components from services in indepe
 
 ## Implementation state
 
-Backend/dashboard implementation and bounded local verification are complete; native integration and independent review are being finalized. A source-only checkpoint is not publication readiness. All three backend/dashboard slices received independent review. One catalog-selection regression was reproduced (a newly created hidden service could populate another component's cost draft), fixed by selecting and populating the same filtered item, and covered by a behavioral React test.
+Implementation and independent review are complete in both repositories; full CI integration is being finalized. A source-only checkpoint is not publication readiness. All three backend/dashboard slices received independent review. One catalog-selection regression was reproduced (a newly created hidden service could populate another component's cost draft), fixed by selecting and populating the same filtered item, and covered by a behavioral React test.
 
 New native writes must use distinct review/local-service endpoints and must never fall back to old endpoints that can change catalog data immediately. The updated backend also intercepts legacy mobile price writes and rejects the former permanent supplier-invoice service endpoint.
 
 ## Fresh validation
 
 - Root repeated the five dashboard suites on 2026-11-08: `CI=true node node_modules/react-scripts/bin/react-scripts.js test --watchAll=false --runInBand --runTestsByPath src/pages/ProductPriceChangeRequest.test.jsx src/components/NotificationBell.priceChanges.test.jsx src/pages/AlertsPage.priceChanges.test.jsx src/components/OwnerOnlyRoute.test.jsx src/components/Layout.deferredWorkspaces.test.jsx` from `frontend`. Exit 0; 31 tests passed in five suites.
-- Root integrated backend run: 187 passed in 4.88s, exit 0, across the 18 suites listed below. This includes actual in-process HTTP with synthetic data, invoice-local refresh and per-piece customer choices, exact halala proposals, owner-only decisions, quantity-only changes, category sharing, employee/file dates, split-day pagination 10+2, and the production DTO hydration wrapper.
+- Root integrated backend final run: 200 passed in 5.09s, exit 0, across the 18 suites listed below. This includes actual in-process HTTP with synthetic data, invoice-local refresh and per-piece customer choices, exact halala proposals, owner-only decisions, quantity-only changes, category sharing, employee/file dates, split-day pagination 10+2, and the production DTO hydration wrapper.
 - Independent component-share review repeated its 9 tests successfully; independent date author ran 51 tests successfully.
 - Root repeated the final eight dashboard suites: 49 passed in 2.105s, exit 0, including the additional catalog-selection regression and explicit option-quantity review display.
 - `git diff --check` succeeded. Existing deprecation warnings were observed, with no failing behavior.
@@ -38,7 +38,7 @@ New native writes must use distinct review/local-service endpoints and must neve
 
 ## Next safe action
 
-Preserve this verified backend/dashboard checkpoint in a draft pull request, then finish the independent native review and its source checkpoint. Keep production and installed app versions unchanged until a separately authorized release.
+Review the final draft-PR checks, including the real Mongo replica performance/rollback jobs and full native dependency/type checks. Keep production and installed app versions unchanged until a separately authorized release.
 
 ## Reproducible integrated backend verification
 
@@ -67,3 +67,15 @@ PYTHONPATH=backend:backend/tests python -m pytest -q \
 ## Deployment state
 
 Production changed: **no**. No merge, Release Guard lease, preview/publish, data backfill, APK distribution, or OTA. Task source is to be preserved in draft PRs only.
+
+## Remote source checkpoints and final review
+
+- Backend/dashboard draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1805. Initial source checkpoint `770b4be863bff0352eab09e3276a8a41cd2dd4b9`, tree `08e59c345d3b1fc99d8f3966b39bc055b7017318`.
+- Native draft PR: https://github.com/AMASI-SA/amasi-mobile/pull/345. Source checkpoint `855871dade3eca167b5159e97d43b777ec78cbfb`, full tree `5bbcfb9632442be78432e77714e0dbc48dccfe79`. The full mobile tree hash was independently reconstructed from the original remote file hashes plus the 29 changed paths and matched GitHub exactly; all other 744 file entries are retained.
+- Root repeated all 19 native targeted scripts; after the last picker fix, root repeated services, policy, approvals and dates successfully. Final focused native counts: 8 local-service, 9 price-approval and 6 date-basis tests. Native full typecheck is deferred to complete-dependency CI; local baseline/current both have 170 missing-dependency diagnostics and zero changed diagnostics.
+- Independent review found and closed a lost-response deletion edge: retrying the same approved removal request now returns the existing decision even after the binding was removed or recreated, without another write. Thirteen additional HTTP cases pin identity/target isolation and unchanged state.
+- Invoice-local service queries now have a tenant/session/piece index initialized once on the authorized service routes.
+- The initial backend CI passed the 164-case display/financial suite and 348-case native invoice suite plus 7 subtests. The larger close profiles stopped during test instrumentation because the price-stage function was renamed. The marker is now updated to the proposal function; no performance budget or financial assertion was relaxed. Final CI rerun is required.
+- The employee permission label now describes adding a service to the supplier invoice. No grant key or authorization changed.
+
+The final source follow-up descends from the initial backend checkpoint above. Final exact source SHA and CI conclusions will be recorded with the handoff.

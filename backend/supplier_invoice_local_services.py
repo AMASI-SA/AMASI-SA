@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import asyncio
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -179,6 +180,18 @@ async def merge_local_invoice_services(db, *, user_id, session_id, rows, service
 
 def register_local_service_routes(router, db: Any, current_user: Callable):
     import supplier_receiving_routes as base
+    indexes_ready = False
+    index_lock = asyncio.Lock()
+
+    async def ensure_indexes_once():
+        nonlocal indexes_ready
+        if indexes_ready:
+            return
+        async with index_lock:
+            if not indexes_ready:
+                await db[LOCAL_SERVICES].create_index([("user_id", 1), ("session_id", 1), ("piece_id", 1)])
+                indexes_ready = True
+
     async def context_session(session_id, user):
         context = await base._actor_context(db, user)
         base._require_permission(context, base.RECEIVE_PERMISSION)
@@ -186,6 +199,7 @@ def register_local_service_routes(router, db: Any, current_user: Callable):
         session = await base._session_for_actor(db, context=context, session_id=session_id)
         if session.get("status") != "open":
             raise HTTPException(409, detail={"code": "supplier_receiving_session_closed"})
+        await ensure_indexes_once()
         return context, session
 
     @router.get("/sessions/{session_id}/products/{product_id}/invoice-service-candidates")

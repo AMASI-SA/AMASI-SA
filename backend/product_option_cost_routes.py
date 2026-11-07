@@ -414,10 +414,14 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
     @router.delete("/products-v2/{product_id}/option-costs/{option_id}/{value_id}/review")
     async def request_option_removal_review(product_id: str, option_id: str, value_id: str,
                                             payload: dict = Body(...), user: dict = Depends(current_user)):
-        from employee_price_approval import requires_mobile_price_approval
+        from employee_price_approval import replay_mobile_option_removal, requires_mobile_price_approval
         if not requires_mobile_price_approval(user):
             raise HTTPException(403, detail={"code": "mobile_direct_price_proposal_required"})
         product = await _product(db, str(user["id"]), product_id)
+        replay = await replay_mobile_option_removal(db, user=user, product=product,
+            option_id=option_id, value_id=value_id, client_request_id=payload.get("client_request_id"))
+        if replay is not None:
+            return replay
         binding = await db[BINDINGS].find_one({"user_id": str(user["id"]), "salla_product_id": str(product["salla_product_id"]),
             "option_id": str(option_id), "value_id": str(value_id)}, {"_id": 0})
         if not binding or binding.get("mode") != "direct":

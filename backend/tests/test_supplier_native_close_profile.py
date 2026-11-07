@@ -195,7 +195,8 @@ async def test_native_close_profile(env, monkeypatch, installed_live_cost_suppor
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://synthetic.test') as client:
         # Inclusive wall time between finalize source lines, including awaited
         # database work. Only this synthetic request is active in the process.
-        # These pinned boundaries belong to the deployed d0a3ff source.
+        # The price stage now creates catalog proposals; the measured invoice
+        # assembly/financial-post boundary remains in the same position.
         spans = {}
         source = Path(r.__file__).read_text(encoding='utf-8').splitlines()
         close_start = next(i for i,l in enumerate(source) if 'async def close_session(' in l)
@@ -207,7 +208,7 @@ async def test_native_close_profile(env, monkeypatch, installed_live_cost_suppor
             ('actual_count = len(scans)', 'live_product_services_options_costs'),
             ('service_catalog = await _supplier_service_catalog(', 'piece_validation'),
             ('invoice_id = ', 'grouping_and_total_validation'),
-            ('invoice["price_changes"] = await apply_supplier_invoice_price_changes(', 'invoice_assembly'),
+            ('invoice["price_changes"] = await propose_invoice_price_changes(', 'invoice_assembly'),
             ('await db[SUPPLIER_INVOICES].insert_one(', 'financial_post'),
             ('invoice_summary = {', 'invoice_piece_linkage'),
             ('await verify_persisted_supplier_invoice(', 'session_flags_and_audit'),
