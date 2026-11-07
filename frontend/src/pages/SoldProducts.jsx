@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useReactToPrint } from "react-to-print";
 import api from "../lib/api";
+import SoldFinancialReport, { FinancialDetails } from "../components/SoldFinancialReport";
 import ProductTrafficSources from "../components/ProductTrafficSources";
 import { addDaysISO, todaySA } from "../lib/dates";
 import { formatMoney, formatInt } from "../lib/format";
@@ -123,6 +124,9 @@ export default function SoldProducts() {
     const [range, setRange] = useState({ from: searchParams.get("from") || addDaysISO(todaySA(), -29), to: searchParams.get("to") || todaySA(), statuses: "default" });
     const [page, setPage] = useState(1);
     const [data, setData] = useState(null);
+    const [financial, setFinancial] = useState(null);
+    const [financialLoading, setFinancialLoading] = useState(true);
+    const [financialError, setFinancialError] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [expanded, setExpanded] = useState({});
@@ -161,6 +165,16 @@ export default function SoldProducts() {
         return () => { active = false; };
     }, [range, revision]);
 
+    useEffect(() => {
+        let active = true;
+        setFinancial(null); setFinancialError(false); setFinancialLoading(true);
+        api.get("/dashboard-v2", { params: { from_date: range.from, to_date: range.to, report_statuses: range.statuses }, headers: { "Cache-Control": "no-cache" } })
+            .then(({ data: result }) => { if (active) setFinancial(result); })
+            .catch(() => { if (active) setFinancialError(true); })
+            .finally(() => { if (active) setFinancialLoading(false); });
+        return () => { active = false; };
+    }, [range, revision]);
+
     const count = data?.items?.length || 0;
     const incompleteCount = data?.items?.filter(row => !complete(row)).length || 0;
     useEffect(() => {
@@ -187,7 +201,7 @@ export default function SoldProducts() {
             <div><h1 className="text-2xl font-extrabold">المنتجات الأكثر مبيعًا</h1><p className="text-sm text-slate-500">تفصيل تكلفة المنتج وخدماته ومكوناته حسب خيارات العميل</p></div>
             <div className="flex gap-2">
                 <button type="button" disabled={loading} onClick={() => { manualRefresh.current = true; setRefreshResult(""); setRevision(value => value + 1); }} className="rounded-lg bg-violet-700 px-4 py-2 font-bold text-white disabled:opacity-50">{loading ? "جارٍ تحديث التكاليف…" : "↻ تحديث جميع التكاليف"}</button>
-                <details className="relative"><summary className="rounded-lg border px-4 py-2 cursor-pointer">طباعة ▾</summary><div className="absolute left-0 z-10 min-w-56 rounded-lg border bg-white p-2 shadow-lg"><button type="button" onClick={() => printSummary()} disabled={loading || !count} className="block w-full p-2 text-right disabled:opacity-50">طباعة الملخص فقط</button><button type="button" onClick={() => printDetails()} disabled={loading || !count} className="block w-full p-2 text-right disabled:opacity-50">طباعة مع تفاصيل التكاليف</button></div></details>
+                <details className="relative"><summary className="rounded-lg border px-4 py-2 cursor-pointer">طباعة ▾</summary><div className="absolute left-0 z-10 min-w-56 rounded-lg border bg-white p-2 shadow-lg"><button type="button" onClick={() => printSummary()} disabled={loading || financialLoading || !count} className="block w-full p-2 text-right disabled:opacity-50">طباعة الملخص فقط</button><button type="button" onClick={() => printDetails()} disabled={loading || financialLoading || !count} className="block w-full p-2 text-right disabled:opacity-50">طباعة مع تفاصيل التكاليف</button></div></details>
             </div>
         </header>
         <p className="text-sm text-slate-600">آخر تحديث: {updatedAt ? updatedAt.toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" }) : "—"} · مكتمل: {formatInt(count - incompleteCount)} منتجًا · غير مكتمل: {formatInt(incompleteCount)} منتجات</p>
@@ -201,6 +215,7 @@ export default function SoldProducts() {
             </fieldset>
             <button className="rounded-lg bg-slate-900 px-5 py-3 text-white font-bold" type="submit">عرض المبيعات</button>
         </form>
+        <SoldFinancialReport data={financial} products={loading ? null : data?.items} loading={loading || financialLoading} error={financialError} />
         {error && <p role="alert" className="text-red-700">{error}</p>}
         {loading ? <p role="status">جارٍ تحميل المنتجات…</p> : data && <section className="rounded-xl border border-slate-200 bg-white overflow-hidden">
             <div className="p-4 text-sm text-slate-600">من {range.from} إلى {range.to} · {selectedStatusLabel} · {count} منتج · غير مكتمل التكلفة أولًا، ثم حسب عدد القطع</div>
@@ -210,10 +225,12 @@ export default function SoldProducts() {
             <CostSummary rows={data.items} final />
         </section>}
         <div className="absolute left-[-99999px] top-0" aria-hidden="true">{[false, true].map(withDetails => <div key={String(withDetails)} ref={withDetails ? detailsPrintRef : summaryPrintRef} dir="rtl" className="p-6 bg-white text-black" style={{ fontFamily: "Tahoma, Arial, sans-serif" }}>
-            <style>{`@page { size: A4 landscape; margin: 10mm; } @media print { table { width: 100%; min-width: 0 !important; font-size: 8px !important; border-collapse: collapse; } th, td { padding: 3px !important; } thead { display: table-header-group; } tbody tr { break-inside: avoid; } .sold-details-row { break-inside: auto !important; } .sold-details-scroll { overflow: visible !important; } img { width: 20px !important; height: 20px !important; object-fit: cover; } }`}</style>
+            <style>{`@page { size: A4 landscape; margin: 10mm; } @media print { table { width: 100%; min-width: 0 !important; font-size: 8px !important; border-collapse: collapse; } th, td { padding: 3px !important; } thead { display: table-header-group; } tbody tr { break-inside: avoid; } .sold-details-row { break-inside: auto !important; } .sold-details-scroll, .sold-financial-table { overflow: visible !important; } .sold-financial-first-page { break-after: page; page-break-after: always; } .sold-financial-extra-details { break-before: page; } img { width: 20px !important; height: 20px !important; object-fit: cover; } }`}</style>
+            <div className="sold-financial-first-page"><h1 className="text-xl font-bold mb-2">التقرير المالي والمنتجات</h1><p className="mb-4">من {range.from} إلى {range.to} · {selectedStatusLabel}</p><SoldFinancialReport data={financial} products={data?.items} error={financialError} printable /></div>
             <h1 className="text-xl font-bold mb-2">المنتجات الأكثر مبيعًا — {withDetails ? "تفاصيل التكاليف" : "الملخص"}</h1><p className="mb-4">من {range.from} إلى {range.to} · {selectedStatusLabel} · {count} منتج</p>
             <SoldTable rows={data?.items || []} printable allDetails={withDetails} />
             <CostSummary rows={data?.items || []} final />
+            {withDetails && <div className="sold-financial-extra-details"><FinancialDetails data={financial} /></div>}
         </div>)}</div>
     </main>;
 }

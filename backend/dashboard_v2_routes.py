@@ -454,6 +454,7 @@ async def _filtered_orders(
     payment_methods: str | None,
     shipping_companies: str | None,
     include_marketing_attribution: bool = False,
+    report_statuses: str | None = None,
 ) -> list[dict[str, Any]]:
     settings = await ensure_user_settings(db, user_id)
     query: dict[str, Any] = {"user_id": user_id}
@@ -495,7 +496,8 @@ async def _filtered_orders(
         order for order in orders
         if _matches_any(order.get("payment_method", ""), pm_list)
         and _matches_any(order.get("shipping_company", ""), ship_list)
-        and _matches_any(order.get("order_status", ""), included_statuses)
+        and (order_matches_status(order, report_statuses.split(","), included_statuses)
+             if report_statuses is not None else _matches_any(order.get("order_status", ""), included_statuses))
     ]
 
 
@@ -1748,10 +1750,15 @@ def make_dashboard_v2_router(
         to_date: str | None = None,
         payment_methods: str | None = None,
         shipping_companies: str | None = None,
+        report_statuses: str | None = None,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         current = owner(user)
         user_id = str(current["id"])
+        if report_statuses is not None:
+            from sold_financial_report import validate_report_statuses
+            report_statuses = validate_report_statuses(report_statuses)
+        report_filter = {"report_statuses": report_statuses} if report_statuses is not None else {}
         today = _today_riyadh()
         month_start = today.replace(day=1).isoformat()
         today_s = today.isoformat()
@@ -1765,6 +1772,7 @@ def make_dashboard_v2_router(
                 shipping_companies=shipping_companies,
                 include_legacy_analyses=False,
                 allow_self_heal=False,
+                **report_filter,
             ),
             _filtered_orders(
                 db,
@@ -1774,6 +1782,7 @@ def make_dashboard_v2_router(
                 payment_methods=payment_methods,
                 shipping_companies=shipping_companies,
                 include_marketing_attribution=True,
+                **report_filter,
             ),
         ]
         if not selected_is_current_month:

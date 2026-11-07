@@ -5,6 +5,7 @@ import SoldProducts, { CostDetails, CostSummary, SoldTable } from "./SoldProduct
 import api from "../lib/api";
 
 const mockPrint = jest.fn();
+const mockProductsGet = jest.fn();
 jest.mock("react-to-print", () => ({ useReactToPrint: ({ contentRef }) => () => mockPrint(contentRef.current.textContent) }), { virtual: true });
 jest.mock("react-router-dom", () => ({
     Link: ({ children, to, ...props }) => <a href={to} {...props}>{children}</a>,
@@ -14,7 +15,7 @@ jest.mock("../lib/api", () => ({ get: jest.fn() }));
 jest.mock("../lib/format", () => ({ formatMoney: value => Number(value).toFixed(2), formatInt: value => String(value) }));
 jest.mock("../components/DateInput", () => ({ __esModule: true, default: props => <input type="date" {...props} />, isValidISODate: value => /^\d{4}-\d{2}-\d{2}$/.test(value) }));
 
-beforeEach(() => { api.get.mockReset(); mockPrint.mockClear(); });
+beforeEach(() => { api.get.mockReset(); mockProductsGet.mockReset(); mockPrint.mockClear(); api.get.mockImplementation((url, options) => url === "/dashboard-v2" ? Promise.resolve({ data: { totals: { total_orders: 2 } } }) : mockProductsGet(url, options)); });
 
 const product = (id, overrides = {}) => ({
     product_id: id, sku: id, name: `منتج ${id}`, units_sold: 2, cost_status: "complete", total_cost: 50, known_cost_total: 50,
@@ -55,8 +56,8 @@ test("refreshes every filtered product including unopened later pages and prints
     global.IS_REACT_ACT_ENVIRONMENT = true;
     const rows = Array.from({ length: 21 }, (_, i) => product(`SKU${i}`));
     rows[20] = product("SKU20", { cost_status: "incomplete", total_cost: null, known_cost_total: 10, missing_cost_reasons: ["option_selection_unresolved:x"] });
-    api.get.mockResolvedValueOnce({ data: { items: rows, count: 21 } });
-    api.get.mockResolvedValueOnce({ data: { items: rows.map(row => product(row.sku)), count: 21 } });
+    mockProductsGet.mockResolvedValueOnce({ data: { items: rows, count: 21 } });
+    mockProductsGet.mockResolvedValueOnce({ data: { items: rows.map(row => product(row.sku)), count: 21 } });
     const host = document.createElement("div"); document.body.appendChild(host);
     const root = createRoot(host);
     await act(async () => { root.render(<SoldProducts />); });
@@ -64,7 +65,7 @@ test("refreshes every filtered product including unopened later pages and prints
     expect(screenSection.textContent).not.toContain("SKU20");
     const refresh = [...host.querySelectorAll("button")].find(button => button.textContent.includes("تحديث جميع التكاليف"));
     await act(async () => { refresh.click(); });
-    expect(api.get).toHaveBeenLastCalledWith("/dashboard-v2/sold-products", { params: { from_date: "2026-11-01", to_date: "2026-11-07", statuses: "default", refresh_costs: true } });
+    expect(mockProductsGet).toHaveBeenLastCalledWith("/dashboard-v2/sold-products", { params: { from_date: "2026-11-01", to_date: "2026-11-07", statuses: "default", refresh_costs: true } });
     expect(host.textContent).toContain("اكتملت تكلفة 1 منتج؛ المتبقي 0");
     const print = [...host.querySelectorAll("button")].find(button => button.textContent === "طباعة مع تفاصيل التكاليف");
     await act(async () => { print.click(); });
@@ -76,8 +77,8 @@ test("refreshes every filtered product including unopened later pages and prints
 test("ignores an older response after filters are applied again", async () => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
     let resolveOld;
-    api.get.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
-    api.get.mockResolvedValueOnce({ data: { items: [product("NEW")], count: 1 } });
+    mockProductsGet.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+    mockProductsGet.mockResolvedValueOnce({ data: { items: [product("NEW")], count: 1 } });
     const host = document.createElement("div"); document.body.appendChild(host);
     const root = createRoot(host);
     await act(async () => { root.render(<SoldProducts />); });
@@ -107,8 +108,8 @@ test("variants sharing product and SKU keep separate accordion and refresh ident
     global.IS_REACT_ACT_ENVIRONMENT = true;
     const first = product("SAME", { report_key: "product:variant-1", name: "المتغير الأول" });
     const second = product("SAME", { report_key: "product:variant-2", name: "المتغير الثاني", cost_status: "incomplete", total_cost: null, missing_cost_reasons: ["base_cost_or_fx_missing"] });
-    api.get.mockResolvedValueOnce({ data: { items: [first, second], count: 2 } });
-    api.get.mockResolvedValueOnce({ data: { items: [first, { ...second, cost_status: "complete", total_cost: 50 }], count: 2 } });
+    mockProductsGet.mockResolvedValueOnce({ data: { items: [first, second], count: 2 } });
+    mockProductsGet.mockResolvedValueOnce({ data: { items: [first, { ...second, cost_status: "complete", total_cost: 50 }], count: 2 } });
     const host = document.createElement("div"); document.body.appendChild(host);
     const root = createRoot(host);
     await act(async () => { root.render(<SoldProducts />); });
