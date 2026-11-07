@@ -128,14 +128,20 @@ async def load_source_current_assignment_workflows(
 
 async def load_review_operational_context(
     db: Any, *, user_id: str, order_numbers: Iterable[str],
+    metadata_only: bool = False,
 ) -> tuple[dict[str, dict[str, Any]], set[str]]:
     """Load local proof and explicitly blocked contracts without legacy fallback."""
     numbers = sorted({_text(number) for number in order_numbers} - {""})
     if not numbers:
         return {}, set()
+    projection = {"_id": 0}
+    if metadata_only:
+        projection.update({field: 1 for field in (
+            "user_id", "order_number", "stage", "completion_mode", "review_completion_operation_id",
+        )})
     workflows = await db[WORKFLOWS].find({
         "user_id": user_id, "order_number": {"$in": numbers},
-    }, {"_id": 0}).to_list(len(numbers))
+    }, projection).to_list(len(numbers))
     local = await load_local_review_workflows(
         db, user_id=user_id, order_numbers=numbers, workflows=workflows,
     )

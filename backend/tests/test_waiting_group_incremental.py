@@ -67,13 +67,13 @@ async def test_count_is_selected_group_current_eligible_physical_pieces_without_
     assert (await request(db, "waiting-count", group="product:p")).json()["eligible_piece_count"] == 0
 
 
-async def test_candidate_card_can_exist_but_canonical_empty_read_and_count_never_grant_selection(db):
+async def test_ineligible_order_has_no_card_or_selectable_details_or_count(db):
     await seed_order(db, "A", current="cancelled")
     await seed_piece(db, "A")
     headers = (await request(db, "waiting-groups", cards_only="true")).json()
-    assert len(headers["groups"]) == 1
-    assert (await request(db, "waiting-page", group=headers["groups"][0]["key"], page_size=1)).json()["files"] == []
-    count = await request(db, "waiting-count", group=headers["groups"][0]["key"])
+    assert headers["groups"] == []
+    assert (await request(db, "waiting-page", group="product:p", page_size=1)).json()["files"] == []
+    count = await request(db, "waiting-count", group="product:p")
     assert count.status_code == 200 and count.json()["eligible_piece_count"] == 0
     for limit in (0, 11):
         assert (await request(db, "waiting-page", page_size=limit)).status_code == 422
