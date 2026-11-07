@@ -161,27 +161,38 @@ def calculate_catalog_line_cost(
         missing.append("invalid_quantity")
     totals = {"product": Decimal(0), "option": Decimal(0)}
     applied = {"product": [], "option": []}
+    details = [{"key": "base", "label": (product or {}).get("name") or row.get("name") or "المنتج",
+                "kind": "product", "status": "costed" if base is not None else "missing_cost",
+                "unit_cost": _amount(base) if base is not None else None}]
     from report_option_identity import resolve_report_choices
     decisions, selection_evidence = resolve_report_choices(row, product, option_bindings)
     seen: set[tuple[str, str]] = set()
     for kind, bindings in (("product", product_bindings), ("option", option_bindings)):
         for index, binding in enumerate(bindings):
             binding_id = str(binding.get("id") or "")
+            if binding_id and (kind, binding_id) in seen:
+                continue
+            if binding_id:
+                seen.add((kind, binding_id))
+            resource = resources.get(str(binding.get("resource_id") or "")) or {}
+            cell = {"key": kind + ":" + (binding_id or str(index)),
+                    "label": resource.get("name") or binding.get("name") or binding.get("option_name") or binding.get("resource_id") or "بند تكلفة",
+                    "kind": "service" if resource.get("kind") == "service" or kind == "option" and binding.get("mode") != "resource" else "component",
+                    "status": "costed", "unit_cost": None}
+            details.append(cell)
             policy_key = ("product_resource" if kind == "product" else "option_resource") + ":" + binding_id
             policy = ((profile or {}).get("composition_components") or {}).get(policy_key) or {}
             if policy.get("cost_treatment") == "included_in_base" or binding.get("cost_treatment") == "included_in_base":
+                cell["status"] = "included_in_base"
                 continue
             if kind == "option" and decisions[index] is not True:
+                cell["status"] = "unresolved" if decisions[index] is None else "not_required"
                 if decisions[index] is None:
                     complete = False
                     missing.append("option_selection_unresolved:" + str(binding.get("id") or binding.get("option_id") or "unknown"))
                 continue
             # Separate binding kinds can legitimately reference the same resource.
             # Deduplicate only identical source identities, never a resource SKU.
-            if binding_id and (kind, binding_id) in seen:
-                continue
-            if binding_id:
-                seen.add((kind, binding_id))
             multiplier = decimal(binding.get("quantity", 1))
             resource = resources.get(str(binding.get("resource_id") or "")) or {}
             if kind == "product" or binding.get("mode") == "resource":
@@ -189,10 +200,12 @@ def calculate_catalog_line_cost(
             else:
                 unit = _sar(binding.get("direct_amount"), binding)
             if unit is None or multiplier is None or multiplier <= 0:
+                cell["status"] = "missing_cost"
                 complete = False
                 missing.append("component_cost_or_fx_missing:" + (binding_id or str(binding.get("resource_id") or "unknown")))
                 continue
             amount = unit * multiplier
+            cell["unit_cost"] = _amount(amount)
             totals[kind] += amount
             applied[kind].append({"binding_id": binding_id, "resource_id": binding.get("resource_id"),
                 "quantity": str(multiplier), "unit_cost_sar": str(unit), "resolved_amount": str(amount)})
@@ -214,6 +227,7 @@ def calculate_catalog_line_cost(
         "resolved_option_selections": selection_evidence,
         "cost_authority": "catalog_estimate", "cost_stage": "expected",
         "historical_cost_verified": False, "missing_cost_reasons": missing,
+        "cost_detail_cells": details,
     }
 
 
@@ -240,6 +254,24 @@ def _frozen_cost(cost: dict, *, authority: str, stage: str = "expected") -> dict
     result["calculation_cost_source"] = ("bundle_" + stage) if authority == "bundle_snapshot" else authority
     result["base_cost_source"] = authority
     return result
+
+
+def _bundle_detail_cells(rows: list[dict], expected: Decimal) -> list[dict]:
+    """Use frozen SAR evidence, never current prices, for displayed leaf costs."""
+    cells = []
+    for index, leaf in enumerate(rows):
+        amount = decimal(leaf.get("line_cost_sar"))
+        if amount is None:
+            return []
+        identity = str(leaf.get("leaf_id") or leaf.get("binding_id") or leaf.get("resource_id") or leaf.get("product_id") or index)
+        kind = "service" if leaf.get("kind") == "direct_cost" else "product" if leaf.get("kind") == "product" else "component"
+        cells.append({"key": "frozen:" + identity + ":" + str(index),
+            "label": leaf.get("name") or leaf.get("resource_name") or leaf.get("product_name") or identity,
+            "kind": kind, "status": "costed", "unit_cost": float(amount),
+            "resource_id": leaf.get("resource_id"), "product_id": leaf.get("product_id")})
+    if sum((decimal(c["unit_cost"]) for c in cells), Decimal(0)) != expected:
+        return []
+    return cells
 
 
 def _bundle_cost(snapshot: dict, quantity: Any, units: list[dict] | None = None) -> dict:
@@ -273,6 +305,9 @@ def _bundle_cost(snapshot: dict, quantity: Any, units: list[dict] | None = None)
             product_components_total=_amount(components), line_total=_amount(total),
             bundle_revision=snapshot.get("revision"),
             bundle_reporting_evidence_hash=report["evidence_hash"])
+        result["cost_detail_cells"] = _bundle_detail_cells(
+            [{**r, "kind": "product"} for r in report.get("added_bases") or []]
+            + list(report.get("components") or []), total / q)
         return _frozen_cost(result, authority="bundle_snapshot", stage="expected")
     estimate = decimal(snapshot.get("estimated_cost"))
     stage, total = "expected", estimate * q if estimate is not None else None
@@ -297,6 +332,12 @@ def _bundle_cost(snapshot: dict, quantity: Any, units: list[dict] | None = None)
                   uses_salla_fallback=fallback, missing_cost_reasons=[],
                   components_total=_amount(total), product_components_total=_amount(total),
                   line_total=_amount(total), bundle_revision=snapshot.get("revision"))
+    if stage == "expected":
+        leaves = []
+        for leaf in snapshot.get("leaves") or []:
+            unit, count = decimal(leaf.get("unit_cost")), decimal(leaf.get("quantity"))
+            leaves.append({**leaf, "line_cost_sar": str(unit * count) if unit is not None and count is not None else None})
+        result["cost_detail_cells"] = _bundle_detail_cells(leaves, total / q)
     return _frozen_cost(result, authority="bundle_snapshot", stage=stage)
 
 

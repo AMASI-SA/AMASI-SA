@@ -189,14 +189,21 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
         _fail("current_bundle_sale_selection_unavailable")
     used_resources = set()
     mezan_complete = True
+    detail_cells = []
 
-    def price(pid: str, pairs: set, variant: str, stack: tuple) -> tuple[Decimal, Decimal, Decimal]:
+    def cell(key, label, kind, status, amount=None):
+        detail_cells.append({"key": key, "label": str(label or key), "kind": kind,
+                             "status": status, "unit_cost": _amount(amount) if amount is not None else None})
+
+    def price(pid: str, pairs: set, variant: str, stack: tuple, scale=Decimal(1), path="root") -> tuple[Decimal, Decimal, Decimal]:
         nonlocal mezan_complete
         if pid not in products or pid in stack or len(stack) >= 5:
             _fail("current_bundle_product_missing_or_recursive")
         product, profile = products[pid], profiles.get(pid, {})
         base, from_mezan = _cost(product, profile, variant)
         mezan_complete &= from_mezan
+        cell("root:base" if path == "root" else path, product.get("name") or pid,
+             "product" if path == "root" else "component", "costed", base * scale)
         physical, services = Decimal(0), Decimal(0)
         doc = definitions.get(pid)
         if doc:
@@ -204,9 +211,14 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
             if not isinstance(items, list) or not 1 <= len(items) <= 100:
                 _fail("current_bundle_recipe_invalid")
             seen_recipe_items = set()
-            for row in items:
+            for recipe_index, row in enumerate(items):
                 if not isinstance(row, dict):
                     _fail("current_bundle_recipe_invalid")
+                recipe_key = path + ":recipe:" + str(row.get("id") or recipe_index)
+                recipe_resource = resources.get(_id(row.get("resource_id"))) or {}
+                recipe_product = products.get(_id(row.get("product_id"))) or {}
+                recipe_label = recipe_resource.get("name") or recipe_product.get("name") or row.get("name") or row.get("resource_id") or row.get("product_id") or "مكوّن"
+                recipe_kind = "service" if recipe_resource.get("kind") == "service" else "component"
                 cond = row.get("condition") or {}
                 signature = (row.get("kind"), _id(row.get("product_id")),
                              _id(row.get("resource_id")), _id(row.get("variant_id")),
@@ -230,6 +242,11 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
                             if isinstance(v, dict)}:
                         _fail("current_bundle_condition_not_in_current_catalog")
                     if (oid, vid) not in pairs:
+                        # Only another proved answer to this option proves non-selection.
+                        proved = any(chosen == oid for chosen, _ in pairs)
+                        if not proved:
+                            _fail("current_bundle_sale_selection_unavailable")
+                        cell(recipe_key, recipe_label, recipe_kind, "not_required")
                         continue
                 count = _number(row.get("quantity", 1))
                 if row.get("component_scope", "per_bundle") != "per_bundle":
@@ -247,7 +264,7 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
                             _fail("current_bundle_nested_selection_invalid")
                         child_pairs.add((_id(choice.get("option_id")), _id(choice.get("value_id"))))
                     child_base, child_physical, child_services = price(
-                        child, child_pairs, _id(row.get("variant_id")), stack + (pid,))
+                        child, child_pairs, _id(row.get("variant_id")), stack + (pid,), scale * count, recipe_key)
                     physical += count * (child_base + child_physical)
                     services += count * child_services
                 elif kind == "resource":
@@ -260,6 +277,7 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
                     unit = _sar(source.get("unit_cost"), source)
                     if unit is None:
                         _fail("current_bundle_resource_cost_missing")
+                    cell(recipe_key, recipe_label, recipe_kind, "costed", count * unit * scale)
                     if source.get("kind") == "service" and not source.get("track_inventory"):
                         services += count * unit
                     else:
@@ -269,17 +287,31 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
         current_option_bindings = [
             ("component", row) for row in bindings.get(pid, [])] + [
             ("option", row) for row in options.get(pid, [])
-            if (_id(row.get("option_id")), _id(row.get("value_id"))) in pairs
         ]
         seen_bindings = set()
         for kind, binding in current_option_bindings:
             bid = _id(binding.get("id"))
+            resource = resources.get(_id(binding.get("resource_id"))) or {}
+            detail_key = path + ":" + kind + ":" + (bid or str(binding.get("resource_id") or "unknown"))
+            detail_label = resource.get("name") or binding.get("name") or binding.get("value_name") or binding.get("option_name") or bid
+            detail_kind = "service" if resource.get("kind") == "service" or kind == "option" and binding.get("mode") == "direct" else "component"
+            policy = ((profile.get("composition_components") or {}).get(
+                ("option_resource:" if kind == "option" else "product_resource:") + bid) or {})
+            included = policy.get("cost_treatment") == "included_in_base" or binding.get("cost_treatment") == "included_in_base"
+            if kind == "option" and (_id(binding.get("option_id")), _id(binding.get("value_id"))) not in pairs:
+                if included:
+                    cell(detail_key, detail_label, detail_kind, "included_in_base", Decimal(0))
+                    continue
+                proved = any(oid == _id(binding.get("option_id")) for oid, _ in pairs)
+                if not proved:
+                    _fail("current_bundle_sale_selection_unavailable")
+                cell(detail_key, detail_label, detail_kind, "not_required")
+                continue
             if not bid or (kind, bid) in seen_bindings:
                 _fail("current_bundle_binding_identity_invalid")
             seen_bindings.add((kind, bid))
-            policy = ((profile.get("composition_components") or {}).get(
-                ("option_resource:" if kind == "option" else "product_resource:") + bid) or {})
-            if policy.get("cost_treatment") == "included_in_base" or binding.get("cost_treatment") == "included_in_base":
+            if included:
+                cell(detail_key, detail_label, detail_kind, "included_in_base", Decimal(0))
                 continue
             q = _number(binding.get("quantity", 1))
             if binding.get("mode") == "direct":
@@ -294,6 +326,7 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
                 unit = _sar(source.get("unit_cost"), source)
             if unit is None:
                 _fail("current_bundle_binding_cost_missing")
+            cell(detail_key, detail_label, detail_kind, "costed", q * unit * scale)
             if kind == "component":
                 physical += q * unit
             else:
@@ -319,6 +352,7 @@ def _build_line_cost(item: dict, root: str, definitions: dict, products: dict,
         "line_total": _amount(total), "cost_authority": "current_bundle_catalog_estimate",
         "cost_stage": "expected", "historical_cost_verified": False,
         "estimated_from_current_catalog": True,
+        "cost_detail_cells": detail_cells,
         "missing_cost_reasons": [],
     }
 

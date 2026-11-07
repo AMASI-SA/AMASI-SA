@@ -2227,6 +2227,7 @@ def make_dashboard_v2_router(
         from_date: str = Query(...),
         to_date: str = Query(...),
         statuses: str = Query("default"),
+        refresh_costs: bool = Query(False),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         current = owner(user)
@@ -2263,6 +2264,8 @@ def make_dashboard_v2_router(
         return {
             "range": {"from_date": from_date, "to_date": to_date, "statuses": selected},
             "items": rows, "count": len(rows),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "complete_count": sum(row["cost_status"] == "complete" for row in rows),
             "incomplete_count": sum(row["cost_status"] != "complete" for row in rows),
             "totals": summarize(rows),
             "source": "unified_orders.quantity + frozen_order_cost_authority_with_catalog_fallback",

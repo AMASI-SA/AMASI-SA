@@ -23,6 +23,7 @@ from product_catalog_cost_resolution import (
 )
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS
+from sold_product_cost_details import detail_group, add_group, finish_groups
 
 CATALOG_FIELDS = {
     "_id": 0, "id": 1, "salla_product_id": 1, "mezan_product_id": 1,
@@ -77,7 +78,7 @@ def _decimal(value: Any) -> Decimal | None:
 def summarize(rows: list[dict]) -> dict:
     units = sum((_decimal(row["units_sold"]) or Decimal(0) for row in rows), Decimal(0))
     costed = [row for row in rows if row["total_cost"] is not None]
-    known = sum((_decimal(row["total_cost"]) or Decimal(0) for row in costed), Decimal(0))
+    known = sum((_decimal(row.get("known_cost_total", row["total_cost"])) or Decimal(0) for row in rows), Decimal(0))
     missing = len(costed) != len(rows)
     return {
         "units_sold": float(units),
@@ -165,18 +166,29 @@ def aggregate_sold_products(
                 "image_url": (product or {}).get("main_image") or item.get("image_url") or item.get("image") or "",
                 "units_sold": Decimal(0), "_known_cost": Decimal(0),
                 "unit_cost": None, "cost_status": "complete", "cost_source": "",
+                "_groups": {}, "_reasons": set(),
             })
+            group = detail_group(cost, item, quantity)
+            # The legacy explicit bundle map is used by pure-helper callers.
+            if authority is None and bundle_costs is not None and bundle_known:
+                legacy_cost = {"calculation_cost_available": amount is not None,
+                    "line_total": float(amount or 0), "cost_authority": cost_source,
+                    "missing_cost_reasons": [] if amount is not None else ["bundle_cost_incomplete"]}
+                group = detail_group(legacy_cost, item, quantity)
+            add_group(row, group)
             row["units_sold"] += quantity
+            row["_known_cost"] += _decimal(group["known_total_cost"]) or Decimal(0)
             if unit is None:
                 row["cost_status"] = "incomplete"
             else:
                 row["unit_cost"] = round(float(unit), 2)
                 row["cost_source"] = cost_source
-                row["_known_cost"] += unit * quantity
     rows = list(aggregated.values())
     for row in rows:
         row["units_sold"] = float(row["units_sold"])
         known_cost = row.pop("_known_cost")
+        row["known_cost_total"] = round(float(known_cost), 2)
+        finish_groups(row, context.get("resources"))
         row["total_cost"] = round(float(known_cost), 2) if row["cost_status"] == "complete" else None
         if row["cost_status"] == "complete":
             row["unit_cost"] = round(float(known_cost / Decimal(str(row["units_sold"]))), 2)
