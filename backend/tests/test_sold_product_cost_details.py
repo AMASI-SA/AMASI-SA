@@ -52,7 +52,7 @@ def test_different_native_choices_do_not_merge_even_when_same_cost():
 
 def test_frozen_price_difference_preserved_and_separately_grouped():
     from order_cost_authority import calculate_catalog_line_cost, line_fingerprint
-    a, b = {**item(2), 'order_item_id': 'a'}, {**item(1), 'order_item_id': 'b'}
+    a, b = {**item(2), 'order_item_id': 'a', 'variant_id': 'red'}, {**item(1), 'order_item_id': 'b', 'variant_id': 'blue'}
     def frozen(line, base):
         cost = calculate_catalog_line_cost(line, product={}, profile={'base_cost': base}, product_bindings=[], option_bindings=[], resources={})
         return {'quantity': line['quantity'], 'cost': cost, 'line_fingerprint': line_fingerprint(line)}
@@ -111,10 +111,13 @@ def test_actual_unit_precision_is_not_rounded_before_group_addition():
     assert row['cost_groups'][0]['unit_cost'] == 20.005
 
 
-def test_variant_rows_have_distinct_stable_report_keys():
+def test_variants_share_one_parent_summary_and_equal_cost_group():
     rows = report([{**item(1), 'variant_id': 'red'}, {**item(1), 'variant_id': 'blue'}])
-    assert len(rows) == 2
-    assert {row['report_key'] for row in rows} == {'p:red', 'p:blue'}
+    assert len(rows) == 1
+    assert rows[0]['report_key'] == 'product:p'
+    assert rows[0]['units_sold'] == 2
+    assert len(rows[0]['cost_groups']) == 1
+    assert rows[0]['cost_groups'][0]['quantity'] == 2
 
 
 def test_customer_names_and_unpriced_colours_do_not_split_equal_costs():

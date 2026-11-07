@@ -48,9 +48,11 @@ def detail_group(cost, item, quantity):
     # Distinct services and applicability states remain distinct even when
     # their overall unit totals happen to match.
     signature = {"cells": sorted([
-                    {k: c.get(k) for k in ("key", "kind", "status", "unit_cost")}
+                    {**{k: c.get(k) for k in ("key", "kind", "status")},
+                     "unit_cost": str(decimal(c["unit_cost"]).normalize())
+                     if decimal(c.get("unit_cost")) is not None else None}
                     for c in cells], key=lambda c: c["key"]),
-                 "complete": complete, "unit": str(known / quantity),
+                 "complete": complete, "unit": str((known / quantity).normalize()),
                  "reasons": sorted(cost.get("missing_cost_reasons") or [])}
     key = hashlib.sha256(json.dumps(signature, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     return {"key": key, "cells": cells, "quantity": float(quantity),
