@@ -1,0 +1,167 @@
+{
+  "mode": "baseline",
+  "at_utc": "2026-11-05T21:38:19.232590+00:00",
+  "engine": "MongoDB8.0.12, isolated loopback replica set, WiredTiger0.25GiB",
+  "profile_scope": "only synthetic fixture DB; enabled identically for both modes",
+  "production_or_provider_requests": false,
+  "source_sha256": {
+    "qoyod_auto_unified/queue_select.py": "3908538413476f3382f1ec76de8202883c36c38fb2a399ed965b3af2a7543d57",
+    "integrations/qoyod/candidate_orders.py": "dca097344059150de2a0487c19cd4b10e9a74592da95de069efb86e7d23d05ca",
+    "integrations/qoyod/models.py": "3d263f67dcd1a6bc92691ba06db97e2784591a8dbc0cbb62781a1a20bb76ac1c"
+  },
+  "trials": [
+    {
+      "orders": 1000,
+      "sent_history": 900,
+      "ticks": 10,
+      "selected_count": 50,
+      "collection_api_calls": {
+        "writes": 10,
+        "find": 30,
+        "returned_documents": 19000
+      },
+      "wall_ms": 511.777,
+      "client_cpu_ms": 281.25,
+      "wire_commands": {
+        "update": 10,
+        "find": 30,
+        "getMore": 190
+      },
+      "driver_command_ms": {
+        "update": 8.348,
+        "find": 91.832,
+        "getMore": 185.662
+      },
+      "driver_read_ms": 277.494,
+      "driver_all_command_ms": 285.842,
+      "profile_read_entries": 115,
+      "profile_docs_examined": 9500,
+      "profile_keys_examined": 9500,
+      "profile_server_read_millis": 19,
+      "profile_plans": {
+        "IXSCAN { user_id: 1, salla_order_id: 1 }": 54,
+        "EOF": 6,
+        "IXSCAN { user_id: 1, order_date: -1 }": 55
+      },
+      "profile_by_collection": {
+        "qoyod_invoices": {
+          "docs_examined": 4500,
+          "keys_examined": 4500,
+          "server_millis": 19
+        },
+        "qoyod_manual_auto_quarantines": {
+          "docs_examined": 0,
+          "keys_examined": 0,
+          "server_millis": 0
+        },
+        "unified_orders": {
+          "docs_examined": 5000,
+          "keys_examined": 5000,
+          "server_millis": 0
+        }
+      }
+    },
+    {
+      "orders": 1000,
+      "sent_history": 900,
+      "ticks": 10,
+      "selected_count": 50,
+      "collection_api_calls": {
+        "writes": 10,
+        "find": 30,
+        "returned_documents": 19000
+      },
+      "wall_ms": 558.784,
+      "client_cpu_ms": 343.75,
+      "wire_commands": {
+        "update": 10,
+        "find": 30,
+        "getMore": 190
+      },
+      "driver_command_ms": {
+        "update": 7.666,
+        "find": 89.438,
+        "getMore": 217.393
+      },
+      "driver_read_ms": 306.831,
+      "driver_all_command_ms": 314.497,
+      "profile_read_entries": 115,
+      "profile_docs_examined": 9500,
+      "profile_keys_examined": 9500,
+      "profile_server_read_millis": 18,
+      "profile_plans": {
+        "IXSCAN { user_id: 1, salla_order_id: 1 }": 54,
+        "EOF": 6,
+        "IXSCAN { user_id: 1, order_date: -1 }": 55
+      },
+      "profile_by_collection": {
+        "qoyod_invoices": {
+          "docs_examined": 4500,
+          "keys_examined": 4500,
+          "server_millis": 18
+        },
+        "qoyod_manual_auto_quarantines": {
+          "docs_examined": 0,
+          "keys_examined": 0,
+          "server_millis": 0
+        },
+        "unified_orders": {
+          "docs_examined": 5000,
+          "keys_examined": 5000,
+          "server_millis": 0
+        }
+      }
+    },
+    {
+      "orders": 1000,
+      "sent_history": 900,
+      "ticks": 10,
+      "selected_count": 50,
+      "collection_api_calls": {
+        "writes": 10,
+        "find": 30,
+        "returned_documents": 19000
+      },
+      "wall_ms": 604.059,
+      "client_cpu_ms": 390.625,
+      "wire_commands": {
+        "update": 10,
+        "find": 30,
+        "getMore": 190
+      },
+      "driver_command_ms": {
+        "update": 8.277,
+        "find": 109.289,
+        "getMore": 215.094
+      },
+      "driver_read_ms": 324.383,
+      "driver_all_command_ms": 332.66,
+      "profile_read_entries": 115,
+      "profile_docs_examined": 9500,
+      "profile_keys_examined": 9500,
+      "profile_server_read_millis": 20,
+      "profile_plans": {
+        "IXSCAN { user_id: 1, salla_order_id: 1 }": 54,
+        "EOF": 6,
+        "IXSCAN { user_id: 1, order_date: -1 }": 55
+      },
+      "profile_by_collection": {
+        "qoyod_invoices": {
+          "docs_examined": 4500,
+          "keys_examined": 4500,
+          "server_millis": 17
+        },
+        "qoyod_manual_auto_quarantines": {
+          "docs_examined": 0,
+          "keys_examined": 0,
+          "server_millis": 0
+        },
+        "unified_orders": {
+          "docs_examined": 5000,
+          "keys_examined": 5000,
+          "server_millis": 3
+        }
+      }
+    }
+  ]
+}

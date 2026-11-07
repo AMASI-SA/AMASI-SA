@@ -1,0 +1,9 @@
+........................................................................ [ 80%]
+..................                                                       [100%]
+============================== warnings summary ===============================
+C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12
+  C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+90 passed, 1 warning in 14.73s

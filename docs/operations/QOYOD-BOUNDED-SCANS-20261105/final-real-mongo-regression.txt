@@ -1,0 +1,17 @@
+........................................................................ [ 22%]
+........................................................................ [ 45%]
+........................................................................ [ 68%]
+...................................................................................................                          [100%]
+============================== warnings summary ===============================
+tests/test_qoyod_scheduled_incremental.py::test_http_display_never_starts_scan_and_native_employee_cannot_refresh
+tests/test_qoyod_header_summary.py::test_http_summary_denies_employee_actor_and_owner_uses_only_small_reads
+  D:\codex-worktrees\qoyod-bounded-scans-20261105\backend\integrations\qoyod\migration_routes.py:76: FastAPIDeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+    sort: str = Query("occurrences", regex="^(occurrences|last_order_date|status)$"),
+
+tests/test_qoyod_scheduled_incremental.py::test_http_display_never_starts_scan_and_native_employee_cannot_refresh
+tests/test_qoyod_header_summary.py::test_http_summary_denies_employee_actor_and_owner_uses_only_small_reads
+  D:\codex-worktrees\qoyod-bounded-scans-20261105\backend\integrations\qoyod\migration_routes.py:77: FastAPIDeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+    sort_dir: str = Query("desc", regex="^(asc|desc)$"),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+315 passed, 4 warnings, 20 subtests passed in 174.74s (0:02:54)

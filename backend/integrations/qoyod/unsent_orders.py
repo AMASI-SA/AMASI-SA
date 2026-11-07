@@ -720,11 +720,12 @@ async def list_unsent_orders(
     to_date: Any = None,
     scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
     _include_internal: bool = False,
+    _audit=None,
 ) -> dict:
     """Map canonical unified candidates to the four read-only UI states."""
     effective_orders_user_id = str(orders_user_id or user_id)
     limit = max(1, min(int(limit), 5000))
-    audit = await build_candidate_audit(
+    audit = _audit if _audit is not None else await build_candidate_audit(
         db,
         orders_user_id=effective_orders_user_id,
         markers_user_id=str(user_id),

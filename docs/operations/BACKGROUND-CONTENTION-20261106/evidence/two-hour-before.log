@@ -1,0 +1,25 @@
+FFF                                                                      [100%]
+================================== FAILURES ===================================
+_ test_snapchat_automatic_refresh_waits_two_hours_after_attempt_finishes[complete] _
+tests\test_ads_scheduler_completion_cadence.py:84: in test_snapchat_automatic_refresh_waits_two_hours_after_attempt_finishes
+    assert not await scheduler._snapchat_cadence_ready(db, user_id="synthetic-owner", now=current)
+E   assert not True
+_ test_snapchat_automatic_refresh_waits_two_hours_after_attempt_finishes[partial] _
+tests\test_ads_scheduler_completion_cadence.py:84: in test_snapchat_automatic_refresh_waits_two_hours_after_attempt_finishes
+    assert not await scheduler._snapchat_cadence_ready(db, user_id="synthetic-owner", now=current)
+E   assert not True
+_ test_snapchat_automatic_refresh_waits_two_hours_after_attempt_finishes[failed] _
+tests\test_ads_scheduler_completion_cadence.py:84: in test_snapchat_automatic_refresh_waits_two_hours_after_attempt_finishes
+    assert not await scheduler._snapchat_cadence_ready(db, user_id="synthetic-owner", now=current)
+E   assert not True
+============================== warnings summary ===============================
+C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12
+  C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_ads_scheduler_completion_cadence.py::test_snapchat_automatic_refresh_waits_two_hours_after_attempt_finishes[complete]
+FAILED tests/test_ads_scheduler_completion_cadence.py::test_snapchat_automatic_refresh_waits_two_hours_after_attempt_finishes[partial]
+FAILED tests/test_ads_scheduler_completion_cadence.py::test_snapchat_automatic_refresh_waits_two_hours_after_attempt_finishes[failed]
+3 failed, 3 deselected, 1 warning in 2.80s

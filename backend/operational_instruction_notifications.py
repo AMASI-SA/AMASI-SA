@@ -16,7 +16,7 @@ LABELS = {
     "rejected": "رُفض التنفيذ؛ راجع سبب الرفض", "completed": "اكتملت التعليمات وفُك الإيقاف",
     "closed": "أُغلقت الملاحظة بواسطة صاحبها",
     "progress": "تحديث تقدم تجهيز المنتج",
-    "comment": "رد جديد على طلب الإيقاف",
+    "comment": "تعليق جديد على المنتج",
     "acknowledged": "تم الاطلاع على التعليمات",
 }
 
@@ -96,7 +96,12 @@ async def actor_assignment_key(db, merchant_id, instruction_id, actor_id):
         "assignee_id": actor_id, "current": {"$ne": False}}, {"_id": 0, "id": 1}).to_list(5000)
     return hashlib.sha256(":".join(sorted(task["id"] for task in tasks)).encode()).hexdigest()
 
-async def emit_instruction_notification(db, *, merchant_id, instruction, event_type, recipient_ids=None):
+async def emit_instruction_notification(db, *, merchant_id, instruction, event_type, recipient_ids=None, sender_id=None):
+    # The sender is an authenticated event author, never a target/recipient.
+    if sender_id is None and event_type in {"created", "assigned", "edit_sent", "approved", "rejected", "completed", "closed"}:
+        sender_id = text(instruction.get("created_by"))
+    sender = await db["users"].find_one({"id": text(sender_id),
+        "$or": [{"id": merchant_id}, {"created_by": merchant_id}]}, {"_id": 0, "id": 1, "name": 1}) if sender_id else None
     targets = set(recipient_ids) if recipient_ids is not None else await recipients(db, merchant_id, instruction)
     if recipient_ids is None and event_type in {"approved", "rejected", "completed"}:
         # Submitter needs the result even if the work has since changed hands.
@@ -114,6 +119,8 @@ async def emit_instruction_notification(db, *, merchant_id, instruction, event_t
         event_revision = revision + assignment_key if event_type == "assigned" else revision
         key = hashlib.sha256(f"{merchant_id}:{instruction['id']}:{event_type}:{event_revision}:{recipient}".encode()).hexdigest()
         row = {"id": key, "merchant_id": merchant_id, "recipient_id": recipient,
+            "sender_id": sender["id"] if sender else "__system__",
+            "sender_name": text(sender.get("name")) if sender else "تحديثات النظام",
             "instruction_id": instruction["id"], "order_number": text(instruction.get("order_number")),
             "event_type": event_type, "assignment_key": assignment_key, "title": LABELS[event_type],
             "priority": instruction.get("priority", "normal"), "metadata": instruction.get("notification_metadata") or {},

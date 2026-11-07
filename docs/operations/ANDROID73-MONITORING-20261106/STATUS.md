@@ -1,0 +1,9 @@
+# Android73 selected supplier-group reads — in progress
+
+Base is fresh Production `a56399edf46f97f8b8e4793dc2619bb2a1b7ac2f`, including concurrent PR1790/background and Qoyod changes. Branch `codex/android73-waiting-count-progress-20261106` must preserve that history. No shared `/app` change, new frozen intent, release lease, deployment or live business write has occurred here.
+
+Implemented additive `page_size`1..10 on the existing scoped waiting-page. Default10 keeps prior callers compatible. The app can publish first1 before filling remaining9, with the same canonical physical cursor and fresh order/local-review eligibility. First-response detail hydration is bounded to two one-row policy checks including lookahead rather than the original ten-row batches.
+
+Implemented GET waiting-count for one explicitly selected group, using only eligibility metadata on physical pieces and the existing canonical order/local-review policy. Order eligibility is shared only within the count request; no cross-request authority cache. It never loads options/images/files/supplier catalogs, grants write authority, changes balances or caps/truncates the actual count. First details and the separate total do not wait on each other in the companion mobile flow.
+
+Tests: baseline RED for page_size ignored (10 rather than1) and missing count404; current focused3 PASS. Combined test_waiting_group_incremental, test_preparation_lazy_sections and test_supplier_dispatch_waiting_current_status:71 PASS on real isolated loopback Mongo27858, no skipped coverage. CI selected-section gate includes the new test file. Broader server tests, final source/intent A/B, release rehearsal and official deploy verification remain pending. Companion mobile branch is codex/android73-monitoring-selection-20261106. Do not publish this WIP or modify another conversation's lease.

@@ -5379,44 +5379,10 @@ async def _local_startup() -> None:
     # them too before it can advertise readiness. Installers are app-idempotent;
     # their identical Mongo create_index calls are safe to repeat per replica.
     await install_process_local_auth_security(db)
-    # Each process restart needs a new optional observer task, even when the
-    # release-global initialization record was completed by an earlier process.
-    from salla_orders_v3.worker import start_salla_orders_v3_shadow_runtime
-    app.state.salla_orders_v3_shadow_task = (
-        await start_salla_orders_v3_shadow_runtime(db)
-    )
-    try:
-        from integrations.qoyod.worker import start_worker as _qoyod_worker_start
-        _qoyod_worker_start(db, interval_sec=5.0, batch_limit=25)
-        logger.info("iter-262: qoyod pipeline worker started")
-    except Exception as exc:
-        logger.exception("iter-262: qoyod pipeline worker failed to start: %s", exc)
-    try:
-        from integrations.qoyod_manual.auto_send import (
-            start_worker as _qoyod_plan_b_auto_start,
-        )
-        _qoyod_plan_b_auto_start(db, interval_sec=15.0, batch_limit=5)
-        logger.info("Plan-B Qoyod automatic sender started")
-    except Exception as exc:
-        logger.exception("Plan-B Qoyod automatic sender failed to start: %s", exc)
-    from salla_integration.service import salla_token_maintenance_loop
-    app.state.salla_token_maintenance_task = _asyncio.create_task(
-        salla_token_maintenance_loop(db)
-    )
-    from operational_balance_worker import run as run_operational_balances
-    app.state.operational_balance_task = _asyncio.create_task(run_operational_balances(db))
-    from order_review_resume_worker import start_worker as start_review_resume
-    app.state.review_completion_resume_task = await start_review_resume(db)
-    from assembly_completion_delivery import start_worker as start_assembly_delivery
-    app.state.assembly_completion_delivery_task = await start_assembly_delivery(db)
-    from salla_integration.shipping_label_inbox import start_worker as start_label_inbox
-    app.state.shipping_label_inbox_task = await start_label_inbox(db)
-    from salla_integration.payment_update_inbox import start_worker as start_payment_inbox
-    app.state.payment_update_inbox_task = await start_payment_inbox(db)
-    from salla_integration.cost_option_recovery import start_worker as start_cost_option_recovery
-    app.state.cost_option_recovery_task = await start_cost_option_recovery(db)
-    from operational_push import run as run_operational_push
-    app.state.operational_push_task = _asyncio.create_task(run_operational_push(db))
+    # Only the supervisor lives in the web process. The child composes the same
+    # canonical guards and runs the existing jobs with their existing leases.
+    from background_worker_process import start_background_process
+    start_background_process(app)
     app.state.startup_phase = "ready"
     app.state.readiness = "ready"
     process_local_readiness_event.set()
@@ -5481,6 +5447,8 @@ async def on_startup():
 @app.on_event("shutdown")
 async def on_shutdown():
     process_local_readiness_event.clear()
+    from background_worker_process import stop_background_process
+    await stop_background_process(app)
     from order_review_resume_worker import stop_worker as stop_review_resume
     await stop_review_resume(getattr(app.state, "review_completion_resume_task", None))
     await cancel_deferred_task(app)
@@ -5488,7 +5456,8 @@ async def on_shutdown():
     await stop_salla_orders_v3_shadow_worker(
         getattr(app.state, "salla_orders_v3_shadow_task", None)
     )
-    for task_name in ("event_loop_lag_task", "operational_balance_task", "assembly_completion_delivery_task", "shipping_label_inbox_task", "payment_update_inbox_task", "cost_option_recovery_task", "operational_push_task"):
+    from integrations.qoyod.scheduled_scan import stop_scans
+    for task_name in ("qoyod_scan_scheduler", "event_loop_lag_task", "operational_balance_task", "assembly_completion_delivery_task", "shipping_label_inbox_task", "payment_update_inbox_task", "operational_push_task"):
         task = getattr(app.state, task_name, None)
         if task is not None:
             task.cancel()
@@ -5496,6 +5465,7 @@ async def on_shutdown():
                 await task
             except _asyncio.CancelledError:
                 pass
+    await stop_scans()
     campaign_ai_monitor_task = getattr(
         app.state, "campaign_ai_monitor_task", None
     )

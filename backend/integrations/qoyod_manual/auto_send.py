@@ -23,7 +23,7 @@ Safety properties:
   orders continue;
 * infrastructure and unknown errors never turn ``auto_send`` off; a failure
   with an order number is quarantined, while a round-level failure is retried
-  on the next worker tick;
+  on the next two-hour cycle (or an explicit owner-started cycle);
 * every mutating run is written to ``qoyod_manual_auto_runs`` before the first
   external request.
 """
@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -52,6 +53,7 @@ from integrations.qoyod_manual.send import (
     manual_send_one,
 )
 from salla_integration.sync import resync_single_order
+from .auto_cycle import INTERVAL_SECONDS, POLL_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -502,6 +504,24 @@ async def _release_lease(db, owner: Optional[str]) -> None:
         logger.exception("Plan-B auto-send lease release failed")
 
 
+async def _lease_is_current(db, owner):
+    try:
+        return bool(await db.qoyod_manual_auto_worker_leases.find_one(
+            {'_id': _TENANT, 'owner': owner, 'lease_until': {'$gt': _now()}}, {'_id': 1}))
+    except Exception:
+        return False  # Unknown ownership may not start another financial send.
+
+
+async def _renew_worker_lease(db, owner):
+    while True:
+        await asyncio.sleep(10)
+        result = await db.qoyod_manual_auto_worker_leases.update_one(
+            {'_id': _TENANT, 'owner': owner, 'lease_until': {'$gt': _now()}},
+            {'$set': {'lease_until': _now() + timedelta(seconds=45)}})
+        if not result.matched_count:
+            return
+
+
 _LIVE_STATUS_NATIVE_BY_SLUG = {
     "completed": frozenset({"", "completed", "تم التنفيذ", "تم التجهيز"}),
     "in_delivery": frozenset({
@@ -877,6 +897,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         return result
 
     client_scope_token = None
+    lease_heartbeat = asyncio.create_task(_renew_worker_lease(db, owner))
     try:
         # Re-read after the lease. A save/disable may have happened while the
         # worker was waiting.
@@ -927,7 +948,11 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         # one complete Qoyod invoice-reference snapshot) for this batch only.
         client_scope_token = begin_shared_manual_qoyod_client()
         results: list[dict[str, Any]] = []
+        lease_lost = False
         for row in candidates:
+            if not await _lease_is_current(db, owner):
+                lease_lost = True
+                break
             order_number = str(row["order_number"])
             try:
                 still_eligible, refresh = await _refresh_and_verify_salla_status(
@@ -944,6 +969,9 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                             or snapshot.get("status_slug"),
                     })
                     continue
+                if not await _lease_is_current(db, owner):
+                    lease_lost = True
+                    break
                 payload = await manual_send_one(
                     db,
                     user_id=_TENANT,
@@ -1086,9 +1114,9 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         result = {
             "ok": True,
             "status": (
-                "credentials_paused"
-                if credential_paused_count
-                else "succeeded"
+                "lease_lost" if lease_lost else (
+                    "credentials_paused" if credential_paused_count else "succeeded"
+                )
             ),
             "run_id": run_id,
             "sent_count": sent_count,
@@ -1123,7 +1151,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
             error_reference,
         )
         # Keep the application armed.  No order was selected safely enough to
-        # quarantine here, so the next 15-second tick retries the round.
+        # quarantine here. The durable cycle scheduler applies its cooldown.
         result = {
             "ok": False,
             "status": "round_failed",
@@ -1134,45 +1162,72 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         return result
     finally:
         _LAST_RUN_AT = _now()
+        lease_heartbeat.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await lease_heartbeat
         if client_scope_token is not None:
             end_shared_manual_qoyod_client(client_scope_token)
         await _release_lease(db, owner)
 
 
-async def _loop(db, *, interval_sec: float, batch_limit: int) -> None:
+async def _run_automatic_batch(db, *, batch_limit: int) -> dict[str, Any]:
+    from .recovery_campaign import tick as recovery_tick
+    from .recovery_adapter import ProductionPorts
+    if await recovery_tick(db, ProductionPorts):
+        return {"ok": True, "status": "recovery_campaign", "sent_count": 0}
+    return await run_once(db, batch_limit=batch_limit)
+
+
+async def _loop(db, *, interval_sec: float, batch_limit: int, wake_event=None) -> None:
+    from .auto_cycle import run_due_cycle, INTERVAL_SECONDS
     logger.info(
         "Plan-B Qoyod auto-send worker started interval=%ss batch=%s",
-        interval_sec, batch_limit,
+        INTERVAL_SECONDS, batch_limit,
     )
     while True:
         try:
-            from .recovery_campaign import tick as recovery_tick
-            from .recovery_adapter import ProductionPorts
-            if not await recovery_tick(db, ProductionPorts):
-                await run_once(db, batch_limit=batch_limit)
+            cycle = await run_due_cycle(db, batch_limit=batch_limit)
+            if cycle.get('status') == 'continuing':
+                await asyncio.sleep(.05)
+                continue
         except Exception:
             # run_once already isolates failures; this protects task liveness.
             logger.exception("Plan-B Qoyod auto-send worker tick escaped")
-        await asyncio.sleep(interval_sec)
+        if wake_event is None:
+            await asyncio.sleep(interval_sec)
+        else:
+            try:
+                await asyncio.wait_for(wake_event.wait(), interval_sec)
+            except asyncio.TimeoutError:
+                pass
+            wake_event.clear()
 
 
 def start_worker(
-    db, *, interval_sec: float = 15.0, batch_limit: int = 5,
+    db, *, interval_sec: float = POLL_SECONDS, batch_limit: int = 5, wake_event=None,
 ) -> asyncio.Task:
     global _WORKER_TASK
     if _WORKER_TASK is not None and not _WORKER_TASK.done():
         return _WORKER_TASK
     _WORKER_TASK = asyncio.create_task(
-        _loop(db, interval_sec=interval_sec, batch_limit=batch_limit),
+        _loop(db, interval_sec=interval_sec, batch_limit=batch_limit, wake_event=wake_event),
         name="qoyod-plan-b-auto-send-worker",
     )
     return _WORKER_TASK
 
 
 def liveness() -> dict[str, Any]:
+    from background_worker_process import is_worker_process, status as background_status
+    running = _WORKER_TASK is not None and not _WORKER_TASK.done()
+    if not is_worker_process():
+        running = background_status()['running']
     return {
-        "running": _WORKER_TASK is not None and not _WORKER_TASK.done(),
+        "running": running,
+        "execution": "background_process",
         "last_run_at": _LAST_RUN_AT.isoformat() if _LAST_RUN_AT else None,
         "last_run_ok": _LAST_RUN_OK,
         "last_round": _LAST_ROUND,
+        "automatic_interval_seconds": INTERVAL_SECONDS,
+        "automatic_interval_minutes": INTERVAL_SECONDS // int(POLL_SECONDS),
+        "cadence_basis": "last_finished_at",
     }

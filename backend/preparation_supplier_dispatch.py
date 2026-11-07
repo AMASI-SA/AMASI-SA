@@ -1170,7 +1170,7 @@ async def _waiting_groups(db: Any, user_id: str, employee_id: str) -> dict[str, 
             "suppliers": await _active_suppliers(db, user_id=user_id)}
 
 
-async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str, group: str = "") -> dict[str, Any]:
+async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str, group: str = "", page_size: int = 10) -> dict[str, Any]:
     from bson import ObjectId
 
     query = _waiting_query(user_id, employee_id)
@@ -1189,10 +1189,10 @@ async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str, gro
         query["$expr"] = {"$and": expressions}
 
     chosen = []
-    cursor = db[PIECES].find(query, {"image_b64": 0}).sort("_id", -1).batch_size(32)
+    cursor = db[PIECES].find(query, {"image_b64": 0}).sort("_id", -1).batch_size(page_size)
     try:
-        while len(chosen) < 11:
-            batch = await cursor.to_list(length=32)
+        while len(chosen) < page_size + 1:
+            batch = await cursor.to_list(length=page_size)
             if not batch:
                 break
             candidates = [row for row in batch if piece_is_available_for_supplier_dispatch(row)]
@@ -1203,10 +1203,10 @@ async def _waiting_page(db: Any, user_id: str, employee_id: str, after: str, gro
         await cursor.close()
 
     next_cursor = None
-    if len(chosen) > 10:
-        key = chosen[9]["_id"]
+    if len(chosen) > page_size:
+        key = chosen[page_size - 1]["_id"]
         next_cursor = ("o:" if isinstance(key, ObjectId) else "s:") + str(key)
-    chosen = chosen[:10]
+    chosen = chosen[:page_size]
     by_batch = defaultdict(list)
     for row in chosen:
         by_batch[_text(row.get("batch_id"))].append(row)
@@ -1244,13 +1244,19 @@ async def _employee_workspace(
     employee_id: str,
     limit: int,
     piece_grain: bool = False,
+    batch_ids: list[str] | None = None,
+    piece_ids: list[str] | None = None,
+    dispatch_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    scoped_read = batch_ids is not None
     pieces = await db[PIECES].find(
         {
             "user_id": user_id,
             "responsible_employee_id": employee_id,
             "experiment_archived_at": None,
             "status": {"$ne": PIECE_STATUS_CANCELLED},
+            **({"batch_id": {"$in": batch_ids}} if batch_ids is not None else {}),
+            **({"piece_id": {"$in": piece_ids}} if piece_ids is not None else {}),
         },
         {"_id": 0, "user_id": 0, "image_b64": 0},
     ).sort("updated_at", -1).limit(50000).to_list(50000)
@@ -1362,8 +1368,10 @@ async def _employee_workspace(
             else _group_piece_products(account_pieces)
         )
 
-    dispatches = await db[DISPATCHES].find(
-        {"user_id": user_id, "sent_by_id": employee_id, "status": {"$ne": "building"}},
+    dispatches = dispatch_rows if dispatch_rows is not None else await db[DISPATCHES].find(
+        {"user_id": user_id, "sent_by_id": employee_id, "status": {"$ne": "building"},
+         **({"source_files.cards.piece_id": {"$in": [_text(row.get("piece_id")) for row in pieces]}}
+            if scoped_read else {})},
         {"_id": 0, "user_id": 0},
     ).sort("sent_at", -1).limit(500).to_list(500)
     pieces_by_dispatch: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -1372,6 +1380,8 @@ async def _employee_workspace(
         if dispatch_id:
             pieces_by_dispatch[dispatch_id].append(piece)
     for dispatch in dispatches:
+        if dispatch_rows is not None:
+            continue  # Metadata already reflects all current pieces, not just this page.
         current = pieces_by_dispatch.get(_text(dispatch.get("id"))) or []
         statuses = {
             _text(piece.get("supplier_dispatch_status")) for piece in current
@@ -1400,7 +1410,7 @@ async def _employee_workspace(
             supplier_rows.values(),
             key=lambda row: (_normalized(row.get("supplier_name")), row["supplier_id"]),
         ),
-        "suppliers": await _active_suppliers(db, user_id=user_id),
+        "suppliers": await _active_suppliers(db, user_id=user_id) if not scoped_read else [],
     }
 
 
@@ -1587,16 +1597,40 @@ def make_preparation_supplier_dispatch_router(
                 indexes_ready = True
 
     @router.get("/waiting-page")
-    async def waiting_page(after: str = Query("", max_length=256), group: str = Query("", max_length=1024), user: dict = Depends(current_user)) -> dict[str, Any]:
+    async def waiting_page(after: str = Query("", max_length=256), group: str = Query("", max_length=1024), page_size: int = Query(10, ge=1, le=10), user: dict = Depends(current_user)) -> dict[str, Any]:
         worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
         await ensure_indexes_once()
-        return await _waiting_page(db, _merchant_user_id(worker), _actor_id(worker), after, group)
+        return await _waiting_page(db, _merchant_user_id(worker), _actor_id(worker), after, group, page_size)
+
+    @router.get("/waiting-count")
+    async def waiting_count(group: str = Query(min_length=1, max_length=1024), user: dict = Depends(current_user)) -> dict[str, Any]:
+        worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
+        await ensure_indexes_once()
+        from preparation_section_reads import waiting_count
+        return await waiting_count(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker), group=group)
 
     @router.get("/waiting-groups")
-    async def waiting_groups(user: dict = Depends(current_user)) -> dict[str, Any]:
+    async def waiting_groups(cards_only: bool = False, after: str = Query("", max_length=2048), user: dict = Depends(current_user)) -> dict[str, Any]:
         worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
         await ensure_indexes_once()
+        if cards_only:
+            from preparation_section_reads import waiting_cards
+            return await waiting_cards(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker), after=after)
         return await _waiting_groups(db, _merchant_user_id(worker), _actor_id(worker))
+
+    @router.get("/progress-days")
+    async def progress_dates(user: dict = Depends(current_user)) -> dict[str, Any]:
+        worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
+        await ensure_indexes_once()
+        from preparation_section_reads import progress_days
+        return await progress_days(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker))
+
+    @router.get("/progress-workspace")
+    async def progress_day_workspace(day: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$|^__unknown__$"), after: str = Query("", max_length=512), user: dict = Depends(current_user)) -> dict[str, Any]:
+        worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
+        await ensure_indexes_once()
+        from preparation_section_reads import progress_workspace
+        return await progress_workspace(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker), day=day, after=after)
 
     @router.get("/workspace")
     async def workspace(

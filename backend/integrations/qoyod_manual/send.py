@@ -27,6 +27,7 @@ from __future__ import annotations
 import logging
 import uuid
 from contextvars import ContextVar
+from pymongo.errors import DuplicateKeyError
 from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Optional
@@ -1011,8 +1012,8 @@ async def _acquire_lock(db, *, user_id: str, order_number: str,
     # Fire-and-forget: ensure unique index (idempotent).
     try:
         await coll.create_index("order_number", unique=True)
-    except Exception:
-        pass
+    except Exception as exc:
+        raise ManualSendRefused('send_lock_unavailable', 'تعذر تأكيد قفل منع التكرار') from exc
 
     lock_id = f"manual-{order_number}-{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc)
@@ -1056,20 +1057,22 @@ async def _acquire_lock(db, *, user_id: str, order_number: str,
                     {"started_at": started.isoformat()
                      if isinstance(started, datetime) else str(started)})
         # Reset failed / stale-in_progress locks in place.
-        await coll.update_one(
-            {"order_number": order_number, "user_id": user_id},
+        acquired = await coll.update_one(
+            {"order_number": order_number, "user_id": user_id,
+             "lock_id": existing.get('lock_id'), 'status': existing.get('status')},
             {"$set": {"status": "in_progress", "lock_id": lock_id,
                        "started_at": now, "actor": actor,
                        "last_error": None}})
+        if acquired.matched_count != 1:
+            raise ManualSendRefused('in_progress', 'حصل عامل آخر على قفل إرسال الطلب')
         return lock_id
-    await coll.insert_one({
-        "order_number":  order_number,
-        "user_id":       user_id,
-        "lock_id":       lock_id,
-        "status":        "in_progress",
-        "started_at":    now,
-        "actor":         actor,
-    })
+    try:
+        await coll.insert_one({
+            "order_number": order_number, "user_id": user_id,
+            "lock_id": lock_id, "status": "in_progress", "started_at": now, "actor": actor,
+        })
+    except DuplicateKeyError as exc:
+        raise ManualSendRefused('in_progress', 'حصل عامل آخر على قفل إرسال الطلب') from exc
     return lock_id
 
 
@@ -2860,41 +2863,37 @@ async def manual_send_one(
                 f"استجابة غير ناجحة من قيود ({exc.status_code})",
                 exc.to_dict())
 
-    # Automatic backlog recovery relies on the local idempotency lock and
-    # persisted invoice/payment markers above. It must keep moving when Qoyod's
-    # reference-search endpoint is unavailable or stale. Manual sends retain
-    # the remote safety-net lookup.
-    automatic_backlog_send = str(actor or "").startswith("auto-plan-b:")
-    if automatic_backlog_send:
-        existing_inv = None
-    else:
-        try:
-            existing_inv = await client.find_invoice_by_reference(
-                str(order_number))
-        except ManualQoyodError as exc:
-            # An unavailable/unauthorized lookup is UNKNOWN, never evidence that
-            # the reference is absent. Fail closed before any customer, product,
-            # invoice, or payment write. A later retry must reconcile first.
-            await _finalize_lock(
-                db,
-                order_number=str(order_number),
-                user_id=user_id,
-                lock_id=lock_id,
-                status="failed",
-                error={
-                    "code": "qoyod_http_error",
-                    "message": (
-                        f"تعذر التأكد من مرجع الفاتورة في قيود "
-                        f"({exc.status_code})"
-                    ),
-                    "detail": exc.to_dict(),
-                },
-            )
-            raise ManualSendRefused(
-                "qoyod_http_error",
-                f"تعذر التأكد من مرجع الفاتورة في قيود ({exc.status_code})",
-                exc.to_dict(),
-            ) from exc
+    # A display/reconciliation snapshot is never permission to create.
+    # Positive cached existence may block a write, but cached absence must be
+    # revalidated for this guarded send (including automatic new orders).
+    client.invalidate_invoice_absence(str(order_number))
+    try:
+        existing_inv = await client.find_invoice_by_reference(
+            str(order_number))
+    except ManualQoyodError as exc:
+        # An unavailable/unauthorized lookup is UNKNOWN, never evidence that
+        # the reference is absent. Fail closed before any customer, product,
+        # invoice, or payment write. A later retry must reconcile first.
+        await _finalize_lock(
+            db,
+            order_number=str(order_number),
+            user_id=user_id,
+            lock_id=lock_id,
+            status="failed",
+            error={
+                "code": "qoyod_http_error",
+                "message": (
+                    f"تعذر التأكد من مرجع الفاتورة في قيود "
+                    f"({exc.status_code})"
+                ),
+                "detail": exc.to_dict(),
+            },
+        )
+        raise ManualSendRefused(
+            "qoyod_http_error",
+            f"تعذر التأكد من مرجع الفاتورة في قيود ({exc.status_code})",
+            exc.to_dict(),
+        ) from exc
     if existing_inv:
         eid = _to_int(existing_inv.get("id"))
         await _finalize_lock(

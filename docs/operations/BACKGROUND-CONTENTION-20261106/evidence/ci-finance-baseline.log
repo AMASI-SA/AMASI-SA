@@ -1,0 +1,29 @@
+......................................F................                  [100%]
+================================== FAILURES ===================================
+_ test_dashboard_v2_keeps_dependent_financial_totals_null_when_snapchat_is_unknown _
+tests\test_dashboard_snapchat_spend_issue_727.py:1027: in test_dashboard_v2_keeps_dependent_financial_totals_null_when_snapchat_is_unknown
+    result = await endpoint(
+dashboard_v2_routes.py:102: in wrapped
+    result = await func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+dashboard_v2_routes.py:1980: in dashboard_v2
+    product_cost["missing_all_cost_products_count"] == 0
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'missing_all_cost_products_count'
+============================== warnings summary ===============================
+C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12
+  C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+recurring_obligations_routes.py:292
+  D:\codex-worktrees\mezan-dashboard-timing-before-20261106\backend\recurring_obligations_routes.py:292: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @root_validator(skip_on_failure=True)
+
+recurring_obligations_routes.py:316
+  D:\codex-worktrees\mezan-dashboard-timing-before-20261106\backend\recurring_obligations_routes.py:316: PydanticDeprecatedSince20: Pydantic V1 style `@root_validator` validators are deprecated. You should migrate to Pydantic V2 style `@model_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @root_validator(skip_on_failure=True)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_dashboard_snapchat_spend_issue_727.py::test_dashboard_v2_keeps_dependent_financial_totals_null_when_snapchat_is_unknown
+1 failed, 54 passed, 3 warnings in 10.43s

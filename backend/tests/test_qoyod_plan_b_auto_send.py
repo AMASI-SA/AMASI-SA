@@ -614,6 +614,19 @@ async def _prepare_run(
             "orders": authoritative_rows,
         }
 
+    # This suite tests the send round after discovery. Discovery persistence,
+    # caps and exact-reference scoping are covered with real mock collections
+    # in test_qoyod_scheduled_incremental.py.
+    from qoyod_auto_unified import incremental
+    async def fake_discover(db, owner, builder):
+        result = await builder(db, orders_user_id=owner, from_date="2026-07-01",
+                               lightweight=True, scope_unified_to_date_range=True,
+                               include_inbox_evidence=False)
+        result['discovery'] = {'scope': 'incremental', 'checked': len(result['orders']), 'recovered': 0}
+        result['_pending_followup'] = []
+        return result
+    monkeypatch.setattr(incremental, 'discover', fake_discover)
+
     async def fake_refresh(db, *, orders_user_id, order_number):
         assert orders_user_id == "orders-user"
         return True, {
@@ -624,6 +637,9 @@ async def _prepare_run(
 
     monkeypatch.setattr(auto_send, "_current_settings", fake_settings)
     monkeypatch.setattr(auto_send, "_acquire_lease", fake_acquire)
+    async def current_lease(db, owner):
+        return True
+    monkeypatch.setattr(auto_send, '_lease_is_current', current_lease)
     monkeypatch.setattr(auto_send, "_release_lease", fake_release)
     monkeypatch.setattr(
         auto_send, "build_candidate_audit", fake_candidate_snapshot
@@ -901,7 +917,8 @@ async def test_more_than_prefetch_page_of_quarantines_cannot_starve_older_row(
 
     assert calls == ["older-runnable"]
     assert result["sent_count"] == 1
-    assert result["authoritative_backlog_count"] == 31
+    assert result["authoritative_backlog_count"] is None
+    assert result["counts_scope"] == "incremental_window"
     assert result["runnable_candidate_count"] == 1
     assert result["open_quarantined_candidate_count"] == 30
     assert result["batch_candidate_count"] == 1
@@ -1108,6 +1125,9 @@ async def test_round_level_failure_keeps_worker_armed_for_next_tick(
 
     monkeypatch.setattr(auto_send, "_current_settings", fake_settings)
     monkeypatch.setattr(auto_send, "_acquire_lease", fake_acquire)
+    async def current_lease(db, owner):
+        return True
+    monkeypatch.setattr(auto_send, '_lease_is_current', current_lease)
     monkeypatch.setattr(auto_send, "_release_lease", fake_release)
     monkeypatch.setattr(
         auto_send, "build_candidate_audit", failed_snapshot

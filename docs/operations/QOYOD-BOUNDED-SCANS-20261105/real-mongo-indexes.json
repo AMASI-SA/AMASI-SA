@@ -1,0 +1,13 @@
+{
+  "invoice_history_rows": 1004,
+  "lookup_references": 4,
+  "winning_indexes": [
+    "qoyod_invoice_official_reference",
+    "qoyod_invoice_raw_reference",
+    "qoyod_invoice_reference"
+  ],
+  "docs_examined": 6,
+  "keys_examined": 5,
+  "returned": 3,
+  "diagnostic_host_omitted": true
+}

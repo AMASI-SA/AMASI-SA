@@ -15,9 +15,12 @@ class Router:
     def get(self, *args, **kwargs):
         return lambda function: function
 
+    post = get
+
 
 @pytest.mark.asyncio
 async def test_ads_and_snapchat_wait_for_local_readiness_and_cancel_safely(monkeypatch):
+    monkeypatch.setenv('MEZAN_BACKGROUND_WORKER_PROCESS', '1')
     process_local_readiness_event.clear()
     calls = []
     blockers = {"ads": asyncio.Event(), "snapchat": asyncio.Event()}
@@ -57,6 +60,7 @@ async def test_ads_and_snapchat_wait_for_local_readiness_and_cancel_safely(monke
 
 @pytest.mark.asyncio
 async def test_initialization_failure_never_releases_heavy_schedulers(monkeypatch):
+    monkeypatch.setenv('MEZAN_BACKGROUND_WORKER_PROCESS', '1')
     process_local_readiness_event.clear()
     called = asyncio.Event()
 
@@ -70,5 +74,6 @@ async def test_initialization_failure_never_releases_heavy_schedulers(monkeypatc
     await router.on_startup[0]()
     await asyncio.sleep(0.01)
     assert not called.is_set()
-    await router.on_shutdown[0]()
+    for callback in reversed(router.on_shutdown):
+        await callback()
     assert not called.is_set()

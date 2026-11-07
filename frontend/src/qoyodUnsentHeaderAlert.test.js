@@ -9,11 +9,11 @@ const payload = {invoice_presence: {complete: true, count: 3, expires_at: "2026-
 test("legacy queue count is never presented as provider absence", () => {
     expect(count({counts: {"لم يُرسل": 271}}, now)).toBeNull();
 });
-test("only fresh complete evidence yields a count, including zero", () => {
+test("last complete display result survives expiry without becoming send authority", () => {
     expect(count(payload, now)).toBe(3);
     expect(count({...payload, invoice_presence: {...payload.invoice_presence, count: 0}}, now)).toBe(0);
     expect(count({...payload, scan_truncated: true}, now)).toBeNull();
-    expect(count(payload, now + 15 * 60_000)).toBeNull();
+    expect(count(payload, now + 15 * 60_000)).toBe(3);
     expect(count({...payload, invoice_presence: {...payload.invoice_presence, complete: false}}, now)).toBeNull();
     expect(count({...payload, invoice_presence: {...payload.invoice_presence, count: null}}, now)).toBeNull();
 });

@@ -1,0 +1,38 @@
+FFF                                                                      [100%]
+================================== FAILURES ===================================
+_______ test_provider_page_processing_gives_an_unrelated_request_a_turn _______
+tests\test_snapchat_background_responsiveness.py:44: in test_provider_page_processing_gives_an_unrelated_request_a_turn
+    assert served, "Unrelated API work was blocked until the entire provider page finished"
+E   AssertionError: Unrelated API work was blocked until the entire provider page finished
+E   assert []
+_ test_both_aggregation_passes_yield_before_fact_publishing_and_keep_exact_totals _
+tests\test_snapchat_background_responsiveness.py:72: in test_both_aggregation_passes_yield_before_fact_publishing_and_keep_exact_totals
+    result = await hourly.refresh_snapchat_account_hours(SimpleNamespace(provider_calls=1),
+latency_evidence.py:129: in wrapped
+    return await function(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+integrations_control_center\snapchat_account_hourly_refresh.py:903: in refresh_snapchat_account_hours
+    await _upsert_performance(
+tests\test_snapchat_background_responsiveness.py:67: in write
+    assert served == [1, 2], "Each fold must let other requests run before publishing facts"
+E   AssertionError: Each fold must let other requests run before publishing facts
+E   assert [] == [1, 2]
+E
+E     Right contains 2 more items, first extra item: 1
+E     Use -v to get more diff
+_______ test_cancellation_during_aggregation_publishes_no_partial_facts _______
+tests\test_snapchat_background_responsiveness.py:108: in test_cancellation_during_aggregation_publishes_no_partial_facts
+    with pytest.raises(asyncio.CancelledError):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE CancelledError
+============================== warnings summary ===============================
+C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12
+  C:\Users\amasi\.codex\worktrees\mezan-page-performance-20261106\.venv\Lib\site-packages\starlette\formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_snapchat_background_responsiveness.py::test_provider_page_processing_gives_an_unrelated_request_a_turn
+FAILED tests/test_snapchat_background_responsiveness.py::test_both_aggregation_passes_yield_before_fact_publishing_and_keep_exact_totals
+FAILED tests/test_snapchat_background_responsiveness.py::test_cancellation_during_aggregation_publishes_no_partial_facts
+3 failed, 1 warning in 2.62s

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
+import os
 
 from pymongo.errors import (
     AutoReconnect,
@@ -33,7 +34,7 @@ TRANSIENT_MONGO_ERRORS = (
 def main_client_options(*, event_listener: Any) -> dict[str, Any]:
     """Return the single conservative option set for the web-process client."""
     return {
-        "maxPoolSize": MONGO_MAX_POOL_SIZE,
+        "maxPoolSize": 8 if os.environ.get('MEZAN_BACKGROUND_WORKER_PROCESS') == '1' else MONGO_MAX_POOL_SIZE,
         "minPoolSize": MONGO_MIN_POOL_SIZE,
         "serverSelectionTimeoutMS": MONGO_SERVER_SELECTION_TIMEOUT_MS,
         "connectTimeoutMS": MONGO_CONNECT_TIMEOUT_MS,

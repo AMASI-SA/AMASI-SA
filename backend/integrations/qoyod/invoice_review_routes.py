@@ -74,23 +74,18 @@ def attach_invoice_review_routes(
         page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
         user: dict = Depends(current_user),
     ):
-        tenant = tenant_id(user)
-        key = await get_api_key(db, tenant)
-        if not key:
-            raise HTTPException(
-                status_code=409,
-                detail="qoyod_api_key_not_configured",
-            )
-        try:
-            result = await sync_invoice_review(
-                db,
-                orders_user_id=orders_owner_id(user),
-                markers_user_id=tenant,
-                api_client=await build_api_client(db, tenant, key),
-                **_params(from_date, to_date, search, page, page_size),
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        from security_sensitive_routes import require_qoyod_security_owner
+        from integrations.qoyod.scheduled_scan import request_scan
+        user = await require_qoyod_security_owner(db, user)
+        requested = await request_scan(db, tenant=tenant_id(user),
+                                       owner=orders_owner_id(user), manual=True)
+        result = await _review_or_422(
+            orders_user_id=orders_owner_id(user), markers_user_id=tenant_id(user),
+            **_params(from_date, to_date, search, page, page_size),
+        )
+        result['scan'] = requested['scan']
+        result['accepted'] = requested['accepted']
+        result['sync_summary'] = {'ok': True, 'ran': False, 'refresh_requested': True}
         return result
 
     @router.get("/invoice-review/export.xlsx")

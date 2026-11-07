@@ -448,6 +448,32 @@ async def ensure_qoyod_indexes(db) -> None:
     auditing trivial. Each index has a `name=` so future migrations
     can target them precisely.
     """
+    await db.qoyod_auto_cycle_items.create_index(
+        [('cycle_id', 1), ('order_number', 1)], unique=True,
+        name='qoyod_cycle_reference',
+    )
+    await db.qoyod_auto_cycle_items.create_index(
+        [('cycle_id', 1), ('state', 1), ('priority', 1), ('order_date', 1), ('order_number', 1)],
+        name='qoyod_cycle_pending',
+    )
+    await db.qoyod_auto_cycle_items.create_index('expires_at', expireAfterSeconds=0,
+        name='qoyod_finished_cycle_expiry')
+    await db.qoyod_order_followup.create_index(
+        [('user_id', 1), ('order_number', 1)], unique=True,
+        name='qoyod_followup_owner_order',
+    )
+    await db.unified_orders.create_index(
+        [('user_id', 1), ('qoyod_followup_dirty', 1), ('order_number', 1)],
+        name='qoyod_followup_dirty_orders',
+    )
+    await db.qoyod_order_followup.create_index(
+        [('user_id', 1), ('priority', 1), ('next_check_at', 1), ('order_number', 1)],
+        name='qoyod_followup_due',
+    )
+    await db.qoyod_scan_views.create_index(
+        [('tenant', 1), ('generation', 1), ('offset', 1)],
+        unique=True, name='qoyod_scan_view_generation',
+    )
     # --- qoyod_settings ---
     await db.qoyod_settings.create_index(
         [("user_id", pymongo.ASCENDING)],
@@ -492,6 +518,14 @@ async def ensure_qoyod_indexes(db) -> None:
     )
 
     # --- qoyod_invoices ---
+    for field, name in (
+        ('reference', 'qoyod_invoice_reference'),
+        ('qoyod_official_reference', 'qoyod_invoice_official_reference'),
+        ('raw_response.reference', 'qoyod_invoice_raw_reference'),
+    ):
+        await db.qoyod_invoices.create_index(
+            [('user_id', 1), (field, 1)], name=name,
+        )
     await db.qoyod_invoices.create_index(
         [("user_id", pymongo.ASCENDING),
          ("salla_order_id", pymongo.ASCENDING)],

@@ -149,7 +149,23 @@ def test_operational_image_is_in_virtual_assembly_card_without_touching_original
 async def test_create_operational_item_uses_independent_photo_and_next_order_learns(monkeypatch):
     """Actual review mutation must freeze a photo only in the new internal card."""
     import order_review_routes as review
-    db = AsyncMongoMockClient()["operational-create-route"]
+    from order_review_product_defaults import ACTION_CLOCKS
+    raw_db = AsyncMongoMockClient()["operational-create-route"]
+    class ClockOptions:
+        # mongomock_motor delegates with_options to synchronous mongomock.
+        # Keep this image-only fixture async while asserting the production
+        # durability options; real replica-set outbox tests exercise the write.
+        def with_options(self, *, write_concern):
+            assert write_concern.document == {"w": "majority", "j": True}
+            return self
+        async def find_one_and_update(self, *args, **kwargs):
+            return await raw_db[ACTION_CLOCKS].find_one_and_update(*args, **kwargs)
+    class ImageFixtureDB:
+        def __getitem__(self, name):
+            return ClockOptions() if name == ACTION_CLOCKS else raw_db[name]
+        def __getattr__(self, name):
+            return getattr(raw_db, name)
+    db = ImageFixtureDB()
     current_order = {"value": SimpleNamespace(order_number="1001", order_id="salla-1001")}
     original = source()
     original.name = "هودي شتوي"
@@ -165,7 +181,8 @@ async def test_create_operational_item_uses_independent_photo_and_next_order_lea
     async def allowed(*_args, **_kwargs):
         return None
 
-    async def detail(_db, tenant, order):
+    async def detail(_db, tenant, order, *, local_only=False):
+        assert local_only is True
         row = await _db[review.WORKFLOWS].find_one(
             {"user_id": tenant, "order_number": order.order_number}, {"_id": 0},
         )

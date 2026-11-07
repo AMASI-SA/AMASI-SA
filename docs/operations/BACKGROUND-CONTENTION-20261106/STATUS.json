@@ -1,0 +1,138 @@
+{
+  "task_id": "BACKGROUND-CONTENTION-20261106",
+  "state": "source_review_and_affected_checks_complete_final_candidate_ci_pending",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1785",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/mezan-background-contention-20261106",
+  "reviewed_base": "2549f053f1ec272cd6e4fc371919775db2d02b6c",
+  "integration": {
+    "reason": "Production advanced with Android72 PR1787 before any intent B was frozen",
+    "preserved_source": "f89feb9889ec953e1c76e7677ee87eec4f9fafde",
+    "preserved_branch": "codex/mezan-background-before-android72-20261106",
+    "preserved_checks": "36 successful, six conditional skips, no failures after one bounded retry of a Docker Hub TLS service-download failure before tests",
+    "method": "Rebase only the eight source checkpoints onto new J; range-diff reports all eight identical and task file bytes are identical; inherited new Production intent remains unchanged",
+    "old_candidate_not_used": "Artifact13476155648/source f89feb9889ec953e1c76e7677ee87eec4f9fafde/base b0b23a5ca62efe934d7eded08d2b7abdca9a9389 is preserved outside the repository but must not be frozen or deployed after the Production advance",
+    "platform_validation": "Official full candidate loader passed in Linux CI. Native Windows POSIX-permission revalidation is unsupported (0666); no permission/source gate was bypassed. New exact-source Linux candidate and host rehearsals are required."
+  },
+  "user_requirement": "Find and repair actual background causes of employee/system slowness even when all dashboard browsers are closed. Dashboard UI work is stopped and must not be resumed or published.",
+  "related_issue": "https://github.com/AMASI-SA/AMASI-SA/issues/1724",
+  "latest_user_decision": {
+    "snapchat_automatic_cadence": "Every two hours plus manual spending refresh when needed",
+    "manual_control_location": "Above the advertising-platforms chart in Mezan 2; same circular refresh icon and label as Latest Sold Products",
+    "dashboard_scope": "General dashboard changes remain stopped. Only the explicitly requested spending refresh control is authorized in this task. Do not reuse PR1784."
+  },
+  "prior_dashboard_work": {
+    "branch": "codex/mezan-dashboard-first-load-20261106",
+    "wip_sha": "5c33a559a64ff846718494331b057b7ea39ecefa",
+    "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1784",
+    "state": "closed_unmerged_at_user_request",
+    "intent_applied_or_frozen": false,
+    "lease_or_deployment": false
+  },
+  "observed_production_state": {
+    "source": "User supplied owner-authenticated GET /api/integrations-v2/ads-auto-sync/status",
+    "enabled": true,
+    "runs_without_browser": true,
+    "interval_seconds": 300,
+    "rolling_days": 2,
+    "scheduler_status": "running",
+    "previous_cycle_started_at": "2026-11-06T01:58:20.231768+00:00",
+    "previous_cycle_finished_at": "2026-11-06T02:17:57.401300+00:00",
+    "previous_cycle_wall_seconds": 1177.169532,
+    "next_cycle_started_at": "2026-11-06T02:18:09.383000",
+    "scheduler_storage_uses_utc": true,
+    "gap_seconds_under_utc_storage_convention": 11.981700,
+    "snapchat_status": "partial",
+    "snapchat_coverage": {"status": "incomplete", "data_state": "unknown_incomplete", "expected_requests": 4, "completed_requests": 3},
+    "other_provider_status": {"google_ads": "partial", "meta_ads": "complete", "tiktok_ads": "complete"},
+    "provider_campaign_accounting_qoyod_write_reached": false,
+    "limitation": "Cycle and run wall duration includes queue/network time. It does not establish CPU time or sole causation of employee slowness. No live latency improvement claim."
+  },
+  "confirmed_code_mechanisms": [
+    "Native advertising scheduler starts after readiness and defaults enabled; runs in the FastAPI process independent of browser state",
+    "Global Mongo claim sets next_due_at to server NOW plus interval at cycle start",
+    "Cycle release does not move next_due_at after completion; loop checks again every 15 seconds, allowing overrunning cycles almost continuously",
+    "Provider start timestamps use the common cycle timestamp; individual provider wall values must not be treated as exclusive CPU time",
+    "Heavy-work admission/cooperative dashboard reducers do not reserve CPU for employee routes",
+    "Some legacy AI/ad loops were already disabled; other AI launchers already use bounded children. Do not restart disabled work."
+  ],
+  "invariants": [
+    "No Qoyod source, schedules, locks, sending, reconciliation or financial behavior changes",
+    "No Salla/order/shipping/payment/employee writer changes",
+    "Only the explicitly requested advertising-chart manual spending control; general dashboard changes remain stopped",
+    "No provider campaign/budget/bid writes in testing",
+    "Preserve provider facts, completeness/unknown policies, ownership fencing and exact source calculations",
+    "No unreviewed worker activation, /app mutation, lease or production configuration change"
+  ],
+  "production_changed_by_this_task": false,
+  "source_changes": [
+    "backend/integrations_control_center/ads_auto_sync_scheduler.py",
+    "backend/tests/test_ads_scheduler_completion_cadence.py",
+    "backend/integrations_control_center/snapchat_account_hourly_refresh.py",
+    "backend/tests/test_snapchat_background_responsiveness.py",
+    "backend/integrations_control_center/snapchat_manual_spend_refresh.py",
+    "backend/tests/test_snapchat_manual_spend_refresh.py",
+    "frontend/src/components/DashboardAdsSpendCard.jsx",
+    "frontend/src/components/DashboardAdsSpendCard.manualRefresh.test.jsx",
+    "frontend/src/services/snapchatManualSpendRefresh.js",
+    "frontend/src/services/snapchatManualSpendRefresh.test.js",
+    "frontend/src/lib/dashboardPlatformSpendClient.js",
+    "frontend/src/lib/dashboardPlatformSpendClient.test.js",
+    "backend/tests/test_ads_auto_sync_scheduler_v2.py",
+    "backend/tests/test_dashboard_snapchat_spend_issue_727.py",
+    "scripts/benchmark_snapchat_reporting.py",
+    ".github/workflows/ads-auto-sync-5min-v2.yml"
+  ],
+  "first_fix": "Cycle completion, lease expiry and next due time are one atomic Mongo server-clock update. Every successful, partial or failed completed cycle leaves the configured interval before another replica can start; data results and owner fencing are preserved.",
+  "additional_fixes": [
+    "Snapchat waits two hours after complete/partial/failed attempts, including normalization of surviving legacy ten-minute environment values; other provider intervals remain unchanged",
+    "Snapchat account-page extraction, row validation and both Riyadh aggregation folds use existing request-local CPUWorkBudget checkpoints. Ordered calculations and synchronous public helper contracts remain identical. Cancellation before publication produces no partial facts."
+  ],
+  "verification": {
+    "broad_backend": {"passed": 210, "exit_code": 0, "source_checkpoint": "d093ced62f1504166aad37100adcd79da1d6b584", "includes": "Full affected reporting/financial suites, native token rotation, employee fulfillment read and order repository regressions"},
+    "broad_frontend": {"passed": 132, "suites": 10, "exit_code": 0, "includes": "Manual card/service/cache plus existing financial/date/cart/mobile/interceptor behavior"},
+    "queued_manual_admission_followup": {"passed": 73, "exit_code": 0, "includes": "Durable registration before heavy-capacity wait; actual provider exclusion; resource pressure leaves connection health intact; own lease cleanup on cancellation and rejection"},
+    "before": {"failed": 3, "exit_code": 1, "reason": "Another replica immediately starts after a 20-minute completed/partial/failed cycle"},
+    "after": {"passed": 87, "exit_code": 0, "real_loopback_mongo": true, "includes": "New cooldown cases, real global lease race/skew/fencing, scheduler v2, target recovery, TikTok and resource governor"},
+    "ci": {"verified_checkpoint": "9015721d5f46dfbab044b8f0000d11c76b6e8cc6", "success": 36, "skipped": 6, "failures": 0, "final_source_candidate": "Pending after the type-annotation and evidence-only final source checkpoint; source A must pass before intent B is frozen"},
+    "final_reporting_check": {"passed": 24, "result": "24 passed, 1 warning in 3.67s", "includes": "Cooperative reporting and existing hourly v2 cases after private generator return-annotation correction", "log": "evidence/final-reporting-tests.log"},
+    "ordinary_frontend_build": {"result": "Vite completed: built in 5.77s", "log": "evidence/ordinary-build-tail.log", "limitation": "Ordinary local build; governed Linux A/B release and both clean-clone host rehearsals remain required"},
+    "owner_policy_status": {"before": "1 failed: owner GET lacked the Snapchat cadence already present in internal cycle results", "after": "60 passed, 1 warning in 3.66s; exit 0", "behavior": "Owner status explicitly reports 7200 seconds / 120 minutes based on completion so the selected policy can be verified after deployment; original tenant-isolation/sanitization assertions remain intact"},
+    "two_hour_policy": {"before_failed": 3, "after_passed": 90, "exit_code": 0, "real_mongo": true},
+    "cooperative_reporting": {"before_failed": 3, "after_passed": 24, "exit_code": 0, "covers": "Real provider-page seam, unrelated callback opportunities in both folds, exact independent monetary/conversion totals, cancellation before any fact write, existing hourly v2 cases"},
+    "manual_backend": {"before_failed": 4, "after_passed": 6, "real_mongo": true, "exit_code": 0, "covers": "HTTP 202 before completion and before occupied heavy capacity; duplicate join, owner scope/employee denial, range validation; real canonical writer bypasses only automatic cadence, retains provider exclusion, preserves connection health on admission rejection, and terminalizes/releases its own cancelled run"},
+    "manual_frontend": {"before_failed_card": 3, "before_failed_cache": 1, "after_passed": 42, "suites": 4, "exit_code": 0, "covers": "Labelled circular button, no provider refresh on open, explicit POST then status reads, saved-fact reload, abort on period change, retained data on failure and rejection of old cache writes after invalidation"},
+    "controlled_comparison": {
+      "exit_code": 0,
+      "synthetic_health_arrivals": 800,
+      "row_sizes": [14400, 72000],
+      "counterbalanced_rounds": 2,
+      "full_output_sha256_parity": true,
+      "independent_spend_total_parity": true,
+      "includes_unchanged_v6_freshness_scan": true,
+      "health_p95_ms_72000_rows": {"round_1_before": 1383.327, "round_1_after": 94.365, "round_2_before": 1346.405, "round_2_after": 71.273},
+      "limitation": "Local reporting computation plus ASGI health control; no external provider/database calls. Does not establish hosted employee latency or an overall live percentage. Total reporting wall time can increase while other work receives turns."
+    },
+    "preexisting_ci_fixture_failure": {
+      "job": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/42154942922/job/127686733336",
+      "reproduced_on_current_and_production_base": "1 failure / 54 passes in the same four-module CI command, in independent processes",
+      "cause": "Mock product_cost omitted missing_all_cost_products_count required by the unchanged endpoint",
+      "repair": "Complete the fixture with zero missing-cost products; preserve all null-profit/fee assertions and leave dashboard runtime unchanged",
+      "fresh_checks": "Repaired fixture passes within the 210-case affected backend run; all financial assertions retained"
+    },
+    "synchronous_profile": {"synthetic_only": true, "network_or_database_requests": 0, "rows_14400_ms": 611.04, "rows_72000_ms": 3034.74, "note": "Initial cold synchronous stage profile; the separate counterbalanced comparison above includes the unchanged v6 freshness scan and must not be confused with total reporting-job duration"},
+    "limitation": "Cadence correctness is proven; live employee latency impact and CPU/memory inside a running cycle remain unmeasured"
+  },
+  "manual_refresh_implementation": {
+    "post": "/api/integrations-v2/ads-auto-sync/snapchat/refresh",
+    "get": "/api/integrations-v2/ads-auto-sync/snapchat/refresh/{run_id}",
+    "authority": "Existing _refresh_snapchat canonical writer and provider Mongo lease; manual skips only the two-hour cadence gate",
+    "lifecycle": "Bounded coordinator, max 8 owned tasks, 25-minute deadline, shutdown cancellation/drain; repeated same-owner/range clicks join; range-covering canonical jobs on another replica can be observed. The canonical run is durably registered before heavy-capacity waiting so HTTP acknowledges promptly even when capacity is occupied. Resource pressure does not invalidate provider connection health.",
+    "ui": "Existing advertising-chart icon becomes a labelled circular refresh pill; initial card opening reads saved data only. Only explicit clicks start provider work. Status reads abort on leave/period change and pause while hidden/offline.",
+    "general_dashboard_source_unchanged": true
+  },
+  "latest_verified_remote_checkpoint": "f89feb9889ec953e1c76e7677ee87eec4f9fafde",
+  "local_test_runtime": "Owned synthetic Mongo PID34840 on loopback port27616 was shut down gracefully after verifying its exact executable/dbpath; mongod logged shutdown exitCode 0",
+  "source_review": "Reviewed runtime diff and manual ownership/admission/cancellation lifecycle; only requested UI card/service/cache changed. AdvancedDashboard, mobile, Qoyod and operational writers are untouched. Full-output benchmark parity and affected backend/frontend checks are complete.",
+  "next_safe_action": "Commit and push the final annotation/evidence source checkpoint A; record its exact SHA on PR1785. Inspect all exact-A checks and hash-validate the governed Linux candidate. Commit B with only release/release-intent-v5.json; require both clean-clone host rehearsals and all B checks before reviewed merge. Fresh /app status must be inactive before any workspace mutation or lease. No deployment has occurred in this task."
+}

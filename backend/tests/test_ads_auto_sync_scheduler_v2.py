@@ -1549,7 +1549,11 @@ def test_router_registers_status_and_backend_lifecycle(monkeypatch):
         for route in router.routes
     )
     assert len(router.on_startup) == before_startup + 1
-    assert len(router.on_shutdown) == before_shutdown + 1
+    assert len(router.on_shutdown) == before_shutdown + 2
+    assert any(route.path == "/integrations-v2/ads-auto-sync/snapchat/refresh" and "POST" in route.methods
+               for route in router.routes)
+    assert any(route.path == "/integrations-v2/ads-auto-sync/snapchat/refresh/{run_id}" and "GET" in route.methods
+               for route in router.routes)
 
 
 def test_safe_summary_preserves_account_error_samples():
@@ -2263,6 +2267,12 @@ def test_status_never_exposes_global_results_from_another_tenant():
     )
 
     result = asyncio.run(scheduler.auto_sync_status(db, "tenant-a"))
+
+    assert result["snapchat"] == {
+        "automatic_interval_seconds": 7200,
+        "automatic_interval_minutes": 120,
+        "cadence_basis": "last_finished_at",
+    }
 
     runs_projection = next(
         projection

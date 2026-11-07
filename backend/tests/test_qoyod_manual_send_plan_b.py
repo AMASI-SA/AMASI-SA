@@ -1567,10 +1567,12 @@ async def test_freeze_toggle_stops_worker(db):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status_code", [0, 401, 403, 429, 500])
+@pytest.mark.parametrize('actor', ['manual-ui', 'auto-plan-b:guard-test'])
 async def test_unknown_qoyod_reference_lookup_never_reaches_a_write(
     db,
     monkeypatch,
     status_code,
+    actor,
 ):
     await _seed_settings(db)
     monkeypatch.setenv("QOYOD_API_BASE", "https://qoyod.invalid")
@@ -1616,6 +1618,7 @@ async def test_unknown_qoyod_reference_lookup_never_reaches_a_write(
                 db,
                 user_id=TENANT,
                 order_number=f"LOOKUP-UNKNOWN-{status_code}",
+                actor=actor,
             )
 
     assert captured.value.code == "qoyod_http_error"
@@ -1624,7 +1627,7 @@ async def test_unknown_qoyod_reference_lookup_never_reaches_a_write(
 
 
 @pytest.mark.asyncio
-async def test_auto_plan_b_skips_remote_reference_precheck_but_keeps_local_lock(
+async def test_auto_plan_b_checks_live_reference_and_keeps_local_lock(
     db,
 ):
     order_number = "AUTO-NO-REMOTE-PRECHECK"
@@ -1634,11 +1637,7 @@ async def test_auto_plan_b_skips_remote_reference_precheck_but_keeps_local_lock(
         _inbox_row(order_number=order_number, total=115.0, sku="SKU-AUTO")
     )
 
-    reference_lookup = AsyncMock(
-        side_effect=AssertionError(
-            "automatic backlog sends must not run the remote reference precheck"
-        )
-    )
+    reference_lookup = AsyncMock(return_value=None)
     invoice_post = AsyncMock(return_value={
         "invoice": {
             "id": 9501,
@@ -1678,7 +1677,7 @@ async def test_auto_plan_b_skips_remote_reference_precheck_but_keeps_local_lock(
             actor="auto-plan-b:test-run",
         )
 
-    reference_lookup.assert_not_awaited()
+    reference_lookup.assert_awaited_once_with(order_number)
     assert result["ok"] is True
     assert result["invoice_id"] == 9501
     assert result["payment_id"] == 9801

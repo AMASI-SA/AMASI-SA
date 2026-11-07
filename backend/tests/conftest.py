@@ -2,6 +2,21 @@
 import os
 import openpyxl
 
+# mongomock's bulk builder predates PyMongo's optional sort=None argument.
+# Adapt this test double only; production still exercises PyMongo UpdateOne.
+try:
+    import inspect
+    from mongomock.collection import BulkOperationBuilder
+    if 'sort' not in inspect.signature(BulkOperationBuilder.add_update).parameters:
+        _mock_add_update = BulkOperationBuilder.add_update
+        def _compatible_mock_update(self, *args, sort=None, **kwargs):
+            if sort is not None:
+                raise NotImplementedError('mongomock does not support sorted updates')
+            return _mock_add_update(self, *args, **kwargs)
+        BulkOperationBuilder.add_update = _compatible_mock_update
+except ImportError:
+    pass
+
 SAMPLE_XLSX = "/tmp/salla_test.xlsx"
 
 

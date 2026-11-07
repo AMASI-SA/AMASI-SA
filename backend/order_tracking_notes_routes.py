@@ -657,7 +657,7 @@ async def _record_approval_submission(
         "note": instruction.get("submitted_result"),
         "occurred_at": instruction.get("submitted_at") or _now(),
     })
-    await emit_instruction_notification(db, merchant_id=merchant_id, instruction=instruction, event_type="submitted")
+    await emit_instruction_notification(db, merchant_id=merchant_id, instruction=instruction, event_type="submitted", sender_id=actor_id)
     await _notify_customer_service_approval(
         db,
         merchant_id=merchant_id,
@@ -998,8 +998,20 @@ def make_order_tracking_notes_router(
         return context, row, can_manage
 
     @router.get("/notifications/me")
-    async def my_notifications(user: dict = Depends(instruction_user)):
+    async def my_notifications(directory_only: bool = False, count_only: bool = False,
+        sender_id: str = Query(default="", max_length=128),
+        read_state: Literal["all", "unread", "read"] = "all",
+        cursor: str | None = Query(default=None, max_length=1024), user: dict = Depends(instruction_user)):
         context = await _actor_context(db, user)
+        if count_only:
+            return {"count_only": True, "unread_count": await db[NOTIFICATIONS].count_documents({
+                "merchant_id": context["merchant_id"], "recipient_id": context["actor_id"], "read_at": None})}
+        if directory_only or sender_id:
+            from operational_notification_directory import sender_directory, sender_page
+            if directory_only:
+                return await sender_directory(db, merchant_id=context["merchant_id"], actor_id=context["actor_id"])
+            return await sender_page(db, merchant_id=context["merchant_id"], actor_id=context["actor_id"],
+                sender_id=sender_id, read_state=read_state, cursor=cursor)
         return await notification_feed(db, merchant_id=context["merchant_id"], actor_id=context["actor_id"])
 
     @router.get("/instructions/inbox")
@@ -1042,7 +1054,7 @@ def make_order_tracking_notes_router(
         tasks = await ensure_instruction_tasks(db, context["merchant_id"], row)
         if tasks and all(task.get("stop_acknowledged_by") == task.get("assignee_id") and task.get("stop_acknowledged_at") for task in tasks):
             await db[ORDER_TRACKING_INSTRUCTIONS].update_one({"user_id": context["merchant_id"], "id": row["id"], "edit_phase": "awaiting_stop", "status": "active"}, {"$set": {"edit_phase": "awaiting_salla", "updated_at": now}})
-        await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction={**row, "notification_revision": now.isoformat(), "note": text(payload.note)}, event_type="stop_acknowledged", recipient_ids={text(row.get("created_by"))})
+        await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction={**row, "notification_revision": now.isoformat(), "note": text(payload.note)}, event_type="stop_acknowledged", recipient_ids={text(row.get("created_by"))}, sender_id=context["actor_id"])
         return {"ok": True}
 
     @router.post("/instructions/{instruction_id}/send-edit")
@@ -1149,7 +1161,7 @@ def make_order_tracking_notes_router(
         claimed = await db[TASKS].find_one_and_update({"merchant_id": context["merchant_id"], "instruction_id": row["id"], "assignee_id": "", "status": "pending"}, {"$set": {"assignee_id": context["actor_id"], "claimed_for_review": True}}, return_document=ReturnDocument.AFTER)
         if not claimed:
             raise HTTPException(status_code=409, detail={"code": "instruction_task_already_claimed"})
-        await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction=row, event_type="assigned", recipient_ids={context["actor_id"], text(row.get("created_by"))} - {""})
+        await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction=row, event_type="assigned", recipient_ids={context["actor_id"], text(row.get("created_by"))} - {""}, sender_id=context["actor_id"])
         return {"ok": True, "instruction": await scoped_instruction(db, context["merchant_id"], row, context["actor_id"])}
 
     @router.post("/instructions/{instruction_id}/tasks/submit")
@@ -1210,7 +1222,7 @@ def make_order_tracking_notes_router(
         now = _now()
         for task_id in set(payload.task_ids):
             await db[TASKS].update_one({"id": task_id, "merchant_id": context["merchant_id"], "assignee_id": context["actor_id"], "status": "pending"}, {"$set": {"status": "submitted", "submitted_at": now, "submitted_by": context["actor_id"], "confirmation": payload.confirmation, "result_note": text(payload.note), "submitted_revision": payload.revision}})
-        await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction={**row, "notification_revision": f"{context['actor_id']}:{now.isoformat()}", "note": text(payload.note) or "أكد الموظف تنفيذ المطلوب للقطع المسندة إليه"}, event_type="submitted", recipient_ids={text(row.get("created_by"))} - {""})
+        await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction={**row, "notification_revision": f"{context['actor_id']}:{now.isoformat()}", "note": text(payload.note) or "أكد الموظف تنفيذ المطلوب للقطع المسندة إليه"}, event_type="submitted", recipient_ids={text(row.get("created_by"))} - {""}, sender_id=context["actor_id"])
         pending = await db[TASKS].count_documents({"merchant_id": context["merchant_id"], "instruction_id": row["id"], "status": "pending"})
         if not pending and row.get("edit_flow") == 1:
             return await complete_instruction(instruction_id, InstructionActionRequest(note=text(payload.note)), user)
@@ -1703,7 +1715,7 @@ def make_order_tracking_notes_router(
             for task in tasks:
                 if task.get("assignee_id") == context["actor_id"] and task.get("current", True):
                     await db[TASKS].update_one({"id": task["id"], "assignee_id": context["actor_id"]}, {"$set": {"acknowledged_at": now, "acknowledged_by": context["actor_id"]}})
-            await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction={**instruction, "notification_revision": f"ack:{context['actor_id']}:{now.isoformat()}", "notification_metadata": {"actor_id": context["actor_id"], "actor_name": history["actor_name"], "piece_ids": [task["piece_id"] for task in tasks if task.get("assignee_id") == context["actor_id"]]}}, event_type="acknowledged", recipient_ids={text(instruction.get("created_by"))} - {""})
+            await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction={**instruction, "notification_revision": f"ack:{context['actor_id']}:{now.isoformat()}", "notification_metadata": {"actor_id": context["actor_id"], "actor_name": history["actor_name"], "piece_ids": [task["piece_id"] for task in tasks if task.get("assignee_id") == context["actor_id"]]}}, event_type="acknowledged", recipient_ids={text(instruction.get("created_by"))} - {""}, sender_id=context["actor_id"])
         await _sync_instruction_snapshot(
             db,
             merchant_id=context["merchant_id"],

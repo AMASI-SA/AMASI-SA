@@ -8,15 +8,22 @@ import pytest
 import salla_orders_v3.worker as worker
 
 
-def test_server_starts_observer_per_process_and_stops_before_mongo():
-    tree = ast.parse((Path(__file__).parents[1] / 'server.py').read_text())
+def test_server_supervises_observer_in_child_and_drains_before_mongo():
+    backend = Path(__file__).parents[1]
+    tree = ast.parse((backend / 'server.py').read_text())
     functions = {node.name: node for node in tree.body if isinstance(node, ast.AsyncFunctionDef)}
     global_calls = ast.unparse(functions['_global_startup'])
     local_calls = ast.unparse(functions['_local_startup'])
     shutdown = ast.unparse(functions['on_shutdown'])
     assert '_start_salla_orders_v3_shadow_worker' not in global_calls
-    assert 'start_salla_orders_v3_shadow_runtime' in local_calls
-    assert shutdown.index('stop_salla_orders_v3_shadow_worker') < shutdown.index('client.close()')
+    assert 'start_salla_orders_v3_shadow_runtime' not in local_calls
+    assert 'start_background_process(app)' in local_calls
+    assert shutdown.index('await stop_background_process(app)') < shutdown.index('client.close()')
+    runtime = (backend / 'background_worker_runtime.py').read_text()
+    runner = (backend / 'background_worker_runner.py').read_text()
+    assert 'await start_salla_orders_v3_shadow_runtime(db)' in runtime
+    assert 'await asyncio.gather(*tasks, return_exceptions=True)' in runtime
+    assert runner.index('await stop_tasks(tasks)') < runner.index('server.client.close()')
 
 
 @pytest.mark.asyncio

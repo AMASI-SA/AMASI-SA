@@ -1,0 +1,58 @@
+FAIL src/components/DashboardAdsSpendCard.manualRefresh.test.jsx
+  × chart has a labelled refresh pill and opens with saved facts; only a click requests fresh Snapchat spend (75 ms)
+  × a failed manual fetch keeps the last saved amount visible (17 ms)
+  × changing period cancels manual status observation and rejects a late prior-period completion (20 ms)
+
+  ● chart has a labelled refresh pill and opens with saved facts; only a click requests fresh Snapchat spend
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "تحديث"
+    Received string:    ""
+
+      33 |     await act(async () => root.render(<DashboardAdsSpendCard {...period} />));
+      34 |     const button = host.querySelector('[data-testid="dashboard-ads-spend-refresh"]');
+    > 35 |     expect(button.textContent).toContain("تحديث");
+         |                                ^
+      36 |     expect(button.className).toContain("rounded-full");
+      37 |     expect(getDashboardAdsSpend).toHaveBeenLastCalledWith({ dateFrom: period.fromDate, dateTo: period.toDate, refresh: false });
+      38 |     expect(refreshSnapchatSpend).not.toHaveBeenCalled();
+
+      at Object.<anonymous> (src/components/DashboardAdsSpendCard.manualRefresh.test.jsx:35:32)
+
+  ● a failed manual fetch keeps the last saved amount visible
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "تعذر جلب سناب مؤقتًا"
+    Received string:    "صرفيات منصات الإعلاناتمرتبطة بتاريخ الملخص التنفيذي للأرباحصرفيات اليوم (2026-11-06)سناب شات + ميتا + تيك توك + Google Ads · العرض بتوقيت الرياضعرض ساعيإجمالي المنصات: 42.00 ر.سسناب شات42.00 ر.ستفصيل سناب الساعي غير مكتملميتاغير مربوطغير متصلتيك توكغير مربوطغير متصلGoogle Adsغير مربوطغير متصلخطوط الساعات مبنية على ساعات المنصات الأصلية فقط، ولا يتم توزيع إجمالي اليوم على الساعات بالتخمين.لا توجد صرفيات إعلانية أصلية ضمن التاريخ المحدد حتى الآن."
+
+      51 |     await act(async () => host.querySelector('[data-testid="dashboard-ads-spend-refresh"]').click());
+      52 |     expect(host.textContent).toContain("42.00");
+    > 53 |     expect(host.textContent).toContain("تعذر جلب سناب مؤقتًا");
+         |                              ^
+      54 |     expect(getDashboardAdsSpend).toHaveBeenCalledTimes(1);
+      55 | });
+      56 |
+
+      at Object.<anonymous> (src/components/DashboardAdsSpendCard.manualRefresh.test.jsx:53:30)
+
+  ● changing period cancels manual status observation and rejects a late prior-period completion
+
+    TypeError: Cannot read properties of undefined (reading '0')
+
+      60 |     await act(async () => root.render(<DashboardAdsSpendCard {...period} />));
+      61 |     await act(async () => host.querySelector('[data-testid="dashboard-ads-spend-refresh"]').click());
+    > 62 |     const signal = refreshSnapchatSpend.mock.calls[0][0].signal;
+         |                                                      ^
+      63 |     await act(async () => root.render(<DashboardAdsSpendCard fromDate="2026-11-05" toDate="2026-11-05" />));
+      64 |     expect(signal.aborted).toBe(true);
+      65 |     await act(async () => resolve({ status: "complete" }));
+
+      at Object.<anonymous> (src/components/DashboardAdsSpendCard.manualRefresh.test.jsx:62:54)
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 3 total
+Snapshots:   0 total
+Time:        2.336 s
+Ran all test suites within paths "src/components/DashboardAdsSpendCard.manualRefresh.test.jsx".

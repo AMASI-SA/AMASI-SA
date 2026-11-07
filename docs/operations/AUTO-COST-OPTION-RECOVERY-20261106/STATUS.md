@@ -34,3 +34,17 @@ Remaining checks:
 
 Production changed: NO. No release lease acquired; other deployments unblocked.
 No claim that this prevention is live. This is a recoverable draft checkpoint.
+
+## Integration checkpoint 2026-11-07
+
+All 22 CI workflows passed on 0fef62325c309e1d276427e52fa4bcd1fd01adb4.
+Real-Mongo review: 657 passed + 345 subtests; separate source-fence run
+37 passed including both new recovery transaction/concurrent-source tests;
+acceptance guard 1 passed. No skips/failures in that CI job.
+
+Integrated production a2487c339fce1c3c6f022d96e91d7d892b66f663. Its worker
+isolation supersedes the old web-process startup. Recovery now starts/stops
+inside background_worker_runtime, not server.py. Added child-readiness and
+web-isolation assertions. Exact integrated HEAD needs CI/release validation.
+The operational fence deliberately permits local corrections during financial
+pause while prohibiting financial writes; recovery uses the same boundary.

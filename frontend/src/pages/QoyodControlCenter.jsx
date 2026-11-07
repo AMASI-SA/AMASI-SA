@@ -55,8 +55,11 @@ function errorMessage(error) {
   return detail?.message || error?.message || "تعذر تحميل حالة قيود";
 }
 
-export function QoyodOverview({ settings, unsent, loading, error, onRefresh, onOpenTab }) {
+export function QoyodOverview({ settings, unsent, loading, error, onRefresh, onOpenTab, onRunCycle, starting }) {
   const automatic = settings?.plan_b_auto_send_status || {};
+  const cycle = automatic.cycle || {};
+  const cycleRunning = cycle.status === "running";
+  const cycleQueued = cycle.manual_requested === true;
   const worker = automatic.worker || {};
   const live = automatic.armed === true && worker.running === true;
   const lastError = automatic.last_error;
@@ -92,8 +95,36 @@ export function QoyodOverview({ settings, unsent, loading, error, onRefresh, onO
                   ? "يعالج الطلبات المؤهلة من الأقدم إلى الأحدث، ويحفظ الفاتورة والسداد في ميزان فورًا."
                   : REASON_LABELS[automatic.disabled_reason] || "راجع الإعدادات وحالة العامل."}
               </p>
+              {automatic.armed === true && (
+                <p className="mt-2 text-xs font-semibold" data-testid="qoyod-v2-cadence">
+                  دورة إرسال تلقائية كل ساعتين بعد انتهاء الدورة السابقة. تكمل جميع الفواتير المؤهلة مرة واحدة، بدفعات صغيرة.
+                  {!cycleRunning && !cycleQueued && cycle.next_due_at && !Number.isNaN(new Date(cycle.next_due_at).getTime()) && (
+                    <> الدورة القادمة: {new Date(cycle.next_due_at).toLocaleString("ar-SA-u-ca-gregory", {
+                      timeZone: "Asia/Riyadh", month: "numeric", day: "numeric",
+                      hour: "2-digit", minute: "2-digit", hour12: true,
+                    })} بتوقيت الرياض.</>
+                  )}
+                </p>
+              )}
+              {(cycleRunning || cycleQueued) && (
+                <p className="mt-2 text-sm font-bold" role="status" data-testid="qoyod-cycle-progress">
+                  {cycleQueued ? "الدورة في انتظار بدء العامل." : cycle.phase === "preparing"
+                    ? "جارٍ تجهيز الفواتير المؤهلة للدورة." : `جارٍ الإرسال: عولج ${cycle.processed_count || 0} من ${cycle.eligible_count || 0}.`}
+                  {cycleRunning && cycle.phase !== "preparing" && ` أُرسل ${cycle.sent_count || 0}، وللمراجعة ${cycle.review_count || 0}.`}
+                </p>
+              )}
             </div>
           </div>
+          <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            data-testid="qoyod-cycle-run-now"
+            onClick={onRunCycle}
+            disabled={!automatic.armed || starting || cycleRunning || cycleQueued}
+            className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-extrabold text-white disabled:opacity-50"
+          >
+            {starting ? "جارٍ طلب الدورة…" : cycleRunning ? "دورة الإرسال تعمل" : cycleQueued ? "الدورة قيد الانتظار" : "تشغيل دورة الإرسال الآن"}
+          </button>
           <button
             type="button"
             onClick={onRefresh}
@@ -103,6 +134,7 @@ export function QoyodOverview({ settings, unsent, loading, error, onRefresh, onO
             <ArrowClockwise size={18} className={loading ? "animate-spin" : ""} />
             تحديث الحالة
           </button>
+          </div>
         </div>
       </div>
 
@@ -200,7 +232,7 @@ export function QoyodOverview({ settings, unsent, loading, error, onRefresh, onO
 
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
         <span className="font-black">سياسة التشغيل النهائية:</span>{" "}
-        الإرسال تلقائي فقط. الفاتورة الموجودة في قيود تُصالح ولا تُعاد، وأي طلب غير آمن يبقى محجورًا بسبب واضح.
+        الإرسال كل ساعتين، ويمكن للمالك تشغيل دورة من الزر في أي وقت. الطلب المتكرر ينضم للدورة الجارية. الفاتورة الموجودة في قيود تُصالح ولا تُعاد، وأي طلب غير آمن يبقى محجورًا بسبب واضح.
       </div>
     </div>
   );
@@ -216,6 +248,13 @@ export default function QoyodControlCenter() {
   const [unsent, setUnsent] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [starting, setStarting] = useState(false);
+
+  const updateCycle = useCallback((cycle) => {
+    setSettings(previous => ({ ...previous, plan_b_auto_send_status: {
+      ...previous?.plan_b_auto_send_status, cycle,
+    } }));
+  }, []);
 
   const loadOverview = useCallback(async () => {
     setLoading(true);
@@ -232,8 +271,51 @@ export default function QoyodControlCenter() {
   }, []);
 
   useEffect(() => {
-    loadOverview();
-  }, [loadOverview]);
+    if (activeTab === "overview") loadOverview();
+  }, [loadOverview, activeTab]);
+
+  const cycle = settings?.plan_b_auto_send_status?.cycle;
+  const observing = cycle?.status === "running" || cycle?.manual_requested === true;
+  useEffect(() => {
+    if (activeTab !== "overview" || !observing) return undefined;
+    const controller = new AbortController();
+    let timer;
+    const poll = async () => {
+      if (!document.hidden && navigator.onLine !== false) {
+        try {
+          const response = await api.get("/integrations/qoyod/auto-send/cycle", { signal: controller.signal });
+          if (controller.signal.aborted) return;
+          const next = response.data.cycle;
+          updateCycle(next);
+          if (next.status !== "running" && !next.manual_requested) {
+            await loadOverview();
+            return;
+          }
+        } catch (failure) {
+          if (controller.signal.aborted) return;
+          setError(errorMessage(failure));
+        }
+      }
+      if (!controller.signal.aborted) timer = setTimeout(poll, 2000);
+    };
+    timer = setTimeout(poll, 2000);
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [activeTab, observing, updateCycle, loadOverview]);
+
+  const runCycle = useCallback(async () => {
+    setStarting(true);
+    setError("");
+    try {
+      const response = await api.post("/integrations/qoyod/auto-send/cycle");
+      updateCycle(response.data.status === "running"
+        ? { status: "running", phase: "preparing" }
+        : { manual_requested: true });
+    } catch (failure) {
+      setError(errorMessage(failure));
+    } finally {
+      setStarting(false);
+    }
+  }, [updateCycle]);
 
   const openTab = useCallback((tab) => {
     setSearchParams(tab === "overview" ? {} : { tab });
@@ -252,9 +334,11 @@ export default function QoyodControlCenter() {
         error={error}
         onRefresh={loadOverview}
         onOpenTab={openTab}
+        onRunCycle={runCycle}
+        starting={starting}
       />
     );
-  }, [activeTab, settings, unsent, loading, error, loadOverview, openTab]);
+  }, [activeTab, settings, unsent, loading, error, loadOverview, openTab, runCycle, starting]);
 
   return (
     <div className="space-y-5" dir="rtl" data-testid="qoyod-v2-control-center">
