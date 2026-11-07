@@ -1,0 +1,109 @@
+{
+  "task_id": "EXIT-2D-RENDER-20261105",
+  "branch": "codex/exit-2d-render-integration-20261105",
+  "tested_reference": "3d03ff3b2985ddd0a826d2f18acdeea13cc0d66f",
+  "prior_delivery": "c19bb28b8cb705132794d13e0e4df52d074873e2",
+  "production_integrated": "2d73a2a039e16468bbd45523bacf441bff515eb2",
+  "integration_merge": "440c25ded463ae2a5be86d92e1772ade2142e72e",
+  "state": "ECONOMY_SYNTHETIC_ACCEPTANCE_PASSED_AWAITING_FINANCIAL_APPROVAL",
+  "latest_integration_merge": "8e2f05a26e7e9c8211cc61335a9d1226712ba62c",
+  "code_checkpoint": "c3ded22b5da09188daba2d56c5607db75f1b1a35",
+  "draft_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1757",
+  "verification": {
+    "post_merge_unit_tests_passed": 25,
+    "render_official_json_schema": "passed",
+    "bounded_28_entry_inventory": "passed; 18 registrations and148 launch candidates; runtime reachability remains separate",
+    "local_compatibility": {
+      "passed": 151,
+      "skipped_real_replica_required": 17,
+      "subtests": 59
+    },
+    "earlier_host_image_job": {
+      "source": "68d881623b314e10e1a976d73d82d2dfc132cec6",
+      "run": 41922573450,
+      "job": 126899681962,
+      "conclusion": "success"
+    },
+    "post_merge_compatibility_evidence": {
+      "source": "31fe1c1bbf501d93f99170b2b07d2ed9f4624f37",
+      "run": 41923459537,
+      "inherited_passed": 365,
+      "shipping_fee_passed": 247,
+      "subtests": 83,
+      "overall_run": "failure at supplier ready event null-key collision"
+    },
+    "first_complete_run": {
+      "source": "2f9daf4b5315b87bb5befa7de34beb76e6146d1b",
+      "run": 41924452274,
+      "conclusion": "success",
+      "operational_groups": 6,
+      "fault_and_restore": "passed"
+    },
+    "full_render_command_image_proof": {
+      "source": "057753499c05e87c1c1c23d2e72075fc05b51ab6",
+      "run": 41925888453,
+      "job": 126911190217,
+      "conclusion": "success"
+    },
+    "fulfillment_role_scope_regression": {
+      "before": "1 failed,5 passed; explicit owner-scoped employee read rejected409",
+      "after": "6 passed; foreign-owner and financial-write refusal retained"
+    },
+    "prior_expanded_financial_run": {
+      "source": "d54ed225b2d5f8ec0b9211176d3221f856ffd3b6",
+      "run": 41927811393,
+      "conclusion": "success",
+      "inherited_passed": 365,
+      "compatibility_passed": 376,
+      "subtests": 111,
+      "new_unit_passed": 25,
+      "operational_groups": 7
+    },
+    "waiting_contract_isolation": "Original Production test blob6d889052c26a4ea8d6b2a31d86915e696d7e7928 restored exactly. mobile_app_request_context imports install a global preparation_route_history wrapper; original direct-router contracts now run in a fresh subprocess, without rewriting expectations.",
+    "latest_source_linux_run": 41932365983,
+    "linux": "PASSED at c3ded22b5da09188daba2d56c5607db75f1b1a35; run41932365983 both jobs succeeded",
+    "final_pytest_passed": 802,
+    "final_pytest_subtests_passed": 111,
+    "existing_controller_tests_passed": 25
+  },
+  "production_changed": false,
+  "production_connections": 0,
+  "paid_resources_created": 0,
+  "remaining": [
+    "User approval for dedicated paid Render synthetic staging resources and hosting-account access",
+    "Actual Render private networking/platform/capacity rehearsal after approval",
+    "Separately authorized real Mongo/files/encryption restore and old-owner stop proof",
+    "Fresh reviewed V5 source/intent handoff before any Production merge/deploy"
+  ],
+  "next_action": "Await explicit financial approval of Hobby five0.5CPU/512MiB Frankfurt services plus5GB Mongo disk,36.25USD/month base; proposed72hours approx3.63USD and5USD manual pre-tax stop threshold. No Apply/Create, Production access or V5 bypass.",
+  "base_monthly_usd": {
+    "hobby": 127.5,
+    "pro": 152.5,
+    "tax_and_overages_excluded": true
+  },
+  "production_guard_or_intent_edited": false,
+  "known_release_readiness_gate": "Generic Frontend build/release-readiness rejects old frozen intent and unreviewed new backend modules; unchanged V5 gate, no bypass",
+  "supplier_ready_repair": "Stable per-dispatch event request identity; no financial logic, provider write, data repair or backfill",
+  "results": "docs/operations/EXIT-2D-RENDER-20261105/RESULTS.json",
+  "arabic_report": "docs/operations/EXIT-2D-RENDER-20261105/REPORT-AR.txt",
+  "checks_at_tested_source": {
+    "success": 41,
+    "skipped": 6,
+    "failure": 1,
+    "failure_stage": "Unchanged V5 Production release readiness; no bypass"
+  },
+  "selected_workspace_plan": "Hobby",
+  "financial_approval_packet": "docs/operations/EXIT-2D-RENDER-20261105/HOBBY-APPROVAL.txt",
+  "resource_creation_authorized": false,
+  "account_alerts_configured": false,
+  "economy_results": "docs/operations/EXIT-2D-RENDER-20261105/ECONOMY-RESULTS.json",
+  "economy_report": "docs/operations/EXIT-2D-RENDER-20261105/ECONOMY-AR.txt",
+  "selected_base_monthly_usd": 36.25,
+  "economy_tested_source": "3ae0ffa087d6d0f2c145f3278026cecfd8c4ca04",
+  "economy_final_tested_source": "cf4f1694f8e4dea5ec2830af975a6a559d65b31c",
+  "economy_final_ci_runs": [
+    42044382363,
+    42044383075
+  ],
+  "economy_final_four_jobs": "success"
+}

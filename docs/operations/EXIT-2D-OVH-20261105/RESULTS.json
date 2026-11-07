@@ -1,0 +1,878 @@
+{
+  "task": "EXIT-2D-OVH-20261105",
+  "render_reference": "e57847a361b37eccc171b625339e0fda97493a23",
+  "tested_source": "901dc25e4b673188f4ac2ee8ca5b581b903c336b",
+  "compose_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/42096167315",
+  "compose_job": 127486633240,
+  "regression_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/42096167520",
+  "regression_jobs": {
+    "isolated_linux": 127486635129,
+    "hosting_images": 127486635572
+  },
+  "fresh_checks": {
+    "compose": "success",
+    "both_inherited_jobs": "success",
+    "pytest": 802,
+    "subtests": 111,
+    "runtime_unittest": 25,
+    "original_controller_unittest": 25,
+    "repeated_inventory_subset": 8
+  },
+  "latest": {
+    "outcome": {
+      "exit_code": 0
+    },
+    "resources": {
+      "kind": "cgroup_v2_no_swap",
+      "services": {
+        "exit2dvps42096167315-mongo-1": {
+          "samples": 710,
+          "current_bytes": 220446720,
+          "peak_bytes": 1075744768,
+          "oom": 0,
+          "oom_kill": 0,
+          "restarts_max": 0,
+          "cpu_usage_usec": 36403404,
+          "sample_total_bytes": 507764539392,
+          "cpu_throttled_usec": 42629546,
+          "docker_oom_seen": false,
+          "memory_limit_bytes": 1610612736,
+          "memory_swap_bytes": 1610612736,
+          "nano_cpus": 500000000,
+          "sample_mean_bytes": 715161323,
+          "working_set_peak_bytes": 481357824,
+          "anonymous_peak_bytes": 455503872,
+          "memory_limit_hits": 0
+        },
+        "exit2dvps42096167315-web-1": {
+          "samples": 710,
+          "current_bytes": 280657920,
+          "peak_bytes": 307363840,
+          "oom": 0,
+          "oom_kill": 0,
+          "restarts_max": 0,
+          "cpu_usage_usec": 23884698,
+          "sample_total_bytes": 203544670208,
+          "cpu_throttled_usec": 1053304,
+          "docker_oom_seen": false,
+          "memory_limit_bytes": 1610612736,
+          "memory_swap_bytes": 1610612736,
+          "nano_cpus": 1250000000,
+          "sample_mean_bytes": 286682634,
+          "working_set_peak_bytes": 307273728,
+          "anonymous_peak_bytes": 298741760,
+          "memory_limit_hits": 0
+        },
+        "exit2dvps42096167315-reports-1": {
+          "samples": 655,
+          "current_bytes": 239620096,
+          "peak_bytes": 301182976,
+          "oom": 0,
+          "oom_kill": 0,
+          "restarts_max": 0,
+          "cpu_usage_usec": 22358211,
+          "sample_total_bytes": 162421878784,
+          "cpu_throttled_usec": 9180945,
+          "docker_oom_seen": false,
+          "memory_limit_bytes": 1073741824,
+          "memory_swap_bytes": 1073741824,
+          "nano_cpus": 750000000,
+          "sample_mean_bytes": 247972334,
+          "working_set_peak_bytes": 300904448,
+          "anonymous_peak_bytes": 293224448,
+          "memory_limit_hits": 0
+        },
+        "exit2dvps42096167315-sync-1": {
+          "samples": 655,
+          "current_bytes": 234246144,
+          "peak_bytes": 411615232,
+          "oom": 0,
+          "oom_kill": 0,
+          "restarts_max": 0,
+          "cpu_usage_usec": 30648303,
+          "sample_total_bytes": 166002434048,
+          "cpu_throttled_usec": 30730540,
+          "docker_oom_seen": false,
+          "memory_limit_bytes": 1073741824,
+          "memory_swap_bytes": 1073741824,
+          "nano_cpus": 500000000,
+          "sample_mean_bytes": 253438830,
+          "working_set_peak_bytes": 411144192,
+          "anonymous_peak_bytes": 402841600,
+          "memory_limit_hits": 0
+        },
+        "exit2dvps42096167315-accounting-1": {
+          "samples": 655,
+          "current_bytes": 231997440,
+          "peak_bytes": 288092160,
+          "oom": 0,
+          "oom_kill": 0,
+          "restarts_max": 0,
+          "cpu_usage_usec": 17517382,
+          "sample_total_bytes": 148757987328,
+          "cpu_throttled_usec": 20272772,
+          "docker_oom_seen": false,
+          "memory_limit_bytes": 805306368,
+          "memory_swap_bytes": 805306368,
+          "nano_cpus": 500000000,
+          "sample_mean_bytes": 227111431,
+          "working_set_peak_bytes": 286224384,
+          "anonymous_peak_bytes": 279011328,
+          "memory_limit_hits": 0
+        }
+      }
+    },
+    "operations": [
+      {
+        "analytics_completed": 4,
+        "kind": "actual_operational_handlers_synthetic_data",
+        "paths": {
+          "assembly_labeling": {
+            "p50_ms": 9.034,
+            "p95_ms": 64.554,
+            "requests": 10
+          },
+          "assembly_piece_ready": {
+            "p50_ms": 28.535,
+            "p95_ms": 78.933,
+            "requests": 10
+          },
+          "assembly_receiving_board": {
+            "p50_ms": 29.319,
+            "p95_ms": 381.12,
+            "requests": 10
+          },
+          "create_supplier_file": {
+            "p50_ms": 34.908,
+            "p95_ms": 97.706,
+            "requests": 10
+          },
+          "mark_supplier_ready": {
+            "p50_ms": 19.289,
+            "p95_ms": 31.446,
+            "requests": 10
+          },
+          "my_products": {
+            "p50_ms": 23.655,
+            "p95_ms": 94.209,
+            "requests": 10
+          },
+          "my_products_waiting_page": {
+            "p50_ms": 16.569,
+            "p95_ms": 1475.411,
+            "requests": 10
+          },
+          "shipping_label_print": {
+            "p50_ms": 35.21,
+            "p95_ms": 89.408,
+            "requests": 10
+          }
+        },
+        "physical_printer_tested": false,
+        "provider_calls_possible": false,
+        "supplier_files_unique": 10
+      },
+      {
+        "kind": "snap_employee_overlap",
+        "before_rounds": 1,
+        "after_rounds": 5
+      },
+      {
+        "objects": 7705,
+        "dataSize": 4702625.0,
+        "storageSize": 1826816.0,
+        "indexSize": 4812800.0,
+        "totalSize": 6639616.0,
+        "kind": "synthetic_database_growth"
+      }
+    ],
+    "setup": [
+      {
+        "objects": 5011,
+        "dataSize": 1823707.0,
+        "storageSize": 552960.0,
+        "indexSize": 1761280.0,
+        "totalSize": 2314240.0,
+        "kind": "synthetic_database_growth"
+      }
+    ],
+    "growth": [
+      {
+        "objects": 7767,
+        "dataSize": 57139807.0,
+        "storageSize": 50696192.0,
+        "indexSize": 10792960.0,
+        "totalSize": 61489152.0,
+        "kind": "synthetic_database_growth"
+      }
+    ],
+    "snap_final": {
+      "kind": "snap_real_client_real_mongo_simulated_transport",
+      "rounds": 63,
+      "entities_per_round": 100,
+      "hourly_facts_unique": 2400,
+      "duplicate_lease_denied": true
+    },
+    "security": [
+      {
+        "kind": "actual_compose_security_boundary",
+        "nonroot_readonly_no_docker_socket": true,
+        "secret_files_not_group_or_world_readable": true,
+        "unsafe_database_and_provider_config_rejected": true,
+        "reports_route_allowlist_and_auth_enforced": true,
+        "mongo_unauthenticated_read_rejected": true
+      }
+    ],
+    "accounting": {
+      "before": [
+        {
+          "kind": "real_qoyod_durable_replay_guard",
+          "attempts": 100,
+          "all_refused_already_sent": true,
+          "markers_unchanged": true,
+          "real_provider_enabled": false
+        }
+      ],
+      "after": [
+        {
+          "kind": "real_qoyod_durable_replay_guard",
+          "attempts": 100,
+          "all_refused_already_sent": true,
+          "markers_unchanged": true,
+          "real_provider_enabled": false
+        }
+      ],
+      "restored": [
+        {
+          "kind": "real_qoyod_durable_replay_guard",
+          "attempts": 100,
+          "all_refused_already_sent": true,
+          "markers_unchanged": true,
+          "real_provider_enabled": false
+        }
+      ]
+    },
+    "archive_encrypt": [
+      {
+        "kind": "encrypted_synthetic_archive",
+        "plain_sha256": "967c52ac2b48a2f7dc3a5ff3fc32cc6f3821e6449bf0033dc894914475852fe6",
+        "encrypted_sha256": "4f9c612fd5dbf03b31b510c55ee2f57b85e41f15041db3e6119b59342db34cce",
+        "plain_bytes": 57277636,
+        "encrypted_bytes": 76370276,
+        "wrong_key_rejected": true,
+        "tamper_rejected": true
+      }
+    ],
+    "archive_decrypt": [
+      {
+        "kind": "decrypted_synthetic_archive",
+        "plain_sha256": "967c52ac2b48a2f7dc3a5ff3fc32cc6f3821e6449bf0033dc894914475852fe6",
+        "plain_bytes": 57277636
+      }
+    ],
+    "restore": [
+      {
+        "kind": "fresh_compose_volume_restore",
+        "all_collection_document_index_hashes_equal": true,
+        "collections": 153,
+        "unknown_outcome_preserved": true,
+        "correct_key_accepted_wrong_key_rejected": true,
+        "attachment_checksum_equal": true
+      }
+    ],
+    "disk_usage": "Filesystem      1B-blocks      Used  Available Use% Mounted on\n/dev/loop0     4834848768 508416000 4309655552  11% /home/runner/work/_temp/exit2dvps42096167315/disk\n",
+    "parent": {
+      "parent-cpu.max.txt": "400000 100000\n",
+      "parent-cpu.stat.txt": "usage_usec 370072367\nuser_usec 347635073\nsystem_usec 22437293\nnice_usec 0\ncore_sched.force_idle_usec 0\nnr_periods 5078\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0\n",
+      "parent-memory.current.txt": "978612224\n",
+      "parent-memory.events.txt": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0\n",
+      "parent-memory.max.txt": "8589934592\n",
+      "parent-memory.peak.txt": "2348097536\n",
+      "parent-memory.swap.max.txt": "0\n"
+    },
+    "evidence_file_sha256": {
+      "accounting-after.jsonl": "b91feb2d6cd432b1b693a5dae1e548ec53c116108112212b1bb9a9e0c9e7c182",
+      "accounting-before.jsonl": "b91feb2d6cd432b1b693a5dae1e548ec53c116108112212b1bb9a9e0c9e7c182",
+      "accounting-restored.jsonl": "b91feb2d6cd432b1b693a5dae1e548ec53c116108112212b1bb9a9e0c9e7c182",
+      "archive-decrypt.jsonl": "065e4ecacd8f0db2c599bca2c5a9ecec4e870085f79a31b6f268f38c3b172f2e",
+      "archive-encrypt.jsonl": "82427a0494872796036069d30a0efc26b74c9a3dd48b9144f60a6ea4fa705bf3",
+      "compose-config.json": "b55f021018bf0923d11562cab45df1a7758db066e30929429f31c979ad7997e3",
+      "compose.log": "779cce645e62a486eb21d2bc3e0630b95c487fe6f005246c3d3013b6a301aa58",
+      "container-constraints.json": "f2da5fc1ac66708831cb8f0e910eee05b87e5463a6654677664beede162ec005",
+      "disk-usage.txt": "a543b173798d7e6455a17b43215065a7d273c66c9e247a4f522a628ddca59d49",
+      "duplicate-accounting.log": "dea0c83eaf06feb7aa6cc3921cfe09357376a357f762d0e0ce0bcff06dc9635b",
+      "duplicate-sync.log": "d6c919fb109a3068840b2b9c9017ebb2ab6e18289a2433a1afddb27a63625a05",
+      "final-state.json": "8920b0f24f0e41fa0a6c2a4a456b5af76e9d447dc55c2bfeb7c94a7e7ff32af0",
+      "growth.jsonl": "d7f55c498184eee7b65dfdcc2282a0570427986382f76d3545938337cf57e10c",
+      "operations.jsonl": "ad1b0d64d3c4b2287f635aa2f7895bfde36d4dd449ff2513897c4382063cee21",
+      "outcome.json": "d24219f6de94b955cf36d25bd2aca88e2d35eef45b9317b7083f55ec8fe9653c",
+      "parent-cpu.max.txt": "bd8ea316d63ccab47af9329b4b4b427cb510d04fe500195f5aa332d211d9fd3f",
+      "parent-cpu.stat.txt": "43538083d9c1465c6a541b249086af5d0f5b47d2420be19bf9d04795fea39c84",
+      "parent-memory.current.txt": "c6ca2ce74fe48222e0bb404aff3b86a6471f3d3df11a7201a2cf390a1aac9d8c",
+      "parent-memory.events.txt": "0a2d4e7982066cc7dc914627e7b195ccba88b82a5a996201809e529142d2f380",
+      "parent-memory.max.txt": "8528d39f97fdd9c9689c4373fe4c7b18f2c3bef6b044a2c4be74b07bf9cd07d8",
+      "parent-memory.peak.txt": "85a82a1ddcb266968eb9435bb5006a8cb3d1d56affbbfdc00cc95b45183b346f",
+      "parent-memory.swap.max.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "resources.json": "71910f66550ff949b5f06e362eb60506f15196adc3e123ddf1617120ec470bf0",
+      "restore-expected.json": "9a5ecd45049235652b90023c43b1020dc15b8b0ee7299d8b961e8ddd7c1f72b1",
+      "restore.jsonl": "1865f5176f5b767e2ea8cb590f0be1d945844f4f2e3639f934a7f585f1eeab9a",
+      "security.jsonl": "ec3444d621f22e538895ff137b69a0ed8680e14579d6634173da537cd0cf3ce5",
+      "setup.jsonl": "e25acc907f1bfdeefc19630b8491399f0c2909c27fd21652ad3844c3b9ab7bd6",
+      "snap.jsonl": "6b773e1a6250d83a5b48ca90e8bc55f29b9e4af36b028768b35475fff14d1c66"
+    },
+    "actual_container_constraints": {
+      "exit2dvps42096167315-mongo-1": {
+        "Memory": 1610612736,
+        "MemorySwap": 1610612736,
+        "NanoCpus": 500000000,
+        "CgroupParent": "exit2dvps42096167315.slice",
+        "ReadonlyRootfs": true,
+        "CapDrop": [
+          "ALL"
+        ],
+        "SecurityOpt": [
+          "no-new-privileges:true"
+        ],
+        "PidsLimit": 256,
+        "RestartPolicy": {
+          "Name": "on-failure",
+          "MaximumRetryCount": 5
+        },
+        "PortBindings": {}
+      },
+      "exit2dvps42096167315-web-1": {
+        "Memory": 1610612736,
+        "MemorySwap": 1610612736,
+        "NanoCpus": 1250000000,
+        "CgroupParent": "exit2dvps42096167315.slice",
+        "ReadonlyRootfs": true,
+        "CapDrop": [
+          "ALL"
+        ],
+        "SecurityOpt": [
+          "no-new-privileges:true"
+        ],
+        "PidsLimit": 256,
+        "RestartPolicy": {
+          "Name": "no",
+          "MaximumRetryCount": 0
+        },
+        "PortBindings": {
+          "10000/tcp": [
+            {
+              "HostIp": "127.0.0.1",
+              "HostPort": "10000"
+            }
+          ]
+        }
+      },
+      "exit2dvps42096167315-reports-1": {
+        "Memory": 1073741824,
+        "MemorySwap": 1073741824,
+        "NanoCpus": 750000000,
+        "CgroupParent": "exit2dvps42096167315.slice",
+        "ReadonlyRootfs": true,
+        "CapDrop": [
+          "ALL"
+        ],
+        "SecurityOpt": [
+          "no-new-privileges:true"
+        ],
+        "PidsLimit": 256,
+        "RestartPolicy": {
+          "Name": "no",
+          "MaximumRetryCount": 0
+        },
+        "PortBindings": {}
+      },
+      "exit2dvps42096167315-sync-1": {
+        "Memory": 1073741824,
+        "MemorySwap": 1073741824,
+        "NanoCpus": 500000000,
+        "CgroupParent": "exit2dvps42096167315.slice",
+        "ReadonlyRootfs": true,
+        "CapDrop": [
+          "ALL"
+        ],
+        "SecurityOpt": [
+          "no-new-privileges:true"
+        ],
+        "PidsLimit": 256,
+        "RestartPolicy": {
+          "Name": "no",
+          "MaximumRetryCount": 0
+        },
+        "PortBindings": {}
+      },
+      "exit2dvps42096167315-accounting-1": {
+        "Memory": 805306368,
+        "MemorySwap": 805306368,
+        "NanoCpus": 500000000,
+        "CgroupParent": "exit2dvps42096167315.slice",
+        "ReadonlyRootfs": true,
+        "CapDrop": [
+          "ALL"
+        ],
+        "SecurityOpt": [
+          "no-new-privileges:true"
+        ],
+        "PidsLimit": 256,
+        "RestartPolicy": {
+          "Name": "no",
+          "MaximumRetryCount": 0
+        },
+        "PortBindings": {}
+      }
+    }
+  },
+  "prior_full_restore_pass": {
+    "source": "a7f9aa984cc3e92aafdf0a434193d0144a1e7a39",
+    "run": 42090268271,
+    "evidence": {
+      "outcome": {
+        "exit_code": 0
+      },
+      "resources": {
+        "kind": "cgroup_v2_no_swap",
+        "services": {
+          "exit2dvps42090268271-mongo-1": {
+            "samples": 723,
+            "current_bytes": 217436160,
+            "peak_bytes": 1008910336,
+            "oom": 0,
+            "oom_kill": 0,
+            "restarts_max": 0,
+            "cpu_usage_usec": 38287559,
+            "sample_total_bytes": 490416521216,
+            "cpu_throttled_usec": 42025411,
+            "docker_oom_seen": false,
+            "memory_limit_bytes": 1610612736,
+            "memory_swap_bytes": 1610612736,
+            "nano_cpus": 500000000,
+            "sample_mean_bytes": 678307774,
+            "working_set_peak_bytes": 477937664,
+            "anonymous_peak_bytes": 450998272,
+            "memory_limit_hits": 0
+          },
+          "exit2dvps42090268271-web-1": {
+            "samples": 723,
+            "current_bytes": 280629248,
+            "peak_bytes": 307277824,
+            "oom": 0,
+            "oom_kill": 0,
+            "restarts_max": 0,
+            "cpu_usage_usec": 25101474,
+            "sample_total_bytes": 207054835712,
+            "cpu_throttled_usec": 1161345,
+            "docker_oom_seen": false,
+            "memory_limit_bytes": 1610612736,
+            "memory_swap_bytes": 1610612736,
+            "nano_cpus": 1250000000,
+            "sample_mean_bytes": 286382898,
+            "working_set_peak_bytes": 306008064,
+            "anonymous_peak_bytes": 297291776,
+            "memory_limit_hits": 0
+          },
+          "exit2dvps42090268271-reports-1": {
+            "samples": 667,
+            "current_bytes": 239800320,
+            "peak_bytes": 301621248,
+            "oom": 0,
+            "oom_kill": 0,
+            "restarts_max": 0,
+            "cpu_usage_usec": 24144853,
+            "sample_total_bytes": 164806868992,
+            "cpu_throttled_usec": 10187185,
+            "docker_oom_seen": false,
+            "memory_limit_bytes": 1073741824,
+            "memory_swap_bytes": 1073741824,
+            "nano_cpus": 750000000,
+            "sample_mean_bytes": 247086760,
+            "working_set_peak_bytes": 301334528,
+            "anonymous_peak_bytes": 293228544,
+            "memory_limit_hits": 0
+          },
+          "exit2dvps42090268271-sync-1": {
+            "samples": 667,
+            "current_bytes": 234225664,
+            "peak_bytes": 411893760,
+            "oom": 0,
+            "oom_kill": 0,
+            "restarts_max": 0,
+            "cpu_usage_usec": 30451946,
+            "sample_total_bytes": 168298504192,
+            "cpu_throttled_usec": 27536527,
+            "docker_oom_seen": false,
+            "memory_limit_bytes": 1073741824,
+            "memory_swap_bytes": 1073741824,
+            "nano_cpus": 500000000,
+            "sample_mean_bytes": 252321595,
+            "working_set_peak_bytes": 411443200,
+            "anonymous_peak_bytes": 402927616,
+            "memory_limit_hits": 0
+          },
+          "exit2dvps42090268271-accounting-1": {
+            "samples": 667,
+            "current_bytes": 232005632,
+            "peak_bytes": 288108544,
+            "oom": 0,
+            "oom_kill": 0,
+            "restarts_max": 0,
+            "cpu_usage_usec": 17754151,
+            "sample_total_bytes": 151165919232,
+            "cpu_throttled_usec": 21030512,
+            "docker_oom_seen": false,
+            "memory_limit_bytes": 805306368,
+            "memory_swap_bytes": 805306368,
+            "nano_cpus": 500000000,
+            "sample_mean_bytes": 226635561,
+            "working_set_peak_bytes": 287322112,
+            "anonymous_peak_bytes": 278982656,
+            "memory_limit_hits": 0
+          }
+        }
+      },
+      "operations": [
+        {
+          "analytics_completed": 4,
+          "kind": "actual_operational_handlers_synthetic_data",
+          "paths": {
+            "assembly_labeling": {
+              "p50_ms": 10.411,
+              "p95_ms": 13.601,
+              "requests": 10
+            },
+            "assembly_piece_ready": {
+              "p50_ms": 33.224,
+              "p95_ms": 65.113,
+              "requests": 10
+            },
+            "assembly_receiving_board": {
+              "p50_ms": 25.894,
+              "p95_ms": 402.0,
+              "requests": 10
+            },
+            "create_supplier_file": {
+              "p50_ms": 44.987,
+              "p95_ms": 85.442,
+              "requests": 10
+            },
+            "mark_supplier_ready": {
+              "p50_ms": 16.65,
+              "p95_ms": 30.153,
+              "requests": 10
+            },
+            "my_products": {
+              "p50_ms": 25.482,
+              "p95_ms": 255.568,
+              "requests": 10
+            },
+            "my_products_waiting_page": {
+              "p50_ms": 18.316,
+              "p95_ms": 1204.121,
+              "requests": 10
+            },
+            "shipping_label_print": {
+              "p50_ms": 38.841,
+              "p95_ms": 71.217,
+              "requests": 10
+            }
+          },
+          "physical_printer_tested": false,
+          "provider_calls_possible": false,
+          "supplier_files_unique": 10
+        },
+        {
+          "kind": "snap_employee_overlap",
+          "before_rounds": 1,
+          "after_rounds": 4
+        },
+        {
+          "objects": 7705,
+          "dataSize": 4702625.0,
+          "storageSize": 1540096.0,
+          "indexSize": 4624384.0,
+          "totalSize": 6164480.0,
+          "kind": "synthetic_database_growth"
+        }
+      ],
+      "setup": [
+        {
+          "objects": 5011,
+          "dataSize": 1823707.0,
+          "storageSize": 552960.0,
+          "indexSize": 1761280.0,
+          "totalSize": 2314240.0,
+          "kind": "synthetic_database_growth"
+        }
+      ],
+      "growth": [
+        {
+          "objects": 7767,
+          "dataSize": 57139807.0,
+          "storageSize": 49696768.0,
+          "indexSize": 9580544.0,
+          "totalSize": 59277312.0,
+          "kind": "synthetic_database_growth"
+        }
+      ],
+      "snap_final": {
+        "kind": "snap_real_client_real_mongo_simulated_transport",
+        "rounds": 50,
+        "entities_per_round": 100,
+        "hourly_facts_unique": 2400,
+        "duplicate_lease_denied": true
+      },
+      "security": [],
+      "accounting": {
+        "before": [
+          {
+            "kind": "real_qoyod_durable_replay_guard",
+            "attempts": 100,
+            "all_refused_already_sent": true,
+            "markers_unchanged": true,
+            "real_provider_enabled": false
+          }
+        ],
+        "after": [
+          {
+            "kind": "real_qoyod_durable_replay_guard",
+            "attempts": 100,
+            "all_refused_already_sent": true,
+            "markers_unchanged": true,
+            "real_provider_enabled": false
+          }
+        ],
+        "restored": [
+          {
+            "kind": "real_qoyod_durable_replay_guard",
+            "attempts": 100,
+            "all_refused_already_sent": true,
+            "markers_unchanged": true,
+            "real_provider_enabled": false
+          }
+        ]
+      },
+      "archive_encrypt": [],
+      "archive_decrypt": [],
+      "restore": [
+        {
+          "kind": "fresh_compose_volume_restore",
+          "all_collection_document_index_hashes_equal": true,
+          "collections": 153,
+          "unknown_outcome_preserved": true,
+          "correct_key_accepted_wrong_key_rejected": true,
+          "attachment_checksum_equal": true
+        }
+      ],
+      "disk_usage": "Filesystem      1B-blocks      Used  Available Use% Mounted on\n/dev/loop0     4834848768 482136064 4335935488  11% /home/runner/work/_temp/exit2dvps42090268271/disk\n",
+      "parent": {
+        "parent-cpu.max.txt": "400000 100000\n",
+        "parent-cpu.stat.txt": "usage_usec 382134791\nuser_usec 351406447\nsystem_usec 30728344\nnice_usec 0\ncore_sched.force_idle_usec 0\nnr_periods 5172\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0\n",
+        "parent-memory.current.txt": "958005248\n",
+        "parent-memory.events.txt": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0\n",
+        "parent-memory.max.txt": "8589934592\n",
+        "parent-memory.peak.txt": "2225135616\n",
+        "parent-memory.swap.max.txt": "0\n"
+      },
+      "evidence_file_sha256": {
+        "accounting-after.jsonl": "b91feb2d6cd432b1b693a5dae1e548ec53c116108112212b1bb9a9e0c9e7c182",
+        "accounting-before.jsonl": "b91feb2d6cd432b1b693a5dae1e548ec53c116108112212b1bb9a9e0c9e7c182",
+        "accounting-restored.jsonl": "b91feb2d6cd432b1b693a5dae1e548ec53c116108112212b1bb9a9e0c9e7c182",
+        "compose-config.json": "7fb91848f5079bafcd859d46a4eb115a74bd267cdcfd8606a13a7394e4830790",
+        "compose.log": "92b8c9605470341e34ce0a8917496e3afe3f6de6d6758faf075c5d7ba08d62b8",
+        "container-constraints.json": "eceb7887a66597bb2bc71fc5f0ef5e485e322df3c22f0252b78e539c7575fe34",
+        "disk-usage.txt": "4dd314d41a0c562bad2e7f8f706b5da23c96bc107e67712386384aabb4486042",
+        "duplicate-accounting.log": "bec0c7fb3130735ed98b28cfa6d8a79e33a46f56015109ce4e0f6d0dc6567619",
+        "duplicate-sync.log": "eaf45b5ef632fdc42ff62694e9fc9d6caa511699658e14f376aa109fefb61fd2",
+        "final-state.json": "64f74fed350d6817903c43ccd66a9e8e19d88b4cb7a8a4b4a0e55373af538ae6",
+        "growth.jsonl": "4e38578414a3441936b721be2726dad88c69b9fe7e52ebd1dcf339656723dc95",
+        "operations.jsonl": "8dadedfeee080e5590c53576273da7be11320889d0d725462bbdd0803023529c",
+        "outcome.json": "d24219f6de94b955cf36d25bd2aca88e2d35eef45b9317b7083f55ec8fe9653c",
+        "parent-cpu.max.txt": "bd8ea316d63ccab47af9329b4b4b427cb510d04fe500195f5aa332d211d9fd3f",
+        "parent-cpu.stat.txt": "b499f941526984a3ce0ed28430f07b5862cabe28185bb93cfa4520ca15d480dd",
+        "parent-memory.current.txt": "c46070261fc3d27567dc5b0ed60be1a74ce29f816d286d14d55f024baf79bbf3",
+        "parent-memory.events.txt": "0a2d4e7982066cc7dc914627e7b195ccba88b82a5a996201809e529142d2f380",
+        "parent-memory.max.txt": "8528d39f97fdd9c9689c4373fe4c7b18f2c3bef6b044a2c4be74b07bf9cd07d8",
+        "parent-memory.peak.txt": "44170e72725130b4a7187ebe4380b45a1d70a15388fa5c9f5f5f5961f3c8a246",
+        "parent-memory.swap.max.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "resources.json": "eebea5ac1aa2f65291579093b40cce66284afb572e30ab2a7e75a4aac121aade",
+        "restore-expected.json": "84393e050692744141497a70598c44269070882e3efdd50a03d3ff34baf997b1",
+        "restore.jsonl": "1865f5176f5b767e2ea8cb590f0be1d945844f4f2e3639f934a7f585f1eeab9a",
+        "setup.jsonl": "e25acc907f1bfdeefc19630b8491399f0c2909c27fd21652ad3844c3b9ab7bd6",
+        "snap.jsonl": "d0302f7e52bbe55363b033c5ad08c9a99df9b3011a29a76fafb1536823929520"
+      },
+      "actual_container_constraints": {
+        "exit2dvps42090268271-mongo-1": {
+          "Memory": 1610612736,
+          "MemorySwap": 1610612736,
+          "NanoCpus": 500000000,
+          "CgroupParent": "exit2dvps42090268271.slice",
+          "ReadonlyRootfs": true,
+          "CapDrop": [
+            "ALL"
+          ],
+          "SecurityOpt": [
+            "no-new-privileges:true"
+          ],
+          "PidsLimit": 256,
+          "RestartPolicy": {
+            "Name": "on-failure",
+            "MaximumRetryCount": 5
+          },
+          "PortBindings": {}
+        },
+        "exit2dvps42090268271-web-1": {
+          "Memory": 1610612736,
+          "MemorySwap": 1610612736,
+          "NanoCpus": 1250000000,
+          "CgroupParent": "exit2dvps42090268271.slice",
+          "ReadonlyRootfs": true,
+          "CapDrop": [
+            "ALL"
+          ],
+          "SecurityOpt": [
+            "no-new-privileges:true"
+          ],
+          "PidsLimit": 256,
+          "RestartPolicy": {
+            "Name": "no",
+            "MaximumRetryCount": 0
+          },
+          "PortBindings": {
+            "10000/tcp": [
+              {
+                "HostIp": "127.0.0.1",
+                "HostPort": "10000"
+              }
+            ]
+          }
+        },
+        "exit2dvps42090268271-reports-1": {
+          "Memory": 1073741824,
+          "MemorySwap": 1073741824,
+          "NanoCpus": 750000000,
+          "CgroupParent": "exit2dvps42090268271.slice",
+          "ReadonlyRootfs": true,
+          "CapDrop": [
+            "ALL"
+          ],
+          "SecurityOpt": [
+            "no-new-privileges:true"
+          ],
+          "PidsLimit": 256,
+          "RestartPolicy": {
+            "Name": "no",
+            "MaximumRetryCount": 0
+          },
+          "PortBindings": {}
+        },
+        "exit2dvps42090268271-sync-1": {
+          "Memory": 1073741824,
+          "MemorySwap": 1073741824,
+          "NanoCpus": 500000000,
+          "CgroupParent": "exit2dvps42090268271.slice",
+          "ReadonlyRootfs": true,
+          "CapDrop": [
+            "ALL"
+          ],
+          "SecurityOpt": [
+            "no-new-privileges:true"
+          ],
+          "PidsLimit": 256,
+          "RestartPolicy": {
+            "Name": "no",
+            "MaximumRetryCount": 0
+          },
+          "PortBindings": {}
+        },
+        "exit2dvps42090268271-accounting-1": {
+          "Memory": 805306368,
+          "MemorySwap": 805306368,
+          "NanoCpus": 500000000,
+          "CgroupParent": "exit2dvps42090268271.slice",
+          "ReadonlyRootfs": true,
+          "CapDrop": [
+            "ALL"
+          ],
+          "SecurityOpt": [
+            "no-new-privileges:true"
+          ],
+          "PidsLimit": 256,
+          "RestartPolicy": {
+            "Name": "no",
+            "MaximumRetryCount": 0
+          },
+          "PortBindings": {}
+        }
+      }
+    }
+  },
+  "history": [
+    {
+      "run": 42086280634,
+      "source": "688a32bdb",
+      "outcome": "failure before builds, resolved Compose memory field encoded as numeric string; parser corrected"
+    },
+    {
+      "run": 42086824821,
+      "source": "ac66da51d",
+      "outcome": "failure Mongo key URL-safe alphabet unsupported; standard base64 generation and nonlogging validation added"
+    },
+    {
+      "run": 42087917523,
+      "source": "a58844eb3",
+      "outcome": "runtime/performance/faults passed; Docker cp could not export tmpfs snapshot receipt; changed to exec stream"
+    },
+    {
+      "run": 42090268271,
+      "source": "a7f9aa984",
+      "outcome": "success full Compose/fresh-volume restore;300 durable sent-guard refusals"
+    },
+    {
+      "run": 42096167315,
+      "source": "901dc25e4",
+      "outcome": "success including actual security probes/encrypted archive tamper-wrong-key rejection and restore"
+    }
+  ],
+  "financial": {
+    "billing_country": "SA",
+    "entity": "must_match_actual_payment_account_no_identity_created",
+    "preferred_region": "standard Germany Frankfurt/Limburg, stock not verified",
+    "target": "VPS-2 4vCPU/8GB/75GB NVMe",
+    "starting_vps2_usd": 8.5,
+    "starting_three_vps1_usd": 13.62,
+    "render_reference_usd": 36.25,
+    "starting_prices_are_not_saudi_quotes": true,
+    "setup": "publicly free, checkout pending",
+    "standard_daily_backup": "publicly included, actual checkout/retention pending",
+    "tax_and_currency": "account-specific, not verified",
+    "commitment_and_renewal": "not verified for Saudi/Germany; monthly payment may have annual commitment",
+    "offsite_r2_standard": {
+      "free_allowance_gb_month": 10,
+      "class_a_free_requests": 1000000,
+      "class_b_free_requests": 10000000,
+      "storage_usd_per_gb_month": 0.015,
+      "example_20gb_usd": 0.15,
+      "example_100gb_usd": 1.35,
+      "created_or_connected": false
+    },
+    "monitoring": "0USD software/free external5minute tier proposed, not configured",
+    "administration": "self-managed software0USD; human time not free; no paid administrator quote",
+    "upgrade": "range/model-specific; US storefront restricts modifications outside US; confirm eligible Germany SKU in actual account",
+    "quote_url": "https://www.ovhcloud.com/en/vps/configurator/?planCode=vps-2027-model2",
+    "next_step": "User will supply cart summary before subscription approval; continue development on estimates only"
+  },
+  "limits": [
+    "Runtime shared cgroup4CPU/8GiB, not an actual OVH VPS/hypervisor/IOPS/WAN test",
+    "External load generator and image build outside simulated VPS budget; nominal OS reserve not observed on OVH",
+    "CI disables automatic restart for controlled crash/claim-expiry tests; not unattended host reboot certification",
+    "Per-container monitoring covers original containers before recreation; aggregate cgroup receipts and readiness cover full restore",
+    "Snap simulated transport with real client/entity/fact/lease paths, not full OAuth/provider scheduler",
+    "No real Qoyod invoices/providers, Production DB/data/keys, DNS/Webhooks, paid resources or V5 changes",
+    "Root host/Docker admin can access file secrets; broad shared synthetic Mongo permission is not Production least privilege",
+    "Caddy/systemd templates and external monitoring/backups are not installed/activated or cloud-tested",
+    "No confirmed Riyadh egress/client latency; no long soak or Production capacity/SLA",
+    "No final Saudi/Germany tax/renewal/commitment/upgrade quote until user cart summary"
+  ]
+}

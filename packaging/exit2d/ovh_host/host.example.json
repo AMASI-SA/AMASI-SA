@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "classification": "synthetic-only",
+  "source_sha": "901dc25e4b673188f4ac2ee8ca5b581b903c336b",
+  "project": "mezan-vps-trial",
+  "origin": "https://staging.example.test",
+  "checkout": "/opt/mezan",
+  "secrets_dir": "/etc/mezan-vps/secrets",
+  "state_dir": "/var/lib/mezan-vps",
+  "public_interface": "ens3",
+  "ssh_port": 22,
+  "admin_cidrs": ["192.0.2.10/32"],
+  "backup": {
+    "repository": "s3:https://ACCOUNT.r2.cloudflarestorage.com/BUCKET/mezan-synthetic",
+    "password_file": "/etc/mezan-backup/restic-password",
+    "access_key_file": "/etc/mezan-backup/s3-access-key",
+    "secret_key_file": "/etc/mezan-backup/s3-secret-key",
+    "max_archive_bytes": 536870912,
+    "max_repository_bytes": 8000000000
+  }
+}

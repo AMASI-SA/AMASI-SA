@@ -1,0 +1,124 @@
+Synthetic OVH VPS candidate — preparation only, no resource approval
+
+Reference preserved: Render acceptance e57847a361b37eccc171b625339e0fda97493a23.
+All Render files/results, Backend/Frontend, V5 and financial policies unchanged.
+Compose uses the SAME accepted app and Mongo images/role implementation. A
+one-off migration must complete before all five persistent services activate.
+
+After financial/account/region approval only
+1. Choose a STANDARD datacentre VPS with4vCPU/8GB/75GB NVMe, Linux Ubuntu LTS.
+   No Local Zone substitution. Confirm Germany location, SKU upgrade support,
+   currency, actual Saudi billing/tax details, commitment, renewal and cancellation
+   in the account quote; a public starting price is not the payable invoice.
+2. Secure SSH with keys and a named administrator. Deny public27017/8000/10000;
+   only SSH from approved source addresses and approved TLS ingress80/443.
+   Do not assume a host firewall alone protects Docker-published ports.
+3. Pin the reviewed checkout to its exact commit. Check git status/packaging diff.
+   Prefer building images in CI/off-host and loading their verified archive on
+   the VPS; no registry publication was authorized/performed. Build-time RAM,
+   TLS/WAN/disk performance and the Linux OS were NOT simulated as an OVH VM.
+4. sudo python packaging/exit2d/vps/init_secrets.py /etc/mezan-vps/secrets
+   NEVER use --ci-fixture on an Internet-exposed machine. It uses PUBLIC test
+   credentials. Normal generation creates NEW staging-only values, outside Git,
+   directory0700, files0400 owned65532 so only mounted app files are readable.
+   Compose file secrets are bind mounts, NOT an encrypted secret-manager service.
+   Host root/Docker administrators can read them. Keep a separate encrypted
+   offline key copy; never put secrets/OTP/body dumps into issue/PR/logs.
+5. Set MEZAN_SOURCE_SHA to the exact reviewed40-character Git SHA and
+   MEZAN_SECRETS_DIR=/etc/mezan-vps/secrets. Set MEZAN_STAGING_ORIGIN and
+   MEZAN_STAGING_HOST to the same NEW approved HTTPS origin/host. Do not reuse
+   Production JWT/MFA/admin/provider keys. APP_ENV/DB/host are fixed synthetic.
+6. sudo -E docker compose -p mezan-vps-test -f packaging/exit2d/vps/compose.yaml config
+   Inspect quantities, limits, secret paths, internal network and loopback port.
+   Build/load the reviewed images, then up -d --no-build --wait.
+   Do not pass the CI override, test flag or a Production database/volume.
+7. Web is LOOPBACK HTTP by default. Caddyfile.example is an inactive host TLS
+   template. Public HTTPS needs approved hostname/certificate and a trusted
+   host reverse proxy. No DNS/certificate/server changes were executed here.
+   Keep proxy CPU/RAM within the nominal0.5CPU/2.25GiB host reserve. Review TLS
+   renewal and operator access before any hosted browser trial.
+8. Migration creates the synthetic owner through existing code. Use the NEW
+   private admin/bootstrap values and existing MFA enrollment. OTP transport is
+   a local capture only; use private operator access, no external bulk email.
+   Seed synthetic data through approved application flows. CI helpers intentionally
+   reject non-fixture credentials and cannot silently target a real database.
+
+Resource and failure boundaries
+Web1.25CPU/1536MiB; reports0.75CPU/1024MiB; sync0.5CPU/1024MiB;
+accounting0.5CPU/768MiB; Mongo0.5CPU/1536MiB. Total3.5CPU/5888MiB, nominal
+0.5CPU/2304MiB for OS/Docker/TLS/monitoring on4CPU/8GiB. Swap disabled per
+container. Mongo volume is local; no Compose volume size quota is implied on
+the75GB disk. CI uses an actually bounded5GB ext4 filesystem for conservative
+growth/recovery proof. Apply storage alert70%/stop-load80% and keep free space.
+Docker log rotation10MBx3 per container limits logs, not application/DB files.
+Services have on-failure:5 as the prepared restart policy. CI disables automatic
+restarts to prove controlled kill/claim expiry/start sequences deterministically.
+It does not certify unattended OVH restart behavior. A host boot is a whole-stack
+event; systemd must start Compose with migration dependencies intact. Do not
+make individual daemon units that bypass the migration barrier.
+
+Role singleton claims use the existing durable Mongo fence, not a process lock.
+Never delete a live claim. Stop the old cgroup/process tree, record control-plane
+evidence, wait its TTL/request/drain window, then start a replacement. Unknown
+provider outcomes require reconciliation; leases alone do NOT prove exactly-once
+external delivery. No real provider credentials are permitted in this image.
+One host shares kernel, disk, power and administrator trust. Internal Docker
+network/resource caps are process/resource isolation, not host high availability.
+The inherited synthetic Mongo access is broad and shared by app roles; it is
+NOT a reviewed least-privilege Production role split. No Docker socket is mounted.
+
+Monitoring — proposed, not enabled
+Cash software cost0: Docker healthchecks/log rotation, host disk/CPU/RAM/cgroup
+sampling with journal/logrotate, and optional external UptimeRobot Free HTTP
+monitor every5minutes. No paid agent, metrics service or account was created.
+External HTTP checks cannot diagnose private workers. Check their durable claim
+freshness, last successful work, backlog, unknown outcomes, restart and OOM events
+through private operator access. Alert thresholds: app memory80% sustained,
+any unplanned OOM/restart, disk70%, stale heartbeat/failed backup. A single-host
+monitor disappears with that host; external uptime and offsite receipts matter.
+Export sanitized resource/latency/backup receipts daily before retention expires;
+never export cookies, auth headers, OTPs, key files or raw customer bodies.
+
+Backup/restore plan — proposed, no external storage/account connection
+Provider daily backup is an extra recovery layer, not an independent offsite copy
+or proof of a financially consistent dump. Review exact retention in checkout;
+public descriptions differ by store/range. Additional disks may be excluded.
+For this synthetic trial, use encrypted restic backups to a SEPARATE provider/
+account, e.g. R2 Standard, with bucket-scoped keys held only by a host backup job.
+Do not inject offsite keys into app workers. Restic password/offline app-key copy
+must be stored separately from the encrypted backup repository itself.
+
+Manual consistent procedure after approval:
+- Record approved project, source SHA, fixed synthetic DB and backup recipient.
+  Capture which services were running. Stop ALL app writers and confirm process
+  trees/claims drained. Do not call this a zero-downtime dump or live oplog backup.
+- Run mongodump for mezan_exit2d_staging through private Mongo, using a0600 tools
+  config for credentials; do not put a password on a shell command line or in logs.
+  Application pause alone does not stop TTL/other DB writers. The CI receipt
+  additionally disables TTL ONLY in its disposable synthetic Mongo. For a hosted
+  synthetic pause, record/restore that setting under explicit test approval. Real
+  Production needs a separately reviewed consistent snapshot or supported full
+  replica-set oplog backup; do not generalize this db-scoped dump to live data.
+  Store temporary archive0600 outside Git; source date/metadata plus archive hash
+  are the receipt. Include application files held outside Mongo only after an
+  inventory; backing up the Docker image alone does not preserve uploads.
+- Encrypt/upload the archive, necessary file inventory and configuration with
+  restic; verify upload/restore check. Resume only the previous approved owners
+  using existing fences. Alert on failure; do not silently count local snapshots
+  as offsite success. A maintenance window and missed-schedule handling need an
+  operator; no cron/timer was installed or enabled by this task.
+- Retain7daily+4weekly as a proposal; actual encrypted retainedGB determines cost.
+  Keep a monthly fresh-volume restore rehearsal, exact document/index identity
+  checks, key/wrong-key and attachment checks, then verify login/employee routes.
+  Never overwrite a running DB or copy a raw live WiredTiger directory as proof.
+- Offsite RPO target24hours only with successful daily receipts; RTO remains a
+  measured target, not a promise. CI restore uses prebuilt images and local data,
+  not a measured OVH host rebuild/WAN download or Production financial replay.
+
+Stop/teardown after separately approved synthetic trial
+Stop intake/load, workers and Web/reports; capture redacted receipts; Mongo last.
+Do not use compose down --volumes until explicitly approving deletion of this
+allowlisted synthetic data. Stopping containers or powering off a VPS does not
+prove OVH subscription billing stopped. Cancel the exact test subscription and
+any paid storage/snapshot options, check commitment end/renewal, retain receipts.
+No unrelated VPS, Production data, DNS/Webhooks or old release lease is changed.

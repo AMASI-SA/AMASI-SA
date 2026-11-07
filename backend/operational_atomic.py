@@ -194,9 +194,14 @@ class _Collection:
                     _reject(self.__state)
                 if args and isinstance(args[0], dict):
                     query = args[0]
-                    if self.__state["profile"] in {"employee_setup", "employee_lifecycle"} and self.__collection.name in {
-                            "mezan_role_assignments_v2", "mezan_mobile_app_access_v1"}:
+                    assignment_read = (self.__state["profile"] == "fulfillment"
+                                       and self.__collection.name == "mezan_role_assignments_v2")
+                    if assignment_read or (self.__state["profile"] in {"employee_setup", "employee_lifecycle"} and self.__collection.name in {
+                            "mezan_role_assignments_v2", "mezan_mobile_app_access_v1"}):
                         # Here user_id is the employee's login, not the tenant.
+                        # Fulfillment reauthorizes the employee inside the same
+                        # transaction. Role reads retain explicit tenant proof;
+                        # this adds no write or financial capability.
                         # Existing management response reads use explicit owner
                         # scope (or the bounded legacy created_by fallback).
                         if (query.get("owner_user_id") != self.__owner and not (

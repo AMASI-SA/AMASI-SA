@@ -1,0 +1,125 @@
+# REVIEW ONLY. Applying this Blueprint creates paid resources and is NOT authorized.
+# Set Blueprint path to this file only after separate resource approval.
+envVarGroups:
+  - name: mezan-exit2d-synthetic-config
+    envVars:
+      - key: APP_ENV
+        value: staging
+      - key: MEZAN_SYNTHETIC_HOSTING
+        value: '1'
+      - key: DB_NAME
+        value: mezan_exit2d_staging
+      - key: EMAIL_OTP_SMTP_HOST
+        value: 127.0.0.1
+      - key: EMAIL_OTP_SMTP_PORT
+        value: '8025'
+      - key: EMAIL_OTP_SMTP_STARTTLS
+        value: 'false'
+      - key: EMAIL_OTP_FROM_EMAIL
+        value: otp@example.test
+services:
+  - name: mezan-exit2d-mongo
+    type: pserv
+    runtime: docker
+    branch: codex/exit-2d-render-integration-20261105
+    dockerfilePath: packaging/exit2d/render/Mongo.Dockerfile
+    dockerContext: .
+    region: frankfurt
+    plan: 0.5c-512mb
+    numInstances: 1
+    autoDeployTrigger: 'off'
+    disk:
+      name: synthetic-mongo
+      mountPath: /data/db
+      sizeGB: 5
+    envVars:
+      - key: MONGO_INITDB_ROOT_USERNAME
+        sync: false
+      - key: MONGO_INITDB_ROOT_PASSWORD
+        sync: false
+      - key: MONGO_REPLICA_KEY
+        generateValue: true
+      - key: PORT
+        value: '27017'
+  - name: mezan-exit2d-web
+    type: web
+    runtime: docker
+    branch: codex/exit-2d-render-integration-20261105
+    region: frankfurt
+    plan: 0.5c-512mb
+    numInstances: 1
+    autoDeployTrigger: 'off'
+    dockerfilePath: packaging/exit2d/render/Dockerfile
+    dockerContext: .
+    dockerCommand: python /opt/render/start.py web
+    preDeployCommand: python /opt/render/start.py migration
+    healthCheckPath: /api/ready
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - fromGroup: mezan-exit2d-synthetic-config
+      - fromGroup: mezan-exit2d-synthetic-secrets
+      - key: MEZAN_STAGING_MONGO_HOST
+        fromService: {name: mezan-exit2d-mongo, type: pserv, property: host}
+      - key: MEZAN_REPORT_WORKER_HOST
+        fromService: {name: mezan-exit2d-reports, type: pserv, property: host}
+  - name: mezan-exit2d-reports
+    type: pserv
+    runtime: docker
+    branch: codex/exit-2d-render-integration-20261105
+    region: frankfurt
+    plan: 0.5c-512mb
+    numInstances: 1
+    autoDeployTrigger: 'off'
+    dockerfilePath: packaging/exit2d/render/Dockerfile
+    dockerContext: .
+    dockerCommand: python /opt/render/start.py worker-reports
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - fromGroup: mezan-exit2d-synthetic-config
+      - fromGroup: mezan-exit2d-synthetic-secrets
+      - key: PORT
+        value: '8000'
+      - key: MEZAN_STAGING_MONGO_HOST
+        fromService: {name: mezan-exit2d-mongo, type: pserv, property: host}
+  - name: mezan-exit2d-sync
+    type: worker
+    runtime: docker
+    branch: codex/exit-2d-render-integration-20261105
+    region: frankfurt
+    plan: 0.5c-512mb
+    numInstances: 1
+    autoDeployTrigger: 'off'
+    dockerfilePath: packaging/exit2d/render/Dockerfile
+    dockerContext: .
+    dockerCommand: python /opt/render/start.py worker-sync
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - fromGroup: mezan-exit2d-synthetic-config
+      - fromGroup: mezan-exit2d-synthetic-secrets
+      - key: MEZAN_STAGING_MONGO_HOST
+        fromService: {name: mezan-exit2d-mongo, type: pserv, property: host}
+      - key: MEZAN_WORKER_ENABLED
+        value: '1'
+      - key: MEZAN_LEGACY_WORKERS_STOPPED
+        value: '1'
+  - name: mezan-exit2d-accounting
+    type: worker
+    runtime: docker
+    branch: codex/exit-2d-render-integration-20261105
+    region: frankfurt
+    plan: 0.5c-512mb
+    numInstances: 1
+    autoDeployTrigger: 'off'
+    dockerfilePath: packaging/exit2d/render/Dockerfile
+    dockerContext: .
+    dockerCommand: python /opt/render/start.py worker-accounting
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - fromGroup: mezan-exit2d-synthetic-config
+      - fromGroup: mezan-exit2d-synthetic-secrets
+      - key: MEZAN_STAGING_MONGO_HOST
+        fromService: {name: mezan-exit2d-mongo, type: pserv, property: host}
+      - key: MEZAN_WORKER_ENABLED
+        value: '1'
+      - key: MEZAN_LEGACY_WORKERS_STOPPED
+        value: '1'

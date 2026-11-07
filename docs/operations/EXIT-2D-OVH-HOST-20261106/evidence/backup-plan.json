@@ -1,0 +1,1 @@
+{"plan_only": true, "resources_created": false, "classification": "synthetic-only", "steps": ["validate source/private approval", "clean stop four writers", "freeze TTL", "completed bounded dump", "restore TTL/start previous writers", "restic encrypted upload/check/restore checksum"], "retention": "manual reviewed forget --dry-run; no automatic prune"}

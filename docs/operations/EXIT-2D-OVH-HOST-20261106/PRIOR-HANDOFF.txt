@@ -1,0 +1,6 @@
+### EXIT-2D OVH final — 2026-11-05
+Delivery c4f23a7c936a98e6e715edbd83db365bb81bad81; tested901dc25e4b673188f4ac2ee8ca5b581b903c336b; branch codex/exit-2d-render-integration-20261105; PR1757 DRAFT.
+Compose CI42096167315 and inherited42096167520: all3jobs SUCCESS;802pytest/111subtests/25+25units.4CPU/8GiB shared cap,peak2.19GiB,OOM0;80operations,300invoice-replay refusals;encrypted fresh-volume restore153collections/keys/files/tamper checks passed.
+Full receipts/history/risks/steps: docs/operations/EXIT-2D-OVH-20261105/{STATUS.json,RESULTS.json,REPORT-AR.txt,OPERATIONS.txt}. Render e57847a36/all old results, Backend/Frontend/finance/V5 unchanged; V5 Production gate still unsatisfied.
+No Production changes/access, paid resources, DNS/Webhooks, merge/deploy. Hosted TLS/WAN/offsite/auto-reboot not certified. Saudi billing/Germany quote pending;8.50USD only starting estimate, not final tax/renewal/commitment.
+NEXT: user supplies non-sensitive official cart summary BEFORE financial approval/subscription. Continue only synthetic scope; no Render creation.

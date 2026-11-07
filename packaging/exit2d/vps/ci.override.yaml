@@ -1,0 +1,20 @@
+# CI-only mounts and bounded disk; never use with real data.
+services:
+  mongo:
+    volumes:
+      - type: bind
+        source: ${MEZAN_CI_DISK:?bounded disposable disk required}
+        target: /data/db
+  web:
+    restart: 'no'
+    volumes:
+      - ..:/evidence/tools:ro
+      - ../../exit2c:/evidence/acceptance:ro
+      - ./restore.py:/opt/vps/restore.py:ro
+      - ./archive_crypt.py:/opt/vps/archive_crypt.py:ro
+  reports:
+    restart: 'no'
+  sync:
+    restart: 'no'
+  accounting:
+    restart: 'no'

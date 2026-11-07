@@ -1,0 +1,115 @@
+{
+  "tested_source_sha": "8b8d2aef835f65f1c9a88c24a12a58b920d901b2",
+  "classification": "synthetic-only",
+  "host_workflow_run": 42117794594,
+  "host_jobs": {
+    "host-boundaries": "success",
+    "application-host-tools": "success"
+  },
+  "boundary_units": 11,
+  "actual_tls_auth": "owner password+MFA and employee password+OTP; invalid/replay refused",
+  "operational": {
+    "analytics_completed": 4,
+    "kind": "actual_operational_handlers_synthetic_data",
+    "paths": {
+      "assembly_labeling": {
+        "p50_ms": 7.977,
+        "p95_ms": 12.62,
+        "requests": 10
+      },
+      "assembly_piece_ready": {
+        "p50_ms": 43.584,
+        "p95_ms": 82.845,
+        "requests": 10
+      },
+      "assembly_receiving_board": {
+        "p50_ms": 27.464,
+        "p95_ms": 224.128,
+        "requests": 10
+      },
+      "create_supplier_file": {
+        "p50_ms": 52.165,
+        "p95_ms": 114.668,
+        "requests": 10
+      },
+      "mark_supplier_ready": {
+        "p50_ms": 14.389,
+        "p95_ms": 72.899,
+        "requests": 10
+      },
+      "my_products": {
+        "p50_ms": 22.347,
+        "p95_ms": 81.103,
+        "requests": 10
+      },
+      "my_products_waiting_page": {
+        "p50_ms": 16.143,
+        "p95_ms": 1068.472,
+        "requests": 10
+      },
+      "shipping_label_print": {
+        "p50_ms": 76.609,
+        "p95_ms": 99.966,
+        "requests": 10
+      }
+    },
+    "physical_printer_tested": false,
+    "provider_calls_possible": false,
+    "supplier_files_unique": 10
+  },
+  "snap_overlap": {
+    "kind": "verified_https_employee_snap_overlap",
+    "before_rounds": 1,
+    "after_rounds": 5,
+    "tls_verification": true
+  },
+  "snap_rounds_total": 52,
+  "unique_snap_facts": 2400,
+  "invoice_already_sent_refusals": 200,
+  "financial_markers_unchanged": true,
+  "provider_network": false,
+  "service_peak_mib": {
+    "web": 292.86,
+    "mongo": 702.96,
+    "reports": 287.82,
+    "sync": 366.93,
+    "accounting": 274.64
+  },
+  "oom_events": 0,
+  "memory_limit_hits": 0,
+  "post_backup_monitor_alerts": [],
+  "backup": {
+    "kind": "actual_synthetic_mongo_restic_backup",
+    "success": true,
+    "verified_at": "2026-11-05T22:11:59.901615+00:00",
+    "source_sha": "8b8d2aef835f65f1c9a88c24a12a58b920d901b2",
+    "archive_bytes": 103292,
+    "encrypted_repository_checked": true,
+    "restored_archive_hash_equal": true,
+    "external_s3_tested": false
+  },
+  "previous_full_mongo_restore_reference": {
+    "source_sha": "901dc25e4b673188f4ac2ee8ca5b581b903c336b",
+    "workflow_run": 42096167315,
+    "collections": 153,
+    "fresh_bounded_volume": true,
+    "encrypted_payload_key_and_file_hash_checks": true
+  },
+  "new_ci_disk": "ordinary disposable runner filesystem; accepted prior5GB constrained-volume test retained unchanged",
+  "actual_ovh_or_riyadh_or_public_acme_or_external_s3_or_host_reboot_tested": false,
+  "production_touched": false,
+  "paid_resource_created": false,
+  "full_production_integration_applied": false,
+  "inherited_linux_run": 42117794547,
+  "inherited_jobs": {
+    "isolated-linux": "success",
+    "hosting-images": "success"
+  },
+  "pytest": 802,
+  "pytest_subtests": 111,
+  "runtime_units": 25,
+  "controller_units": 25,
+  "inventory_subset_units": 8,
+  "production_comparison_snapshot": "2304b365c267d2d4220bc3bc953ecbb5a7403062",
+  "production_new_commits": 30
+}

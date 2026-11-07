@@ -1,0 +1,20 @@
+# Inactive example. Installation/enabling requires an approved synthetic VPS.
+[Unit]
+Description=Mezan synthetic VPS Compose stack
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/mezan
+EnvironmentFile=/etc/mezan-vps/runtime.env
+ExecStartPre=/usr/bin/git diff --exit-code HEAD -- packaging/exit2d/vps packaging/exit2d/render
+ExecStart=/usr/bin/docker compose -p mezan-vps-test -f packaging/exit2d/vps/compose.yaml up -d --no-build --wait --wait-timeout 240
+ExecStop=/usr/bin/docker compose -p mezan-vps-test -f packaging/exit2d/vps/compose.yaml stop
+TimeoutStartSec=300
+TimeoutStopSec=180
+
+[Install]
+WantedBy=multi-user.target

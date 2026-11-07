@@ -1,0 +1,19 @@
+{
+  "source_sha": "8b8d2aef835f65f1c9a88c24a12a58b920d901b2",
+  "workflow_run": 42117794594,
+  "files": {
+    "accounting-after.jsonl": "b91feb2d6cd432b1b693a5dae1e548ec53c116108112212b1bb9a9e0c9e7c182",
+    "accounting-before.jsonl": "b91feb2d6cd432b1b693a5dae1e548ec53c116108112212b1bb9a9e0c9e7c182",
+    "backup-plan.json": "bfcefc5dd11392cfd0a2780c27dfd6237b41dadebe27d520f3a62ce606fbada6",
+    "https-operations.jsonl": "d2ea069382652265cb1912edd5b6f7d064e514413a2eab0c977b77b1c13e4767",
+    "mongo-restic.jsonl": "4a3457a1238de9e9c91ca95ff7f54405266615e4418be1efaf438c44db3f3279",
+    "monitor.json": "0352fa9033d5eaefd8c0f49e01c654a184dc20130d4f82384d2e865cb4bb7cca",
+    "network.jsonl": "480796fc3d6cfb43100c174d0db63688d81acc518077b4e1e1ad15cba13bcce1",
+    "outcome.json": "d24219f6de94b955cf36d25bd2aca88e2d35eef45b9317b7083f55ec8fe9653c",
+    "resources.json": "d40b84bd1c4d5066f42a49fe6f5ad9a58044539da47303de72fd27204a74138c",
+    "restic.json": "a7b631569a67f4b1624a638963f4c061f6e4438ad29c7c736300bb5a0113fd5c",
+    "setup.jsonl": "849fa8691e50e04a07aab46d953f65ad7194d56bacfb71f99e8a209e20c5ec43",
+    "snap.jsonl": "ba5de932921ba6abcfb42feb65af3fadb11f923e075be0331a229596998474b8",
+    "unit.log": "fcc7039625e701425461a18282e37be58e744acac673a0d7ac13d4c5ca943b6a"
+  }
+}

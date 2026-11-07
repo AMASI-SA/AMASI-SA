@@ -1,0 +1,1263 @@
+{
+  "hooks": [
+    {
+      "callback": "attach_advertising_product_watch_scheduler._start",
+      "event": "startup",
+      "line": 99,
+      "path": "advertising_product_watch_scheduler_v3.py",
+      "registration": "decorator"
+    },
+    {
+      "callback": "attach_advertising_product_watch_scheduler._stop",
+      "event": "shutdown",
+      "line": 111,
+      "path": "advertising_product_watch_scheduler_v3.py",
+      "registration": "decorator"
+    },
+    {
+      "callback": "attach_campaign_ai_subprocess_scheduler._start_campaign_ai_subprocess_scheduler",
+      "event": "startup",
+      "line": 207,
+      "path": "campaign_ai_subprocess_scheduler.py",
+      "registration": "decorator"
+    },
+    {
+      "callback": "attach_campaign_ai_subprocess_scheduler._stop_campaign_ai_subprocess_scheduler",
+      "event": "shutdown",
+      "line": 223,
+      "path": "campaign_ai_subprocess_scheduler.py",
+      "registration": "decorator"
+    },
+    {
+      "callback": "attach_google_ads_automation_scheduler.start_google_ads_automation_scheduler",
+      "event": "startup",
+      "line": 245,
+      "path": "google_ads_automation_scheduler.py",
+      "registration": "decorator"
+    },
+    {
+      "callback": "attach_google_ads_automation_scheduler.stop_google_ads_automation_scheduler",
+      "event": "shutdown",
+      "line": 252,
+      "path": "google_ads_automation_scheduler.py",
+      "registration": "decorator"
+    },
+    {
+      "callback": "attach_ads_auto_sync_scheduler.start",
+      "event": "startup",
+      "line": 2598,
+      "path": "integrations_control_center/ads_auto_sync_scheduler.py",
+      "registration": "append",
+      "unresolved": false
+    },
+    {
+      "callback": "attach_ads_auto_sync_scheduler.stop",
+      "event": "shutdown",
+      "line": 2599,
+      "path": "integrations_control_center/ads_auto_sync_scheduler.py",
+      "registration": "append",
+      "unresolved": false
+    },
+    {
+      "callback": "attach_snapchat_capi_purchase_routes.start",
+      "event": "startup",
+      "line": 1215,
+      "path": "integrations_control_center/snapchat_capi_purchases.py",
+      "registration": "append",
+      "unresolved": false
+    },
+    {
+      "callback": "attach_snapchat_capi_purchase_routes.stop",
+      "event": "shutdown",
+      "line": 1216,
+      "path": "integrations_control_center/snapchat_capi_purchases.py",
+      "registration": "append",
+      "unresolved": false
+    },
+    {
+      "callback": "make_product_google_taxonomy_ai_pilot_router.start_resumable_run_loop",
+      "event": "startup",
+      "line": 1715,
+      "path": "product_google_taxonomy_ai_pilot.py",
+      "registration": "decorator"
+    },
+    {
+      "callback": "make_product_google_taxonomy_ai_pilot_router.stop_resumable_run_loop",
+      "event": "shutdown",
+      "line": 1729,
+      "path": "product_google_taxonomy_ai_pilot.py",
+      "registration": "decorator"
+    },
+    {
+      "callback": "on_startup",
+      "event": "startup",
+      "line": 5424,
+      "path": "server.py",
+      "registration": "decorator"
+    },
+    {
+      "callback": "on_shutdown",
+      "event": "shutdown",
+      "line": 5473,
+      "path": "server.py",
+      "registration": "decorator"
+    },
+    {
+      "callback": "attach_shadow_scheduler.start",
+      "event": "startup",
+      "line": 302,
+      "path": "snapchat_v2/scheduler.py",
+      "registration": "append",
+      "unresolved": false
+    },
+    {
+      "callback": "attach_shadow_scheduler.stop",
+      "event": "shutdown",
+      "line": 303,
+      "path": "snapchat_v2/scheduler.py",
+      "registration": "append",
+      "unresolved": false
+    },
+    {
+      "callback": "install_reconciler.start",
+      "event": "startup",
+      "line": 103,
+      "path": "supplier_scan_attempts.py",
+      "registration": "decorator"
+    },
+    {
+      "callback": "install_reconciler.stop",
+      "event": "shutdown",
+      "line": 110,
+      "path": "supplier_scan_attempts.py",
+      "registration": "decorator"
+    }
+  ],
+  "launch_candidates": [
+    {
+      "call": "db.client.start_session",
+      "line": 135,
+      "path": "accounting_advertising_setup.py",
+      "scope": "setup",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 115,
+      "path": "accounting_atomic.py",
+      "scope": "_owner_transaction",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_subprocess_exec",
+      "line": 36,
+      "path": "advertising_product_watch_scheduler_v3.py",
+      "scope": "run_once",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 106,
+      "path": "advertising_product_watch_scheduler_v3.py",
+      "scope": "attach_advertising_product_watch_scheduler._start",
+      "target": "_ready_loop"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 360,
+      "path": "assembly_completion_delivery.py",
+      "scope": "start_worker",
+      "target": "loop"
+    },
+    {
+      "call": "root.client.start_session",
+      "line": 94,
+      "path": "assembly_completion_legacy_readback.py",
+      "scope": "_snapshot",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 191,
+      "path": "assembly_completion_legacy_readback.py",
+      "scope": "_join",
+      "target": "asyncio.wait_for"
+    },
+    {
+      "call": "root.client.start_session",
+      "line": 105,
+      "path": "assembly_completion_v2_readback.py",
+      "scope": "_snapshot",
+      "target": null
+    },
+    {
+      "call": "root.client.start_session",
+      "line": 100,
+      "path": "assembly_print_completion.py",
+      "scope": "_snapshot",
+      "target": null
+    },
+    {
+      "call": "start_tabby_backfill",
+      "line": 185,
+      "path": "bnpl/routes.py",
+      "scope": "attach_bnpl_routes.tabby_backfill_start",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 86,
+      "path": "boot_runtime.py",
+      "scope": "start_deferred_task",
+      "target": "guarded"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 2146,
+      "path": "campaign_ai_monitor_legacy.py",
+      "scope": "start_campaign_ai_worker",
+      "target": "loop"
+    },
+    {
+      "call": "asyncio.create_subprocess_exec",
+      "line": 92,
+      "path": "campaign_ai_subprocess_scheduler.py",
+      "scope": "run_worker_once",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 215,
+      "path": "campaign_ai_subprocess_scheduler.py",
+      "scope": "attach_campaign_ai_subprocess_scheduler._start_campaign_ai_subprocess_scheduler",
+      "target": "_ready_loop"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 774,
+      "path": "customer_intelligence/learning_worker.py",
+      "scope": "start_worker",
+      "target": "_loop"
+    },
+    {
+      "call": "mongo_client.start_session",
+      "line": 642,
+      "path": "fulfillment_experiment_routes.py",
+      "scope": "make_fulfillment_experiment_router.reset_order_experiment",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 92,
+      "path": "google_ads_automation_scheduler.py",
+      "scope": "_ensure_spawn_cleanup",
+      "target": "_cleanup_spawn"
+    },
+    {
+      "call": "asyncio.create_subprocess_exec",
+      "line": 113,
+      "path": "google_ads_automation_scheduler.py",
+      "scope": "_spawn_and_track",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 183,
+      "path": "google_ads_automation_scheduler.py",
+      "scope": "run_worker_once",
+      "target": "_spawn_and_track"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 250,
+      "path": "google_ads_automation_scheduler.py",
+      "scope": "attach_google_ads_automation_scheduler.start_google_ads_automation_scheduler",
+      "target": "ready_loop"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 285,
+      "path": "import_jobs.py",
+      "scope": "schedule_excel_job",
+      "target": "run_excel_job"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 50,
+      "path": "independent_callbacks.py",
+      "scope": "drain_worker_tasks",
+      "target": "cb"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 162,
+      "path": "independent_runtime.py",
+      "scope": "create_web_app.lifespan",
+      "target": "monitor"
+    },
+    {
+      "call": "start_legacy",
+      "line": 229,
+      "path": "independent_runtime.py",
+      "scope": "worker.initialize",
+      "target": null
+    },
+    {
+      "call": "start_plan_b",
+      "line": 229,
+      "path": "independent_runtime.py",
+      "scope": "worker.initialize",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 232,
+      "path": "independent_runtime.py",
+      "scope": "worker.initialize",
+      "target": "run_balances"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 235,
+      "path": "independent_runtime.py",
+      "scope": "worker.initialize",
+      "target": "salla_token_maintenance_loop"
+    },
+    {
+      "call": "start_salla_orders_v3_shadow_runtime",
+      "line": 238,
+      "path": "independent_runtime.py",
+      "scope": "worker.initialize",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 250,
+      "path": "independent_runtime.py",
+      "scope": "worker.initialize",
+      "target": "run_push"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 256,
+      "path": "independent_runtime.py",
+      "scope": "worker",
+      "target": "heartbeat"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 257,
+      "path": "independent_runtime.py",
+      "scope": "worker",
+      "target": "stop.wait"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 258,
+      "path": "independent_runtime.py",
+      "scope": "worker",
+      "target": "initialize"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 179,
+      "path": "integrations/qoyod/worker.py",
+      "scope": "start_worker",
+      "target": "_loop"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 1165,
+      "path": "integrations/qoyod_manual/auto_send.py",
+      "scope": "start_worker",
+      "target": "_loop"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 205,
+      "path": "integrations/qoyod_manual/recovery_campaign.py",
+      "scope": "run_with_lease_heartbeat",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 206,
+      "path": "integrations/qoyod_manual/recovery_campaign.py",
+      "scope": "run_with_lease_heartbeat",
+      "target": "lease_heartbeat"
+    },
+    {
+      "call": "_start_run",
+      "line": 1020,
+      "path": "integrations_control_center/ads_auto_sync_scheduler.py",
+      "scope": "_refresh_meta",
+      "target": null
+    },
+    {
+      "call": "_start_run",
+      "line": 1105,
+      "path": "integrations_control_center/ads_auto_sync_scheduler.py",
+      "scope": "_refresh_tiktok",
+      "target": null
+    },
+    {
+      "call": "_start_run",
+      "line": 1198,
+      "path": "integrations_control_center/ads_auto_sync_scheduler.py",
+      "scope": "_refresh_google",
+      "target": null
+    },
+    {
+      "call": "_start_run",
+      "line": 1303,
+      "path": "integrations_control_center/ads_auto_sync_scheduler.py",
+      "scope": "_refresh_snapchat",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 2069,
+      "path": "integrations_control_center/ads_auto_sync_scheduler.py",
+      "scope": "run_auto_sync_cycle",
+      "target": "worker"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 2216,
+      "path": "integrations_control_center/ads_auto_sync_scheduler.py",
+      "scope": "_run_leased_cycle",
+      "target": "run_auto_sync_cycle"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 2584,
+      "path": "integrations_control_center/ads_auto_sync_scheduler.py",
+      "scope": "attach_ads_auto_sync_scheduler.start",
+      "target": "ready_loop"
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 39,
+      "path": "integrations_control_center/google_ads_budget_storage_readiness.py",
+      "scope": "verify_budget_storage.probe",
+      "target": null
+    },
+    {
+      "call": "session.start_transaction",
+      "line": 46,
+      "path": "integrations_control_center/google_ads_budget_storage_readiness.py",
+      "scope": "verify_budget_storage.probe",
+      "target": null
+    },
+    {
+      "call": "asyncio.ensure_future",
+      "line": 66,
+      "path": "integrations_control_center/google_ads_budget_storage_readiness.py",
+      "scope": "verify_budget_storage.probe",
+      "target": "session.end_session"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 84,
+      "path": "integrations_control_center/google_ads_budget_storage_readiness.py",
+      "scope": "verify_budget_storage",
+      "target": "bounded_probe"
+    },
+    {
+      "call": "asyncio.ensure_future",
+      "line": 53,
+      "path": "integrations_control_center/google_ads_namespace_prerequisites.py",
+      "scope": "_end",
+      "target": "session.end_session"
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 186,
+      "path": "integrations_control_center/google_ads_namespace_prerequisites.py",
+      "scope": "_audit",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 264,
+      "path": "integrations_control_center/google_ads_namespace_prerequisites.py",
+      "scope": "audit_namespace_prerequisites",
+      "target": "original"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 389,
+      "path": "integrations_control_center/google_ads_routes.py",
+      "scope": "attach_google_ads_management_routes.ai_draft",
+      "target": "read_option"
+    },
+    {
+      "call": "asyncio.ensure_future",
+      "line": 55,
+      "path": "integrations_control_center/google_ads_storage_commit_readiness.py",
+      "scope": "_end",
+      "target": "session.end_session"
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 102,
+      "path": "integrations_control_center/google_ads_storage_commit_readiness.py",
+      "scope": "_probe",
+      "target": null
+    },
+    {
+      "call": "session.start_transaction",
+      "line": 124,
+      "path": "integrations_control_center/google_ads_storage_commit_readiness.py",
+      "scope": "_probe",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 135,
+      "path": "integrations_control_center/google_ads_storage_commit_readiness.py",
+      "scope": "_probe",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 156,
+      "path": "integrations_control_center/google_ads_storage_commit_readiness.py",
+      "scope": "_latest",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 173,
+      "path": "integrations_control_center/google_ads_storage_commit_readiness.py",
+      "scope": "_run",
+      "target": "original"
+    },
+    {
+      "call": "start_google_connection",
+      "line": 260,
+      "path": "integrations_control_center/google_connections.py",
+      "scope": "attach_google_connection_routes.google_connect_start",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 41,
+      "path": "integrations_control_center/google_merchant_observation_choices.py",
+      "scope": "_snapshot",
+      "target": null
+    },
+    {
+      "call": "session.start_transaction",
+      "line": 42,
+      "path": "integrations_control_center/google_merchant_observation_choices.py",
+      "scope": "_snapshot",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 92,
+      "path": "integrations_control_center/google_merchant_observation_routes.py",
+      "scope": "_membership",
+      "target": null
+    },
+    {
+      "call": "session.start_transaction",
+      "line": 93,
+      "path": "integrations_control_center/google_merchant_observation_routes.py",
+      "scope": "_membership",
+      "target": null
+    },
+    {
+      "call": "start_meta_connection",
+      "line": 332,
+      "path": "integrations_control_center/meta_connections.py",
+      "scope": "attach_meta_connection_routes.meta_connect_start",
+      "target": null
+    },
+    {
+      "call": "start_meta_reporting_job",
+      "line": 357,
+      "path": "integrations_control_center/meta_native_reporting_routes.py",
+      "scope": "attach_meta_native_reporting_routes.start_reporting_sync",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 694,
+      "path": "integrations_control_center/snapchat_ad_performance.py",
+      "scope": "_fetch_ad_window",
+      "target": "worker"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 602,
+      "path": "integrations_control_center/snapchat_adsquad_performance.py",
+      "scope": "_fetch_adsquad_window",
+      "target": "worker"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 491,
+      "path": "integrations_control_center/snapchat_campaign_preview_async.py",
+      "scope": "execute_snapchat_management_preview_job",
+      "target": "_heartbeat_preview_job_lease"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 642,
+      "path": "integrations_control_center/snapchat_campaign_preview_async.py",
+      "scope": "schedule_snapchat_management_preview_job",
+      "target": "execute_snapchat_management_preview_job"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 893,
+      "path": "integrations_control_center/snapchat_campaign_publication.py",
+      "scope": "schedule_publication",
+      "target": "run_publication"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 1201,
+      "path": "integrations_control_center/snapchat_capi_purchases.py",
+      "scope": "attach_snapchat_capi_purchase_routes.start",
+      "target": "snapchat_capi_loop"
+    },
+    {
+      "call": "start_snapchat_connection",
+      "line": 323,
+      "path": "integrations_control_center/snapchat_connections.py",
+      "scope": "attach_snapchat_connection_routes.snapchat_connect_start",
+      "target": null
+    },
+    {
+      "call": "_start_sync_run_heartbeat",
+      "line": 468,
+      "path": "integrations_control_center/snapchat_native_async_routes.py",
+      "scope": "execute_snapchat_native_sync_job",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 123,
+      "path": "integrations_control_center/snapchat_native_data_common.py",
+      "scope": "_start_sync_run_heartbeat",
+      "target": "_sync_run_heartbeat"
+    },
+    {
+      "call": "_start_sync_run_heartbeat",
+      "line": 302,
+      "path": "integrations_control_center/snapchat_native_data_sync.py",
+      "scope": "execute_snapchat_native_sync",
+      "target": null
+    },
+    {
+      "call": "start_tiktok_connection",
+      "line": 306,
+      "path": "integrations_control_center/tiktok_connections.py",
+      "scope": "attach_tiktok_connection_routes.tiktok_connect_start",
+      "target": null
+    },
+    {
+      "call": "start_creator_connection",
+      "line": 282,
+      "path": "integrations_control_center/tiktok_creator_accounts.py",
+      "scope": "attach_creator_account_routes.connect",
+      "target": null
+    },
+    {
+      "call": "start_tiktok_reporting_job",
+      "line": 433,
+      "path": "integrations_control_center/tiktok_native_reporting_routes.py",
+      "scope": "attach_tiktok_native_reporting_routes.start_reporting_sync",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 159,
+      "path": "mobile_reviewed_preparation_routes.py",
+      "scope": "_publish_ready_file",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 590,
+      "path": "operational_atomic.py",
+      "scope": "operational_owner",
+      "target": null
+    },
+    {
+      "call": "start_baselines",
+      "line": 135,
+      "path": "operational_balance_service.py",
+      "scope": "save_opening.apply",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 134,
+      "path": "operational_driver_review_store.py",
+      "scope": "transact",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 21,
+      "path": "operational_historical_shipping_service.py",
+      "scope": "_preview",
+      "target": null
+    },
+    {
+      "call": "session.start_transaction",
+      "line": 22,
+      "path": "operational_historical_shipping_service.py",
+      "scope": "_preview",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 63,
+      "path": "operational_inventory_projection.py",
+      "scope": "projection",
+      "target": null
+    },
+    {
+      "call": "session.start_transaction",
+      "line": 64,
+      "path": "operational_inventory_projection.py",
+      "scope": "projection",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 31,
+      "path": "operational_native_purchase_link_service.py",
+      "scope": "_read_context",
+      "target": null
+    },
+    {
+      "call": "session.start_transaction",
+      "line": 32,
+      "path": "operational_native_purchase_link_service.py",
+      "scope": "_read_context",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 181,
+      "path": "operational_native_purchase_link_service.py",
+      "scope": "verified_saved_links",
+      "target": null
+    },
+    {
+      "call": "session.start_transaction",
+      "line": 182,
+      "path": "operational_native_purchase_link_service.py",
+      "scope": "verified_saved_links",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 283,
+      "path": "operational_supplier_invoice_preview.py",
+      "scope": "supplier_invoice_preview",
+      "target": null
+    },
+    {
+      "call": "session.start_transaction",
+      "line": 284,
+      "path": "operational_supplier_invoice_preview.py",
+      "scope": "supplier_invoice_preview",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 542,
+      "path": "order_cost_reporting_repair.py",
+      "scope": "apply_reporting_repair",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 163,
+      "path": "order_review_resume_worker.py",
+      "scope": "start_worker",
+      "target": "loop"
+    },
+    {
+      "call": "raw_db.client.start_session",
+      "line": 578,
+      "path": "order_review_routes.py",
+      "scope": "_detail",
+      "target": null
+    },
+    {
+      "call": "session.start_transaction",
+      "line": 579,
+      "path": "order_review_routes.py",
+      "scope": "_detail",
+      "target": null
+    },
+    {
+      "call": "client.start_session",
+      "line": 223,
+      "path": "preparation_incident_recovery.py",
+      "scope": "make_preparation_incident_recovery_router.apply",
+      "target": null
+    },
+    {
+      "call": "_start_file_execution",
+      "line": 4218,
+      "path": "preparation_piece_operations.py",
+      "scope": "make_preparation_piece_operations_router.start_file",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 1098,
+      "path": "product_google_taxonomy_ai_pilot.py",
+      "scope": "_execute_pilot",
+      "target": "_lease_heartbeat_loop"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 1636,
+      "path": "product_google_taxonomy_ai_pilot.py",
+      "scope": "_schedule_pilot_task",
+      "target": "_execute_pilot"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 1725,
+      "path": "product_google_taxonomy_ai_pilot.py",
+      "scope": "make_product_google_taxonomy_ai_pilot_router.start_resumable_run_loop",
+      "target": "ready_loop"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 240,
+      "path": "qoyod_auto_unified/queue_api.py",
+      "scope": "_list_unsent_orders_with_queue_counts",
+      "target": "_run_bounded"
+    },
+    {
+      "call": "self._db.client.start_session",
+      "line": 177,
+      "path": "review_acceptance_config_guard.py",
+      "scope": "AcceptanceConfigCollection.__getattr__.mutate",
+      "target": null
+    },
+    {
+      "call": "raw_db.client.start_session",
+      "line": 234,
+      "path": "review_completion_readback.py",
+      "scope": "read_attempt",
+      "target": null
+    },
+    {
+      "call": "session.start_transaction",
+      "line": 235,
+      "path": "review_completion_readback.py",
+      "scope": "read_attempt",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 36,
+      "path": "runtime_diagnostics.py",
+      "scope": "start_lag_monitor",
+      "target": "_lag_monitor"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 451,
+      "path": "salla_integration/auto_sync.py",
+      "scope": "schedule_salla_auto_sync",
+      "target": "_run_auto_sync"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 84,
+      "path": "salla_integration/payment_update_inbox.py",
+      "scope": "start_worker",
+      "target": "run"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 724,
+      "path": "salla_integration/routes.py",
+      "scope": "attach_salla_routes.sync_orders",
+      "target": "run_orders_sync_background"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 160,
+      "path": "salla_integration/shipping_label_inbox.py",
+      "scope": "start_worker",
+      "target": "run"
+    },
+    {
+      "call": "start_session",
+      "line": 73,
+      "path": "salla_orders_v3/ingestion.py",
+      "scope": "_run_outbox_transaction",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 661,
+      "path": "salla_orders_v3/worker.py",
+      "scope": "process_shadow_job",
+      "target": "_job_heartbeat_loop"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 850,
+      "path": "salla_orders_v3/worker.py",
+      "scope": "run_event_outbox_repair_once",
+      "target": "_recovery_heartbeat_loop"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 1078,
+      "path": "salla_orders_v3/worker.py",
+      "scope": "run_recovery_once",
+      "target": "_recovery_heartbeat_loop"
+    },
+    {
+      "call": "tasks.create_task",
+      "line": 1505,
+      "path": "salla_orders_v3/worker.py",
+      "scope": "_worker_loop",
+      "target": "_discovery_loop"
+    },
+    {
+      "call": "tasks.create_task",
+      "line": 1506,
+      "path": "salla_orders_v3/worker.py",
+      "scope": "_worker_loop",
+      "target": "_enrichment_loop"
+    },
+    {
+      "call": "tasks.create_task",
+      "line": 1507,
+      "path": "salla_orders_v3/worker.py",
+      "scope": "_worker_loop",
+      "target": "_event_outbox_repair_loop"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 1519,
+      "path": "salla_orders_v3/worker.py",
+      "scope": "start_salla_orders_v3_shadow_worker",
+      "target": "_worker_loop"
+    },
+    {
+      "call": "start_salla_orders_v3_shadow_worker",
+      "line": 1535,
+      "path": "salla_orders_v3/worker.py",
+      "scope": "start_salla_orders_v3_shadow_runtime",
+      "target": null
+    },
+    {
+      "call": "start_salla_orders_v3_shadow_runtime",
+      "line": 5380,
+      "path": "server.py",
+      "scope": "_local_startup",
+      "target": null
+    },
+    {
+      "call": "_qoyod_worker_start",
+      "line": 5384,
+      "path": "server.py",
+      "scope": "_local_startup",
+      "target": null
+    },
+    {
+      "call": "_qoyod_plan_b_auto_start",
+      "line": 5392,
+      "path": "server.py",
+      "scope": "_local_startup",
+      "target": null
+    },
+    {
+      "call": "_asyncio.create_task",
+      "line": 5397,
+      "path": "server.py",
+      "scope": "_local_startup",
+      "target": "salla_token_maintenance_loop"
+    },
+    {
+      "call": "_asyncio.create_task",
+      "line": 5401,
+      "path": "server.py",
+      "scope": "_local_startup",
+      "target": "run_operational_balances"
+    },
+    {
+      "call": "start_review_resume",
+      "line": 5403,
+      "path": "server.py",
+      "scope": "_local_startup",
+      "target": null
+    },
+    {
+      "call": "start_assembly_delivery",
+      "line": 5405,
+      "path": "server.py",
+      "scope": "_local_startup",
+      "target": null
+    },
+    {
+      "call": "start_label_inbox",
+      "line": 5407,
+      "path": "server.py",
+      "scope": "_local_startup",
+      "target": null
+    },
+    {
+      "call": "start_payment_inbox",
+      "line": 5409,
+      "path": "server.py",
+      "scope": "_local_startup",
+      "target": null
+    },
+    {
+      "call": "_asyncio.create_task",
+      "line": 5411,
+      "path": "server.py",
+      "scope": "_local_startup",
+      "target": "run_operational_push"
+    },
+    {
+      "call": "start_lag_monitor",
+      "line": 5430,
+      "path": "server.py",
+      "scope": "on_startup",
+      "target": null
+    },
+    {
+      "call": "start_deferred_task",
+      "line": 5470,
+      "path": "server.py",
+      "scope": "on_startup",
+      "target": null
+    },
+    {
+      "call": "start_snapchat_connection",
+      "line": 84,
+      "path": "snapchat_v2/connection.py",
+      "scope": "SnapchatConnectionManager.start_oauth",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 288,
+      "path": "snapchat_v2/scheduler.py",
+      "scope": "attach_shadow_scheduler.start",
+      "target": "ready_loop"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 576,
+      "path": "snapchat_v2/sync_pipeline.py",
+      "scope": "SnapchatV2SyncPipeline.run",
+      "target": "self._heartbeat"
+    },
+    {
+      "call": "raw_db.client.start_session",
+      "line": 301,
+      "path": "source_added_item_review.py",
+      "scope": "register_source_addition_routes.list_additions",
+      "target": null
+    },
+    {
+      "call": "session.start_transaction",
+      "line": 302,
+      "path": "source_added_item_review.py",
+      "scope": "register_source_addition_routes.list_additions",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 197,
+      "path": "startup_guard.py",
+      "scope": "run_release_startup",
+      "target": "_heartbeat_loop"
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 205,
+      "path": "startup_guard.py",
+      "scope": "run_release_startup",
+      "target": "global_initialization"
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 399,
+      "path": "store_delivery_reassignment_routes.py",
+      "scope": "make_store_delivery_reassignment_router.unassign",
+      "target": null
+    },
+    {
+      "call": "tx.start_transaction",
+      "line": 400,
+      "path": "store_delivery_reassignment_routes.py",
+      "scope": "make_store_delivery_reassignment_router.unassign",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 198,
+      "path": "supplier_debit_setup_atomic.py",
+      "scope": "supplier_debit_setup_atomic_owner",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 118,
+      "path": "supplier_invoice_recovery.py",
+      "scope": "register_recovery.reconcile",
+      "target": null
+    },
+    {
+      "call": "mongo_client.start_session",
+      "line": 4209,
+      "path": "supplier_receiving_routes.py",
+      "scope": "make_supplier_receiving_router.add_permanent_supplier_invoice_service",
+      "target": null
+    },
+    {
+      "call": "mongo_session.start_transaction",
+      "line": 4210,
+      "path": "supplier_receiving_routes.py",
+      "scope": "make_supplier_receiving_router.add_permanent_supplier_invoice_service",
+      "target": null
+    },
+    {
+      "call": "mongo_client.start_session",
+      "line": 4729,
+      "path": "supplier_receiving_routes.py",
+      "scope": "make_supplier_receiving_router.refresh_session",
+      "target": null
+    },
+    {
+      "call": "mongo_client.start_session",
+      "line": 5672,
+      "path": "supplier_receiving_routes.py",
+      "scope": "make_supplier_receiving_router.remove_draft_scan",
+      "target": null
+    },
+    {
+      "call": "mongo_client.start_session",
+      "line": 6632,
+      "path": "supplier_receiving_routes.py",
+      "scope": "make_supplier_receiving_router.close_session",
+      "target": null
+    },
+    {
+      "call": "db.client.start_session",
+      "line": 48,
+      "path": "supplier_scan_attempts.py",
+      "scope": "transaction",
+      "target": null
+    },
+    {
+      "call": "asyncio.create_task",
+      "line": 108,
+      "path": "supplier_scan_attempts.py",
+      "scope": "install_reconciler.start",
+      "target": "sweep"
+    }
+  ],
+  "limitations": [
+    "No import or control-flow reachability analysis",
+    "Launch names are candidates, not proof of background execution",
+    "Dynamic registration, aliases and custom task factories may be missed",
+    "Source constants and environment values are intentionally omitted"
+  ],
+  "mode": "offline_ast_discovery",
+  "parse_errors": [],
+  "runtime_verified": false,
+  "schema_version": 1,
+  "source_sha256": {
+    "accounting_advertising_setup.py": "f3834a64332082d17f6360c5928f5dbfbd72331c022920d6be507a694220bd93",
+    "accounting_atomic.py": "fb643c307ba9b61adbdfbe8e4aec825af7aa8406346a06aa6f7a40227609c16a",
+    "advertising_product_watch_scheduler_v3.py": "bf7594f4df64a1a48d50315924cdefa50212d2b003fe2c78c930917bf7f67102",
+    "assembly_completion_delivery.py": "f90e058958f77f93f8632f536c7aeac33f5fa371504edc9dcbd39bf83834a4b9",
+    "assembly_completion_legacy_readback.py": "b90f1b26e70a1b82f54071df5fcea375dbf060424deb1da7a8e9697c5b112d26",
+    "assembly_completion_v2_readback.py": "f728e77e3c8481c3d34f422e2ff4c624bcc89580ba50a3963b9bc50ca7a30539",
+    "assembly_print_completion.py": "0fa4d600d3851b7440aadc7f26faa5077bf245f0d7bfb864b87ab1c0951b40d1",
+    "bnpl/routes.py": "bccdbb539198ae642dc86843925e7e93afd4cf1934d1c0609d0e49e7408016ed",
+    "boot_runtime.py": "8974e836a97224a88e9f4bb9e9dafe7b548a849eb78b6dd5a41c27db67802e4f",
+    "campaign_ai_monitor_legacy.py": "818c5301c6532b150ffba3c4d9fa59924ebf36ee908c561a19d78949b310def0",
+    "campaign_ai_subprocess_scheduler.py": "7f047ab6356906288e1eed0ea9e25e723f7e8f73e4ecb673facb85e13d9302e2",
+    "customer_intelligence/learning_worker.py": "b02af76533a74ccc0798631c9d04b791e9253c70bb6f4435e5d1f246041c5a8b",
+    "fulfillment_experiment_routes.py": "32cf293b5e17f009fd565f8c6a8c9c5c2622d114d108784c66c7f3c4318d14a8",
+    "google_ads_automation_scheduler.py": "684e68a437aafab251740a5afff8b64a12d5e7a161ee172feb6fe091e97f5d22",
+    "import_jobs.py": "5261a5bb1542500ffcc12e81f460c8bb3bbdba710009995149dcf94cccb114ff",
+    "independent_callbacks.py": "c0564d5b4a3d56ecc635cdfca9da2421e22b383cc2021461f2624678a7aab39f",
+    "independent_runtime.py": "df4005fbf3086297e4ac49f71d317c0db4ba425dbcfdafae860c5ba80abae37d",
+    "integrations/qoyod/worker.py": "a16e4bc33ad1cb433a9817df63efd0c21b965b92b88f7270f89b120951610864",
+    "integrations/qoyod_manual/auto_send.py": "668597e9b4c3f421ff586595569192f2887f5347d26a1d7719bd99516a99ac43",
+    "integrations/qoyod_manual/recovery_campaign.py": "e23f0986b64c5ce25d35d644c8fff6ef4f97ac4091c107afc4f9e79db49844f0",
+    "integrations_control_center/ads_auto_sync_scheduler.py": "5ccfa445d354e9339cb23a70c2a5864c49f7bdaac44411bda61c8848399f13b8",
+    "integrations_control_center/google_ads_budget_storage_readiness.py": "89fe77ba2cfb4e943489a52511d9b645ace912ecf5a5507dc4f083741a8251ae",
+    "integrations_control_center/google_ads_namespace_prerequisites.py": "d685ce3e7e0e7c1c9d8ff9890606410207c8f5b918a0db6776a9c107a160de81",
+    "integrations_control_center/google_ads_routes.py": "a2ddaea1873bef552e25e11d351d6555ade17040f42f9b6dbaab490ac66e5023",
+    "integrations_control_center/google_ads_storage_commit_readiness.py": "6dac84c0dea515b335293aa757a53969bc6d236e100b4983d74a07f8ff41ba86",
+    "integrations_control_center/google_connections.py": "0fdd30c3b5b5e39299de8a1554bfc7758e50ed3d14bd54e9dd46a9a56a7e44cf",
+    "integrations_control_center/google_merchant_observation_choices.py": "3671c649d8db7f9c4e62b45b01c57748b8d1a4a4cf4df82a34387e8b68513cd9",
+    "integrations_control_center/google_merchant_observation_routes.py": "746bf5f78d29c05b12227cc6bc57668434279cc915f2b5dad33f8c2a9cf3a2e0",
+    "integrations_control_center/meta_connections.py": "611fa6206b248e12d3e2f0118ad05d6ef5bd03a32b4c029018c3ff8f2d1a0e03",
+    "integrations_control_center/meta_native_reporting_routes.py": "ceba80843e21731bd6176aa19e30fa7feb964baffa2ab6bc826c3648ffec6eec",
+    "integrations_control_center/snapchat_ad_performance.py": "b57ef168898bbba925fe1356833199337d9765c7177ca799e9cdf9b4aaa3d83d",
+    "integrations_control_center/snapchat_adsquad_performance.py": "49969377290a2d503000763ea001e9471681d538c01ff86818aafec24452441f",
+    "integrations_control_center/snapchat_campaign_preview_async.py": "a8af9924350d797db388396bc4c3598ab5ed7c9e35d930c81540fda2ea671511",
+    "integrations_control_center/snapchat_campaign_publication.py": "cc10ffddd58c0845483d5dfb46b6396cd2aa1396b6f71df7e071460611896b6b",
+    "integrations_control_center/snapchat_capi_purchases.py": "e223b3c9a0938193dc50ab2700a95275e7cc4f22aec02f4284c47fd1e19f0ecc",
+    "integrations_control_center/snapchat_connections.py": "851f8a14c019c66329b6aabb4ac6103921ecbf016c115f499469efafce600613",
+    "integrations_control_center/snapchat_native_async_routes.py": "1c26874c37f9ef8e1e1c026440ced58685bdc033a151c518fd0b59cd78552133",
+    "integrations_control_center/snapchat_native_data_common.py": "ce220309f0ad452b2ef4632e1c52c061963c5d539dcfba1beb766d9f4096242d",
+    "integrations_control_center/snapchat_native_data_sync.py": "f163fc8854e1c6f9f02f7247e6b855b15ab7898ac75232d3d0ca398734360b6d",
+    "integrations_control_center/tiktok_connections.py": "ec8b5982659c868df9a2aca662e9c573e7948a2ed751cc70746a3e067d9bc92a",
+    "integrations_control_center/tiktok_creator_accounts.py": "b4e5ce21ef928a042135f1f69a09ae2a1f21d34413b1524fa9db0414bcd9b516",
+    "integrations_control_center/tiktok_native_reporting_routes.py": "70275ad42f4ab272ce4f3d14d3d7936c3b82731649927b8634725f59f2c9d175",
+    "mobile_reviewed_preparation_routes.py": "ab67846385751a8f48ee693e9ac792ba0c1cdb9a8b9767aea9ce9784374c2c93",
+    "operational_atomic.py": "7892008299f0e0d7756ee5fb08a1b2cd5f24983fac365a7b8ed57098a92c433c",
+    "operational_balance_service.py": "b2313fe0109047ef46ffad7a72d1943d3cab5deeb6cf986d9d302ab3e05a3041",
+    "operational_driver_review_store.py": "729865d8724790dbbf65cc62003bea2dc5fb060d722ae4b255de93efe6eb8bc2",
+    "operational_historical_shipping_service.py": "80f0748178f5d3a269564ee60c76b4e872a4fecef855801d91dff8c80f39d659",
+    "operational_inventory_projection.py": "cca86c41fd0c007ea6be7174b46c5b7005b3f0326d295187a81b4b4fcc8aa5e4",
+    "operational_native_purchase_link_service.py": "6db32720b11b88526997b00cd60cb2c1987ad5d982bf15784ede706a412ee1ea",
+    "operational_supplier_invoice_preview.py": "8113cc4f4f35e687450ad220ada3870e44ab12347d0ab46928f2a4b68abe00bd",
+    "order_cost_reporting_repair.py": "f96b6459489ca96715789ee36760c9d54175ea11c0ab01b12a51ff3d18dfc26a",
+    "order_review_resume_worker.py": "e8ff25f75bcb8d8121eeed643426b570ab42b369fefafa22c4d5d5c7f570cf1c",
+    "order_review_routes.py": "43336a0ee01b81d2bbbfcdfabf3b1800daa72d1d7ed4ac8e01aa3a011a79df12",
+    "preparation_incident_recovery.py": "166da231e977b11176dec151d17fa8ab295e74662a3a3fa70f3f0abef650ee87",
+    "preparation_piece_operations.py": "e00f70d86d3d88edc7e241335840a7bbf4d32a4b8e64d9d44ac97f35b53129cc",
+    "product_google_taxonomy_ai_pilot.py": "b6bca2620ede067d2925e4b06339332d3b0fd627f615b721b3b4155ff67d0a37",
+    "qoyod_auto_unified/queue_api.py": "7a39bfd09f0addc06ca54a761f9aeb7dff3ac4b23526af1a688eb8b974830971",
+    "review_acceptance_config_guard.py": "c62eaa857207db7fe7815ab56731273655fd61aed7d7461228e4a020f1939b7d",
+    "review_completion_readback.py": "aa1ab02b1792f42bd902dc876243d66fa2e7398901694c0095cb5095a63904a2",
+    "runtime_diagnostics.py": "49c1761d7b604347136f62033ab3b909fddf5bfaa88ffda7276ca99c3361488e",
+    "salla_integration/auto_sync.py": "093c5575d6a0a1b2de293d0eb88ce18d23c5efa6e180b6d6a44080b88d410fea",
+    "salla_integration/payment_update_inbox.py": "92b31ba5bacde9fde1b5c57c5c811b3371d55b4b956afd4ed2c3a13a9c847499",
+    "salla_integration/routes.py": "a1d48bd87a9d13306a9b2d9d6cfd38b410ca834fefbfaa83d4be487f84a82eda",
+    "salla_integration/shipping_label_inbox.py": "c76ade5979fa6fc88dd9774c96eb5ab6b88fe3cad1fa407984da368c897e92ad",
+    "salla_orders_v3/ingestion.py": "b46293b828f583786756a2f1d9001ad3234c9bd944b1f38e606238f9a17589b3",
+    "salla_orders_v3/worker.py": "71e7dcddb3f9079839b8a2a293b2325f617281ea5338d745741ecf280ba3e4be",
+    "server.py": "ac1e1208fa4576c1098103b18c7e767eae023fa5ce5bfe1c4d9134219a1c866d",
+    "snapchat_v2/connection.py": "a72f2a7239e06f582a8bc22152bba493908b5486113a6622f85aca4d009e0bbc",
+    "snapchat_v2/scheduler.py": "0ac3b5c12ebb647882e1ec415c761fcd8b8b86c98f1e186e082919ff5124fd05",
+    "snapchat_v2/sync_pipeline.py": "91533665c7ec72c603edf3303e4e0375c6757a641932931b0ba871242b6d4890",
+    "source_added_item_review.py": "3e7bc9e486e30040abe1c877d4237dc3fb26858c462cf37f8f3d3022d5afc79b",
+    "startup_guard.py": "8c52e2e08e17987d0dd999e579813c618c634576e9b0cbf313720e7899b69fde",
+    "store_delivery_reassignment_routes.py": "d596baf9833fcc7e20204c3201c4ad8871f4c12d85de4f4e128448edb649a9a6",
+    "supplier_debit_setup_atomic.py": "efb146d5246d79323c485fa1a3c17cd3a44eb537f44b7a553fb92bbaa557374e",
+    "supplier_invoice_recovery.py": "38e94e070301c9520d58a04c8ba76e652f5b51748d65f721f19978f57df218b9",
+    "supplier_receiving_routes.py": "55dbd52c04a3e88800afb1317d24ddea47a921c5202be6c71d5d9d8cf1d1591f",
+    "supplier_scan_attempts.py": "d298b1997329bc3530ae5c33c57de287570d839c8f3522354a3503ca6b334402"
+  }
+}

@@ -1,0 +1,446 @@
+{
+  "task_id": "EXIT-2D-RENDER-20261105",
+  "date": "2026-11-05",
+  "state": "SYNTHETIC_RENDER_CANDIDATE_ACCEPTED_AWAITING_RESOURCE_APPROVAL",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/exit-2d-render-integration-20261105",
+  "draft_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1757",
+  "tested_code_sha": "c3ded22b5da09188daba2d56c5607db75f1b1a35",
+  "production_integrated_sha": "2d73a2a039e16468bbd45523bacf441bff515eb2",
+  "tested_reference_sha": "3d03ff3b2985ddd0a826d2f18acdeea13cc0d66f",
+  "prior_delivery_sha": "c19bb28b8cb705132794d13e0e4df52d074873e2",
+  "september_sha": "6f0884e98b8fddef4a884b1321a9a216b9d30498",
+  "ci": {
+    "run_id": 41932365983,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41932365983",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "id": 126932188874,
+        "name": "isolated-linux",
+        "conclusion": "success"
+      },
+      {
+        "id": 126932189452,
+        "name": "hosting-images",
+        "conclusion": "success"
+      }
+    ],
+    "source_checks": {
+      "success": 41,
+      "skipped": 6,
+      "failure": 1,
+      "failed_name": "Frontend build",
+      "failed_job": 126932231699,
+      "failure_reason": "Unchanged V5 release-readiness rejects retained Production intent: new backend members and source/intent ancestry. Not a staging Vite compilation failure; no bypass."
+    }
+  },
+  "tests": {
+    "inherited_pytest": 365,
+    "original_waiting_pytest": 61,
+    "expanded_compatibility_pytest": 376,
+    "total_pytest_passed": 802,
+    "pytest_subtests_passed": 111,
+    "new_runtime_unittest": 25,
+    "existing_acceptance_controller_unittest": 25,
+    "offline_inventory_tests": 8,
+    "inventory_count_note": "Eight inventory cases are included in the 25 runtime unit cases; do not count their repeat execution twice.",
+    "skips_in_dedicated_runtime_suite": 0
+  },
+  "performance": {
+    "synthetic_process_isolation_not_production_capacity": {
+      "concurrent_employee_requests": 20,
+      "independent_reports": {
+        "max_ms": 9.704,
+        "p50_ms": 8.493,
+        "p95_ms": 9.624
+      },
+      "kind": "synthetic_process_isolation_not_production_capacity",
+      "report_cpu_wall_seconds": 0.6,
+      "same_process": {
+        "max_ms": 605.725,
+        "p50_ms": 604.761,
+        "p95_ms": 605.703
+      }
+    },
+    "real_api_synthetic_data_not_production_capacity": {
+      "all_statuses_200": true,
+      "concurrent_report_requests": 4,
+      "employee_auth_p50_ms": 83.007,
+      "employee_auth_p95_ms": 86.11,
+      "employee_requests": 20,
+      "kind": "real_api_synthetic_data_not_production_capacity",
+      "report_max_ms": 864.618,
+      "synthetic_orders": 5000
+    },
+    "actual_operational_handlers_synthetic_data": {
+      "analytics_completed": 8,
+      "kind": "actual_operational_handlers_synthetic_data",
+      "paths": {
+        "assembly_labeling": {
+          "p50_ms": 6.151,
+          "p95_ms": 8.319,
+          "requests": 10
+        },
+        "assembly_piece_ready": {
+          "p50_ms": 19.002,
+          "p95_ms": 26.703,
+          "requests": 10
+        },
+        "assembly_receiving_board": {
+          "p50_ms": 19.177,
+          "p95_ms": 532.919,
+          "requests": 10
+        },
+        "create_supplier_file": {
+          "p50_ms": 21.754,
+          "p95_ms": 32.06,
+          "requests": 10
+        },
+        "mark_supplier_ready": {
+          "p50_ms": 10.879,
+          "p95_ms": 13.334,
+          "requests": 10
+        },
+        "my_products": {
+          "p50_ms": 15.85,
+          "p95_ms": 50.266,
+          "requests": 10
+        },
+        "my_products_waiting_page": {
+          "p50_ms": 12.452,
+          "p95_ms": 252.713,
+          "requests": 10
+        },
+        "shipping_label_print": {
+          "p50_ms": 23.88,
+          "p95_ms": 33.468,
+          "requests": 10
+        }
+      },
+      "physical_printer_tested": false,
+      "provider_calls_possible": false,
+      "supplier_files_unique": 10
+    }
+  },
+  "operational_paths": {
+    "my_products_waiting_page": "GET /api/supplier-dispatch-v1/waiting-page",
+    "my_products": "GET /api/supplier-dispatch-v1/workspace?grain=piece",
+    "assembly_receiving_board": "GET /api/preparation-work-v1/assembly/orders?state=in_progress",
+    "assembly_labeling": "GET /api/fulfillment-v2/ready-to-ship",
+    "assembly_piece_ready": "POST /api/preparation-work-v1/assembly/pieces/{id}/ready",
+    "create_supplier_file": "POST /api/supplier-dispatch-v1/dispatches",
+    "mark_supplier_ready": "POST /api/supplier-dispatch-v1/dispatches/{id}/ready",
+    "shipping_label_print": "POST /api/fulfillment-v2/completed/{number}/carrier-label/v1"
+  },
+  "runtime_proof": {
+    "actual_frontend_built": true,
+    "nginx_api_proxy": true,
+    "exact_render_full_commands": true,
+    "authenticated_private_mongo_replica_set": true,
+    "migration_barrier": true,
+    "independent_crash_restart": [
+      "web",
+      "worker-reports",
+      "worker-sync",
+      "worker-accounting"
+    ],
+    "genuine_employee_outage_routes": [
+      "supplier workspace",
+      "assembly board",
+      "ready-to-ship"
+    ],
+    "report_outage_response": "503 with Retry-After5; employee operations continue",
+    "worker_restart_fence": "Old process killed first; lease expiry then different UUID fence; clean TERM",
+    "provider_operations_executed": false,
+    "physical_printer_tested": false,
+    "shipping_proof": "Real local-courier printable-data handler; no external shipment purchase",
+    "physical_ready_proof": "Two real received units per synthetic order; only one marked Ready, replay idempotent; order stays incomplete and no Salla completion write"
+  },
+  "restore": {
+    "scope": "Synthetic network-none disposable Mongo only",
+    "source": "mezan_exit2c",
+    "target": "mezan_exit2d_restore",
+    "result": "passed",
+    "checks": [
+      "all collection names",
+      "full BSON document identities and bytes",
+      "index definitions",
+      "unknown outcome/event ID retained",
+      "Fernet decryption",
+      "wrong-key rejection",
+      "Binary attachment checksum"
+    ],
+    "barrier": "All application/worker/report processes stopped; disposable TTL monitor and profiler disabled; synthetic profiler collection removed before dump",
+    "production_backup_performed": false,
+    "production_keys_read": false
+  },
+  "resources": {
+    "region": "frankfurt",
+    "dedicated_workspace": true,
+    "services": 5,
+    "instance_plan": "1c-2g",
+    "cpu_per_service": 1,
+    "ram_gb_per_service": 2,
+    "instances_each": 1,
+    "roles": [
+      "web/frontend/nginx",
+      "private reports",
+      "advertising/sync",
+      "accounting/Qoyod",
+      "private synthetic Mongo"
+    ],
+    "mongo_disk_gb": 10,
+    "compute_monthly_usd": 125,
+    "disk_monthly_usd": 2.5,
+    "hobby_workspace_monthly_usd": 0,
+    "hobby_total_monthly_usd": 127.5,
+    "recommended_pro_workspace_monthly_usd": 25,
+    "recommended_total_monthly_usd": 152.5,
+    "excluded": [
+      "taxes",
+      "FX/card fees",
+      "bandwidth/build overages",
+      "Production managed Mongo",
+      "external durable object storage"
+    ],
+    "hard_spend_cap_claimed": false,
+    "auto_deploy": "off",
+    "resources_created": 0
+  },
+  "review": {
+    "credential_pattern_matches": 0,
+    "sensitive_file_additions": [],
+    "original_waiting_test_blob": "6d889052c26a4ea8d6b2a31d86915e696d7e7928",
+    "original_tests_preserved": true,
+    "waiting_suite_isolation": "Fresh Python subprocess prevents global preparation_route_history wrapper installed by mobile_app_request_context from contaminating standalone-router contracts.",
+    "render_official_schema": "https://render.com/schema/render.yaml.json",
+    "render_schema_sha256": "8a3fb8da6b4f55fe686fbefa790e011d3dd7895f013f355953c572a21ab6494a",
+    "v5_guard_and_frozen_intent_identical_to_production": true,
+    "source_ownership": {
+      "bounded_assignments": 28,
+      "hooks": 18,
+      "launch_candidates": 148,
+      "static_coverage_passed": true,
+      "all_live_reachability_claimed": false
+    }
+  },
+  "input_trees": {
+    "backend": "93aebe7b64bb5e52bf5ac62deb03400cd460e5c3",
+    "frontend": "27ffa80b00c39169e0345d761446869671836441",
+    "packaging": "973d31380f74bb32fa3afb1664a4d0e6c2f3c7df",
+    ".github": "b04cae17ebf63bf07b9658278e7f1fc0dc2d3c2f",
+    "scripts": "94a6c70aec4c70a6ca632a967d530c8f94d6fda8"
+  },
+  "production_changed": false,
+  "production_connections": 0,
+  "release_guard_lease_created": false,
+  "merged": false,
+  "deployed": false,
+  "remaining": [
+    "User approval for paid synthetic Render staging resources and hosting-account access",
+    "Actual Render platform deployment/private-network/capacity rehearsal after resource approval",
+    "Separately authorized real Mongo/files/encryption inventory and restore",
+    "Old-owner control-plane stop proof before any new Production writer",
+    "Fresh reviewed V5 source/intent handoff before Production merge/deploy"
+  ],
+  "acceptance_limits": [
+    "Docker/private-network execution, not an observed Render deployment",
+    "Synthetic data and small samples, not Production capacity or SLA",
+    "Performance application containers1CPU/2GB; actual hosting-image smoke also caps Mongo1CPU/2GB; performance harness Mongo has no equivalent CPU cap",
+    "Physical Ready benchmark exercises default legacy inventory cohort; wider existing component/financial CI remains separate",
+    "No real carrier/provider write or physical printer test",
+    "Six scheduler families observed; original supplier-scan/taxonomy registration gaps retained"
+  ],
+  "ci_history": [
+    {
+      "conclusion": "success",
+      "head_sha": "c3ded22b5da09188daba2d56c5607db75f1b1a35",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41932365983",
+      "id": 41932365983,
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "head_sha": "bc16565a9f88912174976a6b2dcf904525c97fa6",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41931317809",
+      "id": 41931317809,
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "head_sha": "1d72b925424545a36c4479c20c22bda1d7648dbd",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41929951737",
+      "id": 41929951737,
+      "status": "completed"
+    },
+    {
+      "conclusion": "cancelled",
+      "head_sha": "c4c572eceb5b3d15c5d95350569ea453460fb8f5",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41929720859",
+      "id": 41929720859,
+      "status": "completed"
+    },
+    {
+      "conclusion": "cancelled",
+      "head_sha": "8e2f05a26e7e9c8211cc61335a9d1226712ba62c",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41929512787",
+      "id": 41929512787,
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "d54ed225b2d5f8ec0b9211176d3221f856ffd3b6",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41927811393",
+      "id": 41927811393,
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "a611e9b45b5e493f5d7fb0f758a0e5ba6294a106",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41927737138",
+      "id": 41927737138,
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "head_sha": "7506e6220381ca73480708f342e0ce3c331b0d8b",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41926785231",
+      "id": 41926785231,
+      "status": "completed"
+    },
+    {
+      "conclusion": "cancelled",
+      "head_sha": "a0b3e1d101485382d7449284be701a211b87dffe",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41926755632",
+      "id": 41926755632,
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "head_sha": "057753499c05e87c1c1c23d2e72075fc05b51ab6",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41925888453",
+      "id": 41925888453,
+      "status": "completed"
+    },
+    {
+      "conclusion": "cancelled",
+      "head_sha": "53f7b0424deaa9b5355f89af635494eb443653a2",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41925281042",
+      "id": 41925281042,
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "2f9daf4b5315b87bb5befa7de34beb76e6146d1b",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41924452274",
+      "id": 41924452274,
+      "status": "completed"
+    },
+    {
+      "conclusion": "cancelled",
+      "head_sha": "7dc2fbadcb1f4cb36c071cea44c7fc6162a29585",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41923948107",
+      "id": 41923948107,
+      "status": "completed"
+    },
+    {
+      "conclusion": "cancelled",
+      "head_sha": "26d22fedbaa3951c54007a5d29c9fbb5e8cbe122",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41923633021",
+      "id": 41923633021,
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "head_sha": "31fe1c1bbf501d93f99170b2b07d2ed9f4624f37",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41923459537",
+      "id": 41923459537,
+      "status": "completed"
+    },
+    {
+      "conclusion": "cancelled",
+      "head_sha": "98044266a97e64fd9d386e7c71f7841a898b6c46",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41923405584",
+      "id": 41923405584,
+      "status": "completed"
+    },
+    {
+      "conclusion": "cancelled",
+      "head_sha": "0f64f4092f3df66918c0ff52ceea70b3fff3e64c",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41923123296",
+      "id": 41923123296,
+      "status": "completed"
+    },
+    {
+      "conclusion": "cancelled",
+      "head_sha": "f0192479741db0a7143fe973b963e11c108b59be",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41922993342",
+      "id": 41922993342,
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "head_sha": "68d881623b314e10e1a976d73d82d2dfc132cec6",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41922573450",
+      "id": 41922573450,
+      "status": "completed"
+    },
+    {
+      "conclusion": "cancelled",
+      "head_sha": "aec011c5e0bff784fc4db55f0229d9b8f66b0b48",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41922328977",
+      "id": 41922328977,
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "head_sha": "16aaeb739a8ed0062294de46f508e36331ecf2f3",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41922057824",
+      "id": 41922057824,
+      "status": "completed"
+    },
+    {
+      "conclusion": "cancelled",
+      "head_sha": "36b389ead64511cea8deb92ec89541c77bf439d3",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41921898985",
+      "id": 41921898985,
+      "status": "completed"
+    },
+    {
+      "conclusion": "cancelled",
+      "head_sha": "233b027f903f116706a5edce4857c48cd5f08e24",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41921757501",
+      "id": 41921757501,
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "head_sha": "1e978cb7ac32fc800bafcb393e82f97e26db17bb",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41921295301",
+      "id": 41921295301,
+      "status": "completed"
+    },
+    {
+      "conclusion": "cancelled",
+      "head_sha": "05f1e33de1a72533a8c642b6d03d5902ebe5d1ab",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41921107489",
+      "id": 41921107489,
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "head_sha": "60e514dcbc920d85000776419fe7cd6f2e56cf4e",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41920729344",
+      "id": 41920729344,
+      "status": "completed"
+    },
+    {
+      "conclusion": "failure",
+      "head_sha": "b729dd572bc837f1c713333c11003ea4e9f44515",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/41920548759",
+      "id": 41920548759,
+      "status": "completed"
+    }
+  ]
+}

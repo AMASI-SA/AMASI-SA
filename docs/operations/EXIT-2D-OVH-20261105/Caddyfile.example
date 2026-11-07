@@ -1,0 +1,9 @@
+# Inactive host TLS template; install/configure only after separate approval.
+# Keep the Compose Web bind on127.0.0.1; do not publish Mongo/reports/workers.
+# Set a NEW approved staging hostname, never the Production hostname.
+{$MEZAN_STAGING_HOST} {
+    encode gzip
+    reverse_proxy 127.0.0.1:10000
+    header X-Content-Type-Options nosniff
+    header Referrer-Policy same-origin
+}

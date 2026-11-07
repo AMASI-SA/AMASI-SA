@@ -1,0 +1,60 @@
+name: EXIT-2D OVH host preparation
+on:
+  push:
+    branches: [codex/exit-2d-render-integration-20261105]
+    paths:
+      - packaging/exit2d/ovh_host/**
+      - .github/workflows/exit2d-ovh-host.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  host-boundaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Boundary tests and plan-only generation
+        run: |
+          set -euo pipefail
+          mkdir host-evidence
+          python -m unittest discover -s packaging/exit2d/ovh_host -p test_ops.py -v 2>&1 | tee host-evidence/unit.log
+          python packaging/exit2d/ovh_host/generate.py --config packaging/exit2d/ovh_host/host.example.json --output "$RUNNER_TEMP/mezan-generated"
+          python packaging/exit2d/ovh_host/backup.py --config packaging/exit2d/ovh_host/host.example.json | tee host-evidence/backup-plan.json
+          cp "$RUNNER_TEMP/mezan-generated/"* host-evidence/
+      - name: Local encrypted restic verification
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y restic
+          python packaging/exit2d/ovh_host/test_restic.py | tee host-evidence/restic.json
+      - name: Real kernel firewall and verified HTTPS in private Docker namespaces
+        run: |
+          set -euo pipefail
+          docker build -t "mezan-host-lab:$GITHUB_SHA" -f packaging/exit2d/ovh_host/Lab.Dockerfile .
+          python packaging/exit2d/ovh_host/lab.py | tee host-evidence/network.jsonl
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ovh-host-preparation
+          path: host-evidence/
+          retention-days: 14
+  application-host-tools:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install local encrypted repository tool
+        run: sudo apt-get update -qq && sudo apt-get install -y restic
+      - name: Actual Compose app TLS load, Mongo backup and unchanged financial refusals
+        run: bash packaging/exit2d/ovh_host/run_application_linux.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ovh-host-application
+          path: host-app-evidence/
+          retention-days: 14

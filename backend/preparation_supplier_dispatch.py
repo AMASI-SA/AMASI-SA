@@ -2320,6 +2320,10 @@ def make_preparation_supplier_dispatch_router(
             "id": uuid.uuid4().hex,
             "user_id": user_id,
             "event_type": "supplier_dispatch_marked_ready",
+            # A compound sparse unique index still indexes rows with user_id.
+            # Missing request IDs otherwise collide at (user_id, null) when a
+            # second dispatch becomes ready. Preserve one identity per dispatch.
+            "client_request_id": f"supplier-ready:{_text(dispatch_id)}",
             "dispatch_id": _text(dispatch_id),
             "supplier_id": _text(dispatch.get("supplier_id")),
             "piece_ids": piece_ids,
