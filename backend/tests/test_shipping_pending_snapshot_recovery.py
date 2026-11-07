@@ -1,5 +1,6 @@
 """Real owner transactions; only provider transport is replaced."""
 import unittest
+from contextlib import contextmanager
 from copy import deepcopy
 from unittest.mock import AsyncMock, patch
 
@@ -8,12 +9,18 @@ from shipping_pending_snapshot_recovery import recover_pending_print_snapshot
 from order_engine import salla_refresh, shipping_label_service as shipping
 from salla_integration import auto_sync
 from assembly_status_policy import source_status
+import store_delivery_handover_routes as handover
 
 
 class PendingPrintTests(ComponentRouteTests):
-    async def seed_gap(self, *, options=None):
+    async def seed_gap(self, *, options=None, courier=None):
         await self.db.settings.update_one({"user_id": "owner"}, {"$unset": {"g47_inventory": ""}})
-        payload = self.source_payload(status="completed")
+        payload = self.source_payload(number="900123" if courier else "intake-order", status="completed")
+        if courier:
+            payload["shipping"] = {"company_name": courier}
+            payload["payment_actions"] = {"remaining_action": {
+                "remaining_amount": {"amount": 100, "currency": "SAR"},
+            }}
         if options is not None:
             payload["items"][0]["options"] = options
         self.assertTrue((await self.webhook(payload))["synced"])
@@ -143,7 +150,8 @@ class PendingPrintTests(ComponentRouteTests):
         await self.recover(payload)
         self.assertIsNone(await source_status(self.db, "owner", payload["reference_id"]))
 
-    async def recover(self, payload):
+    @contextmanager
+    def provider_reads(self, payload):
         async def provider(_db, _owner, method, path, **kwargs):
             self.assertEqual(method, "GET")
             if path == "/orders/items":
@@ -155,10 +163,72 @@ class PendingPrintTests(ComponentRouteTests):
             return details
         with patch.object(salla_refresh, "call_salla", provider), \
              patch.object(salla_refresh, "_enrich_order_receiving_bank", bank), \
-             patch("stock_component_consumption_service.reserve_component_stock", AsyncMock(side_effect=AssertionError("No stock"))), \
-             patch("stock_component_consumption_service.release_component_stock", AsyncMock(side_effect=AssertionError("No stock"))), \
-             patch("accounting_shipping_native_observer.observe_delivery", AsyncMock(side_effect=AssertionError("No accounting"))):
+             patch("stock_component_consumption_service.reserve_component_stock", new_callable=AsyncMock) as reserve, \
+             patch("stock_component_consumption_service.release_component_stock", new_callable=AsyncMock) as release, \
+             patch("accounting_shipping_native_observer.observe_delivery", new_callable=AsyncMock) as observe:
+            yield
+            reserve.assert_not_awaited()
+            release.assert_not_awaited()
+            observe.assert_not_awaited()
+
+    async def recover(self, payload):
+        with self.provider_reads(payload):
             await recover_pending_print_snapshot(self.db, "owner", payload["reference_id"])
+
+    async def test_courier_v1_refresh_recovers_pending_snapshot(self):
+        selector, payload = await self.seed_gap(courier="مندوب الرياض")
+        number = selector["order_number"]
+        self.context["permissions"].add("fulfillment.labels.print")
+        with self.provider_reads(payload):
+            response = await self.client.post(f"/fulfillment-v2/completed/{number}/carrier-label/v1/refresh")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(response.json()["print_data"]["qr_code"])
+        workflow = await self.db.order_review_workflows.find_one(selector)
+        self.assertTrue(workflow["carrier_label_ready"])
+        self.assertEqual(workflow["carrier_label_type"], "store_courier")
+
+    async def courier_handover_path(self):
+        async def user():
+            return self.actor
+
+        self.app.include_router(handover.make_store_delivery_handover_router(self.db, user))
+        await self.db[handover.STORE_DRIVERS].insert_one({
+            "user_id": "owner", "id": "courier", "name": "Synthetic courier",
+            "status": "active", "shipping_company": "مندوب الرياض", "delivery_fee": 20,
+        })
+        response = await self.client.post("/store-delivery/handover/sessions", json={"driver_id": "courier"})
+        self.assertEqual(response.status_code, 201, response.text)
+        return "/store-delivery/handover/sessions/" + response.json()["id"]
+
+    async def test_operator_number_recovers_courier_proof_before_confirmation(self):
+        selector, payload = await self.seed_gap(courier="مندوب الرياض")
+        path = await self.courier_handover_path()
+        with self.provider_reads(payload):
+            response = await self.client.post(path + "/scan", json={"barcode": selector["order_number"]})
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertTrue(response.json()["accepted"], response.text)
+            self.assertEqual(await self.db[handover.ASSIGNMENTS].count_documents({}), 0)
+            confirmed = await self.client.post(path + "/confirm")
+        self.assertEqual(confirmed.status_code, 200, confirmed.text)
+        self.assertEqual(confirmed.json()["assigned_count"], 1)
+        assignment = await self.db[handover.ASSIGNMENTS].find_one(selector)
+        self.assertEqual(assignment["driver_id"], "courier")
+        self.assertEqual(assignment["status"], "assigned")
+
+    async def test_operator_number_keeps_changed_component_evidence_blocked(self):
+        selector, payload = await self.seed_gap(courier="مندوب الرياض")
+        path = await self.courier_handover_path()
+        payload["items"][0]["quantity"] += 1
+        with self.provider_reads(payload):
+            response = await self.client.post(path + "/scan", json={"barcode": selector["order_number"]})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertFalse(response.json()["accepted"])
+        self.assertIsNone(await source_status(self.db, "owner", selector["order_number"]))
+        source = await self.db.unified_orders.find_one(selector)
+        self.assertEqual(source["raw_by_source"]["salla_direct"]["items"][0]["quantity"], 3)
+        workflow = await self.db.order_review_workflows.find_one(selector)
+        self.assertFalse(workflow.get("carrier_label_ready"))
+        self.assertEqual(await self.db[handover.ASSIGNMENTS].count_documents({}), 0)
 
     async def test_pending_unchanged_snapshot_recovers_without_ready_or_stock_changes(self):
         selector, payload = await self.seed_gap()
