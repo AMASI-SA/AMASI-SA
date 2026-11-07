@@ -59,6 +59,21 @@ test('bank approval pins submitted bank and exact statement movement',async()=>{
   expect(api.post.mock.calls[0][1]).not.toHaveProperty('pos_reviewed_amount');
 });
 
+test('eligible bank candidates can be selected while a manual statement identifier remains supported',async()=>{
+  item.payment_method='bank_transfer';context={...context,payment_method:'bank_transfer',bank_account_id:'bank',bank_movements:[
+    {id:'candidate',bank_account_id:'bank',amount:'200.00',movement_date:'2026-11-06',reference:'matching-transfer'},
+    {id:'wrong-bank',bank_account_id:'other',amount:'200.00'},
+    {id:'wrong-amount',bank_account_id:'bank',amount:'199.99'},
+  ]};
+  await render();await click('تحميل خيارات الاعتماد');
+  expect(field('البنك المستلم المؤكد').value).toBe('bank');
+  const choices=field('حركات البنك المتاحة للمطابقة');
+  expect([...choices.options].map(option=>option.value)).toEqual(['','candidate']);
+  await change(choices,'candidate');expect(field('معرف حركة البنك').value).toBe('candidate');
+  await click('اعتماد مدفوع');
+  expect(api.post.mock.calls[0][1]).toMatchObject({destination_financial_id:'bank',settlement_reference:'candidate'});
+});
+
 test.each([{amount:'199.99'},{amount:null},{assignment_id:'foreign'},{payment_method:'cash'},{session_scope:''},{expected_review_revision:'1'}])('bad options cannot authorize: %j',async patch=>{
   context={...context,...patch};await render();await click('تحميل خيارات الاعتماد');
   expect(button('اعتماد مدفوع').disabled).toBe(true);await click('اعتماد مدفوع');expect(api.post).not.toHaveBeenCalled();

@@ -44,6 +44,9 @@ export default function StoreDeliveryPaymentReview({ driverId = "", embedded = f
   useEffect(() => { alive.current = true; return () => { alive.current = false; loadVersion.current += 1; }; }, []);
   const optionsFor = item => reviewOptions[item.assignment_id];
   const posFor = item => optionsFor(item)?.financial_source === "operational" ? optionsFor(item).pos_receivables || [] : posFacts;
+  const bankMovementsFor = item => (optionsFor(item)?.bank_movements || []).filter(row =>
+    row.bank_account_id === optionsFor(item)?.bank_account_id && cents(row.amount) !== null &&
+    cents(row.amount) === cents(item.amount));
   const validContext = item => {
     const value = optionsFor(item);
     return ["native", "operational"].includes(value?.financial_source) &&
@@ -103,6 +106,11 @@ export default function StoreDeliveryPaymentReview({ driverId = "", embedded = f
       if (data.assignment_id !== item.assignment_id || data.payment_method !== item.payment_method ||
           cents(data.amount) === null || cents(data.amount) !== cents(item.amount)) throw Error("review_context_mismatch");
       setReviewOptions(previous => ({...previous, [item.assignment_id]: data}));
+      if (data.financial_source === "operational" && item.payment_method === "bank_transfer" && data.bank_account_id) {
+        setDestinations(previous => ({...previous, [item.assignment_id]: {
+          ...previous[item.assignment_id], bank: data.bank_account_id,
+        }}));
+      }
     } catch (error) {
       if (!alive.current || version !== loadVersion.current) return;
       setReviewOptions(previous => ({...previous, [item.assignment_id]: null}));
@@ -184,8 +192,15 @@ export default function StoreDeliveryPaymentReview({ driverId = "", embedded = f
             </div>
             {item.payment_method === "bank_transfer" ? <div className="mt-4 space-y-2">
               <label>البنك المستلم المؤكد<select value={destination(item).bank || ""} onChange={e => updateDestination(item, "bank", e.target.value)}><option value="">اختر البنك</option>{banks.map(bank => <option key={bank.id} value={bank.id}>{bank.name || bank.id}</option>)}</select></label>
+              {bankMovementsFor(item).length > 0 && <label>حركات البنك المتاحة للمطابقة<select
+                value={bankMovementsFor(item).some(row => row.id === destination(item).movement) ? destination(item).movement : ""}
+                onChange={e => updateDestination(item, "movement", e.target.value)}>
+                <option value="">اختر الحركة بعد مراجعة الكشف</option>
+                {bankMovementsFor(item).map(row => <option key={row.id} value={row.id}>{row.movement_date} · {money(row.amount)} · {row.reference || row.description || row.id}</option>)}
+              </select></label>}
               <label>معرف حركة البنك الواردة المستوردة<input value={destination(item).movement || ""} onChange={e => updateDestination(item, "movement", e.target.value)} /></label>
               <p>استخدم معرف الحركة من كشف البنك المستورد؛ رقم الإيصال أو وصف التحويل لا يثبت وصول المبلغ. يتحقق النظام من البنك والمبلغ وأصل الكشف.</p>
+              {optionsFor(item)?.bank_movements_truncated && <p>خيارات الكشف المعروضة محدودة؛ يمكنك إدخال معرف حركة مستوردة أخرى لمطابقتها.</p>}
               {bankError && <p role="alert">{bankError}</p>}
             </div> : item.payment_method === "card_terminal" ? <div className="mt-4 space-y-2">
               <label>ذمة الشبكة المختارة<select value={destination(item).pos || ""} onChange={e => updateDestination(item, "pos", e.target.value)}><option value="">اختر ذمة موثقة من الذمم المدينة الأخرى</option>{posFor(item).map(fact => <option key={fact.id} value={fact.id}>{fact.display_name}{isPosDestination(fact) ? ` · ${fact.entity_type}/${fact.entity_id}/${fact.sub_account}` : ""}</option>)}</select></label>

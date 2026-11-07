@@ -147,10 +147,10 @@ export default function StoreDeliverySettlements() {
           <h2 className="font-black">تحصيلات العملاء بالشبكة والتحويل</h2>
           <p className="mt-1 text-sm text-slate-600">هذه إجماليات الإيصالات حسب قرار المراجعة. المعلق والمرفوض لا يثبتان وصول المال، وإجمالي المعتمد ليس الرصيد الحالي للبنك أو الشبكة.</p>
           <table className="mt-3 w-full text-right text-sm" aria-label="إجماليات مراجعة التحصيل">
-            <thead><tr><th className="p-2">طريقة الدفع</th><th className="p-2">بانتظار المراجعة</th><th className="p-2">معتمد</th><th className="p-2">مرفوض</th></tr></thead>
+            <thead><tr><th className="p-2">طريقة الدفع</th><th className="p-2">بانتظار المراجعة</th><th className="p-2">معتمد</th><th className="p-2">مرفوض</th><th className="p-2">حالة غير متاحة</th></tr></thead>
             <tbody>{[["card_terminal", "شبكة / بطاقة"], ["bank_transfer", "تحويل بنكي"]].map(([method, label]) => <tr key={method} className="border-t">
               <th className="p-2">{label}</th>
-              {["pending", "approved", "rejected"].map(reviewStatus => {
+              {["pending", "approved", "rejected", "unknown"].map(reviewStatus => {
                 const value = summary.noncash_payment_reviews[method]?.[reviewStatus];
                 return <td className="p-2" key={reviewStatus}>{money(value?.amount)}{value && <span className="block text-xs text-slate-500">{value.count} إيصال</span>}</td>;
               })}
