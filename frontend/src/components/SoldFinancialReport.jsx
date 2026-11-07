@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { formatMoney, formatInt } from "../lib/format";
-import { buildPaymentFeeRows } from "./ProfitSummaryCard";
+import { buildPaymentFeeRows } from "../lib/paymentFeeRows";
 
 const amount = value => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)) ? Number(value) : null;
 const money = value => amount(value) === null ? "غير مكتمل" : `${formatMoney(value)} ر.س`;
@@ -34,7 +34,7 @@ export function FinancialDetails({ data, section }) {
     const details = {
         ads: <DetailTable title="تفاصيل صرف المنصات بالريال السعودي" headers={["المنصة", "الصرف بالريال السعودي"]} rows={PROVIDERS.map(([key, label]) => [label, money(data.ads_v2?.executive_breakdown?.providers?.[key]?.spend_sar)])} total={financialMetrics(data, []).ads} />,
         shipping: <DetailTable title="تفاصيل شركات الشحن" headers={["شركة الشحن", "عدد الشحنات", "إجمالي التكلفة"]} rows={(data.shipping_breakdown || []).map(row => [row.name, formatInt(row.orders_count), money(row.total_cost)])} total={t.total_shipping_cost} />,
-        payment: <DetailTable title="تفاصيل عمولات طرق الدفع" headers={["طريقة الدفع / الحساب", "عدد الطلبات", "المبلغ الخاضع", "العمولة", "الضريبة", "إجمالي الرسوم"]} rows={buildPaymentFeeRows(data.payment_breakdown || []).map(row => [row.name, row.kind === "ad_bank_commission" ? "—" : formatInt(row.ordersCount), money(row.baseAmount), row.commissionPercent == null ? "—" : `${row.commissionPercent.toFixed(2)}%`, money(row.vatAmount), money(row.feeAmount)])} total={t.total_payment_fees} />,
+        payment: <DetailTable title="تفاصيل عمولات طرق الدفع" headers={["طريقة الدفع / الحساب", "عدد الطلبات", "المبلغ الخاضع", "العمولة", "الضريبة", "إجمالي الرسوم"]} rows={buildPaymentFeeRows(data.payment_breakdown || [], { preserveUnknown: true }).map(row => [row.name, row.kind === "ad_bank_commission" || row.ordersCount === null ? "—" : formatInt(row.ordersCount), money(row.baseAmount), row.commissionPercent == null ? "—" : `${row.commissionPercent.toFixed(2)}%`, money(row.vatAmount), money(row.feeAmount)])} total={t.total_payment_fees} />,
         operating: <DetailTable title="تفاصيل المصروفات التشغيلية" headers={["البند", "إجمالي التكلفة"]} rows={OPERATING.map(([label, key]) => [label, money(t[key])])} total={t.operating_expenses_total} />,
     };
     return section ? details[section] : <div data-testid="sold-financial-all-details">{Object.entries(details).map(([key, node]) => <div key={key}>{node}</div>)}</div>;

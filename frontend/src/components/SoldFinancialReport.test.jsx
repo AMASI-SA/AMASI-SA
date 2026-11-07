@@ -20,3 +20,9 @@ test("print details include every financial table without opening cards", () => 
     expect(summary).toContain("متوسط التكلفة الكلية للطلب");
     expect(summary).not.toContain('<table');
 });
+
+test("missing payment amounts remain unknown in the financial table", () => {
+    const html = renderToStaticMarkup(<FinancialDetails data={{ totals: { total_payment_fees: null }, payment_breakdown: [{ name: "دفع غير محسوم", fee_amount: null }] }} section="payment" />);
+    expect(html).toContain("غير مكتمل");
+    expect(html).not.toContain("0.00 ر.س");
+});
