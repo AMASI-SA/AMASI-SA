@@ -18,7 +18,7 @@ from typing import Any
 
 import qrcode
 from PIL import Image, ImageDraw, ImageOps
-from reportlab.lib.colors import HexColor
+from reportlab.lib.colors import Color, HexColor
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
@@ -28,7 +28,13 @@ from reportlab.pdfgen import canvas
 from preparation_pdf import ProductLine, _ar, _register_font
 import preparation_pdf_card_file_number as numbering
 import preparation_pdf_reference_layout as reference
-from preparation_pdf_wrapped_text import build_wrapped_specification_plan
+from preparation_pdf_spec_text import (
+    SPEC_SYMBOLS_FROM,
+    aware_instant,
+    draw_specification_text,
+    specification_width,
+)
+from preparation_pdf_wrapped_text import _visual_width, build_wrapped_specification_plan
 
 AMASI_MAROON = HexColor("#74102F")
 AMASI_GOLD = HexColor("#CDA14A")
@@ -224,32 +230,40 @@ def generate_amasi_product_file_pdf(
         rows = _spec_rows(line)
         if not rows:
             return
+        # The snapshot's order creation time is independent of assignment,
+        # file creation and reprint time. A file can contain orders on both
+        # sides of the rollout, so decide separately for each card.
+        created_at = aware_instant(line.order_date)
+        enhanced = created_at is not None and created_at >= SPEC_SYMBOLS_FROM
+        measure = specification_width if enhanced else _visual_width
         plan = build_wrapped_specification_plan(
             rows, font_name=font_name, font_bold=font_bold,
             width=width, available_height=top - bottom,
             max_font_size=5.45,
+            measure=measure,
         )
+
+        def draw(value: str, font: str, color: Color, x: float, y: float) -> None:
+            if enhanced:
+                draw_specification_text(pdf, value, font, plan.font_size, color, x, y)
+            else:
+                pdf.setFont(font, plan.font_size)
+                pdf.setFillColor(color)
+                pdf.drawRightString(x, y, _ar(value))
+
         cursor = top
         for field in plan.fields:
             if field.value_below:
                 for label_line in field.label_lines:
-                    pdf.setFont(font_bold, plan.font_size)
-                    pdf.setFillColor(RED)
-                    pdf.drawRightString(right, cursor, _ar(label_line))
+                    draw(label_line, font_bold, RED, right, cursor)
                     cursor -= plan.line_height
                 value_right = right
             else:
-                label_visual = _ar(field.label_lines[0])
-                pdf.setFont(font_bold, plan.font_size)
-                pdf.setFillColor(RED)
-                pdf.drawRightString(right, cursor, label_visual)
-                value_right = right - pdfmetrics.stringWidth(
-                    label_visual, font_bold, plan.font_size,
-                ) - 2.2
+                label = field.label_lines[0]
+                draw(label, font_bold, RED, right, cursor)
+                value_right = right - measure(label, font_bold, plan.font_size) - 2.2
             for value_line in field.lines:
-                pdf.setFont(font_name, plan.font_size)
-                pdf.setFillColor(TEXT)
-                pdf.drawRightString(value_right, cursor, _ar(value_line))
+                draw(value_line, font_name, TEXT, value_right, cursor)
                 cursor -= plan.line_height
                 value_right = right
 
