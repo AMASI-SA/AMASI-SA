@@ -45,7 +45,15 @@ def resolve_traffic_source(order, ledger_rows=()):
                 and platform in AD_PLATFORMS):
             account = attribution.get('account_id')
             account = str(account).strip() if isinstance(account, (str, int)) and not isinstance(account, bool) else None
-            return _bucket(platform, account or None, 'confirmed' if account else 'platform_only')
+            source = _bucket(platform, account or None, 'confirmed' if account else 'platform_only')
+            campaign_id = attribution.get('campaign_id')
+            campaign_id = str(campaign_id).strip() if isinstance(campaign_id, (str, int)) and not isinstance(campaign_id, bool) else ''
+            if campaign_id:
+                name = attribution.get('campaign_name')
+                source['_campaign'] = {'campaign_id': campaign_id,
+                    'campaign_name': name.strip() or None if isinstance(name, str) else None,
+                    'attribution_status': 'confirmed'}
+            return source
     return _bucket(platform, status='platform_only' if platform in AD_PLATFORMS else 'confirmed' if platform != 'unknown' else 'unknown')
 
 
@@ -135,28 +143,60 @@ async def _load_product_traffic_sources(db, owner, orders, *, budget=None):
     return result
 
 
+def _campaign_source(source):
+    campaign = source.get('_campaign')
+    if (source['platform'] in AD_PLATFORMS and isinstance(campaign, dict)
+            and campaign.get('attribution_status') == 'confirmed' and campaign.get('campaign_id')):
+        return dict(campaign)
+    status = source.get('attribution_status')
+    status = status if status in {'conflict', 'unavailable'} else (
+        'not_applicable' if source['platform'] not in AD_PLATFORMS | {'unknown'} else 'unknown')
+    return {'campaign_id': None, 'campaign_name': None, 'attribution_status': status}
+
+
 def add_traffic_units(row, source, quantity):
     key = (source['platform'], source['account_id'], source['account_status'], source['attribution_status'])
     groups = row.setdefault('_traffic_sources', {})
-    entry = groups.setdefault(key, {**source, 'units_sold': Decimal(0)})
-    entry['units_sold'] += Decimal(str(quantity))
+    entry = groups.setdefault(key, {**{k: v for k, v in source.items() if k != '_campaign'},
+                                   'units_sold': Decimal(0), '_campaigns': {}})
+    quantity = Decimal(str(quantity))
+    entry['units_sold'] += quantity
+    campaign = _campaign_source(source)
+    # Native campaign identity (within this platform/account), not its mutable
+    # display name. Unknown pieces remain a separate explicit remainder.
+    campaign_key = (campaign['campaign_id'], campaign['attribution_status'])
+    child = entry['_campaigns'].setdefault(campaign_key, {**campaign, 'units_sold': Decimal(0)})
+    child['units_sold'] += quantity
+    names = [name for name in (child.get('campaign_name'), campaign.get('campaign_name')) if name]
+    child['campaign_name'] = min(names) if names else None
+
+
+def _reconcile_units(entries, total_units):
+    # Largest remainders reconcile display rounding only; they do not allocate
+    # attribution or change the report's underlying return/quantity policy.
+    cent = Decimal('0.01')
+    amounts = [entry['units_sold'].quantize(cent, rounding=ROUND_FLOOR) for entry in entries]
+    remainder_order = sorted(range(len(entries)),
+        key=lambda index: (-(entries[index]['units_sold'] - amounts[index]), index))
+    residual = int((Decimal(str(total_units)) - sum(amounts, Decimal(0))) / cent)
+    if 0 <= residual <= len(entries):
+        for index in remainder_order[:residual]:
+            amounts[index] += cent
+        for entry, amount in zip(entries, amounts):
+            entry['units_sold'] = amount
 
 
 def traffic_sources(row, *, total_units=None):
     entries = [dict(entry) for _, entry in sorted((row.get('_traffic_sources') or {}).items(),
                key=lambda pair: tuple(str(v or '') for v in pair[0]))]
     if total_units is not None and entries:
-        # The executive report rounds effective (return-policy-scaled) units
-        # to cents. Largest remainders reconcile display rounding only, without
-        # changing its underlying quantity policy or attribution allocation.
-        cent = Decimal('0.01')
-        amounts = [entry['units_sold'].quantize(cent, rounding=ROUND_FLOOR) for entry in entries]
-        remainder_order = sorted(range(len(entries)),
-            key=lambda index: (-(entries[index]['units_sold'] - amounts[index]), index))
-        residual = int((Decimal(str(total_units)) - sum(amounts, Decimal(0))) / cent)
-        if 0 <= residual <= len(entries):
-            for index in remainder_order[:residual]:
-                amounts[index] += cent
-            for entry, amount in zip(entries, amounts):
-                entry['units_sold'] = amount
-    return [{**entry, 'units_sold': float(entry['units_sold'])} for entry in entries]
+        _reconcile_units(entries, total_units)
+    result = []
+    for entry in entries:
+        campaigns = [dict(child) for _, child in sorted(entry.pop('_campaigns', {}).items(),
+                     key=lambda pair: tuple(str(v or '') for v in pair[0]))]
+        if total_units is not None and campaigns:
+            _reconcile_units(campaigns, entry['units_sold'])
+        result.append({**entry, 'units_sold': float(entry['units_sold']),
+            'campaigns': [{**child, 'units_sold': float(child['units_sold'])} for child in campaigns]})
+    return result

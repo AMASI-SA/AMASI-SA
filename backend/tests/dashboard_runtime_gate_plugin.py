@@ -273,7 +273,12 @@ def expected_cost_completeness_json(historical_json, *, fixture_case=None):
                   'account_id': None,
                   'account_status': 'not_applicable' if platform == 'direct' else 'unknown',
                   'attribution_status': 'confirmed' if platform == 'direct' else 'platform_only',
-                  'units_sold': float(row['units_sold'])}
+                  'units_sold': float(row['units_sold']),
+                  # The frozen fixtures have no ledger campaigns. Their full
+                  # source quantity must remain unknown (or non-campaign).
+                  'campaigns': [{'campaign_id': None, 'campaign_name': None,
+                      'attribution_status': 'not_applicable' if platform == 'direct' else 'unknown',
+                      'units_sold': float(row['units_sold'])}]}
         expanded = {}
         for key, value in row.items():
             expanded[key] = value

@@ -274,6 +274,9 @@ def test_fixture_traffic_oracle_is_independent_and_preserves_existing_values_and
         source = row['traffic_sources'][0]
         assert source['units_sold'] == original['units_sold']
         assert source['account_id'] is None
+        assert source['campaigns'] == [{'campaign_id': None, 'campaign_name': None,
+            'attribution_status': 'not_applicable' if source['platform'] == 'direct' else 'unknown',
+            'units_sold': original['units_sold']}]
         assert list(row) == ['salla_product_id', 'units_sold', 'traffic_sources',
                              'orders_count', 'total_sales', 'total_cost']
         assert {key: value for key, value in row.items() if key != 'traffic_sources'} == original
@@ -284,6 +287,15 @@ def test_fixture_traffic_oracle_is_independent_and_preserves_existing_values_and
     for field, bad in [('account_id', 'invented-account'), ('units_sold', 3), ('platform', 'direct')]:
         changed = copy.deepcopy(rendered)
         changed['product_cost_v2']['product_rows'][0]['traffic_sources'][0][field] = bad
+        runtime['json'] = json.dumps(changed, ensure_ascii=False)
+        with pytest.raises(AssertionError):
+            assert_runtime_read_contract(runtime, baseline)
+
+
+    for field, bad in [('campaign_id', 'invented-campaign'), ('campaign_name', 'Invented campaign'),
+                       ('units_sold', 3), ('attribution_status', 'confirmed')]:
+        changed = copy.deepcopy(rendered)
+        changed['product_cost_v2']['product_rows'][0]['traffic_sources'][0]['campaigns'][0][field] = bad
         runtime['json'] = json.dumps(changed, ensure_ascii=False)
         with pytest.raises(AssertionError):
             assert_runtime_read_contract(runtime, baseline)

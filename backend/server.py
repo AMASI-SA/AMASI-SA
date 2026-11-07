@@ -2074,6 +2074,7 @@ async def dashboard(
     shipping_companies: Optional[str] = None,
     include_legacy_analyses: bool = Query(default=True, include_in_schema=False),
     allow_self_heal: bool = Query(default=True, include_in_schema=False),
+    report_statuses: Optional[str] = None,
 ):
     """Return aggregated totals from unified_orders (single source of truth).
 
@@ -2200,7 +2201,13 @@ async def dashboard(
     salla_ref_orders_count = len(all_orders)
     salla_ref_currency = summarize_orders_sar(all_orders)
     salla_ref_gross = salla_ref_currency["total_sar"]
-    if included_statuses:
+    if report_statuses is not None:
+        from sold_financial_report import validate_report_statuses
+        from sold_products_report_v2 import order_matches_status
+        report_statuses = validate_report_statuses(report_statuses)
+        all_orders = [o for o in all_orders if order_matches_status(
+            o, report_statuses.split(","), included_statuses)]
+    elif included_statuses:
         all_orders = [
             o for o in all_orders
             if _matches_any(o.get("order_status", ""), included_statuses)
