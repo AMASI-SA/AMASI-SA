@@ -150,12 +150,12 @@ jobs:
           runtime = json.loads(Path('runtime-responses.json').read_text())
           assert len(reference) == len(baseline) == len(runtime) == 164
           assert set(reference) == set(baseline) == set(runtime)
-          assert {k: expected_cost_completeness_json(v['json']) for k, v in reference.items()} == {k: v['json'] for k, v in runtime.items()}
+          assert {k: expected_cost_completeness_json(v['json'], fixture_case=k) for k, v in reference.items()} == {k: v['json'] for k, v in runtime.items()}
           # Only the approved cost-completeness JSON extension and
           # explicitly audited, tenant-scoped empty authority reads may
           # differ; raw command/document evidence is retained in the artifact.
           for key in reference:
-              assert_runtime_read_contract(runtime[key], baseline[key])
+              assert_runtime_read_contract(runtime[key], baseline[key], fixture_case=key)
           print(Path('runtime-responses.calls.json').read_text())
           PY
       - uses: actions/upload-artifact@v4
