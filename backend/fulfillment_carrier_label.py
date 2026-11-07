@@ -214,11 +214,15 @@ async def read_current_carrier_label(db, owner, number, *, publish=None):
 
 
 async def recover_store_courier_label_for_handover(db, *, user_id, order_number):
-    """Persist freshly verified courier proof when a print-only read left it absent."""
+    """Restore missing label proof for an unassigned merchant courier shipment."""
     from assembly_status_policy import source_status
     from order_engine import shipping_label_service as shipping
+    from shipping_pending_snapshot_recovery import recover_pending_print_snapshot
 
     number = _text(order_number)
+    if not await compat.mezan_courier_name(db, user_id, number):
+        return False
+    await recover_pending_print_snapshot(db, user_id, number, allow_print_catalog_rename=False)
     fence = await shipping._assert_current_print_status(db, user_id, number)
     async def persist(scoped, shipment_rows):
         workflow = await _require_completed_workflow(scoped, user_id=user_id, order_number=number)
