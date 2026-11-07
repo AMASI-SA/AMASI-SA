@@ -154,6 +154,18 @@ def _public_hold(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def ensure_fulfillment_hold_indexes(db: Any) -> None:
+    """Retain operational hold indexes independently of the retired replay."""
+    await db[FULFILLMENT_HOLDS].create_index(
+        [("user_id", 1), ("order_number", 1), ("status", 1)],
+        name="ix_fulfillment_hold_order_v1",
+    )
+    await db[FULFILLMENT_HOLDS].create_index(
+        [("user_id", 1), ("piece_ids", 1), ("status", 1)],
+        name="ix_fulfillment_hold_piece_v1",
+    )
+
+
 def _can_manage_stops(context: dict[str, Any]) -> bool:
     return bool(
         context.get("is_owner")
@@ -560,6 +572,7 @@ __all__ = [
     "SELF_STOP_PERMISSION",
     "FulfillmentHoldCreateRequest",
     "FulfillmentHoldReleaseRequest",
+    "ensure_fulfillment_hold_indexes",
     "hold_piece_patch",
     "make_fulfillment_experiment_router",
     "release_piece_update",

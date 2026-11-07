@@ -1,6 +1,8 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import OrderDetailsV2 from "./OrderDetailsV2.jsx";
+import OrderProfitabilityCard from "../components/orders/OrderProfitabilityCard";
+import { markOrderRead } from "../services/orderEngine";
 
 jest.mock("react-router-dom", () => ({
     Link: ({ children }) => <a>{children}</a>,
@@ -18,7 +20,7 @@ jest.mock("../components/orders/SourceAdditionReview", () => ({
     SourceAdditionReviewNotice: () => null, SourceAdditionReviewButton: () => null,
 }));
 jest.mock("../services/orderEngine", () => ({ markOrderRead: jest.fn(() => Promise.resolve()) }));
-jest.mock("../components/orders/OrderProfitabilityCard", () => () => <section data-testid="order-profitability" />);
+jest.mock("../components/orders/OrderProfitabilityCard", () => jest.fn(() => <section data-testid="order-profitability" />));
 jest.mock("../components/orders/ReturnDecisionCard", () => () => null);
 jest.mock("../components/orders/OrderActivityPanel", () => () => null);
 jest.mock("../components/orders/BundleOperationalPanel", () => () => <section data-testid="real-bundle-workflow" />);
@@ -26,6 +28,8 @@ jest.mock("./OrderTrackingNotes", () => ({ OrderTrackingNotesPanel: () => <secti
 
 test("summary immediately follows items while operational panels remain and replay is absent", async () => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
+    markOrderRead.mockResolvedValue(undefined);
+    OrderProfitabilityCard.mockImplementation(() => <section data-testid="order-profitability" />);
     const host = document.createElement("div");
     const root = createRoot(host);
     try {
@@ -36,6 +40,10 @@ test("summary immediately follows items while operational panels remain and repl
         expect(host.querySelector('[data-testid="real-order-tracking"]')).not.toBeNull();
         expect(host.textContent).not.toContain("تجربة مراحل التجهيز والإيقاف");
         expect(host.textContent).not.toContain("كتجربة جديدة");
+        const firstRevision = OrderProfitabilityCard.mock.calls.at(-1)[0].revision;
+        await act(async () => { root.render(<OrderDetailsV2 />); });
+        expect(OrderProfitabilityCard.mock.calls.at(-1)[0].revision).toBe(firstRevision);
+        expect(typeof firstRevision).toBe("string");
     } finally {
         await act(async () => root.unmount());
     }

@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 
 from order_engine import _original_make_order_engine_router as make_order_engine_router
-from order_profitability_summary import build_order_profitability_summary, summarize_order_profitability
+from order_profitability_summary import build_order_profitability_summary, single_order_costs, summarize_order_profitability
 from .test_dashboard_bundle_cost_authority import OWNER, ReadOnlyDB, db, freeze, sale, sale_line
 
 
@@ -59,6 +59,28 @@ def test_missing_fx_and_stale_allocation_are_unknown():
     result = summarize_order_profitability(order, [], {})
     assert result["advertising_cost_sar"] is None
     assert result["shipping_cost_sar"] is None and result["payment_fees_sar"] is None
+
+
+def test_verified_foreign_shipping_fallback_converts_once_and_merchant_rate_stays_sar():
+    order = {"order_number": "foreign", "currency": "KWD", "total_amount": 100,
+        "accounting_currency": "SAR", "currency_conversion_status": "verified",
+        "exchange_rate_to_sar": "12.2", "shipping_cost": 5, "shipping_company": "Carrier",
+        "payment_fee_status": "actual", "actual_payment_fee": 0}
+    costs = single_order_costs(order, {}, {})
+    result = summarize_order_profitability(order, [{"line_total": 100, "mezan_cost_complete": True}], costs)
+    assert result["shipping_cost_sar"] == 61
+    assert result["profit_before_advertising_sar"] == 1059
+    configured = single_order_costs(order, {}, {"Carrier": {"cost_per_order": 15, "vat_percent": 15}})
+    assert configured["shipping_cost_sar"] == 17.25
+    order.pop("exchange_rate_to_sar")
+    assert single_order_costs(order, {}, {})["shipping_cost_sar"] is None
+
+
+def test_explicit_free_merchant_shipping_is_not_replaced_by_customer_charge():
+    costs = single_order_costs({"shipping_company": "Carrier", "shipping_cost": 25}, {},
+        {"Carrier": {"cost_per_order": 0}})
+    assert costs["shipping_cost_sar"] == 0
+    assert costs["shipping_cost_source"] == "company_config"
 
 
 @pytest.mark.asyncio

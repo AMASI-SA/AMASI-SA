@@ -946,7 +946,8 @@ export default function OrderDetailsV2() {
             )}
 
             <AdvancedOrderInfo order={order} />
-            <OrderProfitabilityCard key={openedOrderNumber} orderNumber={openedOrderNumber} revision={order} />
+            <OrderProfitabilityCard key={`profitability:${openedOrderNumber}`} orderNumber={openedOrderNumber}
+                revision={JSON.stringify([order?.totals, order?.payment, order?.shipping, order?.status, additionsRefreshKey])} />
             <OrderActivityPanel
                 orderNumber={openedOrderNumber || orderNumber}
             />

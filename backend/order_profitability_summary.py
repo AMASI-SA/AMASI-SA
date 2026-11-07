@@ -10,7 +10,7 @@ from marketing_report_costs import number, order_costs
 from mezan_attribution_ledger_sync import profit_facts_from_order
 from order_cost_authority import calculate_catalog_line_cost, load_order_cost_authority, order_items, resolve_order_line_cost
 from order_cost_reporting_repair import _catalog_context
-from order_currency import hydrate_order_currency_fields, order_total_sar
+from order_currency import hydrate_order_currency_fields, order_amount_to_sar, order_total_sar
 from order_status_policy import default_category_for
 from product_catalog_cost_resolution import resolve_current_catalog_line_product
 from report_option_recovery import attach_report_option_evidence
@@ -18,6 +18,21 @@ from report_option_recovery import attach_report_option_evidence
 
 def money_sum(values):
     return float(sum((Decimal(str(value)) for value in values), Decimal(0)).quantize(Decimal("0.01")))
+
+
+def single_order_costs(order, settings, configs):
+    """Merchant settings are SAR; a provider fallback remains in order currency."""
+    costs = order_costs(order, settings, configs)
+    company = str(order.get("shipping_company") or "").strip().strip("'\"")
+    config = configs.get(company) or configs.get(company.lower()) or {}
+    configured = config.get("cost_per_order")
+    if configured is None:
+        configured = config.get("cost")
+    if number(configured) == 0:
+        costs.update(shipping_cost_sar=0.0, shipping_cost_source="company_config")
+    elif costs.get("shipping_cost_source") == "salla":
+        costs["shipping_cost_sar"] = order_amount_to_sar(costs["shipping_cost_sar"], order)
+    return costs
 
 
 def summarize_order_profitability(order, lines, costs):
@@ -96,4 +111,4 @@ async def build_order_profitability_summary(db, owner, order_number):
         name = str(row.get("name") or "").strip().strip("'\"")
         if name:
             configs[name] = configs[name.lower()] = row
-    return summarize_order_profitability(order, lines, order_costs(order, settings, configs))
+    return summarize_order_profitability(order, lines, single_order_costs(order, settings, configs))
