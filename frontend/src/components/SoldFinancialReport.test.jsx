@@ -1,6 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import SoldFinancialReport, { financialMetrics, FinancialDetails } from "./SoldFinancialReport";
+jest.mock("react-router-dom", () => ({ Link: ({ children }) => <span>{children}</span> }), { virtual: true });
 const data = { totals: { total_orders: 2, total_sales: 400, total_ads_cost: 40, total_shipping_cost: 30, total_payment_fees: 10, operating_expenses_total: 20, product_cost_complete: true, ads_spend_data_complete: true }, ads_v2: { spend_quality: { status: "complete", amount_complete: true }, executive_breakdown: { providers: { snapchat: { spend_sar: 40 } } } } };
 const products = [{ cost_status: "complete", total_cost: 100 }];
 test("average includes all costs once; ads already SAR; zero orders has no average", () => {
