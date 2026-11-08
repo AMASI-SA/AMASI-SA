@@ -5,6 +5,7 @@ import pytest
 from operational_provider_fees import provider_projection
 from operational_provider_plan_scope import contract_digest
 from test_operational_balance_tabby_uniform_fee import policy, payment
+from tests.test_accounting_onboarding import api, mongo_db, request, fingerprint
 
 
 def terms():
@@ -117,3 +118,24 @@ def test_scope_save_preserves_tariffs_and_rejects_overlap_stale_version_other_ow
         run(create_plan_scope(db, 'shop', 'owner', payload.model_copy(update={'expected_version': 3})))
     with pytest.raises(HTTPException, match='version_conflict'):
         run(create_plan_scope(db, 'other', 'owner', payload))
+
+
+@pytest.mark.asyncio
+async def test_http_scope_is_authorized_versioned_and_metadata_only(api):
+    component = dict(id='capture', percentage='2', fixed_amount='1', vat_treatment='exclusive', vat_rate='15')
+    config = dict(provider='tabby', percentage='2', fixed_amount='1', vat_rate='15',
+        vat_treatment='exclusive', currency='SAR', effective_from='2026-06-01',
+        evidence='synthetic historical contract', components=[component])
+    policies = [await request(api,'POST','/fee-policies',dict(config, plan_id=plan)) for plan in ('three','four')]
+    source = await request(api,'GET','/provider-plan-scopes')
+    assert source == {'items': [], 'version': 2}
+    body = dict(provider='tabby',currency='SAR',policy_ids=[p['id'] for p in policies],
+        expected_version=2,effective_from='2026-06-01',evidence='authorized available plan scope')
+    before = await fingerprint(api, exclude=('mz2_provider_fee_policies_v2',))
+    await request(api,'POST','/provider-plan-scopes',body,user='viewer',status=403)
+    approved = await request(api,'POST','/provider-plan-scopes',body)
+    assert approved['confirmed_by'] == 'full'
+    await request(api,'POST','/provider-plan-scopes',body,status=409)
+    assert await fingerprint(api, exclude=('mz2_provider_fee_policies_v2',)) == before
+    current = await request(api,'GET','/fee-policies')
+    assert [{k:v for k,v in p.items() if k != '_approved_plan_scopes'} for p in current['items']] == policies

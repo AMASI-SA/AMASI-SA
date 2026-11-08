@@ -540,3 +540,29 @@ test.each(["confirmed", "courier_collection_unverified"])("courier %s renders bo
     expect(sheet).toContain("231.11");
     expect(sheet).not.toContain("987.65");
 });
+
+test("profit evidence stays partial and separate on screen print and same-snapshot export", async () => {
+    const snapshot = fixture();
+    snapshot.currencies.SAR.profit_rows = [{ id: "cost_of_goods", label: "تكلفة المباع", amount: "999.00",
+        period_evidence: { complete: false, amount: null, known_subtotal: "9007199254740993.25", estimated_subtotal: "42.07", source_count: 2,
+            basis: "accepted_supplier_invoice_net_cost_with_complete_physical_components",
+            issues: [{ code: "profit_supplier_receipt_not_reconciled", source_id: "synthetic-order-1" }] } }];
+    operationalApi.financialPosition.mockResolvedValueOnce(snapshot);
+    await render();
+    const row = host.querySelector(".ofp-profit tbody tr");
+    expect(row.cells[1].textContent).toBe("غير متاح");
+    const expected = ["المجموع المثبت المتاح: 9,007,199,254,740,993.25", "تقدير تكلفة غير مثبتة: 42.07",
+        "عدد سجلات المصدر: 2", "صافي تكلفة فواتير المورد", "استلام المورد لم يطابق فاتورته", "synthetic-order-1",
+        "المجموع المتاح جزئي", "التقدير مستقل"];
+    expected.forEach(text => expect(row.textContent).toContain(text));
+    expect(row.textContent).not.toContain("profit_supplier_");
+    await click("طباعة التقرير");
+    const printed = useReactToPrint.mock.calls.at(-1)[0].contentRef.current.querySelector(".ofp-profit").textContent;
+    expected.forEach(text => expect(printed).toContain(text));
+    await click("تصدير Excel");
+    const workbook = XLSX.writeFile.mock.calls[0][0];
+    const exported = JSON.stringify(workbook.getWorksheet("الإجماليات والمركز").getSheetValues());
+    expected.forEach(text => expect(exported).toContain(text));
+    expect(exported).not.toContain("999.00");
+    expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
+});

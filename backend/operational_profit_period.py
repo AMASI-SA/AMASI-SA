@@ -20,8 +20,14 @@ async def collect(db, owner, state, raw_orders, data, started, stamp):
     totals, counts, problems = defaultdict(Decimal), Counter(), defaultdict(list)
     def problem(component, code, identity=None, currency=None):
         problems[component].append({'code': code, 'source_id': identity, 'currency': currency})
+    from sold_products_report_v2 import order_matches_status
+    settings = await db['settings'].find({'user_id': owner}, {'_id': 0, 'user_id': 1, 'report_included_statuses': 1}).to_list(2)
+    if len(settings) > 1 or any(r.get('user_id') != owner for r in settings):
+        problem('net_sales', 'profit_sales_policy_ambiguous')
+    configured = settings[0].get('report_included_statuses') or [] if len(settings) == 1 else []
     cohort = []
     identities = Counter(str(raw.get('id') or '') for _, raw in raw_orders)
+    numbers = Counter(str(raw.get('reference_id') or raw.get('order_number') or '') for _, raw in raw_orders)
     if len(raw_orders) != len(data['unified_orders']):
         problem('net_sales', 'profit_canonical_orders_missing')
     for source, raw in raw_orders:
@@ -30,7 +36,19 @@ async def collect(db, owner, state, raw_orders, data, started, stamp):
             created = instant(raw.get('date') or raw.get('created_at') or raw.get('order_date'))
             if not started < created <= stamp:
                 continue
-            if (not oid or identities[oid] != 1 or not order_page_source_current(source, raw)
+            status = raw.get('status')
+            status = status.get('slug') or status.get('name') if isinstance(status, dict) else status
+            selected = {'order_status': source.get('order_status') or status,
+                        'order_status_slug': source.get('order_status_slug') or status}
+            if not order_matches_status(selected, ['default'], configured):
+                if configured or status in {'cancelled', 'canceled', 'deleted', 'refunded', 'returned', 'ملغي', 'ملغى', 'محذوف', 'مسترجع'}:
+                    continue
+                raise ValueError('profit_sales_policy_status_unverified')
+            order_number = str(raw.get('reference_id') or raw.get('order_number') or '')
+            if (not oid or not order_number or identities[oid] != 1 or numbers[order_number] != 1
+                    or str(source.get('order_number') or '') != order_number
+                    or source.get('salla_order_id') is not None and str(source['salla_order_id']) != oid
+                    or not order_page_source_current(source, raw)
                     or instant(raw.get('updated_at') or raw.get('date_updated') or created) > stamp):
                 raise ValueError('profit_order_snapshot_unverified')
             amounts = raw.get('amounts') or {}
@@ -40,12 +58,10 @@ async def collect(db, owner, state, raw_orders, data, started, stamp):
             # Canonical current total already includes order edits. A return must
             # first establish whether that edit included it; never subtract twice.
             returns = [r for r in state.get('customer_returns', []) if str(r.get('order_id')) == oid]
-            if returns or raw.get('refund_amount') or raw.get('refunded_amount') or (raw.get('payment_actions') or {}).get('refund_action'):
+            from operational_customer_returns import observed_salla_refund
+            observed_refund = observed_salla_refund(raw)
+            if returns or raw.get('refund_amount') or raw.get('refunded_amount') or observed_refund.get('status') != 'not_observed':
                 raise ValueError('profit_return_sales_tax_basis_required')
-            status = raw.get('status')
-            status = status.get('slug') if isinstance(status, dict) else status
-            if status not in {'delivered', 'تم التوصيل'}:
-                raise ValueError('profit_sale_recognition_event_required')
             gross, vat = _amount(amounts.get('total'), currency), _amount(amounts.get('tax'), currency)
             if vat > gross:
                 raise ValueError('profit_sale_tax_exceeds_total')
@@ -60,6 +76,12 @@ async def collect(db, owner, state, raw_orders, data, started, stamp):
     try:
         payroll_data = {name: await rows(db, owner, name) for name in
             ('mezan_employees_v2', 'mezan_employee_salary_contracts_v2')}
+        for employee in payroll_data['mezan_employees_v2']:
+            if any(employee.get(key) for key in ('archived', 'deleted', 'is_archived', 'is_deleted')):
+                problem('salaries', 'profit_archived_employee_period_history_required', str(employee.get('id') or ''))
+        for record in [*payroll_data['mezan_employees_v2'], *payroll_data['mezan_employee_salary_contracts_v2']]:
+            if record.get('updated_at') and instant(record['updated_at']) > stamp:
+                problem('salaries', 'profit_salary_source_after_snapshot', str(record.get('id') or record.get('employee_id') or ''))
         _employees(payroll_data, payroll)
         first, last = select_first_day(state, stamp), stamp.astimezone(RIYADH).date()
         ids = Counter(str(e.get('id') or '') for e in payroll['employees'])
@@ -90,9 +112,18 @@ async def collect(db, owner, state, raw_orders, data, started, stamp):
                 'amount': format(totals[currency, component], '.2f') if complete else None,
                 'known_subtotal': format(totals[currency, component], '.2f') if present else None,
                 'source_count': counts[currency, component], 'issues': errors,
-                'basis': 'delivered_current_order_total_less_explicit_vat' if component == 'net_sales' else 'approved_salary_contract_calendar_accrual'}
+                'basis': 'canonical_sales_status_scope_created_in_period_less_explicit_vat' if component == 'net_sales' else 'approved_salary_contract_calendar_accrual'}
     from operational_profit_order_costs import collect as order_costs
     for currency, components in order_costs(state, data, cohort, problems['net_sales']).items():
         result.setdefault(currency, {}).update(components)
+    from operational_profit_period_expenses import collect as expense_period
+    try:
+        expense_evidence = await expense_period(db, owner, state, started, stamp)
+    except (ValueError, TypeError, KeyError, ArithmeticError):
+        expense_evidence = {'by_currency': {'SAR': {kind: {'complete': False, 'amount': None,
+            'known_subtotal': None, 'source_count': 0, 'issues': [{'code': 'profit_expense_source_scope_unverified'}]}
+            for kind in ('advertising', 'operating_expenses')}}}
+    for currency, components in expense_evidence['by_currency'].items():
+        result.setdefault(currency, {}).update(components)
     return {'version': 1, 'scope': 'operating_period_accrual', 'started_at': started.isoformat(),
-        'as_of': stamp.isoformat(), 'by_currency': result, 'issues': dict(problems)}
+        'as_of': stamp.isoformat(), 'sales_scope': {'date_basis': 'canonical_created_at', 'status_policy': configured or 'sold_products_default'}, 'by_currency': result, 'issues': dict(problems)}
