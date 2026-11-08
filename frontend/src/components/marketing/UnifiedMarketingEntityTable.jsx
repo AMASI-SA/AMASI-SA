@@ -261,7 +261,7 @@ export default function UnifiedMarketingEntityTable({
         }
     }
     function heading(label, key = label) {
-        const column = columns.find(c => c.key === key);
+        const column = columns.find(c => c.key === key && c.sortable !== false);
         return <th key={key} className="px-4 py-3 font-black" aria-sort={sortable && column ? sort.key === key ? sort.direction === "desc" ? "descending" : "ascending" : "none" : undefined}>
             {sortable && column ? <button type="button" onClick={() => selectSort(column)} className="inline-flex items-center gap-1 text-right" aria-label={`ترتيب حسب ${label}`}>{label}<span aria-hidden="true">{sort.key === key ? sort.direction === "desc" ? "↓" : "↑" : "↕"}</span></button> : label}
         </th>;

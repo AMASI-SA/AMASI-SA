@@ -294,6 +294,20 @@ describe("UnifiedMarketingEntityTable", () => {
         expect(ids()).not.toContain("Entity row-21"); // unknown remains last in either direction
     });
 
+    test("explicitly disabled extra-column sorting renders a plain header without remote reads", async () => {
+        const prepareSort = jest.fn();
+        const report = { entity_level: "campaign", rows: [row("campaign", "one")] };
+        const extraColumns = [{ key: "budget", label: "Budget", sortable: false, prepareSort, render: () => "Unavailable" }];
+        await act(async () => root.render(<UnifiedMarketingEntityTable report={report} extraColumns={extraColumns} sortable />));
+        const header = [...container.querySelectorAll("th")].find(th => th.textContent === "Budget");
+        expect(header).toBeTruthy();
+        expect(header.querySelector("button")).toBeNull();
+        expect(header.hasAttribute("aria-sort")).toBe(false);
+        expect(container.querySelector('[aria-label="ترتيب حسب الصرف"]')).not.toBeNull();
+        expect(container.querySelector('[data-column="budget"]').textContent).toBe("Unavailable");
+        expect(prepareSort).not.toHaveBeenCalled();
+    });
+
     test("settings sort reads all filtered rows before ordering and ignores a late answer after report change", async () => {
         let finish;
         const prepareSort = jest.fn(() => new Promise(resolve => { finish = resolve; }));

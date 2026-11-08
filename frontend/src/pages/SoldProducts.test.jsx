@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import SoldProducts, { CostDetails, CostSummary, SoldTable } from "./SoldProducts";
 import api from "../lib/api";
+import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
 
 const mockPrint = jest.fn();
 const mockProductsGet = jest.fn();
@@ -12,10 +13,11 @@ jest.mock("react-router-dom", () => ({
     useSearchParams: () => [new URLSearchParams("from=2026-11-01&to=2026-11-07")],
 }), { virtual: true });
 jest.mock("../lib/api", () => ({ get: jest.fn() }));
+jest.mock("../services/dashboardAdsSpend", () => ({ getDashboardAdsSpend: jest.fn() }));
 jest.mock("../lib/format", () => ({ formatMoney: value => Number(value).toFixed(2), formatInt: value => String(value) }));
 jest.mock("../components/DateInput", () => ({ __esModule: true, default: props => <input type="date" {...props} />, isValidISODate: value => /^\d{4}-\d{2}-\d{2}$/.test(value) }));
 
-beforeEach(() => { api.get.mockReset(); mockProductsGet.mockReset(); mockPrint.mockClear(); api.get.mockImplementation((url, options) => url === "/dashboard-v2" ? Promise.resolve({ data: { totals: { total_orders: 2 } } }) : mockProductsGet(url, options)); });
+beforeEach(() => { getDashboardAdsSpend.mockImplementation(async ({ dateFrom, dateTo }) => ({ date_from: dateFrom, date_to: dateTo })); api.get.mockReset(); mockProductsGet.mockReset(); mockPrint.mockClear(); api.get.mockImplementation((url, options) => url === "/dashboard-v2" ? Promise.resolve({ data: { totals: { total_orders: 2 } } }) : mockProductsGet(url, options)); });
 
 const product = (id, overrides = {}) => ({
     product_id: id, sku: id, name: `منتج ${id}`, units_sold: 2, cost_status: "complete", total_cost: 50, known_cost_total: 50,
@@ -212,7 +214,7 @@ test("period expenses can be printed even when no products were sold", async () 
     await act(async () => root.unmount()); host.remove();
 });
 
-test("source hover uses the applied product period and order status cohort", async () => {
+test("product sources retain counts without loading campaign spend", async () => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
     const row = product("source-product", { traffic_sources: [{ platform: "snapchat", platform_label: "سناب شات", account_id: "account-1", account_status: "confirmed", attribution_status: "confirmed", units_sold: 2 }] });
     mockProductsGet.mockResolvedValue({ data: { currency: "SAR", allocation_method: "product_sales_share", rows: [] } });
@@ -221,8 +223,9 @@ test("source hover uses the applied product period and order status cohort", asy
     try {
         await act(async () => root.render(<SoldTable rows={[row]} range={{ from: "2026-11-02", to: "2026-11-05", statuses: "reviewed,in_progress" }} />));
         expect(api.get).not.toHaveBeenCalled();
-        await act(async () => host.querySelector('.product-traffic-sources button').click());
+        await act(async () => host.querySelector('.product-traffic-sources li').click());
         await act(async () => { await new Promise(resolve => setTimeout(resolve, 230)); });
-        expect(api.get).toHaveBeenCalledWith("/dashboard-v2/product-promotion-estimates", expect.objectContaining({ params: expect.objectContaining({ product_id: "source-product", from_date: "2026-11-02", to_date: "2026-11-05", statuses: "reviewed,in_progress", report_scope: "sold" }) }));
+        expect(api.get).not.toHaveBeenCalled();
+        expect(host.querySelector('.product-traffic-sources button')).toBeNull();
     } finally { await act(async () => root.unmount()); host.remove(); }
 });

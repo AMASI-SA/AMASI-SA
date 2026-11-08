@@ -311,7 +311,10 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             raise HTTPException(status_code=422, detail={"code": "invalid_cost_mode"})
         resource_id = _text(payload.get("resource_id")) or None
         direct_amount = _number(payload.get("direct_amount"))
-        quantity = _number(payload.get("quantity")) or 1.0
+        # A direct amount is the complete surcharge for one product. Only a
+        # resource link has a quantity multiplier; stale hidden editor state
+        # must not turn a 60 SAR surcharge into 60 x 60 SAR.
+        quantity = 1.0 if mode == "direct" else (_number(payload.get("quantity")) or 1.0)
         if quantity <= 0:
             raise HTTPException(status_code=422, detail={"code": "invalid_quantity"})
         if mode == "resource":

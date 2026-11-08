@@ -222,6 +222,7 @@ export function SnapchatAccountDetail({ requestedAccountId = "" }) {
     const viewEpochRef = useRef(0);
     const settingsEpochRef = useRef(0);
     const settingsCacheRef = useRef({});
+    const visibleSettingsRowsRef = useRef([]);
     const managementEpochRef = useRef(0);
 
     const account = status?.selected_account || null;
@@ -238,6 +239,7 @@ export function SnapchatAccountDetail({ requestedAccountId = "" }) {
         setManagementSettingsById({});
         setManagementTarget(null);
         settingsCacheRef.current = {};
+        visibleSettingsRowsRef.current = [];
         setSettingsByEntityId({});
         setSettingsLoading(false);
         return nextEpoch;
@@ -506,39 +508,19 @@ export function SnapchatAccountDetail({ requestedAccountId = "" }) {
         setClockNow(Date.now());
     }
 
-    const loadVisibleSettings = useCallback((rows) => {
+    // Browsing and scrolling do not fan out into provider settings reads.
+    const rememberVisibleSettingsRows = useCallback((rows) => {
+        visibleSettingsRowsRef.current = rows.slice(0, 7);
+    }, []);
+
+    function loadVisibleSettings() {
         void loadEntitySettings({
             entityType: entityLevel === "ad_group" ? "ad_squad" : "campaign",
-            rows,
+            rows: visibleSettingsRowsRef.current,
             parentUnifiedId: entityLevel === "ad_group" ? selectedCampaign?.entity?.id || "" : "",
             expectedAccountId: accountId,
             viewEpoch: viewEpochRef.current,
         });
-    }, [accountId, entityLevel, selectedCampaign, loadEntitySettings]);
-
-    // Settings sorting covers the complete filtered report, not just the first
-    // rendered batch. Reads remain exact-ID, account-bound, and nine at a time.
-    async function prepareSettingsSort(rows, field, signal) {
-        const viewEpoch = viewEpochRef.current;
-        const result = {};
-        for (let offset = 0; offset < rows.length; offset += 7) {
-            if (signal?.aborted || viewEpochRef.current !== viewEpoch) throw new Error("View changed");
-            const items = await loadEntitySettings({
-                entityType: entityLevel === "ad_group" ? "ad_squad" : "campaign",
-                rows: rows.slice(offset, offset + 7),
-                parentUnifiedId: entityLevel === "ad_group" ? selectedCampaign?.entity?.id || "" : "",
-                expectedAccountId: accountId, viewEpoch,
-            });
-            if (!items || signal?.aborted || viewEpochRef.current !== viewEpoch) throw new Error("View changed");
-            for (const [id, item] of Object.entries(items)) {
-                if (item.quality?.settings_status === "settings_sync_failed") throw new Error("Settings read failed");
-                result[id] = item.quality?.settings_status === "settings_complete"
-                    && (field !== "bid_micro" || item.bid_strategy !== "AUTO_BID")
-                    && (field !== "daily_budget_micro" || item.daily_budget_availability !== "unsupported_at_provider_level")
-                    ? item[field] : null;
-            }
-        }
-        return result;
     }
 
     function manageEntity(row) {
@@ -711,6 +693,10 @@ export function SnapchatAccountDetail({ requestedAccountId = "" }) {
                     <span className="mr-auto pb-3 text-[11px] font-bold text-slate-400">قراءة V2 موحدة · إدارة Snapchat محكومة</span>
                 </nav>
                 {(selectedCampaign || selectedAdGroup) && <div className="flex flex-wrap items-center gap-2 border-x border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-600"><button type="button" onClick={returnToCampaigns} className="rounded-lg bg-white px-3 py-1.5 text-emerald-700 shadow-sm">كل الحملات</button>{selectedCampaign && <><span>/</span><button type="button" onClick={returnToAdGroups} className="rounded-lg px-2 py-1.5 hover:bg-white">{selectedCampaign.entity.name}</button></>}{selectedAdGroup && <><span>/</span><span className="rounded-lg bg-violet-50 px-2 py-1.5 text-violet-700">{selectedAdGroup.entity.name}</span></>}</div>}
+                {["campaign", "ad_group"].includes(entityLevel) && <div className="flex flex-wrap items-center gap-3 border-x border-slate-200 bg-white px-4 py-3">
+                    <button type="button" data-testid="load-visible-snapchat-settings" disabled={loading || entityLoading || settingsLoading} onClick={loadVisibleSettings} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold disabled:opacity-50">{settingsLoading ? "جارٍ تحميل الإعدادات…" : "تحميل إعدادات آخر صفوف معروضة (حتى 7)"}</button>
+                    <span className="text-xs text-slate-500">الميزانيات والمزايدات تُحمّل عند الطلب فقط؛ ترتيبها غير متاح.</span>
+                </div>}
                 <UnifiedMarketingEntityTable
                     report={activeContract}
                     loading={loading || entityLoading}
@@ -722,8 +708,8 @@ export function SnapchatAccountDetail({ requestedAccountId = "" }) {
                     infiniteScroll
                     defaultActiveOnly
                     sortable
-                    onVisibleRowsChange={loadVisibleSettings}
-                    extraColumns={snapchatInlineColumns({ level: entityLevel, settingsByEntityId, loading: settingsLoading, parentCampaign: selectedCampaign, prepareSettingsSort })}
+                    onVisibleRowsChange={rememberVisibleSettingsRows}
+                    extraColumns={snapchatInlineColumns({ level: entityLevel, settingsByEntityId, loading: settingsLoading, parentCampaign: selectedCampaign }).map(column => ({ ...column, sortable: Boolean(column.value) }))}
                 />
             </section>
 
