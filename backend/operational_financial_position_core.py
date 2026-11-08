@@ -279,6 +279,10 @@ def _provider_table(rows, issues):
     columns = [_column("name", "المنصة", "text"), _column("orders", "عدد الطلبات", "count"),
                _column("gross", "إجمالي المدفوع"), _column("tariff_fees", "العمولة حسب التعرفة مع ضريبتها"),
                _column("tariff_net", "صافي المدفوع حسب التعرفة"),
+               _column("tariff_known_order_count", "طلبات التعرفة المحتسبة", "count"),
+               _column("tariff_unresolved_order_count", "طلبات التعرفة غير المحسومة", "count"),
+               _column("known_tariff_fees", "عمولة التعرفة للجزء المحتسب"),
+               _column("known_tariff_net", "صافي التعرفة للجزء المحتسب"),
                _column("actual_settlement_fees", "عمولة التسويات المثبتة"),
                _column("known_actual_settlement_fees", "المجموع المتاح لعمولة التسويات"),
                _column("fee_variance", "فرق العمولة الفعلية عن التعرفة"),
@@ -288,18 +292,19 @@ def _provider_table(rows, issues):
         str(issue.get("source_id", "")).startswith("provider:") or str(issue.get("code", "")).startswith("provider_")
         for issue in issues)
     result = _table("providers", "منصات الدفع", "fulfillment", columns,
-                  [{"id": row["provider"], **row} for row in rows],
+                  [{"id": row["provider"], **{column["key"]: None for column in columns}, **row} for row in rows],
                   complete=complete,
                   totals={"orders": sum(row["orders"] for row in rows)},
                   notes=["الصافي يشمل الافتتاحي المدخل والتسويات المثبتة. تقدير العمولة يخص المدفوع بعد البداية فقط، والعمولة الفعلية تحل محل تقدير الجزء المسوّى.",
                          "صافي التعرفة يخص المدفوع بعد البداية ناقص استردادات المزود وعمولته؛ يستبعد الأرصدة الافتتاحية والدفعات البنكية.",
+                         "الجزء المحتسب يخص طلبات التعرفة المحتسبة فقط ويستبعد غير المحسومة؛ ليس إجماليًا مكتملًا ولا مبلغًا إضافيًا إلى الرصيد. العدد غير المتاح لا يعرض كصفر.",
                          "عدم وجود مدفوع بعد البداية لا يبرر تطبيق تعرفة الفترة على الافتتاحي؛ عدم وجود كشف لا يثبت أن العمولة صفر.",
                          "المجموع المتاح لعمولة التسويات يعرض الجزء الموثق حتى إذا غابت العمولة عن تسويات أخرى؛ لا يعد إجماليًا مكتملًا.",
                          "عمولة التسويات تخص الجزء المثبت فقط. فرق العمولة يظهر عند تسوية مجموعة الطلبات نفسها بالكامل دون استرداد غير مطابق؛ الموجب يعني عمولة فعلية أعلى.",
                          "المبالغ التي تنتظر مطابقة الهوية أو حوالة غير موزعة تظهر مع عدم اكتمال الصافي."])
     if not complete and not rows:
         result["totals"].update(gross=None, fees=None, refunded=None, net=None,
-                                tariff_fees=None, tariff_net=None, actual_settlement_fees=None, known_actual_settlement_fees=None, fee_variance=None)
+                                tariff_fees=None, tariff_net=None, known_tariff_fees=None, known_tariff_net=None, actual_settlement_fees=None, known_actual_settlement_fees=None, fee_variance=None)
     return result
 
 
