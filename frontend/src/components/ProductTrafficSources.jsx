@@ -27,9 +27,12 @@ function estimateReason(reason) {
     if (/currency|fx/.test(code)) return "تحويل صرف الإعلان إلى الريال غير مكتمل.";
     if (/filter|cohort/.test(code)) return "بيانات الترويج لا تطابق فلاتر التقرير المختارة.";
     if (/account/.test(code)) return "الحساب الإعلاني غير متحقق.";
+    if (code === "campaign_read_timeout") return "تأخرت قراءة صرف الحملة؛ أعد تحديث التقرير.";
+    if (code === "campaign_source_invalid") return "تعذر التحقق من بيانات صرف الحملة المحفوظة.";
+    if (/read_limit/.test(code)) return "تعذر قراءة بيانات الترويج ضمن حد القراءة؛ أعد تحديث التقرير.";
+    if (/spend|coverage|daily/.test(code)) return "بيانات صرف الإعلان غير مكتملة للفترة.";
     if (code === "ad_identity_unverified") return "الحملة معروفة، لكن الإعلان غير متحقق؛ تكلفة الترويج غير متاحة على مستوى الإعلان.";
     if (/campaign|ad_group|ad_identity|attribution/.test(code)) return "هوية الحملة أو المجموعة أو الإعلان غير متحققة.";
-    if (/spend|coverage|daily/.test(code)) return "بيانات صرف الإعلان غير مكتملة للفترة.";
     return "بيانات الصرف أو الإسناد غير مكتملة؛ لم تُفترض صفرًا.";
 }
 
