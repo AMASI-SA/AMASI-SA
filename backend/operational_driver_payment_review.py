@@ -14,11 +14,13 @@ from accounting_driver_payment_review import DriverReviewInput as NativeInput
 from operational_balance_store import STATES, digest, fail, audit, logical_state, now, read
 from operational_salary_start import instant, RIYADH
 from operational_driver_review_store import EVENTS, transact
+from store_delivery_review_permissions import require_review_actor, require_review_scope
 
 REVIEWS = 'store_delivery_payment_reviews'
 COLLECTIONS = 'store_delivery_collections'
 RECEIPTS = 'store_delivery_receipts'
 FACTS = 'driver_payment_review_facts'
+BANK_CANDIDATE_LIMIT = 100
 
 
 class ReviewInput(NativeInput):
@@ -50,15 +52,8 @@ async def single(db, collection, query, code):
     return rows[0]
 
 
-async def authorize(db, owner, actor):
-    user = await db.users.find_one({'id': actor})
-    if (not user or user.get('disabled') or user.get('is_active') is False or user.get('deleted_at')
-            or (actor != owner and user.get('created_by') != owner)
-            or (actor == owner and user.get('role') != 'owner')
-            or 'store_delivery.payments.review' in (user.get('denied_permissions') or [])
-            or (user.get('role') not in {'owner', 'admin', 'accountant'}
-                and 'store_delivery.payments.review' not in (user.get('extra_permissions') or []))):
-        fail('accountant_permission_required', status=403)
+async def authorize(db, owner, actor, *, request_client=None):
+    return await require_review_actor(db, owner, actor, request_client=request_client)
 
 
 async def financial_source(db, owner):
@@ -213,8 +208,41 @@ async def _bank_proof(db, owner, bank_id, movement_id, value, state, stamp):
                            'source_revision': bank_digest([owner, bank_id, hashed, fact])}
 
 
-async def options(db, *, owner, actor, assignment_id, clock=None):
-    await authorize(db, owner, actor)
+async def _bank_candidates(db, owner, bank_id, value, state, stamp):
+    """Bounded suggestions only; approval still revalidates and consumes proof."""
+    if not bank_id:
+        return [], False
+    rows = await db.mz2_daily_movements.find({'user_id': owner, 'bank_account_id': bank_id,
+        'status': 'unclassified', 'direction': 'in', 'currency': 'SAR',
+        'source': {'$in': ['bank_statement_import', 'manual_reconciled_bank_statement']}
+    }).sort([('movement_date', -1), ('id', 1)]).limit(BANK_CANDIDATE_LIMIT + 1).to_list(BANK_CANDIDATE_LIMIT + 1)
+    from fastapi import HTTPException
+    choices = []
+    for row in rows[:BANK_CANDIDATE_LIMIT]:
+        try:
+            if not row.get('id') or exact_money(row.get('amount')) != value:
+                continue
+            _, movement, proof = await _bank_proof(db, owner, bank_id, row['id'], value, state, stamp)
+        except HTTPException as error:
+            if error.status_code != 409 or not isinstance(error.detail, dict):
+                raise
+            continue
+        claim_id = digest([owner, 'operational-driver-review-claim', 'reference',
+                           [proof['source_namespace'], proof['source_record_id']]])
+        if await db[EVENTS].find_one({'user_id': owner, '_id': claim_id}):
+            continue
+        if await db.mz2_shipping_native_events_v2.find_one({'user_id': owner,
+                'destination.source_namespace': proof['source_namespace'],
+                'destination.source_record_id': proof['source_record_id']}):
+            continue
+        choices.append({key: movement.get(key) for key in (
+            'id', 'movement_date', 'amount', 'description', 'reference', 'bank_account_id')})
+        choices[-1]['amount'] = value
+    return choices, len(rows) > BANK_CANDIDATE_LIMIT
+
+
+async def options(db, *, owner, actor, assignment_id, clock=None, request_client=None):
+    await require_review_scope(db, owner, actor, assignment_id, request_client=request_client)
     if await financial_source(db, owner) != 'operational':
         fail('operational_driver_review_phase_changed')
     state = await read(db, owner)
@@ -239,16 +267,23 @@ async def options(db, *, owner, actor, assignment_id, clock=None):
     if len(rows) > 1000:
         fail('operational_source_scope_too_large')
     destinations = pos_candidates(rows, owner) if review['payment_method'] == 'card_terminal' else []
+    bank_movements, bank_movements_truncated = [], False
+    if (blocker is None and review['payment_method'] == 'bank_transfer'
+            and review.get('bank_account_id') == collection.get('bank_account_id')):
+        bank_movements, bank_movements_truncated = await _bank_candidates(
+            db, owner, review.get('bank_account_id'), value, state, stamp)
+    await require_review_scope(db, owner, actor, assignment_id, request_client=request_client)
     return {'assignment_id': assignment_id, 'payment_method': review['payment_method'], 'amount': value,
             'financial_source': 'operational', 'can_approve': blocker is None, 'can_reject': can_reject,
             'blocker': blocker, 'expected_review_revision': review.get('revision', 1),
             'session_scope': digest([owner, actor]), 'bank_account_id': review.get('bank_account_id'),
             'pos_receivables': [{'id': r['id'], 'display_name': r['name']} for r in destinations],
-            'bank_movements': [], 'started_at': state['started_at'],
+            'bank_movements': bank_movements, 'bank_movements_truncated': bank_movements_truncated,
+            'started_at': state['started_at'],
             'note': 'الشبكة ذمة للمتجر وليست نقدًا؛ التحويل يتطلب حركة بنك مثبتة بعد يوم القطع.'}
 
 
-async def review_payment(db, *, owner, actor, assignment_id, payload, clock=None):
+async def review_payment(db, *, owner, actor, assignment_id, payload, clock=None, request_client=None):
     stamp = clock or now()
     if payload.expected_financial_source != 'operational' or payload.expected_session_scope != digest([owner, actor]):
         fail('operational_driver_review_scope_required')
@@ -383,4 +418,5 @@ async def review_payment(db, *, owner, actor, assignment_id, payload, clock=None
         if changed.matched_count != 1:
             fail('operational_concurrent_change')
         return result
-    return await transact(db, owner, commit, lambda scoped: authorize(scoped, owner, actor))
+    return await transact(db, owner, commit,
+                          lambda scoped: require_review_scope(scoped, owner, actor, assignment_id, request_client=request_client))

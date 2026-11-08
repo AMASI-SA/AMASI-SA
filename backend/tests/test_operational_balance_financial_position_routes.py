@@ -185,12 +185,13 @@ def test_read_requires_authentication_and_active_membership(monkeypatch):
     assert asyncio.run(get(db)).status_code == 403
 
 
-def test_mobile_read_grant_is_checked_for_real_actor(monkeypatch):
+def test_mobile_read_grant_does_not_promote_real_actor_to_consolidated_owner(monkeypatch):
     monkeypatch.setitem(sys.modules, "operational_open_cost_exposure", None)
     db = ReadOnlyDB()
     actor = {"id": "owner", "role": "owner", "_session_client": "amasi_mobile", "_mobile_actor_id": "staff"}
     response = asyncio.run(get(db, actor))
-    assert response.status_code == 200, response.text
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"]["code"] == "operational_consolidated_report_owner_required"
     db.data["mezan_mobile_app_access_v1"][0]["permissions"] = []
     assert asyncio.run(get(db, actor)).status_code == 403
 
