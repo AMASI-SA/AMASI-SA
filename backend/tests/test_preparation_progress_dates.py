@@ -296,11 +296,11 @@ async def test_file_day_mongo_expression_scopes_tenant_and_riyadh_day(day):
 @pytest.mark.parametrize('status,eligible', [
     ('reviewed',True),('تمت المراجعة',True),('تم المراجعة',True),
     ('processing',True),('in_progress',True),('قيد التنفيذ',True),
-    ('under_review',False),('waiting_review',False),('انتظار المراجعة',False),
+    ('under_review',True),('waiting_review',True),('انتظار المراجعة',True),
     ('completed',False),('delivered',False),('shipping',False),('shipped',False),
-    ('cancelled',False),('refunded',False),('unknown',False),('',False),
+    ('cancelled',False),('refunded',False),('unknown',True),('',True),
 ])
-async def test_employee_dates_and_products_require_current_reviewed_or_processing(monkeypatch,status,eligible):
+async def test_employee_date_navigation_preserves_existing_nonterminal_selection(monkeypatch,status,eligible):
     db = await seed()
     await db.unified_orders.update_one({'order_number':'order'}, {'$set':{'order_status':status}})
     monkeypatch.setattr(dispatch,"_employee_workspace",lambda *args,**kwargs:_empty_workspace())
@@ -319,7 +319,7 @@ async def test_current_status_change_removes_assignment_day_despite_supplier_his
     async def read():
         return await progress_days(db,user_id='merchant',employee_id='worker',date_basis='employee_assigned_at')
     assert (await read())['days']
-    for status in ('under_review','completed','shipped','cancelled'):
+    for status in ('completed','shipped','cancelled'):
         await db.unified_orders.update_one({'order_number':'order'}, {'$set':{'order_status':status}})
         assert (await read())['days'] == []
         page=await progress_workspace(db,user_id='merchant',employee_id='worker',day='2026-11-03',date_basis='employee_assigned_at')
@@ -341,8 +341,10 @@ async def test_custom_status_uses_order_engine_precedence_for_assignment_dates(m
     for status in ('completed', 'shipped'):
         await db.unified_orders.update_one({'order_number':'order'}, {'$set':{'order_status':status}})
         assert (await progress_days(db,user_id='merchant',employee_id='worker',date_basis='employee_assigned_at'))['days'] == []
+    # Navigation retains the original nonterminal prefilter; canonical detail
+    # eligibility continues to be enforced by the existing downstream path.
     await db.unified_orders.delete_many({})
-    assert (await progress_days(db,user_id='merchant',employee_id='worker',date_basis='employee_assigned_at'))['days'] == []
+    assert (await progress_days(db,user_id='merchant',employee_id='worker',date_basis='employee_assigned_at'))['days']
 
 
 @pytest.mark.asyncio
@@ -360,3 +362,31 @@ async def test_selected_day_is_employee_assignment_and_dispatch_is_membership_on
         page = await progress_workspace(db, user_id="merchant", employee_id="worker", day="2026-11-05", date_basis="employee_assigned_at")
         assert days["days"] == []
         assert page["progress_day_summary"]["assigned"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["reviewed", "in_progress"])
+async def test_local_approved_order_keeps_navigation_with_unchanged_salla_pending(stage, monkeypatch):
+    import review_local_policy as local
+    from test_review_local_downstream import order
+    db = await seed()
+    await db.unified_orders.update_one({"order_number": "order"}, {"$set": {"order_status": "under_review"}})
+    workflow = {"user_id": "merchant", "order_number": "order", "stage": stage,
+        "completion_mode": local.LOCAL_COMPLETION_MODE, "review_completion_operation_id": "local-op"}
+    await db[local.WORKFLOWS].insert_one(workflow)
+    await db[local.OPERATIONS].insert_one({"_id": "local-op", "user_id": "merchant", "order_number": "order",
+        "state": "completed", "completion_mode": local.LOCAL_COMPLETION_MODE})
+    proofs, blocked = await local.load_review_operational_context(db, user_id="merchant", order_numbers=["order"])
+    assert not blocked
+    assert local.local_review_stage_eligible(order("order"), proofs["order"], {"reviewed", "in_progress"})
+    monkeypatch.setattr(dispatch, "_employee_workspace", lambda *args, **kwargs: _empty_workspace())
+    original = await progress_workspace(db, user_id="merchant", employee_id="worker", day="2026-11-02")
+    assert original["progress_day_summary"]["assigned"] == 13
+    days = await progress_days(db, user_id="merchant", employee_id="worker", date_basis="employee_assigned_at")
+    assert days["days"] == [{"key": "2026-11-03"}, {"key": "2026-11-02"}]
+    combined = set()
+    for day, count in (("2026-11-02", 1), ("2026-11-03", 12)):
+        page = await progress_workspace(db, user_id="merchant", employee_id="worker", day=day, date_basis="employee_assigned_at")
+        assert page["progress_day_summary"]["assigned"] == count
+        combined.update(page["progress_active_piece_ids"])
+    assert combined == set(original["progress_active_piece_ids"])

@@ -38,6 +38,7 @@ on:
       - "backend/tests/test_amasi_shipping_compat.py"
       - "backend/tests/test_mobile_assembly_refresh_actions.py"
       - "backend/tests/test_preparation_progress_dates.py"
+      - "backend/tests/test_preparation_lazy_sections.py"
       - "backend/preparation_receipt_status_message.py"
       - "backend/assembly_completion_delivery.py"
       - "backend/assembly_print_completion.py"
@@ -94,6 +95,7 @@ jobs:
       PYTHON_DOTENV_DISABLED: "1"
       MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=reviewtest
       BUILD37_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=reviewtest
+      WAITING_TEST_MONGO_URL: mongodb://127.0.0.1:27018/?replicaSet=reviewtest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -134,6 +136,7 @@ jobs:
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
             tests/test_mobile_assembly_refresh_actions.py \
             tests/test_preparation_progress_dates.py \
+            tests/test_preparation_lazy_sections.py \
             tests/test_preparation_piece_operations.py \
             tests/test_amasi_shipping_compat.py \
             tests/test_assembly_completion_delivery.py \

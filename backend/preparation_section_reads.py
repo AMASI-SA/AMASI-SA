@@ -46,10 +46,10 @@ async def _file_day_registries(db: Any, *, user_id: str, day: str) -> dict[str, 
     return {_text(row.get("batch_id")): row for row in rows if _text(row.get("batch_id"))}
 
 
-async def _nonterminal_numbers(db: Any, user_id: str, numbers: list[str], *, assignment_scope: bool = False) -> set[str]:
+async def _nonterminal_numbers(db: Any, user_id: str, numbers: list[str]) -> set[str]:
     # Reuse Order Engine's custom/current status precedence. Read status fields
     # only: navigation must not hydrate customers, products or payment facts.
-    remaining = set() if assignment_scope else set(numbers)
+    remaining = set(numbers)
     rows = db.unified_orders.find(
         {"user_id": user_id, "order_number": {"$in": numbers}},
         {"_id": 0, "order_number": 1, "order_status": 1,
@@ -59,11 +59,7 @@ async def _nonterminal_numbers(db: Any, user_id: str, numbers: list[str], *, ass
         raw = ((row.get("raw_by_source") or {}).get("salla_direct") or {})
         status = _provider_status_native(raw, current_status=row.get("order_status"))
         effective = " ".join(_text(status).replace("_", " ").casefold().split())
-        if assignment_scope:
-            if any(re.fullmatch(_STATUS_PATTERNS[group], effective, re.IGNORECASE)
-                   for group in ("reviewed", "processing")):
-                remaining.add(_text(row.get("order_number")))
-        elif any(re.fullmatch(_STATUS_PATTERNS[group], effective, re.IGNORECASE)
+        if any(re.fullmatch(_STATUS_PATTERNS[group], effective, re.IGNORECASE)
                  for group in ("completed", "shipping", "cancelled", "refunded")):
             remaining.discard(_text(row.get("order_number")))
     return remaining
@@ -97,7 +93,7 @@ async def progress_day_batches(
                       for source in row.get("source_files") or [] for card in source.get("cards") or []}
     candidates = [row for row in candidates if _text(row.get("piece_id")) in dispatched_ids]
     numbers = sorted({_text(row.get("order_number")) for row in candidates} - {""})
-    live = await _nonterminal_numbers(db, user_id, numbers, assignment_scope=date_basis == "employee_assigned_at") if numbers else set()
+    live = await _nonterminal_numbers(db, user_id, numbers) if numbers else set()
     candidates = [row for row in candidates if _text(row.get("order_number")) in live]
     registry = (await _registry_dates(db, user_id=user_id, pieces=candidates)
                 if date_basis == "file_created_at" else {})
@@ -152,7 +148,7 @@ async def progress_workspace(
                 and piece_progress_day(row, registry.get(_text(row.get("batch_id")), {}), date_basis) == day]
     batches = sorted({_text(row.get("batch_id")) for row in metadata} - {""})
     numbers = sorted({_text(row.get("order_number")) for row in metadata} - {""})
-    live = await _nonterminal_numbers(db, user_id, numbers, assignment_scope=date_basis == "employee_assigned_at") if numbers else set()
+    live = await _nonterminal_numbers(db, user_id, numbers) if numbers else set()
     metadata = [row for row in metadata if _text(row.get("order_number")) in live]
     ids = [_text(row.get("piece_id")) for row in metadata]
     dispatches = await db[DISPATCHES].find({"user_id": user_id, "sent_by_id": employee_id,
@@ -190,7 +186,7 @@ async def progress_workspace(
     outside = await db[PIECES].find({"user_id": user_id, "responsible_employee_id": employee_id,
         "experiment_archived_at": None, "piece_id": {"$in": extras}}, {"_id": 0, **projection}).to_list(None) if extras else []
     extra_numbers = sorted({_text(row.get("order_number")) for row in outside} - {""})
-    extra_live = await _nonterminal_numbers(db, user_id, extra_numbers, assignment_scope=date_basis == "employee_assigned_at") if extra_numbers else set()
+    extra_live = await _nonterminal_numbers(db, user_id, extra_numbers) if extra_numbers else set()
     outside = [row for row in outside if _text(row.get("order_number")) in extra_live]
     outstanding_by_supplier: dict[str, set[str]] = {}
     for row in metadata + outside:
