@@ -295,3 +295,19 @@ async def test_campaign_loader_keeps_two_reads_and_owner_isolation():
     campaigns = [c for s in final for c in s['campaigns']]
     assert {c['campaign_id']: c['units_sold'] for c in campaigns} == {'safe': 5, None: 2}
     assert 'foreign' not in str(final)
+
+
+@pytest.mark.asyncio
+async def test_product_report_does_not_resolve_missing_campaign_from_catalogs():
+    db = AsyncMongoMockClient().db
+    orders = [order('campaign-raw', 6, utm_source='snapchat', utm_campaign='not-in-ledger')]
+    await db.unified_orders.insert_many(orders)
+    class OnlySavedSources(ReadDB):
+        def __getitem__(self, name):
+            assert name in {'unified_orders', LEDGER_COLLECTION}, name
+            return super().__getitem__(name)
+    readonly = OnlySavedSources(db)
+    result = await load_product_traffic_sources(readonly, 'owner', orders)
+    assert len(readonly.calls) == 2
+    assert result[id(orders[0])]['platform'] == 'snapchat'
+    assert result[id(orders[0])]['account_id'] is None

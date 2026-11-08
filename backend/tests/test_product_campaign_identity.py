@@ -15,7 +15,7 @@ async def seed(db, *, owner='owner', account='account', campaign='campaign', sel
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('raw', [False, True])
-async def test_empty_ledger_recovers_exact_campaign_and_promoted_fields(raw):
+async def test_product_report_does_not_enrich_empty_ledger_from_campaign_catalog(raw):
     db = AsyncMongoMockClient().db
     await seed(db)
     evidence = {'utm_source': 'snapchat', 'utm_campaign': 'campaign'}
@@ -23,8 +23,9 @@ async def test_empty_ledger_recovers_exact_campaign_and_promoted_fields(raw):
         **({'raw_by_source': {'salla_direct': evidence}} if raw else evidence)})
     parsed = {'order_number': '123'}
     sources = await load_product_traffic_sources(db, 'owner', [parsed])
-    assert sources[id(parsed)]['account_id'] == 'account'
-    assert sources[id(parsed)]['_campaign']['campaign_name'] == 'كتلوج بلوفرات 2026'
+    assert sources[id(parsed)]['platform'] == 'snapchat'
+    assert sources[id(parsed)]['account_id'] is None
+    assert '_campaign' not in sources[id(parsed)]
     assert await db.mezan_attribution_order_ledger_v1.count_documents({}) == 0
 
 
@@ -84,11 +85,12 @@ async def test_stale_ad_identity_falls_back_to_campaign_not_wrong_ad():
     assert result['123'][0]['attribution']['ad_id'] is None
 
 @pytest.mark.asyncio
-async def test_nested_promoted_campaign_is_not_lost_by_projection():
+async def test_nested_source_remains_without_campaign_enrichment():
     db = AsyncMongoMockClient().db
     await seed(db)
     await db.unified_orders.insert_one({'user_id': 'owner', 'order_number': '123',
         'marketing': {'utm_source': 'snapchat', 'campaign_id': 'campaign'}})
     parsed = {'order_number': '123'}
     result = await load_product_traffic_sources(db, 'owner', [parsed])
-    assert result[id(parsed)]['_campaign']['campaign_id'] == 'campaign'
+    assert result[id(parsed)]['platform'] == 'snapchat'
+    assert '_campaign' not in result[id(parsed)]
