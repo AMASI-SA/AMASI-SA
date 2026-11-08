@@ -234,7 +234,8 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             "orders": set(), "gross": ZERO, "fees": ZERO, "refunded": ZERO, "remaining_fees": ZERO,
             "complete": True, "fees_complete": True, "held_orders": 0, "opening": ZERO, "settled": ZERO,
             "known_net": ZERO, "tariff_sum": ZERO, "tariff_complete": True, "tariff_scope_orders": 0,
-            "fee_comparable": True})
+            "tariff_known_order_count": 0, "known_tariff_gross": ZERO, "known_tariff_refunded": ZERO,
+            "tariff_order_scope_unknown": False, "fee_comparable": True})
 
     for identity, row in records.items():
         currency, provider = row["currency"], row["provider"]
@@ -278,6 +279,9 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
                 total["tariff_complete"] = False
             else:
                 total["tariff_sum"] += fee
+                total["tariff_known_order_count"] += 1
+                total["known_tariff_gross"] += row["gross"]
+                total["known_tariff_refunded"] += row["refunded"]
             proof = proof_allocated.get(identity, {})
             if (held or row["refunded"] != 0 or row["gross"] <= 0
                     or proof.get("gross") != row["gross"]):
@@ -314,11 +318,13 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             paid = number(source.get("paid"))
             known = number(source.get("known_paid", source.get("paid")))
             if known is not None and known > total["gross"]:
+                total["tariff_order_scope_unknown"] = True
                 total["gross"] = known
                 total["missing_order_count"] = max(source.get("orders", 0) - len(total["orders"]), 0)
                 total["complete"] = total["fees_complete"] = False
                 total["tariff_complete"] = total["fee_comparable"] = False
             if paid is None:
+                total["tariff_order_scope_unknown"] = True
                 total["known_gross"] = total["gross"]
                 total["gross"] = None
                 total["complete"] = total["fees_complete"] = False
@@ -344,6 +350,17 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
         scope = currency, provider
         tariff = total.pop("tariff_sum")
         tariff_complete = total["tariff_complete"] and total["tariff_scope_orders"] > 0 and total["gross"] is not None
+        # Preserve the evidenced subset without relabeling it as the provider's
+        # full balance. Unpriced/held orders never contribute a guessed zero;
+        # actual settlement fees cannot substitute for an unknown tariff.
+        known = total["tariff_known_order_count"] > 0
+        total["tariff_unresolved_order_count"] = (None if total.pop("tariff_order_scope_unknown")
+            else total["tariff_scope_orders"] - total["tariff_known_order_count"])
+        total["known_tariff_fees"] = tariff if known else None
+        total["known_tariff_net"] = (total["known_tariff_gross"] - total["known_tariff_refunded"] - tariff
+                                     if known else None)
+        if not known:
+            total["known_tariff_gross"] = total["known_tariff_refunded"] = None
         total["tariff_complete"] = tariff_complete
         total["tariff_fees"] = tariff if tariff_complete else None
         total["tariff_net"] = total["gross"] - total["refunded"] - tariff if tariff_complete else None
