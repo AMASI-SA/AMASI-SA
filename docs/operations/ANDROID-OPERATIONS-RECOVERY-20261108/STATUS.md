@@ -1,3 +1,15 @@
+# Android76 server release evidence
+
+This evidence branch is NOT a deployment candidate; the frozen release remains PR1838 at intent-only B ed088b18887f53f6a56aed3eacb6472079142870.
+
+Authentication succeeded. Fresh /app guard active:false and HEAD cf2e3df3fe11caf9d608a83706d0ae9cafeb95b6; tracked workspace clean, unrelated untracked files preserved. Source A6a1c18d4d87a92cd7a473db1eb8aaba33ae7fc85/tree79d9dccfed7d87911ff5dddd1797c17c588eb7c8 preserves rollback. B tree80083db25a79cc3fce945807c8042a3467310e4f differs from A only in release/release-intent-v5.json.
+
+Source real-Mongo226PASS/59subtests, retained658PASS/345subtests and1acceptance. G47 first attempt had one collection-creation transient WriteConflict, retry cancelled when intent B triggered full CI; B G47 pending. B release readiness42529356911 PASS including Node20/24 clean-clone and package/JSON routing checks. Local Emergent clean clone /tmp/android76-release-rehearsal at exact B completed yarn build in66.38seconds, exit0. Package-boundary and isolated runtime verification passed, matching sourceA and release rg5-b27aabe2e6917c998c4bb3f13eb9c6f979797954a6e74d4edf4a2cf8692e5b6a. No lease created during rehearsal.
+
+Current stage: waiting remaining B CI before normal merge. No merge/publish; production changed:NO. Next: require applicable CI pass, recheck remote production/guard, normal merge preserving A/B, fast-forward /app with unrelated files intact, governed build, prepare/prepublish, publish once, newer explicit success, verify3probes and active:false. Owner deployment authorization persists. APKAndroid76 already delivered; physical mixed-cycle acceptance not run.
+
+## Historical source checkpoints (superseded where above differs)
+
 # Android operations recovery — production-based candidate
 
 ## Publication continuation — 9 November 2026 Riyadh
