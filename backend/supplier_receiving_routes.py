@@ -3388,6 +3388,26 @@ async def supplier_scan_group_candidates(
     return candidates
 
 
+def _scan_is_in_open_draft(
+    scan: dict[str, Any], piece: dict[str, Any] | None, session_id: str,
+) -> bool:
+    if not piece:
+        return False
+    reserved_session_id = _text(piece.get("supplier_receiving_session_id"))
+    receipt_event_id = _text(piece.get("receipt_event_id"))
+    scan_id = _text(scan.get("id"))
+    if scan_id or receipt_event_id:
+        return reserved_session_id == session_id and receipt_event_id == scan_id
+    # Preserve unkeyed draft scans only while there is no evidence the piece left.
+    return (
+        reserved_session_id in {"", session_id}
+        and not piece.get("supplier_receiving_history")
+        and not piece.get("received_at")
+        and _text(piece.get("status")) != PIECE_STATUS_RECEIVED
+        and _text(piece.get("execution_status")) != "received_from_supplier"
+    )
+
+
 @profiled("session_events")
 async def _recent_session_events(
     db: Any,
@@ -3450,13 +3470,12 @@ async def _recent_session_events(
             if _text(row.get("piece_id"))
         }
         if _text(session.get("status")) == "open":
-            # A scan is still part of the draft only while the physical piece
-            # points back to that exact reservation. Keep older scans as audit history.
+            # Derive the draft from current piece ownership and leave the scan audit intact.
             rows = [
                 row for row in rows
-                if (piece := pieces_by_id.get(_text(row.get("piece_id")))) is not None
-                and _text(piece.get("supplier_receiving_session_id")) == session_id
-                and _text(piece.get("receipt_event_id")) == _text(row.get("id"))
+                if _scan_is_in_open_draft(
+                    row, pieces_by_id.get(_text(row.get("piece_id"))), session_id,
+                )
             ]
             if not rows:
                 return []
