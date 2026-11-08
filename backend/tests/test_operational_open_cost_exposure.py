@@ -915,3 +915,43 @@ def test_confirmed_product_and_service_are_not_repriced_or_estimated_twice():
     assert exposure["currencies"]["SAR"]["current_supplier_confirmed"] == "96.80"
     assert exposure["currencies"]["SAR"].get("poststart_supplier_unreceived", "0.00") == "0.00"
     assert updated["engine"]["facts"] == prior["engine"]["facts"]
+
+
+def prepaid_forecast_fixture(status='in_progress', carrier='aramex'):
+    db = seeded_db(native_order(created='2026-11-01T01:00:00+00:00', status=status,
+                               shipping={'company_code': carrier, 'status': 'pending'}))
+    state = operating_state()
+    state.update(owner_id='owner', courier_tariffs=[{
+        'id': 'aramex', 'name': 'Aramex', 'keys': ['aramex'], 'currency': 'SAR',
+        'terms': {'cost_per_order': '30', 'vat_percent': '15'}, 'payment_mode': 'prepaid',
+        'cash_account': {'id': 'cash', 'name': 'Cash', 'currency': 'SAR', 'kind': 'cash'},
+        'version_id': 'approved', 'effective_from': START, 'confirmed_by': 'owner',
+        'confirmed_at': START,
+    }])
+    return db, state
+
+
+@pytest.mark.parametrize('status', ['in_progress', 'completed', 'shipping'])
+def test_current_prepaid_order_without_charge_has_unknown_shipping_forecast(status):
+    db, state = prepaid_forecast_fixture(status)
+    before = deepcopy((db.data, state))
+    result = preview(db, state)
+    assert 'current_prepaid_shipping_forecast_eligibility_unverified' in codes(result)
+    assert result['bucket_completeness']['shipping_expected'] is False
+    assert result['bucket_completeness']['products_unreceived'] is True
+    assert result['bucket_completeness']['products_received_uninvoiced'] is True
+    assert result['complete'] is False
+    assert not group(result, period='current', kind='courier')
+    assert before == (db.data, state)
+
+
+@pytest.mark.parametrize('case', ['charged', 'closed', 'different_carrier', 'native_driver'])
+def test_current_prepaid_forecast_gap_does_not_claim_unrelated_or_paid_cost(case):
+    db, state = prepaid_forecast_fixture('cancelled' if case == 'closed' else 'in_progress',
+                                        'different' if case == 'different_carrier' else 'aramex')
+    if case == 'charged':
+        state['engine']['facts'] = {'prepaid_shipping:salla-OLD': {'immutable': True}}
+    if case == 'native_driver':
+        db.data['store_delivery_assignments'] = [row(order_number='OLD', status='assigned', driver_id='d')]
+    result = preview(db, state)
+    assert 'current_prepaid_shipping_forecast_eligibility_unverified' not in codes(result)

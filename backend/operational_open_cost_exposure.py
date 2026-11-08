@@ -194,6 +194,24 @@ async def project(db, owner, state, *, as_of=None):
         if created > started:
             current_stages[oid] = _cutover_group(status)
             current_statuses[oid] = status
+            # Prepaid charges enter the engine only on proven completion. An
+            # uncharged open order therefore has no delivery-fee obligation to
+            # cover its future shipping cost. Do not report complete coverage
+            # from that absence: a current open status cannot prove that the
+            # order was never completed and subsequently reopened.
+            shipping = record.get("salla_shipping_current") or raw.get("salla_shipping_current") or raw.get("shipping") or {}
+            if isinstance(shipping, dict) and status not in CLOSED and not assignments.get(num):
+                carrier = shipping.get("company_code") or shipping.get("company") or shipping.get("company_name")
+                prepaid_parties = {str(rate.get("party_id")) for rate in setup.get("contracts", [])
+                    if rate.get("status") == "approved" and rate.get("context") == "order_completed"
+                    and rate.get("payment_mode") == "prepaid"}
+                prepaid = any(usable(c) and c.get("confirmed_by") and c.get("confirmed_at")
+                    and str(c.get("courier_key")) in prepaid_parties and matches_courier_key(c, carrier)
+                    for c in setup.get("couriers", []))
+                if prepaid and not state.get("engine", {}).get("facts", {}).get("prepaid_shipping:" + oid):
+                    code = "current_prepaid_shipping_forecast_eligibility_unverified"
+                    issues[code] += 1
+                    declared_scopes[code] = {"shipping_expected"}
             continue
         if status not in OPEN | CLOSED:
             issues["historical_order_status_unverified"] += 1
