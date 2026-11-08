@@ -73,6 +73,8 @@ jobs:
           backend/tests/test_operational_profit_period.py
           backend/tests/test_operational_profit_period_expenses.py
           backend/tests/test_operational_profit_returns.py
+          backend/tests/test_operational_financial_computed_dependencies.py
+          backend/tests/test_operational_provider_fee_comparison.py
           backend/tests/test_store_delivery_released_client_compatibility.py
           backend/tests/test_provider_fee_source_terms.py
           backend/tests/test_provider_fee_runtime_binding.py
@@ -109,6 +111,8 @@ jobs:
           assert len([c for c in cases if 'test_operational_balance_salary_start_mongo' in c.get('classname', '')]) == 5
           assert len([c for c in cases if 'test_operational_driver_review_mongo' in c.get('classname', '')]) == 14
           for suite in ('test_operational_profit_period', 'test_operational_profit_period_expenses',
+                        'test_operational_profit_returns', 'test_operational_financial_computed_dependencies',
+                        'test_operational_provider_fee_comparison',
                         'test_store_delivery_released_client_compatibility',
                         'test_operational_balance_tabby_plan_scope', 'test_operational_balance_emkan_aramex_release',
                         'test_operational_balance_daily_totals_permissions'):

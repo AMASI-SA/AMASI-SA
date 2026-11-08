@@ -89,3 +89,17 @@ def test_known_unsettled_provider_calculation_is_ready_but_statement_is_not_cert
     result = provider_evidence_coverage(projection)[0]
     assert result["status"] == "incomplete"
     assert result["affected_order_count"] == 1
+
+
+def test_provider_order_repeated_as_raw_prefixed_and_split_identity_is_one_affected_case():
+    issues = [
+        {"code":"provider_capture_evidence_incomplete","source_id":"one","scope":"provider_payment","provider":"tabby"},
+        {"code":"provider_payment_plan_required","source_id":"provider:one","scope":"provider_payment","provider":"tabby"},
+        {"code":"provider_fee_policy_incomplete_or_ambiguous","source_id":"provider:one:tabby","provider":"tabby"},
+    ]
+    result = build_financial_position(snapshot(*issues))
+    assert table(result,"providers")["coverage"]["affected_source_count"] == 1
+    diagnostic = next(r for r in result["dependencies"] if r["code"] == "provider_evidence_coverage_tabby")
+    assert diagnostic["affected_order_count"] == 1
+    assert diagnostic["status"] == "incomplete"
+    assert len(table(result,"providers")["coverage"]["issues"]) >= 3

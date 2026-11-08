@@ -70,8 +70,19 @@ def table_coverage(identity, issues, *, as_of, started_at, currency):
     relevant = [deepcopy(row) for row in issues
                 if row.get("currency") in {None, currency} and identity in affected_tables(row)]
     # A provider summary is a diagnostic aggregate, not another affected order.
-    ids = {str(row["source_id"]) for row in relevant if row.get("source_id")
-           and row.get("code") != "provider_net_balance_incomplete"}
+    ids = set()
+    for row in relevant:
+        if not row.get("source_id") or row.get("code") == "provider_net_balance_incomplete":
+            continue
+        source = str(row["source_id"])
+        if (row.get("scope") == "provider_payment" or source.startswith("provider:")):
+            source = source.removeprefix("provider:")
+            provider = str(row.get("provider") or "")
+            if provider:
+                source = source.removesuffix(":" + provider)
+            ids.add(("provider_order", source))
+        else:
+            ids.add(("source", source))
     unknown = sum(1 for row in relevant if not row.get("source_id"))
     return {"complete": bool(as_of) and not relevant, "as_of": as_of, "started_at": started_at,
             "currency": currency, "issues": relevant, "affected_source_count": len(ids),

@@ -329,5 +329,14 @@
     "diagnosis": "The inherited intent correctly rejected modified backend bytes. Source-A fallback then rejected advanced PR base 00e716fb as not an ancestor of checkpoint6e3f. No waiver or rerun. The corrected source is prepared directly on the new reviewed base.",
     "backend_preflight": "Passed",
     "host_engine_contracts": "Actual host20.20.2 and24.19.0 dispatcher contracts passed; clean-clone adapter steps were not reached."
+  },
+  "financial_admin_continuation": {
+    "date": "2026-11-08",
+    "pr": 1806,
+    "branch": "codex/financial-admin-integration-20261108",
+    "checkpoint": "481eca06f310c1ff542d4d41664d49d403b7c606",
+    "status_path": "docs/operations/FINANCIAL-ADMIN-INTEGRATION-20261108/STATUS.md",
+    "production_changed_by_task": false,
+    "release_blocker": "another active lease: codex-supplier-receiving-1809"
   }
 }

@@ -60,6 +60,7 @@ def provider_evidence_coverage(projection):
             if not order.startswith("provider:"):
                 continue
             order = order[len("provider:"):]
+        order = order.removeprefix("provider:")
         if not order:
             continue
         party = issue.get("provider") or party_for_order.get(order) or "unassigned"

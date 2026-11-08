@@ -34,3 +34,8 @@ The new test name matches the existing Operational Balance Web workflow's test_o
 - Current authenticated operational snapshot, source warnings/unique affected orders and screen/export/print parity.
 
 No main/Production branch update, release-intent change, merge, lease, publication, APK build, live approval, backfill or financial mutation was made. Keep this candidate Draft until integrated and reviewed; current owner authorization does not waive V5 or actual release acceptance.
+
+
+## Authorized integration continuation (2026-11-08)
+
+This original checkpoint is preserved. Compatible implementation continues in PR1806, branch codex/financial-admin-integration-20261108, recorded checkpoint481eca06f310c1ff542d4d41664d49d403b7c606. Read docs/operations/FINANCIAL-ADMIN-INTEGRATION-20261108/STATUS.md for latest source/tests and blockers. Owner authorized eventual governed publication; another active supplier-receiving lease still blocks shared release work. No task publication or live financial/configuration write has occurred. No courier APK required.
