@@ -1,27 +1,49 @@
 """Small navigation directories; selected sections retain canonical detail gates."""
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
-from zoneinfo import ZoneInfo
 import re
 
 from order_engine.repository import _STATUS_PATTERNS
 from order_engine.service import _provider_status_native
+from preparation_progress_dates import DateBasis, piece_progress_day
 
 
 def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
-def _day(value: Any) -> str:
-    try:
-        date = value if isinstance(value, datetime) else datetime.fromisoformat(_text(value).replace("Z", "+00:00"))
-        if date.tzinfo is None:
-            date = date.replace(tzinfo=ZoneInfo("UTC"))
-        return date.astimezone(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d")
-    except (ValueError, TypeError):
-        return "__unknown__"
+_ASSIGNMENT_DATE_PROJECTION = {field: 1 for field in (
+    "responsible_employee_id", "employee_assigned_at", "assigned_at",
+    "assignment_history.assignment_id", "assignment_history.assigned_at",
+    "assignment_history.responsible_employee_id", "assignment_history.reason",
+    "assignment_history.source",
+)}
+
+
+async def _registry_dates(db: Any, *, user_id: str, pieces: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    from preparation_supplier_dispatch import REGISTRY
+
+    batch_ids = sorted({_text(row.get("batch_id")) for row in pieces} - {""})
+    if not batch_ids:
+        return {}
+    rows = await db[REGISTRY].find(
+        {"user_id": user_id, "batch_id": {"$in": batch_ids}},
+        {"_id": 0, "batch_id": 1, "created_at": 1, "registered_at": 1},
+    ).to_list(None)
+    return {_text(row.get("batch_id")): row for row in rows}
+
+
+async def _file_day_registries(db: Any, *, user_id: str, day: str) -> dict[str, dict[str, Any]]:
+    from preparation_supplier_dispatch import REGISTRY
+    # Keep the legacy day→batch restriction in Mongo before fetching physical
+    # piece metadata. The legacy selector uses registration, not creation.
+    registered = {"$convert": {"input": "$registered_at", "to": "date", "onError": None, "onNull": None}}
+    rows = await db[REGISTRY].find({"user_id": user_id, "$expr": {"$eq": [
+        {"$dateToString": {"date": registered, "format": "%Y-%m-%d",
+            "timezone": "Asia/Riyadh", "onNull": "__unknown__"}}, day]}},
+        {"_id": 0, "batch_id": 1, "created_at": 1, "registered_at": 1}).to_list(None)
+    return {_text(row.get("batch_id")): row for row in rows if _text(row.get("batch_id"))}
 
 
 async def _nonterminal_numbers(db: Any, user_id: str, numbers: list[str]) -> set[str]:
@@ -38,29 +60,30 @@ async def _nonterminal_numbers(db: Any, user_id: str, numbers: list[str]) -> set
         status = _provider_status_native(raw, current_status=row.get("order_status"))
         effective = " ".join(_text(status).replace("_", " ").casefold().split())
         if any(re.fullmatch(_STATUS_PATTERNS[group], effective, re.IGNORECASE)
-               for group in ("completed", "shipping", "cancelled", "refunded")):
+                 for group in ("completed", "shipping", "cancelled", "refunded")):
             remaining.discard(_text(row.get("order_number")))
     return remaining
 
 
-async def progress_day_batches(db: Any, *, user_id: str, employee_id: str) -> dict[str, list[str]]:
-    from preparation_supplier_dispatch import PIECES, REGISTRY
+async def progress_day_batches(
+    db: Any, *, user_id: str, employee_id: str, date_basis: DateBasis = "file_created_at",
+) -> dict[str, list[str]]:
+    from preparation_supplier_dispatch import PIECES, DISPATCHES
 
     # Only outstanding physical pieces produce dates. No quantity or product
     # details cross this boundary; fully received/completed dates disappear.
-    candidates = await db[PIECES].aggregate([
-        {"$match": {"user_id": user_id, "responsible_employee_id": employee_id,
+    candidates = await db[PIECES].find(
+        {"user_id": user_id, "responsible_employee_id": employee_id,
             "experiment_archived_at": None,
             "status": {"$in": ["assigned", "in_progress", "ready_for_receipt"]},
             "$or": [
                 {"supplier_dispatch_status": {"$in": ["sent", "ready", "partial_received"]}},
                 {"supplier_receiving_history.0": {"$exists": True}},
-            ]}},
-        {"$group": {"_id": {"batch": "$batch_id", "order": "$order_number"},
-                    "piece_ids": {"$addToSet": "$piece_id"}}},
-    ]).to_list(None)
-    from preparation_supplier_dispatch import DISPATCHES
-    candidate_ids = sorted({_text(pid) for row in candidates for pid in row["piece_ids"]} - {""})
+            ]},
+        {"_id": 0, "batch_id": 1, "order_number": 1, "piece_id": 1,
+         **(_ASSIGNMENT_DATE_PROJECTION if date_basis == "employee_assigned_at" else {})},
+    ).to_list(None)
+    candidate_ids = sorted({_text(row.get("piece_id")) for row in candidates} - {""})
     dispatched = await db[DISPATCHES].find(
         {"user_id": user_id, "sent_by_id": employee_id, "status": {"$ne": "building"},
          "source_files.cards.piece_id": {"$in": candidate_ids}},
@@ -68,28 +91,28 @@ async def progress_day_batches(db: Any, *, user_id: str, employee_id: str) -> di
     ).to_list(None) if candidate_ids else []
     dispatched_ids = {_text(card.get("piece_id")) for row in dispatched
                       for source in row.get("source_files") or [] for card in source.get("cards") or []}
-    candidates = [row for row in candidates if dispatched_ids.intersection(row["piece_ids"])]
-    numbers = sorted({_text(row["_id"].get("order")) for row in candidates} - {""})
+    candidates = [row for row in candidates if _text(row.get("piece_id")) in dispatched_ids]
+    numbers = sorted({_text(row.get("order_number")) for row in candidates} - {""})
     live = await _nonterminal_numbers(db, user_id, numbers) if numbers else set()
-    batch_ids = sorted({_text(row["_id"].get("batch")) for row in candidates
-                        if _text(row["_id"].get("order")) in live} - {""})
-    if not batch_ids:
-        return {}
-    registry = await db[REGISTRY].find(
-        {"user_id": user_id, "batch_id": {"$in": batch_ids}},
-        {"_id": 0, "batch_id": 1, "registered_at": 1},
-    ).to_list(None)
-    dates = {_text(row.get("batch_id")): _day(row.get("registered_at")) for row in registry}
-    result: dict[str, list[str]] = {}
-    for batch_id in batch_ids:
-        result.setdefault(dates.get(batch_id, "__unknown__"), []).append(batch_id)
-    return result
+    candidates = [row for row in candidates if _text(row.get("order_number")) in live]
+    registry = (await _registry_dates(db, user_id=user_id, pieces=candidates)
+                if date_basis == "file_created_at" else {})
+    result: dict[str, set[str]] = {}
+    for row in candidates:
+        batch_id = _text(row.get("batch_id"))
+        if batch_id:
+            key = piece_progress_day(row, registry.get(batch_id, {}), date_basis)
+            result.setdefault(key, set()).add(batch_id)
+    return {key: sorted(batches) for key, batches in result.items()}
 
 
-async def progress_days(db: Any, *, user_id: str, employee_id: str) -> dict[str, Any]:
-    dates = await progress_day_batches(db, user_id=user_id, employee_id=employee_id)
+async def progress_days(
+    db: Any, *, user_id: str, employee_id: str, date_basis: DateBasis = "file_created_at",
+) -> dict[str, Any]:
+    dates = await progress_day_batches(db, user_id=user_id, employee_id=employee_id, date_basis=date_basis)
     keys = sorted(dates, key=lambda key: (key != "__unknown__", key), reverse=True)
-    return {"ok": True, "employee_id": employee_id, "days": [{"key": key} for key in keys], "read_only": True}
+    return {"ok": True, "employee_id": employee_id, "days": [{"key": key} for key in keys],
+            "read_only": True, "date_basis": date_basis}
 
 
 def _dispatch_ids(row: dict[str, Any]) -> set[str]:
@@ -97,28 +120,33 @@ def _dispatch_ids(row: dict[str, Any]) -> set[str]:
             for card in source.get("cards") or [] if _text(card.get("piece_id"))}
 
 
-async def progress_workspace(db: Any, *, user_id: str, employee_id: str, day: str, after: str = "") -> dict[str, Any]:
+async def progress_workspace(
+    db: Any, *, user_id: str, employee_id: str, day: str, after: str = "",
+    date_basis: DateBasis = "file_created_at",
+) -> dict[str, Any]:
     from preparation_supplier_dispatch import (
-        PIECES, REGISTRY, DISPATCHES, _employee_workspace, _piece_products,
+        PIECES, DISPATCHES, _employee_workspace, _piece_products,
         piece_is_available_for_supplier_dispatch, annotate_waiting_pieces,
     )
-    # Date selection reads registry metadata, not every employee product.
-    if day == "__unknown__":
-        dates = await progress_day_batches(db, user_id=user_id, employee_id=employee_id)
-        batches = dates.get(day, [])
-    else:
-        registry = await db[REGISTRY].find({"user_id": user_id, "$expr": {"$eq": [
-            {"$dateToString": {"date": {"$convert": {"input": "$registered_at", "to": "date", "onError": None, "onNull": None}},
-                "format": "%Y-%m-%d", "timezone": "Asia/Riyadh", "onNull": "__unknown__"}}, day]}},
-            {"_id": 0, "batch_id": 1}).to_list(None)
-        batches = [_text(row.get("batch_id")) for row in registry]
     projection = {field: 1 for field in (
         "piece_id", "batch_id", "order_number", "order_item_id", "unit_index", "status",
         "assignment_status", "supplier_id", "supplier_dispatch_id", "supplier_dispatch_status",
         "sent_to_supplier_by_id", "supplier_receiving_session_id", "branch_handoff_at")}
-    metadata = await db[PIECES].find({"user_id": user_id, "responsible_employee_id": employee_id,
-        "experiment_archived_at": None, "status": {"$ne": "cancelled"}, "batch_id": {"$in": batches}},
-        {"_id": 0, **projection}).to_list(None)
+    if date_basis == "employee_assigned_at":
+        projection.update(_ASSIGNMENT_DATE_PROJECTION)
+    # A batch can contain assignments from several days. Select exact pieces
+    # before counting/pagination. File-date callers retain their day/batch
+    # narrowing; assignment-date callers need no registry date read at all.
+    registry = (await _file_day_registries(db, user_id=user_id, day=day)
+                if date_basis == "file_created_at" else {})
+    query = {"user_id": user_id, "responsible_employee_id": employee_id,
+             "experiment_archived_at": None, "status": {"$ne": "cancelled"}}
+    if date_basis == "file_created_at":
+        query["batch_id"] = {"$in": list(registry)}
+    metadata = await db[PIECES].find(query, {"_id": 0, **projection}).to_list(None)
+    metadata = [row for row in metadata if _text(row.get("batch_id"))
+                and piece_progress_day(row, registry.get(_text(row.get("batch_id")), {}), date_basis) == day]
+    batches = sorted({_text(row.get("batch_id")) for row in metadata} - {""})
     numbers = sorted({_text(row.get("order_number")) for row in metadata} - {""})
     live = await _nonterminal_numbers(db, user_id, numbers) if numbers else set()
     metadata = [row for row in metadata if _text(row.get("order_number")) in live]
@@ -176,7 +204,7 @@ async def progress_workspace(db: Any, *, user_id: str, employee_id: str, day: st
     page_ids = available[:10]
     workspace = await _employee_workspace(db, user_id=user_id, employee_id=employee_id,
         limit=10, piece_grain=True, batch_ids=batches, piece_ids=page_ids, dispatch_rows=dispatches)
-    return {"ok": True, "read_only": True, **workspace,
+    return {"ok": True, "read_only": True, **workspace, "date_basis": date_basis,
         "next_cursor": page_ids[-1] if len(available) > 10 else None,
         "progress_day_summary": day_summary, "progress_supplier_totals": supplier_totals,
         "progress_active_piece_ids": remaining_ids}

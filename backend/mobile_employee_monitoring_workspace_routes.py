@@ -111,13 +111,15 @@ def make_mobile_employee_monitoring_workspace_router(
     async def employee_progress_days(employee_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
         owner_id, account_id = await progress_target(employee_id, user)
         from preparation_section_reads import progress_days
-        return await progress_days(db, user_id=owner_id, employee_id=account_id)
+        return await progress_days(db, user_id=owner_id, employee_id=account_id,
+                                   date_basis="employee_assigned_at")
 
     @router.get("/preparation/{employee_id}/progress-workspace")
     async def employee_progress_workspace(employee_id: str, day: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$|^__unknown__$"), after: str = Query("", max_length=512), user: dict = Depends(current_user)) -> dict[str, Any]:
         owner_id, account_id = await progress_target(employee_id, user)
         from preparation_section_reads import progress_workspace
-        return await progress_workspace(db, user_id=owner_id, employee_id=account_id, day=day, after=after)
+        return await progress_workspace(db, user_id=owner_id, employee_id=account_id, day=day, after=after,
+                                        date_basis="employee_assigned_at")
 
     @router.get("/preparation/{employee_id}/workspace")
     async def employee_workspace(

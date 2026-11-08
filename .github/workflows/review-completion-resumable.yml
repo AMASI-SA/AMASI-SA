@@ -28,6 +28,17 @@ on:
       - "backend/review_gift_address.py"
       - "backend/tests/test_review_gift_address.py"
       - "backend/preparation_piece_operations.py"
+      - "backend/mobile_order_refresh.py"
+      - "backend/assembly_manual_label_refresh.py"
+      - "backend/preparation_progress_dates.py"
+      - "backend/preparation_section_reads.py"
+      - "backend/preparation_supplier_dispatch.py"
+      - "backend/mobile_employee_monitoring_workspace_routes.py"
+      - "backend/order_engine/amasi_shipping_compat.py"
+      - "backend/tests/test_amasi_shipping_compat.py"
+      - "backend/tests/test_mobile_assembly_refresh_actions.py"
+      - "backend/tests/test_preparation_progress_dates.py"
+      - "backend/tests/test_preparation_lazy_sections.py"
       - "backend/preparation_receipt_status_message.py"
       - "backend/assembly_completion_delivery.py"
       - "backend/assembly_print_completion.py"
@@ -84,6 +95,7 @@ jobs:
       PYTHON_DOTENV_DISABLED: "1"
       MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=reviewtest
       BUILD37_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=reviewtest
+      WAITING_TEST_MONGO_URL: mongodb://127.0.0.1:27018/?replicaSet=reviewtest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -119,6 +131,29 @@ jobs:
             sleep 1
           done
           docker exec review-rs mongosh --port 27018 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'
+      - name: Verify Android operation recovery with disposable Mongo
+        run: |
+          python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
+            tests/test_mobile_assembly_refresh_actions.py \
+            tests/test_preparation_progress_dates.py \
+            tests/test_preparation_lazy_sections.py \
+            tests/test_preparation_piece_operations.py \
+            tests/test_amasi_shipping_compat.py \
+            tests/test_assembly_completion_delivery.py \
+            tests/test_assembly_completion_scheduling.py \
+            tests/test_assembly_direct_preparation_receipt.py \
+            tests/test_mobile_app_request_context.py \
+            tests/test_order_review_operational_images.py \
+            --junitxml="$RUNNER_TEMP/android-operations.xml"
+          python - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          cases = ET.parse(Path(os.environ['RUNNER_TEMP']) / 'android-operations.xml').findall('.//testcase')
+          assert len(cases) >= 200, ('Missing focused operation cases', len(cases))
+          assert not [case.attrib for case in cases if any(case.find(tag) is not None for tag in ('skipped', 'failure', 'error'))]
+          print(f'Android operations: {len(cases)} executed cases; zero skips/failures/errors')
+          PY
       - name: Run local approval and retained provider contract regressions
         run: >-
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short
@@ -231,6 +266,7 @@ jobs:
           path: |
             ${{ runner.temp }}/review-completion.xml
             ${{ runner.temp }}/review-acceptance-guard.xml
+            ${{ runner.temp }}/android-operations.xml
           if-no-files-found: error
       - name: Remove this job's disposable fixture
         if: always()

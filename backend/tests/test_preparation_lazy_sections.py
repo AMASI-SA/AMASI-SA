@@ -20,6 +20,7 @@ async def progress_seed(db, number, day, *, piece_status="in_progress", order_st
     await seed_order(db, number, current=order_status)
     piece = await seed_piece(db, number, batch_id="batch-" + number,
         status=piece_status, supplier_dispatch_status="sent", supplier_id="supplier",
+        employee_assigned_at=day + "T09:00:00+03:00",
         sent_to_supplier_by_id=worker or OWNER["id"], responsible_employee_id=worker or OWNER["id"])
     await db.raw[dispatch.REGISTRY].insert_one({"user_id": OWNER["id"], "batch_id": piece["batch_id"],
         "file_number": "file-" + number, "registered_at": day + "T23:00:00+03:00"})

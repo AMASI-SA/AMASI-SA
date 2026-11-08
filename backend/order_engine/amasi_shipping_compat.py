@@ -646,7 +646,7 @@ async def local_mezan_courier_label(db, owner: str, number: str, workflow: dict,
             "status": "store_courier", "print_data": data, "message": "تم تجهيز بوليصة مندوب المتجر."}
 
 
-async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, completed_only: bool = False) -> dict[str, Any]:
+async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, completed_only: bool = False, explicit_complete: bool = False) -> dict[str, Any]:
     """One Salla order-status POST when needed; read the original carrier AWB.
 
     A rejected or ambiguous status acknowledgement is reconciled by GET,
@@ -663,6 +663,19 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, 
         raise legacy.ShippingLabelError("salla_order_reference_mismatch", "تعذّر تأكيد هوية الطلب في سلة.")
     if status in _CANCELLED | {"refunded"}:
         raise legacy.ShippingLabelError("order_cancelled", "الطلب ملغى أو مسترجع في سلة.")
+    if explicit_complete:
+        # Only the explicit, locally fenced refresh endpoint enables this. An
+        # acknowledged status write flows straight to shipment lookup: no
+        # verification GET, polling or automatic status-POST retry in between.
+        if status not in {"in_progress", "completed"}:
+            raise legacy.ShippingLabelError("order_status_not_completed", "حالة الطلب لا تسمح بإعادة تأكيد التنفيذ.")
+        acknowledgement = await call_salla(db, owner, "POST", f"/orders/{internal_id}/status",
+                         json={"slug": "completed"}, single_post_attempt=True)
+        if not isinstance(acknowledgement, dict) or acknowledgement.get("success") is not True:
+            raise legacy.ShippingLabelError("completion_status_unconfirmed",
+                "لم تؤكد سلة نجاح تحديث الحالة؛ أعد التحقق من الطلب.", status_code=502)
+        order = {**order, "status": {"slug": "completed"}, "status_slug": "completed"}
+        status = "completed"
     if completed_only and status == "in_progress":
         raise legacy.ShippingLabelError("carrier_order_in_progress", "لم تؤكد سلة تنفيذ الطلب بعد.")
     printable = {"completed"} if completed_only else {"completed", *_DONE}

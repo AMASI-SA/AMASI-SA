@@ -285,7 +285,9 @@ async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manua
         await operational_owner(db, user_id, enroll)
     instant = now()
     query = {"user_id": user_id, "order_number": order_number, "assembly_status": "completed",
-             f"{FIELD}.version": {"$in": [1, 2]}, f"{FIELD}.lease_until": {"$lte": instant.isoformat()}}
+             f"{FIELD}.version": {"$in": [1, 2]}, f"{FIELD}.lease_until": {"$lte": instant.isoformat()},
+             "$or": [{"manual_label_refresh.until": {"$exists": False}},
+                     {"manual_label_refresh.until": {"$lte": instant.isoformat()}}]}
     if not manual:
         query.update({f"{FIELD}.state": "pending", f"{FIELD}.due_at": {"$lte": instant.isoformat()},
                       f"{FIELD}.attempts": {"$lt": MAX_ATTEMPTS}})
