@@ -124,6 +124,10 @@ async def test_old_owner_cannot_write_or_clear_new_owner_lock(env, monkeypatch):
 async def test_crashed_worker_expires_without_replaying_post(env, monkeypatch):
     db, http, _ = env
     session, pieces = await seed(env)
+    await db[attempts.ATTEMPTS].insert_one({
+        '_id': 'unfenced-legacy-attempt', 'user_id': 'merchant', 'session_id': 'another-session',
+        'state': 'in_progress', 'expires_at': await attempts.server_now(db) - timedelta(seconds=1),
+    })
     original = attempts.settle_aborted
     async def unavailable(*args, **kwargs):
         raise ConnectionError('process cannot clean up')
@@ -138,8 +142,49 @@ async def test_crashed_worker_expires_without_replaying_post(env, monkeypatch):
     monkeypatch.setattr(attempts, 'settle_aborted', original)
     await attempts.expire_attempts(db)
     assert (await outcome(http, session['id'], 'crashed-worker-01'))['outcome'] == 'rejected'
+    assert (await db[attempts.ATTEMPTS].find_one({'_id': 'unfenced-legacy-attempt'}))['state'] == 'in_progress'
     assert not (await db[r.SESSIONS].find_one({'id': session['id']})).get('scan_lock_token')
     assert await db[r.RECEIVING_EVENTS].count_documents({}) == 0
+
+
+@pytest.mark.parametrize('action', ['cancel', 'refresh'])
+async def test_expired_scan_recovers_without_background_sweep(env, action):
+    db, http, _ = env
+    session, pieces = await seed(env, 2)
+    session_id = session['id']
+    confirmed = await post_scan(http, session_id, pieces[0], 'confirmed-before-crash', 1)
+    assert confirmed.status_code == 200, confirmed.text
+
+    request_id = 'expired-after-client-reset'
+    now = await attempts.server_now(db)
+    expired = now - timedelta(seconds=10)
+    old_attempt = {
+        '_id': attempts.attempt_key('merchant', session_id, request_id),
+        'user_id': 'merchant', 'session_id': session_id, 'client_request_id': request_id,
+        'state': 'in_progress', 'token': 'expired-fence', 'expires_at': expired,
+    }
+    await db[attempts.ATTEMPTS].insert_one(old_attempt)
+    await db[attempts.ATTEMPTS].insert_one({
+        **old_attempt, '_id': 'another-session-attempt', 'session_id': 'other-session',
+    })
+    await db[r.SESSIONS].update_one({'id': session_id}, {'$set': {
+        'scan_lock_token': old_attempt['token'], 'scan_lock_expires_at': expired,
+    }})
+
+    response = await http.post(f'/supplier-receiving-v1/sessions/{session_id}/{action}', json={})
+    assert response.status_code == 200, response.text
+    stored = await db[attempts.ATTEMPTS].find_one({'_id': old_attempt['_id']})
+    assert stored['state'] == 'rejected'
+    assert stored['detail']['code'] == 'supplier_receiving_scan_expired'
+    other = await db[attempts.ATTEMPTS].find_one({'_id': 'another-session-attempt'})
+    assert other['state'] == 'in_progress'
+    saved = await db[r.SESSIONS].find_one({'id': session_id})
+    assert not saved.get('scan_lock_token')
+    assert saved['status'] == ('cancelled' if action == 'cancel' else 'open')
+    attached = await db[r.PIECES].find({'supplier_receiving_session_id': session_id}).to_list(2)
+    assert [p['piece_id'] for p in attached] == ([] if action == 'cancel' else [pieces[0]['piece_id']])
+    assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 0
+    assert await db.general_ledger.count_documents({}) == 0
 
 
 async def test_pending_attempt_blocks_cancel_and_other_employee(env, monkeypatch):
@@ -159,6 +204,8 @@ async def test_pending_attempt_blocks_cancel_and_other_employee(env, monkeypatch
     assert (await outcome(http, session['id'], 'competing-request-1'))['outcome'] == 'rejected'
     cancel = await http.post(f"/supplier-receiving-v1/sessions/{session['id']}/cancel", json={})
     assert cancel.status_code == 409 and cancel.json()['detail']['code'] == 'supplier_receiving_scans_pending'
+    refresh = await http.post(f"/supplier-receiving-v1/sessions/{session['id']}/refresh")
+    assert refresh.status_code == 409 and refresh.json()['detail']['code'] == 'supplier_receiving_scans_pending'
     identity['id'] = 'another-employee'
     denied = await post_scan(http, session['id'], pieces[1], 'other-employee-1', 1)
     assert denied.status_code == 403
