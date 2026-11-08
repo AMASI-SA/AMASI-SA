@@ -98,6 +98,7 @@ const CustomerCohortReport = lazy(() => import("./pages/CustomerCohortReport"));
 const SallaSettlements = lazy(() => import("./pages/SallaSettlements"));
 const SettlementsOverview = lazy(() => import("./pages/SettlementsOverview"));
 const AlertsPage = lazy(() => import("./pages/AlertsPage"));
+const ProductPriceChangeRequest = lazy(() => import("./pages/ProductPriceChangeRequest"));
 const UnifiedEntryScreen = lazy(() => import("./pages/UnifiedEntryScreen"));
 const LedgerTransactionsPage = lazy(() => import("./pages/LedgerTransactionsPage"));
 const MigrationWizard = lazy(() => import("./pages/MigrationWizard"));
@@ -248,6 +249,7 @@ function AppRoutes() {
             <Route path="/salla-settlements" element={<ProtectedRoute><Layout><SallaSettlements /></Layout></ProtectedRoute>} />
             <Route path="/settlements-overview" element={<ProtectedRoute><Layout><SettlementsOverview /></Layout></ProtectedRoute>} />
             <Route path="/alerts" element={<ProtectedRoute><Layout><AlertsPage /></Layout></ProtectedRoute>} />
+            <Route path="/price-change-requests/:requestId" element={<ProtectedRoute><OwnerOnlyRoute><Layout><ProductPriceChangeRequest /></Layout></OwnerOnlyRoute></ProtectedRoute>} />
             <Route path="/new-transaction" element={<ProtectedRoute><Layout><UnifiedEntryScreen /></Layout></ProtectedRoute>} />
             <Route path="/transactions" element={<ProtectedRoute><Layout><LedgerTransactionsPage /></Layout></ProtectedRoute>} />
             <Route path="/accounting/migration" element={<ProtectedRoute><Layout><MigrationWizard /></Layout></ProtectedRoute>} />

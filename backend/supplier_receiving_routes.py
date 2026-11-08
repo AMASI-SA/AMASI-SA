@@ -616,6 +616,15 @@ def group_supplier_invoice_lines_for_display(
                 + Decimal(str(incoming.get("total_quantity") or 0))
             )
             current["total_halalas"] = int(current.get("total_halalas") or 0) + int(incoming.get("total_halalas") or 0)
+            if incoming.get("invoice_scope_piece_ids"):
+                current["invoice_scope"] = True
+                current["invoice_scope_piece_ids"] = sorted(set(current.get("invoice_scope_piece_ids") or []) | set(incoming["invoice_scope_piece_ids"]))
+                current["eligibility_conditions_by_piece"] = {
+                    **(current.get("eligibility_conditions_by_piece") or {}),
+                    **(incoming.get("eligibility_conditions_by_piece") or {}),
+                }
+                if current.get("eligibility_condition") != incoming.get("eligibility_condition"):
+                    current["eligibility_condition"] = None
     for index, line in enumerate(grouped, start=1):
         line["line_number"] = index
     after_total = sum(int(line.get("total_halalas") or 0) for line in grouped)
@@ -882,6 +891,14 @@ def build_supplier_receiving_invoice(
                 "unit_price_halalas": requested_service_halalas,
                 "total_halalas": service_total,
                 "added_to_product": is_addition,
+                "invoice_scope": any(eligible[service_id].get("invoice_scope") is True for eligible in eligible_maps),
+                "eligibility_condition": reference_row.get("eligibility_condition"),
+                "invoice_scope_piece_ids": [piece_id for piece_id, eligible in zip(piece_ids, eligible_maps) if eligible[service_id].get("invoice_scope") is True],
+                "eligibility_conditions_by_piece": {
+                    piece_id: eligible[service_id].get("eligibility_condition")
+                    for piece_id, eligible in zip(piece_ids, eligible_maps)
+                    if eligible[service_id].get("invoice_scope") is True
+                },
             })
 
         product_total_halalas = quantity * requested_product_halalas
@@ -1710,6 +1727,12 @@ def supplier_service_completion_update(
         for row in invoice_line.get("services") or []
         if _text(row.get("service_id"))
     }
+    for service_id, raw in selected.items():
+        row = dict(raw)
+        if "invoice_scope_piece_ids" in row:
+            row["invoice_scope"] = _text(piece.get("piece_id")) in row["invoice_scope_piece_ids"]
+            row["eligibility_condition"] = (row.get("eligibility_conditions_by_piece") or {}).get(_text(piece.get("piece_id")))
+        selected[service_id] = row
     services: list[dict[str, Any]] = []
     seen: set[str] = set()
     for raw in piece.get("services") or []:
@@ -1745,7 +1768,9 @@ def supplier_service_completion_update(
             "reference_unit_cost": (
                 int(selected_row.get("reference_unit_price_halalas") or 0) / 100
             ),
-            "source": "supplier_receiving_addition",
+            "source": "supplier_invoice_local" if selected_row.get("invoice_scope") else "supplier_receiving_addition",
+            "invoice_scope": selected_row.get("invoice_scope") is True,
+            "condition": selected_row.get("eligibility_condition"),
             "status": "completed",
             "completed_quantity": float(
                 _positive_quantity(selected_row.get("quantity_per_piece"))
@@ -2307,6 +2332,8 @@ async def _supplier_receiving_product(
             "salla_product_id": 1,
             "name": 1,
             "sku": 1,
+            "cost_category_id": 1,
+            "cost_category_name": 1,
         },
         **kwargs,
     )
@@ -3570,7 +3597,9 @@ async def _recent_session_events(
         )
         if result.matched_count != len(batch):
             raise HTTPException(409, detail={"code": "supplier_receiving_piece_changed"})
-    return rows
+    from supplier_invoice_local_services import merge_local_invoice_services
+    return await merge_local_invoice_services(db, user_id=user_id, session_id=session_id,
+        rows=rows, service_catalog=service_catalog if session else {}, mongo_session=mongo_session)
 
 
 def _scan_request_shape(payload: SupplierPieceScanRequest) -> dict[str, Any]:
@@ -3972,6 +4001,8 @@ def make_supplier_receiving_router(
     register_recovery(router, db, current_user, sys.modules[__name__])
 
     install_reconciler(router, db)
+    from supplier_invoice_local_services import register_local_service_routes
+    register_local_service_routes(router, db, current_user)
 
     @router.get("/catalog")
     async def catalog(
@@ -4254,74 +4285,10 @@ def make_supplier_receiving_router(
         context = await _actor_context(db, user)
         _require_permission(context, RECEIVE_PERMISSION)
         _require_permission(context, ADD_PRODUCT_SERVICE_PERMISSION)
-        session = await _session_for_actor(
-            db,
-            context=context,
-            session_id=session_id,
-        )
-        if _text(session.get("status")) != "open":
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "supplier_receiving_session_closed"},
-            )
-        mongo_client = getattr(db, "client", None)
-        if mongo_client is None or not hasattr(mongo_client, "start_session"):
-            raise HTTPException(
-                status_code=503,
-                detail={"code": "supplier_receiving_atomic_transaction_required"},
-            )
-        async with await mongo_client.start_session() as mongo_session:
-            async with mongo_session.start_transaction():
-                fresh_session = await db[SESSIONS].find_one(
-                    {
-                        "user_id": context["merchant_id"],
-                        "id": session_id,
-                        "status": "open",
-                        "opened_by": context["actor_id"],
-                    },
-                    {"_id": 0},
-                    session=mongo_session,
-                )
-                if not fresh_session:
-                    raise HTTPException(
-                        status_code=409,
-                        detail={"code": "supplier_receiving_session_closed"},
-                    )
-                result = await _apply_permanent_supplier_invoice_service(
-                    db,
-                    context=context,
-                    actor=user,
-                    session=fresh_session,
-                    product_id=product_id,
-                    service_id=service_id,
-                    mongo_session=mongo_session,
-                )
-        return {
-            "ok": True,
-            "product": {
-                "id": _text(
-                    result["product"].get("mezan_product_id")
-                    or result["product"].get("id")
-                ),
-                "salla_product_id": _text(
-                    result["product"].get("salla_product_id")
-                ),
-                "name": _text(result["product"].get("name")) or "منتج",
-                "sku": _text(result["product"].get("sku")),
-            },
-            "service": {
-                **result["invoice_service"],
-                "unit_cost": result["service"].get("unit_cost"),
-            },
-            "impacted_uninvoiced_piece_count": (
-                result["impacted_uninvoiced_piece_count"]
-            ),
-            "impacted_active_scan_count": (
-                result["impacted_active_scan_count"]
-            ),
-            "historical_invoices_changed": False,
-            "permanent_for_future_orders": True,
-        }
+        # Old clients must not silently create permanent catalog links from
+        # an invoice. The new endpoint requires an explicit piece scope.
+        raise HTTPException(409, detail={"code": "supplier_invoice_local_service_endpoint_required",
+            "message": "حدّث التطبيق لإضافة خدمة تخص الفاتورة الحالية فقط."})
 
     @router.get("/invoices/{invoice_id}")
     async def get_supplier_invoice(
@@ -4343,6 +4310,8 @@ def make_supplier_receiving_router(
         # Presentation is additive. A missing historical snapshot must not
         # invalidate a verified financial readback or fabricate piece metadata.
         public = _public_supplier_invoice(invoice)
+        from employee_price_approval import invoice_approval_view
+        public = await invoice_approval_view(db, owner=context["merchant_id"], invoice=public)
         try:
             public["display"] = await load_invoice_display(db, invoice, context["merchant_id"])
         except ValueError as exc:
@@ -4734,6 +4703,11 @@ def make_supplier_receiving_router(
             context=context,
             session_id=session_id,
         )
+        if session.get("supplier_invoice"):
+            from employee_price_approval import invoice_approval_view
+            session = {**session, "supplier_invoice": await invoice_approval_view(
+                db, owner=context["merchant_id"], invoice=session["supplier_invoice"],
+            )}
         return {
             "ok": True,
             "session": _public_session(session),
@@ -6268,7 +6242,8 @@ def make_supplier_receiving_router(
                 invoice["ledger_entry_ids"] = []
                 ledger = None
             else:
-                invoice["price_changes"] = await apply_supplier_invoice_price_changes(
+                from employee_price_approval import propose_invoice_price_changes
+                invoice["price_changes"] = await propose_invoice_price_changes(
                     db,
                     user_id=merchant_id,
                     actor=user,
@@ -6277,7 +6252,9 @@ def make_supplier_receiving_router(
                     changed_at=now,
                     mongo_session=mongo_session,
                 )
-                invoice["price_updates_applied"] = True
+                invoice["price_updates_applied"] = False
+                invoice["price_approval_pending"] = any(change.get("approval_status") == "pending" for change in invoice["price_changes"])
+                invoice["price_approval_request_count"] = len({change["approval_request_id"] for change in invoice["price_changes"]})
                 writer = post_native_invoice if native_mode else _post_supplier_invoice_ledger
                 ledger = await writer(
                     db,
@@ -6521,6 +6498,10 @@ def make_supplier_receiving_router(
                 "total_halalas": invoice["total_halalas"],
                 "outstanding_halalas": invoice["outstanding_halalas"],
                 "price_change_count": len(invoice.get("price_changes") or []),
+                "price_updates_applied": False,
+                "price_approval_pending": bool(invoice.get("price_approval_pending")),
+                "price_approval_request_count": int(invoice.get("price_approval_request_count") or 0),
+                "price_approval_request_ids": sorted({change["approval_request_id"] for change in invoice.get("price_changes") or [] if change.get("approval_request_id")}),
                 "approved_at": now,
                 "ledger_txn_group_id": ledger["txn_group_id"] if ledger else None,
                 "share_required": not is_experiment,
@@ -6618,7 +6599,7 @@ def make_supplier_receiving_router(
                     "event_type": (
                         "supplier_receiving_price_change_simulated"
                         if is_experiment
-                        else "supplier_receiving_price_changed"
+                        else "supplier_receiving_price_change_requested"
                     ),
                     "supplier_invoice_id": invoice_id,
                     "actor_id": context["actor_id"],
@@ -6658,9 +6639,7 @@ def make_supplier_receiving_router(
                     audit_events,
                     session=mongo_session,
                 )
-            if not is_experiment and (
-                invoice.get("price_changes") or added_pairs
-            ):
+            if not is_experiment and added_pairs:
                 await bump_product_cost_revision(
                     db,
                     merchant_id,

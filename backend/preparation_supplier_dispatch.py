@@ -43,6 +43,7 @@ from order_review_routes import (
 )
 from order_tracking_notes import enforce_stage_instructions
 from preparation_file_registry import REGISTRY, _assignable_employees
+from preparation_progress_dates import employee_assignment_at, file_creation_at, progress_timestamp
 from preparation_piece_operations import (
     PIECES,
     PIECE_EVENTS,
@@ -848,6 +849,7 @@ def _hydrate_piece_print_facts_from_batches(
 
 def _piece_products(
     pieces: list[dict[str, Any]], *, waiting_only: bool = False,
+    registry_by_batch: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Expose one database-backed row per physical piece for native clients."""
     rows: list[dict[str, Any]] = []
@@ -860,6 +862,9 @@ def _piece_products(
             "order_item_id": _text(piece.get("order_item_id")) or None,
             "unit_index": int(piece.get("unit_index") or 0),
             "assigned_at": piece.get("assigned_at"),
+            "employee_assigned_at": progress_timestamp(employee_assignment_at(
+                piece, (registry_by_batch or {}).get(_text(piece.get("batch_id")), {}),
+            )),
             "product_id": _text(piece.get("product_id")) or None,
             "product_name": _text(piece.get("product_name")) or "منتج",
             "sku": _text(piece.get("sku")) or None,
@@ -922,14 +927,16 @@ def _file_view(
     waiting_only: bool = False,
 ) -> dict[str, Any]:
     project = _piece_products if piece_grain else _group_piece_products
-    products = project(pieces, waiting_only=waiting_only)
+    batch_id = _text(registry.get("batch_id")) or _text((pieces[0] if pieces else {}).get("batch_id"))
+    date_options = {"registry_by_batch": {batch_id: registry}} if piece_grain else {}
+    products = project(pieces, waiting_only=waiting_only, **date_options)
     live_products = project([piece for piece in pieces
                              if piece.get("preparation_terminal") is not True],
-                            waiting_only=waiting_only)
+                            waiting_only=waiting_only, **date_options)
     waiting_products = project([piece for piece in pieces
                                 if piece.get("waiting_review_eligible") is True
                                 and piece_is_available_for_supplier_dispatch(piece)],
-                               waiting_only=True)
+                               waiting_only=True, **date_options)
     return {
         "file_number": _text(registry.get("file_number"))
         or _text((pieces[0] if pieces else {}).get("file_number")),
@@ -939,6 +946,7 @@ def _file_view(
         or _text((pieces[0] if pieces else {}).get("file_title")),
         "execution_status": _text(registry.get("execution_status")) or "assigned",
         "registered_at": registry.get("registered_at"),
+        "file_created_at": progress_timestamp(file_creation_at(registry)),
         "piece_count": len(pieces),
         # Live queue counts are separate from immutable supplier history below.
         "in_progress_pieces": sum(row["sent_quantity"] + row["ready_quantity"] for row in live_products),
@@ -1363,7 +1371,7 @@ async def _employee_workspace(
             and _text(row.get("sent_to_supplier_by_id")) == employee_id
         ]
         account["products"] = (
-            _piece_products(account_pieces)
+            _piece_products(account_pieces, registry_by_batch=registry_by_batch)
             if piece_grain
             else _group_piece_products(account_pieces)
         )
@@ -1623,14 +1631,16 @@ def make_preparation_supplier_dispatch_router(
         worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
         await ensure_indexes_once()
         from preparation_section_reads import progress_days
-        return await progress_days(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker))
+        return await progress_days(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker),
+                                   date_basis="file_created_at")
 
     @router.get("/progress-workspace")
     async def progress_day_workspace(day: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$|^__unknown__$"), after: str = Query("", max_length=512), user: dict = Depends(current_user)) -> dict[str, Any]:
         worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
         await ensure_indexes_once()
         from preparation_section_reads import progress_workspace
-        return await progress_workspace(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker), day=day, after=after)
+        return await progress_workspace(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker),
+                                        day=day, after=after, date_basis="file_created_at")
 
     @router.get("/workspace")
     async def workspace(

@@ -332,11 +332,22 @@ def make_product_v2_details_router(db: Any, current_user: Callable) -> APIRouter
                 variant_costs[str(key)] = parsed
         if base_cost is not None and base_cost < 0:
             raise HTTPException(status_code=422, detail={"code": "negative_base_cost"})
+        from employee_price_approval import requires_mobile_price_approval, propose_mobile_product_costs
+        if requires_mobile_price_approval(user):
+            return await propose_mobile_product_costs(db, user=user, product=product,
+                base_cost=base_cost, variant_costs=variant_costs, client_request_id=payload.get("client_request_id"))
         now = _now()
         salla_id = str(product["salla_product_id"])
         await db[COST_PROFILES].update_one({"user_id": user_id, "salla_product_id": salla_id}, {"$set": {"user_id": user_id, "salla_product_id": salla_id, "base_cost": base_cost, "variant_costs": variant_costs, "notes": _text(payload.get("notes")), "updated_at": now}, "$setOnInsert": {"id": uuid.uuid4().hex, "created_at": now}}, upsert=True)
         await bump_product_cost_revision(db, user_id)
         return {"ok": True, "salla_product_id": salla_id, "base_cost": base_cost, "variant_costs": variant_costs, "updated_at": now.isoformat()}
+
+    @router.put("/{product_id}/costs/review")
+    async def request_product_cost_review(product_id: str, payload: dict = Body(...), user: dict = Depends(current_user)):
+        from employee_price_approval import requires_mobile_price_approval
+        if not requires_mobile_price_approval(user):
+            raise HTTPException(403, detail={"code": "mobile_price_proposal_required"})
+        return await save_product_costs(product_id, payload, user)
 
     @router.get("/{product_id}/image-profile")
     async def get_product_image_profile(product_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:

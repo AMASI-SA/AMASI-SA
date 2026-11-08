@@ -490,7 +490,8 @@ def install_product_field_cost_support() -> None:
                 live_services = list(live_price.pop("live_invoice_services", []) or [])
                 merged_services: list[dict[str, Any]] = []
                 seen: set[str] = set()
-                for service in [*live_services, *existing_services]:
+                local_services = [service for service in row.get("invoice_services") or [] if service.get("invoice_scope") is True]
+                for service in [*live_services, *existing_services, *local_services]:
                     service_id = _text(service.get("service_id"))
                     if not service_id or service_id in seen:
                         continue

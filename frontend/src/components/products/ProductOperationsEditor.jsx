@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
     CheckCircle,
-    Cube,
     MagnifyingGlass,
     Package,
     SpinnerGap,
@@ -14,6 +13,7 @@ import {
     getProductOperations,
     linkProductGroups,
     linkProductResource,
+    shareProductComponent,
     unlinkProductGroup,
     unlinkProductResource,
 } from "../../services/mezanProductsV2";
@@ -21,6 +21,8 @@ import {
     saveProductCostCategory,
     saveProductCostCompletion,
 } from "../../services/productCostSetup";
+import ShareComponentDialog from "./ShareComponentDialog";
+import { resourceKind } from "./resourceKind";
 
 function errorCode(error, fallback) {
     const detail = error?.response?.data?.detail;
@@ -37,7 +39,7 @@ function errorCode(error, fallback) {
 }
 
 function isService(resource) {
-    return resource?.kind === "service" || !resource?.track_inventory;
+    return resourceKind(resource) === "service";
 }
 
 export default function ProductOperationsEditor({ productId }) {
@@ -53,6 +55,8 @@ export default function ProductOperationsEditor({ productId }) {
     const [query, setQuery] = useState("");
     const [busy, setBusy] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [choices, setChoices] = useState({ component: "", service: "" });
+    const [sharing, setSharing] = useState(false);
 
     async function load() {
         if (!productId) return;
@@ -67,6 +71,7 @@ export default function ProductOperationsEditor({ productId }) {
     }
 
     useEffect(() => { load(); }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => { setChoices({ component: "", service: "" }); }, [data]);
 
     const categories = useMemo(() => data.categories || [], [data.categories]);
     const categoryId = data?.cost_setup?.cost_category_id || data?.product?.cost_category_id || "";
@@ -108,6 +113,7 @@ export default function ProductOperationsEditor({ productId }) {
         try {
             const result = await saveProductCostCategory(productId, nextCategoryId);
             setData(result);
+            window.dispatchEvent(new CustomEvent("mezan:product-resource-links-changed", { detail: { productId } }));
             toast.success("تم حفظ تصنيف المنتج؛ ستظهر عناصر هذا التصنيف تلقائيًا.");
         } catch (error) {
             toast.error(errorCode(error, "تعذر حفظ تصنيف المنتج"));
@@ -172,6 +178,31 @@ export default function ProductOperationsEditor({ productId }) {
         } finally { setBusy(false); }
     }
 
+    async function shareResource(resourceId, sourceCategoryId) {
+        if (busy) return;
+        setBusy(true);
+        try {
+            const result = await shareProductComponent(productId, resourceId, sourceCategoryId, categoryId);
+            if (result?.ok !== true || result.shared_resource_id !== resourceId || result.shared_category_id !== categoryId) {
+                throw new Error("تعذر التحقق من حفظ المكوّن. حدّث الصفحة قبل إعادة المحاولة.");
+            }
+            setData(result);
+            setSharing(false);
+            toast.success("تم ربط المكوّن بالمنتج ومشاركته مع تصنيفه الحالي.");
+        } catch (error) {
+            toast.error(errorCode(error, error.message || "تعذر مشاركة المكوّن"));
+        } finally { setBusy(false); }
+    }
+
+    function addSelected(kind) {
+        if (busy) return;
+        const value = choices[kind];
+        const group = availableGroups.find(row => `group:${row.id}` === value && (row.group_kind === "service" ? "service" : "component") === kind);
+        const resource = availableResources.find(row => `resource:${row.id}` === value && resourceKind(row) === kind);
+        if (group) addGroup(group);
+        else if (resource) addResource(resource);
+    }
+
     if (loading) {
         return <section className="flex min-h-40 items-center justify-center rounded-2xl border"><SpinnerGap className="animate-spin text-violet-700" /></section>;
     }
@@ -206,25 +237,28 @@ export default function ProductOperationsEditor({ productId }) {
                     </div>
                     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black">{linkedResources.length} عنصر</span>
                 </div>
-                <div className="mt-3 space-y-2">
-                    {linkedGroups.map((group) => (
+                <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                    {["component", "service"].map(kind => <section key={kind} className="space-y-2" aria-label={kind === "component" ? "المكونات المرتبطة" : "الخدمات المرتبطة"}>
+                    <h4 className="text-sm font-black text-slate-700">{kind === "component" ? "المكونات المرتبطة" : "الخدمات المرتبطة"}</h4>
+                    {linkedGroups.filter(group => (group.group_kind === "service" ? "service" : "component") === kind).map((group) => (
                         <div key={group.id} className="flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50 p-3">
                             <div><div className="font-bold">{group.name}</div><div className="mt-1 text-[11px] text-slate-500">{group.group_kind === "service" ? "مجموعة خدمات" : "مجموعة مكونات"} · {(group.resources || []).length} عناصر</div></div>
                             <button type="button" disabled={busy} onClick={() => removeGroup(group)} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-black text-red-700"><Trash className="ml-1 inline" />إزالة</button>
                         </div>
                     ))}
-                    {linkedResources.filter((row) => row.manual_link).map((resource) => (
+                    {linkedResources.filter((row) => row.manual_link && resourceKind(row) === kind).map((resource) => (
                         <div key={resource.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
                             <div><div className="flex items-center gap-2"><div className="font-bold">{resource.name}</div>{resource.status === "inactive" && <span className="rounded-full bg-rose-100 px-2 py-1 text-[10px] font-black text-rose-700">موقوف</span>}</div><div className="mt-1 text-[11px] text-slate-500">{isService(resource) ? "خدمة" : "مكوّن"} · {resource.code || "بدون رمز"}</div></div>
                             <button type="button" disabled={busy} onClick={() => removeResource(resource)} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-black text-red-700"><Trash className="ml-1 inline" />إزالة</button>
                         </div>
                     ))}
-                    {!linkedResources.length && <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-400">لا توجد مكونات أو خدمات، وهذا مسموح.</p>}
+                    {!linkedResources.some(row => resourceKind(row) === kind) && <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-400">{kind === "component" ? "لا توجد مكونات مرتبطة." : "لا توجد خدمات مرتبطة."}</p>}
+                    </section>)}
                 </div>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <h3 className="font-black">إضافة مكوّن أو خدمة</h3>
+                <h3 className="font-black">إضافة المكونات والخدمات</h3>
                 <p className="mt-1 text-xs text-slate-500">المعروض الآن من تصنيف: <strong>{categoryName || "لم يتم تحديد تصنيف"}</strong></p>
                 {!categoryId ? (
                     <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">حدد تصنيف المنتج أولًا لعرض العناصر المناسبة.</div>
@@ -237,25 +271,32 @@ export default function ProductOperationsEditor({ productId }) {
                         <div data-testid="product-groups-inline" className="hidden" />
                         <div title="الخدمات المفردة" className="hidden" />
                         <div title="المكوّنات المفردة" className="hidden" />
-                        <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                            {availableGroups.map((group) => (
-                                <button key={group.id} type="button" disabled={busy} onClick={() => addGroup(group)} className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-right hover:border-violet-400">
-                                    <Cube className="ml-1 inline text-violet-700" /><span className="font-black">{group.name}</span>
-                                    <span className="mt-1 block text-[11px] text-slate-500">{group.group_kind === "service" ? "مجموعة خدمات" : "مجموعة مكونات"} · {(group.resources || []).length} عناصر</span>
-                                </button>
-                            ))}
-                            {availableResources.map((resource) => (
-                                <button key={resource.id} type="button" disabled={busy} onClick={() => addResource(resource)} className="rounded-xl border border-slate-200 bg-white p-3 text-right hover:border-violet-400">
-                                    {isService(resource) ? <Wrench className="ml-1 inline text-violet-700" /> : <Package className="ml-1 inline text-sky-700" />}
-                                    <span className="font-black">{resource.name}</span>
-                                    <span className="mt-1 block text-[11px] text-slate-500">{isService(resource) ? "خدمة" : "مكوّن"} · {resource.code || "بدون رمز"}</span>
-                                </button>
-                            ))}
+                        <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                            {["component", "service"].map(kind => {
+                                const groups = availableGroups.filter(row => (row.group_kind === "service" ? "service" : "component") === kind);
+                                const resources = availableResources.filter(row => resourceKind(row) === kind);
+                                const valid = groups.some(row => choices[kind] === `group:${row.id}`) || resources.some(row => choices[kind] === `resource:${row.id}`);
+                                return <section key={kind} className="space-y-3 rounded-xl border border-slate-200 p-3">
+                                    <label className="block text-sm font-black">{kind === "component" ? <Package className="ml-1 inline text-sky-700" /> : <Wrench className="ml-1 inline text-violet-700" />}{kind === "component" ? "المكونات" : "الخدمات"}
+                                        <select aria-label={kind === "component" ? "مكونات تصنيف المنتج" : "خدمات تصنيف المنتج"} disabled={busy} value={choices[kind]}
+                                            onChange={event => setChoices(previous => ({ ...previous, [kind]: event.target.value }))} className="mt-2 w-full rounded-xl border bg-white p-3 text-sm font-normal">
+                                            <option value="">{kind === "component" ? "اختر المكوّن" : "اختر الخدمة"}</option>
+                                            {groups.length > 0 && <optgroup label={kind === "component" ? "مجموعات المكونات" : "مجموعات الخدمات"}>{groups.map(row => <option key={row.id} value={`group:${row.id}`}>{row.name}</option>)}</optgroup>}
+                                            {resources.map(row => <option key={row.id} value={`resource:${row.id}`}>{row.name}</option>)}
+                                        </select>
+                                    </label>
+                                    <button type="button" disabled={busy || !valid} onClick={() => addSelected(kind)} className="rounded-xl bg-violet-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{kind === "component" ? "إضافة المكوّن" : "إضافة الخدمة"}</button>
+                                    {kind === "component" && <button type="button" disabled={busy} onClick={() => setSharing(true)} className="block text-sm font-bold text-violet-700 underline disabled:opacity-50">إضافة مكوّن من تصنيف آخر</button>}
+                                </section>;
+                            })}
                         </div>
                         {!availableGroups.length && !availableResources.length && <p className="mt-3 rounded-xl bg-slate-50 p-3 text-xs text-slate-400">لا توجد عناصر أخرى متاحة ضمن هذا التصنيف.</p>}
                     </>
                 )}
             </div>
+
+            {sharing && categoryId && <ShareComponentDialog key={`${productId}:${categoryId}`} categories={categories} resources={data.resources}
+                categoryId={categoryId} categoryName={categoryName || "المنتج الحالي"} busy={busy} onClose={() => setSharing(false)} onSave={shareResource} />}
 
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                 <h3 className="font-black text-emerald-950">اعتماد اكتمال التكلفة</h3>

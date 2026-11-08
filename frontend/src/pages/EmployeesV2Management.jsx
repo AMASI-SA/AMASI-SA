@@ -86,7 +86,7 @@ const OPTIONAL_PERMISSION_LABELS = {
     "inventory.preparation.receive": "استلام منتجات التجهيز واعتماد فاتورة المورد",
     "supplier_receiving.product_price.edit": "تعديل سعر المنتج عند الاستلام",
     "supplier_receiving.service_price.edit": "تعديل سعر الخدمة عند الاستلام",
-    "supplier_receiving.service.add": "إضافة خدمة للمنتج عند الاستلام",
+    "supplier_receiving.service.add": "إضافة خدمة لفاتورة المورد عند الاستلام",
     "fulfillment.stop.manage": "إدارة إيقافات خدمة العملاء",
 };
 

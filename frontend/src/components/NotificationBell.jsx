@@ -73,7 +73,11 @@ export default function NotificationBell() {
     useEffect(() => {
         refreshCount();
         const t = setInterval(refreshCount, 60_000);
-        return () => clearInterval(t);
+        window.addEventListener("mezan:price-change-decided", refreshCount);
+        return () => {
+            clearInterval(t);
+            window.removeEventListener("mezan:price-change-decided", refreshCount);
+        };
     }, [refreshCount]);
 
     // Close on outside click
@@ -122,7 +126,9 @@ export default function NotificationBell() {
 
     const goTo = (a) => {
         if (!a.related_entity_url) return;
-        markRead(a); // mark as read on click-through
+        // A pending price proposal must remain discoverable until the owner
+        // decides. Opening its details is neither an approval nor a dismissal.
+        if (a.alert_type !== "employee_price_change") markRead(a);
         setOpen(false);
         navigate(a.related_entity_url);
     };
@@ -208,7 +214,13 @@ export default function NotificationBell() {
                                         <div className="flex items-start gap-2">
                                             <span className={`mt-1.5 w-2 h-2 rounded-full ${dot} flex-shrink-0`}></span>
                                             <div className="flex-1 min-w-0">
-                                                <div className={`text-xs font-extrabold ${sev.split(" ")[2]}`}>{a.title}</div>
+                                                {a.alert_type === "employee_price_change" && a.related_entity_url ? (
+                                                    <button onClick={() => goTo(a)} className={`text-start text-xs font-extrabold hover:underline ${sev.split(" ")[2]}`}>
+                                                        {a.title}
+                                                    </button>
+                                                ) : (
+                                                    <div className={`text-xs font-extrabold ${sev.split(" ")[2]}`}>{a.title}</div>
+                                                )}
                                                 <div className="text-[11px] text-slate-600 mt-0.5 leading-snug">{a.message}</div>
                                                 {isSnoozed && (
                                                     <div className="text-[10px] text-amber-700 mt-1 font-bold">⏰ مؤجَّل حتى {(a.snoozed_until || "").slice(0, 16).replace("T", " ")}</div>
@@ -217,7 +229,7 @@ export default function NotificationBell() {
                                                 <div className="flex items-center gap-2 mt-2 flex-wrap">
                                                     {a.related_entity_url && (
                                                         <button onClick={() => goTo(a)} className="text-[10px] bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-2 py-0.5 rounded font-bold inline-flex items-center gap-1" data-testid={`notification-goto-${a.id}`}>
-                                                            <ArrowSquareOut size={10} weight="bold" /> فتح
+                                                            <ArrowSquareOut size={10} weight="bold" /> {a.alert_type === "employee_price_change" ? "مراجعة تغيير السعر" : "فتح"}
                                                         </button>
                                                     )}
                                                     {a.status === "new" && (
