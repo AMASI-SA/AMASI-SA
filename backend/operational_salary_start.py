@@ -109,7 +109,8 @@ def preview_from_sources(state, employees, source_issues, first_day, as_of):
         currency = previous.get('currency', obligations.get(key, {}).get('currency'))
         obligation = obligations.get(key, {})
         eid, _, stamp = key.removeprefix('salary:').rpartition(':')
-        if ((obligation.get('id'), obligation.get('kind'), obligation.get('party_type'),
+        if (obligation.get('superseded') or obligation.get('derived_credit')
+                or (obligation.get('id'), obligation.get('kind'), obligation.get('party_type'),
              obligation.get('party_id'), obligation.get('business_date'), obligation.get('direction'),
              obligation.get('currency'), obligation.get('confirmed')) !=
                 (key, 'salary', 'employee', eid, stamp, 'payable', currency, previous.get('amount'))):
@@ -145,7 +146,7 @@ def preview_from_sources(state, employees, source_issues, first_day, as_of):
     proof = {'owner_id': state['owner_id'], 'started_at': state['started_at'], 'first_day': first_day,
              'business_date': today.isoformat(), 'employees': sorted(deepcopy(employees), key=lambda row: str(row.get('id'))),
              'source_issues': source_issues, 'recorded': recorded, 'openings': state.get('openings') or {},
-             'salary_obligations': {key: row for key, row in obligations.items() if row.get('kind') == 'salary'},
+             'salary_obligations': {key: row for key, row in obligations.items() if row.get('kind') in {'salary', 'salary_cutover_adjustment'}},
              'salary_allocations': [deepcopy(movement) for movement in state.get('movements', [])
                  if any(obligations.get(allocation.get('obligation_id'), {}).get('kind') == 'salary'
                         for allocation in movement.get('allocations', []))],

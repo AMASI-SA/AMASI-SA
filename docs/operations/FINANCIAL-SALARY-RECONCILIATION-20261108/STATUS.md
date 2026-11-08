@@ -25,3 +25,9 @@ After a valid approval, normal reconciliation materializes deterministic `salary
 Earlier authenticated preview showed 16 missing days (SAR 1,456.66), 40 exact cutoff-rounding conflicts, and one incomplete employee salary source. These are a historical read, not a new live certification. The missing-day subtotal excludes any reviewed adjustment net and must not be presented as the total financial effect.
 
 Before any live approval, obtain the missing employee's valid effective salary history and review evidence that opening balances exclude the newly accrued day. Generate a fresh full preview to review gross/net adjustment impact and paid allocations. This checkpoint does not confirm those facts, change the opening/cutoff, or execute a historical financial backfill. All unresolved source conflicts remain visible.
+
+## Independent review follow-up
+
+The independent reviewer reproduced a ledger/profit mismatch when a reviewed adjustment was marked superseded or duplicated under another identity. Six negative regressions failed on the initial checkpoint. The shared proof now requires both original and adjustment obligations to be active and non-derived, and rejects any additional obligation referencing the same salary day or canonical adjustment identity. It preserves corrupt evidence and raises a salary conflict rather than deleting or rewriting money. Preview also rejects inactive original obligations and binds adjustment obligations into the review hash.
+
+Updated backend result: **141 passed**. Real Mongo tests also verify profit stays incomplete for a missing, superseded, derived, duplicated adjustment or superseded original. No additional live action was taken.

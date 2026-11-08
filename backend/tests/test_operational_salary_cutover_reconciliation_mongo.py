@@ -63,13 +63,22 @@ def test_real_mongo_review_and_worker_concurrency_are_idempotent_without_bank_or
                                datetime.fromisoformat(after['started_at']), datetime.fromisoformat(STAMP))
         assert profit['by_currency']['SAR']['salaries']['complete']
         assert profit['by_currency']['SAR']['salaries']['amount'] == '266.67'
-        damaged = deepcopy(after)
-        adjustment = next(k for k, v in damaged['engine']['obligations'].items() if v['kind'] == 'salary_cutover_adjustment')
-        damaged['engine']['obligations'].pop(adjustment)
-        incomplete = await collect(db, 'owner', damaged, [], empty_orders,
-                                   datetime.fromisoformat(after['started_at']), datetime.fromisoformat(STAMP))
-        assert not incomplete['by_currency']['SAR']['salaries']['complete']
-        assert incomplete['by_currency']['SAR']['salaries']['amount'] is None
+        for corruption in ('missing', 'superseded', 'derived_credit', 'duplicate', 'original_superseded'):
+            damaged = deepcopy(after)
+            adjustment = next(k for k, v in damaged['engine']['obligations'].items() if v['kind'] == 'salary_cutover_adjustment')
+            row = damaged['engine']['obligations'][adjustment]
+            if corruption == 'missing':
+                damaged['engine']['obligations'].pop(adjustment)
+            elif corruption == 'duplicate':
+                damaged['engine']['obligations']['alternate-adjustment'] = {**row, 'id': 'alternate-adjustment'}
+            elif corruption == 'original_superseded':
+                damaged['engine']['obligations'][row['original_salary_day_id']]['superseded'] = True
+            else:
+                row[corruption] = True
+            incomplete = await collect(db, 'owner', damaged, [], empty_orders,
+                                       datetime.fromisoformat(after['started_at']), datetime.fromisoformat(STAMP))
+            assert not incomplete['by_currency']['SAR']['salaries']['complete'], corruption
+            assert incomplete['by_currency']['SAR']['salaries']['amount'] is None
     run(scenario)
 
 

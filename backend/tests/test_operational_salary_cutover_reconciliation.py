@@ -132,3 +132,29 @@ def test_month_total_conserves_salary_after_explicit_review(year, month, salary)
         for r in value['engine']['obligations'].values() if r['kind'] in {'salary', 'salary_cutover_adjustment'})
     assert total == Decimal(salary)
     assert not value['engine'].get('salary_conflicts')
+
+
+@pytest.mark.parametrize('corruption', ['superseded', 'derived_credit', 'duplicate', 'duplicate_same_id', 'original_superseded', 'original_derived_credit'])
+def test_reviewed_adjustment_requires_unique_active_original_and_adjustment(corruption):
+    value, emp = recorded()
+    reviewed(value, emp)
+    result = reconcile(value, {'employees': [emp]}, STAMP)
+    result['engine']['as_of'] = STAMP
+    obligations = result['engine']['obligations']
+    key = next(k for k, row in obligations.items() if row['kind'] == 'salary_cutover_adjustment')
+    row = obligations[key]
+    if corruption.startswith('duplicate'):
+        duplicate = deepcopy(row)
+        if corruption == 'duplicate':
+            duplicate['id'] = 'alternate-adjustment'
+        obligations['alternate-adjustment'] = duplicate
+    elif corruption.startswith('original_'):
+        obligations[row['original_salary_day_id']][corruption.removeprefix('original_')] = True
+    else:
+        row[corruption] = True
+    before = deepcopy(obligations)
+    from operational_profit_payroll import recorded_salary_subtotals
+    assert 'SAR' not in recorded_salary_subtotals(result)
+    retried = reconcile(result, {'employees': [emp]}, STAMP)
+    assert retried['engine']['salary_conflicts']
+    assert retried['engine']['obligations'] == before

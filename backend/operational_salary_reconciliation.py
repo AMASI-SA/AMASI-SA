@@ -82,12 +82,21 @@ def reviewed_salary_day_matches(state, key, previous, proposed, currency, *, req
         original_fields = {'id': key, 'kind': 'salary', 'party_type': 'employee', 'party_id': employee,
                            'currency': currency, 'confirmed': previous['amount'], 'direction': 'payable',
                            'business_date': stamp}
-        if not all(original.get(field) == value for field, value in original_fields.items()):
+        if (original.get('superseded') or original.get('derived_credit')
+                or not all(original.get(field) == value for field, value in original_fields.items())):
             return False
         expected = adjustment_for(key, proof)
-        actual = state.get('engine', {}).get('obligations', {}).get(expected['id'])
+        obligations = state.get('engine', {}).get('obligations', {})
+        # Even an inactive or mis-keyed duplicate is unresolved evidence, not an
+        # authorization to count the canonical row while the ledger counts another.
+        related = {identity: row for identity, row in obligations.items()
+                   if row.get('original_salary_day_id') == key or row.get('id') == expected['id']}
+        if any(identity != expected['id'] for identity in related):
+            return False
+        actual = obligations.get(expected['id'])
         if actual is None:
             return not require_adjustment
-        return all(actual.get(field) == value for field, value in expected.items())
+        return (not actual.get('superseded') and not actual.get('derived_credit')
+                and all(actual.get(field) == value for field, value in expected.items()))
     except (KeyError, TypeError, ValueError, AttributeError):
         return False
