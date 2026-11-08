@@ -756,7 +756,11 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, 
             document_order = await _with_verified_destination(
                 db, owner, number, internal_id, order, result if row_internal else None, courier=provider_carrier["name"],
             )
-            return await legacy._internal_delivery_document(db, owner, number, document_order, baseline, provider_carrier)
+            # Only the explicit action tolerates its own completed-status
+            # webhook clock; its outer material snapshot fences the document.
+            return await legacy._internal_delivery_document(
+                db, owner, number, document_order, baseline, provider_carrier,
+                allow_completion_observation=explicit_complete)
         if (row_internal or order_internal) and (local_carrier["name"] or local_carrier["code"] not in {"", "0"}):
             raise legacy._stale_label()
         if result and any(provider_carrier.values()):

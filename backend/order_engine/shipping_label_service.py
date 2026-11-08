@@ -1213,7 +1213,8 @@ def _store_label_carriers_match(left, right):
                 and (not left["code"] or not right["code"] or left["code"] == right["code"]))
 
 
-async def _internal_delivery_document(db, user_id, order_number, order, baseline, provider_carrier):
+async def _internal_delivery_document(db, user_id, order_number, order, baseline, provider_carrier,
+                                      *, allow_completion_observation=False):
     """Internal delivery is not an external shipment or an external label.
 
     Ignore old embedded shipments, including their addresses. Recheck the
@@ -1227,8 +1228,9 @@ async def _internal_delivery_document(db, user_id, order_number, order, baseline
         current = await _label_baseline(scoped, user_id, order_number)
         if not _internal_carrier(current) or (
             _mobile_label_carrier(current) != _mobile_label_carrier(baseline)
-            or _label_metadata(current).get("carrier_updated_at") !=
-                _label_metadata(baseline).get("carrier_updated_at")
+            or (not allow_completion_observation
+                and _label_metadata(current).get("carrier_updated_at") !=
+                    _label_metadata(baseline).get("carrier_updated_at"))
         ):
             raise _stale_label()
         workflow = await scoped.order_review_workflows.find_one(
