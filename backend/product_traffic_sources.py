@@ -5,7 +5,7 @@ from pymongo.errors import PyMongoError
 from decimal import Decimal, ROUND_FLOOR
 
 from mezan_attribution_order_ledger import LEDGER_COLLECTION, _order_key, _provider
-from product_campaign_identity import load_campaign_ledgers
+from product_campaign_identity import campaign_attribution_projection, load_campaign_ledgers
 from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION, canonical_ad_platform,
     canonical_marketing_source, order_source_candidates,
@@ -80,15 +80,11 @@ async def _load_product_traffic_sources(db, owner, orders, *, budget=None):
         await budget.checkpoint()
     # Report parsers can omit the canonical order ID. Recover it alongside the
     # whitelisted source evidence before constructing the ledger join keys.
-    projection = {**SALLA_RAW_ATTRIBUTION_PROJECTION, 'user_id': 1,
+    projection = {**campaign_attribution_projection(), 'user_id': 1,
                   'order_id': 1, 'id': 1, 'reference_id': 1,
                   'raw_by_source.salla_direct.id': 1,
                   'raw_by_source.salla_direct.reference_id': 1,
                   'raw_by_source.salla_direct.order_number': 1}
-    projection.update({path.removeprefix('raw_by_source.salla_direct.'): 1
-                       for path in SALLA_RAW_ATTRIBUTION_PROJECTION
-                       if path.startswith('raw_by_source.salla_direct.')
-                       and '.' not in path.removeprefix('raw_by_source.salla_direct.')})
     # Salla source is polymorphic: scalar "facebook" or {name: "facebook"}.
     # Projecting only source.name drops scalars in MongoDB. Read only these
     # already-approved marketing source fields, never their raw parent object.

@@ -62,3 +62,33 @@ async def test_native_identity_does_not_override_conflicting_ledger():
                                         'provider': 'snapchat', 'account_id': 'different'}}]}
     result = await load_campaign_ledgers(db, 'owner', [order], existing)
     assert result['123'][0]['attribution']['quality'] == 'ambiguous'
+
+@pytest.mark.asyncio
+async def test_unknown_conflicting_raw_uuid_is_not_ignored():
+    db = AsyncMongoMockClient().db
+    cid = '32d573eb-d2ce-44ef-bc32-dd55ed5178fe'
+    await seed(db, campaign=cid)
+    order = {'order_id': '123', 'utm_source': 'snapchat', 'utm_campaign': cid,
+             'raw_by_source': {'salla_direct': {'utm_campaign': '99d573eb-d2ce-44ef-bc32-dd55ed5178fe'}}}
+    result = await load_campaign_ledgers(db, 'owner', [order], {})
+    assert result['123'][0]['attribution']['quality'] == 'ambiguous'
+
+@pytest.mark.asyncio
+async def test_stale_ad_identity_falls_back_to_campaign_not_wrong_ad():
+    db = AsyncMongoMockClient().db
+    await seed(db)
+    order = {'order_id': '123', 'utm_source': 'snapchat', 'utm_campaign': 'campaign', 'ad_id': 'new-ad'}
+    result = await load_campaign_ledgers(db, 'owner', [order], {
+        '123': [{'attribution': {'provider': 'snapchat', 'quality': 'inferred', 'ad_id': 'old-ad'}}]})
+    assert result['123'][0]['attribution']['campaign_id'] == 'campaign'
+    assert result['123'][0]['attribution']['ad_id'] is None
+
+@pytest.mark.asyncio
+async def test_nested_promoted_campaign_is_not_lost_by_projection():
+    db = AsyncMongoMockClient().db
+    await seed(db)
+    await db.unified_orders.insert_one({'user_id': 'owner', 'order_number': '123',
+        'marketing': {'utm_source': 'snapchat', 'campaign_id': 'campaign'}})
+    parsed = {'order_number': '123'}
+    result = await load_product_traffic_sources(db, 'owner', [parsed])
+    assert result[id(parsed)]['_campaign']['campaign_id'] == 'campaign'

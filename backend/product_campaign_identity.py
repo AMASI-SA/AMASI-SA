@@ -4,11 +4,24 @@ Campaign ownership comes from native identity facts, never product similarity,
 campaign names, conversion totals, or the currently selected account alone.
 """
 from collections import defaultdict
+import re
 
 from mezan_attribution_order_ledger import _explicit_hierarchy, _order_key, _provider
-from salla_marketing_attribution import campaign_id_candidates, canonical_ad_platform
+from salla_marketing_attribution import SALLA_RAW_ATTRIBUTION_PROJECTION, campaign_id_candidates, canonical_ad_platform, field_values
 
 MAX_CANDIDATES = 2000
+
+
+def campaign_attribution_projection():
+    """Same approved marketing leaves for promoted and original Salla facts."""
+    projection = dict(SALLA_RAW_ATTRIBUTION_PROJECTION)
+    prefix = 'raw_by_source.salla_direct.'
+    projection.update({path.removeprefix(prefix): 1 for path in projection if path.startswith(prefix)})
+    sources = {path.split('.source.', 1)[0] + '.source' for path in projection if '.source.' in path}
+    sources.add('source')
+    projection.update({path: 1 for path in sources})
+    return {path: value for path, value in projection.items()
+            if not any(path.startswith(parent + '.') for parent in projection if parent != path)}
 
 
 async def load_campaign_ledgers(db, owner, orders, ledger_by_key):
@@ -16,7 +29,7 @@ async def load_campaign_ledgers(db, owner, orders, ledger_by_key):
     from snapchat_v2.entities import SNAPCHAT_ENTITY_FACTS_COLLECTION
 
     result = defaultdict(list, {key: list(rows) for key, rows in ledger_by_key.items()})
-    candidates = {id(order): set(campaign_id_candidates(order)) for order in orders
+    candidates = {id(order): {value for value in campaign_id_candidates(order) if len(value) <= 128} for order in orders
                   if canonical_ad_platform(order) == 'snapchat'}
     ids = set().union(*candidates.values()) if candidates else set()
     if not ids or len(ids) > MAX_CANDIDATES:
@@ -53,14 +66,33 @@ async def load_campaign_ledgers(db, owner, orders, ledger_by_key):
             result[key] = [{'attribution': {'quality': 'ambiguous', 'decision_safe': False}}]
             continue
         fact = matches[0]
+        previous_source = _provider(previous.get('provider')) or previous.get('marketing_source')
+        if previous_source and previous_source != 'snapchat':
+            result[key] = [{'attribution': {'quality': 'ambiguous', 'decision_safe': False}}]
+            continue
+        explicit_ids = field_values(order, 'campaign_id', 'source_campaign_id', 'utm_campaign_id', 'ad_campaign_id')
+        explicit_ids += [value for value in candidates.get(id(order), ())
+                         if value.isdigit() or re.fullmatch(r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}', value)]
+        if any(value != fact['external_id'] for value in explicit_ids):
+            result[key] = [{'attribution': {'quality': 'ambiguous', 'decision_safe': False}}]
+            continue
         if previous.get('quality') == 'confirmed' and previous.get('decision_safe') is True:
             if any(previous.get(field) and str(previous[field]) != expected for field, expected in (
                     ('account_id', fact['ad_account_id']), ('campaign_id', fact['external_id']))) or (
                     previous.get('provider') and _provider(previous['provider']) != 'snapchat'):
                 result[key] = [{'attribution': {'quality': 'ambiguous', 'decision_safe': False}}]
                 continue
+        hierarchy = _explicit_hierarchy(order)
+        hierarchy_conflict = any(previous.get(field) and value and previous[field] != value
+                                 for field, value in hierarchy.items())
+        hierarchy_conflict |= any(len(field_values(order, *fields)) > 1 for fields in (
+            ('ad_id', 'source_ad_id', 'advertisement_id'),
+            ('ad_group_id', 'adgroup_id', 'ad_squad_id', 'source_ad_group_id')))
+        hierarchy = {field: value or previous.get(field) for field, value in hierarchy.items()}
+        if hierarchy_conflict:
+            hierarchy = {field: None for field in hierarchy}
         result[key] = [{'order_key': key, 'user_id': owner, 'attribution': {
-            **_explicit_hierarchy(order), **previous, 'provider': 'snapchat',
+            **previous, **hierarchy, 'provider': 'snapchat',
             'marketing_source': 'snapchat', 'account_id': fact['ad_account_id'],
             'campaign_id': fact['external_id'], 'campaign_name': fact.get('name'),
             'quality': 'confirmed', 'decision_safe': True,
