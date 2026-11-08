@@ -1,3 +1,17 @@
+# Production accepted — Android76 server recovery
+
+Production changed:YES. User explicitly authorized publication after Android76 delivery and renewed instruction before publish. PR1838 normally merged as10b25d2ad75fb3f1d82fe43ecb64b34f9a410a01, tree-equivalent to frozen intent B ed088b18887f53f6a56aed3eacb6472079142870. SourceA6a1c18d4d87a92cd7a473db1eb8aaba33ae7fc85/basecf2e3df3fe11caf9d608a83706d0ae9cafeb95b6; current rollback preserved.
+
+Emergent new publication a791e7a: UI green Deployment finished Nov9 01:42 Riyadh, newer than prior2c95267/00:54. UI labels the new entry100th publish and prior99th (platform numbering observed, not used as identity). /app adapter EXIT0/67.84s; prepare/prepublish EXIT0; published once. Guard verify EXIT0, verified:true, checks:3, deployment10b25d2ad75fb3f1d82fe43ecb64b34f9a410a01, source6a1c18d4d87a92cd7a473db1eb8aaba33ae7fc85, release rg5-b27aabe2e6917c998c4bb3f13eb9c6f979797954a6e74d4edf4a2cf8692e5b6a. Boot2026-11-08T22:41:48.155941+00:00. Each probe checked576frontend requests including284public files, canonical/cache-busted JSON metadata, exact bytes, shell/service-worker headers. Guard source/critical hashes/frontend verification all passed by verify contract. Fresh status active:false; matching task lease closed automatically.
+
+Verification took approximately10minutes; process remained active polling network and processing files. No repeated publish, verification restart, lease bypass, live Salla/order/financial action, or unrelated source rollback reversal. Cloud UI exposes packaging/build/publishing stages and runtime logs, not full sanitized Cloud Build argv log; clean-clone and /app adapter evidence retained, no claim full Cloud transcript captured. Screenshot: mezan-android76-published-20261109.jpg. Operational verification JSON /tmp/android76-production-verify.json is transient; authoritative summarized result retained here and Issue1006/PR1838.
+
+All applicable frozen-B PR workflows passed; G47327PASS/127subtests +436costPASS. Source recovery226PASS/59subtests +658retained/345subtests +1acceptance. Android1.0.61/code76 delivered earlier (mobile3f0567991c20c1b229811ceb8b852d8bb040bf6c). Old app routes preserved; native PDF/camera/lifecycle fixes require APK76. Physical employee-device mixed-cycle acceptance remains unrun; no claim all intermittent symptoms measured away.
+
+No deployment action remains. Owner may install APK76 and exercise real workflow. Prior published version remains available for rollback, but rollback does not undo business transactions. Evidence-only branch must NOT be merged as release: frozen A/B remains immutable.
+
+## Prior checkpoints
+
 # Android76 server release evidence
 
 This evidence branch is NOT a deployment candidate; the frozen release remains PR1838 at intent-only B ed088b18887f53f6a56aed3eacb6472079142870.
