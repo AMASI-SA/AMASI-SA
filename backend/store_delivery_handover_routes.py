@@ -279,20 +279,44 @@ async def scan_shipment_service(db: Any, *, actor: dict, user_id: str, session_i
             "current_status": active_status,
         }
 
-    workflow = await db[WORKFLOWS].find_one(
-        {"user_id": user_id, "order_number": _order_number(order)},
-        {"_id": 0},
-    )
+    order_number = _order_number(order)
+    selector = {"user_id": user_id, "order_number": order_number}
+    workflow = await db[WORKFLOWS].find_one(selector, {"_id": 0})
     if not workflow:
         return {"accepted": False, "barcode": barcode, "code": "store_courier_shipment_not_found"}
     blocker = store_courier_assignment_blocker(workflow)
+    company = _order_shipping_company(order)
+    label_missing = blocker in {"store_courier_label_required", "store_courier_label_not_ready"}
+    if (label_missing and workflow.get("stage") == "completed"
+            and workflow.get("assembly_status") == "completed"
+            and not normalize_text(workflow.get("store_courier_assignee_id"))
+            and not normalize_text(workflow.get("store_delivery_assignment_id"))
+            and driver and driver.get("status") == "active"
+            and normalize_shipping_carrier(company)
+            and normalize_shipping_carrier(company) == normalize_shipping_carrier(driver.get("shipping_company"))):
+        from fulfillment_carrier_label import recover_store_courier_label_for_handover
+        from order_engine.shipping_label_service import ShippingLabelError
+
+        try:
+            recovered = await recover_store_courier_label_for_handover(db, user_id=user_id, order_number=order_number)
+        except ShippingLabelError as exc:
+            return {"accepted": False, "barcode": barcode, "order_number": order_number, "code": exc.code}
+        if recovered:
+            # Recovery may have refreshed the canonical carrier or destination.
+            order = await db[ORDERS].find_one(selector, {"_id": 0})
+            if not order or _order_id(order) != canonical_order_id:
+                return {"accepted": False, "barcode": barcode, "code": "canonical_order_not_found"}
+            workflow = await db[WORKFLOWS].find_one(selector, {"_id": 0})
+            if not workflow:
+                return {"accepted": False, "barcode": barcode, "code": "store_courier_shipment_not_found"}
+            blocker = store_courier_assignment_blocker(workflow)
+            company = _order_shipping_company(order)
     if blocker:
         return {"accepted": False, "barcode": barcode, "code": blocker}
     if normalize_text(workflow.get("store_courier_assignee_id")):
         return {"accepted": False, "barcode": barcode, "code": "store_courier_already_assigned"}
 
     city = _order_city(order)
-    company = _order_shipping_company(order)
     try:
         snapshot = carrier_assignment_snapshot(driver=driver, shipping_company=company, shipping_city=city)
     except StoreDeliveryRuleError as exc:

@@ -1,18 +1,22 @@
 """Refresh stranded component evidence without advancing assembly or stock."""
 
 
-async def recover_pending_print_snapshot(db, user_id, order_number):
-    from fulfillment_carrier_label import _require_print_completed_workflow
-    from order_engine.salla_refresh import refresh_order_from_salla
-
+async def recover_pending_print_snapshot(
+    db, user_id, order_number, *, allow_print_catalog_rename=True, authorize=None,
+):
     source = await db.unified_orders.find_one(
         {"user_id": str(user_id), "order_number": order_number}) or {}
     if not (source.get("g47_salla_snapshot") or {}).get("component_pending"):
         return
 
+    from fulfillment_carrier_label import _require_print_completed_workflow
+    from order_engine.salla_refresh import refresh_order_from_salla
+
     async def require_completion(scoped):
         await _require_print_completed_workflow(
             scoped, user_id=str(user_id), order_number=order_number)
+        if authorize is not None:
+            await authorize()
 
     await require_completion(db)
     # Network reads happen outside the owner transaction. The refresh fences
@@ -26,11 +30,15 @@ async def recover_pending_print_snapshot(db, user_id, order_number):
     )
     # Only printing can carry a proven fixed-choice label rename forward.
     # Receiving and Ready retain their existing acceptance behavior.
+    if not allow_print_catalog_rename:
+        return
     source = await db.unified_orders.find_one(
         {"user_id": str(user_id), "order_number": order_number}) or {}
     watermark = source.get("g47_salla_snapshot") or {}
     if watermark.get("component_pending"):
         from fulfillment_v2_routes import revalidate_unchanged_component_snapshot
+        if authorize is not None:
+            await authorize()
         await revalidate_unchanged_component_snapshot(
             db, user_id=str(user_id), order_number=order_number,
             source_revision=watermark.get("revision"), allow_print_catalog_rename=True)
