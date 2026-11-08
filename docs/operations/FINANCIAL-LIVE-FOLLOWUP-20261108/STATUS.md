@@ -64,3 +64,12 @@ Isolated official adapter rehearsal exited0, verify-packages exited0; clean B ch
 Own lease codex-financial-live-1820 prepared at2026-11-08T19:25:16.455543+00:00, prepublish ready_to_publish=true, exact A=a14d6715512bc756728e0389436b15a98f138c10 and runtime rg5-d59dc66bfbc9d2f2b6ea5b9d3978751dbc8035cc98f7b8497181a638560cb44c. One normal Publish changes submitted; UI Deployment Started Nov8 22:26Riyadh, event94ed2247-638f-5dfa-9cfd-257047a456f9. Do not duplicate publication. Explicit success and official3-round acceptance are pending. Preview backend stopped/frontend alreadyFATAL before build; restore after verification. All unrelated files retained.
 
 Owner confirmed daily movements stays in Mezan web; PR1823 closed unmerged. No courier APK/UI changes. Tabby scope remains unsaved; save only the two existing equal short policies after new runtime is verified. No real receipt decisions, money transfers, tariff reapproval or financial backfill. All-table financial acceptance remains open.
+
+
+## Published runtime and successful Tabby scope — 2026-11-08
+
+Platform Deployment finished22:35Riyadh, version69cb828, event94ed2247-638f-5dfa-9cfd-257047a456f9. Authenticated normal health page confirms exact A=a14d6715512bc756728e0389436b15a98f138c10/runtime rg5-d59dc66bfbc9d2f2b6ea5b9d3978751dbc8035cc98f7b8497181a638560cb44c, boot2026-11-08T19:35:08.388814+00:00, backend/frontend/critical verification flags true. Official guard verify is RUNNING in Terminal2, output /tmp/financial-live-1820-verify.json; do not interrupt or duplicate, and do not close the active lease manually.
+
+One owner-UI Tabby scope save SUCCEEDED after verified runtime read. Version6→7, scope db7b2b75-75de-45fe-b3d2-ab6d2cab2365, approved SAR/from2026-11-01/no end. Exactly policies4fca8032-06d2-4f6d-bd02-12a706aa24dd and fc2b2541-3796-4aec-b408-ac0020345786 linked. UI explicitly states tariffs/order plans unchanged. Longer plans excluded; no duplicate tariffs or legacy sync activated. DO NOT save this scope again.
+
+Financial UI postpublication initially rendered engine snapshot22:30Riyadh (before new runtime/scope); this is NOT post-scope recalculation acceptance. A normal report refresh has been requested; wait for newer successful engine timestamp and verify actual fee/net/table coverage. All-table acceptance, live Aramex evidence and export/print parity remain open. No real receipt approved or bank refund posted as a test.
