@@ -203,7 +203,8 @@ async def list_fee_policies(db, owner):
     rows = await db[POLICIES].find({"user_id": owner}, {"_id": 0}).to_list(1001)
     if len(rows) > 1000:
         _fail("provider_fee_policy_scope_too_large")
-    return [policy for row in rows for policy in row.get("policies", [])]
+    return [{**policy, **({'_approved_plan_scopes': row['plan_scopes']} if row.get('plan_scopes') else {})}
+            for row in rows for policy in row.get("policies", [])]
 
 
 async def get_fee_source_mode(db, owner):

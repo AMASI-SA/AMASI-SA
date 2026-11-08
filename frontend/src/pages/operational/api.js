@@ -59,6 +59,7 @@ export const operationalApi = {
   receiptContent: id => data(api.get(`${base}/receipts/${encodeURIComponent(id)}`, {responseType:"blob"})),
   reports: () => data(api.get(`${base}/reports`)),
   costExposure: () => data(api.get(`${base}/cost-exposure`)),
+  dailyFinancialMovements: params => data(api.get(`${base}/daily-financial-movements`, {params})),
   financialPosition: () => data(api.get(`${base}/financial-position`)),
   audit: () => data(api.get(`${base}/audit`))
 };

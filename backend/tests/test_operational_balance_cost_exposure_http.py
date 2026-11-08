@@ -16,16 +16,18 @@ def fixed_projection_time(monkeypatch):
 
 
 @pytest.mark.parametrize('permissions', [[], [WRITE], [READ], [WRITE, READ]])
-def test_cost_exposure_http_requires_report_permission_without_financial_writes(permissions, fixed_projection_time):
+def test_cost_exposure_http_requires_owner_for_consolidated_report_without_financial_writes(permissions, fixed_projection_time):
     async def scenario(db):
         await started(db)
         await grant(db, permissions)
         before = deepcopy(await read(db, 'owner'))
         async with client(db) as http:
             result = await http.get('/api/operational-balances/cost-exposure')
-            assert result.status_code == (200 if READ in permissions else 403), result.text
-            if READ in permissions:
-                assert result.json()['status'] == 'preview'
+            assert result.status_code == 403, result.text
+        async with client(db, actor='owner', mobile=False) as http:
+            result = await http.get('/api/operational-balances/cost-exposure')
+            assert result.status_code == 200, result.text
+            assert result.json()['status'] == 'preview'
         assert await read(db, 'owner') == before
         assert await db.general_ledger.count_documents({}) == 0
     run(scenario)
@@ -42,7 +44,7 @@ def test_cost_exposure_http_old_orders_are_owner_scoped_and_do_not_alter_opening
             }}})
             await db.mezan_product_cost_profiles_v2.insert_one({'user_id': owner, 'salla_product_id': identity, 'base_cost': price})
         before = deepcopy(await read(db, 'owner'))
-        async with client(db) as http:
+        async with client(db, actor='owner', mobile=False) as http:
             result = await http.get('/api/operational-balances/cost-exposure')
             assert result.status_code == 200, result.text
             body = result.json()
