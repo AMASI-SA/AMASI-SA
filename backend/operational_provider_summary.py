@@ -61,42 +61,6 @@ def _settlements(state, valuations):
     return allocated, scope_fees, scope_cash
 
 
-def _recorded_fee_scope(state, valuations, records):
-    """Only explicit settlement fee fields prove actual fees (including zero)."""
-    movements, observed, incomplete, unmatched = [], set(), set(), set()
-    for movement in state.get("movements", []):
-        if movement.get("party_type") != "provider" or movement.get("kind") == "correction":
-            continue
-        currency, provider = movement["currency"], movement["party_id"]
-        lines = movement.get("allocations") or []
-        scopes = {("SAR" if valuations.get(line["obligation_id"].removeprefix("credit:")) else currency, provider)
-                  for line in lines} or {(currency, provider)}
-        if movement.get("direction") != "incoming":
-            unmatched.update(scopes)
-            continue
-        fee, received = number(movement.get("actual_fee_amount")), number(movement.get("amount"))
-        if fee is None or received is None or fee < 0 or received <= 0:
-            incomplete.update(scopes)
-            continue
-        movements.append(movement)
-        observed.update(scopes)
-        # Opening allocations, excess/unallocated payout and provider refunds
-        # cannot be compared to the tariff on this period's paid order cohort.
-        if sum((Decimal(line["amount"]) for line in lines), ZERO) != received + fee:
-            unmatched.update(scopes)
-            # A remainder in the original currency has no evidenced conversion
-            # to the allocated claim's display currency.
-            incomplete.update(scope for scope in scopes if scope[0] != currency)
-            observed.add((currency, provider))
-        for line in lines:
-            record = records.get(line["obligation_id"])
-            converted = "SAR" if valuations.get(line["obligation_id"].removeprefix("credit:")) else currency
-            if not record or (record["currency"], record["provider"]) != (converted, provider):
-                unmatched.add((converted, provider))
-    allocated, fees, _ = _settlements({"movements": movements}, valuations)
-    return allocated, fees, observed, incomplete, unmatched
-
-
 def _records(state, obligations, valuations):
     engine = state.get("engine", {})
     inputs = engine.get("provider_fee_inputs", {}).get("orders", {})
@@ -222,7 +186,6 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
     """Project fees once on the unpaid gross claim. Never change saved financial state."""
     records, claims = _records(state, obligations, valuations)
     allocated, actual_fees, settled_cash = _settlements(state, valuations)
-    proof_allocated, proof_fees, fee_observed, fee_incomplete, fee_unmatched = _recorded_fee_scope(state, valuations, records)
     settings = state.get("engine", {}).get("provider_fee_inputs", {}).get("settings", {})
     policies = state.get("engine", {}).get("provider_fee_inputs", {}).get("policies", [])
     source_mode = state.get('engine', {}).get('provider_fee_inputs', {}).get('source_mode', 'legacy_settings')
@@ -233,8 +196,7 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
         return groups.setdefault((currency, provider), {"provider": provider, "name": PLATFORMS.get(provider, provider),
             "orders": set(), "gross": ZERO, "fees": ZERO, "refunded": ZERO, "remaining_fees": ZERO,
             "complete": True, "fees_complete": True, "held_orders": 0, "opening": ZERO, "settled": ZERO,
-            "known_net": ZERO, "tariff_sum": ZERO, "tariff_complete": True, "tariff_scope_orders": 0,
-            "fee_comparable": True})
+            "known_net": ZERO})
 
     for identity, row in records.items():
         currency, provider = row["currency"], row["provider"]
@@ -270,18 +232,6 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
             fee = ZERO
         if retained_uncaptured:
             fee = None
-        # Save the full tariff result before the existing remaining-fee fallback
-        # substitutes zero for a fully settled claim with no available tariff.
-        if row["gross"] > 0 or retained_uncaptured:
-            total["tariff_scope_orders"] += 1
-            if fee is None or held:
-                total["tariff_complete"] = False
-            else:
-                total["tariff_sum"] += fee
-            proof = proof_allocated.get(identity, {})
-            if (held or row["refunded"] != 0 or row["gross"] <= 0
-                    or proof.get("gross") != row["gross"]):
-                total["fee_comparable"] = False
         applied = allocated[identity]["gross"]
         fully_settled = not held and row["gross"] > 0 and applied >= row["gross"]
         if row["refunded"] and applied > 0 and not fully_settled:
@@ -317,12 +267,10 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
                 total["gross"] = known
                 total["missing_order_count"] = max(source.get("orders", 0) - len(total["orders"]), 0)
                 total["complete"] = total["fees_complete"] = False
-                total["tariff_complete"] = total["fee_comparable"] = False
             if paid is None:
                 total["known_gross"] = total["gross"]
                 total["gross"] = None
                 total["complete"] = total["fees_complete"] = False
-                total["tariff_complete"] = total["fee_comparable"] = False
     for party in parties.values():
         if party["party_type"] != "provider":
             continue
@@ -341,20 +289,6 @@ def provider_balances(state, details, obligations, parties, valuations, *, sar_v
         total["known_net"] += party["outstanding_receivable"] - party["outstanding_payable"]
     result = defaultdict(list)
     for (currency, provider), total in sorted(groups.items()):
-        scope = currency, provider
-        tariff = total.pop("tariff_sum")
-        tariff_complete = total["tariff_complete"] and total["tariff_scope_orders"] > 0 and total["gross"] is not None
-        total["tariff_complete"] = tariff_complete
-        total["tariff_fees"] = tariff if tariff_complete else None
-        total["tariff_net"] = total["gross"] - total["refunded"] - tariff if tariff_complete else None
-        total["known_actual_settlement_fees"] = proof_fees[scope] if scope in fee_observed else None
-        total["actual_settlement_fees_complete"] = scope in fee_observed and scope not in fee_incomplete
-        total["actual_settlement_fees"] = proof_fees[scope] if total["actual_settlement_fees_complete"] else None
-        comparable = (total.pop("fee_comparable") and tariff_complete
-                      and total["actual_settlement_fees_complete"] and scope not in fee_unmatched)
-        total["fee_variance"] = proof_fees[scope] - tariff if comparable else None
-        total["fee_comparison_basis"] = "fully_settled_same_paid_order_scope" if comparable else "not_comparable"
-        total["tariff_basis"] = "paid_after_start_less_provider_refunds_excludes_opening_and_payouts"
         total["fees"] += actual_fees[currency, provider]
         total["orders"] = len(total["orders"]) + total.pop("missing_order_count", 0)
         total["net"] = total["known_net"] if total["complete"] else None

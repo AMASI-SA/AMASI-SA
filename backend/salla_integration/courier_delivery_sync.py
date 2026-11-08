@@ -159,9 +159,7 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
              **({} if completed_targets else {"order_status_slug": {"$in": ["delivered", "تم التوصيل"]}}),
              "g47_salla_snapshot.source_updated_at": {"$gte": start.isoformat()},
              "$or": [{_RETRY: {"$exists": False}}, {_RETRY: {"$lte": now}}]},
-            {"$set": {_RETRY: now + timedelta(minutes=15)}}, projection=_PROJECTION,
-            # Try unseen gaps before expired retries; break equal deadlines stably.
-            sort=[(_RETRY, 1), ("_id", 1)])
+            {"$set": {_RETRY: now + timedelta(minutes=15)}}, projection=_PROJECTION)
         if not source:
             break
         raw = (source.get("raw_by_source") or {}).get("salla_direct") or {}

@@ -33,7 +33,7 @@ def test_proved_prestart_cod_is_counted_once_in_its_currency_outside_debt_and_ca
     for ccy in ("SAR","QAR"):
         tab=next(t for t in report["currencies"][ccy]["tables"] if t["id"]=="cod_expected")
         assert len(tab["rows"])==1 and tab["rows"][0]["amount"]=="77.00" and tab["rows"][0]["orders"]==1
-        assert tab["complete"] and tab["totals"]["amount"] == "77.00" and tab["totals"]["orders"] == 1
+        assert not tab["complete"] and tab["totals"]["amount"] is None and tab["totals"]["orders"] is None
         assert report["currencies"][ccy]["metrics"]["debts_receivable"]=="0.00"
         assert report["currencies"][ccy]["metrics"]["liquidity"]=="0.00"
     assert before==(db.data,state)

@@ -1,6 +1,6 @@
 """Owner-assigned MZ2 banks/cashboxes for native entry; no accounting writes."""
 from fastapi import HTTPException
-from mobile_app_permissions import find_mobile_app_access, OPERATIONAL_APP_WRITE, OPERATIONAL_APP_READ
+from mobile_app_permissions import find_mobile_app_access, OPERATIONAL_APP_WRITE
 from operational_balance_sources import entities
 
 
@@ -10,9 +10,8 @@ async def bank_choices(db, owner, kind="bank"):
 
 
 async def validate_assignment(db, owner, permissions, enabled, payload):
-    if not enabled or not {OPERATIONAL_APP_WRITE, OPERATIONAL_APP_READ}.intersection(permissions):
+    if not enabled or OPERATIONAL_APP_WRITE not in permissions:
         return {"bank_ids": [], "default_bank_id": None}
-    can_write = OPERATIONAL_APP_WRITE in permissions
     if not isinstance(payload, dict):
         raise HTTPException(422, {"code": "operational_banks_required"})
     ids = payload.get("bank_ids", [])
@@ -21,7 +20,7 @@ async def validate_assignment(db, owner, permissions, enabled, payload):
     if (not isinstance(cash_ids, list) or len(cash_ids) > 100
             or any(not isinstance(i, str) for i in cash_ids) or len(set(cash_ids)) != len(cash_ids)):
         raise HTTPException(422, {"code": "operational_cash_assignment_invalid"})
-    if (not isinstance(ids, list) or (can_write and not (ids or cash_ids)) or len(ids) > 100
+    if (not isinstance(ids, list) or not (ids or cash_ids) or len(ids) > 100
             or any(not isinstance(i, str) for i in ids) or len(set(ids)) != len(ids)):
         raise HTTPException(422, {"code": "operational_banks_required"})
     allowed = {r["id"] for r in await bank_choices(db, owner)}
@@ -29,13 +28,9 @@ async def validate_assignment(db, owner, permissions, enabled, payload):
         raise HTTPException(422, {"code": "operational_bank_not_mz2"})
     if not set(cash_ids).issubset({r["id"] for r in await bank_choices(db, owner, "cash")}):
         raise HTTPException(422, {"code": "operational_cash_not_mz2"})
-    if not can_write:
-        # Read-only access still needs an explicit account scope. An empty scope
-        # means no visible accounts, and never grants movement entry authority.
-        default = None
-    elif len(ids) == 1:
+    if len(ids) == 1:
         default = ids[0]
-    if can_write and ids and default not in ids:
+    if ids and default not in ids:
         raise HTTPException(422, {"code": "operational_default_bank_required"})
     result = {"bank_ids": ids, "default_bank_id": default if ids else None}
     if "cash_ids" in payload:

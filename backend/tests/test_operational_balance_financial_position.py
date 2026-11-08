@@ -151,10 +151,7 @@ def test_provider_net_cash_and_actual_fees_are_not_subtracted_twice():
     result = build_financial_position(state)
     assert result["currencies"]["SAR"]["metrics"]["liquidity"] == "1035.00"
     assert table(result, "providers")["totals"] == {"name": "الإجمالي", "orders": 1, "gross": "100.00",
-                                                     "fees": "11.00", "refunded": "0.00", "net": "54.00",
-                                                     "tariff_fees": "10.00", "tariff_net": "90.00",
-                                                     "actual_settlement_fees": "5.00", "known_actual_settlement_fees": "5.00",
-                                                     "fee_variance": None}
+                                                     "fees": "11.00", "refunded": "0.00", "net": "54.00"}
     assert table(result, "provider_collections_expected")["totals"]["amount"] == "0.00"
     assert result["currencies"]["SAR"]["metrics"]["monetary_position"] == "1089.00"
     assert state == before

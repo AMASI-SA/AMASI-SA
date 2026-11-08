@@ -45,8 +45,7 @@ def test_one_merchant_comparison_is_nonposting_and_replayable():
             assert not provider['complete']
             assert old['cod_expected']['known_subtotal'] is None
             assert new['cod_expected']['known_subtotal'] == '77.00'
-            assert new['cod_expected']['complete'] is True
-            assert new['cod_expected']['reported_total'] == '77.00'
+            assert new['cod_expected']['reported_total'] is None
             assert 'provider_fees_expected' not in new
             for private in ('PRIVATE-', 'Secret customer', 'Private account', 'secret@example'):
                 assert private not in json.dumps(result)
@@ -132,7 +131,7 @@ def test_cli_requires_dedicated_read_role_on_intended_database(role, expected, m
             monkeypatch.setenv('MEZAN_PREVIEW_READONLY_MONGO_URI',uri)
             monkeypatch.setenv('MEZAN_PREVIEW_DB_NAME',db.name)
             before = await contents(db)
-            assert await main('owner') == expected, capsys.readouterr().err
+            assert await main('owner') == expected
             captured = capsys.readouterr()
             assert password not in captured.err + captured.out and uri not in captured.err + captured.out
             if expected:

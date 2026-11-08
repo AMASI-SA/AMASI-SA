@@ -26,39 +26,7 @@ def test_multiple_banks_require_explicit_default_and_single_is_automatic():
         with pytest.raises(HTTPException): await validate_assignment(db,"owner",[WRITE],True,{"bank_ids":["bank","bank2"]})
         config={"bank_ids":["bank","bank2"],"default_bank_id":"bank2"}
         assert await validate_assignment(db,"owner",[WRITE],True,config) == config
-        assert await validate_assignment(db,"owner",[READ],True,config) == {
-            "bank_ids": ["bank", "bank2"], "default_bank_id": None}
-    run(scenario)
-
-
-def test_read_only_assignment_retains_explicit_bank_and_cash_scope_without_default():
-    async def scenario(db):
-        await db.mz2_financial_accounts.insert_one({"id":"bank2","user_id":"owner","name":"Bank 2","account_type":"bank","currency":"SAR","status":"active"})
-        selected = {"bank_ids": ["bank", "bank2"], "cash_ids": ["cash"], "default_bank_id": None}
-        assert await validate_assignment(db, "owner", [READ], True, selected) == selected
-        assert await validate_assignment(db, "owner", [READ], True, {}) == {
-            "bank_ids": [], "default_bank_id": None}
-        assert await validate_assignment(db, "owner", [READ], False, selected) == {
-            "bank_ids": [], "default_bank_id": None}
-        assert await validate_assignment(db, "owner", [], True, selected) == {
-            "bank_ids": [], "default_bank_id": None}
-        with pytest.raises(HTTPException):
-            await validate_assignment(db, "owner", [READ], True, {"bank_ids": ["foreign"]})
-        with pytest.raises(HTTPException):
-            await validate_assignment(db, "owner", [READ], True, {"cash_ids": ["bank"]})
-    run(scenario)
-
-
-def test_read_only_account_assignment_does_not_grant_movement_writes():
-    async def scenario(db):
-        await started(db); await grant(db, [READ])
-        async with client(db) as c:
-            response = await c.get('/api/operational-balances/entities/bank')
-            assert response.status_code == 200
-            assert [row['id'] for row in response.json()['items']] == ['bank']
-            result = await c.post('/api/operational-balances/movements', json=command())
-            assert result.status_code == 403, result.text
-        assert (await read(db, 'owner'))['movements'] == []
+        assert (await validate_assignment(db,"owner",[READ],True,config))["bank_ids"] == []
     run(scenario)
 
 

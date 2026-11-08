@@ -1,4 +1,3 @@
-import { profitEvidenceLines, profitRowAmount } from "./profitEvidencePresentation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { ArrowClockwise, CalendarBlank, Info, MagnifyingGlass, MicrosoftExcelLogo, Printer, WarningCircle } from "@phosphor-icons/react";
@@ -80,8 +79,8 @@ function AmountTable({ title, rows = [], className = "", complete, printing }) {
     return <article className={`ofp-table-card ${className}`}><div className="ofp-table-title"><h3>{title}</h3>{complete === false && <span className="ofp-status">غير مكتمل</span>}</div>
         <PaginatedReportTable rows={rows} label={title} showAll={printing}>{pageRows => <table><thead><tr><th scope="col">البند</th><th scope="col">المبلغ</th></tr></thead><tbody>
             {pageRows.map(row => <tr key={row.id} className={["total", "positive", "negative"].includes(row.emphasis) ? `ofp-row-${row.emphasis}` : ""}>
-                <td className="ofp-label-cell">{row.label}{row.reason && <small className="ofp-row-reason">{row.reason}</small>}{profitEvidenceLines(row.period_evidence, formatPositionMoney, formatPositionCount).map((line, index) => <small className="ofp-row-reason" key={index}>{line}</small>)}</td>
-                <td><Money value={profitRowAmount(row)} role={row.emphasis === "positive" ? "receivable" : row.emphasis === "negative" ? "payable" : "neutral"} /></td>
+                <td className="ofp-label-cell">{row.label}{row.reason && <small className="ofp-row-reason">{row.reason}</small>}</td>
+                <td><Money value={row.amount} role={row.emphasis === "positive" ? "receivable" : row.emphasis === "negative" ? "payable" : "neutral"} /></td>
             </tr>)}
             {!rows.length && <tr><td className="ofp-empty-cell" colSpan="2">لم تتوفر بيانات مكتملة لهذا القسم.</td></tr>}
         </tbody></table>}</PaginatedReportTable>

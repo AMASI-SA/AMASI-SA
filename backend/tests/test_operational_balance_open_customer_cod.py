@@ -31,11 +31,7 @@ def projected(doc, mutate=lambda *_: None):
         return []
     table = next(t for t in report["tables"] if t["id"] == "cod_expected")
     assert report["metrics"]["liquidity"] == "0.00" and report["metrics"]["debts_receivable"] == "0.00"
-    if table["complete"]:
-        assert table["coverage"]["complete"]
-        assert Decimal(table["totals"]["amount"]) == sum(Decimal(r["amount"]) for r in table["rows"])
-    else:
-        assert table["totals"]["amount"] is None
+    assert not table["complete"] and table["totals"]["amount"] is None
     return table["rows"]
 
 

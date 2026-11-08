@@ -38,11 +38,6 @@ class Cursor:
 class Collection:
     def __init__(self, db, name): self.db, self.name = db, name
     def find(self, query, projection=None):
-        if self.name in {'operating_daily_expenses', 'operating_rentals', 'operating_prepaid_expenses', 'operating_salaries'}:
-            assert query == {'user_id': 'owner'}
-            assert projection == {'_id': 0, **{key: 1 for key in ('id', 'user_id', 'date', 'amount', 'currency', 'annual_amount', 'monthly_amount', 'category', 'expense_type', 'status', 'start_date', 'end_date', 'created_at', 'updated_at', 'linked_transaction_id')}}
-            self.db.reads.append(self.name)
-            return Cursor([r for r in self.db.data.get(self.name, []) if r.get('user_id') == 'owner'])
         if self.name in {'mz2_shipping_accounting_events', 'mz2_shipping_native_events_v2'}:
             assert set(query) == {'user_id', '$or'} and query['user_id'] == 'owner' and len(query['$or']) == 2
             assert projection and projection['_id'] == 0 and projection['user_id'] == 1
@@ -101,7 +96,7 @@ class Collection:
             identity_fields = {'_id', 'user_id', 'shipping_companies.name', 'shipping_companies.salla_carrier_key',
                 *('shipping_companies.' + key for key in ('status', 'active', 'is_active', 'archived', 'deleted', 'is_deleted', 'is_archived'))}
             fee_fields = {'_id', 'user_id', 'payment_methods', 'updated_at'}
-            assert set(projection) in (identity_fields, fee_fields, {'_id', 'user_id', 'report_included_statuses'})
+            assert set(projection) in (identity_fields, fee_fields)
         if self.name == 'users':
             assert query == {'$or': [{'id': 'owner', 'role': 'owner'}, {'created_by': 'owner', 'role': 'admin'}]}
             self.db.reads.append(self.name)
@@ -123,7 +118,7 @@ class Collection:
 class DB:
     def __init__(self, data=None): self.data, self.reads = data or {}, []
     def __getitem__(self, name):
-        assert name in src.ALLOWED_COLLECTIONS | {'operating_daily_expenses', 'operating_rentals', 'operating_prepaid_expenses', 'operating_salaries'}, f'Forbidden source: {name}'
+        assert name in src.ALLOWED_COLLECTIONS, f'Forbidden source: {name}'
         return Collection(self, name)
     def __getattr__(self, name): raise AssertionError(f'Nonallowlisted access: {name}')
 

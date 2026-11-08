@@ -21,12 +21,7 @@ export function financialMetrics(data, products) {
     const total = data && costs.every(value => value !== null) ? costs.reduce((sum, value) => sum + value, 0) : null;
     const orders = amount(t.total_orders);
     const sales = t.sales_currency_conversion_complete === false || data?.currency_conversion?.conversion_complete === false ? null : amount(t.total_sales);
-    // Do not replace executive accounting with gross sales minus display cards.
-    // A refreshed product table must agree with the summary snapshot first.
-    const summaryProduct = amount(t.total_product_cost);
-    const profit = total !== null && sales !== null && summaryProduct !== null
-        && Math.abs(summaryProduct - product) < 0.011 ? amount(t.net_profit) : null;
-    return { product, productKnown, ads, adsProvisional, total, orders, sales, profit, average: total !== null && orders > 0 ? total / orders : null };
+    return { product, productKnown, ads, adsProvisional, total, orders, sales, average: total !== null && orders > 0 ? total / orders : null };
 }
 
 function DetailTable({ title, headers, rows, total }) {
@@ -55,7 +50,6 @@ export default function SoldFinancialReport({ data, products, loading, error, pr
         ["ads", "إجمالي تكاليف الإعلانات", m.ads], ["shipping", "إجمالي تكاليف الشحن", t.total_shipping_cost],
         ["payment", "إجمالي عمولات الدفع", t.total_payment_fees], ["operating", "إجمالي المصروفات التشغيلية", t.operating_expenses_total],
         ["total", "إجمالي التكاليف", m.total],
-        ["profit", "صافي الربح", m.profit],
     ];
     return <div data-testid="sold-financial-summary" className="rounded-xl border border-emerald-200 bg-white p-5">
         <h2 className="font-extrabold text-xl mb-3">الملخص المالي للفترة</h2>
@@ -63,7 +57,7 @@ export default function SoldFinancialReport({ data, products, loading, error, pr
         {error && <p role="alert" className="text-amber-800">تعذر تحميل الملخص المالي؛ حدّث التقرير للمحاولة مجددًا.</p>}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{rows.map(([key, label, value]) => {
             const expandable = ["ads", "shipping", "payment", "operating"].includes(key) && !printable;
-            const provisional = m.adsProvisional && ["ads", "average", "total", "profit"].includes(key);
+            const provisional = m.adsProvisional && ["ads", "average", "total"].includes(key);
             return <div key={key} className="border rounded-lg p-3"><button type="button" disabled={!expandable || !data || loading} aria-expanded={expandable ? expanded === key : undefined} onClick={() => setExpanded(expanded === key ? null : key)} className="text-right w-full"><span className="block text-sm text-slate-600">{label}{expandable ? " ▾" : ""}</span><strong className="block text-lg mt-2">{loading ? "جارٍ التحميل…" : key === "average" && m.orders === 0 ? "—" : key === "orders" && value !== null ? formatInt(value) : money(value)}{provisional && " (مؤقت)"}</strong></button>{key === "products" && m.product === null && m.productKnown !== null && <small className="text-amber-800">المعروف {money(m.productKnown)} — الإجمالي غير مكتمل</small>}</div>;
         })}</div>
         {!printable && expanded && <FinancialDetails data={data} section={expanded} />}

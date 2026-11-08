@@ -125,10 +125,6 @@ def audit(state, actor, action, before, after, reason, source, at=None):
     event = {"id": digest([state["owner_id"], len(state["audit"]), action, stamp]),
              "actor_id": actor, "at": stamp, "action": action, "before": deepcopy(before),
              "after": deepcopy(after), "reason": reason, "source": source}
-    # Metadata only: capture the actual after-balance at each existing effect,
-    # before the same CAS/transaction persists this audit and its movement.
-    from operational_financial_activity import capture_after_balances
-    capture_after_balances(state, event)
     state["audit"].append(event)
 
 

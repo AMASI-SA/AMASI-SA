@@ -2,7 +2,6 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useReactToPrint } from "react-to-print";
 import api from "../lib/api";
-import { loadSoldFinancialSnapshot } from "../lib/soldFinancialSnapshot";
 import SoldFinancialReport, { FinancialDetails } from "../components/SoldFinancialReport";
 import ProductTrafficSources from "../components/ProductTrafficSources";
 import { addDaysISO, todaySA } from "../lib/dates";
@@ -169,8 +168,8 @@ export default function SoldProducts() {
     useEffect(() => {
         let active = true;
         setFinancial(null); setFinancialError(false); setFinancialLoading(true);
-        loadSoldFinancialSnapshot(range)
-            .then(result => { if (active) setFinancial(result); })
+        api.get("/dashboard-v2", { params: { from_date: range.from, to_date: range.to, report_statuses: range.statuses }, headers: { "Cache-Control": "no-cache" } })
+            .then(({ data: result }) => { if (active) setFinancial(result); })
             .catch(() => { if (active) setFinancialError(true); })
             .finally(() => { if (active) setFinancialLoading(false); });
         return () => { active = false; };

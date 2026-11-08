@@ -529,12 +529,6 @@ def make_store_delivery_payment_evidence_router(db: Any, current_user: Callable[
             ) and review_permission not in denied
             if not allowed:
                 raise HTTPException(status_code=403, detail={"code": "receipt_access_denied"})
-        if role != "store_driver":
-            from store_delivery_payment_review_routes import _require_accountant
-            from store_delivery_review_permissions import require_review_scope
-            actor = await _require_accountant(db, user)
-            await require_review_scope(db, user_id, actor["id"], row.get("assignment_id"),
-                                       request_client=actor.get("_review_request_client"))
         return Response(
             content=bytes(row["content"]),
             media_type=row["content_type"],

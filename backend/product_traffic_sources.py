@@ -72,7 +72,7 @@ async def load_product_traffic_sources(db, owner, orders, *, budget=None):
 
 
 async def _load_product_traffic_sources(db, owner, orders, *, budget=None):
-    """Bounded owner-scoped batch reads, no account inference or writes."""
+    """Two bounded owner-scoped batch reads, no account inference or writes."""
     numbers = sorted({str(order.get('order_number')) for order in orders if order.get('order_number')})
     number_counts = Counter(str(order.get('order_number') or '') for order in orders)
     if budget is not None:
@@ -84,9 +84,6 @@ async def _load_product_traffic_sources(db, owner, orders, *, budget=None):
                   'raw_by_source.salla_direct.id': 1,
                   'raw_by_source.salla_direct.reference_id': 1,
                   'raw_by_source.salla_direct.order_number': 1}
-    for prefix in ('', 'marketing.', 'source_details.', 'attribution.'):
-        for field in ('utm_source', 'source', 'platform', 'channel'):
-            projection[prefix + field] = 1
     # Salla source is polymorphic: scalar "facebook" or {name: "facebook"}.
     # Projecting only source.name drops scalars in MongoDB. Read only these
     # already-approved marketing source fields, never their raw parent object.
@@ -133,8 +130,6 @@ async def _load_product_traffic_sources(db, owner, orders, *, budget=None):
     for row in rows:
         if row.get('user_id') == owner:
             ledger[str(row.get('order_key') or '')].append(row)
-    # Product reports use saved platform/account facts only; campaign catalog
-    # enrichment is disabled to keep the shared dashboard path lightweight.
     result = {}
     for order in orders:
         if budget is not None:

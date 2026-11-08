@@ -16,35 +16,6 @@ from test_operational_balance_supplier_workspace import ReadOnlyDB
 PATH = "/api/operational-balances/financial-position"
 
 
-def test_indexed_coverage_is_lossless_and_does_not_change_balances_or_permissions(monkeypatch):
-    import json
-    monkeypatch.setitem(sys.modules, "operational_open_cost_exposure", None)
-    db = ReadOnlyDB()
-    db.data[STATES][0]['engine']['issues'] = [
-        {'code': 'unresolved_source_contract', 'source_id': str(i), 'message': 'Source needs review'}
-        for i in range(300)]
-    before = deepcopy(db.data)
-    expanded = asyncio.run(get(db)).json()
-    response = asyncio.run(get(db, suffix='?coverage_format=indexed'))
-    assert response.status_code == 200
-    indexed = response.json()
-    assert indexed['coverage_format'] == 'indexed'
-    assert len(json.dumps(indexed)) < len(json.dumps(expanded)) * .4
-    restored = deepcopy(indexed)
-    catalog = restored.pop('coverage_issue_catalog')
-    restored.pop('coverage_format')
-    for currency in restored['currencies'].values():
-        for table in currency['tables']:
-            coverage = table.get('coverage')
-            if coverage is not None:
-                coverage['issues'] = [catalog[i] for i in coverage.pop('issue_indexes')]
-    restored['generated_at'] = expanded['generated_at']
-    assert restored == expanded
-    assert db.data == before
-    assert asyncio.run(get(db, principal={}, suffix='?coverage_format=indexed')).status_code == 401
-    assert asyncio.run(get(db, suffix='?coverage_format=omit')).status_code == 422
-
-
 async def get(db, principal=None, suffix=""):
     app = FastAPI()
 
@@ -214,13 +185,12 @@ def test_read_requires_authentication_and_active_membership(monkeypatch):
     assert asyncio.run(get(db)).status_code == 403
 
 
-def test_mobile_read_grant_does_not_promote_real_actor_to_consolidated_owner(monkeypatch):
+def test_mobile_read_grant_is_checked_for_real_actor(monkeypatch):
     monkeypatch.setitem(sys.modules, "operational_open_cost_exposure", None)
     db = ReadOnlyDB()
     actor = {"id": "owner", "role": "owner", "_session_client": "amasi_mobile", "_mobile_actor_id": "staff"}
     response = asyncio.run(get(db, actor))
-    assert response.status_code == 403, response.text
-    assert response.json()["detail"]["code"] == "operational_consolidated_report_owner_required"
+    assert response.status_code == 200, response.text
     db.data["mezan_mobile_app_access_v1"][0]["permissions"] = []
     assert asyncio.run(get(db, actor)).status_code == 403
 

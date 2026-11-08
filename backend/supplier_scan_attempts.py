@@ -21,16 +21,6 @@ SESSIONS = "mezan_supplier_receiving_sessions_v1"
 EXECUTION_SECONDS = 45
 LEASE_SECONDS = 120
 LOCK_FIELDS = {"scan_lock_token": "", "scan_lock_started_at": "", "scan_lock_expires_at": ""}
-_EXPIRY_CHECK = {"$and": [
-    {"$eq": [{"$type": "$expires_at"}, "date"]},
-    {"$lte": ["$expires_at", "$$NOW"]},
-    {"$eq": [{"$type": "$token"}, "string"]},
-    {"$ne": ["$token", ""]},
-    {"$eq": [{"$type": "$user_id"}, "string"]},
-    {"$eq": [{"$type": "$session_id"}, "string"]},
-]}
-_EXPIRED = {"state": "in_progress", "$expr": _EXPIRY_CHECK}
-_EXPIRED_DETAIL = {"code": "supplier_receiving_scan_expired"}
 log = logging.getLogger(__name__)
 
 
@@ -76,39 +66,27 @@ def attempt_key(owner, session_id, request_id):
     return uuid.uuid5(uuid.NAMESPACE_URL, repr((owner, session_id, request_id))).hex
 
 
-async def _settle_aborted(scoped, attempt, detail, *, expired=False):
+async def settle_aborted(db, attempt, detail):
     """A competing commit either wins first or aborts; no receipt rollback."""
-    owner, session_id, token = attempt["user_id"], attempt["session_id"], attempt["token"]
-    selector = {"_id": attempt["_id"], "state": "in_progress", "user_id": owner,
-                "session_id": session_id, "token": token}
-    if expired:
-        selector["$expr"] = _EXPIRY_CHECK
-    changed = await scoped[ATTEMPTS].update_one(
-        selector,
-        {"$set": {"state": "rejected", "detail": detail, "finished_at": datetime.now(timezone.utc)}},
-    )
-    if changed.modified_count:
-        await scoped[SESSIONS].update_one(
-            {"user_id": owner, "id": session_id, "scan_lock_token": token},
-            {"$unset": LOCK_FIELDS},
+    async def settle(scoped):
+        changed = await scoped[ATTEMPTS].update_one(
+            {"_id": attempt["_id"], "state": "in_progress", "token": attempt["token"]},
+            {"$set": {"state": "rejected", "detail": detail, "finished_at": datetime.now(timezone.utc)}},
         )
-
-
-async def settle_aborted(db, attempt, detail, *, expired=False):
-    await transaction(db, lambda scoped: _settle_aborted(scoped, attempt, detail, expired=expired))
-
-
-async def expire_session_attempts(scoped, owner, session_id):
-    """Fence expired attempts in the caller's authorized session transaction."""
-    selector = {**_EXPIRED, "user_id": owner, "session_id": session_id}
-    async for attempt in scoped[ATTEMPTS].find(selector):
-        await _settle_aborted(scoped, attempt, _EXPIRED_DETAIL, expired=True)
+        if changed.modified_count:
+            await scoped[SESSIONS].update_one(
+                {"user_id": attempt["user_id"], "id": attempt["session_id"], "scan_lock_token": attempt["token"]},
+                {"$unset": LOCK_FIELDS},
+            )
+    await transaction(db, settle)
 
 
 async def expire_attempts(db):
-    rows = await db[ATTEMPTS].find(_EXPIRED).limit(100).to_list(100)
+    rows = await db[ATTEMPTS].find({
+        "state": "in_progress", "$expr": {"$lte": ["$expires_at", "$$NOW"]},
+    }).limit(100).to_list(100)
     for row in rows:
-        await settle_aborted(db, row, _EXPIRED_DETAIL, expired=True)
+        await settle_aborted(db, row, {"code": "supplier_receiving_scan_expired"})
 
 
 def install_reconciler(router, db):

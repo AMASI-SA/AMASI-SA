@@ -101,7 +101,7 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
             mode: current?.mode || "resource",
             resource_id: current?.resource_id || firstActiveResource?.id || "",
             direct_amount: current?.direct_amount ?? "",
-            quantity: current?.mode === "direct" ? 1 : current?.quantity || 1,
+            quantity: current?.quantity || 1,
         });
     }
 
@@ -113,7 +113,7 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
                 mode: editing.mode,
                 resource_id: editing.mode === "resource" ? editing.resource_id : null,
                 direct_amount: editing.mode === "direct" ? editing.direct_amount : null,
-                quantity: editing.mode === "direct" ? 1 : editing.quantity,
+                quantity: editing.quantity,
             });
             toast.success(editing.option.isFillField ? "تم حفظ تكلفة تعبئة الحقل" : "تم حفظ التكلفة الإضافية لهذا الخيار");
             setEditing(null);
@@ -178,7 +178,7 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
                         <p className="mt-1 text-xs text-slate-500">{editing.option.isFillField ? "تُضاف هذه التكلفة فقط عندما يرسل العميل قيمة غير فارغة في هذا الحقل." : "تُضاف هذه التكلفة فقط عند اختيار العميل لهذه القيمة."}</p>
                         <div className="mt-5 grid grid-cols-2 gap-2">
                             <button onClick={() => setEditing((row) => ({ ...row, mode: "resource" }))} className={`rounded-xl border p-3 text-sm font-bold ${editing.mode === "resource" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}>مكوّن مشترك</button>
-                            <button onClick={() => setEditing((row) => ({ ...row, mode: "direct", quantity: 1 }))} className={`rounded-xl border p-3 text-sm font-bold ${editing.mode === "direct" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}>مبلغ مباشر</button>
+                            <button onClick={() => setEditing((row) => ({ ...row, mode: "direct" }))} className={`rounded-xl border p-3 text-sm font-bold ${editing.mode === "direct" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}>مبلغ مباشر</button>
                         </div>
                         {editing.mode === "resource" ? (
                             <div className="mt-4 grid gap-3 sm:grid-cols-2">

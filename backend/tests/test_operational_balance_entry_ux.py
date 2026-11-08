@@ -144,7 +144,7 @@ def test_account_statement_read_grant_and_exact_tenant_account_required():
             response=await c.get('/api/operational-balances/accounts/bank/bank')
             assert response.status_code==200,response.text
             assert response.json()['account']['actual']=='1000.00'
-            assert (await c.get('/api/operational-balances/accounts/bank/foreign')).status_code==403
+            assert (await c.get('/api/operational-balances/accounts/bank/foreign')).status_code==409
     run(scenario)
 
 

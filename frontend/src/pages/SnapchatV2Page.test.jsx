@@ -309,8 +309,6 @@ describe("SnapchatV2Page read-only load", () => {
             await Promise.resolve();
             await Promise.resolve();
         });
-        expect(getSnapchatEntitySettings).not.toHaveBeenCalled();
-        await act(async () => container.querySelector('[data-testid="load-visible-snapchat-settings"]').click());
         expect(getSnapchatEntitySettings).toHaveBeenCalledWith(expect.objectContaining({
             entityType: "campaign",
         }));
@@ -327,8 +325,6 @@ describe("SnapchatV2Page read-only load", () => {
             await Promise.resolve();
             await Promise.resolve();
         });
-        expect(getSnapchatEntitySettings).toHaveBeenCalledTimes(1);
-        await act(async () => container.querySelector('[data-testid="load-visible-snapchat-settings"]').click());
         expect(getSnapchatEntitySettings).toHaveBeenCalledWith(expect.objectContaining({
             entityType: "ad_squad",
             parentUnifiedId: "da5049b7-5417-4be9-a596-20a74f9fd54c",
@@ -376,7 +372,6 @@ describe("SnapchatV2Page read-only load", () => {
             await Promise.resolve();
             await Promise.resolve();
         });
-        await act(async () => container.querySelector('[data-testid="load-visible-snapchat-settings"]').click());
         expect(container.textContent).toContain("تعذّر جلب الإعدادات");
         expect(container.querySelector('[data-column="daily-budget"] span').title).toContain("فشل إثبات ارتباط إعدادات الكيان بالحساب الإعلاني المحدد");
         expect(container.textContent).not.toContain("99.00 USD");
@@ -454,7 +449,6 @@ describe("SnapchatV2Page read-only load", () => {
             await Promise.resolve();
             await Promise.resolve();
         });
-        await act(async () => container.querySelector('[data-testid="load-visible-snapchat-settings"]').click());
         expect(getSnapchatEntitySettings).toHaveBeenCalledTimes(1);
 
         await act(async () => {
@@ -464,7 +458,6 @@ describe("SnapchatV2Page read-only load", () => {
             await Promise.resolve();
             await Promise.resolve();
         });
-        await act(async () => container.querySelector('[data-testid="load-visible-snapchat-settings"]').click());
         expect(getSnapchatEntitySettings).toHaveBeenCalledTimes(2);
 
         await act(async () => {
@@ -520,7 +513,7 @@ describe("SnapchatV2Page read-only load", () => {
         expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
         expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
     });
-    it("loads settings only on request and disables remote budget sorting", async () => {
+    it("sorts budgets across all filtered campaigns and reuses previously loaded settings", async () => {
         const rows = Array.from({ length: 20 }, (_, i) => ({
             delivery: {}, platform_outcomes: {},
             entity: { id: `campaign-${i}`, level: "campaign", name: `Campaign ${i}`, status: "ACTIVE" },
@@ -536,12 +529,15 @@ describe("SnapchatV2Page read-only load", () => {
             account_currency: "USD", quality: { settings_status: "settings_complete" },
         }]));
         await act(async () => root.render(<SnapchatV2Page />));
-        expect(getSnapchatEntitySettings).not.toHaveBeenCalled();
-        expect(container.querySelector('[aria-label="ترتيب حسب ميزانية الحملة اليومية"]')).toBeNull();
-        await act(async () => container.querySelector('[data-testid="load-visible-snapchat-settings"]').click());
         expect(getSnapchatEntitySettings).toHaveBeenCalledTimes(7);
-        await act(async () => container.querySelector('[data-testid="load-visible-snapchat-settings"]').click());
-        expect(getSnapchatEntitySettings).toHaveBeenCalledTimes(7);
+        await act(async () => container.querySelector('[aria-label="ترتيب حسب ميزانية الحملة اليومية"]').click());
+        const table = container.querySelector('[data-testid="unified-marketing-entity-table"]');
+        expect(table.querySelector('tbody tr').textContent).toContain("Campaign 19");
+        expect(table.querySelector('[data-column="daily-budget"]').textContent).toContain("19.00 USD");
+        expect(getSnapchatEntitySettings).toHaveBeenCalledTimes(20);
+        await act(async () => container.querySelector('[aria-label="ترتيب حسب ميزانية الحملة اليومية"]').click());
+        expect(table.querySelector('tbody tr').textContent).toContain("Campaign 0");
+        expect(getSnapchatEntitySettings).toHaveBeenCalledTimes(20);
         expect(api.post).not.toHaveBeenCalled();
     });
 
@@ -563,8 +559,6 @@ describe("SnapchatV2Page read-only load", () => {
             quality: { settings_status: "settings_complete" },
         }]));
         await act(async () => { root.render(<SnapchatV2Page />); });
-        expect(getSnapchatEntitySettings).not.toHaveBeenCalled();
-        await act(async () => container.querySelector('[data-testid="load-visible-snapchat-settings"]').click());
         expect(getSnapchatEntitySettings.mock.calls.map(([params]) => params.unifiedEntityId))
             .toEqual(rows.slice(0, 7).map(row => row.entity.id));
         expect(getSnapchatEntitySettings.mock.calls.every(([params]) => params.limit === 1)).toBe(true);
@@ -576,8 +570,6 @@ describe("SnapchatV2Page read-only load", () => {
         await act(async () => { scroll.dispatchEvent(new Event("scroll", { bubbles: true })); });
         expect(table.querySelectorAll('tbody tr')).toHaveLength(12);
         expect(table.querySelector('[data-column="daily-budget"]')).not.toBeNull();
-        expect(getSnapchatEntitySettings).toHaveBeenCalledTimes(7);
-        await act(async () => container.querySelector('[data-testid="load-visible-snapchat-settings"]').click());
         expect(getSnapchatEntitySettings.mock.calls.slice(7).map(([params]) => params.unifiedEntityId))
             .toEqual(rows.slice(7, 12).map(row => row.entity.id));
         await act(async () => { container.querySelector('[data-testid="manage-campaign-11"]').click(); });

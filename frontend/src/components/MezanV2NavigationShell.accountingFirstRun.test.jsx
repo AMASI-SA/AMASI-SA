@@ -100,16 +100,3 @@ test.each([true, false])("the Mezan 2 payment-fee table is linked for owner acce
         expect(node.querySelector("output").textContent).toBe("/operational-balances/provider-fees");
     }
 });
-
-test.each(["owner", "employee"])("operational admin entry points remain independent for %s", async role => {
-    useOptionalAuth.mockReturnValue({ user: { id: "owner-fixture", role } });
-    getAccountingAccess.mockResolvedValue({ user_id: "owner-fixture", is_owner: role === "owner", permissions: [] });
-    await act(async () => root.render(<MemoryRouter initialEntries={["/operational-balances/financial-position"]}><Harness /></MemoryRouter>));
-    const daily = node.querySelector('a[href="/operational-balances/daily-financial-movements"]');
-    const review = node.querySelector('a[href="/bank-transfer-review?workspace=store-delivery"]');
-    expect(daily.textContent).toBe("الحركات المالية اليومية");
-    expect(review.textContent).toBe("مراجعة تحصيلات الموصلين");
-    await act(async () => daily.click());
-    expect(node.querySelector("output").textContent).toBe("/operational-balances/daily-financial-movements");
-    expect(getOnboardingSession).not.toHaveBeenCalled();
-});
