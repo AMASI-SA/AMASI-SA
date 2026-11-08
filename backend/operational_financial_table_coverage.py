@@ -126,6 +126,15 @@ def _historical_capture_phase(issue):
 
 def affected_tables(issue):
     code = str(issue.get("code") or "")
+    if code == "canonical_salla_source_missing":
+        # The canonical-order loop stops before order costs/payment/delivery.
+        # Salary contracts, advertising snapshots and external-party ledger
+        # balances are independent sources. Supplier receipts still depend on
+        # the skipped order identity; cash and consolidated coverage stay held.
+        source = issue.get("source_id")
+        if isinstance(source, (str, int)) and not isinstance(source, bool) and str(source).strip():
+            return ALL_TABLES - {"employees", "external", "ads", "ads_currency_conversion"}
+        return ALL_TABLES
     if code in HISTORICAL_CAPTURE:
         # The history check includes previous bank/COD payments, customer
         # returns/exchanges and same-order movements (including custody legs).

@@ -200,3 +200,73 @@ def test_actual_old_driver_source_retains_delivery_phase_without_courier_display
     assert {'cash', 'banks_network', 'drivers'}.issubset(affected_tables(issue))
     assert not {'suppliers', 'employees', 'external'}.intersection(affected_tables(issue))
     assert not result['orders'] and not result.get('delivery_events')
+
+
+def test_missing_canonical_order_keeps_cash_supplier_and_consolidation_blocked_only():
+    issue = {'code': 'canonical_salla_source_missing', 'source_id': 'order-unknown'}
+    result = build_financial_position(snapshot(issue))
+    for identity in ('employees', 'external', 'ads'):
+        assert table(result, identity)['coverage']['complete'] is True
+    for identity in ('banks_network', 'cash', 'suppliers', 'providers', 'employee_custody'):
+        assert table(result, identity)['coverage']['complete'] is False
+    assert result['currencies']['SAR']['completeness']['actual'] is False
+
+
+@pytest.mark.parametrize('issue', [
+    {'code': 'canonical_salla_source_missing'},
+    {'code': 'canonical_salla_source_missing', 'source_id': ''},
+    {'code': 'canonical_salla_source_missing', 'source_id': {}},
+    {'code': 'canonical_salla_source_unknown', 'source_id': 'order-unknown'},
+])
+def test_missing_identity_or_unknown_canonical_failure_still_blocks_every_table(issue):
+    from operational_financial_table_coverage import ALL_TABLES, affected_tables
+    assert affected_tables(issue) == ALL_TABLES
+
+
+def test_real_missing_canonical_source_does_not_change_independent_salary_or_openings():
+    from operational_balance_engine import reconcile
+    from operational_balance_sources import collect_sources
+    from test_operational_balance_sources import DB, row, run, START, NOW
+    data = {'mezan_employees_v2': [row(id='e', status='active')],
+            'mezan_employee_salary_contracts_v2': [row(employee_id='e', salary_revisions=[
+                {'effective_from': '2026-01-01', 'monthly_amount': '3000.01'}])]}
+    baseline = run(collect_sources(DB(data), 'owner', START, NOW))
+    data['unified_orders'] = [row(order_number='unknown', total=999, status='delivered')]
+    missing = run(collect_sources(DB(data), 'owner', START, NOW))
+    assert missing['orders'] == baseline['orders'] == []
+    assert missing['employees'] == baseline['employees']
+    assert missing['ad_snapshots'] == baseline['ad_snapshots']
+    state = snapshot()
+    state['started_at'] = START
+    opening(state, 'ad', 'ad_account', '45.00')
+    good = reconcile(state, baseline, NOW)
+    held = reconcile(state, missing, NOW)
+    assert held['engine']['obligations'] == good['engine']['obligations']
+    assert held['engine']['salary_days'] == good['engine']['salary_days']
+    assert held['engine']['salary_days']  # Actual accrued days, not an empty fixture.
+    reports = [build_financial_position(s) for s in (good, held)]
+    for identity in ('employees', 'external', 'ads'):
+        assert table(reports[0], identity)['rows'] == table(reports[1], identity)['rows']
+        assert table(reports[0], identity)['complete'] == table(reports[1], identity)['complete']
+    for identity in ('banks_network', 'cash', 'suppliers'):
+        assert table(reports[1], identity)['complete'] is False
+    # Independent source gaps remain real, including an employee bank payment:
+    # the order ambiguity continues to block the bank leg, never its cash effect.
+    held['engine']['issues'].append({'code': 'employee_salary_contract_incomplete', 'source_id': 'e'})
+    assert table(build_financial_position(held), 'employees')['complete'] is False
+
+
+def test_canonical_classification_never_suppresses_independent_ad_or_bank_gaps():
+    from operational_financial_table_coverage import affected_tables
+    canonical = {'code': 'canonical_salla_source_missing', 'source_id': 'unknown'}
+    for extra, affected in [
+        ({'code': 'ad_daily_source_incomplete', 'source_id': 'ad:one'}, 'ads'),
+        ({'code': 'bank_transfer_source_unresolved', 'source_id': 'employee-payment'}, 'employees'),
+        ({'code': 'bank_transfer_source_unresolved', 'source_id': 'ad-funding'}, 'ads'),
+    ]:
+        result = build_financial_position(snapshot(canonical, extra))
+        assert table(result, affected)['complete'] is False
+        assert table(result, 'banks_network')['complete'] is False
+        assert table(result, 'cash')['complete'] is False
+    assert 'ads_currency_conversion' not in affected_tables(canonical)
+    assert 'ads_currency_conversion' in affected_tables({'code': 'ad_fx_snapshot_incomplete'})
