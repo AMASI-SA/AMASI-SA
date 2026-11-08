@@ -22,6 +22,20 @@ def contract_digest(policy):
     return sha256(json.dumps(content, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
 
 
+def calculation_signature(policy):
+    """Compare calculation terms, not identifiers local to each contract.
+
+    The original contract_signature/digest deliberately stays unchanged: an
+    edit to any approved component identity still invalidates its pinned scope.
+    Keep every other field, component ordering and multiplicity fail-closed.
+    """
+    terms = {k: v for k, v in policy.items() if k not in METADATA}
+    if isinstance(terms.get('components'), list):
+        terms['components'] = [{k: v for k, v in part.items() if k != 'id'}
+                               for part in terms['components']]
+    return json.dumps(terms, sort_keys=True, separators=(',', ':'), allow_nan=False)
+
+
 def scoped_uniform_policy(payment, candidates, transaction_date):
     if payment.get('provider') != 'tabby' or payment.get('event_type', 'capture') != 'capture':
         return None
@@ -57,7 +71,7 @@ def scoped_uniform_policy(payment, candidates, transaction_date):
         if not policy.get('plan_id') or type(policy.get('fee_model_version')) is not int or policy['fee_model_version'] != 2:
             raise ValueError('provider_plan_scope_invalid')
         selected.append(policy)
-    if len({contract_signature(p) for p in selected}) != 1:
+    if len({calculation_signature(p) for p in selected}) != 1:
         raise ValueError('provider_plan_scope_terms_differ')
     # A deterministic representative supplies arithmetic only. Never assign its
     # plan_id to the order; result.plan_id remains the payment's unknown value.
@@ -133,7 +147,7 @@ async def create_plan_scope(db, owner, actor, payload):
         except (ValueError, TypeError):
             _fail('provider_plan_scope_contract_invalid')
         selected.append(p)
-    if len({contract_signature(p) for p in selected}) != 1:
+    if len({calculation_signature(p) for p in selected}) != 1:
         _fail('provider_plan_scope_terms_differ')
     scope.update(id=str(uuid4()), status='active', confirmed_by=actor, confirmed_at=_now(),
                  contracts=[{'policy_id': p['id'], 'contract_digest': contract_digest(p)} for p in selected])

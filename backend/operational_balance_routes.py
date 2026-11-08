@@ -1137,7 +1137,7 @@ def make_operational_balance_router(db, current_user):
                                           expected_as_of=expected_as_of, expected_revision=expected_revision)
 
     @router.get("/financial-position")
-    async def financial_position(user=Depends(current_user)):
+    async def financial_position(user=Depends(current_user), coverage_format: Literal['expanded', 'indexed'] = 'expanded'):
         actor, owner, _ = await consolidated_scope(user)
         from operational_balance_service import accounting_inactive
         from operational_financial_position import build_financial_position
@@ -1180,6 +1180,9 @@ def make_operational_balance_router(db, current_user):
                             "غير متاح: تعذر التحقق من مصادر تكاليف الطلبات المفتوحة؛ الأرصدة الحالية من آخر احتساب محفوظ."}],
                     }
         result = build_financial_position(state, cost_exposure=cost_exposure, generated_at=now())
+        if coverage_format == 'indexed':
+            from operational_financial_table_coverage import index_report_coverage
+            result = index_report_coverage(result)
         result = await attach_order_numbers(db, owner, result)
         result.update(session_scope=digest([owner, actor["id"]]), permissions={"reports": True})
         await consolidated_scope(user)
