@@ -101,6 +101,17 @@ const context = { product_id: "product-1", from_date: "2026-11-01", to_date: "20
 const estimates = { currency: "SAR", allocation_method: "product_sales_share", rows: [{ campaign_id: "a", campaign_name: "شالات الشتاء", ad_group_id: "g", ad_group_name: "مجموعة الشتاء", ad_id: "ad", ad_name: "إعلان الشال", units_sold: 7, ad_spend_sar: 140, estimated_product_spend_sar: 70, estimated_unit_promotion_cost_sar: 10, status: "estimated" }] };
 const settleHover = async () => act(async () => { await new Promise(resolve => setTimeout(resolve, 230)); });
 
+test("unknown ad displays campaign spend under the campaign cost label", async () => {
+    api.get.mockResolvedValue({ data: { ...estimates, rows: [{ ...estimates.rows[0],
+        ad_id: null, ad_name: null, ad_group_id: null, ad_group_name: null,
+        allocation_level: "campaign", ad_spend_sar: null, campaign_spend_sar: 140 }] } });
+    await render([source], context); await click(trigger()); await settleHover();
+    const table = popup().querySelector('table[aria-label="صرف الإعلانات ونصيب المنتج التقديري"]');
+    expect(table.textContent).toContain("صرف الإعلان أو الحملة كاملًا");
+    expect(table.querySelectorAll("tbody td")[4].textContent).toBe("140.00 ر.س");
+    expect(table.textContent).toContain("عرض على مستوى الحملة");
+});
+
 test("promotion loads only after opening and reuses the mounted badge result", async () => {
     api.get.mockResolvedValue({ data: estimates });
     await render([source], context);
@@ -178,4 +189,13 @@ test("missing ad is displayed by its confirmed campaign name without invented ad
     expect(label).toContain("على مستوى الحملة");
     expect(label).not.toContain("إعلان غير معروف");
     expect([...table.querySelectorAll("tbody td")].slice(-3).map(cell => cell.textContent)).toEqual(["غير متاح", "غير متاح", "غير متاح"]);
+});
+
+test("current-day campaign estimates expose the spend cutoff and provisional basis", async () => {
+    api.get.mockResolvedValue({ data: { ...estimates, rows: [{ ...estimates.rows[0],
+        allocation_level: "campaign", campaign_spend_sar: 140, ad_spend_sar: null,
+        status: "estimated_provisional", provisional: true, spend_as_of: "2026-11-08T13:00:00Z" }] } });
+    await render([source], context); await click(trigger()); await settleHover();
+    expect(popup().textContent).toContain("صرف مؤقت حتى");
+    expect(popup().textContent).toContain("بتوقيت الرياض؛ التوزيع تقديري على الطلبات الحالية");
 });

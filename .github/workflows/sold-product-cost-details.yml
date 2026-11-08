@@ -14,6 +14,8 @@ on:
       - 'frontend/src/components/ProductTrafficSources*'
       - 'backend/product_traffic_sources.py'
       - 'backend/product_promotion_estimates.py'
+      - 'backend/product_campaign_identity.py'
+      - 'backend/tests/test_product_campaign*'
       - 'backend/tests/test_product_promotion*'
       - 'backend/tests/test_product_traffic_sources.py'
       - 'backend/sold_product*'
@@ -69,6 +71,8 @@ jobs:
           backend/tests/test_product_traffic_sources.py
           backend/tests/test_product_promotion_estimates.py
           backend/tests/test_product_promotion_route.py
+          backend/tests/test_product_campaign_identity.py
+          backend/tests/test_product_campaign_spend_fallback.py
           backend/tests/test_sold_product_cost_details.py
           backend/tests/test_sold_financial_report.py
           backend/tests/test_sold_products_report_v2.py

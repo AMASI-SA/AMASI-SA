@@ -5,6 +5,7 @@ from pymongo.errors import PyMongoError
 from decimal import Decimal, ROUND_FLOOR
 
 from mezan_attribution_order_ledger import LEDGER_COLLECTION, _order_key, _provider
+from product_campaign_identity import campaign_attribution_projection, load_campaign_ledgers
 from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION, canonical_ad_platform,
     canonical_marketing_source, order_source_candidates,
@@ -72,14 +73,14 @@ async def load_product_traffic_sources(db, owner, orders, *, budget=None):
 
 
 async def _load_product_traffic_sources(db, owner, orders, *, budget=None):
-    """Two bounded owner-scoped batch reads, no account inference or writes."""
+    """Bounded owner-scoped batch reads, no account inference or writes."""
     numbers = sorted({str(order.get('order_number')) for order in orders if order.get('order_number')})
     number_counts = Counter(str(order.get('order_number') or '') for order in orders)
     if budget is not None:
         await budget.checkpoint()
     # Report parsers can omit the canonical order ID. Recover it alongside the
     # whitelisted source evidence before constructing the ledger join keys.
-    projection = {**SALLA_RAW_ATTRIBUTION_PROJECTION, 'user_id': 1,
+    projection = {**campaign_attribution_projection(), 'user_id': 1,
                   'order_id': 1, 'id': 1, 'reference_id': 1,
                   'raw_by_source.salla_direct.id': 1,
                   'raw_by_source.salla_direct.reference_id': 1,
@@ -130,6 +131,7 @@ async def _load_product_traffic_sources(db, owner, orders, *, budget=None):
     for row in rows:
         if row.get('user_id') == owner:
             ledger[str(row.get('order_key') or '')].append(row)
+    ledger = await load_campaign_ledgers(db, owner, list(canonical.values()), ledger)
     result = {}
     for order in orders:
         if budget is not None:

@@ -90,15 +90,15 @@ function PromotionDetails({ state, source }) {
     if (!data.rows.length) return <p role="status" className="mt-3 text-sm text-amber-800">{estimateReason(data.reason)}</p>;
     return <section className="mt-4 border-t pt-3" aria-label="تفاصيل الإعلان وتقدير تكلفة الترويج">
         <h3 className="font-bold">الحملة ← المجموعة الإعلانية ← الإعلان عند معرفته</h3>
-        <p className="my-2 text-xs text-slate-500">توزيع تقديري حسب حصة مبيعات المنتج في الإعلان. صرف الإعلان الكامل يختلف عن نصيب هذا المنتج؛ ليس تكلفة شراء فردية مؤكدة. جميع المبالغ بالريال السعودي.</p>
+        <p className="my-2 text-xs text-slate-500">توزيع تقديري حسب حصة مبيعات المنتج في الإعلان أو الحملة عند تعذر تحديد الإعلان. الصرف الكامل يختلف عن نصيب هذا المنتج؛ ليس تكلفة شراء فردية مؤكدة. جميع المبالغ بالريال السعودي.</p>
         <div className="overflow-x-auto"><table className="w-full min-w-[780px] border-collapse text-xs" aria-label="صرف الإعلانات ونصيب المنتج التقديري">
-            <thead className="bg-slate-50"><tr>{["الحملة", "المجموعة الإعلانية", "الإعلان أو الحملة البديلة", "قطع المنتج", "صرف الإعلان كاملًا", "نصيب المنتج التقديري", "تقدير الترويج للقطعة"].map(label => <th key={label} className="border-b p-2">{label}</th>)}</tr></thead>
+            <thead className="bg-slate-50"><tr>{["الحملة", "المجموعة الإعلانية", "الإعلان أو الحملة البديلة", "قطع المنتج", "صرف الإعلان أو الحملة كاملًا", "نصيب المنتج التقديري", "تقدير الترويج للقطعة"].map(label => <th key={label} className="border-b p-2">{label}</th>)}</tr></thead>
             <tbody>{data.rows.map((row, index) => <tr key={`${row.campaign_id}:${row.ad_group_id}:${row.ad_id}:${index}`} className="border-b border-slate-100">
                 <td className="p-2">{row.campaign_name || (row.campaign_id ? `حملة ${row.campaign_id}` : "حملة غير معروفة")}</td>
                 <td className="p-2">{row.ad_group_name || (row.ad_group_id ? `مجموعة ${row.ad_group_id}` : "مجموعة غير معروفة")}</td>
                 <td className="p-2">{row.ad_name || (row.ad_id ? `إعلان ${row.ad_id}` : row.campaign_name || (row.campaign_id ? `حملة ${row.campaign_id}` : "حملة غير معروفة"))}<small className="mt-1 block text-slate-500">{row.allocation_level === "campaign" || !row.ad_id ? "عرض على مستوى الحملة" : "تقدير على مستوى الإعلان"}</small>{row.reason && <small className="mt-1 block text-amber-800">{estimateReason(row.reason)}</small>}</td>
                 <td className="p-2 font-bold">{sourceUnitsFormatter.format(row.units_sold)}</td>
-                <td className="p-2 whitespace-nowrap">{money(row.ad_spend_sar)}</td>
+                <td className="p-2 whitespace-nowrap">{money(row.allocation_level === "campaign" ? row.campaign_spend_sar : row.ad_spend_sar)}{row.provisional && <small className="mt-1 block whitespace-normal text-amber-800">صرف مؤقت حتى {row.spend_as_of ? new Date(row.spend_as_of).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" }) : "آخر رصد"} بتوقيت الرياض؛ التوزيع تقديري على الطلبات الحالية.</small>}</td>
                 <td className="p-2 whitespace-nowrap">{money(row.estimated_product_spend_sar)}</td>
                 <td className="p-2 whitespace-nowrap">{money(row.estimated_unit_promotion_cost_sar)}</td>
             </tr>)}</tbody>
