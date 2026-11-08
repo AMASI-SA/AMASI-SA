@@ -1632,7 +1632,7 @@ def make_preparation_supplier_dispatch_router(
         await ensure_indexes_once()
         from preparation_section_reads import progress_days
         return await progress_days(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker),
-                                   date_basis="file_created_at")
+                                   date_basis="employee_assigned_at")
 
     @router.get("/progress-workspace")
     async def progress_day_workspace(day: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$|^__unknown__$"), after: str = Query("", max_length=512), user: dict = Depends(current_user)) -> dict[str, Any]:
@@ -1640,7 +1640,7 @@ def make_preparation_supplier_dispatch_router(
         await ensure_indexes_once()
         from preparation_section_reads import progress_workspace
         return await progress_workspace(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker),
-                                        day=day, after=after, date_basis="file_created_at")
+                                        day=day, after=after, date_basis="employee_assigned_at")
 
     @router.get("/workspace")
     async def workspace(

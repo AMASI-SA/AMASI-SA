@@ -395,6 +395,9 @@ def make_order_engine_router(
         force: bool = Query(default=True),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
+        if user.get("_session_client") == "amasi_mobile":
+            from mobile_order_refresh import refresh_mobile_order
+            return await refresh_mobile_order(db, user, order_number, page="app.page.orders")
         owner = _require_owner(user)
         result = await refresh_order_from_salla(
             db,

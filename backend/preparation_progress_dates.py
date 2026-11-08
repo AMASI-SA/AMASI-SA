@@ -35,7 +35,7 @@ def employee_assignment_at(piece: dict[str, Any], registry: dict[str, Any]) -> A
     Rejection/reassignment writes an explicit ``assign_*`` history row. The
     generic reassigned_at field is also written by supplier receipt, so it is
     deliberately not a fallback. Legacy pieces retain their initial assigned
-    timestamp or, when missing, the registry's registration timestamp.
+    timestamp; file registration is not proof of employee assignment.
     """
     explicit = piece.get("employee_assigned_at")
     if _timestamp(explicit) is not None:
@@ -59,7 +59,7 @@ def employee_assignment_at(piece: dict[str, Any], registry: dict[str, Any]) -> A
             assignments.append((assigned, event["assigned_at"]))
     if assignments:
         return max(assignments, key=lambda item: item[0])[1]
-    for value in (piece.get("assigned_at"), registry.get("registered_at")):
+    for value in (piece.get("assigned_at"),):
         if _timestamp(value) is not None:
             return value
     return None

@@ -22,7 +22,7 @@ def test_assignment_ignores_supplier_dispatch_receipt_and_untyped_reassigned_tim
         ]}
     assert file_creation_at(registry) == registry["created_at"]
     assert employee_assignment_at(piece, registry) == "2026-11-03T12:00:00Z"
-    assert employee_assignment_at({"reassigned_at": "2026-11-09", "order_date": "2026-10-01"}, registry) == registry["registered_at"]
+    assert employee_assignment_at({"reassigned_at": "2026-11-09", "order_date": "2026-10-01"}, registry) is None
     assert file_creation_at({"registered_at": registry["registered_at"], "file_date": "2026-12-01"}) == registry["registered_at"]
     assert employee_assignment_at({"order_date": "2026-10-01"}, {}) is None
 
@@ -132,8 +132,8 @@ async def test_http_routes_and_real_card_hydration_use_the_same_date_scope(monke
         mine = await client.get("/supplier-dispatch-v1/progress-days")
         watch = await client.get(prefix + "progress-days")
         assert mine.status_code == watch.status_code == 200
-        assert mine.json()["days"] == [{"key": "2026-11-01"}]
-        assert mine.json()["date_basis"] == "file_created_at"
+        assert mine.json()["days"] == [{"key": "2026-11-03"}, {"key": "2026-11-02"}]
+        assert mine.json()["date_basis"] == "employee_assigned_at"
         assert watch.json()["days"] == [{"key": "2026-11-03"}, {"key": "2026-11-02"}]
         assert watch.json()["date_basis"] == "employee_assigned_at"
         assert hydrated == []
@@ -159,10 +159,10 @@ async def test_http_routes_and_real_card_hydration_use_the_same_date_scope(monke
         assert after is None
         assert loaded == [f"piece-{index:02}" for index in range(1, 13)]
         assert hydrated == [10, 2]
-        own_page = await client.get("/supplier-dispatch-v1/progress-workspace", params={"day": "2026-11-01"})
+        own_page = await client.get("/supplier-dispatch-v1/progress-workspace", params={"day": "2026-11-03"})
         assert own_page.status_code == 200, own_page.text
-        assert own_page.json()["date_basis"] == "file_created_at"
-        assert own_page.json()["progress_day_summary"]["assigned"] == 13
+        assert own_page.json()["date_basis"] == "employee_assigned_at"
+        assert own_page.json()["progress_day_summary"]["assigned"] == 12
 
 
 @pytest.mark.asyncio
