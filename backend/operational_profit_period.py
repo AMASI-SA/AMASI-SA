@@ -106,10 +106,12 @@ async def collect(db, owner, state, raw_orders, data, started, stamp):
             for key, row in days.items():
                 previous = saved_days.get(key)
                 from operational_salary_projection import legacy_salary_day_matches
+                from operational_salary_reconciliation import reviewed_salary_day_matches
                 obligation = state.get('engine', {}).get('obligations', {}).get(key)
                 reconciled = (previous is None and obligation is None) or (
                     previous is not None and obligation is not None
-                    and (previous == row or legacy_salary_day_matches(key, previous, row, currency))
+                    and (previous == row or legacy_salary_day_matches(key, previous, row, currency)
+                         or reviewed_salary_day_matches(state, key, previous, row, currency))
                     and obligation.get('kind') == 'salary' and obligation.get('party_id') == eid
                     and obligation.get('currency') == currency
                     and number(obligation.get('confirmed')) == number(previous.get('amount')))

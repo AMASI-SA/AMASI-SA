@@ -679,6 +679,7 @@ def reconcile(state, sources, as_of):
 
     from operational_salary_projection import candidates as salary_candidates, legacy_salary_day_matches
     from operational_salary_start import select_first_day
+    from operational_salary_reconciliation import reviewed_salary_day_matches, adjustment_for
     try:
         first_salary_day = select_first_day(state, now)
     except (ValueError, KeyError, TypeError):
@@ -703,7 +704,8 @@ def reconcile(state, sources, as_of):
         previous_currency = previous.get("currency", obligations.get(key, {}).get("currency"))
         if (proposed is None or previous.get("amount") != proposed["amount"]
                 or previous_currency != proposed["currency"]) and not legacy_salary_day_matches(
-                    key, previous, proposed, previous_currency):
+                    key, previous, proposed, previous_currency) and not reviewed_salary_day_matches(
+                    result, key, previous, proposed, previous_currency, require_adjustment=False):
             conflicts[key] = {"recorded": deepcopy(previous), "proposed": deepcopy(proposed),
                               "action_required": "review_documented_salary_adjustment"}
             issue("salary_source_changed", key)
@@ -723,6 +725,15 @@ def reconcile(state, sources, as_of):
             eid, business_day = key[len("salary:"):].rsplit(":", 1)
             put(key, "salary", eid, "employee", candidate["currency"],
                 confirmed=Decimal(candidate["amount"]), business_date=business_day)
+
+    reviewed_rows = (result.get('salary_accrual_policy', {}).get('rounding_review') or {}).get('rows', {})
+    for key, proof in (reviewed_rows.items() if first_salary_day is not None else []):
+        previous, proposed = engine['salary_days'].get(key), current_salary.get(key)
+        if reviewed_salary_day_matches(result, key, previous, proposed,
+                                       (previous or {}).get('currency'), require_adjustment=False):
+            adjustment = adjustment_for(key, proof)
+            if adjustment['id'] not in obligations:
+                obligations[adjustment['id']] = adjustment
 
     for snapshot in sorted(sources.get("ad_snapshots", sources.get("advertising", [])), key=lambda r: str(r.get("observed_at", ""))):
         key = "advertising:" + str(snapshot.get("account_id")) + ":" + str(snapshot.get("date"))

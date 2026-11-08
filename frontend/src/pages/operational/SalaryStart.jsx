@@ -11,6 +11,7 @@ const issues = {
   employee_salary_contract_missing_or_ambiguous: 'عقد راتب مفقود أو متعدد؛ يلزم تحديد العقد المعتمد للموظف.',
   operational_salary_source_incomplete: 'بيانات راتب غير مكتملة؛ يلزم مراجعتها.',
   operational_salary_employee_identity_ambiguous: 'هوية موظف مكررة أو غير مكتملة.',
+  operational_salary_recorded_obligation_incomplete: 'استحقاق يوم محفوظ لا يطابق قيد الراتب المرتبط به؛ يلزم تدقيق القيد قبل الاعتماد.',
   operational_salary_recorded_day_reconciliation_required: 'يوجد استحقاق محفوظ يختلف عن المصدر؛ يلزم تسوية موثقة ولا يُعدّل تلقائيًا.'
 };
 function SalaryIssue({item}) {
@@ -37,6 +38,17 @@ function validContext(data, context) {
     (!data.approved || data.effective_first_day === data.first_day);
 }
 function validPreview(data, settings) {
+  const review = data?.rounding_review;
+  const validReview = data?.can_approve_with_rounding_review !== true || (
+    data.can_approve === false && review?.version === 1 && review.reviewed_through === data.business_date &&
+    review.rows && typeof review.rows === 'object' && !Array.isArray(review.rows) &&
+    Array.isArray(data.issues) && data.issues.length > 0 && Object.keys(review.rows).length === data.issues.length &&
+    data.issues.every(item => item?.code === 'operational_salary_recorded_day_reconciliation_required' &&
+      item.reason === 'cutover_rounding_changed' && review.rows[item.source_id]) &&
+    review.totals && typeof review.totals === 'object' && !Array.isArray(review.totals) &&
+    Object.keys(review.totals).length > 0 && Object.entries(review.totals).every(([currency, part]) =>
+      /^[A-Z]{3}$/.test(currency) && amount(part?.increase) && amount(part?.decrease) &&
+      typeof part.net === 'string' && /^-?(0|[1-9]\d*)\.\d{2}$/.test(part.net)));
   return data?.session_scope === settings.session_scope && data.first_day === settings.first_day &&
     hash(data.preview_hash) && day(data.business_date) && data.business_date >= data.first_day &&
     Number.isSafeInteger(data.employee_count) && data.employee_count >= 0 &&
@@ -46,7 +58,7 @@ function validPreview(data, settings) {
     data.additional_amounts != null && typeof data.additional_amounts === 'object' &&
     !Array.isArray(data.additional_amounts) &&
     Object.entries(data.additional_amounts).every(([currency, value]) => /^[A-Z]{3}$/.test(currency) && amount(value)) &&
-    (data.new_days === 0 || Object.keys(data.additional_amounts).length > 0);
+    (data.new_days === 0 || Object.keys(data.additional_amounts).length > 0) && validReview;
 }
 
 export default function SalaryStart({context}) {
@@ -57,6 +69,7 @@ export default function SalaryStart({context}) {
   const [settings, setSettings] = useState(null), [preview, setPreview] = useState(null);
   const [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState(false), [uncertain, setUncertain] = useState(false);
+  const [roundingConfirmed, setRoundingConfirmed] = useState(false);
   const [revision, setRevision] = useState(0), [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -64,7 +77,7 @@ export default function SalaryStart({context}) {
     let alive = true;
     const fresh = () => alive && token === generation.current && key === liveKey.current;
     lock.current = false; pending.current = null;
-    setSettings(null); setPreview(null); setConfirmed(false); setError(''); setUncertain(false); setSaved(false);
+    setSettings(null); setPreview(null); setConfirmed(false); setRoundingConfirmed(false); setError(''); setUncertain(false); setSaved(false);
     setBusy(allowed);
     if (allowed) api.salaryStartContext().then(data => {
       if (!validContext(data, context)) throw invalid();
@@ -81,7 +94,7 @@ export default function SalaryStart({context}) {
   const reload = () => {if (!lock.current) setRevision(v => v + 1);};
   async function loadPreview() {
     if (!ready || settings.approved || saved || lock.current || pending.current) return;
-    lock.current = true; setBusy(true); setError(''); setPreview(null); setConfirmed(false);
+    lock.current = true; setBusy(true); setError(''); setPreview(null); setConfirmed(false); setRoundingConfirmed(false);
     const token = generation.current, key = currentKey;
     try {
       const data = await api.previewSalaryStart({first_day: settings.first_day});
@@ -91,11 +104,14 @@ export default function SalaryStart({context}) {
     finally {if (fresh(token, key)) {lock.current = false; setBusy(false);}}
   }
   async function approve() {
-    if (!ready || settings.approved || saved || lock.current || !preview?.can_approve || (!confirmed && !pending.current)) return;
+    if (!ready || settings.approved || saved || lock.current ||
+        !(preview?.can_approve || preview?.can_approve_with_rounding_review) ||
+        ((!confirmed || (preview.can_approve_with_rounding_review && !roundingConfirmed)) && !pending.current)) return;
     const token = generation.current, key = currentKey;
     pending.current = pending.current || {request_id: requestId(), first_day: settings.first_day,
       expected_preview_hash: preview.preview_hash, expected_session_scope: preview.session_scope,
-      opening_salaries_excluded: true};
+      opening_salaries_excluded: true,
+      ...(preview.can_approve_with_rounding_review ? {salary_rounding_reviewed: true} : {})};
     lock.current = true; setBusy(true); setError('');
     try {
       const data = await api.approveSalaryStart(pending.current);
@@ -137,9 +153,18 @@ export default function SalaryStart({context}) {
           </table></div>
           {preview.new_days === 0 && <p>لا توجد أيام ناقصة في المعاينة الحالية؛ لا تُضاف مبالغ مكررة.</p>}
           {preview.issues.map((item, i) => <SalaryIssue key={i} item={item}/>)}
-          {preview.can_approve ? <>
+          {preview.can_approve_with_rounding_review && <div className="op-table">
+            <table><caption>فروق الأيام المسجلة — قيود تسوية مستقلة، إضافة إلى مبلغ الأيام الناقصة أعلاه</caption>
+              <thead><tr><th>العملة</th><th>زيادة المستحق علينا</th><th>تخفيض المستحق علينا</th><th>صافي الفرق: الموجب علينا والسالب لنا</th></tr></thead>
+              <tbody>{Object.entries(preview.rounding_review.totals).sort(([a], [b]) => a.localeCompare(b)).map(([currency, values]) =>
+                <tr key={currency}><th>{currency}</th><td>{values.increase}</td><td>{values.decrease}</td><td>{values.net}</td></tr>)}</tbody>
+            </table>
+            <p>تبقى الاستحقاقات والمدفوعات السابقة كما هي. ينشئ الاعتماد قيود فروق مستقلة مرة واحدة، ولا يدفع راتبًا أو يخصم من البنك.</p>
+          </div>}
+          {(preview.can_approve || preview.can_approve_with_rounding_review) ? <>
             <label className="op-field"><span><input type="checkbox" checked={confirmed} disabled={busy || uncertain} onChange={e => setConfirmed(e.target.checked)}/> أؤكد أن الأرصدة الافتتاحية لا تشمل رواتب يوم القطع وما بعده.</span></label>
-            <button type="button" disabled={busy || (!confirmed && !uncertain)} onClick={approve}>{uncertain ? 'إعادة إرسال طلب الاعتماد نفسه' : 'اعتماد بداية الرواتب من يوم القطع'}</button>
+            {preview.can_approve_with_rounding_review && <label className="op-field"><span><input type="checkbox" checked={roundingConfirmed} disabled={busy || uncertain} onChange={e => setRoundingConfirmed(e.target.checked)}/> راجعت فروق الأيام والمبالغ أعلاه وأوافق على تسجيلها بقيود تسوية مستقلة.</span></label>}
+            <button type="button" disabled={busy || ((!confirmed || (preview.can_approve_with_rounding_review && !roundingConfirmed)) && !uncertain)} onClick={approve}>{uncertain ? 'إعادة إرسال طلب الاعتماد نفسه' : 'اعتماد بداية الرواتب من يوم القطع'}</button>
           </> : <p>صحح مصادر المعاينة قبل الاعتماد؛ لم تتغير الأرصدة.</p>}
         </div>}
       </>}
