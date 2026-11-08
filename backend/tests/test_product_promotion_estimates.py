@@ -83,7 +83,7 @@ async def test_unknown_ad_preserves_units_at_campaign_without_cost(monkeypatch, 
     assert row['units_sold'] == 2 and row['campaign_id'] == 'campaign'
     assert row['ad_id'] is None and row['ad_group_id'] is None
     assert row['estimated_product_spend_sar'] is None
-    assert row['reason'] == 'ad_identity_unverified'
+    assert row['reason'] == 'campaign_account_unverified'
     assert row['allocation_level'] == 'campaign' and row['campaign_name'] == 'حملة'
 
 
