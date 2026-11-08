@@ -8,8 +8,13 @@ all unrelated production changes.
 
 - Production deployment commit: `10b25d2ad75fb3f1d82fe43ecb64b34f9a410a01`.
 - Task branch: `codex/courier-label-post76-20261109`.
-- New source checkpoint is the commit containing this document; exact SHA is
-  recorded in PR/Issue1006 after creation (no self-referential SHA).
+- Source A: `f8af8c2027f1512aa5377933e5229085f375451e`.
+- Frozen intent-only B: `ca2c494178da3543570afa29371766cca1726a4e`.
+- B tree: `05ac32be6d7d6b9e86b4a94e8edf0c1e3ed4b158`.
+- Runtime: `rg5-e80fcfae723c5e865a69dba84df03e1ecdff7faaae323e464d5cc93aee3a420b`.
+- PR1839 is ready for review, unmerged. Do not rewrite frozen A/B.
+- This final status checkpoint is on evidence-only branch
+  `codex/courier-label-post76-evidence-20261109`; never deploy/merge it.
 - Latest observed shared guard: `active:false`, matching production HEAD.
 - No live business mutations used for testing. No new lease or publication.
 
@@ -49,10 +54,44 @@ existing Review Completion Resumable CI workflow.
   unavailable followed by editor disconnection. Screenshots and deterministic
   code reproduction prove the defect, not the private live order contents.
 
-## Remaining / next safe action
+## Final exact-B CI — 2026-11-08 23:40 UTC
 
-Create Draft PR and run exact-source CI (including real Mongo), release readiness
-and governed source A / intent-only B. Inspect fresh shared guard and HEAD before
-any `/app` mutation/rehearsal. Preserve other tasks' leases. Normal merge only,
-then owned V5 prepare/prepublish, authorized targeted publication and verify3.
-Production changed by this follow-up: **NO**. No need for a new APK.
+All 14 applicable workflows passed on exact B; the unrelated conditional TikTok
+workflow skipped. Reviewed PR1839 is mergeable and no longer draft.
+
+- Review Completion Resumable42535555847: 247 operation cases / 59 subtests,
+  658 retained-provider cases / 345 subtests, 37 recovery unit cases and 1
+  acceptance guard passed. The executed-case checks confirm zero skips/failures.
+  Operation group includes the new courier race and 40-cycle regression.
+- Shipping Print Boundary42535555856: 26 focused cases plus 579 regressions
+  passed; 1 existing conditional skip.
+- Release readiness42535555893 passed including actual Host Node20.20.2 and
+  24.19.0 clean-clone/gitless adapter, isolated packages and HTTP JSON identity.
+- Intent artifact13638933186 verified ZIP
+  SHA2560b6a0b8a87cfae2472629c4fda81ddd7d6c452b1e16f18866515ab6ff7b9984a;
+  exact intent blob7b9783e7e4847079ab3c58beba67ac8abd2a73e8.
+- Public health still reports previous published Android76 server source
+  6a1c18d4d87a92cd7a473db1eb8aaba33ae7fc85 and
+  rg5-b27aabe2e6917c998c4bb3f13eb9c6f979797954a6e74d4edf4a2cf8692e5b6a.
+  This single read is continuity evidence, not a fresh3-probe release acceptance.
+
+## Blocker and next safe action
+
+The shared development workspace stopped from inactivity. Code Server changed
+from502 to explicit Preview Unavailable: agent resting after inactivity; restart
+from Emergent. Existing and fresh management project/home tabs time out, including
+after reload. No sign-in or payment action is required/attempted; no paid chat.
+
+Wake the existing Salla Analytics development environment through Emergent
+management. Then FIRST run in its terminal:
+`cd /app && python scripts/production_release_guard.py status && git rev-parse HEAD`.
+
+Require inactive guard and inspect tracked cleanliness/unrelated files. Fetch
+latest production and exact1839 B; if production advanced, re-evaluate ancestry
+and governed A/B before merge. Do not clear another lease. Use normal merge,
+preserve sourceA and intentB, fast-forward shared/app only, run its governed
+adapter, then owned prepare/prepublish, authorized publish and verify3/statusfalse.
+
+The owned local checkout is clean at B. No shared/app mutation, new lease, merge
+or publication was performed for1839. Production changed by this follow-up:
+**NO**. No new APK required; physical printing acceptance still follows deployment.
