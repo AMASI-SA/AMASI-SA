@@ -72,13 +72,12 @@ async def _driver_or_404(db: Any, user_id: str, driver_id: str) -> dict[str, Any
     return row
 
 
-async def _totals(db: Any, user_id: str, driver_id: str) -> dict[str, Any]:
+async def _totals(db: Any, user_id: str, driver_id: str) -> dict[str, float]:
     earnings = await db[DRIVER_EARNINGS].find(
         {"user_id": user_id, "driver_id": driver_id}, {"_id": 0, "amount": 1}
     ).to_list(length=100000)
     collections = await db[DRIVER_COLLECTIONS].find(
-        {"user_id": user_id, "driver_id": driver_id},
-        {"_id": 0, "cod_custody_amount": 1, "amount": 1, "payment_method": 1, "review_status": 1},
+        {"user_id": user_id, "driver_id": driver_id}, {"_id": 0, "cod_custody_amount": 1}
     ).to_list(length=100000)
     settlements = await db[SETTLEMENTS].find(
         {"user_id": user_id, "driver_id": driver_id},
@@ -127,20 +126,6 @@ async def _totals(db: Any, user_id: str, driver_id: str) -> dict[str, Any]:
         for row in pending_settlements
         if row.get("settlement_type") in {"earning_payment", "net_settlement"}
     ), 2)
-    # These are receipt-review totals, not cash custody or current bank/POS
-    # balances. In particular, a pending or rejected receipt is never paid.
-    noncash_reviews: dict[str, Any] = {}
-    for method in ("card_terminal", "bank_transfer"):
-        noncash_reviews[method] = {}
-        for review_status in ("pending", "approved", "rejected", "unknown"):
-            accepted_statuses = {"pending", "pending_accountant_review"} if review_status == "pending" else {review_status}
-            rows = [row for row in collections if row.get("payment_method") == method
-                    and (row.get("review_status") not in {"pending", "pending_accountant_review", "approved", "rejected"}
-                         if review_status == "unknown" else row.get("review_status") in accepted_statuses)]
-            noncash_reviews[method][review_status] = {
-                "count": len(rows),
-                "amount": round(sum(float(row.get("amount") or 0) for row in rows), 2),
-            }
     return {
         "delivery_earnings_total": earned,
         "delivery_earnings_paid": earnings_paid,
@@ -154,7 +139,6 @@ async def _totals(db: Any, user_id: str, driver_id: str) -> dict[str, Any]:
         "pending_cod_remittance": pending_cod,
         "pending_earning_payment": pending_fee,
         "posted_settlement_count": len(posted_settlements),
-        "noncash_payment_reviews": noncash_reviews,
         "balance_source": "store_delivery_operational",
         "accounting_link_status": "pending_mz2_driver_balance_link",
         "ledger_cod_receivable": None,

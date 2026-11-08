@@ -70,12 +70,6 @@ jobs:
           backend/tests/test_operational_supplier_invoice_cutover.py
           backend/tests/test_store_delivery_noncash_review.py
           backend/tests/test_operational_driver_review_mongo.py
-          backend/tests/test_operational_profit_period.py
-          backend/tests/test_operational_profit_period_expenses.py
-          backend/tests/test_operational_profit_returns.py
-          backend/tests/test_operational_financial_computed_dependencies.py
-          backend/tests/test_operational_provider_fee_comparison.py
-          backend/tests/test_store_delivery_released_client_compatibility.py
           backend/tests/test_provider_fee_source_terms.py
           backend/tests/test_provider_fee_runtime_binding.py
           backend/tests/test_bnpl_fee_completeness_boundaries.py
@@ -110,13 +104,6 @@ jobs:
               assert any(suite in c.get('classname', '') for c in cases), suite + ' not collected'
           assert len([c for c in cases if 'test_operational_balance_salary_start_mongo' in c.get('classname', '')]) == 5
           assert len([c for c in cases if 'test_operational_driver_review_mongo' in c.get('classname', '')]) == 14
-          for suite in ('test_operational_profit_period', 'test_operational_profit_period_expenses',
-                        'test_operational_profit_returns', 'test_operational_financial_computed_dependencies',
-                        'test_operational_provider_fee_comparison',
-                        'test_store_delivery_released_client_compatibility',
-                        'test_operational_balance_tabby_plan_scope', 'test_operational_balance_emkan_aramex_release',
-                        'test_operational_balance_daily_totals_permissions'):
-              assert any(c.get('classname', '').rsplit('.', 1)[-1] == suite for c in cases), suite + ' missing'
           assert not any(c.find(tag) is not None for c in cases for tag in ('skipped', 'failure', 'error'))
           PY
       - uses: actions/upload-artifact@v4

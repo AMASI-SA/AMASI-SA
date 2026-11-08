@@ -645,28 +645,6 @@ def _option_binding_token(binding):
             _option_label(binding.get('option_name')), _option_value_label(binding.get('value_name')))
 
 
-def _native_option_id(row):
-    """Explicit provider identities outrank an order-option checkout row ID."""
-    option = row.get('option') if isinstance(row.get('option'), dict) else {}
-    explicit = [row.get('option_id'), row.get('product_option_id'), option.get('id')]
-    explicit = [value for value in explicit if value is not None and value != '']
-    if not explicit and row.get('id') is not None and row.get('id') != '':
-        explicit = [row['id']]
-    if any(not _catalog_identity(value) for value in explicit) or len({str(value) for value in explicit}) > 1:
-        raise ValueError('mz2_cost_option_identity_conflict')
-    return str(explicit[0]) if explicit else None
-
-
-def _native_option_value_id(row, value):
-    """Reject conflicting or unsupported value identities before direct matching."""
-    represented = row.get('value_id') or value.get('id')
-    explicit = [row.get('value_id'), row.get('option_value_id'), value.get('id'),
-                value.get('value_id'), value.get('option_value_id')]
-    if any(v is not None and v != '' and (not _catalog_identity(v) or str(v) != str(represented)) for v in explicit):
-        raise ValueError('mz2_cost_option_identity_conflict')
-    return str(represented) if represented is not None else None
-
-
 def option_tokens(item):
     """Retain each selection's IDs with its labels; a label cannot override an ID."""
     tokens = set()
@@ -675,13 +653,13 @@ def option_tokens(item):
             raise ValueError('order_option_shape_invalid')
         option = row.get('option') if isinstance(row.get('option'), dict) else {}
         value = row.get('value') if isinstance(row.get('value'), dict) else {}
-        option_id = _native_option_id(row)
+        option_id = row.get('option_id') or row.get('id') or option.get('id')
         option_name = row.get('option_name') or row.get('name') or option.get('name')
         values = row.get('values') or row.get('value')
         values = values if isinstance(values, list) else [values]
         for entry in values:
             entry_dict = entry if isinstance(entry, dict) else value
-            value_id = _native_option_value_id(row, entry_dict)
+            value_id = row.get('value_id') or entry_dict.get('id')
             value_name = row.get('value_name') or entry_dict.get('name') or entry_dict.get('value') or entry
             if (option_id or option_name) and (value_id or value_name):
                 tokens.add((str(option_id or ''), str(value_id or ''),
@@ -766,13 +744,10 @@ def selected_cost_options(bindings, tokens):
 
 def _option_needs_catalog(bindings, token):
     option, value, name, label, _ = token
+    if option and value:
+        return False
     candidates = [b for b in bindings if str(b.get('option_id') or '') == option] if option else [
         b for b in bindings if name and _option_label(b.get('option_name')) == name]
-    # A different native value of a known nonboolean option (e.g. a color)
-    # retains the existing unselected conditional-cost behavior.
-    if option and value and candidates and all(
-            _option_value_label(b.get('value_name')) not in {'yes', 'no'} for b in candidates):
-        return False
     if any(option_matches(b, [token]) for b in candidates):
         return False
     # Preserve the existing explicit yes/no contract, including a declined yes.
@@ -783,13 +758,21 @@ def _option_needs_catalog(bindings, token):
 def _catalog_recovery_preserves_ids(item):
     """Unsupported explicit IDs must not disappear into a label-only fallback."""
     for row in item.get('options_raw') or item.get('options') or []:
-        _native_option_id(row)
-        if isinstance(row.get('raw'), dict):
+        option = row.get('option') if isinstance(row.get('option'), dict) else {}
+        represented = row.get('option_id') or row.get('id') or option.get('id')
+        explicit = [row.get('option_id'), row.get('id'), option.get('id')]
+        if isinstance(row.get('raw'), dict) or any(v is not None and v != '' and
+                (not _catalog_identity(v) or str(v) != str(represented))
+                for v in explicit):
             raise ValueError('mz2_cost_option_identity_conflict')
         values = row.get('values') or row.get('value')
         for value in values if isinstance(values, list) else [values]:
             value = value if isinstance(value, dict) else {}
-            _native_option_value_id(row, value)
+            represented = row.get('value_id') or value.get('id')
+            explicit = [row.get('value_id'), row.get('option_value_id'), value.get('id'),
+                        value.get('value_id'), value.get('option_value_id')]
+            if any(v is not None and v != '' and (not _catalog_identity(v) or str(v) != str(represented)) for v in explicit):
+                raise ValueError('mz2_cost_option_identity_conflict')
 
 
 def _catalog_identity(value):
@@ -1309,7 +1292,6 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
         if not isinstance(raw, dict):
             issue(out, 'canonical_salla_source_missing', source.get('order_number'))
             continue
-        historical_delivery_resolution = False
         try:
             created = instant(raw.get('date') or raw.get('created_at') or raw.get('order_date'))
             if created > now:
@@ -1349,7 +1331,6 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             order_numbers[order_number] = identity
             if created <= start:
                 from operational_delivery_evidence import recorded_courier_fee, resolve_delivery_event
-                historical_delivery_resolution = True
                 event = resolve_delivery_event(raw, source=source, owner=owner,
                     assignments=data['store_delivery_assignments'], setup=setup,
                     started_at=started_at, as_of=as_of, history=delivery_history.get(order_number, ()),
@@ -1357,7 +1338,6 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     frozen_event=(operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity),
                     frozen_shipping=(operational_state or {}).get('engine', {}).get('facts', {}).get('shipping:' + identity),
                     recorded_fee=recorded_courier_fee(operational_state, identity))
-                historical_delivery_resolution = False
                 if event is None:
                     continue
                 # Native drivers retain their SAR-only contract. A courier's
@@ -1556,12 +1536,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             out['orders'].append(order)
         except (ValueError, TypeError, KeyError, InvalidOperation) as exc:
             code = str(exc)
-            # Old orders are excluded from the sales/product/provider stream.
-            # A missing courier display name must not erase the phase of a
-            # delivery resolver failure. Coverage still allowlists exact codes;
-            # unknown or owner/identity failures continue blocking all tables.
-            phase = {'component': 'shipping_fee'} if historical_delivery_resolution else {}
-            issue(out, code, raw.get('id'), **phase)
+            issue(out, code, raw.get('id'))
             if code.startswith('operational_delivery_') and code not in {'operational_delivery_driver_assignment_required',
                     'operational_delivery_owner_mismatch','operational_delivery_order_identity_conflict'}:
                 courier_issue(out, code, raw, source)
@@ -1689,10 +1664,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             if policy.get('user_id') not in (None, owner):
                 issue(out, 'provider_fee_owner_mismatch', policy.get('id'))
                 continue
-            projected = {k: v for k, v in policy.items() if k not in ('_id', 'user_id')}
-            if document.get('plan_scopes'):
-                projected['_approved_plan_scopes'] = document['plan_scopes']
-            out['fee_policies'].append(projected)
+            out['fee_policies'].append({k: v for k, v in policy.items() if k not in ('_id', 'user_id')})
     _employees(data, out)
     _advertising(data, out, start, now, baselines)
     _recurring(data, out, start, now)

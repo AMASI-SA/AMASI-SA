@@ -1,7 +1,6 @@
 """Compose the unchanged financial projection with evidenced noncash linkage."""
-from operational_financial_position_core import build_financial_position as project_balances, refresh_computed_dependencies
+from operational_financial_position_core import build_financial_position as project_balances
 from operational_driver_review_report import link_review_destinations
-from operational_financial_table_coverage import apply_table_coverage
 
 
 def build_financial_position(state, *, cost_exposure=None, generated_at=None):
@@ -57,19 +56,10 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         # Keep recorded rows visible, but a contradictory approval/effect cannot
         # be presented as a complete, trustworthy net monetary position.
         if any(issue["code"] != "operational_driver_review_awaiting_delivery_snapshot" for issue in issues):
-            apply_table_coverage(data["tables"], [issue for issue in result["issues"]
-                if issue["code"] != "operational_driver_review_awaiting_delivery_snapshot"],
-                as_of=result["as_of"], started_at=result["started_at"], currency=currency)
             data["completeness"]["actual"] = False
-            data["completeness"]["forecast"] = False
-            data["metrics"]["forecast_monetary_position"] = None
-            for row in data["forecast_rows"]:
-                if row["id"] == "forecast_monetary_position":
-                    row.update(amount=None, reason="غير متاح: المركز الحالي متعارض مع دليل اعتماد التحصيل؛ لا يمكن إضافته إلى التغير المتوقع.")
             for key in ("monetary_position", "displayed_position"):
                 data["metrics"][key] = None
                 for row in data["current_rows"]:
                     if row["id"] == key:
                         row.update(amount=None, reason="غير متاح: اعتماد التحصيل لا يطابق الأثر المسجل؛ يلزم مراجعة الدليل.")
-    refresh_computed_dependencies(result)
     return result

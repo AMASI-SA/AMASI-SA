@@ -103,7 +103,7 @@ async def _recorded_deliveries(db, owner):
     return records
 
 
-async def open_customer_cod(db, owner, raw_orders, data, state, started, stamp, ids, numbers, *, coverage=None):
+async def open_customer_cod(db, owner, raw_orders, data, state, started, stamp, ids, numbers):
     recorded = await _recorded_deliveries(db, owner)
     linked = [*recorded, *state.get("movements", []), *state.get("customer_returns", []),
               *(state.get("driver_payment_review_facts") or {}).values()]
@@ -182,9 +182,6 @@ async def open_customer_cod(db, owner, raw_orders, data, state, started, stamp, 
                         or _amount(prior.get("confirmed"), currency) != 0):
                     continue
                 replaced[currency].append(cod_key)
-            if coverage is not None:
-                coverage.append({"order_id": oid, "currency": currency, "amount": format(due, ".2f"),
-                                 "source": "open_customer_cod"})
             if due:
                 key = ("prestart_" if old else "current_") + ("assigned" if rows else "unassigned")
                 totals[currency][key][0] += 1

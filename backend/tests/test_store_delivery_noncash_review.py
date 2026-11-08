@@ -94,9 +94,6 @@ def test_options_are_scoped_read_only_and_keep_old_order_eligible(method):
         result = await service.options(db, owner='owner', actor='owner', assignment_id=assignment, clock=NOW)
         assert result['financial_source'] == 'operational' and result['can_approve']
         assert result['amount'] == '200.00' and result['expected_review_revision'] == 1
-        assert result['bank_movements'] == ([{'id': 'bank-movement-1', 'movement_date': '2026-10-06',
-            'amount': '200.00', 'description': None, 'reference': 'BANK-REF-1', 'bank_account_id': 'bank'}]
-            if method == 'bank_transfer' else [])
         assert await db[STATES].find_one({}) == before
         assert await db[EVENTS].count_documents({}) == 0
     run_mock(check)
@@ -146,7 +143,7 @@ def test_current_actor_not_browser_claims_authorizes_review(patch):
 def test_bank_requires_original_bytes_and_unambiguous_post_cutover_evidence(case):
     async def check(db):
         day = {'date_cutover': '2026-10-05', 'old_date': '2026-10-04', 'future_date': '2026-10-08'}.get(case, '2026-10-06')
-        assignment, payload = await seed(db, 'bank_transfer', day=day)
+        _, payload = await seed(db, 'bank_transfer', day=day)
         if case == 'wrong_bank': await db.mz2_daily_movements.update_one({}, {'$set': {'bank_account_id': 'wrong'}})
         if case == 'wrong_amount': await db.mz2_daily_movements.update_one({}, {'$set': {'amount': '199.99'}})
         if case == 'consumed': await db.mz2_daily_movements.update_one({}, {'$set': {'status': 'operational_consumed'}})
@@ -157,32 +154,7 @@ def test_bank_requires_original_bytes_and_unambiguous_post_cutover_evidence(case
         state = await db[STATES].find_one({})
         with pytest.raises(HTTPException):
             await service._bank_proof(db, 'owner', 'bank', payload.settlement_reference, '200.00', state, NOW)
-        choices = await service.options(db, owner='owner', actor='owner', assignment_id=assignment, clock=NOW)
-        assert choices['bank_movements'] == []
         assert await db[STATES].find_one({}) == state
-    run_mock(check)
-
-
-@pytest.mark.parametrize('case', ['operational_claim', 'native_claim', 'manual_reference'])
-def test_bank_options_exclude_claimed_evidence_without_consuming_candidates(case):
-    async def check(db):
-        assignment, payload = await seed(db, 'bank_transfer')
-        identity = ['mz2_daily_movements', payload.settlement_reference]
-        if case == 'operational_claim':
-            await db[EVENTS].insert_one({'user_id': 'owner',
-                '_id': digest(['owner', 'operational-driver-review-claim', 'reference', identity]), 'kind': 'claim'})
-        elif case == 'native_claim':
-            await db.mz2_shipping_native_events_v2.insert_one({'user_id': 'owner', 'destination': {
-                'source_namespace': identity[0], 'source_record_id': identity[1]}})
-        else:
-            await db[STATES].update_one({}, {'$set': {'movements': [
-                {'direction': 'incoming', 'reference': 'BANK-REF-1'}]}})
-        before = await db[STATES].find_one({})
-        movement = await db.mz2_daily_movements.find_one({})
-        choices = await service.options(db, owner='owner', actor='owner', assignment_id=assignment, clock=NOW)
-        assert choices['bank_movements'] == []
-        assert await db[STATES].find_one({}) == before
-        assert await db.mz2_daily_movements.find_one({}) == movement
     run_mock(check)
 
 

@@ -14,7 +14,6 @@ from operational_prestart_cod_forecast import snapshot_cod_preview
 from operational_delivery_report_coverage import delivery_coverage_diagnostics
 from operational_profit_payroll import recorded_salary_subtotals
 from operational_provider_report_coverage import provider_evidence_coverage
-from operational_financial_table_coverage import apply_table_coverage
 
 
 ZERO = Decimal("0")
@@ -277,12 +276,7 @@ def _cost_tables(exposure, currency, obligations):
 
 def _provider_table(rows, issues):
     columns = [_column("name", "المنصة", "text"), _column("orders", "عدد الطلبات", "count"),
-               _column("gross", "إجمالي المدفوع"), _column("tariff_fees", "العمولة حسب التعرفة مع ضريبتها"),
-               _column("tariff_net", "صافي المدفوع حسب التعرفة"),
-               _column("actual_settlement_fees", "عمولة التسويات المثبتة"),
-               _column("known_actual_settlement_fees", "المجموع المتاح لعمولة التسويات"),
-               _column("fee_variance", "فرق العمولة الفعلية عن التعرفة"),
-               _column("fees", "العمولة الداخلة في الرصيد"),
+               _column("gross", "إجمالي المدفوع"), _column("fees", "العمولات مع ضريبتها"),
                _column("refunded", "الاستردادات"), _column("net", "صافي المتبقي لنا", role="receivable")]
     complete = all(row["complete"] for row in rows) and not any(
         str(issue.get("source_id", "")).startswith("provider:") or str(issue.get("code", "")).startswith("provider_")
@@ -292,14 +286,9 @@ def _provider_table(rows, issues):
                   complete=complete,
                   totals={"orders": sum(row["orders"] for row in rows)},
                   notes=["الصافي يشمل الافتتاحي المدخل والتسويات المثبتة. تقدير العمولة يخص المدفوع بعد البداية فقط، والعمولة الفعلية تحل محل تقدير الجزء المسوّى.",
-                         "صافي التعرفة يخص المدفوع بعد البداية ناقص استردادات المزود وعمولته؛ يستبعد الأرصدة الافتتاحية والدفعات البنكية.",
-                         "عدم وجود مدفوع بعد البداية لا يبرر تطبيق تعرفة الفترة على الافتتاحي؛ عدم وجود كشف لا يثبت أن العمولة صفر.",
-                         "المجموع المتاح لعمولة التسويات يعرض الجزء الموثق حتى إذا غابت العمولة عن تسويات أخرى؛ لا يعد إجماليًا مكتملًا.",
-                         "عمولة التسويات تخص الجزء المثبت فقط. فرق العمولة يظهر عند تسوية مجموعة الطلبات نفسها بالكامل دون استرداد غير مطابق؛ الموجب يعني عمولة فعلية أعلى.",
                          "المبالغ التي تنتظر مطابقة الهوية أو حوالة غير موزعة تظهر مع عدم اكتمال الصافي."])
     if not complete and not rows:
-        result["totals"].update(gross=None, fees=None, refunded=None, net=None,
-                                tariff_fees=None, tariff_net=None, actual_settlement_fees=None, known_actual_settlement_fees=None, fee_variance=None)
+        result["totals"].update(gross=None, fees=None, refunded=None, net=None)
     return result
 
 
@@ -370,7 +359,7 @@ def _provider_collection_table(obligations, details, issues):
     return collection_table
 
 
-def _cod_table(obligations, details, prestart=None, customer=None, coverage=None):
+def _cod_table(obligations, details, prestart=None, customer=None):
     facts = details.get("facts") or {}
     metrics = details.get("cod_reports") or {}
     customer = customer or {}
@@ -409,41 +398,15 @@ def _cod_table(obligations, details, prestart=None, customer=None, coverage=None
                      "orders":prestart["orders"], "amount":prestart["amount"]})
     rows.extend(customer.get("rows", []))
     known = [row["amount"] for row in rows if row["amount"] is not None]
-    coverage = coverage or {}
-    total = _sum(row["amount"] for row in rows)
-    count = sum(row["orders"] for row in rows)
-    complete = (coverage.get("complete") is True and total is not None
-                and _number(coverage.get("amount")) == total
-                and type(coverage.get("positive_orders")) is int and coverage["positive_orders"] == count)
-    result = _table("cod_expected", "تحصيل متوقع من العملاء للطلبات غير المسلمة", "forecast",
+    return _table("cod_expected", "تحصيل متوقع من العملاء للطلبات غير المسلمة", "forecast",
                   [_column("name", "مسار التحصيل / المطالبة", "text"), _column("orders", "الطلبات", "count"),
-                   _column("amount", "تحصيل متوقع من العميل", role="receivable")], rows, complete=complete,
-                  totals={"amount": _money(total) if complete else None, "orders": count if complete else None},
-                  notes=(["تغطية طلبات الدفع عند الاستلام المفتوحة مكتملة لهذه اللقطة؛ يشمل الفحص الطلبات السابقة والجديدة."]
-                         if complete else [UNKNOWN + COD_SCOPE]) + [
+                   _column("amount", "تحصيل متوقع من العميل", role="receivable")], rows, complete=False,
+                  totals={"amount": None, "orders": None},
+                  notes=[UNKNOWN + COD_SCOPE,
                          "تظهر مبالغ الطلبات المفتوحة المؤيدة بصفحة الطلب قبل الإسناد وبعده. تتطلب الطلبات السابقة دليلًا مؤرخًا بعد بداية التشغيل.",
                          "المبالغ المتوقعة ليست عهدة نقدية لدى المندوب ولا تضاف إلى رصيد شركة الشحن المثبت.",
                          ("مجموع التحصيل المتوقع في الصفوف المتاحة " + _money(_sum(known)) + ".") if known
                          else "لم يثبت مبلغ تحصيل متوقع في الصفوف المتاحة."])
-    if coverage:
-        result["coverage"] = deepcopy(coverage)
-    return result
-
-
-def _cod_coverage(exposure, started_at, as_of):
-    from operational_balance_sources import instant
-    if not isinstance(exposure, dict) or exposure.get("status") != "preview":
-        return {}
-    proof = exposure.get("cod_forecast_coverage") or {}
-    try:
-        if (type(proof.get("version")) is int and proof["version"] == 1
-                and proof.get("scope") == "all_open_canonical_orders"
-                and instant(proof["started_at"]) == instant(started_at) == instant(exposure["started_at"])
-                and instant(proof["as_of"]) == instant(as_of) == instant(exposure["engine_as_of"]) == instant(exposure["as_of"])):
-            return proof.get("by_currency") or {}
-    except (KeyError, ValueError, TypeError):
-        pass
-    return {}
 
 
 def _deliveries(obligations, details, currency, names, source_issues, *, coverage_note=None):
@@ -583,7 +546,7 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
     ]}
 
 
-def _profit_rows(recorded_salary, period=None):
+def _profit_rows(recorded_salary):
     components = (
         ("net_sales", "صافي المبيعات دون ضريبة القيمة المضافة", "مجموعة مبيعات الفترة بعد الخصومات والمرتجعات والضريبة غير مثبتة هنا."),
         ("cost_of_goods", "تكلفة المنتجات المباعة", "فواتير الموردين وتقديرات الطلبات المفتوحة لا تثبت تكلفة مجموعة المبيعات نفسها."),
@@ -606,55 +569,7 @@ def _profit_rows(recorded_salary, period=None):
                          f"{recorded_salary['currency']} عن {recorded_salary['employee_days']} يوم موظف، "
                          f"بين {recorded_salary['first_day']} و{recorded_salary['last_day']} بتوقيت الرياض. "
                          "يتطلب إجمالي الرواتب مطابقة جميع الموظفين وأيام الاستحقاق للفترة.")
-    for row in rows:
-        evidence = (period or {}).get(row["id"])
-        if evidence:
-            row["period_evidence"] = deepcopy(evidence)
-            if evidence.get("complete") is True and _number(evidence.get("amount")) is not None:
-                row["amount"] = _money(_number(evidence["amount"]))
-                row["reason"] = "محسوب من مصادر الفترة نفسها؛ تفاصيل الأساس والتغطية محفوظة في اللقطة."
-    by_id = {row["id"]: row for row in rows}
-    component_ids = ("net_sales", "cost_of_goods", "shipping", "payment_fees", "advertising", "salaries", "operating_expenses")
-    if all(_number(by_id[key]["amount"]) is not None for key in component_ids):
-        operating = _number(by_id["net_sales"]["amount"]) - sum((_number(by_id[key]["amount"]) for key in component_ids[1:]), Decimal(0))
-        by_id["operating_profit"].update(amount=_money(operating), reason="إيراد الفترة ناقص تكاليفها المثبتة حسب أسس البنود المبينة.")
-        if all(_number(by_id[key]["amount"]) is not None for key in ("financing", "tax")):
-            net = operating - _number(by_id["financing"]["amount"]) - _number(by_id["tax"]["amount"])
-            by_id["net_profit"].update(amount=_money(net), reason="صافي الربح من عناصر الفترة المكتملة.")
     return rows
-
-
-def refresh_computed_dependencies(result):
-    """Aggregate proven per-currency coverage; an empty scope is not complete."""
-    collection, profit = {}, {}
-    for currency, data in result.get("currencies", {}).items():
-        tables = {row["id"]: row for row in data.get("tables", [])}
-        required = [tables.get(key, {}) for key in ("cod_expected", "provider_collections_expected")]
-        ready = all(row.get("complete") is True and _number((row.get("totals") or {}).get("amount")) is not None
-                    for row in required)
-        available = any(row.get("rows") or row.get("coverage") for row in required)
-        collection[currency] = "ready" if ready else "incomplete" if available else "unavailable"
-        metrics = data.get("metrics") or {}
-        ready = (data.get("completeness", {}).get("profit") is True
-                 and all(_number(metrics.get(key)) is not None for key in ("operating_profit", "net_profit")))
-        available = any(row.get("period_evidence") or row.get("recorded_subtotal")
-                        or _number(row.get("amount")) is not None for row in data.get("profit_rows", []))
-        profit[currency] = "ready" if ready else "incomplete" if available else "unavailable"
-    messages = {
-        "complete_collection_forecast": {
-            "ready": "تغطية التحصيل المتوقع من العملاء ومنصات الدفع مكتملة لجميع عملات اللقطة، كل عملة على حدة.",
-            "incomplete": "تغطية التحصيل المتوقع متاحة جزئيًا؛ بعض مطالبات العملاء أو منصات الدفع غير مكتملة.",
-            "unavailable": "غير متاح: لم تثبت تغطية التحصيل المتوقع لنطاق اللقطة."},
-        "profit_period_coverage": {
-            "ready": "عناصر الربح التشغيلي والصافي محسوبة للفترة نفسها لجميع عملات اللقطة، كل عملة على حدة.",
-            "incomplete": "عناصر ربح الفترة متاحة جزئيًا؛ لا يكتمل الصافي قبل اكتمال عناصر كل عملة.",
-            "unavailable": "غير متاح: لا توجد عناصر ربح موثقة للفترة نفسها في هذه اللقطة."}}
-    for code, scope in (("complete_collection_forecast", collection), ("profit_period_coverage", profit)):
-        status = ("ready" if scope and all(value == "ready" for value in scope.values()) else
-                  "unavailable" if not scope or all(value == "unavailable" for value in scope.values()) else "incomplete")
-        for dependency in result.get("dependencies", []):
-            if dependency["code"] == code:
-                dependency.update(status=status, message=messages[code][status], currency_status=scope)
 
 
 def build_financial_position(state, *, cost_exposure=None, generated_at=None):
@@ -683,17 +598,7 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     prestart_cod = snapshot_cod_preview(cost_exposure, projection["started_at"], projection["as_of"])
     currencies.update(prestart_cod)
     customer_cod = snapshot_cod_preview(cost_exposure, projection["started_at"], projection["as_of"], "open_customer_cod")
-    period = {}
-    if isinstance(cost_exposure, dict):
-        candidate = cost_exposure.get("profit_period") or {}
-        if (candidate.get("version") == 1 and candidate.get("scope") == "operating_period_accrual"
-                and candidate.get("started_at") == cost_exposure.get("started_at") == projection["started_at"]
-                and candidate.get("as_of") == cost_exposure.get("engine_as_of") == cost_exposure.get("as_of") == projection["as_of"]):
-            period = candidate.get("by_currency") or {}
-    cod_coverage = _cod_coverage(cost_exposure, projection["started_at"], projection["as_of"])
     currencies.update(customer_cod)
-    currencies.update(cod_coverage)
-    currencies.update(period)
     page_payments = projection["details"]["provider_order_payments"]
     paid_totals = projection["details"]["provider_paid_totals"]
     tender_coverage = projection["details"].get("customer_tender_coverage", {})
@@ -714,9 +619,7 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         parties = sorted((row for row in projection["parties"] if row["currency"] == currency), key=_party_id)
         obligations = [row for row in projection["obligations"] if row.get("currency") == currency]
         actual_complete = bool(projection["as_of"]) and not any(row.get("currency") in {None, currency} for row in projection["issues"])
-        # Build the same recorded amounts, then gate each table only on source
-        # failures that can affect it. The combined position still needs all.
-        tables = _actual_tables(parties, bool(projection["as_of"]))
+        tables = _actual_tables(parties, actual_complete)
         tables.append(_provider_table(projection["details"]["provider_balances"].get(currency, []),
                                       [row for row in projection["issues"] if row.get("currency") in {None, currency}]))
         wallet = customer_wallets.get(currency)
@@ -728,9 +631,7 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
                 notes=["الرصيد الختامي التزام علينا بتاريخ كشف سلة المحفوظ. يشمل الاستخدامات المثبتة فيه، وتحتفظ التحديثات التشغيلية بتاريخ هذا الكشف."])
             wallet_table.update(show_totals=False, totals={})
             tables.append(wallet_table)
-        tables.append(_balance_origin(parties, obligations, bool(projection["as_of"])))
-        apply_table_coverage(tables, projection["issues"], as_of=projection["as_of"],
-                             started_at=projection["started_at"], currency=currency)
+        tables.append(_balance_origin(parties, obligations, actual_complete))
         if other_tenders.get(currency):
             rows = [{"id": row["method"], **row} for row in other_tenders[currency]]
             for row in rows:
@@ -781,34 +682,25 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         costs = _cost_tables(cost_exposure, currency, obligations)
         currency_issues = [row for row in projection["issues"] if row.get("currency") in {None, currency}]
         provider_future = _provider_collection_table(obligations, projection["details"], currency_issues)
-        cod = _cod_table(obligations, projection["details"], prestart_cod.get(currency), customer_cod.get(currency),
-                         cod_coverage.get(currency))
+        cod = _cod_table(obligations, projection["details"], prestart_cod.get(currency), customer_cod.get(currency))
         tables.extend([costs[-1], *costs[:-1], cod, provider_future])
         forecast_rows = [_row(table["id"], table["title"], table["totals"]["amount"],
                               "positive" if table["id"] in {"cod_expected", "provider_collections_expected"} else "negative",
                               None if table["complete"] else UNKNOWN + "تغطية هذا البند غير مكتملة.")
                          for table in (cod, provider_future, *costs)]
-        forecast_complete = all(table["complete"] and _number(table["totals"].get("amount")) is not None for table in (cod, provider_future, *costs))
-        forecast_change = (_sum([_number(cod["totals"]["amount"]), _number(provider_future["totals"]["amount"]),
-            *(-_number(table["totals"]["amount"]) for table in costs)]) if forecast_complete else None)
-        forecast_position = position + forecast_change if position is not None and forecast_change is not None else None
         forecast_rows.extend([
-            _row("forecast_change", "صافي التغير المتوقع", forecast_change, "total",
-                 None if forecast_change is not None else UNKNOWN + "تغطية بعض بنود التحصيل أو التكاليف المتوقعة غير مكتملة."),
-            _row("forecast_monetary_position", "المركز النقدي والديون المتوقع", forecast_position, "total",
-                 None if forecast_position is not None else UNKNOWN + "الأرصدة الحالية أو التكاليف والتحصيل المستقبليان غير مكتملين."),
+            _row("forecast_change", "صافي التغير المتوقع", None, "total", UNKNOWN + COD_SCOPE),
+            _row("forecast_monetary_position", "المركز النقدي والديون المتوقع", None, "total", UNKNOWN + "التكاليف والتحصيل المستقبليان غير مكتملين."),
         ])
-        profit_rows = _profit_rows(recorded_salaries.get(currency), period.get(currency))
-        profit_values = {row["id"]: row["amount"] for row in profit_rows}
         result["currencies"][currency] = {
             "tables": tables, "debt_rows": debt_rows,
             "debt_totals": {"receivable": _money(receivable), "payable": _money(payable)},
-            "current_rows": current_rows, "forecast_rows": forecast_rows, "profit_rows": profit_rows,
+            "current_rows": current_rows, "forecast_rows": forecast_rows, "profit_rows": _profit_rows(recorded_salaries.get(currency)),
             "metrics": {"liquidity": _money(liquidity), "debts_receivable": _money(receivable), "debts_payable": _money(payable),
                         "monetary_position": _money(position), "prepaid_ad_credit": _money(prepaid), "employee_custody": _money(custody),
-                        "displayed_position": _money(displayed), "forecast_change": _money(forecast_change), "forecast_monetary_position": _money(forecast_position),
-                        "operating_profit": profit_values["operating_profit"], "net_profit": profit_values["net_profit"]},
-            "completeness": {"actual": actual_complete, "forecast": forecast_complete and actual_complete, "profit": profit_values["net_profit"] is not None},
+                        "displayed_position": _money(displayed), "forecast_change": None, "forecast_monetary_position": None,
+                        "operating_profit": None, "net_profit": None},
+            "completeness": {"actual": actual_complete, "forecast": False, "profit": False},
             "notes": ["كل المبالغ بهذه العملة؛ لا تحويل ولا جمع بين العملات.",
                       "المركز النقدي والديون = النقد المتاح + الحقوق القابلة للتحصيل − الالتزامات المثبتة.",
                       "الرصيد الإعلاني المقدم والعهد يعرضان منفصلين ثم يضافان مرة واحدة إلى مجموع الأرصدة المعروضة.",
@@ -818,5 +710,4 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
                 coverage_note=(delivery_coverage["event_note"] if currency == "SAR" else
                     "تغطية تسليم الطلبات السابقة لبدء التشغيل بهذه العملة غير مثبتة؛ لا تحويل أو إعادة تسمية لمبالغ الشحن.")),
         }
-    refresh_computed_dependencies(result)
     return result

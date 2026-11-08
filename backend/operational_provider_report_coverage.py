@@ -52,22 +52,18 @@ def provider_evidence_coverage(projection):
         counts[party]["order_page" if status == "saved" else "settlement_review"].add(oid)
 
     for issue in projection["issues"]:
-        if issue.get("code") == "provider_net_balance_incomplete":
-            # This summarizes the platform, not a second affected order.
-            continue
         order = issue.get("source_id") or ""
         if issue.get("scope") != "provider_payment":
             if not order.startswith("provider:"):
                 continue
             order = order[len("provider:"):]
-        order = order.removeprefix("provider:")
         if not order:
             continue
         party = issue.get("provider") or party_for_order.get(order) or "unassigned"
         code = str(issue.get("code") or "")
         if "capture_timestamp" in (issue.get("missing_fields") or []):
             group = "missing_time"
-        elif "fee" in code or code in {"provider_payment_plan_required", "provider_payment_plan_conflict"}:
+        elif "fee" in code:
             group = "fee_review"
         elif "settled" in code or "settlement" in code:
             group = "settlement_review"
@@ -79,31 +75,13 @@ def provider_evidence_coverage(projection):
         return [{"code":"provider_evidence_coverage", "status":"unavailable", "observed_order_counts":{},
                  "message":"لا تتوفر باللقطة أدلة تكفي لقياس تغطية تحصيل المنصات وتسوياتها."}]
     rows = []
-    summaries = defaultdict(list)
-    for currency, providers in projection["details"].get("provider_balances", {}).items():
-        for provider in providers:
-            summaries[provider["provider"]].append(provider)
     for party, groups in sorted(counts.items()):
         observed = {key: len(groups[key]) for key in LABELS if groups.get(key)}
         text = "، ".join(f"{n} {LABELS[key]}" for key, n in observed.items())
-        review_groups = ("missing_time", "fee_review", "settlement_review", "capture_review")
-        affected = set().union(*(groups.get(key, set()) for key in review_groups))
-        # Known receivables need not have reached the bank. The monetary reader
-        # already validates capture, tariff, allocation and FX evidence; reuse
-        # that proof instead of requiring a statement to calculate every debt.
-        calculation_ready = bool(summaries[party]) and all(
-            row.get("complete") is True for row in summaries[party]) and not affected
-        status = "ready" if calculation_ready else "incomplete"
-        rows.append({"code":"provider_evidence_coverage_"+party, "status":status,
+        rows.append({"code":"provider_evidence_coverage_"+party, "status":"incomplete",
                      "observed_order_counts":observed,
-                     "affected_order_count": len(affected),
-                     "calculation_status": status,
-                     "statement_reconciliation_status": "partial" if groups.get("settlement_allocation") else "unavailable",
                      "message":f"طلبات {PLATFORMS.get(party, 'المنصة غير المحددة')} في اللقطة المحفوظة (كل العملات): {text}. "
-                               f"حالات تحتاج مراجعة دون تكرار: {len(affected)}. "
-                               + ("حساب المستحق حسب الأدلة والتعرفة مكتمل؛ انتظار التسوية ليس نقصًا في الحساب. "
-                                  if calculation_ready else "حساب المستحق يحتاج استكمال الأدلة أو التعرفة. ")
-                               + "مطابقة كشف المنصة مستقلة؛ السداد المخصص قد يكون جزئيًا ولا يثبت اكتمال الكشف."})
+                               "قد يظهر الطلب في أكثر من فئة. اكتمال التغطية يتطلب كشف المنصة."})
     return rows
 
 def provider_customer_payments(projection):

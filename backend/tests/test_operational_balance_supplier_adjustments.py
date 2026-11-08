@@ -82,7 +82,7 @@ def test_api_permission_exact_lookup_no_report_grant(permissions):
             assert response.status_code==(200 if WRITE in permissions else 403),response.text
             response=await c.post(path,json=adjustment(inv))
             assert response.status_code==(200 if WRITE in permissions else 403),response.text
-            assert (await c.get('/api/operational-balances/reports')).status_code==403
+            assert (await c.get('/api/operational-balances/reports')).status_code==(200 if READ in permissions else 403)
     run(scenario)
 
 

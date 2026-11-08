@@ -6,7 +6,7 @@ Every denominator includes all products in the selected order cohort for an ad.
 import asyncio
 
 from collections import Counter, defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from marketing_report_costs import allocate
@@ -14,7 +14,6 @@ from mezan_attribution_order_ledger import LEDGER_COLLECTION, _order_key
 from order_currency import SALLA_RAW_CURRENCY_PROJECTION, hydrate_order_currency_fields, order_amount_to_sar
 from product_catalog_cost_resolution import index_current_catalog_products, resolve_current_catalog_line_product
 from product_traffic_sources import resolve_traffic_source
-from product_campaign_identity import campaign_attribution_projection, load_campaign_ledgers
 from sold_products_report_v2 import CATALOG_FIELDS, SELECTABLE_STATUSES, order_matches_status
 from product_v2_routes import PRODUCTS
 
@@ -26,10 +25,6 @@ ZONE = 'Asia/Riyadh'
 
 class EvidenceUnavailable(ValueError):
     pass
-
-
-def _utcnow():
-    return datetime.now(timezone.utc)
 
 
 def _text(value):
@@ -149,201 +144,6 @@ async def _stored_ads(db, owner, platform, account_id, start, end):
     raise EvidenceUnavailable('stored_ad_spend_unavailable')
 
 
-
-async def _snapchat_campaign_hourly_proof(db, owner, account, campaign_ids, start, end, *, now=None):
-    """Prove a complete Riyadh window from explicit campaign-hour facts only.
-
-    An account total cannot prove a campaign's spend, and a missing hour is
-    never zero. This allows cross-timezone accounts without relabeling their
-    account-local daily totals as Riyadh totals.
-    """
-    from snapchat_v2.facts import SNAPCHAT_HOURLY_FACTS_COLLECTION
-    from snapchat_v2.models import (build_attribution_key, DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
-                                    DEFAULT_VIEW_ATTRIBUTION_WINDOW)
-    from snapchat_v2.projections import business_day_window
-    first, _ = business_day_window(start, ZONE)
-    end_day_start, last = business_day_window(end, ZONE)
-    current = now or _utcnow()
-    provisional = end_day_start <= current < last
-    if provisional:
-        # Current UTC hour is still changing. Only explicitly proved completed
-        # hours belong to this provisional amount, never future-hour zeros.
-        last = current.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
-    elif last > current:
-        return {}
-    if last <= first:
-        return {}
-    expected = {first + timedelta(hours=i) for i in range(int((last - first).total_seconds() / 3600))}
-    attribution_key = build_attribution_key('conversion', {
-        'swipe': DEFAULT_SWIPE_ATTRIBUTION_WINDOW, 'view': DEFAULT_VIEW_ATTRIBUTION_WINDOW})
-    query = {'user_id': owner, 'provider': 'snapchat_ads', 'ad_account_id': account['ad_account_id'],
-             'entity_type': 'campaign', 'external_id': {'$in': campaign_ids},
-             'hour_start_utc': {'$gte': first, '$lt': last}, 'action_report_time': 'conversion',
-             'attribution_key': attribution_key}
-    projection = {'_id': 0, 'external_id': 1, 'hour_start_utc': 1, 'hour_end_utc': 1,
-                  'spend_native': 1, 'currency': 1, 'account_timezone': 1, 'coverage': 1,
-                  'provisional': 1, 'attribution_key': 1}
-    rows = await _read(db, SNAPCHAT_HOURLY_FACTS_COLLECTION, query, projection, 20000)
-    # Match the native reader's prior-series fallback, but never combine two
-    # attribution windows or fill gaps in a partially present current series.
-    missing = set(campaign_ids) - {_text(row.get('external_id')) for row in rows}
-    if missing:
-        fallback_query = {**query, 'external_id': {'$in': sorted(missing)}}
-        fallback_query.pop('attribution_key')
-        older = await _read(db, SNAPCHAT_HOURLY_FACTS_COLLECTION, fallback_query, projection, 20000)
-        series = defaultdict(set)
-        for row in older:
-            series[_text(row.get('external_id'))].add(_text(row.get('attribution_key')))
-        rows.extend(row for row in older
-                    if len(series[_text(row.get('external_id'))]) == 1 and row.get('attribution_key'))
-    by_campaign, invalid, seen = defaultdict(dict), set(), defaultdict(set)
-    for row in rows:
-        cid = _text(row.get('external_id'))
-        point, finish = row.get('hour_start_utc'), row.get('hour_end_utc')
-        if isinstance(point, datetime):
-            point = point.replace(tzinfo=timezone.utc) if point.tzinfo is None else point.astimezone(timezone.utc)
-        if isinstance(finish, datetime):
-            finish = finish.replace(tzinfo=timezone.utc) if finish.tzinfo is None else finish.astimezone(timezone.utc)
-        coverage, amount = row.get('coverage') or {}, _number(row.get('spend_native'))
-        if (point not in expected or point in seen[cid] or amount is None
-                or finish != point + timedelta(hours=1)
-                or row.get('currency') != account.get('currency')
-                or row.get('account_timezone') != account.get('timezone')):
-            invalid.add(cid)
-            continue
-        seen[cid].add(point)
-        # A still-provisional trailing hour is not a zero and is not included.
-        if provisional and row.get('provisional') is True:
-            continue
-        if (row.get('provisional') is not False or coverage.get('status') != 'complete'
-                or coverage.get('data_state') not in {'confirmed_data', 'confirmed_zero'}):
-            invalid.add(cid)
-            continue
-        by_campaign[cid][point] = amount
-    proofs = {}
-    for cid, hours in by_campaign.items():
-        if cid in invalid or not hours:
-            continue
-        cutoff = max(hours) + timedelta(hours=1) if provisional else last
-        if provisional and cutoff < end_day_start:
-            continue
-        covered = {first + timedelta(hours=i)
-                   for i in range(int((cutoff - first).total_seconds() / 3600))}
-        # Only today's trailing sync lag may shorten the proved window. An
-        # internal gap, or any gap in a closed period, remains unavailable.
-        if not covered or set(hours) != covered:
-            continue
-        proofs[cid] = {'spend': float(sum(hours.values(), Decimal(0))),
-                       'provisional': provisional, 'spend_as_of': cutoff.isoformat(),
-                       'fact_count': len(hours)}
-    return proofs
-
-
-async def _stored_campaigns(db, owner, platform, account_id, start, end, campaign_ids=None):
-    if platform != 'snapchat':
-        return {}
-    from snapchat_v2.accounts import resolve_account
-    from snapchat_v2.routes import _entity_performance_report, _add_sar_spend
-    from snapchat_v2.projections import business_day_window
-    account = await resolve_account(db, owner, account_id)
-    if not account or _text(account.get('ad_account_id')) != account_id:
-        raise EvidenceUnavailable('account_unverified')
-    candidates = set(campaign_ids or ())
-    if len(candidates) > MAX_ADS:
-        raise EvidenceUnavailable('campaign_read_limit_exceeded')
-    end_day_start, period_end = business_day_window(end, ZONE)
-    current = _utcnow()
-    open_period = end_day_start <= current < period_end
-    needs_hourly = account.get('timezone') != ZONE or open_period
-    # The product cohort already carries owner/account-verified campaign IDs.
-    # Read those IDs directly instead of loading every historic campaign in
-    # the account (which can exceed the general hierarchy report safety cap).
-    if candidates and needs_hourly:
-        hourly = await _snapchat_campaign_hourly_proof(
-            db, owner, account, sorted(candidates), start, end, now=current)
-        rows = [{'campaign_id': cid, 'account_id': account_id,
-                 'source_fact_count': 0, 'source_period_complete': False,
-                 'native_amount_complete': False, 'performance_sync_status': 'partial'}
-                for cid in sorted(candidates)]
-        totals = {}
-    else:
-        report = await _entity_performance_report(db, user_id=owner, account=account,
-            date_from=start, date_to=end, timezone_name=ZONE, action_report_time='conversion',
-            entity_type='campaign', include_stale=True)
-        rows = [row for row in report.get('rows') or []
-                if not candidates or _text(row.get('campaign_id')) in candidates]
-        totals = dict(report.get('totals') or {})
-        if len(rows) > MAX_ADS:
-            raise EvidenceUnavailable('campaign_read_limit_exceeded')
-        ids = [_text(row.get('campaign_id')) for row in rows]
-        if not all(ids) or len(ids) != len(set(ids)):
-            raise EvidenceUnavailable('duplicate_campaign_facts')
-        hourly = (await _snapchat_campaign_hourly_proof(
-            db, owner, account, ids, start, end, now=current)) if needs_hourly and ids else {}
-    for row in rows:
-        if open_period:
-            row['source_period_complete'] = False
-        if row['campaign_id'] in hourly and _text(row.get('account_id')) == account_id:
-            proof = hourly[row['campaign_id']]
-            row.update(spend_native=proof['spend'], source_period_complete=True,
-                promotion_provisional=proof['provisional'], spend_as_of=proof['spend_as_of'],
-                native_amount_complete=True, performance_sync_status='complete',
-                source_fact_count=proof['fact_count'])
-    exchange_rate, coverage = await _add_sar_spend(
-        db, user_id=owner, account=account, rows=rows, totals=totals)
-    result = {}
-    for row in rows:
-        valid = row.get('amount_complete') is True and _text(row.get('account_id')) == account_id
-        reason = None if valid else ('campaign_hourly_coverage_incomplete'
-            if needs_hourly and row['campaign_id'] not in hourly
-            else 'campaign_fx_incomplete' if exchange_rate is None or coverage.get('complete') is not True
-            else 'campaign_spend_incomplete')
-        result[row['campaign_id']] = {
-            'spend': row.get('spend_sar') if valid else None,
-            'provisional': row.get('promotion_provisional') is True,
-            'spend_as_of': row.get('spend_as_of'), 'reason': reason}
-    for cid in candidates - result.keys():
-        result[cid] = {'spend': None, 'provisional': False, 'spend_as_of': None,
-                       'reason': 'campaign_spend_incomplete'}
-    return result
-
-
-async def _merge_campaign_fallbacks(db, owner, platform, account_id, start, end, groups):
-    target_campaigns = {cid for (cid, _), bucket in groups.items() if bucket['units_sold'] > 0}
-    candidates = {cid for cid, aid in groups if cid and cid in target_campaigns and aid is None}
-    if not candidates or platform != 'snapchat':
-        return groups
-    try:
-        campaigns = await _stored_campaigns(db, owner, platform, account_id, start, end, sorted(candidates))
-    except (EvidenceUnavailable, ValueError, LookupError, TimeoutError) as exc:
-        reason = (str(exc) if isinstance(exc, EvidenceUnavailable) else
-                  'campaign_account_unverified' if isinstance(exc, LookupError) else
-                  'campaign_read_timeout' if isinstance(exc, TimeoutError) else
-                  'campaign_source_invalid')
-        for (cid, aid), bucket in groups.items():
-            if cid in candidates:
-                bucket['reason'] = reason
-        return groups
-    for cid in candidates & campaigns.keys():
-        keys = [key for key in groups if key[0] == cid]
-        merged = dict(groups[(cid, None)])
-        merged.update(units_sold=Decimal(0), _weights=defaultdict(Decimal), _complete=True,
-                      _spend=_number(campaigns[cid].get('spend')),
-                      reason=campaigns[cid].get('reason'), ad_spend_sar=None,
-                      campaign_spend_sar=None, provisional=campaigns[cid].get('provisional') is True,
-                      spend_as_of=campaigns[cid].get('spend_as_of'))
-        for key in keys:
-            bucket = groups.pop(key)
-            merged['units_sold'] += bucket['units_sold']
-            merged['_complete'] = merged['_complete'] and bucket['_complete']
-            for product, weight in bucket['_weights'].items():
-                merged['_weights'][product] += weight
-            if bucket.get('_target'):
-                merged['_target'] = bucket['_target']
-        groups[(cid, None)] = merged
-    return groups
-
-
 def _line_revenue(item, quantity, order):
     # The dashboard helper's missing-price default must not become zero evidence.
     from dashboard_v2_routes import _line_sales_total
@@ -377,8 +177,12 @@ async def build_product_promotion_estimates(db, owner, *, from_date, to_date, st
               'actual_refund_amount', 'actual_partial_refund_amount', 'currency', 'original_currency', 'accounting_currency',
               'currency_conversion_status', 'exchange_rate_to_sar', 'original_total_amount',
               'total_amount', 'total', 'total_amount_sar', 'utm_source', 'marketing_source', 'marketing')
-    projection = {**SALLA_RAW_CURRENCY_PROJECTION, **campaign_attribution_projection(),
+    from salla_marketing_attribution import SALLA_RAW_ATTRIBUTION_PROJECTION
+    projection = {**SALLA_RAW_CURRENCY_PROJECTION, **SALLA_RAW_ATTRIBUTION_PROJECTION,
                   **{field: 1 for field in fields}, '_id': 0}
+    source_paths = {path.split('.source.', 1)[0] + '.source'
+                    for path in projection if '.source.' in path}
+    projection.update({path: 1 for path in source_paths})
     # Avoid Mongo parent/child path collisions in the source projections.
     projection = {key: value for key, value in projection.items()
                   if not any(key.startswith(parent + '.') for parent in projection if parent != key)}
@@ -407,7 +211,6 @@ async def build_product_promotion_estimates(db, owner, *, from_date, to_date, st
     for row in ledger_rows:
         if row.get('user_id') == owner:
             ledgers[row.get('order_key')].append(row)
-    ledgers = await load_campaign_ledgers(db, owner, orders, ledgers)
     catalog = await _read(db, PRODUCTS, {'user_id': owner}, CATALOG_FIELDS, MAX_CATALOG)
     by_id, by_variant, by_sku = index_current_catalog_products(catalog)
     try:
@@ -472,14 +275,13 @@ async def build_product_promotion_estimates(db, owner, *, from_date, to_date, st
                 bucket['_weights'][pkey] += revenue
             if target:
                 bucket['_target'] = pkey
-    groups = await _merge_campaign_fallbacks(db, owner, platform, _text(account_id), start, end, groups)
     for bucket in groups.values():
         if bucket['units_sold'] <= 0:
             continue
         weights, spend = bucket.pop('_weights'), bucket.pop('_spend')
         complete, target = bucket.pop('_complete'), bucket.pop('_target', None)
         if spend is not None:
-            bucket['campaign_spend_sar' if bucket['allocation_level'] == 'campaign' else 'ad_spend_sar'] = float(spend)
+            bucket['ad_spend_sar'] = float(spend)
             if not complete:
                 bucket['reason'] = 'product_revenue_unavailable'
             elif sum(weights.values()) <= 0:
@@ -490,7 +292,7 @@ async def build_product_promotion_estimates(db, owner, *, from_date, to_date, st
                 allocated = parts[keys.index(target)]
                 bucket.update(estimated_product_spend_sar=allocated,
                     estimated_unit_promotion_cost_sar=round(allocated / float(bucket['units_sold']), 4),
-                    status='estimated_provisional' if bucket.get('provisional') else 'estimated', reason=None)
+                    status='estimated', reason=None)
         elif not bucket['reason']:
             bucket['reason'] = 'spend_incomplete'
         bucket['units_sold'] = float(bucket['units_sold'])

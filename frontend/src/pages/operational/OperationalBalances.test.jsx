@@ -619,14 +619,3 @@ test('unknown source warnings and fee-policy alerts remain inspectable, not sile
   expect(host.textContent).toContain('4 تنبيه');
   expect(api.movement).not.toHaveBeenCalled();
 });
-
-
-test('scoped reports reader opens daily route without fetching consolidated balances or audit', async () => {
-  api.context.mockResolvedValue({status:'active', session_scope:'scoped-reader', can_view_consolidated_reports:false, permissions:{reports:true,move:false}});
-  await render(<OperationalBalances />);
-  expect(api.reports).not.toHaveBeenCalled();
-  expect(api.audit).not.toHaveBeenCalled();
-  expect(button('الأرصدة والتقارير التشغيلية')).toBeUndefined();
-  expect(host.querySelector('a[href="/operational-balances/daily-financial-movements"]')).not.toBeNull();
-  expect(host.textContent).toContain('للحسابات المصرح لك بها فقط');
-});

@@ -125,64 +125,6 @@ async def test_exact_amount_actor_tenant_readback_and_presentation_source(env, m
         assert captured[0][key]==stored[key]
     assert captured[0]['total_halalas']==total
 
-async def test_open_draft_omits_piece_received_by_another_employee(env):
-    db, http, user = env
-    other_session, other_payload = await seed(db, (1500,))
-    transferred_line = other_payload["invoice_lines"][0]
-    transferred_piece = transferred_line["piece_ids"][0]
-    scan_snapshot = await db[r.RECEIVING_EVENTS].find_one({"piece_id": transferred_piece}, {"_id": 0})
-    await db[r.SESSIONS].update_one({"id": other_session["id"]}, {"$set": {
-        "opened_by": "other-employee", "opened_by_name": "Synthetic second receiver",
-    }})
-    user["_mobile_actor_id"] = "other-employee"
-    other_receipt = await close(http, other_session, other_payload)
-    assert other_receipt.status_code == 200, other_receipt.text
-    other_invoice_id = other_receipt.json()["supplier_invoice"]["id"]
-    original_invoice = await db[r.SUPPLIER_INVOICES].find_one({"id": other_invoice_id})
-    assert original_invoice["approved_by"] == "other-employee"
-
-    user["_mobile_actor_id"] = "employee"
-    session, payload = await seed(db, (1800,))
-    retained_line = payload["invoice_lines"][0]
-    retained_piece = retained_line["piece_ids"][0]
-    for collection in (r.PIECES, r.RECEIVING_EVENTS, r.PIECE_EVENTS):
-        await db[collection].update_one(
-            {"piece_id": retained_piece}, {"$set": {"order_item_id": "retained-item"}},
-        )
-    # A legacy draft scan can outlive its live reservation. The other
-    # employee's receipt and its posted invoice are already authoritative.
-    old_scan = {
-        **scan_snapshot, "id": "stale-scan", "receipt_event_id": "stale-scan",
-        "session_id": session["id"], "supplier_receiving_session_id": session["id"],
-    }
-    for collection in (r.RECEIVING_EVENTS, r.PIECE_EVENTS):
-        await db[collection].insert_one(dict(old_scan))
-    await db[r.SESSIONS].update_one({"id": session["id"]}, {"$set": {"scan_count": 2}})
-    endpoint = f"/supplier-receiving-v1/sessions/{session['id']}"
-    for response in (await http.get(endpoint), await http.post(endpoint + "/refresh")):
-        assert response.status_code == 200, response.text
-        assert [scan["piece_id"] for scan in response.json()["scans"]] == [retained_piece]
-        assert response.json()["session"]["scan_count"] == 1
-    catalog = await http.get("/supplier-receiving-v1/catalog")
-    assert catalog.status_code == 200, catalog.text
-    assert [scan["piece_id"] for scan in catalog.json()["active_session_scans"]] == [retained_piece]
-    assert catalog.json()["active_session"]["scan_count"] == 1
-
-    stale_approval = await close(http, session, {
-        **payload, "confirmed_total_halalas": 3300,
-        "invoice_lines": [transferred_line, retained_line],
-    })
-    assert stale_approval.status_code == 409, stale_approval.text
-    assert stale_approval.json()["detail"]["code"] == "supplier_receiving_invoice_piece_mismatch"
-    assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 1
-    assert await db.general_ledger.count_documents({}) == 2
-    corrected = await close(http, session, payload)
-    assert corrected.status_code == 200, corrected.text
-    assert corrected.json()["supplier_invoice"]["total_halalas"] == 1800
-    assert await db[r.SUPPLIER_INVOICES].find_one({"id": other_invoice_id}) == original_invoice
-    assert await db[r.RECEIVING_EVENTS].find_one({"id": old_scan["id"]}, {"_id": 0}) == old_scan
-
-
 async def test_presentation_rereads_saved_invoice_and_ignores_independent_draft_values(env,monkeypatch):
     db,http,_=env;s,p=await seed(db,(32750,));res=await close(http,s,p);assert res.status_code==200,res.text
     iid=res.json()['supplier_invoice']['id']

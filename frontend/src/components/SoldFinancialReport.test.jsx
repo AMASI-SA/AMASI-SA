@@ -2,7 +2,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import SoldFinancialReport, { financialMetrics, FinancialDetails } from "./SoldFinancialReport";
 jest.mock("react-router-dom", () => ({ Link: ({ children }) => <span>{children}</span> }), { virtual: true });
-const data = { totals: { total_orders: 2, total_sales: 400, total_product_cost: 100, net_profit: 190, total_ads_cost: 40, total_shipping_cost: 30, total_payment_fees: 10, operating_expenses_total: 20, product_cost_complete: true, ads_spend_data_complete: true }, ads_v2: { spend_quality: { status: "complete", amount_complete: true }, executive_breakdown: { providers: { snapchat: { spend_sar: 40 } } } } };
+const data = { totals: { total_orders: 2, total_sales: 400, total_ads_cost: 40, total_shipping_cost: 30, total_payment_fees: 10, operating_expenses_total: 20, product_cost_complete: true, ads_spend_data_complete: true }, ads_v2: { spend_quality: { status: "complete", amount_complete: true }, executive_breakdown: { providers: { snapchat: { spend_sar: 40 } } } } };
 const products = [{ cost_status: "complete", total_cost: 100 }];
 test("average includes all costs once; ads already SAR; zero orders has no average", () => {
     expect(financialMetrics(data, products)).toMatchObject({ total: 200, average: 100, ads: 40, orders: 2 });
@@ -28,28 +28,10 @@ test("missing payment amounts remain unknown in the financial table", () => {
 });
 
 test("zero-order periods show no average rather than a missing cost", () => {
-    const html = renderToStaticMarkup(<SoldFinancialReport data={{ ...data, totals: { ...data.totals, total_orders: 0, total_product_cost: 0 } }} products={[]} printable />);
+    const html = renderToStaticMarkup(<SoldFinancialReport data={{ ...data, totals: { ...data.totals, total_orders: 0 } }} products={[]} printable />);
     expect(html).toContain("متوسط التكلفة الكلية للطلب");
     expect(html).toContain("—");
     expect(html).not.toContain("غير مكتمل");
-});
-
-test("profit uses executive authority in screen and print, not gross sales subtraction", () => {
-    expect(financialMetrics(data, products).profit).toBe(190);
-    for (const printable of [false, true]) {
-        const html = renderToStaticMarkup(<SoldFinancialReport data={data} products={products} printable={printable} />);
-        expect(html).toContain("صافي الربح");
-        expect(html).toContain("190.00");
-    }
-});
-
-test("profit stays incomplete for missing evidence or mismatched product snapshots", () => {
-    expect(financialMetrics(data, [{ cost_status: "incomplete", known_cost_total: 100 }]).profit).toBeNull();
-    expect(financialMetrics(data, [{ cost_status: "complete", total_cost: 120 }]).profit).toBeNull();
-    expect(financialMetrics({ ...data, ads_v2: {} }, products).profit).toBeNull();
-    expect(financialMetrics({ ...data, totals: { ...data.totals, net_profit: null } }, products).profit).toBeNull();
-    expect(financialMetrics({ ...data, totals: { ...data.totals, sales_currency_conversion_complete: false } }, products).profit).toBeNull();
-    expect(financialMetrics({ ...data, totals: { ...data.totals, net_profit: -20 } }, products).profit).toBe(-20);
 });
 
 
