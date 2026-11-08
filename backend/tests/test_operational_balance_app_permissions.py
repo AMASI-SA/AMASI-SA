@@ -36,7 +36,7 @@ def test_independent_native_permission_matrix(permissions, direction):
                 assert ctx.json()["permissions"]=={"view":True,"move":WRITE in permissions,"manage":False,"reports":READ in permissions}
             for path in ["reports","movements","obligations?party_type=supplier&party_id=supplier"]:
                 r=await c.get("/api/operational-balances/"+path)
-                assert r.status_code==(200 if READ in permissions else 403), (path,r.text)
+                assert r.status_code==(200 if READ in permissions and path != "reports" else 403), (path,r.text)
             assert (await c.get("/api/operational-balances/entities/bank")).status_code==(200 if permissions else 403)
             payload={**movement(),"expected_session_scope":digest(["owner","staff"]),"direction":direction,"kind":"collection" if direction=="incoming" else "payment"}
             r=await c.post("/api/operational-balances/movements",json=payload)
@@ -114,8 +114,8 @@ def test_browser_movement_requires_separate_explicit_accounting_write_grant():
     async def scenario(db):
         await started(db); await grant(db,[])
         async with client(db,mobile=False) as c:
-            assert (await c.get("/api/operational-balances/reports")).status_code==200
-            assert (await c.get("/api/operational-balances/audit")).status_code==200
+            assert (await c.get("/api/operational-balances/reports")).status_code==403
+            assert (await c.get("/api/operational-balances/audit")).status_code==403
             payload={**movement(),"expected_session_scope":digest(["owner","staff"])}
             assert (await c.post("/api/operational-balances/movements",json=payload)).status_code==403
             await db.users.update_one({"id":"staff"},{"$set":{"accounting_permissions":["accounting.movements.view"]}})

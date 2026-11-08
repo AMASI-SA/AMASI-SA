@@ -172,3 +172,52 @@ def test_legacy_movements_cannot_bypass_assigned_scope_or_disclose_transfer_dest
         assert {row['id'] for row in response.json()['items']} == {'visible','transfer'}
         assert 'secret' not in response.text.lower()
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('mobile', [False, True])
+def test_staff_account_statement_is_scoped_and_consolidated_reports_owner_only(mobile):
+    from test_operational_balance_app_permissions import client
+    state = state_fixture()
+    state['movements'] = [movement('transfer-out', kind='transfer', party_type='bank', party_id='secret',
+        name='SECRET BANK', reference='SECRET REF', note='SECRET NOTE', allocations=[]),
+        movement('transfer-in', kind='transfer', bank_id='secret', bank_name='SECRET BANK',
+                 party_type='bank', party_id='bank', direction='outgoing', name='visible',
+                 reference='SECRET REF', note='SECRET NOTE',allocations=[])]
+    async def scenario():
+        db = await database(state)
+        await db.users.update_one({'id':'staff'}, {'$set':{'accounting_permissions':[
+            'accounting.financial_accounts.view', 'accounting.movements.view']}})
+        async with client(db,mobile=mobile) as c:
+            for path in ('reports','audit','financial-position','cost-exposure'):
+                result = await c.get('/api/operational-balances/' + path)
+                assert result.status_code == 403, (path,result.text)
+            result = await c.get('/api/operational-balances/accounts/bank/secret')
+            assert result.status_code == 403
+            result = await c.get('/api/operational-balances/accounts/bank/bank')
+            assert result.status_code == 200, result.text
+            assert len(result.json()['items']) == 2
+            assert 'SECRET' not in result.text
+            ctx = (await c.get('/api/operational-balances/context')).json()
+            assert ctx['permissions']['reports'] and not ctx['can_view_consolidated_reports']
+            daily = await c.get('/api/operational-balances/daily-financial-movements',
+                params={'from_date':'2026-11-07','to_date':'2026-11-07'})
+            assert daily.status_code == 200 and daily.json()['total'] == 2
+    asyncio.run(scenario())
+
+
+def test_individual_account_scope_revocation_during_lookup_rejects_result(monkeypatch):
+    from test_operational_balance_app_permissions import client
+    import operational_balance_routes as routes
+    original = routes.entity
+    async def revoke(db,owner,kind,identity,currency):
+        result = await original(db,owner,kind,identity,currency)
+        await db.mezan_mobile_app_access_v1.update_one({'user_id':'staff'},
+            {'$set':{'operational_banks':{'bank_ids':[]}}})
+        return result
+    monkeypatch.setattr(routes,'entity',revoke)
+    async def scenario():
+        db=await database(state_fixture())
+        async with client(db) as c:
+            result=await c.get('/api/operational-balances/accounts/bank/bank')
+        assert result.status_code == 403
+    asyncio.run(scenario())

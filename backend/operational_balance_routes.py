@@ -458,6 +458,13 @@ def make_operational_balance_router(db, current_user):
                 AUTHORIZATION_GUARD.reset(token)
         return dependency
 
+    async def consolidated_scope(user):
+        actor, owner, source = await scope(db, user, "reports")
+        if actor.get("role") != "owner" or actor.get("id") != owner:
+            fail("operational_consolidated_report_owner_required",
+                 "التقرير المجمع للمالك فقط؛ استخدم الحركات اليومية أو كشف الحسابات المسندة لك", 403)
+        return actor, owner, source
+
     manage_guard = guarded("manage")
     move_guard = guarded("move")
     movement_guard = guarded("move", browser_permission="accounting.movements.import")
@@ -657,6 +664,11 @@ def make_operational_balance_router(db, current_user):
                 permissions[key] = False
         from operational_app_banks import assigned_banks
         banks = await assigned_banks(db, owner, actor) if source == "employee_app" else None
+        consolidated = actor.get("role") == "owner" and actor.get("id") == owner
+        from operational_financial_activity import account_scope
+        allowed = None if consolidated else await account_scope(db, owner, actor)
+        opening_count = len(state["openings"]) if consolidated else sum(
+            (row.get("party_type"), row.get("party_id")) in allowed for row in state["openings"].values())
         return {"status": state["status"], "started_at": state["started_at"],
                 "operational_banks": banks,
                 "can_create_cash": actor.get("role") == "owner",
@@ -667,8 +679,9 @@ def make_operational_balance_router(db, current_user):
                 "can_manage_salary_start": actor.get("role") == "owner" and source != "employee_app" and state["status"] == "active",
                 "can_create_owner_withdrawal": actor.get("role") == "owner",
                 "session_scope": digest([owner, actor["id"]]),
-                "opening_count": len(state["openings"]), "permissions": permissions,
-                "issues": state.get("engine", {}).get("issues", []) if permissions["reports"] else []}
+                "opening_count": opening_count, "permissions": permissions,
+                "can_view_consolidated_reports": consolidated,
+                "issues": state.get("engine", {}).get("issues", []) if consolidated and permissions["reports"] else []}
 
     @router.get("/entities/{kind}")
     async def entities_route(kind: PartyType, user=Depends(current_user)):
@@ -686,7 +699,7 @@ def make_operational_balance_router(db, current_user):
                 from operational_app_banks import assigned_custody
                 own = await assigned_custody(db, owner, actor)
                 rows = [r for r in rows if r["id"] in own]
-            if source == "employee_app" and kind in {"bank", "cash"}:
+            if kind in {"bank", "cash"}:
                 from operational_app_banks import assigned_banks
                 allowed = await assigned_banks(db, owner, actor)
                 rows = [r for r in rows if r["id"] in allowed["bank_ids" if kind == "bank" else "cash_ids"]]
@@ -973,22 +986,47 @@ def make_operational_balance_router(db, current_user):
     @router.get("/accounts/{kind}/{identity}")
     async def account_read(kind: Literal["bank", "cash"], identity: str, currency: str = "SAR", user=Depends(current_user)):
         actor, owner, source = await scope(db, user, "reports")
+        from operational_financial_activity import account_scope, require_browser_activity_permission
+        if source != "employee_app":
+            require_browser_activity_permission(actor, "accounting.financial_accounts.view")
+        allowed = await account_scope(db, owner, actor)
+        if allowed is not None and (kind, identity) not in allowed:
+            fail("operational_bank_not_assigned", "الحساب غير مسند لك", 403)
         account = await entity(db, owner, kind, identity, currency)
-        # reports_read retains tenant reporting scope. Account assignments constrain
-        # writes, not reports-only users (who deliberately have no write assignments).
         from operational_balance_service import account_statement
-        return account_statement(await read(db, owner), account)
+        state = await read(db, owner)
+        result = account_statement(state, account)
+        if allowed is not None:
+            # Keep the authorized leg and its exact balance; names/free text may
+            # identify the other leg even when no explicit party fields exist.
+            restricted = {row['id'] for row in state['movements'] if any(
+                party_kind in {'bank', 'cash'} and party_id and (party_kind, party_id) not in allowed
+                for party_kind, party_id in ((row.get('bank_kind'), row.get('bank_id')),
+                                            (row.get('party_type'), row.get('party_id'))))}
+            for row in result['items']:
+                if row['id'] in restricted:
+                    row.update(name="تحويل من/إلى حساب خارج صلاحية العرض", reference="", note="تفاصيل الحساب المقابل خارج صلاحية العرض.")
+        fresh, fresh_owner, _ = await scope(db, user, "reports")
+        if source != "employee_app":
+            require_browser_activity_permission(fresh, "accounting.financial_accounts.view")
+        if fresh_owner != owner or fresh['id'] != actor['id'] or allowed != await account_scope(db, owner, fresh):
+            fail("financial_movements_scope_changed", "تغيرت صلاحيات الحسابات؛ أعد تحميل الصفحة", 403)
+        return result
 
     @router.get("/reports")
     async def reports(user=Depends(current_user)):
-        _, owner, _ = await scope(db, user, "reports")
-        return report(await read(db, owner), provider_balances_sar=True, provider_balances_net=True, ad_balances_sar=True)
+        _, owner, _ = await consolidated_scope(user)
+        result = report(await read(db, owner), provider_balances_sar=True, provider_balances_net=True, ad_balances_sar=True)
+        await consolidated_scope(user)
+        return result
 
     @router.get("/cost-exposure")
     async def cost_exposure(user=Depends(current_user)):
-        _, owner, _ = await scope(db, user, "reports")
+        _, owner, _ = await consolidated_scope(user)
         from operational_open_cost_exposure import project
-        return await project(db, owner, await read(db, owner))
+        result = await project(db, owner, await read(db, owner))
+        await consolidated_scope(user)
+        return result
 
     @router.get("/suppliers")
     async def supplier_accounts(user=Depends(current_user)):
@@ -1100,7 +1138,7 @@ def make_operational_balance_router(db, current_user):
 
     @router.get("/financial-position")
     async def financial_position(user=Depends(current_user)):
-        actor, owner, _ = await scope(db, user, "reports")
+        actor, owner, _ = await consolidated_scope(user)
         from operational_balance_service import accounting_inactive
         from operational_financial_position import build_financial_position
         from operational_financial_order_labels import attach_order_numbers
@@ -1144,12 +1182,14 @@ def make_operational_balance_router(db, current_user):
         result = build_financial_position(state, cost_exposure=cost_exposure, generated_at=now())
         result = await attach_order_numbers(db, owner, result)
         result.update(session_scope=digest([owner, actor["id"]]), permissions={"reports": True})
+        await consolidated_scope(user)
         return result
 
     @router.get("/audit")
     async def audit_route(user=Depends(current_user)):
-        _, owner, _ = await scope(db, user, "reports")
+        _, owner, _ = await consolidated_scope(user)
         state = await read(db, owner)
+        await consolidated_scope(user)
         return {"items": list(reversed(state["audit"] + state.get("engine", {}).get("audit", [])))}
 
     @router.post("/freeze")
