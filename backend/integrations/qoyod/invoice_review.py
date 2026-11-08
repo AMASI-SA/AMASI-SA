@@ -45,7 +45,7 @@ def _eligible_salla_status(row: dict) -> bool:
         if status in {
             "completed", "تم التنفيذ",
             "delivered", "تم التوصيل",
-            "in delivery", "shipping",
+            "in delivery", "shipping", "delivering",
             "جاري التوصيل", "جارٍ التوصيل",
         }:
             return True

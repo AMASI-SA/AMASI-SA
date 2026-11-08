@@ -3904,6 +3904,18 @@ def make_qoyod_router(db, current_user) -> APIRouter:
 
 
     # ── طلبات لم تُرسل إلى قيود — READ-ONLY ────────────────────────
+    @router.get("/header-count")
+    async def qoyod_header_count(user: dict = Depends(current_user)):
+        actor = await require_security_owner(db, user)
+        from integrations.qoyod.manual_header_summary import read_manual_summary
+        return await read_manual_summary(db, tenant=_tenant_id(actor), owner=orders_owner_id(actor))
+
+    @router.post("/header-count/refresh")
+    async def qoyod_header_count_refresh(user: dict = Depends(current_user)):
+        actor = await require_security_owner(db, user)
+        from integrations.qoyod.manual_header_summary import refresh_manual_summary
+        return await refresh_manual_summary(db, tenant=_tenant_id(actor), owner=orders_owner_id(actor))
+
     @router.get("/unsent-summary")
     async def qoyod_unsent_summary(user: dict = Depends(current_user)):
         actor = await require_security_owner(db, user)
