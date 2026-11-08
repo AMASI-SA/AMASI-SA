@@ -4,6 +4,7 @@ Only reviewed, known source failures can be isolated. An unknown failure still
 blocks every balance table, so a new source cannot silently become harmless.
 """
 from copy import deepcopy
+import json
 
 ALL_TABLES = frozenset({"banks_network", "cash", "suppliers", "employees", "external",
     "ads_currency_conversion", "ads", "employee_custody", "other_balances",
@@ -80,6 +81,35 @@ DELIVERY_PHASE_FAILURES = frozenset({
     "operational_delivery_order_waybill_unproven",
 })
 KNOWN_PROVIDERS = frozenset({"salla", "tabby", "tamara", "emkan"})
+
+
+def index_report_coverage(report):
+    """Lossless opt-in transport: send each diagnostic once, retain every link.
+
+    No eligibility, amount, completeness flag, note or case count changes.
+    Existing API clients keep the expanded default. This only avoids sending
+    the same historical source diagnostics again for every affected table.
+    """
+    catalog, positions = [], {}
+    currencies = {}
+    for code, currency in report.get('currencies', {}).items():
+        tables = []
+        for table in currency.get('tables', []):
+            coverage = table.get('coverage')
+            if coverage is not None:
+                indexes = []
+                for issue in coverage.get('issues', []):
+                    key = json.dumps(issue, sort_keys=True, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
+                    if key not in positions:
+                        positions[key] = len(catalog)
+                        catalog.append(issue)
+                    indexes.append(positions[key])
+                table = {**table, 'coverage': {**{k: v for k, v in coverage.items() if k != 'issues'},
+                                               'issue_indexes': indexes}}
+            tables.append(table)
+        currencies[code] = {**currency, 'tables': tables}
+    return {**report, 'currencies': currencies, 'coverage_format': 'indexed',
+            'coverage_issue_catalog': catalog}
 
 
 def _historical_capture_phase(issue):
