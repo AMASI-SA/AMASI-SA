@@ -65,6 +65,16 @@ def test_independent_upload_validation_rejects_bad_media_and_overflow():
         _decode_image(OperationalImageInput(filename="bad.png", content_type="image/png", data_base64="!!!"))
 
 
+def test_native_picker_converted_jpeg_requires_actual_content_type():
+    # Android picker compression can keep original WEBP metadata while exporting JPEG.
+    raw = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01"
+    encoded = base64.b64encode(raw).decode()
+    with pytest.raises(HTTPException) as exc:
+        _decode_image(OperationalImageInput(filename="source.webp", content_type="image/webp", data_base64=encoded))
+    assert exc.value.detail["code"] == "operational_image_signature_invalid"
+    assert _decode_image(OperationalImageInput(filename="source.jpg", content_type="image/jpeg", data_base64=encoded)) == (raw, "image/jpeg")
+
+
 @pytest.mark.asyncio
 async def test_uploaded_image_isolated_and_reused_only_for_same_product_choice():
     db = AsyncMongoMockClient()["isolated-operational"]

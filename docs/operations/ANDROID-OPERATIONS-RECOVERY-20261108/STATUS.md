@@ -17,3 +17,5 @@ Fresh focused validation command: PYTHONPATH=backend:backend/tests python -m pyt
 Result: 168 passed, 20 skipped, 59 subtests passed. Skips require a real Mongo replica environment. py_compile and diff checks pass. No live Salla operation/device acceptance/performance measurement claimed.
 
 Remaining: reviewed integration with moving production and inherited date endpoint dependencies, Mongo replica acceptance, native/mobile CI and physical-device mixed cycles, governed backend deployment, signed APK build and verification. Current mobile build transport explicitly NOT_COMMISSIONED; no APK or distribution available.
+
+Operational image follow-up: added regression proving JPEG bytes mislabeled image/webp are rejected by the existing backend, while corrected MIME/filename is accepted. Server validation is unchanged. Backend image suite: 7 passed. Native encoder correction lives in mobile companion; exact owner input image bytes are unavailable.
