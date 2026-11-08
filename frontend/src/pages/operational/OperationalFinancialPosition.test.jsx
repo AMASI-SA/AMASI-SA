@@ -566,3 +566,36 @@ test("profit evidence stays partial and separate on screen print and same-snapsh
     expect(exported).not.toContain("999.00");
     expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
 });
+
+test("tariff, actual settlement and unmatched variance retain identical meaning on screen, print and export", async () => {
+    const value = fixture();
+    const columns = [
+        {key:"name",label:"المنصة",type:"text"},
+        {key:"tariff_fees",label:"العمولة حسب التعرفة مع ضريبتها",type:"money"},
+        {key:"tariff_net",label:"صافي المدفوع حسب التعرفة",type:"money"},
+        {key:"actual_settlement_fees",label:"عمولة التسويات المثبتة",type:"money"},
+        {key:"fee_variance",label:"فرق العمولة الفعلية عن التعرفة",type:"money"},
+    ];
+    const amounts = {tariff_fees:"10.15",tariff_net:"89.85",actual_settlement_fees:"6.25",fee_variance:null};
+    const note = "التسوية جزئية؛ فرق العمولة غير متاح حتى تطابق النطاق.";
+    value.currencies.SAR.tables.push({id:"providers",title:"منصات الدفع",section:"fulfillment",kind:"actual",complete:true,
+        columns, rows:[{id:"tabby",name:"تابي",...amounts}],totals:{name:"الإجمالي",...amounts},notes:[note]});
+    operationalApi.financialPosition.mockResolvedValue(value);
+    await render();
+    const read = content => [...content.querySelector('[data-testid="financial-table-providers"] tbody tr').cells].map(cell=>cell.textContent);
+    const screen = read(host);
+    expect(screen).toEqual(["تابي","10.15","89.85","6.25","غير متاح"]);
+    print.mockImplementation(() => {
+        const content = useReactToPrint.mock.calls.at(-1)[0].contentRef.current;
+        expect(read(content)).toEqual(screen);
+        expect(content.textContent).toContain(note);
+    });
+    await click("طباعة التقرير");
+    await act(async () => useReactToPrint.mock.calls.at(-1)[0].onAfterPrint());
+    await click("تصدير Excel");
+    const book = XLSX.writeFile.mock.calls[0][0];
+    const rows = book.worksheets.flatMap(sheet=>sheet.getSheetValues().filter(Boolean));
+    const provider = rows.find(row=>row.includes("تابي"));
+    expect(provider.slice(1)).toEqual(screen);
+    expect(JSON.stringify(rows)).toContain(note);
+});

@@ -21,7 +21,7 @@ PROVIDER_CALCULATION = frozenset({
     "provider_fee_rate_invalid", "provider_fee_policy_evidence_required",
     "provider_capture_evidence_missing", "provider_capture_evidence_incomplete",
     "provider_capture_timestamp_conflict", "provider_balance_sar_unavailable",
-    "provider_sar_basis_conflict", "provider_historical_capture_review_required",
+    "provider_sar_basis_conflict",
     "provider_fee_source_mode_ambiguous", "provider_fee_settings_ambiguous",
     "provider_fee_owner_mismatch",
     "provider_plan_scope_conflict", "provider_plan_scope_invalid",
@@ -45,9 +45,71 @@ SHIPPING = frozenset({"courier_fee_historical_review_required", "driver_fee_evid
     "courier_fee_native_overlap", "driver_fee_amount_conflict", "driver_fee_native_overlap",
     "driver_fee_payout_review_required", "driver_fee_policy_review_required"})
 
+# operational_balance_sources emits these only after product components have
+# been extracted, tagged scope=provider_payment. The unresolved funding source
+# can be a bank receipt, provider claim, customer credit or COD/cash custody;
+# independent supplier invoices and salary accruals are not rewritten here.
+PAYMENT_SOURCE_AMBIGUITY = frozenset({
+    "provider_payment_method_unknown", "provider_payment_method_conflict",
+    "provider_split_payment_review_required", "provider_payment_shape_invalid",
+    "provider_payment_currency_conflict", "provider_payment_amount_invalid",
+    "provider_payment_amount_conflict", "provider_payment_reference_missing",
+    "provider_capture_original_basis_required", "provider_refund_execution_evidence_required",
+    "provider_cancellation_execution_evidence_required",
+})
+VERIFIED_PROVIDER_CAPTURE = frozenset({
+    "provider_capture_timestamp_invalid", "provider_capture_conflict", "provider_capture_status_conflict",
+    "provider_transaction_order_conflict", "provider_transaction_history_conflict",
+    "provider_transaction_binding_conflict", "provider_transaction_not_captured",
+    "provider_transaction_amount_conflict",
+})
+MONEY_SOURCE_TABLES = frozenset({"banks_network", "cash", "providers", "couriers", "drivers",
+    "employee_custody", "customer_wallets", "balance_origin"})
+HISTORICAL_CAPTURE = frozenset({"provider_historical_capture_review_required",
+    "provider_settled_capture_review_required"})
+# Exact failures from operational_delivery_evidence, held by the shipping-only
+# source phase before _attach_delivery_sources. Identity/owner/canonical-source
+# failures are deliberately not covered by this allowlist.
+DELIVERY_PHASE_FAILURES = frozenset({
+    "operational_delivery_timestamp_missing", "operational_delivery_timestamp_invalid",
+    "operational_delivery_timestamp_timezone_missing", "operational_delivery_timestamp_ambiguous",
+    "operational_delivery_timestamp_before_order", "operational_delivery_timestamp_before_shipment",
+    "operational_delivery_current_shipment_required", "operational_delivery_shipment_identity_missing",
+    "operational_delivery_shipment_identity_conflict", "operational_delivery_shipment_not_delivered",
+    "operational_delivery_shipment_status_conflict", "operational_delivery_shipment_waybill_conflict",
+    "operational_delivery_order_waybill_unproven",
+})
+KNOWN_PROVIDERS = frozenset({"salla", "tabby", "tamara", "emkan"})
+
+
+def _historical_capture_phase(issue):
+    # This exact payload is emitted by the provider-history handler in the
+    # engine. A bare error code cannot establish which source phase failed.
+    page = issue.get("order_page_balance_review")
+    if not isinstance(page, dict) or not page.get("order_id"):
+        return False
+    provider = issue.get("provider")
+    return (provider in KNOWN_PROVIDERS and page.get("provider") == provider
+            and issue.get("source_id") in {"provider:" + str(page["order_id"]),
+                "provider:" + str(page["order_id"]) + ":" + provider})
+
 
 def affected_tables(issue):
     code = str(issue.get("code") or "")
+    if code in HISTORICAL_CAPTURE:
+        # The history check includes previous bank/COD payments, customer
+        # returns/exchanges and same-order movements (including custody legs).
+        return MONEY_SOURCE_TABLES if _historical_capture_phase(issue) else ALL_TABLES
+    if code in PAYMENT_SOURCE_AMBIGUITY:
+        return MONEY_SOURCE_TABLES if issue.get("scope") == "provider_payment" else ALL_TABLES
+    if code in VERIFIED_PROVIDER_CAPTURE:
+        if issue.get("scope") == "provider_payment" and issue.get("provider") in KNOWN_PROVIDERS:
+            return frozenset({"providers", "balance_origin"})
+        return ALL_TABLES
+    if code in DELIVERY_PHASE_FAILURES:
+        if issue.get("component") == "shipping_fee":
+            return frozenset({"banks_network", "cash", "couriers", "drivers", "employee_custody", "balance_origin"})
+        return ALL_TABLES
     if code in PROVIDER_CALCULATION:
         return frozenset({"providers", "balance_origin"})
     if code in SALARY_CALCULATION:
@@ -93,7 +155,11 @@ def _reason(issue):
     if issue.get("message"):
         return str(issue["message"])
     code = str(issue.get("code") or "")
-    if code in PROVIDER_CALCULATION:
+    if code in PAYMENT_SOURCE_AMBIGUITY or code in HISTORICAL_CAPTURE:
+        return "يلزم مطابقة مصدر التحصيل أو الاسترداد مع البنك والمنصة والعهد قبل اكتمال الأرصدة المتأثرة"
+    if code in DELIVERY_PHASE_FAILURES:
+        return "دليل تسليم الشحنة أو توقيته غير مكتمل؛ يلزم مطابقة أجرتها وتحصلاتها والعهد المرتبطة بها"
+    if code in PROVIDER_CALCULATION or code in VERIFIED_PROVIDER_CAPTURE:
         return "تعذر استكمال احتساب مستحق منصة الدفع من أدلة التحصيل والتعرفة المحفوظة"
     if code in SALARY_CALCULATION:
         return "تحتاج أيام استحقاق الرواتب أو عقودها وتواريخ سريانها إلى مراجعة"
