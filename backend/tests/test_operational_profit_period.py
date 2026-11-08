@@ -105,3 +105,87 @@ def test_cost_actual_requires_all_received_invoiced_components_not_catalog():
     assert row['complete'] and row['amount'] == '40.00'
     data['mezan_preparation_pieces_v1'].append(dict(data['mezan_preparation_pieces_v1'][0], id='duplicate'))
     assert not costs(state,data,[raw],[])['SAR']['cost_of_goods']['complete']
+
+
+def test_revised_salary_cannot_certify_conflicting_recorded_day():
+    def fixture(db, state):
+        db.data['mezan_employees_v2'] = [{'user_id':'owner','id':'employee1','status':'active','hire_date':'2026-11-01'}]
+        db.data['mezan_employee_salary_contracts_v2'] = [{'user_id':'owner','employee_id':'employee1',
+            'effective_from':'2026-11-01', 'monthly_amount':'3000', 'currency':'SAR'}]
+        state['engine']['salary_days'] = {'salary:employee1:2026-11-02': {'amount':'90', 'currency':'SAR'}}
+        state['engine']['salary_conflicts'] = {'salary:employee1:2026-11-02': {'reason':'revision_changed'}}
+    value = collect_one(order(status='delivered'), fixture)['by_currency']['SAR']['salaries']
+    assert not value['complete'] and value['amount'] is None
+    assert any(row['code'] == 'profit_salary_recorded_reconciliation_required' for row in value['issues'])
+
+
+def test_salary_period_is_bounded_before_candidate_expansion(monkeypatch):
+    import operational_profit_period as module
+    def fixture(db, state):
+        state['started_at'] = '1900-01-01T00:00:00Z'
+        db.data['mezan_employees_v2'] = [{'user_id':'owner','id':'employee1','status':'active','hire_date':'2026-11-01'}]
+        db.data['mezan_employee_salary_contracts_v2'] = [{'user_id':'owner','employee_id':'employee1',
+            'effective_from':'2026-11-01', 'monthly_amount':'3000', 'currency':'SAR'}]
+    def forbidden(*args):
+        raise AssertionError('unbounded candidates invoked')
+    monkeypatch.setattr(module, 'candidates', forbidden)
+    value = collect_one(order(status='delivered'), fixture)
+    assert any(r['code'] == 'profit_salary_period_or_workload_unbounded' for r in value['issues']['salaries'])
+
+
+def test_proven_cash_collection_has_no_platform_fee_without_guessing_missing_method():
+    from operational_profit_order_costs import collect as costs
+    from operational_open_cost_exposure import READS
+    doc = order(status='delivered', paid='100')
+    raw = doc['raw_by_source']['salla_direct']
+    db = seeded_db(order_row=doc)
+    data = {name:db.data.get(name,[]) for name in READS}
+    state = operating_state()
+    oid = str(raw['id'])
+    state['engine'].setdefault('facts', {}).update({
+        'shipping:'+oid: {'id':'driver', 'party_type':'store_driver'},
+        'cod_collection:'+oid: {'party_id':'driver', 'amount':'100', 'evidence': {
+            'evidence_complete':True, 'collection_confirmed':True, 'payment_method':'cash',
+            'gross':'100', 'collected':'100', 'outstanding':'0', 'custody_amount':'100', 'evidence_ids':['receipt']}}})
+    row = costs(state,data,[raw],[])['SAR']['payment_fees']
+    assert row['complete'] and row['amount'] == '0.00'
+    raw.pop('payment_method')
+    assert not costs(state,data,[raw],[])['SAR']['payment_fees']['complete']
+
+
+def test_fee_net_requires_bound_explicit_tax_proof_or_proven_zero_tax():
+    from decimal import Decimal
+    from operational_profit_order_costs import fee_expense_net
+    projection = {'policy_id':'tariff', 'estimated_fee_net':'10', 'estimated_fee_tax':'1.5', 'estimated_fees':'11.5'}
+    assert fee_expense_net(projection, Decimal('11.5')) is None
+    proof = {'treatment':'INPUT_VAT', 'confirmed':True, 'currency':'SAR',
+        'policy_id':'tariff', 'evidence_id':'vatdoc', 'tax_amount':'1.5'}
+    assert fee_expense_net(projection, Decimal('11.5'), proof) == Decimal('10')
+    for key, value in [('policy_id','other'), ('tax_amount','2'), ('currency','USD'), ('confirmed',False)]:
+        assert fee_expense_net(projection, Decimal('11.5'), {**proof,key:value}) is None
+    assert fee_expense_net({**projection,'estimated_fee_tax':'0','estimated_fees':'10'}, Decimal('10')) == Decimal('10')
+    assert fee_expense_net(None, Decimal('0')) is None
+
+
+def test_cash_exemption_rejects_partial_card_split_and_conflicting_capture():
+    from operational_profit_order_costs import proven_cash_without_provider_fee
+    raw = order(status='delivered',paid='100')['raw_by_source']['salla_direct']
+    oid = str(raw['id'])
+    fact = {'party_id':'driver','amount':'100','evidence':{'evidence_complete':True,
+        'collection_confirmed':True,'payment_method':'cash','evidence_ids':['receipt'],
+        'gross':'100','collected':'100','outstanding':'0','custody_amount':'100'}}
+    facts = {'shipping:'+oid:{'id':'driver','party_type':'store_driver'}, 'cod_collection:'+oid:fact}
+    assert proven_cash_without_provider_fee(raw,facts)
+    for key, value in [('payment_method','card_terminal'),('collected','90'),('evidence_complete',False)]:
+        invalid = deepcopy(facts)
+        invalid['cod_collection:'+oid]['evidence'][key] = value
+        assert not proven_cash_without_provider_fee(raw,invalid)
+    assert not proven_cash_without_provider_fee({**raw,'payment_methods':[{'method':'cod'}]},facts)
+    assert not proven_cash_without_provider_fee(raw,{**facts,'capture:unexpected':{'order_id':oid,'amount':'1','provider':'tabby'}})
+
+
+def test_excluded_status_cannot_hide_stale_canonical_snapshot():
+    doc = order(status='cancelled')
+    doc['g47_salla_snapshot']['source_updated_at'] = '2026-11-01T13:00:00+00:00'
+    result = collect_one(doc)
+    assert any(row['code'] == 'profit_order_snapshot_unverified' for row in result['issues']['net_sales'])

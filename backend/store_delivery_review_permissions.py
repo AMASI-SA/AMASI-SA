@@ -53,3 +53,28 @@ async def require_review_actor(db, owner, actor_id, *, request_client=None):
         _deny()
     # Restore the server-owned legacy employee link without lending owner identity.
     return {**actor, 'created_by': owner}
+
+
+async def review_bank_ids(db, owner, actor):
+    """Account assignment narrows review authority; it never grants that authority."""
+    if actor.get('role') == 'owner' and actor.get('id') == owner:
+        return None
+    access = await db[MOBILE_APP_ACCESS].find_one({'owner_user_id': owner, 'user_id': actor['id']}) or {}
+    ids = (access.get('operational_banks') or {}).get('bank_ids') or []
+    return {value for value in ids if isinstance(value, str) and value}
+
+
+async def require_review_bank(db, owner, actor, bank_id):
+    allowed = await review_bank_ids(db, owner, actor)
+    if allowed is not None and bank_id not in allowed:
+        raise HTTPException(403, detail={'code': 'operational_bank_not_assigned'})
+
+
+async def require_review_scope(db, owner, actor_id, assignment_id, *, request_client=None):
+    actor = await require_review_actor(db, owner, actor_id, request_client=request_client)
+    review = await db.store_delivery_payment_reviews.find_one({'user_id': owner, 'assignment_id': assignment_id})
+    if not review and not (actor.get('role') == 'owner' and actor.get('id') == owner):
+        raise HTTPException(403, detail={'code': 'operational_bank_not_assigned'})
+    if review and (review.get('payment_method') == 'bank_transfer' or review.get('bank_account_id')):
+        await require_review_bank(db, owner, actor, review.get('bank_account_id'))
+    return actor

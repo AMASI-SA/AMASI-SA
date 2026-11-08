@@ -15,7 +15,7 @@ from accounting_shipping_native_contract import Input, EVIDENCE, EVENTS, digest,
 from accounting_shipping_native_setup import pin_setup, require_party
 import accounting_driver_payment_port as destination_port
 import accounting_shipping_bank_port as bank_port
-from store_delivery_review_permissions import require_review_actor
+from store_delivery_review_permissions import require_review_actor, require_review_scope, require_review_bank
 
 REVIEWS = "store_delivery_payment_reviews"
 COLLECTIONS = "store_delivery_collections"
@@ -84,6 +84,7 @@ def validate_destination(result, *, owner, payload, method, value, receipt_hash)
 async def review_driver_payment(db, *, owner, actor_id, assignment_id, payload, request_client=None):
     async def commit(scoped):
         actor = await review_actor(scoped, owner, actor_id, request_client=request_client)
+        await require_review_scope(scoped, owner, actor_id, assignment_id, request_client=request_client)
         review = await single(scoped, REVIEWS, {"user_id": owner, "assignment_id": assignment_id}, "driver_payment_review_required")
         if not review.get("id"):
             fail("driver_payment_review_identity_required")
@@ -218,9 +219,9 @@ async def review_driver_payment(db, *, owner, actor_id, assignment_id, payload, 
     async def authorized_commit(scoped):
         # Also recheck outside the snapshot so revocation during a transaction
         # aborts its effects instead of relying on the old app-grant snapshot.
-        await require_review_actor(db, owner, actor_id, request_client=request_client)
+        await require_review_scope(db, owner, actor_id, assignment_id, request_client=request_client)
         result = await commit(scoped)
-        await require_review_actor(db, owner, actor_id, request_client=request_client)
+        await require_review_scope(db, owner, actor_id, assignment_id, request_client=request_client)
         return result
     return await atomic_owner(db, owner, authorized_commit)
 
@@ -256,6 +257,8 @@ async def settle_pos_to_bank(db, *, owner, actor_id, assignment_id, payload):
             fail("shipping_movement_date_invalid")
         if day > datetime.now(ZoneInfo("Asia/Riyadh")).date():
             fail("shipping_settlement_in_future")
+        live_actor = await require_review_actor(scoped, owner, actor_id)
+        await require_review_bank(scoped, owner, live_actor, movement.get("bank_account_id"))
         bank = await bank_port.require_shipping_bank_identity(scoped, owner, movement.get("bank_account_id"))
         bank_key = (bank["entity_type"], bank["entity_id"], bank["sub_account"])
         if bank_key == pos_key or bank["entity_type"] != "bank":
@@ -281,4 +284,15 @@ async def settle_pos_to_bank(db, *, owner, actor_id, assignment_id, payload):
         record["seal"] = digest({k: v for k, v in record.items() if k != "_id"})
         await scoped[EVENTS].insert_one(record)
         return {"state": "posted", "txn_group_id": result["txn_group_id"]}
-    return await atomic_owner(db, owner, commit)
+    async def live_bank_scope(database):
+        actor = await require_review_actor(database, owner, actor_id)
+        movement = await database.mz2_daily_movements.find_one({'user_id': owner, 'id': payload.movement_id})
+        if movement:
+            await require_review_bank(database, owner, actor, movement.get('bank_account_id'))
+    async def authorized_commit(scoped):
+        await live_bank_scope(db)
+        await live_bank_scope(scoped)
+        result = await commit(scoped)
+        await live_bank_scope(db)
+        return result
+    return await atomic_owner(db, owner, authorized_commit)

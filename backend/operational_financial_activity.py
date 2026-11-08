@@ -258,6 +258,73 @@ def _cash_only_projection(state, selected):
     return {"parties": list(parties.values()), "obligations": []}
 
 
+def _driver_review_projection(state, selected):
+    """Exact bank/POS and driver confirmed net debt from this transaction state.
+
+    No cross-event cache. Only the report's ordinary debt types qualify; special
+    supplier/provider credit reconciliation and funding models keep the report
+    fallback. Net debt preserves corrections, advances and overallocations.
+    """
+    if any(r["account_type"] not in {"bank", "cash", "pos_receivable"}
+           or r["counterparty_type"] != "store_driver" for r in selected):
+        return None
+    keys = {(r["counterparty_type"], r["counterparty_id"], r["counterparty_balance_currency"]) for r in selected}
+    keys.update((r["account_type"], r["account_id"], r["currency"])
+                for r in selected if r["account_type"] == "pos_receivable")
+    obligations = [r for r in state.get("engine", {}).get("obligations", {}).values()
+                   if (r["party_type"], r["party_id"], r["currency"]) in keys and not r.get("superseded")]
+    if any(r.get("kind") in {"supplier", "provider"} or r.get("funding_type")
+           or r.get("derived_credit") for r in obligations):
+        return None
+    parties = {}
+
+    def get(row):
+        key = row["party_type"], row["party_id"], row["currency"]
+        if key not in parties:
+            parties[key] = {"party_type": key[0], "party_id": key[1], "currency": key[2],
+                "name": row.get("name") or key[1], "outstanding_receivable": Decimal(0),
+                "outstanding_payable": Decimal(0)}
+        return parties[key]
+
+    # Opening debt has its own allocation identity; it is not an extra movement.
+    for row in state.get("openings", {}).values():
+        if (row["party_type"], row["party_id"], row["currency"]) in keys:
+            get(row)
+            obligations.append({**row, "confirmed": row["amount"],
+                "direction": "receivable" if row["direction"] == "for_us" else "payable"})
+    ids = {r["id"] for r in obligations}
+    allocated = {}
+    for movement in state.get("movements", []):
+        for allocation in movement.get("allocations", []):
+            identity = allocation["obligation_id"]
+            if identity in ids:
+                allocated[identity] = allocated.get(identity, Decimal(0)) + Decimal(_amount(allocation["amount"]))
+    for row in obligations:
+        party = get(row)
+        remaining = Decimal(_amount(row.get("confirmed", "0"))) - allocated.get(row["id"], Decimal(0))
+        # The full report suppresses a negative original claim when an explicit
+        # credit claim exists. Keep the same rule even for unusual old state.
+        if remaining < 0 and "credit:" + row["id"] in state.get("engine", {}).get("obligations", {}):
+            continue
+        field = "outstanding_" + row["direction"]
+        party[field] += remaining
+    for movement in state.get("movements", []):
+        if (movement["party_type"], movement["party_id"], movement["currency"]) not in keys:
+            continue
+        party = get(movement)
+        amount = Decimal(_amount(movement["amount"]))
+        if movement["kind"] == "correction":
+            party["outstanding_receivable"] += amount if movement["direction"] == "incoming" else -amount
+        elif movement["kind"] != "transfer":
+            unused = amount - sum((Decimal(_amount(a["amount"])) for a in movement.get("allocations", [])), Decimal(0))
+            if unused > 0:
+                party["outstanding_receivable"] += unused if movement["direction"] == "outgoing" else -unused
+    cash_rows = [{**r, "counterparty_id": None, "counterparty_type": None} for r in selected
+                 if r["account_type"] in {"bank", "cash"}]
+    cash = _cash_only_projection(state, cash_rows) if cash_rows else {"parties": []}
+    return {"parties": [*cash["parties"], *parties.values()], "obligations": obligations}
+
+
 def capture_after_balances(state, event):
     """Called after each real effect, before its existing atomic audit append.
 
@@ -296,6 +363,8 @@ def capture_after_balances(state, event):
     # the growing sealed log for every automatic movement in a worker batch.
     try:
         projection = _cash_only_projection(state, selected)
+        if projection is None and action == "driver_payment_review_approved":
+            projection = _driver_review_projection(state, selected)
         if projection is None:
             projection = report({**state, "audit": [], "requests": {},
                                  "engine": {**state.get("engine", {}), "audit": []}})

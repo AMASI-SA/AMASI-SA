@@ -3,7 +3,7 @@ from collections import defaultdict
 from decimal import Decimal
 
 from operational_balance_sources import cost_components, number, unique_index, invoice_component_amounts, instant, supplier_receipt_proven, physical_unit_index
-from operational_configured_provider_fees import estimate_fee
+from operational_configured_provider_fees import estimate_fee, configured_projection
 from operational_provider_summary import _records
 
 
@@ -12,6 +12,14 @@ def collect(state, data, cohort, scope_issues):
     obligations = engine.get('obligations', {})
     facts = engine.get('facts', {})
     inputs = engine.get('provider_fee_inputs', {})
+    provider_orders = set()
+    for key, fact in facts.items():
+        if key.startswith('provider_split:'):
+            provider_orders.add(key.removeprefix('provider_split:'))
+        elif key.startswith('provider_order_balance:'):
+            provider_orders.add(key.removeprefix('provider_order_balance:'))
+        elif key.startswith('capture:') and isinstance(fact, dict):
+            provider_orders.add(str(fact.get('order_id')))
     profiles = unique_index(data['mezan_product_cost_profiles_v2'], 'salla_product_id')
     try:
         records, _ = _records(state, list(obligations.values()), {})
@@ -125,7 +133,10 @@ def collect(state, data, cohort, scope_issues):
                 except (ValueError, TypeError, KeyError, ArithmeticError):
                     reject('shipping', oid, 'profit_shipping_source_incomplete')
         matches = fees_by_order[oid]
-        if not matches:
+        if not matches and proven_cash_without_provider_fee(raw, facts, provider_orders):
+            totals['SAR','payment_fees'] += Decimal(0)
+            counts['SAR','payment_fees'] += 1
+        elif not matches:
             reject('payment_fees', oid, 'profit_payment_fee_scope_missing')
         for row in matches:
             fee = None
@@ -142,8 +153,20 @@ def collect(state, data, cohort, scope_issues):
             if fee is None:
                 reject('payment_fees', oid, 'profit_payment_fee_tariff_or_fx_missing')
             else:
-                totals['SAR','payment_fees'] += fee
-                reject('payment_fees', oid, 'profit_fee_input_vat_treatment_required')
+                try:
+                    projection = configured_projection(inputs.get('policies', []), row['provider'], row['gross'],
+                        method=row.get('method'), refunded=row['refunded'], payment=row.get('payment'),
+                        created_at=row.get('created_at'), observed_at=row.get('observed_at'),
+                        refunds=row.get('refund_events'), source_mode=inputs.get('source_mode', 'legacy_settings'),
+                        as_of=engine.get('as_of'))
+                    obligation = obligations.get('provider:' + oid, {})
+                    proof = obligation.get('tax_evidence') if obligation.get('party_id') == row['provider'] else None
+                    net_fee = fee_expense_net(projection, fee, proof)
+                except (ValueError, TypeError, KeyError, ArithmeticError):
+                    net_fee = None
+                totals['SAR','payment_fees'] += fee if net_fee is None else net_fee
+                if net_fee is None:
+                    reject('payment_fees', oid, 'profit_fee_input_vat_treatment_required')
                 counts['SAR','payment_fees'] += 1
     result = {}
     for currency in {currency for currency, _ in totals} | {'SAR'}:
@@ -157,5 +180,54 @@ def collect(state, data, cohort, scope_issues):
                 'source_count':counts[currency,kind], 'issues':errors,
                 'estimated_subtotal':format(estimates[currency,kind],'.2f') if (currency,kind) in estimates else None,
                 'basis': {'cost_of_goods':'accepted_supplier_invoice_net_cost_with_complete_physical_components',
-                    'shipping':'recorded_shipping_event_gross_cost', 'payment_fees':'saved_effective_tariff_including_fee_vat'}[kind]}
+                    'shipping':'recorded_shipping_cost_net_of_proven_recoverable_input_vat', 'payment_fees':'saved_effective_tariff_net_of_proven_recoverable_input_vat'}[kind]}
     return result
+
+
+def fee_expense_net(projection, gross_fee, proof=None):
+    """A tariff gives its VAT split; recoverability needs separate saved proof."""
+    if not projection or not projection.get('policy_id'):
+        return None
+    net, tax = number(projection.get('estimated_fee_net')), number(projection.get('estimated_fee_tax'))
+    if net + tax != gross_fee or number(projection.get('estimated_fees')) != gross_fee:
+        return None
+    if tax == 0:
+        return net
+    if (isinstance(proof, dict) and proof.get('confirmed') is True
+            and proof.get('treatment') == 'INPUT_VAT' and proof.get('currency') == 'SAR'
+            and proof.get('policy_id') == projection['policy_id']
+            and proof.get('evidence_id') and number(proof.get('tax_amount')) == tax):
+        return net
+    return None
+
+
+def proven_cash_without_provider_fee(raw, facts, provider_orders=None):
+    """Only a fully evidenced store-driver cash collection excludes platform fees.
+
+    Carrier COD service charges remain in shipping. Missing methods, card/bank
+    receipts and partly paid/split orders cannot establish this exemption.
+    """
+    from operational_cod_forecast_coverage import _methods
+    from operational_prestart_cod_forecast import COD
+    methods = _methods(raw)
+    if not methods or not methods <= COD | {'cash'} or raw.get('currency') != 'SAR':
+        return False
+    oid = str(raw.get('id') or '')
+    if provider_orders is None:
+        provider_orders = {str(value.get('order_id')) for key, value in facts.items()
+                           if key.startswith('capture:') and isinstance(value, dict)}
+    if ('provider_split:' + oid in facts or 'provider_order_balance:' + oid in facts or oid in provider_orders):
+        return False
+    shipping, collected = facts.get('shipping:' + oid, {}), facts.get('cod_collection:' + oid, {})
+    evidence = collected.get('evidence') or {}
+    try:
+        gross = number(raw['amounts']['total'])
+        return (gross > 0 and shipping.get('party_type') == 'store_driver'
+            and shipping.get('id') == collected.get('party_id') and bool(shipping.get('id'))
+            and evidence.get('evidence_complete') is True and evidence.get('collection_confirmed') is True
+            and evidence.get('payment_method') == 'cash' and bool(evidence.get('evidence_ids'))
+            and number(evidence.get('gross')) == number(evidence.get('collected')) == gross
+            and number(evidence.get('outstanding')) == 0
+            and number(evidence.get('custody_amount')) == number(collected.get('amount')) == gross)
+    except (KeyError, TypeError, ValueError, ArithmeticError):
+        return False

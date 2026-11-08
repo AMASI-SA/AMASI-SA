@@ -25,7 +25,8 @@ async def staff(db, *, role='employee', legacy=False, grants=None):
         await db.mezan_employees_v2.insert_one({'user_id': 'owner', 'account_user_id': user['id']})
     await db.users.insert_one(user)
     await db[MOBILE_APP_ACCESS].insert_one({'owner_user_id': 'owner', 'user_id': user['id'],
-        'enabled': True, 'permissions': APP_GRANTS if grants is None else grants})
+        'enabled': True, 'permissions': APP_GRANTS if grants is None else grants,
+        'operational_banks': {'bank_ids': ['bank']}})
     return user
 
 
@@ -158,4 +159,39 @@ def test_transaction_permission_reads_remain_owner_and_actor_scoped(collection, 
         with pytest.raises(HTTPException):
             await scoped[collection].find_one(query)
         assert scoped.failed
+    run_mock(check)
+
+
+def test_review_grant_cannot_read_or_approve_unassigned_bank(monkeypatch):
+    monkeypatch.setattr(service, 'now', lambda: NOW)
+    async def check(db):
+        assignment, payload = await seed(db, method='bank_transfer')
+        actor = await staff(db)
+        principal = await app_principal(db, actor)
+        payload.expected_session_scope = digest(['owner', actor['id']])
+        await db[MOBILE_APP_ACCESS].update_one({'user_id':actor['id']}, {'$set':{'operational_banks':{'bank_ids':[]}}})
+        before = await db[STATES].find_one({})
+        async with client_for(db, principal) as client:
+            pending = await client.get('/store-delivery/payment-review/pending')
+            assert pending.status_code == 200 and pending.json()['items'] == [] and pending.json()['total'] == 0
+            assert (await client.get(f'/store-delivery/payment-review/{assignment}/approval-options')).status_code == 403
+            assert (await client.post(f'/store-delivery/payment-review/{assignment}', json=payload.model_dump(mode='json'))).status_code == 403
+        assert await db[STATES].find_one({}) == before
+        assert await db[EVENTS].count_documents({}) == 0
+    run_mock(check)
+
+
+def test_receipt_token_does_not_bypass_bank_scope(monkeypatch):
+    from store_delivery_payment_evidence_routes import make_store_delivery_payment_evidence_router
+    monkeypatch.setattr(service, 'now', lambda: NOW)
+    async def check(db):
+        await seed(db, method='bank_transfer')
+        actor = await staff(db, role='accountant')
+        await db[MOBILE_APP_ACCESS].update_one({'user_id':actor['id']}, {'$set':{'operational_banks':{'bank_ids':[]}}})
+        app = FastAPI()
+        async def current(): return actor
+        app.include_router(make_store_delivery_payment_evidence_router(db, current))
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://synthetic') as client:
+            response = await client.get('/store-delivery/evidence/receipt/token-1')
+        assert response.status_code == 403
     run_mock(check)

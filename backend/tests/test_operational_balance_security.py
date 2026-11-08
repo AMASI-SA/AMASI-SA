@@ -65,7 +65,7 @@ def test_active_member_needs_no_operational_grants_for_reports_or_choices():
     run(scenario)
 
 
-def test_active_members_share_operational_history_within_same_owner():
+def test_assigned_members_share_authorized_account_history_within_same_owner():
     async def scenario(db):
         await started(db)
         await routes.create_movement(db, "owner", "owner", movement())
@@ -75,6 +75,9 @@ def test_active_members_share_operational_history_within_same_owner():
             {"_id": "staffreceipt", "owner_id": "owner", "actor_id": "staff", "content": b"%PDF-safe", "mime": "application/pdf"},
         ])
         async with await mobile_client(db) as client:
+            assert (await client.get("/api/operational-balances/movements")).json()["items"] == []
+            await db.mezan_mobile_app_access_v1.update_one({'user_id':'staff'},
+                {'$set':{'operational_banks':{'bank_ids':['bank']}}})
             items = (await client.get("/api/operational-balances/movements")).json()["items"]
             assert len(items) == 2 and {m["actor_id"] for m in items} == {"owner", "staff"}
             assert (await client.get("/api/operational-balances/receipts/ownerreceipt")).status_code == 403
@@ -129,17 +132,18 @@ def test_independent_mobile_report_grant_allows_reports():
     run(scenario)
 
 
-def test_active_member_without_any_operational_grants_has_all_functions():
+def test_active_member_without_browser_write_grant_cannot_record_movements():
     async def scenario(db):
         await started(db)
         await db.users.update_one({'id':'staff'},{'$unset':{'operational_balance_permissions':''}})
         async with await mobile_client(db, browser=True) as client:
             await db.mezan_mobile_app_access_v1.update_one({'user_id':'staff'},{'$set':{'permissions':[]}})
             context=(await client.get('/api/operational-balances/context')).json()
-            assert all(context['permissions'].values())
+            assert context['permissions']['reports'] is True
+            assert context['permissions']['move'] is False
             response=await client.post('/api/operational-balances/movements',json={**movement(),'expected_session_scope':routes.digest(['owner','staff'])})
-            assert response.status_code==200, response.text
-            assert (await routes.read(db,'owner'))['movements'][0]['actor_id']=='staff'
+            assert response.status_code==403, response.text
+            assert (await routes.read(db,'owner'))['movements'] == []
     run(scenario)
 
 

@@ -156,3 +156,19 @@ def test_real_mongo_browser_write_grant_and_account_scope_rechecked_before_commi
                 assert result.status_code == 403, result.text
             assert (await read(db, "owner"))["movements"] == []
     run(scenario)
+
+
+def test_legacy_movements_cannot_bypass_assigned_scope_or_disclose_transfer_destination():
+    from test_operational_balance_app_permissions import client
+    state = state_fixture()
+    state['movements'] = [movement('visible'), movement('hidden',bank_id='secret'),
+        movement('transfer',kind='transfer',party_type='bank',party_id='secret',name='SECRET BANK',
+                 reference='SECRET REF',note='SECRET NOTE',allocations=[])]
+    async def scenario():
+        db = await database(state)
+        async with client(db) as mobile:
+            response = await mobile.get('/api/operational-balances/movements')
+        assert response.status_code == 200
+        assert {row['id'] for row in response.json()['items']} == {'visible','transfer'}
+        assert 'secret' not in response.text.lower()
+    asyncio.run(scenario())

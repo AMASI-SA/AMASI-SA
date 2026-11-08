@@ -20,7 +20,7 @@ from store_delivery_handover_routes import ASSIGNMENTS
 from accounting_driver_payment_review import DriverReviewInput as NativeReviewPayload, PosBankInput
 from operational_driver_payment_review import ReviewInput as ReviewPayload
 from mobile_app_permissions import MOBILE_APP_CLIENT
-from store_delivery_review_permissions import require_review_actor
+from store_delivery_review_permissions import require_review_actor, review_bank_ids, require_review_scope
 
 PAYMENT_EVENTS = "store_delivery_payment_review_events"
 
@@ -70,6 +70,10 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
         actor = await _require_accountant(db, user)
         user_id = _merchant_user_id(actor)
         query: dict[str, Any] = {"user_id": user_id, "status": "pending"}
+        allowed = await review_bank_ids(db, user_id, actor)
+        if allowed is not None:
+            query['$or'] = [{'bank_account_id': {'$in': sorted(allowed)}},
+                {'payment_method': 'card_terminal', 'bank_account_id': {'$in': [None, '']}}]
         if method:
             query["payment_method"] = normalize_text(method)
         if driver_id:
@@ -105,6 +109,9 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
                 "driver_name": driver.get("name") or assignment.get("driver_name_snapshot") or review.get("driver_name_snapshot"),
                 "driver_phone": driver.get("phone"),
             })
+        fresh = await _require_accountant(db, user)
+        if allowed != await review_bank_ids(db, user_id, fresh):
+            raise HTTPException(403, detail={'code':'operational_bank_not_assigned'})
         return {"items": items, "total": len(items)}
 
     @router.get("/{assignment_id}/approval-options")
@@ -114,6 +121,7 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
     ) -> dict[str, Any]:
         actor = await _require_accountant(db, user)
         user_id = _merchant_user_id(actor)
+        await require_review_scope(db, user_id, actor["id"], assignment_id, request_client=actor.get("_review_request_client"))
         from operational_driver_payment_review import financial_source, options
         source = await financial_source(db, user_id)
         if source == "operational":
@@ -254,6 +262,7 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
             result["bank_movements"] = safe
         else:
             result["blocker"] = "payment_review_not_required"
+        await require_review_scope(db, user_id, actor["id"], assignment_id, request_client=actor.get("_review_request_client"))
         return result
 
     @router.get("/bank-accounts")
@@ -261,8 +270,13 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
         actor = await _require_accountant(db, user)
         user_id = _merchant_user_id(actor)
         accounts = await list_financial_accounts(db, user_id, account_types=("bank",), currency="SAR")
+        allowed = await review_bank_ids(db, user_id, actor)
+        accounts = [row for row in accounts if allowed is None or row.get("id") in allowed]
         items = [{key: row.get(key) for key in ("id", "name", "account_type", "currency", "status")}
                  for row in accounts]
+        fresh = await _require_accountant(db, user)
+        if allowed != await review_bank_ids(db, user_id, fresh):
+            raise HTTPException(403, detail={'code':'operational_bank_not_assigned'})
         return {"items": items, "total": len(items), "source": "mz2_financial_accounts"}
 
     @router.post("/{assignment_id}")

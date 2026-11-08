@@ -50,7 +50,7 @@ def test_real_app_grant_approves_once_as_employee_without_browser_permission(mon
     run(scenario)
 
 
-@pytest.mark.parametrize('revoked', ['app_grant', 'legacy_link'])
+@pytest.mark.parametrize('revoked', ['app_grant', 'legacy_link', 'bank_assignment'])
 def test_real_app_revocation_inside_approval_rolls_back_every_effect(monkeypatch, revoked):
     monkeypatch.setattr(service, 'now', lambda: NOW)
     async def scenario(db):
@@ -71,6 +71,9 @@ def test_real_app_revocation_inside_approval_rolls_back_every_effect(monkeypatch
                 if revoked == 'app_grant':
                     await db[MOBILE_APP_ACCESS].update_one({'owner_user_id': 'owner', 'user_id': actor['id']},
                                                         {'$set': {'enabled': False}})
+                elif revoked == 'bank_assignment':
+                    await db[MOBILE_APP_ACCESS].update_one({'owner_user_id': 'owner', 'user_id': actor['id']},
+                        {'$set': {'operational_banks': {'bank_ids': []}}})
                 else:
                     await db.mezan_employees_v2.delete_one({'user_id': 'owner', 'account_user_id': actor['id']})
             return result
@@ -82,7 +85,7 @@ def test_real_app_revocation_inside_approval_rolls_back_every_effect(monkeypatch
         assert changes == [True]
         assert response.status_code == 403, response.text
         after = await snapshot(db)
-        changed_collection = MOBILE_APP_ACCESS if revoked == 'app_grant' else 'mezan_employees_v2'
+        changed_collection = MOBILE_APP_ACCESS if revoked in {'app_grant', 'bank_assignment'} else 'mezan_employees_v2'
         assert {k: v for k, v in after.items() if k != changed_collection} == {
             k: v for k, v in before.items() if k != changed_collection}
         assert (await db.store_delivery_payment_reviews.find_one({'assignment_id': assignment}))['status'] == 'pending'

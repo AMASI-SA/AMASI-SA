@@ -25,6 +25,9 @@ async def collect(db, owner, state, raw_orders, data, started, stamp):
     if len(settings) > 1 or any(r.get('user_id') != owner for r in settings):
         problem('net_sales', 'profit_sales_policy_ambiguous')
     configured = settings[0].get('report_included_statuses') or [] if len(settings) == 1 else []
+    returns_by_order = defaultdict(list)
+    for returned in state.get('customer_returns', []):
+        returns_by_order[str(returned.get('order_id'))].append(returned)
     cohort = []
     identities = Counter(str(raw.get('id') or '') for _, raw in raw_orders)
     numbers = Counter(str(raw.get('reference_id') or raw.get('order_number') or '') for _, raw in raw_orders)
@@ -36,6 +39,13 @@ async def collect(db, owner, state, raw_orders, data, started, stamp):
             created = instant(raw.get('date') or raw.get('created_at') or raw.get('order_date'))
             if not started < created <= stamp:
                 continue
+            order_number = str(raw.get('reference_id') or raw.get('order_number') or '')
+            if (not oid or not order_number or identities[oid] != 1 or numbers[order_number] != 1
+                    or str(source.get('order_number') or '') != order_number
+                    or source.get('salla_order_id') is not None and str(source['salla_order_id']) != oid
+                    or not order_page_source_current(source, raw)
+                    or instant(raw.get('updated_at') or raw.get('date_updated') or created) > stamp):
+                raise ValueError('profit_order_snapshot_unverified')
             status = raw.get('status')
             status = status.get('slug') or status.get('name') if isinstance(status, dict) else status
             selected = {'order_status': source.get('order_status') or status,
@@ -44,23 +54,15 @@ async def collect(db, owner, state, raw_orders, data, started, stamp):
                 if configured or status in {'cancelled', 'canceled', 'deleted', 'refunded', 'returned', 'ملغي', 'ملغى', 'محذوف', 'مسترجع'}:
                     continue
                 raise ValueError('profit_sales_policy_status_unverified')
-            order_number = str(raw.get('reference_id') or raw.get('order_number') or '')
-            if (not oid or not order_number or identities[oid] != 1 or numbers[order_number] != 1
-                    or str(source.get('order_number') or '') != order_number
-                    or source.get('salla_order_id') is not None and str(source['salla_order_id']) != oid
-                    or not order_page_source_current(source, raw)
-                    or instant(raw.get('updated_at') or raw.get('date_updated') or created) > stamp):
-                raise ValueError('profit_order_snapshot_unverified')
             amounts = raw.get('amounts') or {}
             currency = currency or amounts['total'].get('currency')
             if not currency:
                 raise ValueError('profit_sale_currency_missing')
             # Canonical current total already includes order edits. A return must
             # first establish whether that edit included it; never subtract twice.
-            returns = [r for r in state.get('customer_returns', []) if str(r.get('order_id')) == oid]
-            from operational_customer_returns import observed_salla_refund
-            observed_refund = observed_salla_refund(raw)
-            if returns or raw.get('refund_amount') or raw.get('refunded_amount') or observed_refund.get('status') != 'not_observed':
+            returns = returns_by_order.get(oid, [])
+            from operational_profit_returns import current_total_is_net
+            if not current_total_is_net(raw, returns, stamp):
                 raise ValueError('profit_return_sales_tax_basis_required')
             gross, vat = _amount(amounts.get('total'), currency), _amount(amounts.get('tax'), currency)
             if vat > gross:
@@ -84,6 +86,14 @@ async def collect(db, owner, state, raw_orders, data, started, stamp):
                 problem('salaries', 'profit_salary_source_after_snapshot', str(record.get('id') or record.get('employee_id') or ''))
         _employees(payroll_data, payroll)
         first, last = select_first_day(state, stamp), stamp.astimezone(RIYADH).date()
+        span = (last-first).days + 1
+        workload = span * sum(max(1, len(e.get('salary_revisions', []))) for e in payroll['employees'])
+        if span < 0 or span > 3660 or workload > 250000:
+            problem('salaries', 'profit_salary_period_or_workload_unbounded')
+            raise ValueError('profit_salary_period_or_workload_unbounded')
+        saved_days = state.get('engine', {}).get('salary_days', {})
+        conflicts = state.get('engine', {}).get('salary_conflicts', {})
+        proposed = {}
         ids = Counter(str(e.get('id') or '') for e in payroll['employees'])
         for employee in payroll['employees']:
             currency, eid = employee['currency'], str(employee['id'])
@@ -92,9 +102,25 @@ async def collect(db, owner, state, raw_orders, data, started, stamp):
             days, missing = candidates(employee, first, last)
             for key in missing:
                 problem('salaries', 'profit_salary_revision_missing', key, currency)
+            proposed.update(days)
             for key, row in days.items():
+                previous = saved_days.get(key)
+                from operational_salary_projection import legacy_salary_day_matches
+                obligation = state.get('engine', {}).get('obligations', {}).get(key)
+                reconciled = (previous is None and obligation is None) or (
+                    previous is not None and obligation is not None
+                    and (previous == row or legacy_salary_day_matches(key, previous, row, currency))
+                    and obligation.get('kind') == 'salary' and obligation.get('party_id') == eid
+                    and obligation.get('currency') == currency
+                    and number(obligation.get('confirmed')) == number(previous.get('amount')))
+                if key in conflicts or not reconciled:
+                    problem('salaries', 'profit_salary_recorded_reconciliation_required', key, currency)
                 totals[currency, 'salaries'] += Decimal(row['amount'])
                 counts[currency, 'salaries'] += 1
+        recorded_keys = {key for key, value in state.get('engine', {}).get('obligations', {}).items() if value.get('kind') == 'salary'}
+        for key in set(saved_days) | set(conflicts) | recorded_keys:
+            if first.isoformat() <= key.rsplit(':', 1)[-1] <= last.isoformat() and key not in proposed:
+                problem('salaries', 'profit_salary_recorded_reconciliation_required', key, saved_days.get(key, {}).get('currency'))
         for issue in payroll['issues']:
             problem('salaries', issue['code'], issue.get('source_id'))
     except (ValueError, TypeError, KeyError, AttributeError, InvalidOperation):

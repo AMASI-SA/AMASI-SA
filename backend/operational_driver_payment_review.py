@@ -14,7 +14,7 @@ from accounting_driver_payment_review import DriverReviewInput as NativeInput
 from operational_balance_store import STATES, digest, fail, audit, logical_state, now, read
 from operational_salary_start import instant, RIYADH
 from operational_driver_review_store import EVENTS, transact
-from store_delivery_review_permissions import require_review_actor
+from store_delivery_review_permissions import require_review_actor, require_review_scope
 
 REVIEWS = 'store_delivery_payment_reviews'
 COLLECTIONS = 'store_delivery_collections'
@@ -242,7 +242,7 @@ async def _bank_candidates(db, owner, bank_id, value, state, stamp):
 
 
 async def options(db, *, owner, actor, assignment_id, clock=None, request_client=None):
-    await authorize(db, owner, actor, request_client=request_client)
+    await require_review_scope(db, owner, actor, assignment_id, request_client=request_client)
     if await financial_source(db, owner) != 'operational':
         fail('operational_driver_review_phase_changed')
     state = await read(db, owner)
@@ -272,6 +272,7 @@ async def options(db, *, owner, actor, assignment_id, clock=None, request_client
             and review.get('bank_account_id') == collection.get('bank_account_id')):
         bank_movements, bank_movements_truncated = await _bank_candidates(
             db, owner, review.get('bank_account_id'), value, state, stamp)
+    await require_review_scope(db, owner, actor, assignment_id, request_client=request_client)
     return {'assignment_id': assignment_id, 'payment_method': review['payment_method'], 'amount': value,
             'financial_source': 'operational', 'can_approve': blocker is None, 'can_reject': can_reject,
             'blocker': blocker, 'expected_review_revision': review.get('revision', 1),
@@ -418,4 +419,4 @@ async def review_payment(db, *, owner, actor, assignment_id, payload, clock=None
             fail('operational_concurrent_change')
         return result
     return await transact(db, owner, commit,
-                          lambda scoped: authorize(scoped, owner, actor, request_client=request_client))
+                          lambda scoped: require_review_scope(scoped, owner, actor, assignment_id, request_client=request_client))

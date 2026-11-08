@@ -24,6 +24,8 @@ PROVIDER_CALCULATION = frozenset({
     "provider_sar_basis_conflict", "provider_historical_capture_review_required",
     "provider_fee_source_mode_ambiguous", "provider_fee_settings_ambiguous",
     "provider_fee_owner_mismatch",
+    "provider_plan_scope_conflict", "provider_plan_scope_invalid",
+    "provider_plan_scope_contract_changed", "provider_plan_scope_terms_differ",
 })
 SALARY_CALCULATION = frozenset({"salary_contract_missing", "salary_source_changed",
     "employee_salary_contract_missing_or_ambiguous", "employee_salary_contract_incomplete",

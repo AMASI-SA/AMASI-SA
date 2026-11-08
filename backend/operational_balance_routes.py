@@ -848,9 +848,32 @@ def make_operational_balance_router(db, current_user):
 
     @router.get("/movements")
     async def movements(user=Depends(current_user)):
-        actor, owner, source = await scope(db, user, "view")
+        actor, owner, source = await scope(db, user, "reports")
+        from operational_financial_activity import account_scope, require_browser_activity_permission
+        if source != "employee_app":
+            require_browser_activity_permission(actor, "accounting.movements.view")
+        allowed = await account_scope(db, owner, actor)
         state = await read(db, owner)
-        items = state["movements"]
+        items = []
+        for movement in state["movements"]:
+            source_account = (movement.get("bank_kind"), movement.get("bank_id")) if movement.get("bank_id") else (movement.get("party_type"), movement.get("party_id"))
+            if allowed is not None and source_account not in allowed:
+                continue
+            item = dict(movement)
+            if (allowed is not None and movement.get("party_type") in {"bank", "cash"}
+                    and (movement["party_type"], movement.get("party_id")) not in allowed):
+                # Keep the visible source leg, without destination identity/free text.
+                item = {key: value for key, value in item.items() if key in {
+                    "id", "kind", "amount", "currency", "bank_amount", "bank_currency", "direction",
+                    "bank_kind", "bank_id", "bank_name", "occurred_at", "created_at", "actor_id"}}
+                item.update(party_type=None, party_id=None, name=None,
+                            note="تفاصيل الحساب المقابل خارج صلاحية العرض.")
+            items.append(item)
+        fresh, fresh_owner, _ = await scope(db, user, "reports")
+        if source != "employee_app":
+            require_browser_activity_permission(fresh, "accounting.movements.view")
+        if fresh_owner != owner or fresh["id"] != actor["id"] or allowed != await account_scope(db, owner, fresh):
+            fail("financial_movements_scope_changed", "تغيرت صلاحيات الحسابات؛ أعد تحميل الصفحة", 403)
         return {"items": list(reversed(items))}
 
     @router.get("/daily-financial-movements")

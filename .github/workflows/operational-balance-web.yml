@@ -72,6 +72,7 @@ jobs:
           backend/tests/test_operational_driver_review_mongo.py
           backend/tests/test_operational_profit_period.py
           backend/tests/test_operational_profit_period_expenses.py
+          backend/tests/test_operational_profit_returns.py
           backend/tests/test_store_delivery_released_client_compatibility.py
           backend/tests/test_provider_fee_source_terms.py
           backend/tests/test_provider_fee_runtime_binding.py

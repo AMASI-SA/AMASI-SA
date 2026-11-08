@@ -55,3 +55,16 @@ Daily browser read/write separated through canonical accounting permissions and 
 COD full-scope evidence and same-period profit collectors are WIP.202coverage/regression tests pass; one Mongo integration not yet run in that set. Sales/payroll/COGS/shipping/provider components present, additional ads/recurring pending. Catalog estimated COGS must not certify actual profit; exact source and VAT policy still under review. No forced completeness or unknown zeros authorized.
 
 Remaining gates: finish profit sources/historical costs and tests, plan scope persistent authorization tests/live reviewed config, accurate unique case evidence and payroll opening-day review, courier contract compatibility, integrated performance, final build/CI/V5A/newB/clean-clone and authorized publication/official3checks. Production changed by this task:no. No own lease, merge, APK, financial write or backfill.
+
+
+## Reviewed follow-up WIP (before final broad rerun)
+
+Saved checkpoint e58a8a5719950497df50f843818d08f402f8c079 preserves period collectors, expense sources, courier compatibility and profit screen/print/export evidence. New subsequent candidate work closes legacy movement and receipt/options/review assigned-account bypasses (123isolated replica tests); whole-company report/account/audit scope is still being closed. Read permission does not authorize writing/review. No guard is bypassed to keep old permission-free tests passing; authorized test actors now have explicit grants and bank assignments.
+
+Actual driver review audit performance100/5000: bank7.961→1.194s,POS7.478→0.076s, all200snapshots equal aside from timestamp/seal.96real-Mongo tests passed; independent9tests+250deterministic mixed debt states matched fullreport. This is audit-hook latency, not full HTTP throughput. Salary frozen-day conflict guards, bounded payroll workload, proven COD zero fee, and stale sale exclusion checks89tests pass. Root already-net Salla compensation helper12tests passes; full/partial net sale uses current explicit VAT once, no bank/provider write. Independent returns+profit25pass.
+
+Tabby scope UI now on existing owner fee page: explicit contract selection/date/evidence/version, no auto-selected plan, no tariff duplication;43frontend/APItests pass. No scope/config saved live.
+
+First broad local replica run:3320passed,29failed,2errors,212.47s. Most fixture errors lacked replicaSet query marker despite replica running; harness corrected, no tests disabled. Four old permission expectations updated to explicit grants/denial. Two perpetual-incomplete COD assertions updated to proven77total; preview+prestart39pass. Full rerun pending latest fixes. Earlier CIe58:21workflows success,3failure including operational suites and inherited stale intent; failures not waived. Final sourceA/build/newB still not frozen.
+
+Read-only shared environment attempt had no active operational state; it does not match live owner UI. STOPPED this database path, no alternate credential/dataset discovery or write. Live accepted evidence remains owner browser report, not preview DB. Report Excel download tool failed, no file attached or parity claim from it. Runtime identity already recorded remains existing production, unchanged by task.
