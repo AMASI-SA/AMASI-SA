@@ -24,3 +24,7 @@ Used Jest with jsdom and Babel env/react presets from the preinstalled frontend 
 
 ## Remaining acceptance
 Coordinator must run integrated final-head/build checks, review the active release guard and V5 protocol, and verify the production UI after an authorized deployment. This patch does not prove backend query latency or financial-table completeness and does not remove financial warnings. No /app access, live financial mutation, merge or deployment was performed by this task.
+
+## Follow-up stale-scope write audit
+InventoryPurchases mode=reports never exposes purchase/payment forms: entry/paying are false (lines 23-24), save explicitly rejects mode=reports (line 37), and persisted commands cannot offer a retry (line 62). Existing tests cover read-only mode even with move permission and persisted-command recovery. OperationalCostExposure only invokes GET costExposure (component lines 37,58; api.js line 61). DomainDetails only downloads GET receiptContent (component lines 25-33; api.js line 59); all other contents are report presentation. No further write gates are needed in these children.
+Extended report 401/403 regressions: manual retry remains empty while pending, a subsequent transient 503 cannot resurrect the unauthorized snapshot, and only a new successful response renders data. Follow-up validation: 157 tests passed across 6 suites, adding OperationalCostExposure; original 149 tests still pass. Source implementation is unchanged by this review.

@@ -672,6 +672,13 @@ test.each([401,403])('report authorization failure %s removes cached balances', 
  jest.useFakeTimers(); api.context.mockResolvedValue(reportContext()); api.reports.mockResolvedValue(savedReport());
  await render(<OperationalBalances/>); api.reports.mockRejectedValueOnce({response:{status}}); await tickRead();
  expect(host.textContent).not.toContain('لقطة موثقة'); expect(host.textContent).not.toContain('123.45');
+ const retry=deferredRead(); api.reports.mockReturnValueOnce(retry.promise);
+ await click('إعادة تحميل التقرير');
+ expect(host.textContent).not.toContain('لقطة موثقة'); expect(host.textContent).not.toContain('123.45');
+ await act(async()=>retry.reject({response:{status:503}}));
+ expect(host.textContent).not.toContain('لقطة موثقة'); expect(host.textContent).not.toContain('123.45');
+ api.reports.mockResolvedValue(savedReport('قراءة جديدة مصرح بها')); await click('إعادة تحميل التقرير');
+ expect(host.textContent).toContain('قراءة جديدة مصرح بها'); expect(host.textContent).not.toContain('لقطة موثقة');
 });
 
 test('permission revocation and late old-scope report cannot resurrect old balances', async()=>{
