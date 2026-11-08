@@ -199,3 +199,14 @@ test("current-day campaign estimates expose the spend cutoff and provisional bas
     expect(popup().textContent).toContain("صرف مؤقت حتى");
     expect(popup().textContent).toContain("بتوقيت الرياض؛ التوزيع تقديري على الطلبات الحالية");
 });
+
+test("known campaign with incomplete spend is not mislabeled as unknown identity", async () => {
+    api.get.mockResolvedValue({ data: { ...estimates, rows: [{ ...estimates.rows[0],
+        allocation_level: "campaign", campaign_spend_sar: null, ad_spend_sar: null,
+        estimated_product_spend_sar: null, estimated_unit_promotion_cost_sar: null,
+        reason: "campaign_spend_incomplete" }] } });
+    await render([source], context); await click(trigger()); await settleHover();
+    expect(popup().textContent).toContain("شالات الشتاء");
+    expect(popup().textContent).toContain("بيانات صرف الإعلان غير مكتملة للفترة");
+    expect(popup().textContent).not.toContain("هوية الحملة أو المجموعة أو الإعلان غير متحققة");
+});
