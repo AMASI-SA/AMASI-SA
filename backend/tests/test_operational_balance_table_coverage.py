@@ -203,7 +203,7 @@ def test_actual_old_driver_source_retains_delivery_phase_without_courier_display
 
 
 def test_missing_canonical_order_keeps_cash_supplier_and_consolidation_blocked_only():
-    issue = {'code': 'canonical_salla_source_missing', 'source_id': 'order-unknown'}
+    issue = {'code': 'canonical_salla_source_missing', 'source_id': '298760201'}
     result = build_financial_position(snapshot(issue))
     for identity in ('employees', 'external', 'ads'):
         assert table(result, identity)['coverage']['complete'] is True
@@ -216,7 +216,7 @@ def test_missing_canonical_order_keeps_cash_supplier_and_consolidation_blocked_o
     {'code': 'canonical_salla_source_missing'},
     {'code': 'canonical_salla_source_missing', 'source_id': ''},
     {'code': 'canonical_salla_source_missing', 'source_id': {}},
-    {'code': 'canonical_salla_source_unknown', 'source_id': 'order-unknown'},
+    {'code': 'canonical_salla_source_unknown', 'source_id': '298760201'},
 ])
 def test_missing_identity_or_unknown_canonical_failure_still_blocks_every_table(issue):
     from operational_financial_table_coverage import ALL_TABLES, affected_tables
@@ -231,7 +231,7 @@ def test_real_missing_canonical_source_does_not_change_independent_salary_or_ope
             'mezan_employee_salary_contracts_v2': [row(employee_id='e', salary_revisions=[
                 {'effective_from': '2026-01-01', 'monthly_amount': '3000.01'}])]}
     baseline = run(collect_sources(DB(data), 'owner', START, NOW))
-    data['unified_orders'] = [row(order_number='unknown', total=999, status='delivered')]
+    data['unified_orders'] = [row(order_number='298760201', total=999, status='delivered')]
     missing = run(collect_sources(DB(data), 'owner', START, NOW))
     assert missing['orders'] == baseline['orders'] == []
     assert missing['employees'] == baseline['employees']
@@ -258,7 +258,7 @@ def test_real_missing_canonical_source_does_not_change_independent_salary_or_ope
 
 def test_canonical_classification_never_suppresses_independent_ad_or_bank_gaps():
     from operational_financial_table_coverage import affected_tables
-    canonical = {'code': 'canonical_salla_source_missing', 'source_id': 'unknown'}
+    canonical = {'code': 'canonical_salla_source_missing', 'source_id': '298760201'}
     for extra, affected in [
         ({'code': 'ad_daily_source_incomplete', 'source_id': 'ad:one'}, 'ads'),
         ({'code': 'bank_transfer_source_unresolved', 'source_id': 'employee-payment'}, 'employees'),
@@ -270,3 +270,17 @@ def test_canonical_classification_never_suppresses_independent_ad_or_bank_gaps()
         assert table(result, 'cash')['complete'] is False
     assert 'ads_currency_conversion' not in affected_tables(canonical)
     assert 'ads_currency_conversion' in affected_tables({'code': 'ad_fx_snapshot_incomplete'})
+
+
+@pytest.mark.parametrize('reference', ['...', 'unknown', '0', '000', -1, 0, True,
+    False, {}, [], None, '', ' ', ' 123 ', '١٢٣', '１２３', '12.3', 123.0])
+def test_canonical_placeholder_or_non_native_reference_blocks_every_table(reference):
+    from operational_financial_table_coverage import ALL_TABLES, affected_tables
+    assert affected_tables({'code': 'canonical_salla_source_missing', 'source_id': reference}) == ALL_TABLES
+
+
+@pytest.mark.parametrize('reference', [1, 298760201, '1', '298760201', '000123'])
+def test_canonical_positive_native_order_reference_has_only_reviewed_dependencies(reference):
+    from operational_financial_table_coverage import ALL_TABLES, affected_tables
+    assert affected_tables({'code': 'canonical_salla_source_missing', 'source_id': reference}) == (
+        ALL_TABLES - {'employees', 'external', 'ads', 'ads_currency_conversion'})

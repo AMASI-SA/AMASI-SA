@@ -132,7 +132,12 @@ def affected_tables(issue):
         # balances are independent sources. Supplier receipts still depend on
         # the skipped order identity; cash and consolidated coverage stay held.
         source = issue.get("source_id")
-        if isinstance(source, (str, int)) and not isinstance(source, bool) and str(source).strip():
+        # Collector emits the native Salla order_number. Placeholders or
+        # arbitrary text cannot establish a specific order dependency.
+        valid_reference = (type(source) is int and source > 0) or (
+            isinstance(source, str) and source.isascii() and source.isdecimal()
+            and any(digit != "0" for digit in source))
+        if valid_reference:
             return ALL_TABLES - {"employees", "external", "ads", "ads_currency_conversion"}
         return ALL_TABLES
     if code in HISTORICAL_CAPTURE:
