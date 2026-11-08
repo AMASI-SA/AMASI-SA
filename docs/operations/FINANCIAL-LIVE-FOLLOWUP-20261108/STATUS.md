@@ -51,3 +51,7 @@ Read-only DOM baseline captured from existing19:47financial snapshot: banks56254
 ## Owner decision and release resumption
 
 Owner confirms daily financial movements should remain in Mezan. PR1823 was closed unmerged; preserve its branch but do not apply navigation removal. Frozen PR1820 A/B unchanged. Fresh guard inactive, /app tracked source clean atJ835703d4b24c1c93da3fd91be74a21720da8f6cc; five unrelated untracked entries preserved. Exact-B applicable CI allpassed. Official adapter build running in new isolated /tmp/financial-live-1820-rehearsal clone atB; log /tmp/financial-live-1820-rehearsal.log. No merge or publication yet. Inspect result before repeating; then package proof and normal V5 release. No source/financial/config changes.
+
+## PR1820 merged; publication pending
+
+Isolated official adapter rehearsal exited0, verify-packages exited0; clean B checkout and materialized source A/runtime match frozen pair. PR1820 merged normally at75b6b14762f1390d63973ef2103c0975a2056a49, expected B enforced. Preparing /app after fresh inactive guard and clean tracked worktree; five unrelated untracked entries preserved. New production HEAD must have exact Btree997d1c49ef850786aff04bb46705d58b636bcd0e and only intent diff after A. Publication still pending; next governed materialization, prepare/prepublish once and official verify3. Do not repeat merge or re-freeze A/B.
