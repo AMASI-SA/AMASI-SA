@@ -1,0 +1,26 @@
+import React, {act} from 'react';
+import {createRoot} from 'react-dom/client';
+import OperationalBalances from './OperationalBalances';
+import {operationalApi as api} from './api';
+jest.mock('./api',()=>({operationalApi:{context:jest.fn()},entityKinds:[],messageFor:()=> 'read failed'}));
+jest.mock('./DailyMovements',()=>({__esModule:true,default:({context,onScopeChanged})=><div><span>{context.session_scope}</span><button onClick={onScopeChanged}>scope changed</button></div>}));
+jest.mock('./MovementHistory',()=>()=>null);
+let root,host;
+const pending=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};};
+beforeEach(()=>{jest.useFakeTimers();jest.resetAllMocks();global.IS_REACT_ACT_ENVIRONMENT=true;host=document.createElement('div');document.body.appendChild(host);root=createRoot(host);});
+afterEach(async()=>{await act(async()=>root.unmount());host.remove();jest.useRealTimers();});
+test('observed scope change hides old context and queues a single read behind pending polling',async()=>{
+ const ctx=scope=>({session_scope:scope,status:'active',permissions:{move:true,reports:false}});
+ api.context.mockResolvedValueOnce(ctx('old-owner'));
+ await act(async()=>root.render(<OperationalBalances source="employee_app"/>));
+ const old=pending(), fresh=pending(); api.context.mockReturnValueOnce(old.promise).mockReturnValueOnce(fresh.promise);
+ await act(async()=>jest.advanceTimersByTime(30000));
+ await act(async()=>[...host.querySelectorAll('button')].find(b=>b.textContent==='scope changed').click());
+ expect(host.textContent).not.toContain('old-owner');
+ expect(api.context).toHaveBeenCalledTimes(2);
+ await act(async()=>old.resolve(ctx('old-owner')));
+ expect(host.textContent).not.toContain('old-owner');
+ expect(api.context).toHaveBeenCalledTimes(3);
+ await act(async()=>fresh.resolve(ctx('new-owner')));
+ expect(host.textContent).toContain('new-owner');
+});
