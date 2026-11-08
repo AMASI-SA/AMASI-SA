@@ -112,3 +112,18 @@ Fresh A performance100receipts/5000history: bank7.9906→1.4629s/POS7.0592→0.0
 B CI running; clean local clone adapter rehearsal started. Fresh shared guardinactive, sharedHEADJ trackedclean/5untracked preserved. Live prior source d1c2a3268e81ef6305cf853a66e7c7e1e855082f/release rg5-be0277a9f9c55b6060330447f97aef2b000da6d786f9366ca7365906d9ce6450 has verified identity/hash/frontend flags true. This task has not published. No ownlease, merge, production/config/money write, Tabby scope save, backfill orAPK.
 
 Next: finish exactB checks and local/CIcleanclone package+runtime acceptance; refreshproduction and sharedguard; only then reviewedtree merge,sharedmaterialization,prepare/prepublish/onepublish/3officialverify. Then live read-only before/after all tables and reviewed Tabby scope application; external evidence gaps remain explicit. PR1813 is current release evidence, Issue1006 updated. This doc-only continuation commit stays on WIP1806 and never modifies frozenA/B.
+
+
+## Compatible successor frozen A/B — PR1817
+
+Final compatible pair: source A8408b7df4b6ceb75e9a08565f3574023f99cc8a4, intent-only B06b4eb7727c6e63ee2c4a78aa0c2242fb3041b9d, J22634586abdbdf55a5d41726acce4280674bde61. Btree7662a3aafdc60e41ef5785685d7294480422337b; runtime rg5-659dcf7fdb737c8ea67a88787f512de7a67fe25d283c59c7cc523040b1b43e73; intentSHA25694817ad4877f03e369a08b85543789404ea4001ec2639d44aff2351351b2e6be. A/B frozen; no squash/rebase or edits.
+
+Preserves all10newer campaign source/spend paths from1812/1816 and99reviewed financial paths without overlap. Implements financial administration in existingWeb, assigned-account authorization, daily movements, per-table evidence coverage, same-period profit, dated Tabby existing-contract scope, separate tariff/actual settlement fees. Emkan refund and Aramex prepaid idempotency preserved. Courier18/19API; no mobile344 merge orAPK.
+
+Fresh successor3523backend testsPASS241.31s/15warnings/no skips on isolatedMongo8.0.12, including newest campaign tests.44frontend suites511testsPASS25.842s. Previous reviewed audit-hook100receipts/5000history bank7.9906→1.4629s/POS7.0592→0.0808s,200full snapshots equal; optimized financial source unchanged.
+
+Official source release-readiness42496904750 passed two clean builds and produced candidate artifact13623957039. Downloaded ZIP digest68c85b491a39f3e90f10e5500ea75bb000e283e957c77d34fa971a2ca7325281 verified; official load_candidate_release_intent validated exactA/J before trackingB. FinalB CI and host20/24gitless adapter/HTTP gates pending. Old pair inPR1813 passed all24applicable workflows and independent deployment-environment rehearsal but was not merged/published because production advanced; oldA/B remain intact.
+
+Shared guard status is blocked waiting on another release operation lock (confirmed kernel locks_lock_inode_wait). No interruption/abort/override. Existing deployment finished18:46Riyadh belongs to other task. No ownlease,shared/app source edits,merge,publish,liveconfigsave,financialbackfill orAPK. Next finishBchecks and waitfreshinactiveguard; then reviewcurrentproduction,mergeexacttree,materialize,prepare/prepublish/onepublish/3officialverify and livealltable acceptance. Source gaps remain unknown until proven; Tabby scope not yet savedlive. FulltaskSTATUS/LIVE-BASELINE retained.
+
+Read-only process diagnosis confirms the lock holder is running production_release_guard.py verify; our status waits on locks_lock_inode_wait. No process interrupted and no lease bypass. Frozen source records remain unchanged; this continuation lives only on WIP branch.
