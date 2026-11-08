@@ -60,7 +60,7 @@ export const operationalApi = {
   reports: () => data(api.get(`${base}/reports`)),
   costExposure: () => data(api.get(`${base}/cost-exposure`)),
   dailyFinancialMovements: params => data(api.get(`${base}/daily-financial-movements`, {params})),
-  financialPosition: () => data(api.get(`${base}/financial-position`)),
+  financialPosition: () => data(api.get(`${base}/financial-position`, {params: {coverage_format: 'indexed'}})),
   audit: () => data(api.get(`${base}/audit`))
 };
 export const entityKinds = [['employee', 'موظفين'], ['employee_custody', 'عهد الموظفين'], ['provider', 'منصات دفع'], ['pos_receivable', 'ذمم شبكة سابقة'], ['courier', 'شركات شحن'], ['store_driver', 'مناديب المتجر'], ['ad_account', 'منصات إعلانية'], ['supplier', 'موردين'], ['external_person', 'جهات خارجية'], ['bank', 'بنوك وأجهزة الشبكة'], ['cash', 'صناديق'], ['operating_expense', 'مصروفات تشغيلية'], ['owner_withdrawal', 'سحوبات المالك/المدير']];
