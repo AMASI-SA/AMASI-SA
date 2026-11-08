@@ -477,6 +477,12 @@ class SnapchatV2Client:
                         "raw": {
                             key: entity.get(key)
                             for key in (
+                                # Exact provider settings and identity evidence for
+                                # the read-only management projection. Never infer
+                                # absent settings from reporting/normalized fields.
+                                "id", "name", "status", "campaign_id", "updated_at",
+                                "bid_micro", "bid_strategy", "optimization_goal",
+                                "billing_event", "conversion_window", "shared_properties",
                                 "daily_budget_micro",
                                 "lifetime_spend_cap_micro",
                                 "start_time",

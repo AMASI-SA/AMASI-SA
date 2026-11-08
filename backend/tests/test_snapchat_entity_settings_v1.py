@@ -1576,3 +1576,161 @@ async def test_sar_financial_controls_require_api_account_currency_proof():
         result = await module.list_financial_management_settings(
             DB(entities=[row], accounts=[invalid]), USER_ID, "ad_squad", AD_SQUAD_ID, now=NOW)
         assert result["items"][0]["quality"]["financial_controls_allowed"] is False
+
+
+def canonical_db(*, legacy=True):
+    old = entity("ad_squad", AD_SQUAD_ID, campaign_id=CAMPAIGN_ID,
+                 observed_at=(NOW - timedelta(hours=2)).isoformat(),
+                 snapshot={"bid_micro": 99_000_000, "bid_strategy": "TARGET_COST"})
+    row = {
+        "user_id": USER_ID, "provider": "snapchat_ads", "ad_account_id": ACCOUNT_ID,
+        "entity_type": "ad_squad", "external_id": AD_SQUAD_ID,
+        "campaign_id": CAMPAIGN_ID, "active": True, "missing_from_latest_sync": False,
+        "sync_run_id": "canonical-run", "last_seen_at": (NOW - timedelta(minutes=5)).isoformat(),
+        "raw": {"id": AD_SQUAD_ID, "campaign_id": CAMPAIGN_ID, "name": "current",
+                "status": "ACTIVE", "bid_micro": 12_500_000, "bid_strategy": "TARGET_COST",
+                "daily_budget_micro": 100_000_000, "optimization_goal": "PIXEL_PURCHASE"},
+    }
+    run = {
+        "user_id": USER_ID, "provider": "snapchat_ads", "ad_account_id": ACCOUNT_ID,
+        "sync_run_id": "canonical-run", "status": "complete", "identity_sync_status": "complete",
+        "started_at": (NOW - timedelta(minutes=10)).isoformat(),
+        "finished_at": (NOW - timedelta(minutes=1)).isoformat(),
+        "summary": {"identity": {"ad_squad": {"rows_saved": 1, "coverage": {"status": "complete"}}}},
+    }
+    db = DB(entities=[old] if legacy else [], accounts=[account()])
+    db.collections[module.CANONICAL_ENTITY_COLLECTION] = Collection([row], db.write_log)
+    db.collections[module.CANONICAL_SYNC_RUN_COLLECTION] = Collection([run], db.write_log)
+    return db
+
+
+@pytest.mark.asyncio
+async def test_canonical_sync_restores_exact_settings_over_stale_legacy():
+    db = canonical_db()
+    item = await module.resolve_financial_management_settings(
+        db, USER_ID, "ad_squad", AD_SQUAD_ID, AD_SQUAD_ID, CAMPAIGN_ID, now=NOW)
+    assert item["bid_micro"] == 12_500_000
+    assert item["bid_strategy"] == "TARGET_COST"
+    assert item["quality"]["financial_field_controls"]["bid"]["allowed"] is True
+    assert item["mapping_source"] == module.CANONICAL_ENTITY_COLLECTION + ".raw.id"
+    assert item["quality"]["latest_sync_run_id"] == "canonical-run"
+    assert not db.write_log
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", [
+    "missing_id", "wrong_parent", "old_raw", "stale", "future", "different_run",
+    "missing_run", "wrong_user_run", "wrong_account_run", "failed_run", "partial_identity",
+    "incomplete_coverage", "outside_run", "newer_failed_run",
+])
+async def test_canonical_settings_fail_closed_without_fresh_exact_proof(mutation):
+    db = canonical_db()
+    row = db[module.CANONICAL_ENTITY_COLLECTION].rows[0]
+    run = db[module.CANONICAL_SYNC_RUN_COLLECTION].rows[0]
+    if mutation == "missing_id": row["raw"].pop("id")
+    if mutation == "wrong_parent": row["raw"]["campaign_id"] = "wrong"
+    if mutation == "old_raw": row["raw"] = {"daily_budget_micro": 100_000_000}
+    if mutation == "stale":
+        row["last_seen_at"] = (NOW - timedelta(hours=2)).isoformat()
+        run["started_at"] = (NOW - timedelta(hours=3)).isoformat()
+    if mutation == "future":
+        row["last_seen_at"] = (NOW + timedelta(hours=1)).isoformat()
+        run["finished_at"] = (NOW + timedelta(hours=2)).isoformat()
+    if mutation == "different_run": row["sync_run_id"] = "other"
+    if mutation == "missing_run": db[module.CANONICAL_SYNC_RUN_COLLECTION].rows.clear()
+    if mutation == "wrong_user_run": run["user_id"] = "other"
+    if mutation == "wrong_account_run": run["ad_account_id"] = "other"
+    if mutation == "failed_run": run["status"] = "failed"
+    if mutation == "partial_identity": run["identity_sync_status"] = "partial"
+    if mutation == "incomplete_coverage": run["summary"]["identity"]["ad_squad"]["coverage"]["status"] = "incomplete"
+    if mutation == "outside_run": run["finished_at"] = (NOW - timedelta(minutes=6)).isoformat()
+    if mutation == "newer_failed_run":
+        newer = {**run, "sync_run_id": "newer", "status": "failed", "started_at": NOW.isoformat()}
+        db[module.CANONICAL_SYNC_RUN_COLLECTION].rows.append(newer)
+    result = await module.list_financial_management_settings(db, USER_ID, "ad_squad", AD_SQUAD_ID, now=NOW)
+    assert result["items"][0]["quality"]["financial_field_controls"]["bid"]["allowed"] is False
+    assert not db.write_log
+
+
+@pytest.mark.asyncio
+async def test_canonical_tombstone_does_not_resurrect_legacy_settings():
+    db = canonical_db()
+    db[module.CANONICAL_ENTITY_COLLECTION].rows[0]["active"] = False
+    result = await module.list_financial_management_settings(db, USER_ID, "ad_squad", AD_SQUAD_ID, now=NOW)
+    assert result["items"][0]["provider_entity_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_canonical_settings_enforce_resolver_parent_and_tenant():
+    db = canonical_db()
+    mismatch = await module.resolve_financial_management_settings(
+        db, USER_ID, "ad_squad", AD_SQUAD_ID, AD_SQUAD_ID, "wrong", now=NOW)
+    assert mismatch["mapping_status"] == "parent_mismatch"
+    assert mismatch["quality"]["financial_controls_allowed"] is False
+    other = await module.list_financial_management_settings(db, "other", "ad_squad", AD_SQUAD_ID, now=NOW)
+    assert other["items"][0]["provider_entity_id"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("child_coverage,expected_complete", [("complete", True), ("incomplete", False)])
+async def test_canonical_campaign_aggregate_requires_complete_child_catalog(child_coverage, expected_complete):
+    db = canonical_db(legacy=False)
+    child = db[module.CANONICAL_ENTITY_COLLECTION].rows[0]
+    campaign = {**child, "entity_type": "campaign", "external_id": CAMPAIGN_ID,
+                "campaign_id": None, "raw": {"id": CAMPAIGN_ID, "daily_budget_micro": 100_000_000}}
+    db[module.CANONICAL_ENTITY_COLLECTION].rows.append(campaign)
+    identity = db[module.CANONICAL_SYNC_RUN_COLLECTION].rows[0]["summary"]["identity"]
+    identity["campaign"] = {"rows_saved": 1, "coverage": {"status": "complete"}}
+    identity["ad_squad"]["coverage"]["status"] = child_coverage
+    result = await module.list_financial_management_settings(db, USER_ID, "campaign", CAMPAIGN_ID, now=NOW)
+    aggregate = result["items"][0]["campaign_aggregate"]
+    assert aggregate["budget_coverage"]["complete"] is expected_complete
+
+
+@pytest.mark.asyncio
+async def test_canonical_client_preserves_provider_settings_without_credentials():
+    from snapchat_v2.client import SnapchatV2Client
+    from contextlib import asynccontextmanager
+
+    provider = {"id": AD_SQUAD_ID, "campaign_id": CAMPAIGN_ID, "bid_micro": 12_500_000,
+                "bid_strategy": "TARGET_COST", "daily_budget_micro": 100_000_000,
+                "optimization_goal": "PIXEL_PURCHASE", "status": "ACTIVE",
+                "access_token": "secret", "authorization": "secret", "unknown": "unused"}
+
+    @asynccontextmanager
+    async def client_factory(**kwargs):
+        yield object()
+
+    client = SnapchatV2Client(DB(), USER_ID, client_factory=client_factory)
+
+    async def pages(*args, **kwargs):
+        return [{"adsquads": [{"adsquad": provider}]}], 1
+
+    client._pages = pages
+    result = await client.fetch_entities(ACCOUNT_ID, "ad_squad")
+    raw = result["rows"][0]["raw"]
+    assert raw == {key: value for key, value in provider.items()
+                   if key not in {"access_token", "authorization", "unknown"}}
+    assert result["coverage"]["status"] == "complete"
+
+
+@pytest.mark.asyncio
+async def test_newer_other_account_run_does_not_invalidate_canonical_settings():
+    db = canonical_db()
+    run = db[module.CANONICAL_SYNC_RUN_COLLECTION].rows[0]
+    db[module.CANONICAL_SYNC_RUN_COLLECTION].rows.append({
+        **run, "ad_account_id": "other-account", "sync_run_id": "other-run",
+        "status": "failed", "started_at": NOW.isoformat(),
+    })
+    item = await module.resolve_financial_management_settings(db, USER_ID, "ad_squad", AD_SQUAD_ID, now=NOW)
+    assert item["quality"]["financial_field_controls"]["bid"]["allowed"] is True
+
+
+@pytest.mark.asyncio
+async def test_truncated_canonical_scan_never_unlocks_legacy_fallback():
+    db = canonical_db()
+    row = db[module.CANONICAL_ENTITY_COLLECTION].rows[0]
+    db[module.CANONICAL_ENTITY_COLLECTION].rows.append({**row, "external_id": "second"})
+    result = await module.list_financial_management_settings(db, USER_ID, "ad_squad", now=NOW, limit=1)
+    assert result["rows_truncated"] is True
+    assert all(not item["quality"]["financial_controls_allowed"] for item in result["items"])
