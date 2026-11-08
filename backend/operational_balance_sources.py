@@ -1309,6 +1309,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
         if not isinstance(raw, dict):
             issue(out, 'canonical_salla_source_missing', source.get('order_number'))
             continue
+        historical_delivery_resolution = False
         try:
             created = instant(raw.get('date') or raw.get('created_at') or raw.get('order_date'))
             if created > now:
@@ -1348,6 +1349,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             order_numbers[order_number] = identity
             if created <= start:
                 from operational_delivery_evidence import recorded_courier_fee, resolve_delivery_event
+                historical_delivery_resolution = True
                 event = resolve_delivery_event(raw, source=source, owner=owner,
                     assignments=data['store_delivery_assignments'], setup=setup,
                     started_at=started_at, as_of=as_of, history=delivery_history.get(order_number, ()),
@@ -1355,6 +1357,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     frozen_event=(operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity),
                     frozen_shipping=(operational_state or {}).get('engine', {}).get('facts', {}).get('shipping:' + identity),
                     recorded_fee=recorded_courier_fee(operational_state, identity))
+                historical_delivery_resolution = False
                 if event is None:
                     continue
                 # Native drivers retain their SAR-only contract. A courier's
@@ -1553,7 +1556,12 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             out['orders'].append(order)
         except (ValueError, TypeError, KeyError, InvalidOperation) as exc:
             code = str(exc)
-            issue(out, code, raw.get('id'))
+            # Old orders are excluded from the sales/product/provider stream.
+            # A missing courier display name must not erase the phase of a
+            # delivery resolver failure. Coverage still allowlists exact codes;
+            # unknown or owner/identity failures continue blocking all tables.
+            phase = {'component': 'shipping_fee'} if historical_delivery_resolution else {}
+            issue(out, code, raw.get('id'), **phase)
             if code.startswith('operational_delivery_') and code not in {'operational_delivery_driver_assignment_required',
                     'operational_delivery_owner_mismatch','operational_delivery_order_identity_conflict'}:
                 courier_issue(out, code, raw, source)

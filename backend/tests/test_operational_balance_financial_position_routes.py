@@ -16,6 +16,35 @@ from test_operational_balance_supplier_workspace import ReadOnlyDB
 PATH = "/api/operational-balances/financial-position"
 
 
+def test_indexed_coverage_is_lossless_and_does_not_change_balances_or_permissions(monkeypatch):
+    import json
+    monkeypatch.setitem(sys.modules, "operational_open_cost_exposure", None)
+    db = ReadOnlyDB()
+    db.data[STATES][0]['engine']['issues'] = [
+        {'code': 'unresolved_source_contract', 'source_id': str(i), 'message': 'Source needs review'}
+        for i in range(300)]
+    before = deepcopy(db.data)
+    expanded = asyncio.run(get(db)).json()
+    response = asyncio.run(get(db, suffix='?coverage_format=indexed'))
+    assert response.status_code == 200
+    indexed = response.json()
+    assert indexed['coverage_format'] == 'indexed'
+    assert len(json.dumps(indexed)) < len(json.dumps(expanded)) * .4
+    restored = deepcopy(indexed)
+    catalog = restored.pop('coverage_issue_catalog')
+    restored.pop('coverage_format')
+    for currency in restored['currencies'].values():
+        for table in currency['tables']:
+            coverage = table.get('coverage')
+            if coverage is not None:
+                coverage['issues'] = [catalog[i] for i in coverage.pop('issue_indexes')]
+    restored['generated_at'] = expanded['generated_at']
+    assert restored == expanded
+    assert db.data == before
+    assert asyncio.run(get(db, principal={}, suffix='?coverage_format=indexed')).status_code == 401
+    assert asyncio.run(get(db, suffix='?coverage_format=omit')).status_code == 422
+
+
 async def get(db, principal=None, suffix=""):
     app = FastAPI()
 

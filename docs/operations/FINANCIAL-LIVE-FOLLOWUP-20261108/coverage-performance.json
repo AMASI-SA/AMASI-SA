@@ -1,0 +1,12 @@
+{
+  "synthetic_unique_sources": 12000,
+  "coverage_copies": 132000,
+  "report_build_seconds": 0.7690535870060557,
+  "expanded_bytes": 17524730,
+  "indexed_bytes": 6677755,
+  "index_seconds": 0.3242842290055705,
+  "expanded_serialization_seconds": 0.07171590600046329,
+  "indexed_serialization_seconds": 0.020252981994417496,
+  "full_report_reconstructed_equal": true,
+  "production_latency_verified": false
+}
