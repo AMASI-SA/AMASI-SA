@@ -174,6 +174,7 @@ def test_reviewed_shipping_phase_does_not_hold_independent_supplier_receipts(cod
     {'code':'provider_payment_method_unknown'},
     {'code':'provider_refund_execution_evidence_required'},
     {'code':'provider_capture_timestamp_invalid','scope':'provider_payment'},
+    {'code':'provider_transaction_binding_conflict','scope':'provider_payment'},
     {'code':'provider_historical_capture_review_required','source_id':'provider:one'},
     {'code':'provider_settled_capture_review_required','order_page_balance_review':{'order_id':'other','provider':'tabby'},'source_id':'provider:one','provider':'tabby'},
     {'code':'operational_delivery_timestamp_missing'},
