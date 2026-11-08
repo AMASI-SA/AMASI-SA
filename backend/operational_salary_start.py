@@ -80,7 +80,7 @@ def preview_from_sources(state, employees, source_issues, first_day, as_of):
     if state.get(POLICY_KEY) is not None:
         raise ValueError('operational_salary_start_already_approved')
     issues = deepcopy(source_issues)
-    proposed = {}
+    proposed, existing_cutoff = {}, {}
     ids = [row.get('id') for row in employees]
     if any(not isinstance(identity, str) or not identity for identity in ids) or len(ids) != len(set(ids)):
         issues.append({'code': 'operational_salary_employee_identity_ambiguous'})
@@ -90,7 +90,9 @@ def preview_from_sources(state, employees, source_issues, first_day, as_of):
                 if not isinstance(employee.get('currency'), str) or len(employee['currency']) != 3:
                     raise ValueError('operational_salary_currency_required')
                 days, missing = candidates(employee, first, today)
+                prior_days, _ = candidates(employee, select_first_day(state, as_of), today)
                 proposed.update(days)
+                existing_cutoff.update(prior_days)
                 issues.extend({'code': 'salary_contract_missing', 'source_id': key} for key in missing)
             except (ValueError, KeyError, TypeError, ArithmeticError) as exc:
                 issues.append({'code': 'operational_salary_source_incomplete', 'source_id': employee['id'],
@@ -105,7 +107,17 @@ def preview_from_sources(state, employees, source_issues, first_day, as_of):
         if not unchanged and not legacy_salary_day_matches(key, previous, following, currency):
             issues.append({'code': 'operational_salary_recorded_day_reconciliation_required',
                            'source_id': key, 'recorded': previous.get('amount'),
-                           'proposed': following.get('amount') if following else None})
+                           'proposed': following.get('amount') if following else None,
+                           'currency': currency,
+                           'proposed_currency': following.get('currency') if following else None,
+                           'business_date': key.rsplit(':', 1)[-1],
+                           # Exact whole-row equality proves unchanged contract inputs under
+                           # the saved cutoff. This is explanation only, never an approval
+                           # exemption, tolerance or rewrite of a recorded salary day.
+                           'reason': ('cutover_rounding_changed' if following is not None
+                                      and previous == existing_cutoff.get(key)
+                                      and currency == following.get('currency')
+                                      else 'recorded_source_changed')})
     additions = {key: value for key, value in proposed.items() if key not in recorded}
     totals = {}
     for row in additions.values():

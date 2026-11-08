@@ -45,6 +45,25 @@ def earned(value):
     return sum((Decimal(row['amount']) for row in value['engine']['salary_days'].values()), Decimal(0))
 
 
+def test_cutover_rounding_conflicts_expose_exact_review_evidence_without_authorizing():
+    emp = employee('1000')
+    stamp = '2026-11-08T12:00:00+03:00'
+    recorded = reconcile(state(), {'employees': [emp]}, stamp)
+    before = deepcopy(recorded)
+    check = preview_from_sources(recorded, [emp], [], '2026-11-01', stamp)
+    conflicts = check['issues']
+    assert len(conflicts) == 5
+    assert all(row['reason'] == 'cutover_rounding_changed' for row in conflicts)
+    assert all(row['currency'] == 'SAR' and row['business_date'].startswith('2026-11-') for row in conflicts)
+    assert check['additional_amounts'] == {'SAR': '33.33'}
+    assert check['can_approve'] is False
+    assert recorded == before
+    changed = deepcopy(emp)
+    changed['salary_revisions'][0]['salary'] = '1000.01'
+    altered = preview_from_sources(recorded, [changed], [], '2026-11-01', stamp)
+    assert all(row.get('reason') != 'cutover_rounding_changed' for row in altered['issues'])
+
+
 def test_no_approval_does_not_change_existing_tenant_cutoff():
     value = state()
     assert select_first_day(value, NOW) == date(2026, 11, 2)
