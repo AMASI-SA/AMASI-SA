@@ -34,6 +34,40 @@ class AmasiCompatibleShippingTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(mock_order.stop)
         self.addCleanup(mock_api.stop)
 
+    async def test_explicit_completion_repeats_completed_post_without_readback(self):
+        for status in ("in_progress", "completed"):
+            self.resolve.return_value = self.order_id, {**self.pending, "status": {"slug": status}}
+            self.api.reset_mock()
+            self.api.return_value = {"success": True}
+            with patch.object(legacy, "_label_baseline", AsyncMock(return_value={})), \
+                 patch.object(compat, "_shipment", AsyncMock(return_value=self.pdf)) as shipment:
+                result = await compat.carrier_label(None, "owner", self.number,
+                    issue=False, completed_only=True, explicit_complete=True)
+            self.assertTrue(result["ready"])
+            self.api.assert_awaited_once_with(None, "owner", "POST", "/orders/42/status",
+                json={"slug": "completed"}, single_post_attempt=True)
+            shipment.assert_awaited_once()
+
+    async def test_explicit_completion_false_acknowledgement_never_fetches(self):
+        for payload in ({"success": False}, {}, None):
+            self.api.return_value = payload
+            with patch.object(legacy, "_label_baseline", AsyncMock(return_value={})), \
+                 patch.object(compat, "_shipment", AsyncMock()) as shipment:
+                with self.assertRaises(legacy.ShippingLabelError):
+                    await compat.carrier_label(None, "owner", self.number,
+                        issue=False, completed_only=True, explicit_complete=True)
+                shipment.assert_not_awaited()
+
+    async def test_explicit_completion_failure_never_fetches_or_retries(self):
+        self.api.side_effect = TimeoutError()
+        with patch.object(legacy, "_label_baseline", AsyncMock(return_value={})), \
+             patch.object(compat, "_shipment", AsyncMock()) as shipment:
+            with self.assertRaises(TimeoutError):
+                await compat.carrier_label(None, "owner", self.number,
+                    issue=False, completed_only=True, explicit_complete=True)
+        self.api.assert_awaited_once()
+        shipment.assert_not_awaited()
+
     async def test_unknown_conflicting_cancelled_and_refunded_orders_never_dispatch(self):
         for status, slug in [("refunded", None), ("ملغى", None), ("waiting_payment", None),
                              ("in_progress", "cancelled"), (None, None)]:
