@@ -81,6 +81,18 @@ async def settle_aborted(db, attempt, detail):
     await transaction(db, settle)
 
 
+async def cancel_session_attempts(scoped, owner, session_id, *, finished_at):
+    """Fence pending scans in the transaction that cancels their session."""
+    await scoped[ATTEMPTS].update_many(
+        {"user_id": owner, "session_id": session_id, "state": "in_progress"},
+        {"$set": {
+            "state": "rejected",
+            "detail": {"code": "supplier_receiving_session_cancelled"},
+            "finished_at": finished_at,
+        }},
+    )
+
+
 async def expire_attempts(db):
     rows = await db[ATTEMPTS].find({
         "state": "in_progress", "$expr": {"$lte": ["$expires_at", "$$NOW"]},

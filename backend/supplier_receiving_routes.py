@@ -21,7 +21,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING, IndexModel, ReturnDocument, UpdateOne
 from pymongo.errors import DuplicateKeyError
 
-from supplier_scan_attempts import run_scan, read_outcome, install_reconciler, ATTEMPTS, transaction
+from supplier_scan_attempts import (
+    ATTEMPTS, cancel_session_attempts, install_reconciler, read_outcome,
+    run_scan, transaction,
+)
 from supplier_receiving_direct_assignment import direct_assignment_offer, direct_assignment_patch
 from mobile_operational_flow_policy import FIELD_SUPPLIER, is_optional
 
@@ -5742,13 +5745,9 @@ def make_supplier_receiving_router(
 
     @router.post("/sessions/{session_id}/cancel")
     async def cancel_session(session_id: str, payload: SupplierReceivingSessionCancelRequest, user: dict = Depends(current_user)):
-        async def cancel(scoped):
-            context = await _actor_context(scoped, user)
-            _require_permission(context, RECEIVE_PERMISSION)
-            await _session_for_actor(scoped, context=context, session_id=session_id)
-            await _require_settled_scans(scoped, context["merchant_id"], session_id)
-            return await _cancel_session_atomic(scoped, session_id, payload, user)
-        return await transaction(db, cancel)
+        return await transaction(
+            db, lambda scoped: _cancel_session_atomic(scoped, session_id, payload, user)
+        )
 
     async def _cancel_session_atomic(
         db: Any,
@@ -5812,11 +5811,6 @@ def make_supplier_receiving_router(
                     "id": session_id,
                     "status": "open",
                     "opened_by": context["actor_id"],
-                    "$or": [
-                        {"scan_lock_token": {"$exists": False}},
-                        {"scan_lock_token": None},
-                        {"scan_lock_expires_at": {"$lte": now}},
-                    ],
                 },
                 {
                     "$set": {
@@ -5845,6 +5839,11 @@ def make_supplier_receiving_router(
                     detail={"code": "supplier_receiving_session_cancel_conflict"},
                 )
 
+        # Claim the session before fencing its attempts. Concurrent scans either
+        # commit before this transaction's snapshot or lose their write fence.
+        await cancel_session_attempts(
+            db, context["merchant_id"], session_id, finished_at=now,
+        )
         rolled_back_count = 0
         for scan in scans:
             if scan.get("rolled_back") is True:
