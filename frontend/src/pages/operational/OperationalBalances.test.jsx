@@ -630,3 +630,97 @@ test('scoped reports reader opens daily route without fetching consolidated bala
   expect(host.querySelector('a[href="/operational-balances/daily-financial-movements"]')).not.toBeNull();
   expect(host.textContent).toContain('للحسابات المصرح لك بها فقط');
 });
+
+const reportContext = (scope = 'read-reliability') => ({session_scope:scope,status:'active',permissions:{reports:true,move:false,manage:false}});
+const savedReport = (name = 'لقطة موثقة') => ({as_of:'2026-11-08T19:00:00Z', parties:[{party_type:'supplier',party_id:name,currency:'SAR',name,outstanding_payable:'123.45'}],summaries:{SAR:{payable:'123.45'}},issues:[],details:{}});
+const deferredRead = () => {let resolve, reject; const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};
+const tickRead = async () => {await act(async()=>{jest.advanceTimersByTime(30000);});};
+afterEach(()=>jest.useRealTimers());
+
+test('slow context polling never overlaps outstanding requests', async()=>{
+ jest.useFakeTimers(); const waiting=deferredRead(); api.context.mockReturnValue(waiting.promise);
+ await render(<OperationalBalances/>); await tickRead(); await tickRead();
+ expect(api.context).toHaveBeenCalledTimes(1);
+ await act(async()=>waiting.resolve(reportContext()));
+});
+
+test('transient context refresh preserves the read-only dated report and recovers', async()=>{
+ jest.useFakeTimers(); api.context.mockResolvedValue(reportContext()); api.reports.mockResolvedValue(savedReport());
+ await render(<OperationalBalances/>);
+ api.context.mockRejectedValueOnce({response:{status:503}}); await tickRead();
+ expect(host.textContent).toContain('لقطة موثقة'); expect(host.textContent).toContain('آخر لقطة ناجحة');
+ expect(button('شراء المخزون')).toBeUndefined();
+ await tickRead(); expect(host.textContent).not.toContain('تعذر تحديث صلاحيات العرض');
+ expect(host.textContent).toContain('123.45');
+});
+
+test('transient report refresh retains the previous snapshot with a stale warning', async()=>{
+ jest.useFakeTimers(); api.context.mockResolvedValue(reportContext()); api.reports.mockResolvedValue(savedReport());
+ await render(<OperationalBalances/>); api.reports.mockRejectedValueOnce({response:{status:502}}); await tickRead();
+ expect(host.textContent).toContain('لقطة موثقة'); expect(host.textContent).toContain('آخر لقطة ناجحة');
+ expect(host.textContent).toContain('123.45');
+ await tickRead(); expect(host.textContent).not.toContain('تعذر تحديث التقرير');
+});
+
+test.each([401,403])('context authorization failure %s removes all cached balances', async status=>{
+ jest.useFakeTimers(); api.context.mockResolvedValue(reportContext()); api.reports.mockResolvedValue(savedReport());
+ await render(<OperationalBalances/>); api.context.mockRejectedValueOnce({response:{status}}); await tickRead();
+ expect(host.textContent).not.toContain('لقطة موثقة'); expect(host.textContent).not.toContain('123.45');
+});
+
+test.each([401,403])('report authorization failure %s removes cached balances', async status=>{
+ jest.useFakeTimers(); api.context.mockResolvedValue(reportContext()); api.reports.mockResolvedValue(savedReport());
+ await render(<OperationalBalances/>); api.reports.mockRejectedValueOnce({response:{status}}); await tickRead();
+ expect(host.textContent).not.toContain('لقطة موثقة'); expect(host.textContent).not.toContain('123.45');
+ const retry=deferredRead(); api.reports.mockReturnValueOnce(retry.promise);
+ await click('إعادة تحميل التقرير');
+ expect(host.textContent).not.toContain('لقطة موثقة'); expect(host.textContent).not.toContain('123.45');
+ await act(async()=>retry.reject({response:{status:503}}));
+ expect(host.textContent).not.toContain('لقطة موثقة'); expect(host.textContent).not.toContain('123.45');
+ api.reports.mockResolvedValue(savedReport('قراءة جديدة مصرح بها')); await click('إعادة تحميل التقرير');
+ expect(host.textContent).toContain('قراءة جديدة مصرح بها'); expect(host.textContent).not.toContain('لقطة موثقة');
+});
+
+test('permission revocation and late old-scope report cannot resurrect old balances', async()=>{
+ jest.useFakeTimers(); api.context.mockResolvedValue(reportContext()); api.reports.mockResolvedValue(savedReport());
+ await render(<OperationalBalances/>); const old=deferredRead(); api.reports.mockReturnValueOnce(old.promise);
+ await tickRead(); api.context.mockResolvedValue({session_scope:'new-scope',status:'active',permissions:{reports:false,move:false}});
+ await tickRead(); await act(async()=>old.resolve(savedReport('بيانات قديمة محظورة')));
+ expect(host.textContent).not.toContain('لقطة موثقة'); expect(host.textContent).not.toContain('بيانات قديمة محظورة');
+});
+
+test('new authorized scope clears old snapshot while its report is pending', async()=>{
+ jest.useFakeTimers(); api.context.mockResolvedValue(reportContext()); api.reports.mockResolvedValue(savedReport());
+ await render(<OperationalBalances/>); const changed=deferredRead();
+ api.context.mockResolvedValue(reportContext('different-authorized-scope')); api.reports.mockReturnValue(changed.promise);
+ await tickRead(); expect(host.textContent).not.toContain('لقطة موثقة');
+ await act(async()=>changed.resolve(savedReport('لقطة النطاق الجديد')));
+ expect(host.textContent).toContain('لقطة النطاق الجديد');
+});
+
+test('same-scope permission revocation hides old data without requiring a new session key', async()=>{
+ jest.useFakeTimers(); api.context.mockResolvedValue(reportContext()); api.reports.mockResolvedValue(savedReport());
+ await render(<OperationalBalances/>);
+ api.context.mockResolvedValue({...reportContext(),can_view_consolidated_reports:false}); await tickRead();
+ expect(host.textContent).not.toContain('لقطة موثقة'); expect(host.textContent).not.toContain('123.45');
+});
+
+test('context and report completions after unmount do not schedule more reads', async()=>{
+ jest.useFakeTimers(); const delayed=deferredRead(); api.context.mockReturnValue(delayed.promise);
+ await render(<OperationalBalances/>); await render(<div>صفحة أخرى</div>);
+ await act(async()=>delayed.resolve(reportContext())); await tickRead();
+ expect(api.context).toHaveBeenCalledTimes(1); expect(api.reports).not.toHaveBeenCalled();
+ expect(host.textContent).toBe('صفحة أخرى');
+});
+
+test('cached report is read-only when context refresh cannot verify permission', async()=>{
+ jest.useFakeTimers(); api.context.mockResolvedValue({...reportContext(),permissions:{reports:true,manage:true,move:true}});
+ api.reports.mockResolvedValue(savedReport()); await render(<OperationalBalances/>);
+ expect(button('تحديث رصيد محافظ العملاء من كشف سلة')).toBeDefined();
+ api.context.mockRejectedValueOnce({response:{status:503}}); await tickRead();
+ expect(host.textContent).toContain('لقطة موثقة');
+ expect(button('تحديث رصيد محافظ العملاء من كشف سلة')).toBeUndefined();
+ expect(button('الحركات المالية اليومية').disabled).toBe(true);
+ expect(button('شراء المخزون').disabled).toBe(true);
+ expect(api.movement).not.toHaveBeenCalled();
+});
