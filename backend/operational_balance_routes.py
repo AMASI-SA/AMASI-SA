@@ -93,6 +93,7 @@ class SalaryStartApproval(Request):
     expected_preview_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
     expected_session_scope: str = Field(pattern=r"^[a-f0-9]{64}$")
     opening_salaries_excluded: bool = Field(strict=True)
+    salary_rounding_reviewed: bool = Field(default=False, strict=True)
 
 
 class HistoricalShippingPreview(Input):

@@ -69,6 +69,64 @@ test('incomplete sources expose a reason and never offer approval', async () => 
   expect(api.approveSalaryStart).not.toHaveBeenCalled();
 });
 
+test('blocked preview exposes exact daily evidence without approving rounding differences', async () => {
+  api.previewSalaryStart.mockResolvedValue({...preview(), can_approve: false, issues: [
+    {code: 'operational_salary_recorded_day_reconciliation_required', source_id: 'salary:employee:2026-11-16',
+      business_date: '2026-11-16', reason: 'cutover_rounding_changed', currency: 'SAR', proposed_currency: 'SAR',
+      recorded: '33.33', proposed: '33.34'},
+    {code: 'employee_salary_contract_incomplete', source_id: 'employee-missing'},
+    {code: 'operational_salary_recorded_day_reconciliation_required', source_id: 'salary:other:2026-11-16',
+      currency: 'SAR', recorded: '10.00', proposed: null}
+  ]});
+  await render(); await showPreview();
+  expect(host.textContent).toContain('توزيع التقريب');
+  expect(host.textContent).toContain('salary:employee:2026-11-16');
+  expect(host.textContent).toContain('33.33 SAR');
+  expect(host.textContent).toContain('33.34 SAR');
+  expect(host.textContent).toContain('employee-missing');
+  expect(host.textContent).toContain('غير متاح');
+  expect(host.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(api.approveSalaryStart).not.toHaveBeenCalled();
+});
+
+const roundingPreview = () => ({...preview(), can_approve: false, can_approve_with_rounding_review: true,
+  issues: [{code: 'operational_salary_recorded_day_reconciliation_required', source_id: 'salary:employee:2026-11-15',
+    business_date: '2026-11-15', reason: 'cutover_rounding_changed', currency: 'SAR', proposed_currency: 'SAR',
+    recorded: '33.33', proposed: '33.34'}],
+  rounding_review: {version: 1, reviewed_through: '2026-11-15', rows: {'salary:employee:2026-11-15': {}},
+    totals: {SAR: {increase: '0.03', decrease: '0.02', net: '0.01'}}}});
+
+test('reviewed rounding requires two explicit confirmations and retries the same operation', async () => {
+  api.previewSalaryStart.mockResolvedValue(roundingPreview());
+  await render(); await showPreview();
+  expect(host.textContent).toContain('قيود تسوية مستقلة');
+  expect(host.textContent).toContain('0.03'); expect(host.textContent).toContain('0.02');
+  expect(host.querySelectorAll('input[type="checkbox"]')).toHaveLength(2);
+  await checkbox(); await confirm();
+  expect(api.approveSalaryStart).not.toHaveBeenCalled();
+  await act(async () => host.querySelectorAll('input[type="checkbox"]')[1].click());
+  api.approveSalaryStart.mockRejectedValueOnce(new Error('network'));
+  await confirm();
+  const original = api.approveSalaryStart.mock.calls[0][0];
+  expect(original.salary_rounding_reviewed).toBe(true);
+  expect(original.opening_salaries_excluded).toBe(true);
+  await click('إعادة إرسال طلب الاعتماد نفسه');
+  expect(api.approveSalaryStart.mock.calls[1][0]).toEqual(original);
+  expect(requestId).toHaveBeenCalledTimes(1);
+});
+
+test.each([
+  {rounding_review: null},
+  {rounding_review: {...roundingPreview().rounding_review, totals: {SAR: {increase: 0.03, decrease: '0.02', net: '0.01'}}}},
+  {issues: [{code: 'employee_salary_contract_incomplete'}]}
+])('malformed rounding review cannot authorize: %j', async patch => {
+  api.previewSalaryStart.mockResolvedValue({...roundingPreview(), ...patch});
+  await render(); await showPreview();
+  expect(host.textContent).toContain('تعذر التحقق');
+  expect(host.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(api.approveSalaryStart).not.toHaveBeenCalled();
+});
+
 test.each([
   {session_scope: other}, {first_day: '2026-11-01'}, {preview_hash: 'bad'},
   {additional_amounts: {SAR: 100}}, {additional_amounts: {}}, {issues: [{code: 'missing'}]},

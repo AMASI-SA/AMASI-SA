@@ -3,6 +3,7 @@ from calendar import monthrange
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR
 
 from operational_salary_start import RIYADH, instant, select_first_day, strict_day
+from operational_salary_reconciliation import reviewed_salary_day_matches
 
 
 def recorded_salary_subtotals(state):
@@ -59,6 +60,27 @@ def recorded_salary_subtotals(state):
         currency = day["currency"]
         amounts[currency] = amounts.get(currency, Decimal(0)) + amount
         counts[currency] = counts.get(currency, 0) + 1
+    adjustments = {key: row for key, row in obligations.items() if row.get('kind') == 'salary_cutover_adjustment'}
+    approved_rows = ((state.get('salary_accrual_policy') or {}).get('rounding_review') or {}).get('rows', {})
+    adjustment_totals = {}
+    for key, proof in approved_rows.items():
+        currency = proof.get('proposed', {}).get('currency')
+        if not reviewed_salary_day_matches(state, key, days.get(key), proof.get('proposed'), currency):
+            if currency:
+                blocked.add(currency)
+            continue
+        delta = Decimal(proof['proposed']['amount']) - Decimal(proof['recorded']['amount'])
+        adjustment_totals[currency] = adjustment_totals.get(currency, Decimal(0)) + delta
+    for adjustment in adjustments.values():
+        key, currency = adjustment.get('original_salary_day_id'), adjustment.get('currency')
+        if key not in approved_rows:
+            if currency:
+                blocked.add(currency)
+    for currency, delta in adjustment_totals.items():
+        if currency in amounts:
+            amounts[currency] += delta
     return {code: {"amount": format(value, ".2f"), "currency": code, "employee_days": counts[code],
+                   **({'cutover_adjustment_amount': format(adjustment_totals[code], '.2f')}
+                      if code in adjustment_totals else {}),
                    "first_day": first.isoformat(), "last_day": last.isoformat()}
             for code, value in amounts.items() if code not in blocked}

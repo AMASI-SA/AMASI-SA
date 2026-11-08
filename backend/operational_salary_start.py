@@ -63,6 +63,10 @@ def select_first_day(state, as_of):
                 or not isinstance(policy.get('request_id'), str) or not policy['request_id']
                 or policy.get('fingerprint') != fingerprint(content)):
             raise ValueError('invalid policy')
+        if 'rounding_review' in policy:
+            from operational_salary_reconciliation import validate_review
+            validate_review(policy['rounding_review'], first.isoformat(),
+                            instant(policy['approved_at']).astimezone(RIYADH).date())
         return first
     except (KeyError, TypeError, ValueError, AttributeError):
         raise ValueError('operational_salary_start_policy_invalid') from None
@@ -80,7 +84,7 @@ def preview_from_sources(state, employees, source_issues, first_day, as_of):
     if state.get(POLICY_KEY) is not None:
         raise ValueError('operational_salary_start_already_approved')
     issues = deepcopy(source_issues)
-    proposed = {}
+    proposed, existing_cutoff, rounding_rows = {}, {}, {}
     ids = [row.get('id') for row in employees]
     if any(not isinstance(identity, str) or not identity for identity in ids) or len(ids) != len(set(ids)):
         issues.append({'code': 'operational_salary_employee_identity_ambiguous'})
@@ -90,7 +94,9 @@ def preview_from_sources(state, employees, source_issues, first_day, as_of):
                 if not isinstance(employee.get('currency'), str) or len(employee['currency']) != 3:
                     raise ValueError('operational_salary_currency_required')
                 days, missing = candidates(employee, first, today)
+                prior_days, _ = candidates(employee, select_first_day(state, as_of), today)
                 proposed.update(days)
+                existing_cutoff.update(prior_days)
                 issues.extend({'code': 'salary_contract_missing', 'source_id': key} for key in missing)
             except (ValueError, KeyError, TypeError, ArithmeticError) as exc:
                 issues.append({'code': 'operational_salary_source_incomplete', 'source_id': employee['id'],
@@ -101,23 +107,54 @@ def preview_from_sources(state, employees, source_issues, first_day, as_of):
     for key, previous in recorded.items():
         following = proposed.get(key)
         currency = previous.get('currency', obligations.get(key, {}).get('currency'))
+        obligation = obligations.get(key, {})
+        eid, _, stamp = key.removeprefix('salary:').rpartition(':')
+        if (obligation.get('superseded') or obligation.get('derived_credit')
+                or (obligation.get('id'), obligation.get('kind'), obligation.get('party_type'),
+             obligation.get('party_id'), obligation.get('business_date'), obligation.get('direction'),
+             obligation.get('currency'), obligation.get('confirmed')) !=
+                (key, 'salary', 'employee', eid, stamp, 'payable', currency, previous.get('amount'))):
+            issues.append({'code': 'operational_salary_recorded_obligation_incomplete', 'source_id': key})
         unchanged = following is not None and previous.get('amount') == following['amount'] and currency == following['currency']
         if not unchanged and not legacy_salary_day_matches(key, previous, following, currency):
+            exact_rounding = (following is not None and previous == existing_cutoff.get(key)
+                              and currency == following.get('currency')
+                              and {k: v for k, v in previous.items() if k != 'amount'} ==
+                                  {k: v for k, v in following.items() if k != 'amount'})
+            if exact_rounding:
+                rounding_rows[key] = {'recorded': deepcopy(previous), 'proposed': deepcopy(following)}
             issues.append({'code': 'operational_salary_recorded_day_reconciliation_required',
                            'source_id': key, 'recorded': previous.get('amount'),
-                           'proposed': following.get('amount') if following else None})
+                           'proposed': following.get('amount') if following else None,
+                           'currency': currency,
+                           'proposed_currency': following.get('currency') if following else None,
+                           'business_date': key.rsplit(':', 1)[-1],
+                           # Exact whole-row equality proves unchanged contract inputs under
+                           # the saved cutoff. This is explanation only, never an approval
+                           # exemption, tolerance or rewrite of a recorded salary day.
+                           'reason': ('cutover_rounding_changed' if exact_rounding
+                                      else 'recorded_source_changed')})
     additions = {key: value for key, value in proposed.items() if key not in recorded}
     totals = {}
     for row in additions.values():
         totals[row['currency']] = totals.get(row['currency'], Decimal(0)) + Decimal(row['amount'])
+    from operational_salary_reconciliation import review_for
+    rounding_review = review_for(rounding_rows, today.isoformat()) if rounding_rows else None
+    can_review = bool(rounding_rows) and all(
+        item.get('code') == 'operational_salary_recorded_day_reconciliation_required'
+        and item.get('reason') == 'cutover_rounding_changed' for item in issues)
     proof = {'owner_id': state['owner_id'], 'started_at': state['started_at'], 'first_day': first_day,
              'business_date': today.isoformat(), 'employees': sorted(deepcopy(employees), key=lambda row: str(row.get('id'))),
              'source_issues': source_issues, 'recorded': recorded, 'openings': state.get('openings') or {},
-             'salary_obligations': {key: row for key, row in obligations.items() if row.get('kind') == 'salary'},
-             'policy': state.get(POLICY_KEY)}
+             'salary_obligations': {key: row for key, row in obligations.items() if row.get('kind') in {'salary', 'salary_cutover_adjustment'}},
+             'salary_allocations': [deepcopy(movement) for movement in state.get('movements', [])
+                 if any(obligations.get(allocation.get('obligation_id'), {}).get('kind') == 'salary'
+                        for allocation in movement.get('allocations', []))],
+             'policy': state.get(POLICY_KEY), 'rounding_review': rounding_review}
     return {'first_day': first_day, 'business_date': today.isoformat(), 'employee_count': len(employees),
             'new_days': len(additions), 'additional_amounts': {key: format(value, '.2f') for key, value in sorted(totals.items())},
             'can_approve': not issues, 'issues': issues, 'preview_hash': fingerprint(proof),
+            'can_approve_with_rounding_review': can_review, 'rounding_review': rounding_review,
             'opening_confirmation_required': True,
             'note': 'تبدأ الرواتب من يوم القطع التشغيلي نفسه ويُحتسب كامل استحقاق اليوم؛ لا تشمل الأيام السابقة. الاعتماد يؤكد عدم تضمين هذه الرواتب في الأرصدة الافتتاحية، ولا يُعدّل الأيام أو الدفعات المحفوظة.'}
 
@@ -203,11 +240,14 @@ async def approve(db, owner, actor, payload, *, clock=None):
             fail(str(exc), 'تعذر اعتماد بداية الرواتب؛ أعد المعاينة')
         if check['preview_hash'] != payload.get('expected_preview_hash'):
             fail('operational_salary_preview_stale', 'تغيرت الرواتب أو الأرصدة منذ المعاينة؛ أعد المعاينة')
-        if not check['can_approve']:
+        reviewed_rounding = check['can_approve_with_rounding_review'] and payload.get('salary_rounding_reviewed') is True
+        if not check['can_approve'] and not reviewed_rounding:
             fail('operational_salary_reconciliation_required', 'توجد أيام محفوظة أو مصادر تحتاج مطابقة؛ لم تُعدّل الأرصدة')
         policy = {'version': 1, 'mode': MODE, 'owner_id': owner, 'started_at': state['started_at'],
                   'first_day': payload['first_day'], 'opening_salary_excluded_since': payload['first_day'],
                   'approved_by': actor, 'approved_at': stamp, 'request_id': payload['request_id']}
+        if reviewed_rounding:
+            policy['rounding_review'] = deepcopy(check['rounding_review'])
         policy['fingerprint'] = fingerprint(policy)
         await _owner(db, owner, actor)
         await active_gate(db, owner, state)
