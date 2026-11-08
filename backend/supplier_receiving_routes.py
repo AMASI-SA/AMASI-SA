@@ -977,7 +977,9 @@ def _public_piece(row: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
-def _public_session(row: dict[str, Any] | None) -> dict[str, Any] | None:
+def _public_session(
+    row: dict[str, Any] | None, *, draft_scans: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
     if not row:
         return None
     return {
@@ -1004,7 +1006,10 @@ def _public_session(row: dict[str, Any] | None) -> dict[str, Any] | None:
         "cancelled_at": row.get("cancelled_at"),
         "cancel_note": _text(row.get("cancel_note")) or None,
         "cancelled_piece_count": int(row.get("cancelled_piece_count") or 0),
-        "scan_count": int(row.get("scan_count") or 0),
+        "scan_count": (
+            len(draft_scans) if draft_scans is not None and _text(row.get("status")) == "open"
+            else int(row.get("scan_count") or 0)
+        ),
         "order_numbers": list(row.get("order_numbers") or []),
         "file_numbers": list(row.get("file_numbers") or []),
         "preparation_employee_ids": list(row.get("preparation_employee_ids") or []),
@@ -3425,12 +3430,6 @@ async def _recent_session_events(
         **kwargs,
     )
     if session:
-        service_catalog = await _supplier_service_catalog(
-            db,
-            user_id=user_id,
-            session=session,
-            mongo_session=mongo_session,
-        )
         piece_ids = [
             _text(row.get("piece_id"))
             for row in rows
@@ -3450,6 +3449,23 @@ async def _recent_session_events(
             for row in piece_rows
             if _text(row.get("piece_id"))
         }
+        if _text(session.get("status")) == "open":
+            # A scan is still part of the draft only while the physical piece
+            # points back to that exact reservation. Keep older scans as audit history.
+            rows = [
+                row for row in rows
+                if (piece := pieces_by_id.get(_text(row.get("piece_id")))) is not None
+                and _text(piece.get("supplier_receiving_session_id")) == session_id
+                and _text(piece.get("receipt_event_id")) == _text(row.get("id"))
+            ]
+            if not rows:
+                return []
+        service_catalog = await _supplier_service_catalog(
+            db,
+            user_id=user_id,
+            session=session,
+            mongo_session=mongo_session,
+        )
         product_price_cache: dict[
             tuple[str, str, str, tuple[tuple[str, str], ...]],
             dict[str, Any],
@@ -4086,21 +4102,22 @@ def make_supplier_receiving_router(
                 ],
             }
         )
+        active_scans = (
+            await _recent_session_events(
+                db,
+                user_id=merchant_id,
+                session_id=_text(active.get("id")),
+                limit=MAX_SESSION_SCANS,
+            )
+            if active and not session_only
+            else None
+        )
         return {
             "ok": True,
             "suppliers": suppliers,
             "service_catalog": service_rows,
-            "active_session": _public_session(active),
-            "active_session_scans": (
-                await _recent_session_events(
-                    db,
-                    user_id=merchant_id,
-                    session_id=_text(active.get("id")),
-                    limit=MAX_SESSION_SCANS,
-                )
-                if active and not session_only
-                else []
-            ),
+            "active_session": _public_session(active, draft_scans=active_scans),
+            "active_session_scans": active_scans or [],
             "sessions": [
                 view
                 for row in sessions
@@ -4734,15 +4751,16 @@ def make_supplier_receiving_router(
             context=context,
             session_id=session_id,
         )
+        scans = await _recent_session_events(
+            db,
+            user_id=context["merchant_id"],
+            session_id=session_id,
+            limit=MAX_SESSION_SCANS,
+        )
         return {
             "ok": True,
-            "session": _public_session(session),
-            "scans": await _recent_session_events(
-                db,
-                user_id=context["merchant_id"],
-                session_id=session_id,
-                limit=MAX_SESSION_SCANS,
-            ),
+            "session": _public_session(session, draft_scans=scans),
+            "scans": scans,
         }
 
     @router.post("/sessions/{session_id}/refresh")
@@ -4788,7 +4806,7 @@ def make_supplier_receiving_router(
                 mongo_session=mongo_session,
                 refresh_product_services=True,
             )
-            return {"ok": True, "session": _public_session(fresh_session),
+            return {"ok": True, "session": _public_session(fresh_session, draft_scans=scans),
                     "scans": scans, "refreshed": True}
 
         async with await mongo_client.start_session() as mongo_session:
