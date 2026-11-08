@@ -8,6 +8,12 @@ from operational_balance_service import save_opening, report
 from test_operational_balance_integration import run, started, movement, opening, START
 
 
+async def grant_staff(db):
+    await db.users.update_one({'id':'staff'}, {'$set': {'accounting_permissions':['accounting.movements.import']}})
+    await db.mezan_mobile_app_access_v1.insert_many([{'owner_user_id':owner,'user_id':'staff',
+        'enabled':True,'permissions':[], 'operational_banks':{'bank_ids':['bank']}} for owner in ('owner','other')])
+
+
 def client_for(db):
     app = FastAPI()
     async def principal(x_test_user: str = Header(default="staff")):
@@ -19,6 +25,7 @@ def client_for(db):
 def test_owner_change_cannot_rebind_same_intent_even_with_new_scope_and_concurrency():
     async def scenario(db):
         await started(db)
+        await grant_staff(db)
         await db.mezan_suppliers_v2.insert_one({"id": "supplier", "user_id": "other", "name": "المورد", "status": "active"})
         await db.mz2_financial_accounts.insert_one({"id": "bank", "user_id": "other", "name": "بنك معزول", "account_type": "bank", "currency": "SAR", "status": "active"})
         await save_opening(db,"other","other",opening(),clock=START)
@@ -46,16 +53,17 @@ def test_owner_change_cannot_rebind_same_intent_even_with_new_scope_and_concurre
     run(scenario)
 
 
-def test_api_scope_required_and_definitive_business_rejection_has_no_cash_effect():
+def test_api_scope_required_and_unassigned_bank_rejection_has_no_cash_effect():
     async def scenario(db):
         await started(db)
+        await grant_staff(db)
         async with client_for(db) as client:
             url = "/api/operational-balances/movements"
             assert (await client.post(url,json=movement())).status_code == 422
             payload = {**movement(),"expected_session_scope":digest(["owner","staff"]),"bank_id":"missing"}
             denied = await client.post(url,json=payload)
-            assert denied.status_code == 409
-            assert denied.json()["detail"]["not_applied"] is True
+            assert denied.status_code == 403
+            assert denied.json()["detail"]["code"] == "operational_bank_not_assigned"
             assert (await read(db,"owner"))["movements"] == []
             corrected = {**payload,"request_id":"corrected-intent-01","bank_id":"bank"}
             assert (await client.post(url,json=corrected)).status_code == 200

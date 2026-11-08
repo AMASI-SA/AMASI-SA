@@ -112,3 +112,13 @@ test("rich shipping transport preserves exact setup payload and native metadata 
     expect(api.get).toHaveBeenCalledWith("/accounting-module/shipping-v2/rich-contracts");
     expect(api.post.mock.calls).toEqual(["rich-contracts/drafts", "contract-evidence/review", "contract-evidence/revoke", "rich-contracts/approve"].map(path => [`/accounting-module/shipping-v2/${path}`, payload]));
 });
+
+test("Tabby availability metadata uses only scoped setup endpoints and exact reviewed payload", async () => {
+    const payload = { provider: "tabby", currency: "SAR", policy_ids: ["p3", "p4"], expected_version: 7,
+        effective_from: "2026-11-01", effective_to: null, evidence: "approved availability" };
+    await service.listOnboardingProviderPlanScopes("SAR");
+    await service.createOnboardingProviderPlanScope(payload);
+    expect(api.get).toHaveBeenCalledWith("/accounting-module/onboarding/provider-plan-scopes", { params: { currency: "SAR" } });
+    expect(api.post.mock.calls).toEqual([["/accounting-module/onboarding/provider-plan-scopes", payload]]);
+    expect(api.put).not.toHaveBeenCalled();
+});

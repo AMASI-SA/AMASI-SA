@@ -6,7 +6,7 @@ import * as fees from "../../services/accountingOnboarding";
 import { requestId } from "./api";
 
 jest.mock("../../context/AuthContext", () => ({ useOptionalAuth: jest.fn() }));
-jest.mock("../../services/accountingOnboarding", () => ({ listOnboardingFeePolicies: jest.fn(), listOnboardingFeeCandidates: jest.fn(), createOnboardingFeePolicy: jest.fn(), updateOnboardingFeePolicy: jest.fn(), saveOnboardingFeeSourceMode: jest.fn(), previewOnboardingFeePolicy: jest.fn() }));
+jest.mock("../../services/accountingOnboarding", () => ({ listOnboardingFeePolicies: jest.fn(), listOnboardingProviderPlanScopes: jest.fn(), createOnboardingProviderPlanScope: jest.fn(), listOnboardingFeeCandidates: jest.fn(), createOnboardingFeePolicy: jest.fn(), updateOnboardingFeePolicy: jest.fn(), saveOnboardingFeeSourceMode: jest.fn(), previewOnboardingFeePolicy: jest.fn() }));
 jest.mock("./api", () => ({ requestId: jest.fn() }));
 let root, host;
 const input = key => host.querySelector(`[aria-label="${key}"]`);
@@ -46,6 +46,8 @@ beforeEach(() => {
     host = document.createElement("div"); document.body.appendChild(host); root = createRoot(host);
     useOptionalAuth.mockReturnValue({ user: { id: "owner", role: "owner" } });
     fees.listOnboardingFeePolicies.mockResolvedValue({ items: [] });
+    fees.listOnboardingProviderPlanScopes.mockResolvedValue({ items: [], version: 4 });
+    fees.createOnboardingProviderPlanScope.mockResolvedValue({ id: "scope-synthetic" });
     fees.listOnboardingFeeCandidates.mockResolvedValue({ items: [{ provider: "salla", payment_method: "mada", label: "مدى", percentage: "1.25", fixed_amount: "1", vat_rate: "15" }] });
     fees.createOnboardingFeePolicy.mockImplementation(async payload => ({ ...payload, id: "saved" }));
     fees.updateOnboardingFeePolicy.mockImplementation(async (id, payload) => ({ ...payload, id, version: payload.expected_version + 1 }));
@@ -323,4 +325,54 @@ test("event guidance distinguishes settlement transfer evidence from refund proc
     await set("نوع الرسم", "refund");
     expect(host.textContent).toContain("تُحتسب رسوم معالجة الاسترجاع عند ثبوت الاسترجاع");
     expect(host.textContent).not.toContain("رسوم التحويل الفعلية تؤخذ من كشف التسوية");
+});
+
+const scopedPolicy = (id, plan, patch = {}) => policy({ id, plan_id: plan, provider: "tabby", currency: "SAR", status: "active", fee_model_version: 2,
+    confirmed_by: "owner", confirmed_at: "2026-11-01T00:00:00Z", ...patch });
+test("dated Tabby scope explicitly selects existing contracts without changing tariffs or orders", async () => {
+    await renderPolicies([scopedPolicy("tabby3", "3"), scopedPolicy("tabby4", "4"), scopedPolicy("long", "12", { status: "inactive" }), scopedPolicy("old", "3", { fee_model_version: 1 })]);
+    expect(host.querySelectorAll('[aria-label^="تعرفة تابي "]')).toHaveLength(2);
+    expect(input("تعرفة تابي tabby3").checked).toBe(false);
+    expect(input("بداية نطاق تابي").value).toBe("");
+    expect(fees.createOnboardingProviderPlanScope).not.toHaveBeenCalled();
+    await act(async () => { input("تعرفة تابي tabby3").click(); input("تعرفة تابي tabby4").click(); });
+    await set("بداية نطاق تابي", "2026-11-01");
+    await set("دليل تفعيل خطط تابي وفترتها", "approved merchant availability for 3 and 4");
+    await click("اعتماد نطاق تعرفات تابي");
+    expect(fees.createOnboardingProviderPlanScope).toHaveBeenCalledTimes(1);
+    expect(fees.createOnboardingProviderPlanScope).toHaveBeenCalledWith({ provider: "tabby", currency: "SAR", policy_ids: ["tabby3", "tabby4"], expected_version: 4,
+        effective_from: "2026-11-01", effective_to: null, evidence: "approved merchant availability for 3 and 4" });
+    expect(fees.createOnboardingFeePolicy).not.toHaveBeenCalled();
+    expect(fees.updateOnboardingFeePolicy).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("حُفظ نطاق التعرفات المفعلة");
+});
+
+test("scope denial blocks saving until explicitly reloaded and never retries uncertain writes", async () => {
+    fees.listOnboardingProviderPlanScopes.mockRejectedValue(new Error("forbidden"));
+    await renderPolicies([scopedPolicy("tabby3", "3")]);
+    expect(host.querySelector('[aria-label="اعتماد نطاق تابي"] fieldset').disabled).toBe(true);
+    expect(host.textContent).toContain("تعذرت قراءة نطاقات تابي");
+    fees.listOnboardingProviderPlanScopes.mockResolvedValue({ items: [], version: 5 });
+    await click("إعادة تحميل نطاقات تابي");
+    await act(async () => input("تعرفة تابي tabby3").click());
+    await set("بداية نطاق تابي", "2026-11-01"); await set("دليل تفعيل خطط تابي وفترتها", "approved scope");
+    fees.createOnboardingProviderPlanScope.mockRejectedValue(new Error("response lost"));
+    await click("اعتماد نطاق تعرفات تابي");
+    expect(host.querySelector('[aria-label="اعتماد نطاق تابي"] fieldset').disabled).toBe(true);
+    expect(fees.createOnboardingProviderPlanScope).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain("أعد تحميل النطاقات قبل أي محاولة أخرى");
+});
+
+test("existing scopes display their exact dates and evidence; nonowner cannot read or write setup", async () => {
+    fees.listOnboardingProviderPlanScopes.mockResolvedValue({ version: 8, items: [{ id: "saved-scope", status: "active", currency: "SAR", effective_from: "2026-11-01", effective_to: "2026-11-30", evidence: "saved availability", contracts: [{ policy_id: "tabby3" }] }] });
+    await renderPolicies([scopedPolicy("tabby3", "3")]);
+    const section = host.querySelector('[aria-label="نطاق تعرفات تابي المفعلة"]');
+    expect(section.textContent).toContain("saved availability"); expect(section.textContent).toContain("2026-11-30");
+    expect(section.textContent).toContain("tabby3");
+    const reads = fees.listOnboardingProviderPlanScopes.mock.calls.length;
+    useOptionalAuth.mockReturnValue({ user: { id: "viewer", role: "employee" } });
+    await act(async () => root.render(<ProviderFeeSetup />));
+    expect(host.querySelector('[aria-label="نطاق تعرفات تابي المفعلة"]')).toBeNull();
+    expect(fees.listOnboardingProviderPlanScopes).toHaveBeenCalledTimes(reads);
+    expect(fees.createOnboardingProviderPlanScope).not.toHaveBeenCalled();
 });

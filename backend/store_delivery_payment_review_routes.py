@@ -9,7 +9,7 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from accounting_financial_identity import list_financial_accounts
 from accounting_onboarding_ssot import FACTS
 
@@ -19,6 +19,8 @@ from store_delivery_driver_routes import STORE_DRIVERS
 from store_delivery_handover_routes import ASSIGNMENTS
 from accounting_driver_payment_review import DriverReviewInput as NativeReviewPayload, PosBankInput
 from operational_driver_payment_review import ReviewInput as ReviewPayload
+from mobile_app_permissions import MOBILE_APP_CLIENT
+from store_delivery_review_permissions import require_review_actor, review_bank_ids, require_review_scope
 
 PAYMENT_EVENTS = "store_delivery_payment_review_events"
 
@@ -36,55 +38,18 @@ async def _require_accountant(db: Any, user: Any) -> dict[str, Any]:
     if not isinstance(user, dict):
         raise HTTPException(status_code=403, detail={"code": "accountant_permission_required"})
 
-    actor = dict(user)
+    request_client = MOBILE_APP_CLIENT if user.get("_session_client") == MOBILE_APP_CLIENT else None
     mobile_actor_id = normalize_text(user.get("_mobile_actor_id"))
     if mobile_actor_id:
+        if request_client is None:
+            raise HTTPException(status_code=403, detail={"code": "accountant_permission_required"})
         owner_id = normalize_text(user.get("_mobile_owner_id") or user.get("id"))
-        stored = await db.users.find_one(
-            {"id": mobile_actor_id},
-            {
-                "_id": 0,
-                "id": 1,
-                "name": 1,
-                "email": 1,
-                "role": 1,
-                "is_owner": 1,
-                "created_by": 1,
-                "extra_permissions": 1,
-                "denied_permissions": 1,
-                "is_active": 1,
-                "disabled": 1,
-            },
-        )
-        if not stored or stored.get("disabled") is True or stored.get("is_active") is False:
-            raise HTTPException(status_code=403, detail={"code": "accountant_permission_required"})
-        linked_owner = normalize_text(stored.get("created_by"))
-        if not linked_owner:
-            employee = await db["mezan_employees_v2"].find_one(
-                {"account_user_id": mobile_actor_id},
-                {"_id": 0, "user_id": 1},
-            )
-            linked_owner = normalize_text((employee or {}).get("user_id"))
-        if not owner_id or linked_owner != owner_id:
-            raise HTTPException(status_code=403, detail={"code": "accountant_permission_required"})
-        actor = {**stored, "created_by": owner_id, "_native_mobile_actor": True}
-
-    role = normalize_text(actor.get("role")).casefold()
-    permission = "store_delivery.payments.review"
-    native_permission = "app.action.couriers.payment_review"
-    mobile_permissions = set(user.get("_mobile_app_permissions") or [])
-    allowed = (
-        role in {"owner", "admin", "accountant"}
-        or actor.get("is_owner") is True
-        or permission in set(actor.get("extra_permissions") or [])
-        or (mobile_actor_id and native_permission in mobile_permissions)
-    ) and permission not in set(actor.get("denied_permissions") or [])
-    if not allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "accountant_permission_required"},
-        )
-    return actor
+        actor_id = mobile_actor_id
+    else:
+        owner_id = _merchant_user_id(user)
+        actor_id = normalize_text(user.get("id"))
+    actor = await require_review_actor(db, owner_id, actor_id, request_client=request_client)
+    return {**actor, "_review_request_client": request_client}
 
 
 async def ensure_store_delivery_payment_review_indexes(db: Any) -> None:
@@ -105,6 +70,10 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
         actor = await _require_accountant(db, user)
         user_id = _merchant_user_id(actor)
         query: dict[str, Any] = {"user_id": user_id, "status": "pending"}
+        allowed = await review_bank_ids(db, user_id, actor)
+        if allowed is not None:
+            query['$or'] = [{'bank_account_id': {'$in': sorted(allowed)}},
+                {'payment_method': 'card_terminal', 'bank_account_id': {'$in': [None, '']}}]
         if method:
             query["payment_method"] = normalize_text(method)
         if driver_id:
@@ -140,6 +109,9 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
                 "driver_name": driver.get("name") or assignment.get("driver_name_snapshot") or review.get("driver_name_snapshot"),
                 "driver_phone": driver.get("phone"),
             })
+        fresh = await _require_accountant(db, user)
+        if allowed != await review_bank_ids(db, user_id, fresh):
+            raise HTTPException(403, detail={'code':'operational_bank_not_assigned'})
         return {"items": items, "total": len(items)}
 
     @router.get("/{assignment_id}/approval-options")
@@ -149,11 +121,13 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
     ) -> dict[str, Any]:
         actor = await _require_accountant(db, user)
         user_id = _merchant_user_id(actor)
+        await require_review_scope(db, user_id, actor["id"], assignment_id, request_client=actor.get("_review_request_client"))
         from operational_driver_payment_review import financial_source, options
         source = await financial_source(db, user_id)
         if source == "operational":
             return await options(db, owner=user_id, actor=normalize_text(actor.get("id")),
-                                 assignment_id=normalize_text(assignment_id))
+                                 assignment_id=normalize_text(assignment_id),
+                                 request_client=actor.get("_review_request_client"))
         review = await db[DRIVER_PAYMENT_REVIEWS].find_one(
             {
                 "user_id": user_id,
@@ -288,6 +262,7 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
             result["bank_movements"] = safe
         else:
             result["blocker"] = "payment_review_not_required"
+        await require_review_scope(db, user_id, actor["id"], assignment_id, request_client=actor.get("_review_request_client"))
         return result
 
     @router.get("/bank-accounts")
@@ -295,8 +270,13 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
         actor = await _require_accountant(db, user)
         user_id = _merchant_user_id(actor)
         accounts = await list_financial_accounts(db, user_id, account_types=("bank",), currency="SAR")
+        allowed = await review_bank_ids(db, user_id, actor)
+        accounts = [row for row in accounts if allowed is None or row.get("id") in allowed]
         items = [{key: row.get(key) for key in ("id", "name", "account_type", "currency", "status")}
                  for row in accounts]
+        fresh = await _require_accountant(db, user)
+        if allowed != await review_bank_ids(db, user_id, fresh):
+            raise HTTPException(403, detail={'code':'operational_bank_not_assigned'})
         return {"items": items, "total": len(items), "source": "mz2_financial_accounts"}
 
     @router.post("/{assignment_id}")
@@ -322,7 +302,8 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
             and prior.get("operational_review_revision") == prior.get("revision", 1))
         if payload.expected_financial_source == "operational" or prior_operational_decision:
             return await review_payment(db, owner=user_id, actor=normalize_text(actor.get("id")),
-                                        assignment_id=assignment_id, payload=payload)
+                                        assignment_id=assignment_id, payload=payload,
+                                        request_client=actor.get("_review_request_client"))
         if source == "operational":
             raise HTTPException(409, detail={"code": "operational_driver_review_scope_required"})
         if payload.expected_financial_source == "native":
@@ -335,7 +316,8 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
             "expected_financial_source", "expected_review_revision", "expected_session_scope"}))
         try:
             return await review_driver_payment(db, owner=user_id, actor_id=normalize_text(actor.get("id")),
-                                               assignment_id=assignment_id, payload=native)
+                                               assignment_id=assignment_id, payload=native,
+                                               request_client=actor.get("_review_request_client"))
         except AccountingLedgerV2Error as exc:
             raise HTTPException(409, detail={"code": exc.code}) from exc
 

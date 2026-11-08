@@ -1,3 +1,4 @@
+import { profitEvidenceLines, profitRowAmount } from "./profitEvidencePresentation";
 import XLSX from "../../lib/safeSpreadsheet";
 import { formatRiyadhDateTime } from "../../lib/dates";
 
@@ -192,7 +193,7 @@ export function buildFinancialPositionWorkbook(report, currency, filters = {}) {
         ["الإجمالي", exportValue(data.debt_totals?.receivable, "money"), exportValue(data.debt_totals?.payable, "money")]];
     [["صافي الأرصدة الحالية", data.current_rows], ["التغير المتوقع من الطلبات المفتوحة", data.forecast_rows], ["حساب الربح المتوقع", data.profit_rows]].forEach(([title, rows]) => {
         summaries.push([], [title], ["البند", "المبلغ", "ملاحظات"]);
-        (rows || []).forEach(row => summaries.push([positionText(row.label), exportValue(row.amount, "money"), row.reason || ""]));
+        (rows || []).forEach(row => summaries.push([positionText(row.label), exportValue(profitRowAmount(row), "money"), [row.reason, ...profitEvidenceLines(row.period_evidence, formatPositionMoney, formatPositionCount)].filter(Boolean).join("\n")]));
     });
     summaries.push([], ["صافي السيولة والمستحقات المتوقع", exportValue(data.metrics?.forecast_monetary_position, "money")],
         ["صافي الربح المتوقع", exportValue(data.metrics?.net_profit, "money")]);

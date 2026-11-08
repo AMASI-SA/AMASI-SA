@@ -36,7 +36,7 @@ def test_independent_native_permission_matrix(permissions, direction):
                 assert ctx.json()["permissions"]=={"view":True,"move":WRITE in permissions,"manage":False,"reports":READ in permissions}
             for path in ["reports","movements","obligations?party_type=supplier&party_id=supplier"]:
                 r=await c.get("/api/operational-balances/"+path)
-                assert r.status_code==(200 if READ in permissions else 403), (path,r.text)
+                assert r.status_code==(200 if READ in permissions and path != "reports" else 403), (path,r.text)
             assert (await c.get("/api/operational-balances/entities/bank")).status_code==(200 if permissions else 403)
             payload={**movement(),"expected_session_scope":digest(["owner","staff"]),"direction":direction,"kind":"collection" if direction=="incoming" else "payment"}
             r=await c.post("/api/operational-balances/movements",json=payload)
@@ -110,13 +110,18 @@ def test_grants_have_no_parent_or_implicit_manager_expansion(permissions):
     granted=effective_mobile_app_permissions({"enabled":True,"permissions":["app.role.manager",*permissions]})
     assert set(granted)&{WRITE,READ}==set(permissions)
 
-def test_browser_contract_stays_permission_free():
+def test_browser_movement_requires_separate_explicit_accounting_write_grant():
     async def scenario(db):
         await started(db); await grant(db,[])
         async with client(db,mobile=False) as c:
-            assert (await c.get("/api/operational-balances/reports")).status_code==200
-            assert (await c.get("/api/operational-balances/audit")).status_code==200
-            assert (await c.post("/api/operational-balances/movements",json={**movement(),"expected_session_scope":digest(["owner","staff"])})).status_code==200
+            assert (await c.get("/api/operational-balances/reports")).status_code==403
+            assert (await c.get("/api/operational-balances/audit")).status_code==403
+            payload={**movement(),"expected_session_scope":digest(["owner","staff"])}
+            assert (await c.post("/api/operational-balances/movements",json=payload)).status_code==403
+            await db.users.update_one({"id":"staff"},{"$set":{"accounting_permissions":["accounting.movements.view"]}})
+            assert (await c.post("/api/operational-balances/movements",json=payload)).status_code==403
+            await db.users.update_one({"id":"staff"},{"$set":{"accounting_permissions":["accounting.movements.import"]}})
+            assert (await c.post("/api/operational-balances/movements",json=payload)).status_code==200
     run(scenario)
 
 
@@ -134,7 +139,10 @@ def test_owner_grants_and_revokes_both_permissions_independently(monkeypatch):
                 r=await c.put("/api/employees-v2/management/employees/employee-staff/mobile-app-permissions",json={"confirmation":employees.EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION,"enabled":True,"permissions":permissions,"operational_banks":{"bank_ids":["bank"],"default_bank_id":"bank"}})
                 assert r.status_code==200,r.text
                 stored = await db.mezan_mobile_app_access_v1.find_one({"owner_user_id":"owner","user_id":"staff"})
-                assert stored["operational_banks"] == ({"bank_ids":["bank"],"default_bank_id":"bank"} if WRITE in permissions else {"bank_ids":[],"default_bank_id":None})
+                assert stored["operational_banks"] == {
+                    "bank_ids": ["bank"] if WRITE in permissions or READ in permissions else [],
+                    "default_bank_id": "bank" if WRITE in permissions else None,
+                }
                 access=await mobile_app_access_for_user(db,await db.users.find_one({"id":"staff"}))
                 assert set(access["permissions"])==set(permissions)
                 assert (await db.users.find_one({"id":"staff"}))["role"]=="employee"
