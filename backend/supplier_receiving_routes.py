@@ -21,7 +21,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING, IndexModel, ReturnDocument, UpdateOne
 from pymongo.errors import DuplicateKeyError
 
-from supplier_scan_attempts import run_scan, read_outcome, install_reconciler, ATTEMPTS, transaction
+from supplier_scan_attempts import (
+    ATTEMPTS, ScanDatabase, expire_session_attempts, install_reconciler, read_outcome,
+    run_scan, transaction,
+)
 from supplier_receiving_direct_assignment import direct_assignment_offer, direct_assignment_patch
 from mobile_operational_flow_policy import FIELD_SUPPLIER, is_optional
 
@@ -4776,6 +4779,7 @@ def make_supplier_receiving_router(
             )
             if not fresh_session:
                 raise HTTPException(409, detail={"code": "supplier_receiving_session_not_open"})
+            await expire_session_attempts(ScanDatabase(db, mongo_session), context["merchant_id"], session_id)
             scans = await _recent_session_events(
                 db,
                 user_id=context["merchant_id"],
@@ -5746,6 +5750,7 @@ def make_supplier_receiving_router(
             context = await _actor_context(scoped, user)
             _require_permission(context, RECEIVE_PERMISSION)
             await _session_for_actor(scoped, context=context, session_id=session_id)
+            await expire_session_attempts(scoped, context["merchant_id"], session_id)
             await _require_settled_scans(scoped, context["merchant_id"], session_id)
             return await _cancel_session_atomic(scoped, session_id, payload, user)
         return await transaction(db, cancel)

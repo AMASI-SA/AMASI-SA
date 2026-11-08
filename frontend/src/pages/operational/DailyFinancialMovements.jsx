@@ -7,7 +7,7 @@ import "./financialPosition.css";
 
 const unavailable = "غير متاح";
 const directions = { incoming: "وارد", outgoing: "صادر", noncash: "تحصيل شبكة — لم يصل للبنك" };
-const kinds = { transfer: "تحويل بين حسابات", customer_refund: "استرجاع للعميل", pos_collection_approved: "اعتماد تحصيل شبكة", movement: "حركة مالية", payment: "سداد", receipt: "تحصيل" };
+const kinds = { transfer: "تحويل بين حسابات", customer_refund: "استرجاع للعميل", pos_collection_approved: "اعتماد تحصيل شبكة", movement: "حركة مالية", payment: "سداد", receipt: "تحصيل", collection: "تحصيل", refund: "استرجاع", settlement: "تسوية", correction: "تصحيح", wallet_funding: "تمويل محفظة" };
 export function dailyRange(preset, today = todaySA()) {
     const days = { today: 0, yesterday: 1, week: 6, month: 29 };
     return { from_date: addDaysISO(today, -days[preset]), to_date: preset === "yesterday" ? addDaysISO(today, -1) : today };
@@ -46,7 +46,11 @@ export default function DailyFinancialMovements() {
         setLoading(true);
         operationalApi.dailyFinancialMovements(query).then(value => {
             if (current !== sequence.current) return;
-            if (!Array.isArray(value?.items) || value.page_size !== 10 || value.page !== query.page ||
+            if (!Array.isArray(value?.items) || value.items.length > 10 ||
+                !Number.isInteger(value.total) || value.total < value.items.length ||
+                !Number.isInteger(value.total_pages) || value.total_pages < 0 ||
+                typeof value.snapshot !== "string" || !value.snapshot.trim() ||
+                value.page_size !== 10 || value.page !== query.page ||
                 value.from_date !== query.from_date || value.to_date !== query.to_date || value.timezone !== "Asia/Riyadh") {
                 throw new Error("invalid daily movement response");
             }
@@ -87,11 +91,14 @@ export default function DailyFinancialMovements() {
         {loading && <p role="status">جارٍ تحميل الحركات…</p>}
         {error && <p role="alert">{error}</p>}
         {data && <>
+            <p aria-label="الفترة المعروضة">الفترة المعروضة: <bdi>{data.from_date}</bdi> إلى <bdi>{data.to_date}</bdi> بتوقيت الرياض.</p>
             {data.coverage?.complete !== true && <p className="ofp-status">بيانات بعض الحركات غير مكتملة؛ المبالغ غير المتاحة لا تُعرض كصفر.</p>}
             {(data.coverage?.notes || []).map((note, index) => <p key={index}>{note}</p>)}
             <section aria-label="إجماليات الفترة" className="ofp-table-card"><h2>إجماليات الفترة للحسابات المصرح بها</h2>
-                {Array.isArray(data.totals) ? <table><thead><tr><th>العملة</th><th>الوارد</th><th>الصادر</th><th>تحصيل شبكة غير بنكي</th></tr></thead><tbody>
-                    {data.totals.map(total => <tr key={total.currency}><td>{total.currency}</td><td><bdi>{money(total.incoming, total.currency)}</bdi></td><td><bdi>{money(total.outgoing, total.currency)}</bdi></td><td><bdi>{money(total.noncash, total.currency)}</bdi></td></tr>)}
+                <p>مجموع الحركات المسجلة ضمن الفترة، وليس رصيد الحساب.</p>
+                {data.totals_complete !== true && <p className="ofp-status">إجماليات الحركات المسجلة غير مكتملة؛ لا تشمل أي حركة يتعذر تحديد تاريخها أو مصدرها.</p>}
+                {Array.isArray(data.totals_by_currency) ? <table><thead><tr><th>العملة</th><th>الوارد</th><th>الصادر</th><th>تحصيل شبكة غير بنكي</th></tr></thead><tbody>
+                    {data.totals_by_currency.map(total => <tr key={total.currency}><td>{total.currency}</td><td><bdi>{money(total.incoming, total.currency)}</bdi></td><td><bdi>{money(total.outgoing, total.currency)}</bdi></td><td><bdi>{money(total.noncash, total.currency)}</bdi></td></tr>)}
                 </tbody></table> : <p>إجماليات الفترة غير متاحة من المصدر.</p>}
                 <p>عدد الحركات ضمن الفترة والصلاحيات: {data.total}. لا تجمع العملات المختلفة، والتحويل بين حسابين يظهر أثر كل حساب مصرح به.</p>
             </section>

@@ -1681,7 +1681,10 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             if policy.get('user_id') not in (None, owner):
                 issue(out, 'provider_fee_owner_mismatch', policy.get('id'))
                 continue
-            out['fee_policies'].append({k: v for k, v in policy.items() if k not in ('_id', 'user_id')})
+            projected = {k: v for k, v in policy.items() if k not in ('_id', 'user_id')}
+            if document.get('plan_scopes'):
+                projected['_approved_plan_scopes'] = document['plan_scopes']
+            out['fee_policies'].append(projected)
     _employees(data, out)
     _advertising(data, out, start, now, baselines)
     _recurring(data, out, start, now)

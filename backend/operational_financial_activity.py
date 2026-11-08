@@ -434,6 +434,32 @@ async def financial_control(db, owner):
     return {"ledger_backend_state": marker.get("ledger_backend_state"), "cutover": cutover}
 
 
+def require_browser_activity_permission(actor, permission):
+    """Use explicit accounting page/action grants, never native app grants."""
+    from accounting_module_contract import require_accounting_permission
+    if actor.get("role") == "store_driver" or permission in (actor.get("denied_permissions") or []):
+        fail("accounting_permission_required", "لا تملك الصلاحية المحاسبية المطلوبة", 403)
+    require_accounting_permission(actor, permission)
+
+
+def scoped_currency_totals(rows):
+    """Sum the full authorized date range, never pages or account balances."""
+    totals = {}
+    for row in rows:
+        currency = row["currency"]
+        direction = row["direction"]
+        if not isinstance(currency, str) or not currency or direction not in {"incoming", "outgoing", "noncash"}:
+            fail("financial_movements_source_invalid", "تعذر التحقق من عملة الحركة أو اتجاهها", 503)
+        values = totals.setdefault(currency, {"currency": currency, "count": 0,
+            "incoming": Decimal(0), "outgoing": Decimal(0), "noncash": Decimal(0)})
+        values["count"] += 1
+        values[direction] += Decimal(_amount(row["amount"]))
+    return [{"currency": currency, "count": values["count"],
+             **{key: _amount(values[key]) for key in ("incoming", "outgoing", "noncash")},
+             "net_cash": _amount(values["incoming"] - values["outgoing"])}
+            for currency, values in sorted(totals.items())]
+
+
 async def daily_financial_movements(db, *, owner, actor, from_date, to_date,
                                     page=1, page_size=10, snapshot=None):
     lower, upper = date_range(from_date, to_date)
@@ -484,6 +510,7 @@ async def daily_financial_movements(db, *, owner, actor, from_date, to_date,
     if issues and allowed is None:
         notes.append("توجد اعتمادات تحصيل تعذر مطابقتها بأثرها المالي؛ لم تضف إلى الحركات المؤكدة.")
     public_rows = [{key: value for key, value in row.items() if not key.startswith("_")} for row in rows]
+    totals = scoped_currency_totals(public_rows)
     token = digest({"schema": SNAPSHOT_SCHEMA, "owner": owner, "actor": actor["id"], "allowed": None if allowed is None else sorted(allowed),
                     "control": control, "revision": revision if allowed is None else None, "range": [from_date, to_date], "page_size": page_size,
                     "rows": public_rows})
@@ -503,6 +530,8 @@ async def daily_financial_movements(db, *, owner, actor, from_date, to_date,
             "total": total, "total_pages": pages, "has_previous": page > 1,
             "has_next": page < pages, "has_more": page < pages, "snapshot": token,
             "captured_at": None, "items": items,
+            "totals_by_currency": totals, "totals_basis": "recorded_scoped_movements",
+            "totals_complete": financial_source != "unavailable" and not undated and not (issues and allowed is None),
             "coverage": {"complete": financial_source != "unavailable" and not undated and not missing_actor and not missing_balance
                                       and not (issues and allowed is None),
                          "undated_count": undated, "missing_actor_count": missing_actor,

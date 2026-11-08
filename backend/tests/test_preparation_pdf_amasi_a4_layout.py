@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import io
+import unicodedata
+from datetime import datetime, timezone
 
 import fitz
+import pytest
 from PIL import Image
+import preparation_pdf_amasi_a4_layout as pdf_layout
 
 from preparation_pdf import ProductLine
 from preparation_pdf_amasi_a4_layout import (
@@ -71,3 +75,46 @@ def test_sixteen_cards_start_second_a4_page() -> None:
         assert len(document) == 2
     finally:
         document.close()
+
+
+def _symbols_pdf(order_date: str | None) -> bytes:
+    line = _line(1)
+    line.order_date = order_date
+    line.file_spec_fields = [
+        {"name": "الاسم على الشال", "value": "نجمة...🩶"},
+        {"name": "رسالة الكرت", "value": "نورة🩷"},
+        {"name": "ملاحظة", "value": "أحبك (SKU-17) ★ • ✓"},
+        {"name": "شكل التطريز", "value": "اسم مع غزال"},
+    ]
+    return generate_amasi_product_file_pdf([line], file_date="2026/11/08")
+
+
+def test_new_order_pdf_keeps_arabic_punctuation_and_symbols() -> None:
+    with fitz.open(stream=_symbols_pdf("2026-11-07T23:00:00Z"), filetype="pdf") as doc:
+        page = doc[0]
+        printed = unicodedata.normalize("NFKC", page.get_text())
+        assert "نجمة" in printed and "نورة" in printed
+        assert all(text in printed for text in ("...", "(SKU-17)", "★", "•", "✓"))
+        assert "اسم مع غزال" in printed
+        spans = page.get_texttrace()
+        hearts = [s for s in spans if any(c[0] == ord("♥") and c[1] > 0 for c in s["chars"])]
+        assert len(hearts) == 2
+        assert hearts[0]["color"] != hearts[1]["color"]
+        dots = next(s for s in spans if "".join(chr(c[0]) for c in s["chars"]) == "...")
+        assert hearts[0]["bbox"][2] <= dots["bbox"][0] + 0.1
+        symbol_xref = next(font[0] for font in page.get_fonts() if "NotoSansSymbols2" in font[3])
+        assert doc.extract_font(symbol_xref)[3]  # The viewer need not have this font installed.
+
+
+@pytest.mark.parametrize("order_date", ["2026-11-08T01:59:59+03:00", "2026-11-08", None])
+def test_reprinting_older_or_undated_orders_keeps_the_original_appearance(
+    monkeypatch, order_date,
+) -> None:
+    with monkeypatch.context() as disabled:
+        disabled.setattr(pdf_layout, "SPEC_SYMBOLS_FROM", datetime.max.replace(tzinfo=timezone.utc))
+        baseline = _symbols_pdf(order_date)
+    with (
+        fitz.open(stream=baseline, filetype="pdf") as before,
+        fitz.open(stream=_symbols_pdf(order_date), filetype="pdf") as after,
+    ):
+        assert before[0].get_pixmap().samples == after[0].get_pixmap().samples

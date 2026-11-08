@@ -110,13 +110,18 @@ def test_grants_have_no_parent_or_implicit_manager_expansion(permissions):
     granted=effective_mobile_app_permissions({"enabled":True,"permissions":["app.role.manager",*permissions]})
     assert set(granted)&{WRITE,READ}==set(permissions)
 
-def test_browser_contract_stays_permission_free():
+def test_browser_movement_requires_separate_explicit_accounting_write_grant():
     async def scenario(db):
         await started(db); await grant(db,[])
         async with client(db,mobile=False) as c:
             assert (await c.get("/api/operational-balances/reports")).status_code==200
             assert (await c.get("/api/operational-balances/audit")).status_code==200
-            assert (await c.post("/api/operational-balances/movements",json={**movement(),"expected_session_scope":digest(["owner","staff"])})).status_code==200
+            payload={**movement(),"expected_session_scope":digest(["owner","staff"])}
+            assert (await c.post("/api/operational-balances/movements",json=payload)).status_code==403
+            await db.users.update_one({"id":"staff"},{"$set":{"accounting_permissions":["accounting.movements.view"]}})
+            assert (await c.post("/api/operational-balances/movements",json=payload)).status_code==403
+            await db.users.update_one({"id":"staff"},{"$set":{"accounting_permissions":["accounting.movements.import"]}})
+            assert (await c.post("/api/operational-balances/movements",json=payload)).status_code==200
     run(scenario)
 
 

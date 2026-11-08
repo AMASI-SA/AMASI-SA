@@ -143,6 +143,10 @@ def _select(payment, policies, transaction_date):
     for key, error in zip(qualifiers, ('provider_payment_method_required_for_fee', 'provider_payment_plan_required')):
         if payment.get(key) in (None, '') and any(p.get(key) not in (None, '') for p in candidates):
             if key == 'plan_id':
+                from operational_provider_plan_scope import scoped_uniform_policy
+                scoped = scoped_uniform_policy(payment, candidates, transaction_date)
+                if scoped is not None:
+                    return scoped
                 uniform = _uniform_tabby_policy(payment, candidates)
                 if uniform is not None:
                     return uniform
@@ -362,6 +366,9 @@ def provider_projection(payment, policies, transaction_date, *, earliest_date=No
     policy = _select(payment, policies, transaction_date)
     if earliest_date and earliest_date < transaction_date:
         boundaries = {earliest_date}
+        from operational_provider_plan_scope import scope_boundaries
+        boundaries.update(point for point in scope_boundaries(policies)
+                          if earliest_date < point <= transaction_date)
         for row in policies:
             if (row.get("provider") != payment["provider"] or row.get("currency") != payment["currency"]
                     or row.get("status") != "active"
@@ -386,6 +393,8 @@ def provider_projection(payment, policies, transaction_date, *, earliest_date=No
     if policy.get('_equivalent_policy_ids'):
         result['fee_policy_resolution'] = 'approved_uniform_plan_terms'
         result['equivalent_policy_ids'] = list(policy['_equivalent_policy_ids'])
+    if policy.get('_approved_scope_id'):
+        result['fee_policy_scope_id'] = policy['_approved_scope_id']
     return _refund_processing_fees(payment, policies, result, transaction_date, earliest_date, as_of_date)
 
 

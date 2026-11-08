@@ -420,15 +420,22 @@ def make_operational_balance_router(db, current_user):
     router = APIRouter(prefix="/operational-balances", tags=["Operational balances"],
                        dependencies=[Depends(native_gate)])
 
-    def guarded(permission):
+    def guarded(permission, *, browser_permission=None):
         async def dependency(request: HttpRequest, user=Depends(current_user)):
             actor, owner, _ = await scope(db, user, permission)
             actor_id = actor["id"]
-            bank_payload = await request.json() if permission == "move" and user.get("_session_client") == "amasi_mobile" else None
+            browser = user.get("_session_client") != "amasi_mobile"
+            if browser and browser_permission:
+                from operational_financial_activity import require_browser_activity_permission
+                require_browser_activity_permission(actor, browser_permission)
+            bank_payload = await request.json() if permission == "move" and (
+                not browser or browser_permission and actor.get("role") != "owner") else None
             async def verify():
                 fresh_actor, fresh_owner, _ = await scope(db, user, permission)
                 if fresh_actor["id"] != actor_id or fresh_owner != owner:
                     fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
+                if browser and browser_permission:
+                    require_browser_activity_permission(fresh_actor, browser_permission)
                 if bank_payload is not None:
                     from operational_app_banks import require_assigned_bank
                     path=request.url.path
@@ -453,6 +460,7 @@ def make_operational_balance_router(db, current_user):
 
     manage_guard = guarded("manage")
     move_guard = guarded("move")
+    movement_guard = guarded("move", browser_permission="accounting.movements.import")
 
     @router.get('/courier-tariffs')
     async def courier_tariffs(user=Depends(current_user)):
@@ -638,6 +646,9 @@ def make_operational_balance_router(db, current_user):
         for key in ("view", "move", "manage", "reports"):
             try:
                 await scope(db, user, key)
+                if key == "move" and source != "employee_app":
+                    from operational_financial_activity import require_browser_activity_permission
+                    require_browser_activity_permission(actor, "accounting.movements.import")
                 permissions[key] = True
             except Exception as exc:
                 from fastapi import HTTPException
@@ -806,7 +817,7 @@ def make_operational_balance_router(db, current_user):
             "Cache-Control": "private, no-store"})
 
     @router.post("/movements")
-    async def movement(payload: Movement, user=Depends(move_guard)):
+    async def movement(payload: Movement, user=Depends(movement_guard)):
         actor, owner, source = await scope(db, user, "move")
         if source == "employee_app" and payload.kind == "correction":
             fail("operational_app_route_not_allowed", "تصحيح الأرصدة غير متاح في التطبيق", 403)
@@ -817,7 +828,7 @@ def make_operational_balance_router(db, current_user):
         for field in ("bank_currency", "bank_amount", "bank_fee_amount", "external_operation"):
             if data[field] is None:
                 data.pop(field)
-        if source == "employee_app":
+        if source == "employee_app" or actor.get("role") != "owner":
             from operational_app_banks import require_assigned_bank
             await require_assigned_bank(db, owner, actor, data)
         result = await create_movement(db, owner, actor["id"], data, source=source)
@@ -851,14 +862,17 @@ def make_operational_balance_router(db, current_user):
         snapshot: str | None = Query(default=None, pattern=r"^[a-f0-9]{64}$"),
         user=Depends(current_user),
     ):
-        from operational_financial_activity import daily_financial_movements
+        from operational_financial_activity import daily_financial_movements, require_browser_activity_permission
         actor, owner, _ = await scope(db, user, "reports")
-        if (actor.get("role") == "store_driver" or
-                actor.get("role") != "owner" and user.get("_session_client") != "amasi_mobile"):
+        if actor.get("role") == "store_driver":
             fail("operational_app_permission_required", "لا توجد صلاحية لهذه الوظيفة", 403)
+        if user.get("_session_client") != "amasi_mobile":
+            require_browser_activity_permission(actor, "accounting.movements.view")
         result = await daily_financial_movements(db, owner=owner, actor=actor,
             from_date=from_date, to_date=to_date, page=page, page_size=page_size, snapshot=snapshot)
         fresh_actor, fresh_owner, _ = await scope(db, user, "reports")
+        if user.get("_session_client") != "amasi_mobile":
+            require_browser_activity_permission(fresh_actor, "accounting.movements.view")
         if (fresh_actor["id"] != actor["id"] or fresh_owner != owner
                 or fresh_actor.get("role") != actor.get("role")):
             fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
