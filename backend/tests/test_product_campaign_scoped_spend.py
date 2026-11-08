@@ -85,6 +85,18 @@ async def test_closed_period_cannot_use_short_prefix(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('hours,expected', [(2, None), (24, 180.0)])
+async def test_multi_day_open_range_requires_all_closed_days(monkeypatch, hours, expected):
+    db = await setup(monkeypatch)
+    rows = [fact(i - 24) for i in range(hours)]
+    await db.mezan_snapchat_hourly_facts_v2.insert_many(rows)
+    result = await read(db, start=DAY - timedelta(days=1))
+    assert result['campaign']['spend'] == expected
+    if expected is not None:
+        assert result['campaign']['spend_as_of'] == FIRST.isoformat()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('fx,coverage', [(None, True), (3.75, False)])
 async def test_complete_campaign_hours_still_require_verified_conversion(monkeypatch, fx, coverage):
     db = await setup(monkeypatch, fx=fx, coverage=coverage)
@@ -126,6 +138,21 @@ async def test_target_campaign_keeps_other_product_orders_in_denominator(monkeyp
     assert row['units_sold'] == 2
     assert row['estimated_product_spend_sar'] == 30  # 60 / (60 + 40 + 100).
     assert row['estimated_unit_promotion_cost_sar'] == 15
+
+
+@pytest.mark.asyncio
+async def test_unknown_campaign_does_not_block_known_campaign_spend(monkeypatch):
+    db = await seeded(monkeypatch, orders=[order(), order('unknown')],
+                      ledgers=[ledger(ad_id=None), ledger('unknown', campaign_id=None, ad_id=None)])
+    async def campaigns(db, owner, platform, account_id, start, end, campaign_ids):
+        assert campaign_ids == ['campaign']
+        return {'campaign': {'spend': 100, 'reason': None}}
+    monkeypatch.setattr(service, '_stored_campaigns', campaigns)
+    rows = (await build(db))['rows']
+    known = next(row for row in rows if row['campaign_id'] == 'campaign')
+    unknown = next(row for row in rows if not row['campaign_id'])
+    assert known['estimated_product_spend_sar'] == 60
+    assert unknown['estimated_product_spend_sar'] is None
 
 
 @pytest.mark.asyncio

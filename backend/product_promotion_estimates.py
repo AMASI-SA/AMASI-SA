@@ -225,6 +225,8 @@ async def _snapchat_campaign_hourly_proof(db, owner, account, campaign_ids, star
         if cid in invalid or not hours:
             continue
         cutoff = max(hours) + timedelta(hours=1) if provisional else last
+        if provisional and cutoff < end_day_start:
+            continue
         covered = {first + timedelta(hours=i)
                    for i in range(int((cutoff - first).total_seconds() / 3600))}
         # Only today's trailing sync lag may shorten the proved window. An
@@ -308,7 +310,7 @@ async def _stored_campaigns(db, owner, platform, account_id, start, end, campaig
 
 async def _merge_campaign_fallbacks(db, owner, platform, account_id, start, end, groups):
     target_campaigns = {cid for (cid, _), bucket in groups.items() if bucket['units_sold'] > 0}
-    candidates = {cid for cid, aid in groups if cid in target_campaigns and aid is None}
+    candidates = {cid for cid, aid in groups if cid and cid in target_campaigns and aid is None}
     if not candidates or platform != 'snapchat':
         return groups
     try:
