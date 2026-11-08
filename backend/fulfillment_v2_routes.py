@@ -2632,6 +2632,23 @@ def make_fulfillment_v2_router(
     async def refresh_mobile_carrier_label_v1(order_number: str, user: dict = Depends(current_user)):
         return await _mobile_carrier_label_v1(order_number, user, issue=False)
 
+    @router.post("/completed/{order_number}/carrier-label/v1/complete-and-refresh")
+    async def complete_and_refresh_mobile_label(order_number: str, user: dict = Depends(current_user)):
+        from assembly_manual_label_refresh import complete_and_refresh
+        from assembly_mobile_settings import _scope as assembly_app_scope
+        from salla_integration.service import SallaError
+        owner, _ = await assembly_app_scope(db, user)
+        async def authorize():
+            if (await assembly_app_scope(db, user))[0] != owner:
+                raise HTTPException(403, detail={"code": "completion_owner_changed"})
+        try:
+            return await complete_and_refresh(db, owner, _text(order_number), authorize)
+        except ShippingLabelError as exc:
+            raise HTTPException(exc.status_code, detail={"code": exc.code, "message": str(exc)}) from exc
+        except (SallaError, TimeoutError) as exc:
+            raise HTTPException(502, detail={"code": "completion_status_unconfirmed",
+                "message": "تعذّر تأكيد تحديث الحالة وجلب البوليصة؛ لم تُكرر العملية تلقائيًا."}) from exc
+
     @router.post("/completed/{order_number}/carrier-label/confirm-print")
     async def confirm_completed_order_carrier_label_print(
         order_number: str,

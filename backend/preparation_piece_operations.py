@@ -2614,7 +2614,10 @@ def _local_assembly_coverage_complete(
             covered = (
                 piece.get("virtual_kind") == "direct_assembly" if direct else
                 not piece.get("virtual_kind")
-                and _piece_has_completed_preparation_receipt(piece)
+                and (_piece_has_completed_preparation_receipt(piece)
+                     or (piece.get("assembly_preparation_receipt_optional") is True
+                         and piece.get("assembly_status") == "ready"
+                         and preparation_receipt_blocker(piece) is None))
                 and not piece.get("active_hold_id")
                 and _text(piece.get("supplier_dispatch_status")) in {"", "received"}
             )
@@ -2990,17 +2993,16 @@ async def _assembly_search(
             virtual=virtual,
         )
         row_eligible = row_eligible and status_allowed
-        # Do not promote a piece just because it appears in assembly search:
-        # show a separate consent action for the exact physical custody receipt.
-        row["can_receive_from_preparation"] = bool(
-            preparation_shortcut_enabled
-            and row_eligible and not virtual
-            and assembly_direct_preparation_receipt_eligible(piece)
-        )
-        row["preparation_employee_name_for_receipt"] = (
-            _text(piece.get("responsible_employee_name")) or None
-            if row["can_receive_from_preparation"] else None
-        )
+        # Optional receipt removes only the employee custody prerequisite. It
+        # does not manufacture a receipt or bypass supplier/service/hold checks.
+        row["preparation_receipt_optional"] = preparation_shortcut_enabled
+        optional_ready = (preparation_shortcut_enabled and row_eligible and not virtual
+                          and assembly_direct_preparation_receipt_eligible(piece))
+        row["can_receive_from_preparation"] = False
+        row["preparation_employee_name_for_receipt"] = None
+        if optional_ready:
+            row["can_mark_ready"] = True
+            row["assembly_blocker_code"] = None
         if not row_eligible:
             row["can_mark_ready"] = False
             row["assembly_blocker_code"] = component_blocker or "assembly_order_not_ready"
@@ -3650,7 +3652,9 @@ async def _mark_assembly_piece_ready_in_transaction(
             "progress": progress,
         }
     blocker = assembly_piece_blocker(piece)
-    if blocker:
+    optional_receipt = (await is_optional(db, user_id, FIELD_PREPARATION)
+                        and assembly_direct_preparation_receipt_eligible(piece))
+    if blocker and not optional_receipt:
         raise HTTPException(status_code=409, detail={"code": blocker})
     await enforce_stage_instructions(
         db,
@@ -3666,11 +3670,12 @@ async def _mark_assembly_piece_ready_in_transaction(
         {
             "user_id": user_id,
             "piece_id": normalized_piece_id,
-            "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+            "status": piece.get("status") if optional_receipt else PIECE_STATUS_READY_FOR_ASSEMBLY,
             "assembly_status": {"$ne": "ready"},
         },
         {"$set": {
             "assembly_status": "ready",
+            "assembly_preparation_receipt_optional": bool(optional_receipt),
             "assembly_ready_at": now,
             "assembly_ready_by": actor_id,
             "assembly_ready_by_name": actor_name,
@@ -4143,6 +4148,13 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             if current_context["merchant_id"] != context["merchant_id"]:
                 raise HTTPException(403, detail={"code": "completion_owner_changed"})
         return result
+
+    @router.post("/assembly/orders/{order_number}/refresh-from-salla")
+    async def refresh_assembly_order_source(order_number: str, user: dict = Depends(current_user)):
+        context = await _actor_context(db, user)
+        _require_permission(context, "fulfillment.ready.read", responsibility="instant_ready")
+        from mobile_order_refresh import refresh_mobile_order
+        return await refresh_mobile_order(db, user, order_number, page="app.page.assembly_shipping")
 
     @router.get("/assembly/orders")
     async def list_assembly_orders(

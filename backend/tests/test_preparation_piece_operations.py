@@ -871,7 +871,7 @@ async def test_received_piece_can_enter_assembly_before_other_order_pieces(monke
 
 
 @pytest.mark.asyncio
-async def test_assembly_search_only_offers_direct_preparation_receipt_in_optional_mode(monkeypatch):
+async def test_assembly_search_offers_ready_directly_in_optional_mode(monkeypatch):
     from unittest.mock import AsyncMock
     import preparation_piece_operations as operations
 
@@ -920,13 +920,14 @@ async def test_assembly_search_only_offers_direct_preparation_receipt_in_optiona
             DB(mode), user_id="merchant-1", query=piece_id.upper(),
         )
         card = result["pieces"][0]
-        assert card["can_mark_ready"] is False
+        assert card["can_mark_ready"] is expected
         assert card["assembly_blocker_code"] == (
-            "assembly_piece_preparation_receipt_required"
+            None if expected else "assembly_piece_preparation_receipt_required"
         )
-        assert card["can_receive_from_preparation"] is expected
+        assert card["can_receive_from_preparation"] is False
+        assert card["preparation_receipt_optional"] is expected
         assert card["preparation_employee_name_for_receipt"] == (
-            "محمد" if expected else None
+            None
         )
 
 
