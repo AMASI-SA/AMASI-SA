@@ -101,15 +101,17 @@ test.each([true, false])("the Mezan 2 payment-fee table is linked for owner acce
     }
 });
 
-test.each(["owner", "employee"])("operational admin entry points remain independent for %s", async role => {
+test.each(["owner", "employee"])("Mezan retains balance tables without the app-only daily feed for %s", async role => {
     useOptionalAuth.mockReturnValue({ user: { id: "owner-fixture", role } });
     getAccountingAccess.mockResolvedValue({ user_id: "owner-fixture", is_owner: role === "owner", permissions: [] });
     await act(async () => root.render(<MemoryRouter initialEntries={["/operational-balances/financial-position"]}><Harness /></MemoryRouter>));
     const daily = node.querySelector('a[href="/operational-balances/daily-financial-movements"]');
     const review = node.querySelector('a[href="/bank-transfer-review?workspace=store-delivery"]');
-    expect(daily.textContent).toBe("الحركات المالية اليومية");
+    expect(daily).toBeNull();
+    const balances = node.querySelector('a[href="/operational-balances"]');
+    expect(balances.textContent).toBe("الأرصدة والحركات التشغيلية");
     expect(review.textContent).toBe("مراجعة تحصيلات الموصلين");
-    await act(async () => daily.click());
-    expect(node.querySelector("output").textContent).toBe("/operational-balances/daily-financial-movements");
+    await act(async () => balances.click());
+    expect(node.querySelector("output").textContent).toBe("/operational-balances");
     expect(getOnboardingSession).not.toHaveBeenCalled();
 });

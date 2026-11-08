@@ -185,3 +185,18 @@ def test_reviewed_shipping_phase_does_not_hold_independent_supplier_receipts(cod
 def test_new_phase_scoping_never_trusts_missing_marker_or_unknown_code(issue):
     from operational_financial_table_coverage import affected_tables, ALL_TABLES
     assert affected_tables(issue)==ALL_TABLES
+
+
+def test_actual_old_driver_source_retains_delivery_phase_without_courier_display_name():
+    from test_operational_balance_delivery_cutover import driver_data, collect
+    from operational_financial_table_coverage import affected_tables
+    data = driver_data()
+    data['store_delivery_assignments'][0].pop('delivered_at')
+    source = data['unified_orders'][0]
+    source.pop('salla_shipping_current', None)
+    source['raw_by_source']['salla_direct'].pop('shipping', None)
+    result = collect(data)
+    issue = next(r for r in result['issues'] if r['code'] == 'operational_delivery_timestamp_missing')
+    assert {'cash', 'banks_network', 'drivers'}.issubset(affected_tables(issue))
+    assert not {'suppliers', 'employees', 'external'}.intersection(affected_tables(issue))
+    assert not result['orders'] and not result.get('delivery_events')
