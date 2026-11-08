@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/prepaid-cost-release-20261105",
   "base_commit": "4b336e2a8bb8288dae50505e8eca33147744f441",
-  "phase": "Reviewed source on a fresh single-parent production base; final remote CI and Protocol V5 A/B pending",
+  "phase": "Published and officially verified in PR1774; live acceptance remains partial; isolated retry-fairness follow-up in progress",
   "predecessor": "https://github.com/AMASI-SA/AMASI-SA/pull/1765",
   "contract": "An original prepaid shipping label may be created after the authoritative completed transition, but must exist by the canonical source version. The completed timestamp still determines cutover, tariff and accounting recognition. One allocated cashbox debit is retained through replay and later delivery. A missing completion proof can be recovered only from verified, integrity-checked original order.status.updated captures within a unique current owner/merchant binding. Capture receipt time and untyped history observations are never completion evidence.",
   "defect": "The prepaid path reused the deferred-delivery label-creation cutoff. A label created after completion was incorrectly rejected even when it was the single original current label in a valid newer canonical snapshot.",
@@ -126,7 +126,7 @@
   ],
   "independent_review": "PASS: capture and cost deltas independently reviewed on their frozen hashes. Concrete counterexamples reproduced and closed; no waiver. Root final combined integration passed. Live data values remain a separate acceptance step.",
   "ci": {
-    "state": "Fresh successor A/B exact-head CI remains required; prior WIP tests and ancestry failure are retained honestly above.",
+    "state": "Exact intent B30d43cef: all13applicable workflows PASS. OperationalBalanceWeb42106962630/backend127524199974:3138passed plus16passed/18subtests, pinnedMongo8.0.12 and no-skips gates. Frontend38suites/447tests. Actual Host20.20.2/24.19.0 clean-clone adapter rehearsals PASS.",
     "required_gate": ".github/workflows/operational-balance-web.yml; pinned Mongo 8.0.12, no skipped, failed or errored tests; Protocol V5 release gates on final A/B."
   },
   "live_configuration": {
@@ -136,13 +136,20 @@
     "diagnostic_boundary": "A bounded existing-environment read resolved exactly one active owner, but the exact owner-scoped cashbox match was absent. It stopped before tariff/state/order reads. No alternate credentials, environment or dataset was probed. This does not establish that the reproduced chronology defect is the exact live order blocker."
   },
   "release": {
-    "intent_frozen": false,
-    "merged": false,
+    "intent_frozen": true,
+    "merged": true,
     "own_lease": false,
-    "published": false,
-    "production_application_changed_by_this_followup": false,
-    "shared_workspace_last_observed": "Latest observed result of the pending shared /app guard status command:active:false. Shared Git4b336e2a, tracked clean, unrelated untracked files preserved. PR1773 deployment finished23:14Riyadh; root has no own rehearsal, lease or publication. Read guard freshly again immediately before rehearsal or /app mutation.",
-    "ancestry_resolution": "Preserve PR1771/head370fb366 as a WIP checkpoint. Create final source A directly on latest J4b336e2a with one parent, restoring only12reviewed task paths. Keep J intent unchanged and require empty full-history intent path J..A. Do not merge the WIP ancestry or weaken the guard."
+    "published": true,
+    "production_application_changed_by_this_followup": true,
+    "shared_workspace_last_observed": "Shared/app atM. Official verify completed and matching lease closed. No further app mutation or publish; frozenA/B remain unchanged.",
+    "ancestry_resolution": "Preserve PR1771/head370fb366 as a WIP checkpoint. Create final source A directly on latest J4b336e2a with one parent, restoring only12reviewed task paths. Keep J intent unchanged and require empty full-history intent path J..A. Do not merge the WIP ancestry or weaken the guard.",
+    "source_A": "a009b05eb2f25b562678d579b69bed129cb0c025",
+    "intent_B": "30d43cef1a1af8414355a8f1fc6d70b73b248f2f",
+    "merge_M": "ae2fe9ce01c003ff139e22dd54f4641be48c8e38",
+    "runtime": "rg5-aae16b1799248ac98a3bcf081adae2597db874c822822ba82da9a8682e3f1fbc",
+    "published_version": "c919c57",
+    "published_at_ui": "2026-11-06 00:18 Asia/Riyadh",
+    "official_verification": "verified=true,checks=3;446publicFrontendrequests per round; exactA/M/runtime/artifact; empty stderr; freshstatusactive:false. Matchingprepaid-cost-1774leaseclosednormally."
   },
   "preserved": [
     "Existing opening balances and recorded financial facts",
@@ -154,9 +161,9 @@
     "PR1772 stable product-option cost identity and incomplete-profit behavior",
     "PR1773 reviewed zero-price-currency recovery, its workflow/audit and source files; no task path overlaps"
   ],
-  "next_safe_action": "Push the fresh single-parent source checkpoint and successor Draft PR, verify exact remote/local tree and J intent history; build governed source A and freeze intent-only B. Fresh inactive shared guard is required before clean-clone adapter rehearsal. Obtain exact-head CI, then authorized merge/publish with own V5 lease and three probes. Finally verify live Aramex paid/cash/no-duplicate movements and operating cost completeness. Never repeat saved Emkan or Aramex approvals.",
+  "next_safe_action": "Do not republish PR1774 or repeat saved Emkan/Aramex approvals. Follow docs/operations/SHIPPING-RETRY-FAIRNESS-20261106/STATUS.json for the separately reproduced acquisition starvation fix, independent review, required gates and eventual live acceptance. Existing missing payment/shipping evidence remains unverified.",
   "checkpoint_identity": "The containing commit is recorded by its full SHA in the PR and Issue1006 after pushing; this document does not self-reference its own hash.",
-  "updated_at_utc": "2026-11-05T20:42:20.194632+00:00",
+  "updated_at_utc": "2026-11-05T21:51:44+00:00",
   "cost_contract": {
     "reproduction": "Unique recorded English option/value translations may recover only their product-scoped native identity. Generic Yes never identifies a service.",
     "synthetic_acceptance": "28 units /21orders /23independentlines =677.60SAR at15+8+1.20; before/after start, raw/normalized inputs verified.",

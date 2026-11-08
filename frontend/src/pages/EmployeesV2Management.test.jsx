@@ -99,7 +99,10 @@ const workspace = {
             warehouse_operator: "موظف المخزن",
         },
         mobile_app_permission_catalog: [
-            { key: "operational", label: "النظام التشغيلي", permissions: [{key:"operational_balance_movements_write",label:"إدخال الحركات",kind:"action"}] },
+            { key: "operational", label: "النظام التشغيلي", permissions: [
+                {key:"operational_balance_movements_write",label:"إدخال الحركات",kind:"action"},
+                {key:"operational_balance_reports_read",label:"عرض التقارير والحركات اليومية",kind:"action"},
+            ] },
             {
                 key: "preparation",
                 label: "إدارة التجهيز",
@@ -166,6 +169,34 @@ test("operational entry requires assigned banks and an explicit default for mult
     } finally {await cleanup(container,root);}
 });
 
+
+test("read-only financial access can select banks and cashboxes without granting writes", async () => {
+    const data = { ...workspace, management: { ...workspace.management,
+        operational_bank_choices: [{id:"inma",name:"الإنماء",currency:"SAR"},{id:"rajhi",name:"الراجحي",currency:"SAR"}],
+        operational_cash_choices: [{id:"cash1",name:"صندوق الفرع",currency:"SAR"}],
+    } };
+    getEmployeesV2Management.mockResolvedValue(data);
+    assignEmployeesV2MobileAppPermissions.mockResolvedValue(data);
+    const {container,root} = await renderPage();
+    try {
+        const card = container.querySelector('[data-testid="employees-v2-employee-card"]');
+        await act(async () => [...card.querySelectorAll('button')].find(b => b.textContent.includes('صلاحيات التطبيق')).click());
+        await act(async () => document.querySelector('[data-testid="mobile-app-permission-operational_balance_reports_read"]').click());
+        const section = document.querySelector('[aria-label="بنوك الحركات التشغيلية"]');
+        expect(section).not.toBeNull();
+        expect(section.textContent).toContain('دون تحديد');
+        expect(document.querySelector('[aria-label="البنك الافتراضي"]')).toBeNull();
+        const choices = section.querySelectorAll('input');
+        await act(async () => { choices[0].click(); choices[2].click(); });
+        const submit = document.querySelector('[data-testid="employees-v2-mobile-app-permissions-submit"]');
+        expect(submit.disabled).toBe(false);
+        await act(async () => submit.click());
+        const saved = assignEmployeesV2MobileAppPermissions.mock.calls.at(-1)[1];
+        expect(saved.operational_banks).toEqual({bank_ids:['inma'],cash_ids:['cash1'],default_bank_id:null});
+        expect(saved.permissions).toContain('operational_balance_reports_read');
+        expect(saved.permissions).not.toContain('operational_balance_movements_write');
+    } finally { await cleanup(container,root); }
+});
 
 test("owner can assign only an MZ2 cashbox without a default bank", async()=>{
     const data={...workspace,management:{...workspace.management,operational_bank_choices:[],operational_cash_choices:[{id:'cash1',name:'صندوق الفرع',currency:'SAR'}]}};

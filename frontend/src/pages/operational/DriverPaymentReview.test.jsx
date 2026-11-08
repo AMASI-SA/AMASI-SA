@@ -59,6 +59,21 @@ test('bank approval pins submitted bank and exact statement movement',async()=>{
   expect(api.post.mock.calls[0][1]).not.toHaveProperty('pos_reviewed_amount');
 });
 
+test('eligible bank candidates can be selected while a manual statement identifier remains supported',async()=>{
+  item.payment_method='bank_transfer';context={...context,payment_method:'bank_transfer',bank_account_id:'bank',bank_movements:[
+    {id:'candidate',bank_account_id:'bank',amount:'200.00',movement_date:'2026-11-06',reference:'matching-transfer'},
+    {id:'wrong-bank',bank_account_id:'other',amount:'200.00'},
+    {id:'wrong-amount',bank_account_id:'bank',amount:'199.99'},
+  ]};
+  await render();await click('تحميل خيارات الاعتماد');
+  expect(field('البنك المستلم المؤكد').value).toBe('bank');
+  const choices=field('حركات البنك المتاحة للمطابقة');
+  expect([...choices.options].map(option=>option.value)).toEqual(['','candidate']);
+  await change(choices,'candidate');expect(field('معرف حركة البنك').value).toBe('candidate');
+  await click('اعتماد مدفوع');
+  expect(api.post.mock.calls[0][1]).toMatchObject({destination_financial_id:'bank',settlement_reference:'candidate'});
+});
+
 test.each([{amount:'199.99'},{amount:null},{assignment_id:'foreign'},{payment_method:'cash'},{session_scope:''},{expected_review_revision:'1'}])('bad options cannot authorize: %j',async patch=>{
   context={...context,...patch};await render();await click('تحميل خيارات الاعتماد');
   expect(button('اعتماد مدفوع').disabled).toBe(true);await click('اعتماد مدفوع');expect(api.post).not.toHaveBeenCalled();
@@ -99,4 +114,16 @@ test('options failure and pending-list failure clear usable state',async()=>{
 test('strict-mode effect replay still loads the current list and explicit options',async()=>{
   await render(true);expect(button('تحميل خيارات الاعتماد')).toBeDefined();await preparePos();
   expect(button('اعتماد مدفوع').disabled).toBe(false);expect(api.post).not.toHaveBeenCalled();
+});
+
+test('rejection requires a reason and preserves the pinned review context without a destination',async()=>{
+  context={...context,can_approve:false,can_reject:true,blocker:'receipt_not_eligible'};
+  const prompt=jest.spyOn(window,'prompt').mockReturnValueOnce('   ').mockReturnValueOnce('  المبلغ غير موجود بالشبكة  ');
+  await render();await click('تحميل خيارات الاعتماد');await click('رفض');
+  expect(api.post).not.toHaveBeenCalled();expect(toast.error).toHaveBeenCalledWith('اكتب سبب الرفض حتى يظهر للموصل.');
+  await click('رفض');
+  expect(api.post).toHaveBeenCalledWith('/store-delivery/payment-review/assignment',{
+    decision:'rejected',note:'المبلغ غير موجود بالشبكة',expected_financial_source:'operational',
+    expected_review_revision:1,expected_session_scope:scope});
+  expect(prompt).toHaveBeenCalledTimes(2);
 });

@@ -91,7 +91,7 @@ def _open_waybill(source, raw, started, stamp):
     return all(started <= instant(v) <= stamp for v in versions)
 
 
-def prestart_open_cod(raw_orders, data, state, started, stamp, ids, numbers, open_statuses):
+def prestart_open_cod(raw_orders, data, state, started, stamp, ids, numbers, open_statuses, *, coverage=None):
     """Require positive current state; absence of a delivery fact alone proves nothing."""
     engine = state.get("engine") or {}
     booked = set(engine.get("obligations", {})) | set(engine.get("cod_reports", {})) | set(engine.get("facts", {}))
@@ -123,6 +123,9 @@ def prestart_open_cod(raw_orders, data, state, started, stamp, ids, numbers, ope
                 withheld += 1
                 continue
             currency, due = _remaining(raw)
+            if coverage is not None:
+                coverage.append({"order_id": oid, "currency": currency, "amount": format(due, ".2f"),
+                                 "source": "prestart_open_cod"})
             if due > 0:
                 groups[currency][0] += 1
                 groups[currency][1] += due

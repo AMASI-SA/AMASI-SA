@@ -145,3 +145,6 @@ export async function downloadShippingEvidence(fileId) {
     document.body.appendChild(anchor); anchor.click(); anchor.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+export const listOnboardingProviderPlanScopes = currency => api.get(`${BASE}/provider-plan-scopes`, { params: { currency } }).then(body);
+export const createOnboardingProviderPlanScope = payload => api.post(`${BASE}/provider-plan-scopes`, payload).then(body);
