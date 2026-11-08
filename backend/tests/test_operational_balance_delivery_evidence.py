@@ -272,9 +272,12 @@ def test_later_customer_order_status_does_not_erase_proved_earned_service(driver
 
 
 @pytest.mark.parametrize("current", [None, "malformed", {}])
-def test_delivered_label_requires_an_explicit_canonical_current_shipment(current):
+def test_order_carrier_can_replace_absent_but_not_malformed_current_shipment(current):
     values = evidence(driver=False)
     values[1]["salla_shipping_current"] = current
+    if current is None:
+        assert resolve(values)["party_type"] == "courier"
+        return
     with pytest.raises(ValueError, match="^operational_delivery_current_shipment_required$"):
         resolve(values)
 
@@ -334,12 +337,11 @@ def test_older_shipments_cannot_supply_missing_current_delivery_time():
         resolve(values)
 
 
-def test_current_shipment_requires_same_identity_in_raw_source():
+def test_dated_order_does_not_require_duplicate_raw_label_identity():
     values = evidence(driver=False)
     values[0].pop("shipments")
     values[0]["shipping"].pop("shipment_id")
-    with pytest.raises(ValueError, match="^operational_delivery_shipment_source_missing$"):
-        resolve(values)
+    assert resolve(values)["party_type"] == "courier"
 
 
 @pytest.mark.parametrize("change", ["duplicate", "malformed-aliases", "unapproved"])

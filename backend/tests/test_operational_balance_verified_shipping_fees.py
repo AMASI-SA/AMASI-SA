@@ -496,11 +496,11 @@ def test_recent_external_shipment_label_does_not_confirm_fee_while_order_disagre
                for i in result['engine']['issues'])
 
 
-def test_dated_shipment_without_matching_awb_and_changed_native_driver_identity_never_confirm():
+def test_order_status_can_earn_without_awb_but_changed_native_driver_identity_cannot():
     d = courier_data(); raw = d['unified_orders'][0]['raw_by_source']['salla_direct']
     raw['shipping'].pop('tracking_number')
     raw['shipments'][0].pop('tracking_number')
-    assert fee_total(calculated(d))==0
+    assert fee_total(calculated(d))==10
     d = fixture(with_rate=True); raw = d['unified_orders'][0]['raw_by_source']['salla_direct']
     raw['created_at']='2026-10-06T01:00:00+00:00'
     d['store_delivery_assignments'][0]['order_id']='other-order-id'

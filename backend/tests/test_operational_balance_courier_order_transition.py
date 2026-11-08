@@ -117,7 +117,10 @@ def test_conflicts_and_boundary_never_confirm_shipping(case):
     elif case == "malformed_shipment":
         raw["shipments"].append(None)
     state = calculated(data)
-    assert fee_total(state) == 0 and "cod:100" not in state["engine"]["obligations"]
+    # The user-approved earning contract is the dated order transition. Missing
+    # or later-issued labels no longer block that fee; actual conflicts still do.
+    expected = 10 if case in {"no_waybill", "shipment_after_delivery"} else 0
+    assert fee_total(state) == expected and "cod:100" not in state["engine"]["obligations"]
 
 
 def test_authenticated_history_refresh_preserves_native_time_once_on_legacy_row(monkeypatch):

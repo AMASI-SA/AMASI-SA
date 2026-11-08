@@ -1327,7 +1327,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             watermark = source.get('g47_salla_snapshot') or {}
             if watermark.get('requires_authoritative_refresh'):
                 raise ValueError('canonical_salla_refresh_required')
-            current_shipping = source.get('salla_shipping_current') or raw.get('salla_shipping_current') or {}
+            from operational_delivery_evidence import order_shipping_identity
+            current_shipping = order_shipping_identity(raw, source)
             saved_prepaid = (operational_state or {}).get('engine', {}).get('facts', {}).get('prepaid_shipping:' + identity)
             if saved_prepaid or isinstance(current_shipping, dict) and any(
                     str(current_shipping.get(key) or '').casefold() in prepaid_keys for key in ('company_code', 'company_name')):

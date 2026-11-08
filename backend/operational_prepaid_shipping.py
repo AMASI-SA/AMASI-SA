@@ -5,8 +5,8 @@ from zoneinfo import ZoneInfo
 
 from courier_cod_fee_rules import split_tax_amount
 from operational_courier_transitions import COMPLETED_PROOF
-from operational_delivery_evidence import _courier, _current_shipping, _instant, _status, recorded_courier_fee
-from operational_order_completed_evidence import bind_completed_waybill, completion_time
+from operational_delivery_evidence import _courier, _current_shipping, _instant, _status, recorded_courier_fee, order_shipping_identity, _order_waybill
+from operational_order_completed_evidence import completion_time
 
 SCHEMA = 'operational_prepaid_shipping_v1'
 
@@ -19,7 +19,7 @@ def source_event(data, setup, source, raw, state, owner, start, end, history, sh
     saved = (state or {}).get('engine', {}).get('facts', {}).get('prepaid_shipping:' + oid)
     if saved:
         return True, None  # Its immutable original cash leg survives later order changes.
-    current = source.get('salla_shipping_current') or raw.get('salla_shipping_current') or {}
+    current = order_shipping_identity(raw, source)
     prepaid = [rate for rate in setup.get('contracts', []) if rate.get('context') == 'order_completed'
                and rate.get('payment_mode') == 'prepaid']
     keys = {str(key).casefold() for rate in prepaid for key in rate.get('keys', [])}
@@ -39,12 +39,14 @@ def source_event(data, setup, source, raw, state, owner, start, end, history, sh
     if _status(effective) in {'pending', 'new', 'created', 'processing', 'in_progress', 'under_processing',
             'under_review', 'waiting_review', 'awaiting_payment', 'بانتظار المراجعة', 'جاري التجهيز', 'قيد التجهيز'} and not has_completion:
         return True, None  # An unexecuted order has no missing earned-charge proof.
-    current, shipment, waybill = _current_shipping(raw, source, require_delivered=False)
+    current, shipment, waybill = _current_shipping(raw, source, require_delivered=False, require_label=False)
     party, carrier_key = _courier(setup, owner, current)
     if ('shipment', shipment) in shipment_conflicts or ('waybill', waybill) in shipment_conflicts:
         raise ValueError('operational_prepaid_shipping_shipment_shared_by_orders')
     at = completion_time(raw, source, history, end)
-    bind_completed_waybill(raw, current, shipment, waybill, at)
+    # Completion plus its actual timestamp establishes the prepaid expense;
+    # label issuance is not a financial eligibility condition.
+    _order_waybill(raw, current, shipment, waybill, at, optional=True)
     rates = [rate for rate in prepaid if rate.get('party_id') == party and rate.get('status') == 'approved'
              and _instant(rate['effective_from']) <= at
              and (not rate.get('effective_to') or at < _instant(rate['effective_to']))]
