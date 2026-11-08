@@ -135,3 +135,8 @@ All 24 applicable workflows on B06b4eb7727c6e63ee2c4a78aa0c2242fb3041b9d passed;
 
 
 Deployment workspace went idle during first independent successor rehearsal; Code administration woke environment and secure browser sign-in restored terminal. Temporary rehearsal log is absent after restart, so no success claim. Fresh status active:false, /app HEAD22634586abdbdf55a5d41726acce4280674bde61, trackedclean/5untracked unchanged. Preview backend/frontend running after platform wake. Started new no-hardlinks clean clone /tmp/financial-admin-1817-resumed with exactB; output /tmp/financial-admin-1817-rehearsal.log. PR1817 ready; all24BworkflowsPASS. No merge/lease/publish yet. Recheck guard after rehearsal; preserve untouched production and untracked files.
+
+
+## Merged successor, publication pending
+
+Independent fresh /tmp/financial-admin-1817-resumed adapter completed and verify-packages passed with exactA8408b7df4b6ceb75e9a08565f3574023f99cc8a4/runtime rg5-659dcf7fdb737c8ea67a88787f512de7a67fe25d283c59c7cc523040b1b43e73; gitworktreeclean. Fresh guard active:false. PR1817 merged normally with expected B06b4eb7727c6e63ee2c4a78aa0c2242fb3041b9d; merge M6eed626bb8815c54db6d8cb46d45e97902e3db4f. Btree7662a3aafdc60e41ef5785685d7294480422337b must match M. /app update command guarded by inactive lease/clean tracked source/exactM+tree, stops only preview backend/frontend then ff-only. No reset/clean. Next inspect update, materialize officialadapter, prepareactorcodex-financial-admin-1817/prepublish/onepublish/3verify; restore preview services. Production Git branch changed:yes; actual runtime publication:no. No liveconfig/backfill/APK.
