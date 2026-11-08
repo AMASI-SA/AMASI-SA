@@ -3,11 +3,11 @@ import { operationalApi } from "./api";
 
 jest.mock("../../lib/api", () => ({ get: jest.fn(), post: jest.fn() }));
 
-test("financial position reads the operational report without write or unsupported filters", async () => {
+test("financial position opts into lossless indexed coverage without a financial write", async () => {
     const report = { schema_version: 1, authority: "operational_balance_report", status: "active" };
     http.get.mockResolvedValueOnce({ data: report });
     expect(await operationalApi.financialPosition()).toBe(report);
-    expect(http.get).toHaveBeenCalledWith("/operational-balances/financial-position");
+    expect(http.get).toHaveBeenCalledWith("/operational-balances/financial-position", {params: {coverage_format: "indexed"}});
     expect(http.post).not.toHaveBeenCalled();
 });
 

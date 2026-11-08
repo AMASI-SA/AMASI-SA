@@ -33,6 +33,25 @@ def test_missing_plan_uses_only_explicitly_available_contracts_and_does_not_muta
     assert rows == before
 
 
+def test_equivalent_component_terms_accept_distinct_contract_local_identifiers():
+    rows = terms()
+    rows[1]['components'][0]['id'] = 'four-installments-component'
+    for row in rows:
+        row['_approved_plan_scopes'][0]['contracts'] = [
+            {'policy_id': p['id'], 'contract_digest': contract_digest(p)} for p in rows[:2]]
+    before = deepcopy(rows)
+    result = provider_projection(payment(), rows, date(2026, 6, 10))
+    assert result['estimated_fees'] == '3.51'
+    assert result['expected_receivable'] == '96.49'
+    assert result['plan_id'] is None
+    assert rows == before
+    # Identity remains part of the immutable contract approval, even though it
+    # does not determine whether two separately approved tariffs calculate alike.
+    rows[1]['components'][0]['id'] = 'edited-after-approval'
+    with pytest.raises(ValueError, match='provider_plan_scope_contract_changed'):
+        provider_projection(payment(), rows, date(2026, 6, 10))
+
+
 @pytest.mark.parametrize('day', [date(2026, 6, 1), date(2026, 7, 1)])
 def test_scope_does_not_apply_outside_its_dates(day):
     with pytest.raises(ValueError, match='provider_payment_plan_required'):
@@ -70,12 +89,13 @@ def test_known_long_plan_keeps_own_evidence_and_is_not_repriced():
     assert 'fee_policy_scope_id' not in result
 
 
-def test_saved_contract_arithmetic_has_no_installment_dependency_1000_amounts():
+@pytest.mark.parametrize('distinct_component_ids', [False, True])
+def test_saved_contract_arithmetic_has_no_installment_dependency_1000_amounts(distinct_component_ids):
     from decimal import Decimal, ROUND_HALF_UP, ROUND_HALF_EVEN
     rows = terms()
     for row in rows[:2]:
         template = row['components'][0]
-        row['components'] = [{**template, 'id': name, 'percentage': rate,
+        row['components'] = [{**template, 'id': row['id'] + ':' + name if distinct_component_ids else name, 'percentage': rate,
                               'fixed_amount': fixed, 'vat_rate': '15'}
                              for name, rate, fixed in [('refundable', '4.99', '0'),
                                                       ('retained', '2', '0'), ('fixed', '0', '1')]]
@@ -121,12 +141,15 @@ def test_scope_save_preserves_tariffs_and_rejects_overlap_stale_version_other_ow
 
 
 @pytest.mark.asyncio
-async def test_http_scope_is_authorized_versioned_and_metadata_only(api):
+@pytest.mark.parametrize('distinct_component_ids', [False, True])
+async def test_http_scope_is_authorized_versioned_and_metadata_only(api, distinct_component_ids):
     component = dict(id='capture', percentage='2', fixed_amount='1', vat_treatment='exclusive', vat_rate='15')
     config = dict(provider='tabby', percentage='2', fixed_amount='1', vat_rate='15',
         vat_treatment='exclusive', currency='SAR', effective_from='2026-06-01',
         evidence='synthetic historical contract', components=[component])
-    policies = [await request(api,'POST','/fee-policies',dict(config, plan_id=plan)) for plan in ('three','four')]
+    policies = [await request(api,'POST','/fee-policies',dict(config, plan_id=plan,
+        components=[dict(component, id=plan if distinct_component_ids else 'capture')]))
+        for plan in ('three','four')]
     source = await request(api,'GET','/provider-plan-scopes')
     assert source == {'items': [], 'version': 2}
     body = dict(provider='tabby',currency='SAR',policy_ids=[p['id'] for p in policies],
