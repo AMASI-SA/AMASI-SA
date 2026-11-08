@@ -150,7 +150,8 @@ def test_provider_net_cash_and_actual_fees_are_not_subtracted_twice():
     before = deepcopy(state)
     result = build_financial_position(state)
     assert result["currencies"]["SAR"]["metrics"]["liquidity"] == "1035.00"
-    assert table(result, "providers")["totals"] == {"name": "الإجمالي", "orders": 1, "gross": "100.00",
+    assert {key: value for key, value in table(result, "providers")["totals"].items()
+            if key not in {"known_tariff_fees", "known_tariff_net", "tariff_known_order_count", "tariff_unresolved_order_count"}} == {"name": "الإجمالي", "orders": 1, "gross": "100.00",
                                                      "fees": "11.00", "refunded": "0.00", "net": "54.00",
                                                      "tariff_fees": "10.00", "tariff_net": "90.00",
                                                      "actual_settlement_fees": "5.00", "known_actual_settlement_fees": "5.00",
@@ -466,3 +467,22 @@ def test_uncollected_courier_forecast_never_has_booked_responsibility_or_collect
     assert row["courier_responsibility"] is None
     assert row["collection_amount"] is None and row["store_collection"] is None
     assert row["collection_status"] != "confirmed"
+
+
+def test_partial_tariff_columns_never_replace_unknown_full_totals_or_unknown_count():
+    from operational_financial_position_core import _provider_table
+    result = _provider_table([{'provider': 'tabby', 'name': 'Tabby', 'orders': 170, 'complete': False,
+        'tariff_fees': None, 'tariff_net': None, 'known_tariff_fees': '16.30',
+        'known_tariff_net': '146.70', 'tariff_known_order_count': 163,
+        'tariff_unresolved_order_count': None}], [])
+    row = result['rows'][0]
+    assert row['tariff_fees'] is row['tariff_net'] is row['tariff_unresolved_order_count'] is None
+    assert row['tariff_known_order_count'] == 163
+    assert result['totals']['known_tariff_fees'] == '16.30'
+    assert result['totals']['known_tariff_net'] == '146.70'
+    assert result['totals']['tariff_fees'] is result['totals']['tariff_net'] is None
+    assert result['complete'] is False
+    empty = _provider_table([], [{'code': 'provider_payment_method_unknown'}])
+    # Empty incomplete evidence is not evidence of a zero known subset.
+    assert empty['totals']['known_tariff_fees'] is None
+    assert empty['totals']['known_tariff_net'] is None
