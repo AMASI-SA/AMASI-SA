@@ -132,6 +132,24 @@ jobs:
           rejected=0
           for changed_path in "${changed_paths[@]}"; do
             case "${changed_path}" in
+              # Product attribution rollback and its existing cost/report regressions.
+              .github/workflows/sold-product-cost-details.yml|\
+              backend/dashboard_v2_routes.py|\
+              backend/product_option_cost_routes.py|\
+              backend/product_traffic_sources.py|\
+              backend/tests/dashboard_runtime_gate_plugin.py|\
+              backend/tests/test_direct_option_cost_quantity.py|\
+              backend/tests/test_product_campaign_identity.py|\
+              backend/tests/test_product_promotion_route.py|\
+              backend/tests/test_product_traffic_sources.py|\
+              frontend/src/components/ProductTrafficSources.jsx|\
+              frontend/src/components/ProductTrafficSources.test.jsx|\
+              frontend/src/components/products/ProductOptionCostEditor.jsx|\
+              frontend/src/components/products/ProductOptionCostEditor.quantity.test.jsx|\
+              frontend/src/lib/soldFinancialSnapshot.js|\
+              frontend/src/lib/soldFinancialSnapshot.test.js|\
+              frontend/src/pages/SoldProducts.jsx|\
+              frontend/src/pages/SoldProducts.test.jsx|\
               backend/integrations_control_center/snapchat_entity_settings.py|\
               backend/integrations_control_center/snapchat_campaign_management.py|\
               backend/integrations_control_center/snapchat_campaign_publication.py|\
