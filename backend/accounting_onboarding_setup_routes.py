@@ -11,6 +11,18 @@ from accounting_onboarding_ssot import (
 
 
 def install_setup_contract_routes(router, raw, current_user, actor_for, base):
+    from operational_provider_plan_scope import PlanScopeCreate, create_plan_scope, list_plan_scopes
+
+    @router.get(base + "/provider-plan-scopes")
+    async def plan_scopes(currency: str = 'SAR', user: dict = Depends(current_user)):
+        _, owner = await actor_for(user)
+        return await list_plan_scopes(raw, owner, currency)
+
+    @router.post(base + "/provider-plan-scopes")
+    async def plan_scope(payload: PlanScopeCreate, user: dict = Depends(current_user)):
+        actor, owner = await actor_for(user, 'drafts_manage')
+        return await create_plan_scope(raw, owner, actor['id'], payload)
+
     @router.post(base + "/external-persons")
     async def person(payload: ExternalPersonIn, user: dict = Depends(current_user)):
         actor, owner = await actor_for(user, "drafts_manage")

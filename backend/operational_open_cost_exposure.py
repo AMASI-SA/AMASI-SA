@@ -496,14 +496,24 @@ async def project(db, owner, state, *, as_of=None):
         "amount": _fmt(v["amount"]), "units": v["units"], "orders": len(v["orders"])}
         for (period, kind, stage, party, name, currency), v in values.items()]
     groups.sort(key=lambda r: (r["period"], r["kind"], r["stage"], r["party_name"], r["party_id"]))
+    cod_evidence = []
+    customer_cod = ({"by_currency": await open_customer_cod(db, owner, raw_orders, data, state,
+        started, stamp, ids, nums, coverage=cod_evidence)} if engine_at == stamp else {})
+    historical_cod = (prestart_open_cod(raw_orders, data, state, started, stamp, ids, nums, OPEN,
+        coverage=cod_evidence) if engine_at == stamp else {"by_currency": {}})
+    from operational_cod_forecast_coverage import project as cod_scope
+    cod_coverage = (cod_scope(raw_orders, data, state, started, stamp, cod_evidence,
+        open_statuses=OPEN, closed_statuses=CLOSED) if engine_at == stamp else {})
+    from operational_profit_period import collect as profit_period
+    profit = await profit_period(db, owner, state, raw_orders, data, started, stamp) if engine_at == stamp else {}
     return {"status": "preview", "as_of": stamp.isoformat(),
         "engine_as_of": engine_at.isoformat() if engine_at else None, "started_at": started.isoformat(),
         "currencies": {c: {k: _fmt(v) for k, v in sorted(details.items())} for c, details in sorted(currencies.items())},
         "distinct_order_counts": counts,
-        "open_customer_cod": {"by_currency": await open_customer_cod(db, owner, raw_orders, data, state,
-            started, stamp, ids, nums)} if engine_at == stamp else {},
-        "prestart_open_cod": prestart_open_cod(raw_orders, data, state, started,
-            stamp, ids, nums, OPEN) if engine_at == stamp else {"by_currency":{}},
+        "open_customer_cod": customer_cod,
+        "prestart_open_cod": historical_cod,
+        "cod_forecast_coverage": cod_coverage,
+        "profit_period": profit,
         "bucket_completeness": cost_completeness(issues, declared_scopes),
         "groups": groups, "issues": [{"code": c, "count": n} for c, n in sorted(issues.items())],
         "complete": not any(c != "historical_current_catalog_estimate_used" for c in issues),

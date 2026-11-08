@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useOptionalAuth } from "../../context/AuthContext";
 import {
     createOnboardingFeePolicy, listOnboardingFeeCandidates, listOnboardingFeePolicies,
+    listOnboardingProviderPlanScopes, createOnboardingProviderPlanScope,
     previewOnboardingFeePolicy, saveOnboardingFeeSourceMode, updateOnboardingFeePolicy,
 } from "../../services/accountingOnboarding";
 import { formatRiyadhDateTime } from "../../lib/dates";
@@ -98,6 +99,75 @@ function FeePreview({ policy, onClose }) {
         </p>}
         {error && <p role="alert">{error}</p>}
         <button type="button" onClick={onClose}>إغلاق المعاينة</button>
+    </section>;
+}
+
+function TabbyPlanScopes({ policies, disabled }) {
+    const [currency, setCurrency] = useState("SAR");
+    const [saved, setSaved] = useState(null), [selected, setSelected] = useState([]);
+    const [from, setFrom] = useState(""), [to, setTo] = useState(""), [evidence, setEvidence] = useState("");
+    const [busy, setBusy] = useState(false), [message, setMessage] = useState("");
+    const [reload, setReload] = useState(0);
+    const generation = useRef(0), inFlight = useRef(false);
+    const eligible = policies.filter(p => p.provider === "tabby" && p.currency === currency && p.status === "active" &&
+        p.fee_model_version === 2 && p.plan_id && (p.event_type || "capture") === "capture" && p.confirmed_by && p.confirmed_at && p.evidence);
+    useEffect(() => {
+        const token = ++generation.current;
+        setSaved(null); setSelected([]); setMessage(""); setBusy(true);
+        listOnboardingProviderPlanScopes(currency).then(value => {
+            if (token === generation.current) setSaved(value);
+        }).catch(() => { if (token === generation.current) setMessage("تعذرت قراءة نطاقات تابي أو لا توجد صلاحية. أعد التحميل للتحقق."); })
+            .finally(() => { if (token === generation.current) setBusy(false); });
+        return () => { generation.current += 1; };
+    }, [currency, policies, reload]);
+    async function saveScope(event) {
+        event.preventDefault();
+        if (inFlight.current || disabled || busy || !saved?.version || !selected.length || !from || (to && to < from) || evidence.trim().length < 3) return;
+        if (selected.some(id => !eligible.some(p => p.id === id))) return;
+        inFlight.current = true; setBusy(true); setMessage("");
+        const token = generation.current;
+        try {
+            await createOnboardingProviderPlanScope({ provider: "tabby", currency, policy_ids: selected,
+                expected_version: saved.version, effective_from: from, effective_to: to || null, evidence: evidence.trim() });
+            if (token !== generation.current) return;
+            setSelected([]); setFrom(""); setTo(""); setEvidence("");
+            setSaved(null);
+            const latest = await listOnboardingProviderPlanScopes(currency);
+            if (token === generation.current) { setSaved(latest); setMessage("حُفظ نطاق التعرفات المفعلة لتابي. لم تتغير التعرفات أو خطط الطلبات."); }
+        } catch (error) {
+            if (token !== generation.current) return;
+            setSaved(null);
+            const code = error?.response?.data?.detail?.code;
+            setMessage(code === "provider_plan_scope_terms_differ" ? "شروط التعرفات المحددة غير متطابقة؛ راجع الرسم الثابت والضريبة والتقريب وفترة السريان." :
+                code === "provider_plan_scope_overlap" ? "يوجد نطاق معتمد متداخل مع هذه الفترة. أعد التحميل لمراجعته." :
+                "تعذر تأكيد حفظ النطاق أو تغير إصدار الإعداد. أعد تحميل النطاقات قبل أي محاولة أخرى.");
+        } finally { inFlight.current = false; if (token === generation.current) setBusy(false); }
+    }
+    return <section className="ofp-table-card p-4 space-y-3" aria-label="نطاق تعرفات تابي المفعلة">
+        <h2>نطاق تعرفات تابي المفعلة</h2>
+        <p>حدد عقود الخطط المفعلة للمتجر وفترة سريانها. يسمح النطاق باحتساب التعرفة المتطابقة عند غياب خطة الطلب، دون تعيين خطة للطلب أو تعديل أي عمولة.</p>
+        <Input label="عملة نطاق تابي" value={currency} maxLength={3} pattern="[A-Z]{3}" disabled={busy || disabled} onChange={e => setCurrency(e.target.value.toUpperCase())} />
+        <button type="button" className="ofp-button" disabled={busy || disabled} onClick={() => setReload(n => n + 1)}>إعادة تحميل نطاقات تابي</button>
+        {saved && <div><p>إصدار إعداد تابي: {saved.version ?? "غير متاح"}</p>
+            {(saved.items || []).map(scope => <article key={scope.id} className="border rounded p-2">
+                <p>النطاق {scope.id} · {scope.status === "active" ? "معتمد" : "غير فعال"} · {scope.currency}</p>
+                <p>من {scope.effective_from} إلى {scope.effective_to || "مستمر"}</p><p>{scope.evidence}</p>
+                <p>التعرفات المرتبطة: {(scope.contracts || []).map(ref => ref.policy_id).join("، ")}</p>
+            </article>)}
+            {!saved.items?.length && <p>لا يوجد نطاق محفوظ لهذه العملة.</p>}
+        </div>}
+        <form onSubmit={saveScope} aria-label="اعتماد نطاق تابي"><fieldset disabled={busy || disabled || !Number.isInteger(saved?.version)} className="space-y-3">
+            <legend>اختيار التعرفات المعتمدة المفعلة للمتجر</legend>
+            {eligible.map(p => <label key={p.id} className="block"><input type="checkbox" aria-label={`تعرفة تابي ${p.id}`} checked={selected.includes(p.id)} onChange={e => setSelected(ids => e.target.checked ? [...ids, p.id] : ids.filter(id => id !== p.id))} />
+                {p.plan_id} · {p.id} · {p.effective_from} إلى {p.effective_to || "مستمر"} · الإصدار {p.version || 1}
+            </label>)}
+            {!eligible.length && <p>لا توجد تعرفات تابي تفصيلية معتمدة مؤهلة بهذه العملة.</p>}
+            <Input label="بداية نطاق تابي" type="date" required value={from} onChange={e => setFrom(e.target.value)} />
+            <Input label="نهاية نطاق تابي الاختيارية" type="date" min={from || undefined} value={to} onChange={e => setTo(e.target.value)} />
+            <Input label="دليل تفعيل خطط تابي وفترتها" required minLength={3} maxLength={1000} value={evidence} onChange={e => setEvidence(e.target.value)} />
+            <button type="submit" className="ofp-button" disabled={!selected.length}>اعتماد نطاق تعرفات تابي</button>
+        </fieldset></form>
+        {message && <p role="status">{message}</p>}
     </section>;
 }
 
@@ -232,6 +302,7 @@ function FeeForm() {
             {editing && <button type="button" onClick={() => { setEditing(null); setForm(initial); setParts([]); }}>إلغاء التعديل</button>}
         </fieldset></form>
         {message && <p role="status">{message}</p>}
+        <TabbyPlanScopes policies={policies} disabled={busy} />
     </main>;
 }
 export default function ProviderFeeSetup() {
