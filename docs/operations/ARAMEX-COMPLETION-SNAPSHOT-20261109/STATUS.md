@@ -42,3 +42,18 @@ shared guard; never alter another release lease. Normal merge and governed
 rehearsal before owned prepare/prepublish, one Publish changes, newer success,
 official three-probe verify and inactive guard. Do not claim physical Android
 or printer acceptance: ADB exists on the user's Windows PC, not this runtime.
+
+
+## Intent checkpoint
+All 10 applicable source workflows passed. Real-Mongo job129432631407 ran
+272 Android cases plus59subtests, 658 retained cases plus345subtests, and1
+acceptance guard; mandatory zero-skips/failures checks passed.
+SourceA b954c00b7e837d8832ba1be98f00e079fd1ee9ef.
+IntentB 3b5b1527a0158a2ecd228c1bd5203b85e1b36d14, tree3c2a4b002d5605875e54090ce7782a725d339543.
+Runtime rg5-a24e66ae8e57e5bb49784372c02fa3c121986c1ad634252c01510d7d3decb580.
+Readiness42697353647 artifact13709184161, ZIP SHA256
+51ee45178ecc2c7ae00b6ff742e23c768acfde841bb65cb8a303c2287d634651.
+Candidate and A-to-B validators exit0. Exact-B CI started. Terminal auth
+restored; fresh shared guard inactive, /app at reviewed720194f, only unrelated
+untracked files. No merge/publish/lease. Next isolated B adapter rehearsal and
+exact-B checks, then recheck prod/guard. Evidence-only branch must not deploy.
