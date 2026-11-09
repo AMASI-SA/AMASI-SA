@@ -689,6 +689,78 @@ class MobileShippingV1Tests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(saved["carrier_label_ready"])
         self.assertFalse(saved.get("carrier_label_print_confirmed"))
 
+    async def native_assembly_actor(self):
+        self.actor = {"id": "merchant", "_session_client": "amasi_mobile",
+                      "_mobile_actor_id": "employee", "_mobile_owner_id": "merchant"}
+        await self.db.users.insert_one({"id": "employee", "created_by": "merchant", "role": "employee"})
+        access = patch("assembly_mobile_settings.mobile_app_access_for_user", AsyncMock(return_value={
+            "enabled": True, "permissions": ["app.page.assembly_shipping"]}))
+        access.start()
+        self.addCleanup(access.stop)
+
+    async def test_android76_courier_fetch_matches_web_without_provider_or_manual_lease(self):
+        await self.seed_current_mezan_courier()
+        await self.native_assembly_actor()
+        await self.workflows.update_one(self.key, {"$set": {
+            "manual_label_refresh": {"token": "old-request", "until": "2099-01-01T00:00:00Z"}}})
+        with patch.object(compat, "call_salla", side_effect=AssertionError("courier fetch must use Mezan")), \
+             patch.object(legacy, "call_salla", side_effect=AssertionError("no courier provider call")), \
+             patch("assembly_manual_label_refresh.complete_and_refresh", new_callable=AsyncMock,
+                   side_effect=AssertionError("courier must not use external completion flow")):
+            web = await self.client.post(self.path + "/refresh")
+            self.assertEqual(web.status_code, 200, web.text)
+            expected = web.json()
+            for _ in range(30):
+                response = await self.client.post(self.path + "/complete-and-refresh")
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.json(), expected)
+        saved = await self.workflows.find_one(self.key)
+        self.assertEqual(saved["salla_order_status_verified_at"], "2026-01-01")
+        self.assertEqual(saved["stage"], "completed")
+        self.assertEqual(saved["manual_label_refresh"]["token"], "old-request")
+        self.assertFalse(saved.get("carrier_label_print_confirmed"))
+
+    async def test_android76_courier_fetch_retains_web_completion_and_cancel_guards(self):
+        await self.seed_current_mezan_courier()
+        await self.native_assembly_actor()
+        with patch("assembly_manual_label_refresh.complete_and_refresh", new_callable=AsyncMock,
+                   side_effect=AssertionError("courier guards must match web")) as external:
+            for status, assembly in [("completed", "pending"), ("cancelled", "completed")]:
+                await self.db.unified_orders.update_one(self.key, {"$set": {
+                    "order_status": status, "raw_by_source.salla_direct.status.slug": status}})
+                await self.workflows.update_one(self.key, {"$set": {"assembly_status": assembly}})
+                web = await self.client.post(self.path + "/refresh")
+                native = await self.client.post(self.path + "/complete-and-refresh")
+                self.assertEqual(native.status_code, web.status_code)
+                self.assertEqual(native.status_code, 409, native.text)
+                self.assertEqual(native.json()["detail"]["code"], web.json()["detail"]["code"])
+                self.assertEqual(native.json()["detail"]["print_state"], "failed")
+            external.assert_not_awaited()
+
+    async def test_android76_courier_fetch_rechecks_mobile_permission(self):
+        await self.seed_current_mezan_courier()
+        await self.native_assembly_actor()
+        await self.db.users.update_one({"id": "employee"}, {"$set": {"disabled": True}})
+        with patch.object(compat, "local_mezan_courier_label", new_callable=AsyncMock) as document, \
+             patch("assembly_manual_label_refresh.complete_and_refresh", new_callable=AsyncMock) as external:
+            response = await self.client.post(self.path + "/complete-and-refresh")
+            self.assertEqual(response.status_code, 403)
+            document.assert_not_awaited()
+            external.assert_not_awaited()
+
+    async def test_android76_external_fetch_keeps_explicit_completion_flow(self):
+        await self.seed_current_mezan_courier()
+        await self.native_assembly_actor()
+        await self.db.unified_orders.update_one(self.key, {"$set": {"shipping_company": "SMSA"}})
+        with patch("assembly_manual_label_refresh.complete_and_refresh", new_callable=AsyncMock,
+                   return_value={**self.pdf, "order_number": "12345", "contract_version": 1,
+                                 "print_state": "ready"}) as external:
+            response = await self.client.post(self.path + "/complete-and-refresh")
+            self.assertEqual(response.status_code, 200, response.text)
+            external.assert_awaited_once()
+            self.assertEqual(external.await_args.args[:3], (self.db, "merchant", "12345"))
+            self.assertEqual(response.json()["label_url"], self.pdf["label_url"])
+
     async def seed_gift_receiver(self):
         await self.seed_current_mezan_courier()
         await self.db.unified_orders.update_one(self.key, {
