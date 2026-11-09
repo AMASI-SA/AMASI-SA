@@ -95,3 +95,26 @@ adapter, then owned prepare/prepublish, authorized publish and verify3/statusfal
 The owned local checkout is clean at B. No shared/app mutation, new lease, merge
 or publication was performed for1839. Production changed by this follow-up:
 **NO**. No new APK required; physical printing acceptance still follows deployment.
+
+
+## Continuation — 2026-11-09 UTC (supersedes prior blocker)
+
+Owner continued. Environment woke; fresh guard inactive and tracked /app clean.
+PR1839 merged normally:18c245748d22615332d10c674812d4362b88ae71; /app fast-forwarded.
+First shared adapter failed ignored backend __pycache__; safely quarantined in
+/app/.release-preserved/courier1839-bytecode. Second failed ENOSPC: /app9.8G full.
+Preserved 3 inactive worktrees with per-file SHA verified tar.gz copies in
+/app/.release-preserved/courier1839-space; relocated originals into
+/tmp/courier1839-preserved-worktrees and retained original paths as symlinks:
+p01-write-final-preview-20260920 (archive43128878bytes),
+p01-intake-runtime-20260919 (17554248bytes),
+preview-runtime-state-20260919 (104440901bytes).
+Active p01-acceptance Mongo untouched. Free space became913M.
+Third governed /app adapter PASSED63.10s, exact source and rg5-e80fcfae identity;
+isolated backend1161files/health_verified/isolated_verified true.
+Log /tmp/courier1839-build.log, owned Terminal2 idle. No new lease or live publish.
+Management home/options recovered but entering project /chat loads indefinitely;
+AX snapshots repeatedly time out. Need open existing project Manage UI, then
+fresh guard status, prepare --actor codex-courier-label-1839, prepublish, publish
+once and verify3/statusfalse. Do not publish before lease/prepublish. All14 B CI
+passed. Production runtime remains prior1838; source merge is not publication.
