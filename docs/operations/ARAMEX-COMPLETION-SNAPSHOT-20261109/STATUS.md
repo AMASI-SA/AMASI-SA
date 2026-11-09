@@ -95,3 +95,10 @@ Official guard verify --url https://mezansalla.com started ONCE in Terminal3,
 output /tmp/aramex1854-production-verify.json, errors .err. Wait for
 ARAMEX_VERIFY_EXIT=0 and exactproofchecks3, then freshstatusinactive. Do not
 start duplicateverify, mutate/app, republish or clear the owned lease.
+
+
+## Final acceptance — production verified
+
+Official V5 verification completed with `verified: true`, `checks: 3`, and empty stderr. A fresh subsequent `status` returned `{"active": false}`; no manual lease clear was used. Runtime source A, normal merge, and release identity match the reviewed candidate. Boot started at `2026-11-09T21:46:36.145180+00:00`.
+
+Publication is complete. No new APK is required for this backend correction. Device/physical printing is not claimed: the user's current handset should re-fetch and print the affected Aramex order. All test evidence and the deployment screenshot are retained on this evidence-only branch; do not deploy this branch.

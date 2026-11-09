@@ -1,0 +1,39 @@
+{
+  "pr": 1854,
+  "status": "production_verified",
+  "source_git_sha": "b954c00b7e837d8832ba1be98f00e079fd1ee9ef",
+  "intent_git_sha": "3b5b1527a0158a2ecd228c1bd5203b85e1b36d14",
+  "deployment_git_sha": "c1259613df33f06c534a8e6081209a90ff31eb65",
+  "release_id": "rg5-a24e66ae8e57e5bb49784372c02fa3c121986c1ad634252c01510d7d3decb580",
+  "deployment_id": "340f772c-5e17-509c-b716-60e9dee7c288",
+  "ui_version": "81df7ea",
+  "ui_finished_at_riyadh": "2026-11-10T00:47:00+03:00",
+  "boot_started_at": "2026-11-09T21:46:36.145180+00:00",
+  "official_verify": {
+    "verified": true,
+    "checks": 3,
+    "stderr_empty": true
+  },
+  "fresh_guard_status": {
+    "active": false
+  },
+  "public_health": {
+    "ok": true,
+    "verified_identity_available": true,
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true,
+    "backend_runtime_source_verified": true
+  },
+  "real_mongo_ci": {
+    "android_cases": 272,
+    "android_subtests": 59,
+    "retained_cases": 658,
+    "retained_subtests": 345,
+    "acceptance_guard": 1,
+    "executed_skips": 0,
+    "failures": 0
+  },
+  "android_physical_print_verified": false,
+  "limitation": "Source regression and production identity verified. No live ADB or physical printer is connected to this runtime; user handset print acceptance remains pending.",
+  "evidence_only_branch": true
+}
