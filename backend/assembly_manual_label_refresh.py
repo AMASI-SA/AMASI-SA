@@ -34,17 +34,18 @@ def _same_material_snapshot(before, current):
         state = value['source'].get('g47_salla_snapshot') or {}
         value['source']['g47_salla_snapshot'] = {
             key: bool(state.get(key)) for key in ('component_pending', 'requires_authoritative_refresh')}
-        if same_store_courier:
-            # Our completed POST can publish a new observation of the same
-            # courier. These clocks/provenance are not document contents. Keep
-            # every carrier, shipment, address, product and custody field in
-            # the fence; external shipping retains the original exact fence.
-            for metadata in (value['source'].get(CURRENT_SHIPPING), value['shipping']):
-                if isinstance(metadata, dict):
-                    for key in ('provider_updated_at', 'carrier_updated_at', 'shipment_updated_at',
-                                'event_name', 'source_kind', 'source_path',
-                                'verified_order_completed_transition'):
-                        metadata.pop(key, None)
+        # Our completed POST can publish a newer observation of the same
+        # carrier for external labels too. Observation clocks/provenance are
+        # not document contents. Keep carrier identity, shipment facts, address,
+        # products and custody exact; external shipment freshness stays fenced.
+        for metadata in (value['source'].get(CURRENT_SHIPPING), value.get('shipping')):
+            if isinstance(metadata, dict):
+                for key in ('provider_updated_at', 'carrier_updated_at',
+                            'event_name', 'source_kind', 'source_path',
+                            'verified_order_completed_transition'):
+                    metadata.pop(key, None)
+                if same_store_courier:
+                    metadata.pop('shipment_updated_at', None)
         return value
     return material(before) == material(current)
 

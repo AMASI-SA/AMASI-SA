@@ -17,7 +17,7 @@ from order_engine.mapper import map_salla_order
 from salla_shipping import CURRENT_SHIPPING, accept_shipping, extract_shipping
 
 
-async def scenario(monkeypatch, *, status="in_progress", mutation=None, timing="post"):
+async def scenario(monkeypatch, *, status="in_progress", mutation=None, timing="post", external=False):
     db = AsyncMongoMockClient().manual_courier_race
     key = {"user_id": "owner", "order_number": "3001"}
     raw = {"id": "123", "reference_id": "3001", "status": {"slug": status},
@@ -27,6 +27,13 @@ async def scenario(monkeypatch, *, status="in_progress", mutation=None, timing="
         "shipping": {"company_name": "مندوب الرياض", "company_code": "0",
             "address": {"address_line": "Synthetic street", "city": "Riyadh"}},
         "items": [{"id": "line", "name": "Synthetic product", "quantity": 1}]}
+    if external:
+        raw["shipping_company_name"] = raw["shipping"]["company_name"] = "أرامكس - شحن دولي"
+        raw["shipping_company_code"] = raw["shipping"]["company_code"] = "aramex"
+        raw["shipments"] = [{"id": 99, "order_id": 123, "status": "created",
+            "courier_name": "أرامكس - شحن دولي", "courier_id": "aramex",
+            "tracking_number": "SYNTHETIC-AWB", "updated_at": "2026-11-08T09:59:00Z",
+            "label": {"url": "https://files.example/aramex-synthetic.pdf"}}]
     shipping = accept_shipping({}, extract_shipping(raw, event_name="order.updated"))
     assert shipping
     await db.unified_orders.insert_one({**key, "order_id": "123", "order_status": status,
@@ -77,6 +84,29 @@ async def scenario(monkeypatch, *, status="in_progress", mutation=None, timing="
     monkeypatch.setattr(legacy, "operational_owner", transaction)
     monkeypatch.setattr(legacy, "_store_identity", AsyncMock(return_value={}))
     return db, calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["in_progress", "completed"])
+@pytest.mark.parametrize("timing", ["post", "after_document"])
+async def test_aramex_completion_observation_keeps_same_official_pdf(monkeypatch, status, timing):
+    db, calls = await scenario(monkeypatch, status=status, timing=timing, external=True)
+    result = await manual.complete_and_refresh(db, "owner", "3001", AsyncMock())
+    assert result["ready"] and result["print_state"] == "ready"
+    assert result["shipment_id"] == "99"
+    assert result["label_url"] == "https://files.example/aramex-synthetic.pdf"
+    assert result["tracking_number"] == "SYNTHETIC-AWB"
+    assert [c[:2] for c in calls] == [("GET", "/orders/123"), ("POST", "/orders/123/status")]
+    assert "manual_label_refresh" not in await db.order_review_workflows.find_one({"order_number": "3001"})
+
+
+@pytest.mark.asyncio
+async def test_old_aramex_read_returns_same_pdf_without_completion_post(monkeypatch):
+    db, calls = await scenario(monkeypatch, status="completed", external=True)
+    result = await compat.carrier_label(db, "owner", "3001", issue=False, completed_only=True)
+    assert result["ready"] and result["shipment_id"] == "99"
+    assert result["label_url"] == "https://files.example/aramex-synthetic.pdf"
+    assert [c[:2] for c in calls] == [("GET", "/orders/123")]
 
 
 @pytest.mark.asyncio
@@ -137,7 +167,7 @@ async def test_courier_snapshot_keeps_material_shipping_fields(monkeypatch, fiel
 
 
 @pytest.mark.asyncio
-async def test_external_carrier_observation_fence_is_unchanged(monkeypatch):
+async def test_external_carrier_observation_clock_is_not_a_material_change(monkeypatch):
     db, _ = await scenario(monkeypatch)
     before = await manual._capture(db, "owner", "3001")
     for data in (before["source"][CURRENT_SHIPPING], before["shipping"]):
@@ -145,4 +175,36 @@ async def test_external_carrier_observation_fence_is_unchanged(monkeypatch):
     after = deepcopy(before)
     for data in (after["source"][CURRENT_SHIPPING], after["shipping"]):
         data["carrier_updated_at"] = "2026-11-08T10:01:00+00:00"
+    assert manual._same_material_snapshot(before, after)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["shipment_id", "status", "tracking_number", "label_url", "shipment_updated_at"])
+async def test_aramex_snapshot_keeps_shipment_identity_content_and_freshness(monkeypatch, field):
+    db, _ = await scenario(monkeypatch, external=True)
+    before = await manual._capture(db, "owner", "3001")
+    after = deepcopy(before)
+    for data in (after["source"][CURRENT_SHIPPING], after["shipping"]):
+        data[field] = "changed"
     assert not manual._same_material_snapshot(before, after)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", ["carrier", "address", "product", "component_pending", "requires_authoritative_refresh"])
+@pytest.mark.parametrize("timing", ["post", "after_document"])
+async def test_aramex_material_mutation_during_completion_still_blocks_pdf(monkeypatch, mutation, timing):
+    db, _ = await scenario(monkeypatch, external=True, mutation=mutation, timing=timing)
+    with pytest.raises((legacy.ShippingLabelError, HTTPException)) as error:
+        await manual.complete_and_refresh(db, "owner", "3001", AsyncMock())
+    assert (getattr(error.value, "code", None) or error.value.detail["code"]) == "shipping_snapshot_changed"
+    assert "manual_label_refresh" not in await db.order_review_workflows.find_one({"order_number": "3001"})
+
+
+@pytest.mark.asyncio
+async def test_repeated_aramex_fetches_release_lease_without_polling(monkeypatch):
+    db, calls = await scenario(monkeypatch, external=True)
+    for _ in range(40):
+        result = await manual.complete_and_refresh(db, "owner", "3001", AsyncMock())
+        assert result["ready"] and result["label_url"] == "https://files.example/aramex-synthetic.pdf"
+        assert "manual_label_refresh" not in await db.order_review_workflows.find_one({"order_number": "3001"})
+    assert len(calls) == 80
