@@ -4720,9 +4720,9 @@ async def _global_startup() -> None:
     )
     # Explicitly approved, exact-record repair. Runs only in release startup;
     # no provider calls, scans, worker creation, or request-path database work.
-    from integrations.qoyod.approved_owner_migration import apply_approved_recovery
+    from integrations.qoyod.approved_owner_migration import run_startup_recovery
     try:
-        recovery_state = await _asyncio.wait_for(apply_approved_recovery(db), timeout=3)
+        recovery_state = await _asyncio.wait_for(run_startup_recovery(db), timeout=5)
         logger.info("qoyod_approved_owner_recovery state=%s", recovery_state)
     except Exception as exc:
         # Preserve availability and existing fail-closed authorization. Never
