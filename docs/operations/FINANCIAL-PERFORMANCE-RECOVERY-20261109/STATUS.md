@@ -41,3 +41,13 @@ Synthetic-only fixture and repeatable benchmark prohibit network connections, co
 Fresh isolated venv bootstrap initially exposed missing bcrypt/cryptography/openpyxl dependencies. Those import failures are environment failures, not the intended regression evidence. They were installed without changing test assertions.
 
 Next: preserve source checkpoint/Draft PR, run current-head CI and governed release prerequisites after coordination with1840. Separately eliminate prepaid capture full-report replay before restoring that feature. Never claim all financial tables complete from performance tests.
+
+## 2026-11-09 exact-source CI and release-candidate checkpoint
+
+Source A `64ee370759dd6a3e148244bcaf8cb1461764d5c3`, tree `1860a890a4439abfd3248125c136892422a1ed56`, Draft PR1841. All 11 PR-triggered workflow runs returned by the connector completed SUCCESS, including release readiness42632991700, operational balances42632991795, G47 integration42632991734, stock42632991589, salaries, security and CodeQL. The connector is first-page-only; no claim about unreturned checks.
+
+Readiness candidate artifact13682407024 downloaded and ZIP SHA256 verified `e0bf11f0edec8ea1cc085fffbd3bee1ba53107c4acf4943c11247d8f27dee88a`. Candidate validation and backend/release-control Git manifests PASS from an isolated exact-A worktree, exit0. Candidate runtime `rg5-0247b9aa567adf143da1ec7fcbf6ad30922bb962f14fd080f637235b4e167477`. Expected ignored backend/release_identity.json is absent in this source-only checkout; candidate validation is not a materialized build or release rehearsal. No intent-only B created.
+
+Fresh readonly shared terminal observation: guard active:false and /app HEAD18c245748d22615332d10c674812d4362b88ae71. No shared code edit, lease, merge, financial write or deployment. Pending courier PR1840 has frozen A/B and ready checks but remains unmerged, blocked on its management sign-in. Preserve its release order: after1840 publishes, rebuild this narrow patch on the then-current production source, rerun exact-head checks, produce a NEW governed intent and rehearsal. This evidence branch is NOT a deployment branch and must never be merged as an implementation candidate.
+
+Separately, an isolated historical prepaid-capture fix is under independent review. It does not restore the reverted financial bundle. No claim of production fulfillment latency recovery or completed financial tables.
