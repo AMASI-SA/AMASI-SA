@@ -743,8 +743,8 @@ class MongoOrderRepository:
         # light Salla response cannot erase address, courier or payment evidence.
         salla_raw = _apply_v2_root_fallbacks(raw_provider, row)
 
-        from salla_payment_collection import order_page_source_current
-        payment_ready = order_page_source_current(row, raw_provider)
+        from salla_payment_collection import order_page_display_source_current
+        payment_ready = order_page_display_source_current(row, raw_provider)
         current_status = str(row.get("order_status") or "").strip() or None
         return OrderDiscoveryRow(
             order_number=order_number,

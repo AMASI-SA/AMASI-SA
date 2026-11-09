@@ -503,7 +503,7 @@ def test_page_uses_original_reconciled_paid_and_due(salla_order_payload, payment
     assert ((balance.paid, balance.remaining) if balance else None) == expected
 
 
-@pytest.mark.parametrize("watermark", [{}, {"requires_authoritative_refresh":True}, {"component_pending":True}, {"source_updated_at":"2026-08-10T00:00:00Z"}])
+@pytest.mark.parametrize("watermark", [{}, {"requires_authoritative_refresh":True}, {"source_updated_at":"2026-08-10T00:00:00Z"}])
 def test_promoted_stale_display_fields_do_not_prove_collection(salla_order_payload, watermark):
     from order_engine.repository import MongoOrderRepository
     from order_engine.service import _map_row
@@ -554,8 +554,76 @@ def test_review_approval_survives_internal_component_acknowledgement(salla_order
     acknowledged = deepcopy(doc)
     acknowledged["g47_salla_snapshot"]["component_pending"] = False
     after_order, after = snapshot(acknowledged)
-    assert before_order.payment.source_balance is None
+    assert before_order.payment.source_balance.paid == "135.00"
     assert after_order.payment.source_balance.paid == "135.00"
     assert before_order.payment.paid_amount == after_order.payment.paid_amount
     comparison = compare_snapshots(before, after)
     assert comparison["equal"], comparison
+
+
+@pytest.mark.parametrize("method", ["mada", "tabby_installment", "tamara_installment"])
+@pytest.mark.parametrize("paid,due", [(135, 0), (0, 135), (60, 75)])
+def test_component_wait_does_not_change_native_payment_balance(salla_order_payload, method, paid, due):
+    from order_engine.repository import MongoOrderRepository
+    from order_engine.service import _map_row
+    from salla_payment_collection import order_page_source_current
+
+    stamp = "2026-07-13T13:12:00Z"
+    raw = dict(salla_order_payload, payment_method=method, payment={},
+               paid_amount=paid, remaining_amount=due, updated_at=stamp)
+    doc = {"order_number": str(raw["reference_id"]), "order_date": str(raw["date"]),
+           "raw_by_source": {"salla_direct": raw},
+           "g47_salla_snapshot": {"source_updated_at": stamp, "component_pending": True}}
+    unchanged = deepcopy(doc)
+    for pending in (True, False, True):
+        doc["g47_salla_snapshot"]["component_pending"] = pending
+        row = MongoOrderRepository._to_discovery_row(doc)
+        balance = _map_row(row.salla_raw, native_payment_source=row.native_payment_source).payment.source_balance
+        assert balance is not None
+        assert (balance.paid, balance.remaining) == (f"{paid:.2f}", f"{due:.2f}")
+    assert doc == unchanged
+    # The financial-posting guard remains independent and unchanged.
+    assert not order_page_source_current(doc, raw)
+
+
+@pytest.mark.parametrize("invalid", ["identity", "stale", "newer_status", "cancelled", "refresh", "amount", "currency", "missing"])
+def test_component_wait_does_not_bypass_payment_validation(salla_order_payload, invalid):
+    from order_engine.repository import MongoOrderRepository
+    from order_engine.service import _map_row
+
+    stamp = "2026-07-13T13:12:00Z"
+    raw = dict(salla_order_payload, payment_method="tabby_installment", payment={},
+               paid_amount=135, remaining_amount=0, updated_at=stamp)
+    doc = {"order_number": str(raw["reference_id"]), "order_date": str(raw["date"]),
+           "raw_by_source": {"salla_direct": raw},
+           "g47_salla_snapshot": {"source_updated_at": stamp, "component_pending": True}}
+    if invalid == "identity": doc["salla_order_id"] = "wrong-order"
+    if invalid == "stale": doc["g47_salla_snapshot"]["source_updated_at"] = "2026-07-14T13:12:00Z"
+    if invalid == "newer_status": doc["last_salla_direct_status_source_updated_at"] = "2026-07-14T13:12:00Z"
+    if invalid == "cancelled": doc["g47_salla_snapshot"]["cancelled"] = True
+    if invalid == "refresh": doc["g47_salla_snapshot"]["requires_authoritative_refresh"] = True
+    if invalid == "amount": raw["payment"] = {"paid_amount": 20}
+    if invalid == "currency": raw["payment"] = {"currency": "USD"}
+    if invalid == "missing": del raw["paid_amount"]
+    row = MongoOrderRepository._to_discovery_row(doc)
+    assert _map_row(row.salla_raw, native_payment_source=row.native_payment_source).payment.source_balance is None
+
+
+def test_native_tabby_actions_remain_visible_during_component_wait(salla_order_payload):
+    from order_engine.repository import MongoOrderRepository
+    from order_engine.service import _map_row
+
+    stamp = "2026-07-13T13:12:00Z"
+    raw = dict(salla_order_payload, payment_method="tabby_installment", payment={}, updated_at=stamp,
+               is_pending_payment=False,
+               payment_methods=[{"payment_method": "tabby_installment", "amount": "135.00",
+                                 "transaction_reference": "synthetic-tabby-reference"}],
+               payment_actions={"remaining_action": {"paid_amount": {"amount": 135, "currency": "SAR"},
+                                                     "remaining_amount": None, "has_remaining_amount": False}})
+    doc = {"order_number": str(raw["reference_id"]), "order_date": str(raw["date"]),
+           "raw_by_source": {"salla_direct": raw},
+           "g47_salla_snapshot": {"component_pending": True, "source_updated_at": stamp}}
+    row = MongoOrderRepository._to_discovery_row(doc)
+    balance = _map_row(row.salla_raw, native_payment_source=row.native_payment_source).payment.source_balance
+    assert (balance.paid, balance.remaining) == ("135.00", "0.00")
+    assert doc["g47_salla_snapshot"]["component_pending"] is True

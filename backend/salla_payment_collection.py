@@ -162,6 +162,33 @@ def order_page_source_current(source, raw, *, referenced_provider_payment=False,
         return False
 
 
+def order_page_display_source_current(source, raw):
+    """Read payment evidence independently of fulfillment acknowledgement.
+
+    This is only the order DTO's display gate, not a financial posting gate.
+    Identity, cancellation, refresh and source-version checks still apply;
+    the mapper separately reconciles native paid/due amounts and currency.
+    Never mutate the persisted component watermark.
+    """
+    from operational_payment_evidence import _instant
+
+    watermark = source.get("g47_salla_snapshot") or {}
+    if not isinstance(watermark, dict):
+        return False
+    if str(source.get("order_status_slug") or "").lower() in {
+            "cancelled", "canceled", "restored", "refunded", "ملغي", "ملغى", "مسترجع"}:
+        return False
+    status_version = source.get("last_salla_direct_status_source_updated_at")
+    if status_version is not None:
+        try:
+            if _instant(raw.get("updated_at") or raw.get("date_updated")) < _instant(status_version):
+                return False
+        except ValueError:
+            return False
+    display_source = {**source, "g47_salla_snapshot": {**watermark, "component_pending": False}}
+    return order_page_source_current(display_source, raw)
+
+
 def provider_order_page_current(source, raw, *, owner, order_number, provider_order_id, customer_balance_verified=False):
     if (not owner or source.get("user_id") != owner or not order_number or not provider_order_id
             or str(raw.get("id")) != provider_order_id or str(raw.get("reference_id") or raw.get("order_number")) != order_number

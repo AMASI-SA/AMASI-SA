@@ -86,7 +86,7 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         await self.db.unified_orders.update_one(selector, {"$set": {"g47_salla_snapshot.component_pending": True}})
         source = await self.db.unified_orders.find_one(selector)
         before = await pieces._current_assembly_order(self.db, user_id="owner", order_number="paid-component-ack")
-        self.assertIsNone(before.payment.source_balance)
+        self.assertEqual(before.payment.source_balance.paid, "100.00")
         displayed = await self.client.get("/order-reviews-v1/paid-component-ack?local_only=true")
         self.assertEqual(displayed.status_code, 200, displayed.text)
         response = await self.client.post("/order-reviews-v1/paid-component-ack/complete", json={
