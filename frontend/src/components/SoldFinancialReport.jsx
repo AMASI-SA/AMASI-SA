@@ -7,6 +7,42 @@ const money = value => amount(value) === null ? "غير مكتمل" : `${formatM
 const OPERATING = [["رواتب الموظفين", "operating_salaries_employee"], ["مصاريف منزلية", "operating_salaries_household"], ["صدقات / زكاة", "operating_salaries_charity"], ["إيجارات", "operating_rentals_total"], ["كهرباء وماء", "operating_utilities_total"], ["تجديدات وتأمين والتزامات دورية", "operating_renewals_total"], ["مصاريف مدفوعة مقدماً", "operating_prepaid_total"], ["مصاريف يومية أخرى", "operating_daily_other_total"]];
 const PROVIDERS = [["snapchat", "سناب شات"], ["tiktok", "تيك توك"], ["meta", "ميتا"], ["google", "جوجل"]];
 
+// Split only amounts backed by the report's priced cells. Legacy combined
+// snapshots remain usable for the grand total without inventing a category split.
+export function splitProductCosts(products) {
+    const result = Object.fromEntries(["product", "component", "service"].map(kind => [kind, { known: 0, complete: Array.isArray(products) }]));
+    for (const row of products || []) {
+        const groups = row.cost_groups || [];
+        if (!groups.length) { Object.values(result).forEach(value => { value.complete = false; }); continue; }
+        let explained = 0;
+        for (const group of groups) {
+            const quantity = amount(group.quantity);
+            if (!(group.cells || []).length || (group.complete === false && group.cells.every(cell => ["costed", "not_required", "included_in_base"].includes(cell.status)))) {
+                Object.values(result).forEach(value => { value.complete = false; });
+            }
+            for (const cell of group.cells || []) {
+                const column = row.cost_columns?.find(column => column.key === cell.key);
+                const kind = cell.kind || column?.kind;
+                const target = result[kind === "base" ? "product" : kind];
+                if (!target || cell.key === "historical-components" || cell.key === "unresolved-cost") {
+                    Object.values(result).forEach(value => { value.complete = false; });
+                    continue;
+                }
+                if (["not_required", "included_in_base"].includes(cell.status)) continue;
+                const unit = amount(cell.unit_cost);
+                if (cell.status !== "costed" || unit === null || quantity === null) { target.complete = false; continue; }
+                const value = unit * quantity;
+                target.known += value;
+                explained += value;
+            }
+        }
+        const known = amount(row.known_cost_total ?? row.total_cost);
+        if (known === null || Math.abs(explained - known) > 0.011) Object.values(result).forEach(value => { value.complete = false; });
+        if (row.cost_status !== "complete" && groups.every(group => group.complete)) Object.values(result).forEach(value => { value.complete = false; });
+    }
+    return result;
+}
+
 export function financialMetrics(data, products) {
     const t = data?.totals || {};
     const q = data?.ads_v2?.spend_quality || {};
@@ -21,7 +57,7 @@ export function financialMetrics(data, products) {
     const total = data && costs.every(value => value !== null) ? costs.reduce((sum, value) => sum + value, 0) : null;
     const orders = amount(t.total_orders);
     const sales = t.sales_currency_conversion_complete === false || data?.currency_conversion?.conversion_complete === false ? null : amount(t.total_sales);
-    return { product, productKnown, ads, adsProvisional, total, orders, sales, average: total !== null && orders > 0 ? total / orders : null };
+    return { product, productKnown, split: splitProductCosts(products), ads, adsProvisional, total, orders, sales, average: total !== null && orders > 0 ? total / orders : null, basketAverage: sales !== null && orders > 0 ? sales / orders : null, adAverage: ads !== null && orders > 0 ? ads / orders : null, profit: sales !== null && total !== null ? sales - total : null };
 }
 
 function DetailTable({ title, headers, rows, total }) {
@@ -46,19 +82,24 @@ export default function SoldFinancialReport({ data, products, loading, error, pr
     const m = financialMetrics(data, products);
     const rows = [
         ["sales", "إجمالي المبيعات", m.sales], ["orders", "عدد الطلبات", m.orders],
-        ["average", "متوسط التكلفة الكلية للطلب", m.average], ["products", "إجمالي تكاليف المنتجات", m.product],
+        ["basketAverage", "متوسط قيمة الطلب", m.basketAverage], ["adAverage", "متوسط تكلفة الإعلان للطلب", m.adAverage],
+        ["product", "تكاليف المنتجات", m.split.product.complete ? m.split.product.known : null],
+        ["component", "تكاليف المكونات", m.split.component.complete ? m.split.component.known : null],
+        ["service", "تكاليف الخدمات", m.split.service.complete ? m.split.service.known : null],
         ["ads", "إجمالي تكاليف الإعلانات", m.ads], ["shipping", "إجمالي تكاليف الشحن", t.total_shipping_cost],
         ["payment", "إجمالي عمولات الدفع", t.total_payment_fees], ["operating", "إجمالي المصروفات التشغيلية", t.operating_expenses_total],
-        ["total", "إجمالي التكاليف", m.total],
+        ["total", "إجمالي التكاليف", m.total], ["profit", "صافي الربح", m.profit],
     ];
     return <div data-testid="sold-financial-summary" className="rounded-xl border border-emerald-200 bg-white p-5">
         <h2 className="font-extrabold text-xl mb-3">الملخص المالي للفترة</h2>
-        <p className="text-xs text-slate-600 mb-4">المبيعات والطلبات والمنتجات والشحن حسب حالات الطلب المختارة. الإعلانات والمصروفات التشغيلية تخص الفترة كاملة. متوسط التكلفة الكلية = إجمالي التكاليف ÷ عدد الطلبات. جميع المبالغ بالريال السعودي.</p>
+        <p className="text-xs text-slate-600 mb-4">المبيعات والطلبات والمنتجات والشحن حسب حالات الطلب المختارة. الإعلانات والمصروفات التشغيلية تخص الفترة كاملة. متوسط قيمة الطلب = المبيعات ÷ عدد الطلبات. متوسط تكلفة الإعلان للطلب = صرف الإعلانات ÷ عدد الطلبات. النسب من إجمالي المبيعات. جميع المبالغ بالريال السعودي.</p>
         {error && <p role="alert" className="text-amber-800">تعذر تحميل الملخص المالي؛ حدّث التقرير للمحاولة مجددًا.</p>}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{rows.map(([key, label, value]) => {
             const expandable = ["ads", "shipping", "payment", "operating"].includes(key) && !printable;
-            const provisional = m.adsProvisional && ["ads", "average", "total"].includes(key);
-            return <div key={key} className="border rounded-lg p-3"><button type="button" disabled={!expandable || !data || loading} aria-expanded={expandable ? expanded === key : undefined} onClick={() => setExpanded(expanded === key ? null : key)} className="text-right w-full"><span className="block text-sm text-slate-600">{label}{expandable ? " ▾" : ""}</span><strong className="block text-lg mt-2">{loading ? "جارٍ التحميل…" : key === "average" && m.orders === 0 ? "—" : key === "orders" && value !== null ? formatInt(value) : money(value)}{provisional && " (مؤقت)"}</strong></button>{key === "products" && m.product === null && m.productKnown !== null && <small className="text-amber-800">المعروف {money(m.productKnown)} — الإجمالي غير مكتمل</small>}</div>;
+            const provisional = m.adsProvisional && ["ads", "adAverage", "total", "profit"].includes(key);
+            return <div key={key} className="border rounded-lg p-3"><button type="button" disabled={!expandable || !data || loading} aria-expanded={expandable ? expanded === key : undefined} onClick={() => setExpanded(expanded === key ? null : key)} className="text-right w-full"><span className="block text-sm text-slate-600">{label}{expandable ? " ▾" : ""}</span><strong className="block text-lg mt-2">{loading ? "جارٍ التحميل…" : ["basketAverage", "adAverage"].includes(key) && m.orders === 0 ? "—" : key === "orders" && value !== null ? formatInt(value) : money(value)}{provisional && " (مؤقت)"}</strong></button>{m.split[key] && !m.split[key].complete && <small className="text-amber-800">المعروف المصنّف {money(m.split[key].known)} — التفصيل غير مكتمل</small>}
+                {!["orders", "basketAverage", "adAverage"].includes(key) && <small className="block mt-1 text-slate-600" data-testid={`financial-percentage-${key}`}>{loading ? "…" : m.sales > 0 && amount(value) !== null ? `${(Number(value) / m.sales * 100).toFixed(2)}% من المبيعات` : "النسبة غير متاحة"}</small>}
+                {key === "total" && m.product === null && m.productKnown !== null && <small className="text-amber-800">المعروف من تكاليف القطع {money(m.productKnown)} — الإجمالي غير مكتمل</small>}</div>;
         })}</div>
         {!printable && expanded && <FinancialDetails data={data} section={expanded} />}
     </div>;

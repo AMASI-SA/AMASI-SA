@@ -125,13 +125,24 @@ test("variants sharing product and SKU keep separate accordion and refresh ident
     await act(async () => root.unmount()); host.remove();
 });
 
-test("shows per-account source units on screen and excludes them from both print modes", () => {
+async function openedSources(rows) {
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    const host = document.createElement("div"); document.body.appendChild(host);
+    const root = createRoot(host);
+    try {
+        await act(async () => root.render(<SoldTable rows={rows} onToggle={() => {}} />));
+        await act(async () => host.querySelector('[aria-label^="مصادر "]').click());
+        return host.innerHTML;
+    } finally { await act(async () => root.unmount()); host.remove(); }
+}
+
+test("shows per-account source units on screen and excludes them from both print modes", async () => {
     const rows = [product("sources", { units_sold: 6, traffic_sources: [
         { platform: "snapchat", platform_label: "سناب شات", account_id: "account-123", account_status: "confirmed", attribution_status: "confirmed", units_sold: 2 },
         { platform: "tiktok", platform_label: "تيك توك", account_id: null, account_status: "unknown", attribution_status: "platform_only", units_sold: 1 },
         { platform: "direct", platform_label: "مباشر", account_id: null, account_status: "not_applicable", attribution_status: "confirmed", units_sold: 3 },
     ] })];
-    const screen = renderToStaticMarkup(<SoldTable rows={rows} onToggle={() => {}} />);
+    const screen = await openedSources(rows);
     expect(screen).toContain("account-123");
     expect(screen).toContain("حساب غير محدد");
     expect(screen).toContain("مباشر");
@@ -142,20 +153,20 @@ test("shows per-account source units on screen and excludes them from both print
     }
 });
 
-test("missing source data remains explicitly unknown instead of direct", () => {
-    const screen = renderToStaticMarkup(<SoldTable rows={[product("unknown")]} onToggle={() => {}} />);
+test("missing source data remains explicitly unknown instead of direct", async () => {
+    const screen = await openedSources([product("unknown")]);
     expect(screen).toContain("مصدر القطع غير متحقق");
     expect(screen).not.toContain("مباشر");
     expect(screen).toContain("@media print { .product-traffic-sources");
 });
 
 
-test("source quantities preserve fractional return-policy units and unavailable attribution stays explicit", () => {
+test("source quantities preserve fractional return-policy units and unavailable attribution stays explicit", async () => {
     const rows = [product("fractional-sources", { units_sold: 2, traffic_sources: [
         { platform: "snapchat", platform_label: "سناب شات", account_id: "fractional-account", account_status: "confirmed", attribution_status: "confirmed", units_sold: 0.5 },
         { platform: "direct", platform_label: "مباشر", account_id: null, account_status: "not_applicable", attribution_status: "unavailable", units_sold: 1.5 },
     ] })];
-    const screen = renderToStaticMarkup(<SoldTable rows={rows} onToggle={() => {}} />);
+    const screen = await openedSources(rows);
     expect(screen).toContain("0.5 قطعة");
     expect(screen).toContain("1.5 قطعة");
     expect(screen).toContain("تعذر تحديث المصدر");
@@ -183,14 +194,14 @@ test("cost columns show quantity totals and footer sums while unit cost stays pe
     expect([...host.querySelectorAll('tfoot td')].map(td => td.textContent)).toEqual(["71.00","24.00","10.00","الإجمالي","5","105.00"]);
 });
 
-test("platforms use compact icons and counts while direct and unknown remain text", () => {
+test("platforms use compact icons and counts while direct and unknown remain text", async () => {
     const row = product("icons", { traffic_sources: [
         {platform:"snapchat",platform_label:"سناب شات",account_id:"snap-1",account_status:"confirmed",units_sold:3},
         {platform:"tiktok",platform_label:"تيك توك",account_status:"unknown",units_sold:2},
         {platform:"direct",platform_label:"مباشر",account_status:"not_applicable",units_sold:1},
         {platform:"unknown",platform_label:"غير معروف",account_status:"unknown",units_sold:4},
     ]});
-    const host = document.createElement("div"); host.innerHTML = renderToStaticMarkup(<SoldTable rows={[row]} expanded={{}} onToggle={() => {}} />);
+    const host = document.createElement("div"); host.innerHTML = await openedSources([row]);
     const list = host.querySelector('.product-traffic-sources ul');
     expect(list.textContent).not.toContain("سناب شات"); expect(list.textContent).not.toContain("تيك توك"); expect(list.textContent).not.toContain("حساب غير محدد");
     expect(list.textContent).toContain("3 قطعة"); expect(list.textContent).toContain("مباشر"); expect(list.textContent).toContain("غير معروف");
@@ -221,8 +232,38 @@ test("source hover uses the applied product period and order status cohort", asy
     try {
         await act(async () => root.render(<SoldTable rows={[row]} range={{ from: "2026-11-02", to: "2026-11-05", statuses: "reviewed,in_progress" }} />));
         expect(api.get).not.toHaveBeenCalled();
+        await act(async () => host.querySelector('[aria-label^="مصادر "]').click());
+        expect(api.get).not.toHaveBeenCalled();
         await act(async () => host.querySelector('.product-traffic-sources button').click());
         await act(async () => { await new Promise(resolve => setTimeout(resolve, 230)); });
         expect(api.get).toHaveBeenCalledWith("/dashboard-v2/product-promotion-estimates", expect.objectContaining({ params: expect.objectContaining({ product_id: "source-product", from_date: "2026-11-02", to_date: "2026-11-05", statuses: "reviewed,in_progress", report_scope: "sold" }) }));
     } finally { await act(async () => root.unmount()); host.remove(); }
+});
+
+test("linked counts and sources are screen-only and sources open on demand", async () => {
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    const row = product("A", { traffic_sources: [{ platform: "direct", units: 2 }] });
+    const host = document.createElement("div"); document.body.appendChild(host);
+    const root = createRoot(host);
+    await act(async () => root.render(<SoldTable rows={[row]} onToggle={() => {}} />));
+    expect(host.textContent).toContain("الخدمات: 1");
+    expect(host.textContent).not.toContain("القطع حسب المنصة والحساب");
+    await act(async () => host.querySelector('[aria-label="مصادر منتج A"]').click());
+    expect(host.textContent).toContain("القطع حسب المنصة والحساب");
+    const print = renderToStaticMarkup(<SoldTable rows={[row]} printable allDetails />);
+    expect(print).not.toContain("الخدمات والمكونات المرتبطة");
+    expect(print).not.toContain("مصادر منتج");
+    await act(async () => root.unmount()); host.remove();
+});
+
+test("Salla fallback is labelled in screen and print without hiding incomplete costs", () => {
+    for (const printable of [false, true]) {
+        const html = renderToStaticMarkup(<SoldTable rows={[product("fallback", {cost_source:"salla"})]} printable={printable} />);
+        expect(html).toContain("تكلفة سلة");
+        const mezan = renderToStaticMarkup(<SoldTable rows={[product("mezan", {cost_source:"mezan"})]} printable={printable} />);
+        expect(mezan).not.toContain("تكلفة سلة");
+        const missing = renderToStaticMarkup(<SoldTable rows={[product("missing", {cost_source:"missing",cost_status:"incomplete",total_cost:null})]} printable={printable} />);
+        expect(missing).not.toContain("تكلفة سلة");
+        expect(missing).toContain("الإجمالي غير مكتمل");
+    }
 });
