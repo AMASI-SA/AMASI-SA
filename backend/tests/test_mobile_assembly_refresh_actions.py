@@ -15,6 +15,26 @@ PIECE = {'piece_id': 'ab' * 16, 'order_number': '300000001',
 
 
 @pytest.mark.asyncio
+async def test_employee_refresh_reauthorizes_inside_real_capability(monkeypatch):
+    from operational_atomic import OperationalDatabase
+    db = AsyncMongoMockClient().test
+    await db.users.insert_one({'id': 'employee', 'created_by': 'merchant'})
+    await db.mezan_mobile_app_access_v1.insert_one({
+        'owner_user_id': 'merchant', 'user_id': 'employee', 'enabled': True,
+        'permissions': ['app.page.assembly_shipping']})
+    state = {'profile': 'fulfillment', 'failed': False}
+    scoped = OperationalDatabase(db, None, state, 'merchant')
+    async def refresh(db_arg, owner, number, **kw):
+        await kw['before_persist'](scoped)
+        return {'ok': True, 'found': True, 'updated': True, 'order_number': number}
+    monkeypatch.setattr(source, 'refresh_order_from_salla', refresh)
+    result = await source.refresh_mobile_order(db, {
+        'id': 'merchant', '_mobile_actor_id': 'employee'}, '123',
+        page='app.page.assembly_shipping')
+    assert result['updated'] and not state['failed']
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('page', ['app.page.orders', 'app.page.assembly_shipping'])
 async def test_manual_refresh_scoped_and_no_automatic_side_effects(monkeypatch, page):
     db = AsyncMongoMockClient().test
