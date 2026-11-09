@@ -83,3 +83,15 @@ Publishing. Previous UI release was ed51d00, finished Nov10 00:02 Riyadh.
 ACTIVE owned lease: do not alter /app, advance production source or clear it.
 No success/production verification claim yet. Next newer explicit success,
 then run official verify ONCE and wait for3matchingprobes/inactive guard.
+
+
+## UI success and verification running
+New green Deployment finished Nov10 00:47 Riyadh (Nov9 21:47UTC), deployment
+340f772c-5e17-509c-b716-60e9dee7c288, version81df7ea, newer thaned51d00.
+Saved screenshot deployment-success.jpg. Independent public/api/health returned
+ok=true, exactA/rg5, verifiedidentity/criticalhashes/frontendproof/backendsource
+alltrue. Productionchanged:YES. Physical Android/printer still unverified.
+Official guard verify --url https://mezansalla.com started ONCE in Terminal3,
+output /tmp/aramex1854-production-verify.json, errors .err. Wait for
+ARAMEX_VERIFY_EXIT=0 and exactproofchecks3, then freshstatusinactive. Do not
+start duplicateverify, mutate/app, republish or clear the owned lease.
