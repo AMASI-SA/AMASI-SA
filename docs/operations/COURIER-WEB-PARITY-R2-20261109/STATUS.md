@@ -53,3 +53,16 @@ Wait for1842 owner to close its lease. Recheck production branch and guard befor
 any shared mutation. Then normal merge, shared governed rehearsal, owned
 prepare/prepublish, publish once, new explicit success and official3probes.
 Update Issue1006 and evidence-only STATUS; never deploy evidence branches.
+
+## Frozen release checkpoint
+New source A a057b0357fa1370d1735d7ab93a9e06113374516; intent-only B
+6f2dc1bd382ead3670d26f796b4662b5bcac41b9/tree32306e7aa9074c6d639eec0ec8a57654ebdf2430.
+Readiness42637408685 PASS; candidate artifact13684007040 SHA256
+7c281c713dd84cb7e90ab6fc939dd19895cfb8717b874b931fd0120f1a7bf552.
+Local exact A/base/manifests candidate validator EXIT0. Runtime
+rg5-4a8fc0d5b6527684bb4fdc4049adbf7e8dd7d15c0744206bca9ebf1229ba7776.
+PR1843 B CI pending. UI prior1842 finished17:42Riyadh/version7df3fa1, but its
+owner's official guard verification/lease closure remains pending. Courier
+read-only status waits on the operation lock; do not start another verifier
+or change shared source. No courier merge, lease or publication yet.
+This is an evidence-only continuation document, never a deployment input.
