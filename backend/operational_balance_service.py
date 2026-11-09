@@ -816,12 +816,21 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
         provider_metrics[identity] = convert_projection(provider_metrics[identity], valuations[identity])
     details["provider_reports"] = provider_metrics
     cod_metrics = deepcopy(details.get("cod_reports", {}))
+    # Preserve incoming-only settlement arithmetic and allocation order, but
+    # traverse history once rather than once for every COD claim.
+    cod_settled = {}
+    if cod_metrics:
+        for movement in state["movements"]:
+            if movement["direction"] != "incoming":
+                continue
+            for allocation in movement.get("allocations", []):
+                identity = allocation["obligation_id"]
+                if identity in cod_metrics:
+                    cod_settled[identity] = cod_settled.get(identity, Decimal(0)) + Decimal(allocation["amount"])
     for identity, projection in cod_metrics.items():
         obligation = state.get("engine", {}).get("obligations", {}).get(identity, {})
         confirmed = Decimal(obligation.get("confirmed", "0"))
-        settled = sum((Decimal(a["amount"]) for m in state["movements"]
-                       if m["direction"] == "incoming" for a in m.get("allocations", [])
-                       if a["obligation_id"] == identity), Decimal(0))
+        settled = cod_settled.get(identity, Decimal(0))
         projection.update(party_type=obligation.get("party_type", projection.get("party_type")),
                           confirmed_custody=fmt(confirmed), settled=fmt(settled),
                           outstanding=fmt(max(confirmed-settled, Decimal(0))))
