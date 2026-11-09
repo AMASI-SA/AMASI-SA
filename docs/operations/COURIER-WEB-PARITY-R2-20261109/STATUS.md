@@ -1,102 +1,71 @@
-# Android courier web parity R2
+# Android courier web parity R2 — published and verified
 
-Owner authorizes fix, merge and publication. Android merchant-courier fetch must
-use exactly the web path and current Mezan data. External carriers unchanged.
-No new APK is needed for Android76.
+## Current outcome
+COMPLETE. Production changed: YES. PR1843 merged and published once on
+2026-11-09. New green UI Deployment finished at18:18Riyadh, versionbcb03ed,
+deployment141ba48c-7c31-5c32-a617-2adc2dd5b424.
+Official production_release_guard.py verify --url https://mezansalla.com EXIT0:
+verified=true, checks=3, exact intended source/release/deployment identity.
+Fresh guard status active=false. No publication action remains.
+See production-verification-summary.json for the observed acceptance values.
 
-## Continuation and base
-Prior frozen PR1840 A a914bfee26f2071c9efbf883af26e40a4b1c6f4a /
-B 8f8cd46ef30cb440692aaa76df6c7bc17d55e9aa is preserved unchanged and must not
-be deployed: production advanced during management sign-in.
-PR1842 merged as cedd7158ba1a7fbae13d1503a503c61b19ad7ae6 and is currently
-publishing under actor codex-payment-display-1842. Fresh shared guard ACTIVE;
-no /app mutation or new lease is permitted until its owner finishes.
-Management login succeeded; user resumed in this conversation.
+## Frozen source and deployment
+Repository AMASI-SA/AMASI-SA; production hotfix/prod-snap-meta-final.
+Task branch codex/courier-web-parity-r2-20261109.
+Source A a057b0357fa1370d1735d7ab93a9e06113374516.
+A tree c009c02b3cc1853095c48f684e90d1d65f09fd2a.
+Intent-only B6f2dc1bd382ead3670d26f796b4662b5bcac41b9.
+B tree32306e7aa9074c6d639eec0ec8a57654ebdf2430.
+Normal merge9b98bc1817ffce7d644f408c63e78bedf915686f, tree exactly equals B.
+Basecedd7158ba1a7fbae13d1503a503c61b19ad7ae6 retains payment-display1842.
+Runtime rg5-4a8fc0d5b6527684bb4fdc4049adbf7e8dd7d15c0744206bca9ebf1229ba7776.
+Owner actor codex-courier-web-parity-1843; lease successfully closed by verifier.
+This evidence branch is NEVER a deployment input.
 
-R2 branch: codex/courier-web-parity-r2-20261109
-R2 source base: cedd7158ba1a7fbae13d1503a503c61b19ad7ae6
-Only the previously reviewed production-route and regression test changes are
-transplanted to this base. Base release intent is retained untouched at source A.
-PR1842 payment-display behavior and all unrelated source are preserved.
+## Shipped behavior
+backend/fulfillment_v2_routes.py dispatches Android76 complete-and-refresh for
+current merchant couriers to _mobile_carrier_label_v1(issue=False), exactly the
+web/print-refresh handler and current Mezan data. This avoids the Salla status
+POST and manual completion lease for this courier fetch.
+Existing permission, current carrier/recipient, assembly completion and
+cancellation checks remain. Optional missing-recipient recovery is still the
+same as web; not every incomplete-address request is asserted provider-free.
+External carrier completion flow unchanged. No new APK is required for Android76.
+No frontend, worker, polling, accounting or advertising changes in this fix.
 
-## Change and validation
-backend/fulfillment_v2_routes.py routes Android76 complete-and-refresh requests
-for current merchant couriers to the same _mobile_carrier_label_v1 read handler
-used by web, issue=False. No Salla status POST or manual completion lease.
-The existing permission, current carrier/recipient, assembly completion and
-cancellation checks remain. Optional missing-recipient recovery stays identical
-to web; not every incomplete-address request is asserted provider-free.
-External carrier completion flow remains unchanged.
-
-Tests in backend/tests/test_amasi_shipping_compat.py cover 30 sequential Android
-HTTP requests equal to web with provider calls forbidden and a stale unrelated
-manual lease present; disabled employee, incomplete/cancelled order and SMSA
-external dispatch are covered. Original baseline had 2 expected failures/2 passes.
-R2 after new production base: exit0, 115 tests+64subtests PASS,18 local Mongo SKIP
-in6.01s. Same six suites:
-test_amasi_shipping_compat, test_mobile_assembly_refresh_actions,
-test_manual_courier_label_refresh_race, test_unified_completed_carrier_label,
-test_courier_label_recovery, test_store_courier_unified_print.
-Command: PYTHONPATH=backend:backend/tests PYTHONDONTWRITEBYTECODE=1 <venv>/bin/python
--m pytest -q --asyncio-mode=auto <six backend/tests/*.py paths>
---disable-warnings --tb=short.
-Prior exact B all13 applicable workflows and gitless Node20/24 rehearsal passed;
-R2 requires its own CI/intent because the source base changed.
-No physical Android/printer acceptance, live business write or incident-wide
-root-cause claim.
-
-## Current state / next
-R2 source only; no merge, new lease or publication. Production changed by this
-task: NO. Create new PR replacing1840, run R2 CI/readiness, freeze new intent-only
-B after artifact validation, require exact B checks. Preserve frozen1840.
-Wait for1842 owner to close its lease. Recheck production branch and guard before
-any shared mutation. Then normal merge, shared governed rehearsal, owned
-prepare/prepublish, publish once, new explicit success and official3probes.
-Update Issue1006 and evidence-only STATUS; never deploy evidence branches.
-
-## Frozen release checkpoint
-New source A a057b0357fa1370d1735d7ab93a9e06113374516; intent-only B
-6f2dc1bd382ead3670d26f796b4662b5bcac41b9/tree32306e7aa9074c6d639eec0ec8a57654ebdf2430.
-Readiness42637408685 PASS; candidate artifact13684007040 SHA256
+## Verification
+Existing backend/tests/test_amasi_shipping_compat.py adds authenticated HTTP
+coverage for30 consecutive Android fetches equal to web with provider calls
+forbidden and a stale unrelated manual lease present; employee permission,
+incomplete/cancelled and SMSA external dispatch covered.
+Original baseline2expected failures/2passes. Final local six suites115PASS,
+64subtestsPASS and18explicit local Mongo SKIP, exit0 in6.01s. These local skips
+are not acceptance; exact-B CI ran the required isolated database coverage.
+All13 applicable exact-B workflows PASS; unrelated conditional TikTok skipped.
+Review42637866581/job129230932735:251+658+1cases,404subtests PASS, executed-case
+no-fail/no-skip guard PASS. G47 run42637866790 both jobs PASS.
+Readiness42637866784 Node20/24 gitless clean-clone/package/HTTP adapter PASS.
+Source candidate42637408685/artifact13684007040 ZIP SHA256
 7c281c713dd84cb7e90ab6fc939dd19895cfb8717b874b931fd0120f1a7bf552.
-Local exact A/base/manifests candidate validator EXIT0. Runtime
-rg5-4a8fc0d5b6527684bb4fdc4049adbf7e8dd7d15c0744206bca9ebf1229ba7776.
-PR1843 B CI pending. UI prior1842 finished17:42Riyadh/version7df3fa1, but its
-owner's official guard verification/lease closure remains pending. Courier
-read-only status waits on the operation lock; do not start another verifier
-or change shared source. No courier merge, lease or publication yet.
-This is an evidence-only continuation document, never a deployment input.
+Local exact source/base/manifests validator EXIT0.
+Shared adapter initial stop: untracked backend/__pycache__; preserved intact in
+/app/.release-preserved/courier1843-bytecode/. Source remained unchanged.
+PYTHONDONTWRITEBYTECODE=1 REACT_APP_BACKEND_URL=https://mezansalla.com yarn build
+retry EXIT0 in64.77s, exact reviewed identity. Fresh ownedprepare/prepublish
+EXIT0; one Publish changes click at18:09Riyadh.
+Official3probes verify backend identity/hashes and canonical/cache-busted
+frontend artifacts/build-meta JSON, then release matching lease. Public health
+independently confirmed ok, intendedA/release, verifiedidentity/criticalhashes/
+frontendbuild alltrue. Boot2026-11-09T15:18:20.055913+00:00.
 
-## CI and merge completed
-All13 applicable exact B workflows PASS; unrelated TikTok conditional skipped.
-Final review251+658+1 tests /404subtests PASS, executed-case guard PASS.
-Previous1842 owner finished: fresh shared guard active:false. Normal merge
-9b98bc1817ffce7d644f408c63e78bedf915686f preserves A/B. Shared fast-forward and
-governed build started only after fresh inactive guard and clean tracked tree.
-Log /tmp/courier1843-adapter.log; no new lease or UI publication yet.
-Next read adapter completion, require exact intent, prepare/prepublish actor
-codex-courier-web-parity-1843, publish once and verify3/statusfalse.
-
-## Shared rehearsal passed
-Initial adapter stopped on untracked backend/__pycache__. Fresh guard inactive;
-cache preserved intact in .release-preserved/courier1843-bytecode/ without source
-changes. Retry PYTHONDONTWRITEBYTECODE=1 REACT_APP_BACKEND_URL=https://mezansalla.com
-yarn build EXIT0 in64.77s. Generated identity sourceA a057b0357fa1370d1735d7ab93a9e06113374516
-and rg5-4a8fc0d5b6527684bb4fdc4049adbf7e8dd7d15c0744206bca9ebf1229ba7776 match frozen intent.
-Production runtime still prior1842. Next fresh guard, ownedprepare/prepublish,
-UIpublish once, newexplicit success, official3probe verification/statusfalse.
-
-## Publication in progress
-Fresh guard inactive; prepare and prepublish actor codex-courier-web-parity-1843
-EXIT0, then Publish changes clicked exactly ONCE. UI Deployment Started
-Nov9 18:09 Riyadh (15:09UTC), deployment141ba48c-7c31-5c32-a617-2adc2dd5b424.
-UI Packaging your latest changes. Matching lease ACTIVE; preserve shared/app.
-No acceptance until newer explicit success and official verify3/statusfalse.
-
-## New UI publication succeeded / verification running
-Observed NEW green Deployment finished Nov9 18:18Riyadh (15:18UTC), same
-deployment141ba48c-7c31-5c32-a617-2adc2dd5b424, publishedversion bcb03ed
-(newer than previous7df3fa1). Official guard verify --url https://mezansalla.com
-started exactly once, log /tmp/courier1843-production-verify.json. Owned lease
-remains until verifier succeeds. Do not start another verifier or shared mutation.
-Production changed YES (UI), final identity acceptance pending3probes/statusfalse.
+## Scope, limitations and next safe action
+No physical Android/printer acceptance or live business mutation was performed
+for verification; automated HTTP parity and publication identity are proven.
+No claim that this explains every earlier native freeze symptom.
+No remaining merge/publish step; next is ordinary phone use/physical print
+acceptance. Do not republish this release when resuming.
+Prior1840 frozenA/B preserved, closed superseded after1842 advanced during
+management login. Prior1842 release owner finished before any courier shared
+mutation. Unrelated finance1844/1846/1847 and earlier1825 are not merged here.
+No full actual Cloud Build argv transcript was exposed by UI; do not claim one.
+Historical checkpoints remain in this evidence branch's earlier commits.

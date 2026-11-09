@@ -1,0 +1,28 @@
+{
+  "task": "COURIER-WEB-PARITY-R2-20261109",
+  "pr": 1843,
+  "production_changed": true,
+  "source_git_sha": "a057b0357fa1370d1735d7ab93a9e06113374516",
+  "intent_commit": "6f2dc1bd382ead3670d26f796b4662b5bcac41b9",
+  "deployment_git_sha": "9b98bc1817ffce7d644f408c63e78bedf915686f",
+  "source_base_git_sha": "cedd7158ba1a7fbae13d1503a503c61b19ad7ae6",
+  "release_id": "rg5-4a8fc0d5b6527684bb4fdc4049adbf7e8dd7d15c0744206bca9ebf1229ba7776",
+  "ui_deployment_id": "141ba48c-7c31-5c32-a617-2adc2dd5b424",
+  "ui_version": "bcb03ed",
+  "ui_finished_at_riyadh": "2026-11-09 18:18",
+  "boot_started_at": "2026-11-09T15:18:20.055913+00:00",
+  "official_verify_command": "python -B scripts/production_release_guard.py verify --url https://mezansalla.com",
+  "verify_exit": 0,
+  "verified": true,
+  "checks": 3,
+  "guard_active_after_verify": false,
+  "public_health": {
+    "ok": true,
+    "source_git_sha": "a057b0357fa1370d1735d7ab93a9e06113374516",
+    "release_id": "rg5-4a8fc0d5b6527684bb4fdc4049adbf7e8dd7d15c0744206bca9ebf1229ba7776",
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true,
+    "verified_identity_available": true
+  },
+  "physical_phone_and_printer_acceptance_performed": false
+}
