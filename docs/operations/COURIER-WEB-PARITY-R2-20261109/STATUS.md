@@ -85,3 +85,10 @@ yarn build EXIT0 in64.77s. Generated identity sourceA a057b0357fa1370d1735d7ab93
 and rg5-4a8fc0d5b6527684bb4fdc4049adbf7e8dd7d15c0744206bca9ebf1229ba7776 match frozen intent.
 Production runtime still prior1842. Next fresh guard, ownedprepare/prepublish,
 UIpublish once, newexplicit success, official3probe verification/statusfalse.
+
+## Publication in progress
+Fresh guard inactive; prepare and prepublish actor codex-courier-web-parity-1843
+EXIT0, then Publish changes clicked exactly ONCE. UI Deployment Started
+Nov9 18:09 Riyadh (15:09UTC), deployment141ba48c-7c31-5c32-a617-2adc2dd5b424.
+UI Packaging your latest changes. Matching lease ACTIVE; preserve shared/app.
+No acceptance until newer explicit success and official verify3/statusfalse.
