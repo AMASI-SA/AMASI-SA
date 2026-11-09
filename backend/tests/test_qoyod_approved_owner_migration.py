@@ -1,4 +1,7 @@
 import asyncio
+import ast
+import logging
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -100,3 +103,35 @@ async def test_concurrent_replica_or_binding_change_cannot_overwrite():
         find_one=collection.find_one, update_one=race))
     assert await apply_approved_recovery(wrapped) == 'precondition_changed'
     assert (await collection.find_one({}))['security_owner_id'] == 'concurrent-owner'
+
+
+@pytest.mark.asyncio
+async def test_server_startup_wiring_reaches_approved_recovery():
+    """Execute the real startup hook with the server's actual asyncio import.
+
+    Isolate unrelated index/worker startup, but preserve the import bindings
+    and exception handler that can otherwise silently skip this repair.
+    """
+    source = ast.parse((Path(__file__).parents[1] / 'server.py').read_text())
+    imports = [node for node in source.body if isinstance(node, ast.Import)
+               and any(alias.name == 'asyncio' for alias in node.names)]
+    startup = next(node for node in source.body
+                   if isinstance(node, ast.AsyncFunctionDef)
+                   and node.name == '_global_startup')
+    start = next(i for i, node in enumerate(startup.body)
+                 if isinstance(node, ast.ImportFrom)
+                 and node.module == 'integrations.qoyod.approved_owner_migration')
+    hook = ast.AsyncFunctionDef(
+        name='run_hook', args=ast.arguments(posonlyargs=[], args=[],
+        kwonlyargs=[], kw_defaults=[], defaults=[]),
+        body=startup.body[start:start + 2], decorator_list=[],
+    )
+    module = ast.fix_missing_locations(ast.Module(body=[*imports, hook], type_ignores=[]))
+    db = await fixture()
+    namespace = {'db': db, 'logger': logging.getLogger('test.startup_recovery')}
+    exec(compile(module, 'server_startup_recovery', 'exec'), namespace)
+    await namespace['run_hook']()
+    from security_sensitive_routes import require_qoyod_security_owner
+    assert (await require_qoyod_security_owner(db, {'id': OWNER}))['id'] == OWNER
+    repaired = await db.qoyod_settings.find_one({'user_id': 'main'})
+    assert len(repaired['security_owner_binding_audit']) == 1
