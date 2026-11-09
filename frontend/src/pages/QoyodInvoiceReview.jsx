@@ -55,6 +55,7 @@ const dateOnly = (value) => (value ? String(value).slice(0, 10) : "—");
 
 function errorMessage(error, fallback) {
   const detail = error?.response?.data?.detail;
+  if (detail === "qoyod_security_owner_required" || detail?.code === "qoyod_security_owner_required") return "تعذر التحقق من تفويض حسابك لإدارة ربط قيود. يلزم مراجعة ربط مالك التكامل قبل إعادة المحاولة؛ لم يبدأ التحديث.";
   if (typeof detail === "string") return detail;
   return detail?.message || error?.response?.data?.error || error?.message || fallback;
 }
