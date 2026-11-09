@@ -66,3 +66,13 @@ owner's official guard verification/lease closure remains pending. Courier
 read-only status waits on the operation lock; do not start another verifier
 or change shared source. No courier merge, lease or publication yet.
 This is an evidence-only continuation document, never a deployment input.
+
+## CI and merge completed
+All13 applicable exact B workflows PASS; unrelated TikTok conditional skipped.
+Final review251+658+1 tests /404subtests PASS, executed-case guard PASS.
+Previous1842 owner finished: fresh shared guard active:false. Normal merge
+9b98bc1817ffce7d644f408c63e78bedf915686f preserves A/B. Shared fast-forward and
+governed build started only after fresh inactive guard and clean tracked tree.
+Log /tmp/courier1843-adapter.log; no new lease or UI publication yet.
+Next read adapter completion, require exact intent, prepare/prepublish actor
+codex-courier-web-parity-1843, publish once and verify3/statusfalse.
