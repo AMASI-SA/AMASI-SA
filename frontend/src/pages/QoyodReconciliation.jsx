@@ -56,6 +56,7 @@ const fmt = (v) =>
 
 function extractDetail(err) {
   const d = err?.response?.data?.detail;
+  if (d === "qoyod_security_owner_required" || d?.code === "qoyod_security_owner_required") return "تعذر التحقق من تفويض حسابك لإدارة ربط قيود. يلزم مراجعة ربط مالك التكامل قبل إعادة المحاولة؛ لم يبدأ التحديث.";
   if (typeof d === "string") return d;
   return d?.message || err?.message || "خطأ غير معروف";
 }
@@ -86,8 +87,7 @@ export default function QoyodReconciliation() {
           ? await api.post("/integrations/qoyod/reconciliation-refresh")
           : await api.get("/integrations/qoyod/reconciliation-report");
         if (res.data?.ok === false) {
-          setError(res.data.error || "تعذر تشغيل تقرير المطابقة");
-
+          throw new Error(res.data.error || "تعذر تشغيل تقرير المطابقة");
         } else {
           setData(res.data);
           setPage(1);
@@ -96,7 +96,7 @@ export default function QoyodReconciliation() {
         setError(extractDetail(e));
         setData(previous => previous ? { ...previous, scan: {
           ...previous.scan, stale: true, last_error: 'refresh_failed',
-          running: refresh || previous.scan?.running,
+          running: false,
         } } : previous);
       } finally {
         setLoading(false);
@@ -149,6 +149,7 @@ export default function QoyodReconciliation() {
       ),
     [data, tab, fromDate, toDate],
   );
+  const snapshotAvailable = Boolean(data && data.snapshot_available !== false && data.scan?.updated_at);
   const counts = data?.counts || {};
   const sync = data?.sync_summary;
 
@@ -268,17 +269,17 @@ export default function QoyodReconciliation() {
         </div>
       )}
 
-      {!data && !loading && !error && (
+      {!snapshotAvailable && !loading && (
         <div
           className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500"
           data-testid="recon-empty-state"
         >
-          لا توجد بيانات محلية بعد. اضغط &quot;تشغيل المطابقة الآن&quot;
-          لجلب فواتير قيود وحفظها.
+          لا تتوفر نتيجة مطابقة مكتملة؛ العدد المتبقي غير معروف.
+          {error ? " عالج سبب تعذر التحديث الظاهر أعلاه ثم أعد المحاولة." : " اضغط تحديث الفحص الآن لجلب الفواتير وإكمال المطابقة."}
         </div>
       )}
 
-      {data && (
+      {snapshotAvailable && (
         <>
           {/* Sync summary strip */}
           {sync?.ran && (

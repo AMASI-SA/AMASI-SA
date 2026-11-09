@@ -25,7 +25,7 @@ function CountCard({ label, value, active, onClick }) {
         active ? "border-slate-800 bg-slate-900 text-white"
                : "border-slate-200 bg-white hover:bg-slate-50"}`}>
       <div className="text-xs opacity-70">{label}</div>
-      <div className="text-2xl font-bold">{value ?? 0}</div>
+      <div className="text-2xl font-bold">{value ?? "—"}</div>
     </button>
   );
 }
@@ -229,9 +229,9 @@ export default function QoyodUnsentOrders() {
       setError(null);
     } catch (requestError) {
       if (isQoyodRequestAbort(requestError)) return;
-      setError(
-        requestError?.response?.data?.detail || "تعذر تحميل البيانات",
-      );
+      const detail = requestError?.response?.data?.detail;
+      setError(detail === "qoyod_security_owner_required" || detail?.code === "qoyod_security_owner_required"
+        ? "تعذر التحقق من تفويض حسابك لإدارة ربط قيود. يلزم مراجعة ربط مالك التكامل قبل إعادة المحاولة؛ لم يبدأ التحديث." : (typeof detail === "string" ? detail : detail?.message || "تعذر تحميل البيانات"));
     } finally {
       if (fetchControllerRef.current === controller) {
         fetchControllerRef.current = null;
@@ -249,7 +249,9 @@ export default function QoyodUnsentOrders() {
 
   const orders = (data?.orders || []).filter(
     (o) => tab === "الكل" || o.status === tab);
-  const counts = data?.counts || {};
+  const snapshotAvailable = Boolean(data && data.snapshot_available !== false
+    && (!verifiedMode || data.invoice_presence?.complete));
+  const counts = snapshotAvailable ? data.counts || {} : {};
 
   return (
     <div className="space-y-6" dir="rtl" data-testid="qoyod-unsent-orders-page">
@@ -454,9 +456,9 @@ export default function QoyodUnsentOrders() {
       </>}
 
       <div className="rounded-lg border p-3 text-sm" data-testid="unsent-snapshot-status">
-        {data?.snapshot_available === false ? "لم يكتمل فحص شامل بعد؛ لا تعني القائمة الفارغة عدم وجود طلبات." : <>
+        {!snapshotAvailable ? "لم يكتمل فحص شامل بعد؛ لا تعني القائمة الفارغة عدم وجود طلبات." : <>
           آخر فحص ناجح: {data?.updated_at ? new Date(data.updated_at).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" }) : "—"}.
-          {(data?.scan?.stale || data?.scan?.last_error) && " النتيجة قديمة؛ احتُفظ بآخر فحص ناجح."}
+          {(error || data?.scan?.stale || data?.scan?.last_error) && " النتيجة قديمة؛ احتُفظ بآخر فحص ناجح."}
           {data?.counts_complete === false && " القائمة والعدادات المعروضة محدودة؛ لا تمثل كل النتائج."}
         </>}
       </div>
@@ -502,7 +504,9 @@ export default function QoyodUnsentOrders() {
           <div className="p-6 text-sm text-slate-500">جاري التحميل…</div>
         ) : orders.length === 0 ? (
           <div className="p-6 text-sm text-slate-500" data-testid="unsent-empty">
-            {tab === "لم يُرسل"
+            {!snapshotAvailable || error || data?.counts_complete === false
+              ? "لا يمكن تأكيد خلو الفترة من الطلبات؛ يلزم فحص مكتمل وناجح."
+              : tab === "لم يُرسل"
               ? "✅ لا توجد طلبات بانتظار الإرسال في هذه الفترة."
               : "لا توجد طلبات بهذه الحالة في الفترة المحددة."}
           </div>
