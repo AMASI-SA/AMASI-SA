@@ -8,7 +8,15 @@ import './operational/operational.css';
 
 // This workspace reuses existing inventory permissions and data. It never
 // activates writers, reserves order units or invokes fulfillment transitions.
-export default function InventoryWorkspace() {
+export default function InventoryWorkspace({ accessMode = null }) {
+  if (accessMode) return <main className="op-page" dir="rtl">
+    <header><span className="op-eyebrow">ميزان · المنتجات</span><h1>المخزون</h1></header>
+    <InventoryAvailability context={{permissions: {reports: true}, session_scope: 'mezan-web-stock'}} />
+  </main>;
+  return <InventoryManagement />;
+}
+
+function InventoryManagement() {
   const [params, setParams] = useSearchParams();
   const [context, setContext] = useState(null);
   const [error, setError] = useState('');

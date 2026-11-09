@@ -327,7 +327,7 @@ function AppRoutes() {
                 path="/orders-v2"
                 element={
                     <ProtectedRoute>
-                        <OwnerOnlyRoute>
+                        <OwnerOnlyRoute employeePages={["orders.list"]}>
                             <Layout><OrdersV2 /></Layout>
                         </OwnerOnlyRoute>
                     </ProtectedRoute>
@@ -347,7 +347,7 @@ function AppRoutes() {
                 path="/products-v2"
                 element={
                     <ProtectedRoute>
-                        <OwnerOnlyRoute>
+                        <OwnerOnlyRoute employeePages={["products.catalog", "products.intake"]}>
                             <Layout><MezanProducts /></Layout>
                         </OwnerOnlyRoute>
                     </ProtectedRoute>
@@ -378,7 +378,7 @@ function AppRoutes() {
                 path="/components-v2"
                 element={
                     <ProtectedRoute>
-                        <OwnerOnlyRoute>
+                        <OwnerOnlyRoute employeePages={["products.components", "products.warehouses"]}>
                             <Layout><MezanComponents /></Layout>
                         </OwnerOnlyRoute>
                     </ProtectedRoute>

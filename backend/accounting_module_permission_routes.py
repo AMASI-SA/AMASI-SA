@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException
 from accounting_module_contract import (
     ACCOUNTING_ACTIONS,
     ACCOUNTING_PAGES,
+    ACCOUNTING_PAGE_PERMISSION_KEYS,
     ACCOUNTING_PERMISSION_KEYS,
     AccountingPermissionsUpdate,
     OPERATION_ID,
@@ -50,6 +51,7 @@ def install_accounting_permission_routes(router, db, current_user: Callable):
                 "is_owner": 1,
                 "created_by": 1,
                 "accounting_permissions": 1,
+                "web_page_access": 1,
                 "created_at": 1,
             },
         ).sort("created_at", -1).to_list(5000)
@@ -66,7 +68,8 @@ def install_accounting_permission_routes(router, db, current_user: Callable):
     ):
         fresh = await fresh_accounting_user(db, user)
         require_owner(fresh)
-        unknown = sorted(set(payload.permissions) - ACCOUNTING_PERMISSION_KEYS)
+        assignable = ACCOUNTING_PERMISSION_KEYS - ACCOUNTING_PAGE_PERMISSION_KEYS if payload.actions_only else ACCOUNTING_PERMISSION_KEYS
+        unknown = sorted(set(payload.permissions) - assignable)
         if unknown:
             raise HTTPException(
                 status_code=422,
@@ -89,16 +92,23 @@ def install_accounting_permission_routes(router, db, current_user: Callable):
                 detail="صلاحيات المالك المحاسبية كاملة ولا تُخفض",
             )
 
-        selected = sorted(set(payload.permissions))
+        selected = set(payload.permissions)
+        selector = {"id": user_id, "created_by": fresh["id"]}
+        if payload.actions_only:
+            previous = target.get("accounting_permissions")
+            selected |= set(previous or []) & ACCOUNTING_PAGE_PERMISSION_KEYS
+            selector["accounting_permissions"] = previous if "accounting_permissions" in target else {"$exists": False}
         now = datetime.now(timezone.utc).isoformat()
-        await db.users.update_one(
-            {"id": user_id, "created_by": fresh["id"]},
+        result = await db.users.update_one(
+            selector,
             {"$set": {
-                "accounting_permissions": selected,
+                "accounting_permissions": sorted(selected),
                 "accounting_permissions_updated_at": now,
                 "accounting_permissions_updated_by": fresh["id"],
             }},
         )
+        if payload.actions_only and not result.matched_count:
+            raise HTTPException(409, detail="تغيّرت صلاحيات المحاسبة. أعد فتح الصفحة قبل الحفظ.")
         updated = await db.users.find_one(
             {"id": user_id, "created_by": fresh["id"]},
             {"_id": 0},

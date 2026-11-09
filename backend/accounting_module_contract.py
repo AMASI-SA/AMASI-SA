@@ -55,6 +55,28 @@ ACCOUNTING_PERMISSION_KEYS = frozenset(
     row["permission"] for row in (*ACCOUNTING_PAGES, *ACCOUNTING_ACTIONS)
 )
 
+ACCOUNTING_PAGE_WRITES = {
+    "accounting.home.view": {"accounting.drafts.create"},
+    "accounting.financial_accounts.view": {"accounting.financial_accounts.manage"},
+    "accounting.settlements.view": {
+        "accounting.advances.recognize", "accounting.advances.refund", "accounting.receivables.post",
+        "accounting.drafts.create", "accounting.settlements.post",
+    },
+    "accounting.shipping.view": {"accounting.rules.manage", "accounting.shipping.contracts.review", "accounting.settlements.post"},
+    "accounting.inventory.view": {"accounting.purchases.post"},
+    "accounting.movements.view": {
+        "accounting.advances.recognize", "accounting.advances.refund", "accounting.refunds.create",
+        "accounting.refunds.recognize", "accounting.refunds.pay", "accounting.receipts.create", "accounting.movements.import",
+    },
+    "accounting.payroll.view": {"accounting.payroll.post"},
+    "accounting.opening_balances.view": {
+        "accounting.opening_balances.drafts.manage", "accounting.opening_balances.review",
+        "accounting.opening_balances.post", "accounting.opening_balances.approve", "accounting.ledger_transition.manage",
+    },
+    "accounting.journals_reports.view": {"accounting.journals.manual_create", "accounting.journals.reverse"},
+}
+
+
 # The existing registry is the single authority. No role/owner-only substitute
 # and no separate hardcoded allowlist in the shipping service.
 SHIPPING_CONTRACT_PERMISSIONS = {
@@ -92,6 +114,7 @@ class AccountingPermissionsUpdate(BaseModel):
         default_factory=list,
         max_length=len(ACCOUNTING_PERMISSION_KEYS),
     )
+    actions_only: bool = False
 
 
 def role_name(user: dict[str, Any]) -> str:
@@ -121,6 +144,13 @@ def accounting_permissions_for_user(user: dict[str, Any]) -> list[str]:
     assigned = set(user.get("accounting_permissions") or []) & ACCOUNTING_PERMISSION_KEYS
     if is_owner(user):
         return sorted((ACCOUNTING_PERMISSION_KEYS - ACCOUNTING_EXPLICIT_GRANT_KEYS) | assigned)
+    from web_page_access import configured_page_modes
+
+    modes = configured_page_modes(user)
+    if modes is not None:
+        pages = modes.keys() & ACCOUNTING_PAGE_PERMISSION_KEYS
+        actions = set().union(*(ACCOUNTING_PAGE_WRITES.get(page, set()) for page in pages if modes[page] == "write"))
+        assigned = pages | (assigned & actions)
     return sorted(assigned)
 
 

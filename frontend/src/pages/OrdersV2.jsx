@@ -23,6 +23,8 @@ import {
 } from "@phosphor-icons/react";
 
 import { useOrders } from "../hooks/useOrders";
+import { useOptionalAuth } from "../context/AuthContext";
+import { managedWebPages } from "../lib/webPageAccess";
 import { getOrderFilterSummary } from "../services/orderEngine";
 import OrderCurrencyAmount from "../components/OrderCurrencyAmount";
 
@@ -192,6 +194,9 @@ function isRiskyTransition(fromStatus, toStatus) {
 }
 
 export default function OrdersV2() {
+    const { user } = useOptionalAuth() || {};
+    const listOnly = Boolean(managedWebPages(user));
+    const OrderEntry = listOnly ? "div" : "button";
     const navigate = useNavigate();
     const [urlParams] = useSearchParams();
     const loadMoreRef = useRef(null);
@@ -271,7 +276,7 @@ export default function OrdersV2() {
     const visibleIds = useMemo(() => orders.map((order) => String(order.order_number)), [orders]);
     const allVisibleSelected = Boolean(activeStatus && visibleIds.length && visibleIds.every((id) => selected.has(id)));
     const selectedCount = allMatchingSelected ? Number(activeCard?.count || 0) : selected.size;
-    const canSelectVisible = Boolean(activeStatus && !searchMode && orders.length);
+    const canSelectVisible = Boolean(!listOnly && activeStatus && !searchMode && orders.length);
     const targetStatusLabel = statusCards.find((card) => card.key === targetStatus)?.label || targetStatus;
     const selectedIdSample = useMemo(() => (allMatchingSelected ? visibleIds : Array.from(selected)).slice(0, 10), [allMatchingSelected, selected, visibleIds]);
     const hiddenSelectedCount = Math.max(0, selectedCount - selectedIdSample.length);
@@ -325,7 +330,7 @@ export default function OrdersV2() {
             {resultSummary?.currency_conversion_complete === false && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">تعذّر احتساب ملخص المبيعات بالريال السعودي لوجود طلب بعملة أجنبية بلا سعر صرف موثّق من سلة.</div>}
 
             <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-5"><div className="flex min-w-0 items-center gap-3"><SelectionBox checked={allVisibleSelected} disabled={!canSelectVisible} onChange={toggleVisible} label={canSelectVisible ? "تحديد الطلبات الظاهرة" : "تحديد الكل متاح داخل حالة موحدة فقط"} /><h2 className="truncate font-extrabold text-slate-900">{searchMode ? "نتيجة البحث" : activeStatusLabel ? `طلبات: ${activeStatusLabel}` : "أحدث الطلبات حسب تاريخ الإنشاء"}</h2></div>{selectedCount > 0 && <div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-teal-100 px-3 py-2 text-sm font-bold text-teal-900">تم تحديد {selectedCount.toLocaleString("en-US")} طلب</span><button type="button" onClick={() => setQuickEditOpen(true)} className="rounded-xl border border-teal-500 bg-white px-4 py-2 text-sm font-bold text-teal-800">تحرير سريع</button><button type="button" onClick={clearSelection} className="rounded-xl border px-3 py-2 text-sm">إلغاء التحديد</button></div>}</div>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-5"><div className="flex min-w-0 items-center gap-3">{!listOnly && <SelectionBox checked={allVisibleSelected} disabled={!canSelectVisible} onChange={toggleVisible} label={canSelectVisible ? "تحديد الطلبات الظاهرة" : "تحديد الكل متاح داخل حالة موحدة فقط"} />}<h2 className="truncate font-extrabold text-slate-900">{searchMode ? "نتيجة البحث" : activeStatusLabel ? `طلبات: ${activeStatusLabel}` : "أحدث الطلبات حسب تاريخ الإنشاء"}</h2></div>{selectedCount > 0 && <div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-teal-100 px-3 py-2 text-sm font-bold text-teal-900">تم تحديد {selectedCount.toLocaleString("en-US")} طلب</span><button type="button" onClick={() => setQuickEditOpen(true)} className="rounded-xl border border-teal-500 bg-white px-4 py-2 text-sm font-bold text-teal-800">تحرير سريع</button><button type="button" onClick={clearSelection} className="rounded-xl border px-3 py-2 text-sm">إلغاء التحديد</button></div>}</div>
                 {canSelectVisible && allVisibleSelected && !allMatchingSelected && Number(activeCard?.count || 0) > visibleIds.length && <div className="border-b border-amber-200 bg-amber-50 px-5 py-3 text-center text-sm text-amber-800">تم تحديد الطلبات المحملة ({visibleIds.length}). <button type="button" onClick={() => setAllMatchingSelected(true)} className="font-extrabold underline">تحديد جميع طلبات {activeStatusLabel} ({Number(activeCard?.count || 0).toLocaleString("en-US")})</button></div>}
                 {allMatchingSelected && <div className="border-b border-teal-200 bg-teal-50 px-5 py-3 text-center text-sm font-bold text-teal-900">تم تحديد جميع طلبات {activeStatusLabel} ({selectedCount.toLocaleString("en-US")}) — اختيار واجهة فقط، دون تنفيذ على سلة.</div>}
                 {error && <div className="m-5 flex gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><WarningCircle size={22} /><div><b>تعذّر تحميل الطلبات</b><div>{error}</div></div></div>}
@@ -336,8 +341,8 @@ export default function OrdersV2() {
                         const checked = allMatchingSelected || selected.has(id);
                         return (
                             <div key={id} className={`flex items-start gap-2 px-3 py-4 sm:items-center sm:gap-3 sm:px-5 sm:py-5 ${checked ? "bg-teal-50/60" : "hover:bg-slate-50"}`}>
-                                <SelectionBox checked={checked} onChange={() => toggleOrder(id)} label={`تحديد الطلب ${id}`} />
-                                <button type="button" onClick={() => navigate(`/orders-v2/${encodeURIComponent(id)}`)} className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-right sm:flex sm:items-center sm:gap-3">
+                                {!listOnly && <SelectionBox checked={checked} onChange={() => toggleOrder(id)} label={`تحديد الطلب ${id}`} />}
+                                <OrderEntry type={listOnly ? undefined : "button"} onClick={listOnly ? undefined : () => navigate(`/orders-v2/${encodeURIComponent(id)}`)} className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-right sm:flex sm:items-center sm:gap-3">
                                     <div className="row-span-2 sm:row-auto"><CustomerAvatar customer={order.customer} /></div>
                                     <div className="min-w-0 sm:flex-1">
                                         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -354,9 +359,9 @@ export default function OrdersV2() {
                                             <div className="flex items-center gap-1.5 sm:justify-end"><SourceBadge order={order} /><OrderCurrencyAmount order={order} /></div>
                                             <div className="mt-1 whitespace-nowrap text-[11px] text-slate-400 sm:text-xs">{formatOrderDate(order.created_at, nowMs)}</div>
                                         </div>
-                                        <CaretLeft size={17} className="shrink-0 text-slate-300" />
+                                        {!listOnly && <CaretLeft size={17} className="shrink-0 text-slate-300" />}
                                     </div>
-                                </button>
+                                </OrderEntry>
                             </div>
                         );
                     })}</div>

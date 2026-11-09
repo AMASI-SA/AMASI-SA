@@ -113,7 +113,10 @@ def make_warehouse_location_v2_router(db: Any, current_user: Callable[..., Any])
 
     @router.get("/catalog")
     async def catalog(user: dict = Depends(current_user)) -> dict[str, Any]:
-        _require_manager(user)
+        from web_page_access import WAREHOUSES_PAGE, delegated_page_owner
+
+        if await delegated_page_owner(db, user, WAREHOUSES_PAGE) is None:
+            _require_manager(user)
         return {
             "countries": [
                 {"name": country, "cities": cities, "default_city": cities[0]}
@@ -125,8 +128,13 @@ def make_warehouse_location_v2_router(db: Any, current_user: Callable[..., Any])
 
     @router.post("/warehouses", status_code=201)
     async def create_warehouse(payload: WarehouseCreateV2, user: dict = Depends(current_user)) -> dict[str, Any]:
-        actor = _require_manager(user)
-        user_id = _merchant_user_id(actor)
+        from web_page_access import WAREHOUSES_PAGE, delegated_page_owner
+
+        user_id = await delegated_page_owner(db, user, WAREHOUSES_PAGE, write=True)
+        if user_id and payload.is_primary:
+            raise HTTPException(403, detail={"code": "warehouse_primary_owner_required"})
+        actor = user if user_id else _require_manager(user)
+        user_id = user_id or _merchant_user_id(actor)
         if payload.city not in COUNTRY_CITIES[payload.country]:
             raise HTTPException(status_code=422, detail={"code": "city_not_in_country"})
         await ensure_v2_indexes(db)

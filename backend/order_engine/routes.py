@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 
 from salla_integration.order_commerce_enrichment import enrich_single_order_commerce
+from web_page_access import ORDERS_PAGE, delegated_page_owner
 from .address_diagnostic import build_order_address_diagnostic
 from .campaign_enrichment import enrich_order_campaigns
 from .city_enrichment import enrich_order_cities
@@ -126,8 +127,9 @@ def make_order_engine_router(
         baseline_cutoff_at: Optional[str] = Query(default=None),
         user: dict = Depends(current_user),
     ) -> OrderListResponse:
-        owner = _require_owner(user)
-        owner_id = str(owner["id"])
+        owner_id = await delegated_page_owner(db, user, ORDERS_PAGE)
+        if owner_id is None:
+            owner_id = str(_require_owner(user)["id"])
 
         combined_filters = {
             "q": q, "product": product, "sku": sku, "status": status_exact,
@@ -295,11 +297,10 @@ def make_order_engine_router(
     async def get_filter_summary(
         user: dict = Depends(current_user),
     ) -> OrderFilterSummaryResponse:
-        owner = _require_owner(user)
-        summary = await build_order_filter_summary(
-            db,
-            user_id=str(owner["id"]),
-        )
+        owner_id = await delegated_page_owner(db, user, ORDERS_PAGE)
+        if owner_id is None:
+            owner_id = str(_require_owner(user)["id"])
+        summary = await build_order_filter_summary(db, user_id=owner_id)
         return OrderFilterSummaryResponse(**summary)
 
     @router.get("/filters/status-diagnostic")

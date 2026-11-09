@@ -11,12 +11,12 @@ import {
 const employees = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "employees");
 const products = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "products");
 
-test("employees own management, store drivers, salary migration, and fulfillment permissions in Mezan V2 navigation", () => {
+test("employees own management, store drivers, salary migration, and page permissions in Mezan V2 navigation", () => {
     expect(employees.items).toEqual([
         { to: "/employees-v2", label: "إدارة الموظفين", exactSearch: true },
         { to: "/employees-v2?workspace=drivers", label: "موصلو المتجر" },
         { to: "/employees-v2?workspace=migration", label: "تقرير الترحيل والرواتب" },
-        { to: "/employees-v2?workspace=permissions", label: "الصلاحيات وإدارة التجهيز" },
+        { to: "/employees-v2?workspace=permissions", label: "إدارة الصلاحيات" },
     ]);
     expect(products.items.some((item) => item.to === "/products-v2?workspace=access")).toBe(false);
 });

@@ -207,8 +207,11 @@ def make_warehouse_location_router(db: Any, current_user: Callable[..., Any]) ->
 
     @router.get("/warehouses")
     async def list_warehouses(user: dict = Depends(current_user)) -> dict[str, Any]:
-        actor = _require_manager(user)
-        user_id = _merchant_user_id(actor)
+        from web_page_access import WAREHOUSES_PAGE, delegated_page_owner
+
+        user_id = await delegated_page_owner(db, user, WAREHOUSES_PAGE)
+        if user_id is None:
+            user_id = _merchant_user_id(_require_manager(user))
         rows = await db[WAREHOUSES].find(
             {"user_id": user_id}, {"_id": 0}
         ).sort("created_at", 1).to_list(length=500)

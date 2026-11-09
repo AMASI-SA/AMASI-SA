@@ -26,7 +26,7 @@ export const AD_COST_SETTINGS_ROUTE_CONTRACT = {
 export const EMPLOYEES_V2_ROUTE_CONTRACT = [
     { to: "/employees-v2", label: "إدارة الموظفين", exactSearch: true },
     { to: "/employees-v2?workspace=migration", label: "تقرير الترحيل والرواتب" },
-    { to: "/employees-v2?workspace=permissions", label: "الصلاحيات وإدارة التجهيز" },
+    { to: "/employees-v2?workspace=permissions", label: "إدارة الصلاحيات" },
 ];
 export const FULFILLMENT_REVIEW_WINDOWS_ROUTE_CONTRACT = [
     "/fulfillment-v2?stage=reviewed&view=products",

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { WEB_PERMISSIONS_PATH } from "../../lib/webPageAccess";
 import { toast } from "sonner";
 import { useOptionalAuth } from "../../context/AuthContext";
 import { getAccountingAccess, getAccountingModuleStatus } from "../../services/accountingModule";
@@ -7,7 +8,6 @@ import AccountingCourierBankBindings from "./AccountingCourierBankBindings";
 import AccountingDailyWorkspace from "./AccountingDailyWorkspace";
 import AccountingFinancialAccounts from "./AccountingFinancialAccounts";
 import AccountingReports from "./AccountingReports";
-import AccountingPermissionsDialog from "./AccountingPermissionsDialog";
 import AccountingSettlements from "./AccountingSettlements";
 import AccountingShippingCod from "./AccountingShippingCod";
 import AccountingBankReceipts from "./AccountingBankReceipts";
@@ -41,7 +41,8 @@ function AccountingWorkspaceContent() {
     const [accessLoading, setAccessLoading] = useState(true);
     const [status, setStatus] = useState(null);
     const [statusLoading, setStatusLoading] = useState(true);
-    const [permissionsOpen, setPermissionsOpen] = useState(false);
+    const navigate = useNavigate();
+    const openPermissions = () => navigate(WEB_PERMISSIONS_PATH + "&panel=accounting-actions");
     const permissions = access?.permissions || [];
     const allowed = userCanAccessAccounting(user, page.permission, permissions);
     const needsStatus = page.id === "home" || page.id === "opening-balances";
@@ -93,7 +94,7 @@ function AccountingWorkspaceContent() {
                     user={user}
                     accountingPermissions={permissions}
                     canManagePermissions={access?.is_owner === true}
-                    onOpenPermissions={() => setPermissionsOpen(true)}
+                    onOpenPermissions={openPermissions}
                 />
             );
     } else if (page.id === "settlements") {
@@ -125,11 +126,10 @@ function AccountingWorkspaceContent() {
                 <AccountingHeader
                     page={page}
                     canManagePermissions={access?.is_owner === true}
-                    onOpenPermissions={() => setPermissionsOpen(true)}
+                    onOpenPermissions={openPermissions}
                 />
             )}
             {content}
-            <AccountingPermissionsDialog open={permissionsOpen} onClose={() => setPermissionsOpen(false)} />
         </div>
     );
 }

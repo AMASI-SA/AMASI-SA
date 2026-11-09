@@ -1,6 +1,9 @@
-import { lazy, useEffect, useState } from "react";
+import { cloneElement, lazy, useEffect, useState } from "react";
+import { useOptionalAuth } from "../context/AuthContext";
+import { grantedPageAt, managedWebPages, WEB_PERMISSIONS_PATH } from "../lib/webPageAccess";
+import EmployeeWebLayout from "./EmployeeWebLayout";
 import { createPortal } from "react-dom";
-import { NavLink, useLocation } from "react-router-dom";
+import { Navigate, NavLink, useLocation } from "react-router-dom";
 import {
     ChartLineUp,
     ChatsCircle,
@@ -38,7 +41,6 @@ import MezanV2NavigationShell, {
 // their charts, scanners and editors into every route despite App's lazy pages.
 const WarehouseHierarchyWorkspace = lazy(() => import("../pages/WarehouseHierarchyWorkspace"));
 const ProductIntakeWorkspace = lazy(() => import("../pages/ProductIntakeWorkspace"));
-const StoreOperationsAccessWorkspace = lazy(() => import("../pages/StoreOperationsAccessWorkspace"));
 const StoreDrivers = lazy(() => import("../pages/StoreDrivers"));
 const StoreDriverHandover = lazy(() => import("../pages/StoreDriverHandover"));
 const StoreDeliveryCustomerService = lazy(() => import("../pages/StoreDeliveryCustomerService"));
@@ -58,10 +60,9 @@ const V2_LINKS = [
     { to: "/employees-v2", label: "الموظفون والرواتب", Icon: UsersThree },
     { to: "/employees-v2?workspace=drivers", label: "موصلو المتجر", Icon: UsersThree },
     { to: "/recurring-obligations", label: "الالتزامات والمصاريف الدورية", Icon: CalendarBlank },
-    { to: "/employees-v2?workspace=permissions", label: "الصلاحيات وإدارة التجهيز", Icon: UsersThree },
+    { to: "/employees-v2?workspace=permissions", label: "إدارة الصلاحيات", Icon: UsersThree },
     { to: "/products-v2", label: "المنتجات", Icon: Package },
     { to: "/products-v2?workspace=intake", label: "استقبال المنتجات", Icon: Robot },
-    { to: "/products-v2?workspace=access", label: "الفريق والصلاحيات", Icon: UsersThree },
     { to: "/components-v2", label: "المكونات", Icon: Cube },
     { to: "/components-v2?workspace=warehouse", label: "الفروع والمخازن", Icon: Warehouse },
     { to: "/integrations-v2", label: "التطبيقات والتكاملات", Icon: Plug },
@@ -115,6 +116,24 @@ function WarehouseSidebarLink({ location, onNavigate }) {
 }
 
 export default function Layout({ children }) {
+    const { user } = useOptionalAuth() || {};
+    const location = useLocation();
+    const pages = managedWebPages(user);
+    if (!pages) return <FullLayout>{children}</FullLayout>;
+
+    const page = grantedPageAt(pages, location);
+    let content = children;
+    if (page?.id === "products.intake") {
+        content = <ProductIntakeWorkspace accessMode={page.mode} canOpenCatalogue={pages.some((entry) => entry.id === "products.catalog")} />;
+    } else if (page?.id === "products.warehouses") {
+        content = <WarehouseHierarchyWorkspace accessMode={page.mode} />;
+    } else if (["products.inventory", "products.receiving", "products.components"].includes(page?.id)) {
+        content = cloneElement(children, { accessMode: page.mode });
+    }
+    return <EmployeeWebLayout pages={pages}>{content}</EmployeeWebLayout>;
+}
+
+function FullLayout({ children }) {
     const [legacyMenuOpen, setLegacyMenuOpen] = useState(false);
     const location = useLocation();
     const searchParams = new URLSearchParams(location.search);
@@ -140,7 +159,7 @@ export default function Layout({ children }) {
         : isProductIntake
             ? <ProductIntakeWorkspace />
             : isStoreAccess
-                ? <StoreOperationsAccessWorkspace />
+                ? <Navigate to={WEB_PERMISSIONS_PATH} replace />
                 : isStoreDrivers
                     ? <StoreDrivers />
                     : isStoreDriverHandover

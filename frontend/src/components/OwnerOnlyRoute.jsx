@@ -1,12 +1,13 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { grantedPageAt, managedWebPages } from "../lib/webPageAccess";
 
 export function isAccountingWorkspaceLocation(location) {
     return location?.pathname === "/integrations-v2"
         && new URLSearchParams(location?.search || "").get("workspace") === "financial";
 }
 
-export default function OwnerOnlyRoute({ children }) {
+export default function OwnerOnlyRoute({ children, employeePages = [] }) {
     const { user, loading } = useAuth();
     const location = useLocation();
 
@@ -37,7 +38,8 @@ export default function OwnerOnlyRoute({ children }) {
     // permissions from the backend. Other integrations remain owner-only.
     const accountingWorkspaceAllowed = isAccountingWorkspaceLocation(location);
 
-    if (!user.is_owner && !metaReviewerAllowed && !accountingWorkspaceAllowed) {
+    const employeeAllowed = employeePages.includes(grantedPageAt(managedWebPages(user), location)?.id);
+    if (!user.is_owner && !metaReviewerAllowed && !accountingWorkspaceAllowed && !employeeAllowed) {
         return (
             <div
                 className="max-w-2xl mx-auto mt-12 rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center"
