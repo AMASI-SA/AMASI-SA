@@ -3904,6 +3904,18 @@ def make_qoyod_router(db, current_user) -> APIRouter:
 
 
     # ── طلبات لم تُرسل إلى قيود — READ-ONLY ────────────────────────
+    @router.get("/header-count")
+    async def qoyod_header_count(user: dict = Depends(current_user)):
+        actor = await require_security_owner(db, user)
+        from integrations.qoyod.manual_header_summary import read_manual_summary
+        return await read_manual_summary(db, tenant=_tenant_id(actor), owner=orders_owner_id(actor))
+
+    @router.post("/header-count/refresh")
+    async def qoyod_header_count_refresh(user: dict = Depends(current_user)):
+        actor = await require_security_owner(db, user)
+        from integrations.qoyod.manual_header_summary import refresh_manual_summary
+        return await refresh_manual_summary(db, tenant=_tenant_id(actor), owner=orders_owner_id(actor))
+
     @router.get("/unsent-summary")
     async def qoyod_unsent_summary(user: dict = Depends(current_user)):
         actor = await require_security_owner(db, user)
@@ -3945,10 +3957,11 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         user = await require_qoyod_security_owner(db, user)
         from integrations.qoyod.scheduled_scan import read_scan
         result = await read_scan(db, tenant=_tenant_id(user), owner=orders_owner_id(user))
-        report = result.pop('report') or {'ok': True, 'counts': {}, 'rows': []}
+        saved_report = result.pop('report')
+        report = saved_report or {'ok': True, 'counts': {}, 'rows': []}
         # GET only displays the last published generation. Refresh is explicit
         # and shares the scheduler's distributed lease across every replica.
-        return {**report, 'scan': result['scan']}
+        return {**report, 'scan': result['scan'], 'snapshot_available': saved_report is not None}
 
     @router.post("/reconciliation-refresh")
     async def reconciliation_refresh_endpoint(user=Depends(current_user)):
@@ -3956,8 +3969,10 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         from integrations.qoyod.scheduled_scan import request_scan
         result = await request_scan(db, tenant=_tenant_id(user),
                                     owner=orders_owner_id(user), manual=True)
-        report = result.pop('report') or {'ok': True, 'counts': {}, 'rows': []}
-        return {**report, 'scan': result['scan'], 'accepted': result['accepted']}
+        saved_report = result.pop('report')
+        report = saved_report or {'ok': True, 'counts': {}, 'rows': []}
+        return {**report, 'scan': result['scan'], 'accepted': result['accepted'],
+                'snapshot_available': saved_report is not None}
 
     # ── Iter-294 — Global Qoyod Production Write Lock report ────────
     # Read-only audit endpoint. Shows every write attempt that was
