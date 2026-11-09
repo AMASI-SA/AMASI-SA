@@ -259,14 +259,24 @@ def _cash_only_projection(state, selected):
 
 
 def _driver_review_projection(state, selected):
-    """Exact bank/POS and driver confirmed net debt from this transaction state.
+    return _ordinary_debt_projection(state, selected, counterparty_type="store_driver",
+                                     account_types={"bank", "cash", "pos_receivable"})
+
+
+def _prepaid_projection(state, selected):
+    return _ordinary_debt_projection(state, selected, counterparty_type="courier",
+                                     account_types={"bank", "cash"})
+
+
+def _ordinary_debt_projection(state, selected, *, counterparty_type, account_types):
+    """Exact selected cash/POS and ordinary confirmed debt in this transaction.
 
     No cross-event cache. Only the report's ordinary debt types qualify; special
     supplier/provider credit reconciliation and funding models keep the report
     fallback. Net debt preserves corrections, advances and overallocations.
     """
-    if any(r["account_type"] not in {"bank", "cash", "pos_receivable"}
-           or r["counterparty_type"] != "store_driver" for r in selected):
+    if any(r["account_type"] not in account_types
+           or r["counterparty_type"] != counterparty_type for r in selected):
         return None
     keys = {(r["counterparty_type"], r["counterparty_id"], r["counterparty_balance_currency"]) for r in selected}
     keys.update((r["account_type"], r["account_id"], r["currency"])
@@ -365,6 +375,8 @@ def capture_after_balances(state, event):
         projection = _cash_only_projection(state, selected)
         if projection is None and action == "driver_payment_review_approved":
             projection = _driver_review_projection(state, selected)
+        if projection is None and action == "prepaid_shipping_paid":
+            projection = _prepaid_projection(state, selected)
         if projection is None:
             projection = report({**state, "audit": [], "requests": {},
                                  "engine": {**state.get("engine", {}), "audit": []}})
