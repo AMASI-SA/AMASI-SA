@@ -4718,6 +4718,16 @@ async def _global_startup() -> None:
         "startup_phase required_initialization memory_current=%s memory_max=%s rss=%s",
         before.current_bytes, before.max_bytes, before.process_rss_bytes,
     )
+    # Explicitly approved, exact-record repair. Runs only in release startup;
+    # no provider calls, scans, worker creation, or request-path database work.
+    from integrations.qoyod.approved_owner_migration import apply_approved_recovery
+    try:
+        recovery_state = await asyncio.wait_for(apply_approved_recovery(db), timeout=3)
+        logger.info("qoyod_approved_owner_recovery state=%s", recovery_state)
+    except Exception as exc:
+        # Preserve availability and existing fail-closed authorization. Never
+        # log connection strings or retry through ordinary web requests.
+        logger.warning("qoyod_approved_owner_recovery failed type=%s", type(exc).__name__)
     from review_acceptance_config_guard import ensure_acceptance_config_storage
     await ensure_acceptance_config_storage(db)
     from review_session_fence import ensure_review_session_storage

@@ -232,3 +232,13 @@ test("source is isolated from Qoyod write and manual-send routes", () => {
   expect(source).toContain("`${QOYOD_BASE}/sync`");
   expect(source).toContain("`${QOYOD_BASE}/export.xlsx`");
 });
+
+test('owner-binding denial preserves the local invoice table and explains the blocked update', async () => {
+  api.post.mockRejectedValueOnce({ response: { data: { detail: 'qoyod_security_owner_required' } } });
+  const { container, root } = await renderPage();
+  try {
+    await act(async () => container.querySelector('[data-testid="qoyod-invoice-sync"]').click());
+    expect(container.querySelector('[data-testid="qoyod-invoice-error"]').textContent).toContain('ربط مالك التكامل');
+    expect(container.querySelector('[data-testid="qoyod-invoice-row-1363"]')).not.toBeNull();
+  } finally { await cleanup(container, root); }
+});

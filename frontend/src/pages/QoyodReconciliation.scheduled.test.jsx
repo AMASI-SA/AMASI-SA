@@ -27,6 +27,9 @@ test('opening the page only displays the saved generation; a failed manual reque
   await act(async () => container.querySelector('[data-testid="recon-run-btn"]').click());
   expect(container.textContent).toContain('saved-order');
   expect(container.querySelector('[data-testid="recon-error"]').textContent).toContain('offline');
+  await act(async () => jest.advanceTimersByTime(60000));
+  expect(api.get).toHaveBeenCalledTimes(1);
+  expect(container.querySelector('[data-testid="recon-run-btn"]').disabled).toBe(false);
 });
 
 test('an active shared scan disables manual restart and polls display status only', async () => {
@@ -39,4 +42,24 @@ test('an active shared scan disables manual restart and polls display status onl
   await act(async () => jest.advanceTimersByTime(5000));
   expect(api.get).toHaveBeenCalledTimes(2);
   expect(api.post).toHaveBeenCalledTimes(1);
+});
+
+test('owner denial is actionable and does not create a polling loop or false empty success', async () => {
+  api.get.mockRejectedValueOnce({ response: { data: { detail: 'qoyod_security_owner_required' } } });
+  await act(async () => root.render(<QoyodReconciliation />));
+  expect(container.querySelector('[data-testid="recon-error"]').textContent).toContain('ربط مالك التكامل');
+  expect(container.querySelector('[data-testid="recon-empty-state"]').textContent).toContain('غير معروف');
+  expect(container.querySelector('[data-testid="recon-verdict"]')).toBeNull();
+  api.post.mockRejectedValueOnce({ response: { data: { detail: 'qoyod_security_owner_required' } } });
+  await act(async () => container.querySelector('[data-testid="recon-run-btn"]').click());
+  await act(async () => jest.advanceTimersByTime(60000));
+  expect(api.get).toHaveBeenCalledTimes(1);
+  expect(container.querySelector('[data-testid="recon-run-btn"]').disabled).toBe(false);
+});
+
+test('empty unpublished report does not display a verdict or zero counts', async () => {
+  api.get.mockResolvedValueOnce({ data: { ok: true, rows: [], counts: {}, scan: { running: false } } });
+  await act(async () => root.render(<QoyodReconciliation />));
+  expect(container.querySelector('[data-testid="recon-empty-state"]').textContent).toContain('غير معروف');
+  expect(container.querySelector('[data-testid="recon-verdict"]')).toBeNull();
 });

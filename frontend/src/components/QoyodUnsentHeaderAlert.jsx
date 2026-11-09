@@ -1,132 +1,82 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { WarningCircle } from "@phosphor-icons/react";
-
 import api from "../lib/api";
 import { useOptionalAuth } from "../context/AuthContext";
 
-const REFRESH_INTERVAL_MS = 300_000;
-
-export function eligibleQoyodUnsentCount(payload) {
-    const evidence = payload?.invoice_presence;
-    if (payload?.scan_truncated || evidence?.complete !== true) return null;
-    const value = evidence.count;
-    return Number.isInteger(value) && value >= 0 ? value : null;
+export function validSummary(value) {
+    return value?.source === "local_invoice_mirror" && Number.isInteger(value.count)
+        && value.count >= 0 && Number.isFinite(Date.parse(value.updated_at));
 }
+const dateLabel = value => Number.isFinite(Date.parse(value))
+    ? new Date(value).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" }) : "غير متوفر";
 
 export default function QoyodUnsentHeaderAlert() {
-    const owner = useOptionalAuth()?.user?.role === "owner";
-    const [payload, setPayload] = useState(null);
-    const [refreshFailed, setRefreshFailed] = useState(false);
-    const [requesting, setRequesting] = useState(false);
-    const [scanRunning, setScanRunning] = useState(false);
-    const reading = useRef(false);
-    const count = eligibleQoyodUnsentCount(payload);
+    const user = useOptionalAuth()?.user;
+    const ownerId = user?.role === "owner" ? user.id : null;
+    const [state, setState] = useState({ ownerId: null, summary: null, error: "", busy: false });
+    const active = useRef(null);
+    const request = useRef(null);
+    const summary = state.ownerId === ownerId ? state.summary : null;
+    const busy = state.ownerId === ownerId && state.busy;
+    const error = state.ownerId === ownerId ? state.error : "";
 
-    const refresh = useCallback(async (signal) => {
-        if (reading.current) return;
-        reading.current = true;
+    useEffect(() => {
+        const session = {};
+        active.current = session;
+        setState({ ownerId, summary: null, error: "", busy: false });
+        if (!ownerId) return;
+        const controller = new AbortController();
+        request.current = controller;
+        // One small saved-document read on mount. No timers, provider sync,
+        // visibility refresh, route refresh or automatic retry.
+        api.get("/integrations/qoyod/header-count", { signal: controller.signal }).then(({ data }) => {
+            if (!controller.signal.aborted && active.current === session) {
+                setState({ ownerId, summary: validSummary(data.local_summary) ? data.local_summary : null, error: "", busy: false });
+            }
+        }).catch(() => {
+            if (!controller.signal.aborted && active.current === session)
+                setState({ ownerId, summary: null, error: "تعذر قراءة آخر عدد محفوظ", busy: false });
+        });
+        return () => { active.current = null; request.current?.abort(); controller.abort(); };
+    }, [ownerId]);
+
+    const refresh = async () => {
+        if (!ownerId || request.current?.manual) return;
+        request.current?.abort(); // late mount response cannot replace this result
+        const controller = new AbortController();
+        controller.manual = true;
+        request.current = controller;
+        const session = active.current;
+        setState(previous => ({ ...previous, ownerId, busy: true, error: "" }));
         try {
-            const { data: payload } = await api.get(
-                "/integrations/qoyod/unsent-summary", { signal },
-            );
-            if (!signal.aborted) {
-                setPayload((previous) => eligibleQoyodUnsentCount(payload) !== null ? payload : previous || payload);
-                setRefreshFailed(eligibleQoyodUnsentCount(payload) === null);
-                setScanRunning(payload.scan_running === true);
-            }
-        } catch (error) {
-            if (signal.aborted) return;
-            // This owner-only check must never break the store header.
-            // Retain the last successful display result and label it stale.
-            setRefreshFailed(true);
+            const { data } = await api.post("/integrations/qoyod/header-count/refresh", null, { signal: controller.signal });
+            if (!validSummary(data.local_summary)) throw new Error("incomplete summary");
+            if (!controller.signal.aborted && active.current === session)
+                setState({ ownerId, summary: data.local_summary, busy: false, error: "" });
+        } catch (err) {
+            if (!controller.signal.aborted && active.current === session)
+                setState(previous => ({ ...previous, busy: false, error: err.response?.status === 429
+                    ? "يوجد تحديث جارٍ أو حديث؛ أعد المحاولة بعد دقيقة"
+                    : "تعذر تحديث العدد؛ آخر نتيجة محفوظة لم تتغير" }));
         } finally {
-            reading.current = false;
+            if (request.current === controller) controller.manual = false;
         }
-    }, []);
-
-    useEffect(() => {
-        if (!owner) { setPayload(null); return; }
-        let running = false;
-        let controller = null;
-        const run = async () => {
-            if (running || document.visibilityState !== "visible") return;
-            running = true;
-            controller = new AbortController();
-            try {
-                await refresh(controller.signal);
-            } finally {
-                running = false;
-            }
-        };
-        run();
-        const timer = window.setInterval(run, REFRESH_INTERVAL_MS);
-        return () => {
-            window.clearInterval(timer);
-            controller?.abort();
-        };
-    }, [owner, refresh]);
-
-    useEffect(() => {
-        if (!owner || !scanRunning) return;
-        let controller;
-        const timer = window.setInterval(() => {
-            if (document.visibilityState !== "visible" || reading.current) return;
-            controller = new AbortController();
-            refresh(controller.signal);
-        }, 5000);
-        return () => { window.clearInterval(timer); controller?.abort(); };
-    }, [owner, scanRunning, refresh]);
-
-    const stale = refreshFailed || payload?.invoice_presence?.stale
-      || Date.parse(payload?.invoice_presence?.expires_at) <= Date.now();
-    const requestScan = async () => {
-      if (requesting) return;
-      setRequesting(true);
-      try {
-            const result = await api.post("/integrations/qoyod/reconciliation-refresh");
-            setScanRunning(result.data?.scan?.running === true);
-        await refresh(new AbortController().signal);
-      } catch { setRefreshFailed(true); }
-      finally { setRequesting(false); }
     };
-    if (!owner) return null;
-
-    return (
-        <div
-            className="border-b border-amber-400 bg-amber-100 text-amber-950"
-            dir="rtl"
-            role="status"
-            aria-live="polite"
-            data-testid="qoyod-unsent-header-alert"
-        >
-            <div className="mx-auto flex max-w-[1900px] flex-wrap items-center gap-2 px-4 py-2 sm:px-6">
-                <WarningCircle
-                    size={22}
-                    weight="fill"
-                    className="shrink-0 text-amber-600"
-                />
-                <div className="min-w-0 flex-1 text-sm font-extrabold">
-                    {count === null ? "قيود: يلزم تحديث المطابقة للتحقق من الطلبات غير المرسلة" : <>
-                        قيود: <span data-testid="qoyod-unsent-header-alert-count">{count.toLocaleString("ar-SA")}</span>{" "}
-                        طلب مؤهل دون فاتورة مطابقة في آخر تحقق، منذ 1 يوليو 2026
-                        <span className="mr-2 text-xs">آخر تحديث ناجح: {new Date(payload.invoice_presence.updated_at || payload.invoice_presence.verified_at).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" })}</span>
-                        {stale && <span data-testid="qoyod-summary-stale"> · نتيجة قديمة؛ لم يكتمل تحديث أحدث</span>}
-                        {payload.invoice_presence.verification_required > 0 && <span className="mr-2">· {payload.invoice_presence.verification_required} طلب يحتاج تحققًا</span>}
-                    </>}
-
-                </div>
-                <button onClick={requestScan} disabled={requesting || scanRunning} className="rounded border px-3 py-1.5 text-xs font-bold">
-                    {requesting || scanRunning ? "الفحص جارٍ…" : "تحديث الفحص"}
-                </button>
-                <Link
-                    to={count === null || stale ? "/integrations-v2/qoyod?tab=reconciliation" : "/integrations-v2/qoyod?tab=exceptions&verified_absent=1"}
-                    className="rounded-lg border border-amber-600 bg-white px-3 py-1.5 text-xs font-black text-amber-900 transition hover:bg-amber-50"
-                    data-testid="qoyod-unsent-header-alert-link"
-                >
-                    مراجعة الطلبات
-                </Link>
+    if (!ownerId) return null;
+    return <div className="border-b border-amber-400 bg-amber-100 text-amber-950" dir="rtl" role="status" aria-live="polite" data-testid="qoyod-unsent-header-alert">
+        <div className="mx-auto flex max-w-[1900px] flex-wrap items-center gap-2 px-4 py-2 sm:px-6">
+            <WarningCircle size={22} weight="fill" className="shrink-0 text-amber-600" />
+            <div className="min-w-0 flex-1 text-sm font-extrabold">
+                {summary ? <>
+                    قيود: المتبقي <span data-testid="qoyod-unsent-header-alert-count">{summary.count.toLocaleString("ar-SA")}</span> طلبًا حسب الفواتير المحفوظة في ميزان
+                    <span className="mr-2 text-xs">آخر حساب: {dateLabel(summary.updated_at)} · آخر مزامنة للفواتير: {dateLabel(summary.latest_invoice_sync_at)}</span>
+                </> : "قيود: لم يُحسب العدد بعد؛ اضغط تحديث العدد"}
+                <span className="mr-2 text-xs">تحديث يدوي فقط · لا يجلب فواتير من قيود</span>
+                {error && <span className="mr-2 text-xs" data-testid="qoyod-summary-error">{error}</span>}
             </div>
+            <button onClick={refresh} disabled={busy} className="rounded border px-3 py-1.5 text-xs font-bold">{busy ? "جارٍ حساب العدد…" : "تحديث العدد"}</button>
+            <Link to="/integrations-v2/qoyod?tab=invoices" className="rounded-lg border border-amber-600 bg-white px-3 py-1.5 text-xs font-black text-amber-900" data-testid="qoyod-unsent-header-alert-link">مراجعة الفواتير</Link>
         </div>
-    );
+    </div>;
 }
