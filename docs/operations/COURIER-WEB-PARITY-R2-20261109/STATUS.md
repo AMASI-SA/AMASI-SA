@@ -92,3 +92,11 @@ EXIT0, then Publish changes clicked exactly ONCE. UI Deployment Started
 Nov9 18:09 Riyadh (15:09UTC), deployment141ba48c-7c31-5c32-a617-2adc2dd5b424.
 UI Packaging your latest changes. Matching lease ACTIVE; preserve shared/app.
 No acceptance until newer explicit success and official verify3/statusfalse.
+
+## New UI publication succeeded / verification running
+Observed NEW green Deployment finished Nov9 18:18Riyadh (15:18UTC), same
+deployment141ba48c-7c31-5c32-a617-2adc2dd5b424, publishedversion bcb03ed
+(newer than previous7df3fa1). Official guard verify --url https://mezansalla.com
+started exactly once, log /tmp/courier1843-production-verify.json. Owned lease
+remains until verifier succeeds. Do not start another verifier or shared mutation.
+Production changed YES (UI), final identity acceptance pending3probes/statusfalse.
