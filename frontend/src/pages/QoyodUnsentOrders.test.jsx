@@ -292,3 +292,23 @@ test("payment-only bulk check never calls a Qoyod send endpoint", async () => {
     await cleanup(container, root);
   }
 });
+
+test('missing snapshot shows unknown counts and never claims there are no pending orders', async () => {
+  api.get.mockResolvedValueOnce({ data: { snapshot_available: false, orders: [], counts: { 'لم يُرسل': 0 } } });
+  const { container, root } = await renderRecoveryPage();
+  try {
+    expect(container.querySelector('[data-testid="unsent-count-لم يُرسل"]').textContent).toContain('—');
+    expect(container.querySelector('[data-testid="unsent-empty"]').textContent).toContain('لا يمكن تأكيد');
+    expect(container.textContent).not.toContain('✅ لا توجد طلبات');
+  } finally { await cleanup(container, root); }
+});
+
+test('failed initial read never renders successful empty results', async () => {
+  api.get.mockRejectedValueOnce({ response: { data: { detail: 'qoyod_security_owner_required' } } });
+  const { container, root } = await renderRecoveryPage();
+  try {
+    expect(container.querySelector('[data-testid="unsent-error"]').textContent).toContain('ربط مالك التكامل');
+    expect(container.querySelector('[data-testid="unsent-count-لم يُرسل"]').textContent).toContain('—');
+    expect(container.textContent).not.toContain('✅ لا توجد طلبات');
+  } finally { await cleanup(container, root); }
+});
