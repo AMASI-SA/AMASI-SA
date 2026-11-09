@@ -103,3 +103,16 @@ def test_special_carrier_credit_models_use_authoritative_fallback(monkeypatch, s
     monkeypatch.setattr(service, 'report', lambda s: (calls.append(True), full(s))[1])
     activity.capture_after_balances(state, event)
     assert calls == [True]
+
+
+def test_nonfinancial_audit_actions_do_not_project_or_scan_history(monkeypatch):
+    from operational_balance_store import audit
+    def forbidden(*args, **kwargs):
+        raise AssertionError('nonfinancial audit must not calculate balances')
+    monkeypatch.setattr(activity, '_affected', forbidden)
+    monkeypatch.setattr(service, 'report', forbidden)
+    state = state_fixture()
+    for action in ('assembly_completed', 'order_review_completed', 'reconciled', 'supplier_received'):
+        audit(state, 'staff', action, {}, {'id': action}, None, 'test')
+    assert len(state['audit']) == 4
+    assert all('financial_activity_snapshots' not in event for event in state['audit'])
