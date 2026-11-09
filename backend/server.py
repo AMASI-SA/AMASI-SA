@@ -260,6 +260,8 @@ async def readiness_check(response: Response):
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
 async def current_user(request: Request) -> dict:
+    from web_page_access import enforce_web_catalog_access
+
     user = await get_current_user_from_db(request, db)
     enforce_web_catalog_access(user, request.url.path, request.method)
     # Native employees authenticate as themselves, but Mezan's historical data
@@ -4324,7 +4326,7 @@ from employees_v2_routes import (
     make_employees_v2_router,
 )
 api.include_router(make_employees_v2_router(db, current_user))
-from web_page_access import enforce_web_catalog_access, make_web_page_access_router
+from web_page_access import make_web_page_access_router
 api.include_router(make_web_page_access_router(db, current_user))
 api.include_router(make_order_review_router(db, current_user))
 api.include_router(make_return_decision_router(db, current_user))
