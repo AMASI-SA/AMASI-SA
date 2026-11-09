@@ -2509,6 +2509,11 @@ def make_fulfillment_v2_router(
 
         number = _text(order_number)
         owner = await authorized_owner()
+
+        async def authorize_current_owner():
+            if await authorized_owner() != owner:
+                raise HTTPException(403, detail={"code": "completion_owner_changed"})
+
         try:
             workflow = await _require_print_completed_workflow(db, user_id=owner, order_number=number)
             if mobile_v1 and issue and workflow.get("stage") != "completed":
@@ -2519,6 +2524,9 @@ def make_fulfillment_v2_router(
 
                 try:
                     if await mezan_courier_name(db, owner, number):
+                        from shipping_pending_snapshot_recovery import recover_pending_print_snapshot
+                        await recover_pending_print_snapshot(db, owner, number, authorize=authorize_current_owner)
+
                         async def local_document(scoped, shipment_rows):
                             current = await _require_print_completed_workflow(scoped, user_id=owner, order_number=number)
                             if issue and current.get("stage") != "completed":
@@ -2526,8 +2534,7 @@ def make_fulfillment_v2_router(
                             document = await local_mezan_courier_label(scoped, owner, number, current, shipment_rows)
                             if document is None:
                                 return None
-                            if await authorized_owner() != owner:
-                                raise HTTPException(403, detail={"code": "completion_owner_changed"})
+                            await authorize_current_owner()
                             patch = _workflow_patch(document, now=_now())
                             # Reading a verified local order does not refresh the Salla verification clock.
                             del patch["salla_order_status"], patch["salla_order_status_verified_at"]
@@ -2550,13 +2557,10 @@ def make_fulfillment_v2_router(
                         journal = workflow.get("assembly_delivery") or {}
                         if journal.get("version") != 2 or journal.get("legacy_readback_only"):
                             raise HTTPException(409, detail={"code": "completion_status_unconfirmed"})
-                        async def reauthorize():
-                            if await authorized_owner() != owner:
-                                raise HTTPException(403, detail={"code": "completion_owner_changed"})
-                        await reauthorize()
+                        await authorize_current_owner()
                         state = await resume(db, user_id=owner, order_number=number,
-                                             authorize_first_issue=reauthorize)
-                        await reauthorize()
+                                             authorize_first_issue=authorize_current_owner)
+                        await authorize_current_owner()
                         if state.get("requires_attention"):
                             raise HTTPException(409, detail={"code": state.get("error_code") or "completion_status_unconfirmed"})
                     # Only a new order-first GET confirming completion may
@@ -2579,8 +2583,7 @@ def make_fulfillment_v2_router(
 
         # Keep the existing employee-permission boundary, including revocation
         # during external IO. Carrier content comes from the current Salla read.
-        if await authorized_owner() != owner:
-            raise HTTPException(403, detail={"code": "completion_owner_changed"})
+        await authorize_current_owner()
         patch = _workflow_patch(result, now=_now())
         if result.get("observed_order_status"):
             patch["salla_order_status"] = result["observed_order_status"]
