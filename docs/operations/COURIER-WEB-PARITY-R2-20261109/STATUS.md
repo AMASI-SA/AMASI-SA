@@ -76,3 +76,12 @@ governed build started only after fresh inactive guard and clean tracked tree.
 Log /tmp/courier1843-adapter.log; no new lease or UI publication yet.
 Next read adapter completion, require exact intent, prepare/prepublish actor
 codex-courier-web-parity-1843, publish once and verify3/statusfalse.
+
+## Shared rehearsal passed
+Initial adapter stopped on untracked backend/__pycache__. Fresh guard inactive;
+cache preserved intact in .release-preserved/courier1843-bytecode/ without source
+changes. Retry PYTHONDONTWRITEBYTECODE=1 REACT_APP_BACKEND_URL=https://mezansalla.com
+yarn build EXIT0 in64.77s. Generated identity sourceA a057b0357fa1370d1735d7ab93a9e06113374516
+and rg5-4a8fc0d5b6527684bb4fdc4049adbf7e8dd7d15c0744206bca9ebf1229ba7776 match frozen intent.
+Production runtime still prior1842. Next fresh guard, ownedprepare/prepublish,
+UIpublish once, newexplicit success, official3probe verification/statusfalse.
