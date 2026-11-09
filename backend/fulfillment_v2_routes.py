@@ -2636,13 +2636,20 @@ def make_fulfillment_v2_router(
     async def complete_and_refresh_mobile_label(order_number: str, user: dict = Depends(current_user)):
         from assembly_manual_label_refresh import complete_and_refresh
         from assembly_mobile_settings import _scope as assembly_app_scope
+        from order_engine.amasi_shipping_compat import mezan_courier_name
         from salla_integration.service import SallaError
         owner, _ = await assembly_app_scope(db, user)
+        number = _text(order_number)
+        if await mezan_courier_name(db, owner, number):
+            # Android76 calls this URL for its fetch button. Merchant couriers
+            # must use the same current Mezan document as web/print refresh,
+            # without a Salla status write or the external completion lease.
+            return await _mobile_carrier_label_v1(number, user, issue=False)
         async def authorize():
             if (await assembly_app_scope(db, user))[0] != owner:
                 raise HTTPException(403, detail={"code": "completion_owner_changed"})
         try:
-            return await complete_and_refresh(db, owner, _text(order_number), authorize)
+            return await complete_and_refresh(db, owner, number, authorize)
         except ShippingLabelError as exc:
             raise HTTPException(exc.status_code, detail={"code": exc.code, "message": str(exc)}) from exc
         except (SallaError, TimeoutError) as exc:
