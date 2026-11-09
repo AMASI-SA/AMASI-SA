@@ -38,6 +38,7 @@ on:
       - "backend/tests/test_amasi_shipping_compat.py"
       - "backend/tests/test_mobile_assembly_refresh_actions.py"
       - "backend/tests/test_manual_courier_label_refresh_race.py"
+      - "backend/tests/test_manual_label_delivery_overlap.py"
       - "backend/tests/test_preparation_progress_dates.py"
       - "backend/tests/test_preparation_lazy_sections.py"
       - "backend/preparation_receipt_status_message.py"
@@ -137,6 +138,7 @@ jobs:
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
             tests/test_mobile_assembly_refresh_actions.py \
             tests/test_manual_courier_label_refresh_race.py \
+            tests/test_manual_label_delivery_overlap.py \
             tests/test_preparation_progress_dates.py \
             tests/test_preparation_lazy_sections.py \
             tests/test_preparation_piece_operations.py \
