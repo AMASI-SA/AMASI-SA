@@ -1,4 +1,7 @@
 import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
+import { useOptionalAuth } from "../context/AuthContext";
+import { managedWebPages } from "../lib/webPageAccess";
 
 import ProductGoogleTaxonomyPilotPanel from "../components/products/ProductGoogleTaxonomyPilotPanel";
 import { syncRecentProductsV2 } from "../services/mezanProductsV2";
@@ -7,6 +10,17 @@ import MezanProductsWorkspace from "./MezanProductsWorkspace";
 const AUTO_SYNC_INTERVAL_MS = 60_000;
 
 export default function MezanProductsAutoSync() {
+    const { user } = useOptionalAuth() || {};
+    const grant = managedWebPages(user)?.find((page) => page.id === "products.catalog");
+    return grant ? <EmployeeCatalogue mode={grant.mode} /> : <OwnerProductsWorkspace />;
+}
+
+function EmployeeCatalogue({ mode }) {
+    const location = useLocation();
+    return <MezanProductsWorkspace key={location.key} catalogSearch={location.search} canEditDraft={mode === "write"} />;
+}
+
+function OwnerProductsWorkspace() {
     useEffect(() => {
         let active = true;
         async function refreshRecent() {

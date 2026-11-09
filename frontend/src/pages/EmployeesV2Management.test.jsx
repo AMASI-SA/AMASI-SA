@@ -1,6 +1,10 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 
+jest.mock("react-router-dom", () => ({
+    Link: ({ to, children }) => <a href={to}>{children}</a>,
+}));
+
 jest.mock("../services/employeesV2", () => ({
     assignEmployeesV2MobileAppPermissions: jest.fn(),
     assignEmployeesV2Role: jest.fn(),
@@ -325,7 +329,9 @@ test("preparation employee role remains limited to assigned work", async () => {
     const { container, root } = await renderPage();
     try {
         const firstCard = container.querySelector('[data-testid="employees-v2-employee-card"]');
-        const roleButton = [...firstCard.querySelectorAll("button")].find((button) => button.textContent.includes("صلاحيات ميزان"));
+        const accessLink = [...firstCard.querySelectorAll("a")].find((link) => link.textContent.includes("صلاحيات ميزان"));
+        expect(accessLink.getAttribute("href")).toBe("/employees-v2?workspace=permissions&member=turki-account");
+        const roleButton = [...firstCard.querySelectorAll("button")].find((button) => button.textContent.includes("الدور التشغيلي"));
         await act(async () => roleButton.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
         const roleSelect = document.body.querySelector('[data-testid="employees-v2-role-select"]');

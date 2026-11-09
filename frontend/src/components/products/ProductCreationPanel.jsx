@@ -77,7 +77,7 @@ function errorMessage(error) {
     return messages[code] || detail?.message || "تعذر تنفيذ العملية";
 }
 
-export default function ProductCreationPanel({ onCreated }) {
+export default function ProductCreationPanel({ onCreated, draftOnly = false }) {
     const [open, setOpen] = useState(false);
     const [form, setForm] = useState(EMPTY_FORM);
     const [drafts, setDrafts] = useState([]);
@@ -431,7 +431,7 @@ export default function ProductCreationPanel({ onCreated }) {
                             </div>
 
                             {!!activeDraft.options?.length && <ProductCreationOptionsPreview key={activeDraft.id} options={activeDraft.options} />}
-                            {activeDraft.status === "published" && activeDraft.salla_product_id && <BundleEditor key={activeDraft.salla_product_id} productId={activeDraft.salla_product_id} salePrice={activeDraft.price} />}
+                            {!draftOnly && activeDraft.status === "published" && activeDraft.salla_product_id && <BundleEditor key={activeDraft.salla_product_id} productId={activeDraft.salla_product_id} salePrice={activeDraft.price} />}
                             {activeDraft.status === "published_unverified" && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">أُنشئ المنتج، لكن لم يكتمل التحقق من نوعه وخياراته في سلة. لا تُنشئ نسخة أخرى.</p>}
 
                             {preview && (
@@ -458,14 +458,14 @@ export default function ProductCreationPanel({ onCreated }) {
                             {activeDraft.status === "publishing" && <p role="status">جارٍ معالجة الطلب. حدّث الحالة لمعرفة النتيجة.</p>}
                             <button type="button" disabled={busy} onClick={() => refreshDraft(activeDraft.id).catch((error) => toast.error(errorMessage(error)))}>تحديث حالة الطلب</button>
                             <div className="flex flex-wrap gap-2">
-                                {["draft", "approved"].includes(activeDraft.status) && <button type="button" disabled={busy} onClick={editDraft} className="rounded-xl border px-4 py-3 font-black disabled:opacity-50">تعديل المسودة</button>}
-                                {activeDraft.status === "draft" && !preview && (
+                                {(activeDraft.status === "draft" || (!draftOnly && activeDraft.status === "approved")) && <button type="button" disabled={busy} onClick={editDraft} className="rounded-xl border px-4 py-3 font-black disabled:opacity-50">تعديل المسودة</button>}
+                                {!draftOnly && activeDraft.status === "draft" && !preview && (
                                     <button type="button" disabled={busy} onClick={reviewDraft} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 font-black text-white disabled:opacity-50"><Eye /> معاينة وفحص</button>
                                 )}
-                                {activeDraft.status === "draft" && preview && (
+                                {!draftOnly && activeDraft.status === "draft" && preview && (
                                     <button type="button" disabled={busy} onClick={approveDraft} className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 font-black text-white disabled:opacity-50"><CheckCircle /> اعتماد المسودة</button>
                                 )}
-                                {["approved", "publish_unknown"].includes(activeDraft.status) && (
+                                {!draftOnly && ["approved", "publish_unknown"].includes(activeDraft.status) && (
                                     <button type="button" disabled={busy} onClick={() => { setPublishError(""); setConfirmOpen(true); }} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-4 py-3 font-black text-white disabled:opacity-50"><RocketLaunch /> {busy ? "جارٍ تنفيذ الطلب…" : activeDraft.status === "publish_unknown" ? "التحقق من نتيجة الإنشاء" : "إنشاء المنتج في سلة"}</button>
                                 )}
                             </div>

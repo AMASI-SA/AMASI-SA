@@ -590,7 +590,15 @@ async def ensure_product_creation_indexes(db: Any) -> None:
 
 
 async def _actor_context(db: Any, user: dict[str, Any]) -> dict[str, Any]:
+    from web_page_access import INTAKE_PAGE, delegated_page_owner
+
     actor_id = _text(user.get("id"))
+    delegated_owner = await delegated_page_owner(db, user, INTAKE_PAGE, write=True)
+    if delegated_owner:
+        return {
+            "actor_id": actor_id, "merchant_id": delegated_owner,
+            "permissions": {"products.create"}, "is_owner": False, "draft_owner": actor_id,
+        }
     if _text(user.get("role")).casefold() == "owner" or user.get("is_owner"):
         return {
             "actor_id": actor_id,
@@ -652,9 +660,13 @@ async def _draft(
     *,
     merchant_id: str,
     draft_id: str,
+    draft_owner: str | None = None,
 ) -> dict[str, Any]:
+    selector = {"user_id": merchant_id, "id": draft_id}
+    if draft_owner:
+        selector["created_by"] = draft_owner
     row = await db[DRAFTS].find_one(
-        {"user_id": merchant_id, "id": draft_id},
+        selector,
         {"_id": 0},
     )
     if not row:
@@ -857,6 +869,8 @@ def make_product_creation_router(
         context = await _actor_context(db, user)
         _require_permission(context, "products.create")
         query: dict[str, Any] = {"user_id": context["merchant_id"]}
+        if context.get("draft_owner"):
+            query["created_by"] = context["draft_owner"]
         if status:
             query["status"] = status
         rows = await db[DRAFTS].find(
@@ -943,6 +957,7 @@ def make_product_creation_router(
             db,
             merchant_id=context["merchant_id"],
             draft_id=draft_id,
+            draft_owner=context.get("draft_owner"),
         )
         return {
             "ok": True,
@@ -962,8 +977,10 @@ def make_product_creation_router(
             db,
             merchant_id=context["merchant_id"],
             draft_id=draft_id,
+            draft_owner=context.get("draft_owner"),
         )
-        if current.get("status") not in EDITABLE_STATUSES:
+        editable = {"draft"} if context.get("draft_owner") else EDITABLE_STATUSES
+        if current.get("status") not in editable:
             raise HTTPException(
                 status_code=409,
                 detail={"code": "product_creation_draft_not_editable"},
@@ -989,8 +1006,11 @@ def make_product_creation_router(
             draft_id=draft_id,
         )
         now = _now()
+        selector = {"user_id": context["merchant_id"], "id": draft_id}
+        if context.get("draft_owner"):
+            selector.update(created_by=context["draft_owner"], status="draft")
         updated = await db[DRAFTS].find_one_and_update(
-            {"user_id": context["merchant_id"], "id": draft_id},
+            selector,
             {
                 "$set": {
                     **values,
@@ -1007,6 +1027,8 @@ def make_product_creation_router(
             },
             return_document=ReturnDocument.AFTER,
         )
+        if updated is None:
+            raise HTTPException(409, detail={"code": "product_creation_draft_not_editable"})
         await _event(
             db,
             context=context,

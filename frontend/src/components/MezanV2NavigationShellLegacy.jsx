@@ -54,7 +54,7 @@ export const MEZAN_V2_NAV_SECTIONS = [
             { to: "/employees-v2", label: "إدارة الموظفين", exactSearch: true },
             { to: "/employees-v2?workspace=drivers", label: "موصلو المتجر" },
             { to: "/employees-v2?workspace=migration", label: "تقرير الترحيل والرواتب" },
-            { to: "/employees-v2?workspace=permissions", label: "الصلاحيات وإدارة التجهيز" },
+            { to: "/employees-v2?workspace=permissions", label: "إدارة الصلاحيات" },
         ],
     },
     {
@@ -222,7 +222,7 @@ export function navigationSectionsForDisplay(location, openSectionId = null, sec
     return { activeSection, openSection, visibleSection: openSection || activeSection };
 }
 
-function SectionButton({ section, active, open, onToggle, onNavigate }) {
+function SectionButton({ section, active, open, onToggle, onNavigate, expandSingle }) {
     const Icon = section.Icon;
     const singleItem = section.items.length === 1;
     const buttonClass = [
@@ -230,7 +230,7 @@ function SectionButton({ section, active, open, onToggle, onNavigate }) {
         active ? "bg-emerald-200 text-slate-950 shadow-sm" : "text-slate-100 hover:bg-white/10 hover:text-white",
     ].join(" ");
 
-    if (singleItem || section.entryTo) {
+    if (!expandSingle && (singleItem || section.entryTo)) {
         return (
             <Link to={section.entryTo || section.items[0].to} className={buttonClass} onClick={onNavigate} data-testid={`mezan-v2-primary-${section.id}`} title={section.label}>
                 <Icon size={21} weight="duotone" className="shrink-0" />
@@ -248,10 +248,11 @@ function SectionButton({ section, active, open, onToggle, onNavigate }) {
     );
 }
 
-export default function MezanV2NavigationShell({ location, onOpenAll, searchForm = null, notificationControl = null }) {
+export default function MezanV2NavigationShell({ location, onOpenAll, searchForm = null, notificationControl = null, restrictedSections = null }) {
     const { user } = useOptionalAuth() || {};
     const isMetaReviewer = user?.role === "meta_reviewer";
-    const sections = isMetaReviewer ? META_REVIEWER_NAV_SECTIONS : MEZAN_V2_NAV_SECTIONS;
+    const restricted = restrictedSections !== null;
+    const sections = restrictedSections ?? (isMetaReviewer ? META_REVIEWER_NAV_SECTIONS : MEZAN_V2_NAV_SECTIONS);
     const safeSearchForm = isMetaReviewer ? null : searchForm;
     const safeNotificationControl = isMetaReviewer ? null : notificationControl;
     const [openSectionId, setOpenSectionId] = useState(null);
@@ -286,28 +287,28 @@ export default function MezanV2NavigationShell({ location, onOpenAll, searchForm
                     <div className="hidden min-[1700px]:block"><div className="whitespace-nowrap text-sm font-black tracking-wide text-white">MEZAN 2</div><div className="whitespace-nowrap text-[10px] font-bold text-slate-400">نظام تشغيل المتجر</div></div>
                 </div>
 
-                <button type="button" onClick={isMetaReviewer ? undefined : onOpenAll} disabled={isMetaReviewer} className="inline-flex h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl px-2 text-[11px] font-extrabold text-slate-100 transition hover:bg-white/10 hover:text-white sm:h-11 sm:px-2.5 sm:text-xs xl:h-12 xl:px-3 2xl:px-4 2xl:text-sm" data-testid="mezan-v2-open-all" aria-label="فتح كل صفحات ميزان"><List size={23} weight="bold" className="shrink-0" /><span className="hidden whitespace-nowrap sm:inline">الكل</span></button>
+                {!restricted && <button type="button" onClick={isMetaReviewer ? undefined : onOpenAll} disabled={isMetaReviewer} className="inline-flex h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl px-2 text-[11px] font-extrabold text-slate-100 transition hover:bg-white/10 hover:text-white sm:h-11 sm:px-2.5 sm:text-xs xl:h-12 xl:px-3 2xl:px-4 2xl:text-sm" data-testid="mezan-v2-open-all" aria-label="فتح كل صفحات ميزان"><List size={23} weight="bold" className="shrink-0" /><span className="hidden whitespace-nowrap sm:inline">الكل</span></button>}
 
                 <div className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain scrollbar-thin" data-testid="mezan-v2-primary-scroll">
                     <div className="flex w-max min-w-full flex-nowrap items-center gap-1 whitespace-nowrap sm:gap-1.5">
                         {sections.map((section) => {
                             const active = activeSection?.id === section.id;
                             const open = openSectionId === section.id;
-                            return <div key={section.id} className="relative shrink-0"><SectionButton section={section} active={active} open={open} onToggle={() => { setSearchOpen(false); setOpenSectionId(open ? null : section.id); }} onNavigate={() => { setOpenSectionId(null); setSearchOpen(false); }} /></div>;
+                            return <div key={section.id} className="relative shrink-0"><SectionButton section={section} active={active} open={open} expandSingle={restricted} onToggle={() => { setSearchOpen(false); setOpenSectionId(open ? null : section.id); }} onNavigate={() => { setOpenSectionId(null); setSearchOpen(false); }} /></div>;
                         })}
                     </div>
                 </div>
 
                 <div className="flex shrink-0 items-center gap-1.5">
-                    <div className="relative shrink-0">
+                    {!restricted && <div className="relative shrink-0">
                         <button type="button" onClick={() => { setOpenSectionId(null); setSearchOpen((value) => !value); }} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-100 transition hover:border-emerald-300 hover:bg-white/10 hover:text-emerald-200 sm:h-11 sm:w-11" aria-expanded={searchOpen} aria-controls="mezan-v2-search-dropdown" aria-label={searchOpen ? "إغلاق بحث الطلبات" : "فتح بحث الطلبات"} data-testid="mezan-v2-search-trigger">{searchOpen ? <X size={21} weight="bold" /> : <MagnifyingGlass size={21} weight="bold" />}</button>
                         {searchOpen && safeSearchForm && <div id="mezan-v2-search-dropdown" className="absolute left-0 top-[calc(100%+0.65rem)] z-[80] w-[calc(100vw-1rem)] max-w-[34rem] rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl sm:w-[32rem]" data-testid="mezan-v2-search-dropdown">{safeSearchForm}</div>}
-                    </div>
+                    </div>}
                     {safeNotificationControl && <div className="shrink-0" data-testid="mezan-v2-notification-control">{safeNotificationControl}</div>}
                 </div>
             </div>
 
-            {visibleSection && visibleSection.items.length > 1 && (
+            {visibleSection && (restricted ? Boolean(openSection) : visibleSection.items.length > 1) && (
                 <nav className="relative z-[60] flex flex-nowrap items-center gap-1 overflow-x-auto whitespace-nowrap border-t border-white/10 bg-[#0B4938] px-2 shadow-inner scrollbar-thin sm:px-5" aria-label={`صفحات ${visibleSection.label}`} data-testid={`mezan-v2-secondary-${visibleSection.id}`} data-navigation-source={openSection ? "opened" : "active"}>
                     {visibleSection.items.map((item) => {
                         const active = isNavigationItemActive(location, item);

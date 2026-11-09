@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle, ClockCounterClockwise, Robot, ShieldCheck, UsersThree, WarningCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { Link, useSearchParams } from "react-router-dom";
+import { WEB_PERMISSIONS_PATH } from "../lib/webPageAccess";
+import WebPagePermissions from "./WebPagePermissions";
+import AccountingPermissionsDialog from "./accounting/AccountingPermissionsDialog";
 
 import {
     getStoreOperationsAccess,
@@ -160,6 +164,28 @@ function RoleCard({ user, roleLabels, roleCatalog, warehouses, responsibilityTyp
 }
 
 export default function StoreOperationsAccessWorkspace() {
+    const [params, setParams] = useSearchParams();
+    const panel = params.get("panel");
+    const closeAccounting = () => {
+        const next = new URLSearchParams(params);
+        next.delete("panel");
+        setParams(next, { replace: true });
+    };
+    return <div className="space-y-4" dir="rtl">
+        <section className="rounded-2xl border bg-white p-4 sm:p-6">
+            <h1 className="text-2xl font-extrabold">إدارة الصلاحيات</h1>
+            <nav aria-label="إدارة الصلاحيات" className="mt-3 flex flex-wrap gap-2 text-sm font-bold">
+                <Link className="rounded-xl border px-3 py-2" to={WEB_PERMISSIONS_PATH} aria-current={!panel ? "page" : undefined}>صفحات ميزان</Link>
+                <Link className="rounded-xl border px-3 py-2" to={WEB_PERMISSIONS_PATH + "&panel=roles"} aria-current={panel === "roles" ? "page" : undefined}>الأدوار التشغيلية</Link>
+                <Link className="rounded-xl border px-3 py-2" to={WEB_PERMISSIONS_PATH + "&panel=accounting-actions"}>الإجراءات المحاسبية</Link>
+            </nav>
+        </section>
+        {panel === "roles" ? <OperationalRolesPanel /> : <WebPagePermissions initialMemberId={params.get("member") || ""} />}
+        {panel === "accounting-actions" && <AccountingPermissionsDialog open actionsOnly onClose={closeAccounting} />}
+    </div>;
+}
+
+function OperationalRolesPanel() {
     const [data, setData] = useState(null);
     const [audit, setAudit] = useState([]);
     const [loading, setLoading] = useState(true);

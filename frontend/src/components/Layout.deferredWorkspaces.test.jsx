@@ -6,6 +6,7 @@ let mockLocation = { pathname: "/dashboard-advanced", search: "" };
 jest.mock("react-router-dom", () => ({
     useLocation: () => mockLocation,
     NavLink: ({ children }) => <span>{children}</span>,
+    Navigate: ({ to }) => <span data-testid="redirect">{to}</span>,
 }));
 jest.mock("./Sidebar", () => () => null);
 jest.mock("./GlobalSearch", () => () => null);
@@ -31,9 +32,6 @@ jest.mock("../pages/WarehouseHierarchyWorkspace", () => {
 });
 jest.mock("../pages/ProductIntakeWorkspace", () => {
     mockLoaded.push("intake"); return () => <div>intake</div>;
-});
-jest.mock("../pages/StoreOperationsAccessWorkspace", () => {
-    mockLoaded.push("access"); return () => <div>access</div>;
 });
 jest.mock("../pages/StoreDrivers", () => {
     mockLoaded.push("drivers"); return () => <div>drivers</div>;
@@ -68,7 +66,6 @@ test("each workspace loads only when selected and preserves the navigation", asy
         const destinations = [
             ["/components-v2", "?workspace=warehouse", "warehouse"],
             ["/products-v2", "?workspace=intake", "intake"],
-            ["/products-v2", "?workspace=access", "access"],
             ["/employees-v2", "?workspace=drivers", "drivers"],
             ["/fulfillment-v2", "?workspace=store-driver-handover", "handover"],
             ["/customer-intelligence", "?workspace=store-delivery", "customer-service"],
@@ -84,6 +81,10 @@ test("each workspace loads only when selected and preserves the navigation", asy
             expect(host.textContent).toContain(label);
             expect(host.querySelector("nav")).toBe(navigation);
         }
+        mockLocation = { pathname: "/products-v2", search: "?workspace=access" };
+        await act(async () => root.render(<Layout><div>Dashboard</div></Layout>));
+        expect(host.querySelector('[data-testid="redirect"]').textContent).toBe("/employees-v2?workspace=permissions");
+        expect(mockLoaded).toEqual(expected);
     } finally {
         await act(async () => root.unmount());
         delete globalThis.IS_REACT_ACT_ENVIRONMENT;

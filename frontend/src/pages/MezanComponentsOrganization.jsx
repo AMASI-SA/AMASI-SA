@@ -100,7 +100,8 @@ function CategoryAssignment({ resource, categories, saving, onClose, onSaved }) 
   );
 }
 
-export default function MezanComponentsOrganization() {
+export default function MezanComponentsOrganization({ accessMode = null }) {
+  const canWrite = accessMode !== "read";
   const [workspace, setWorkspace] = useState({ components: [], categories: [], groups: [], meta: {} });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -217,7 +218,7 @@ export default function MezanComponentsOrganization() {
 
       <nav className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
         <button onClick={() => { setTab("organization"); load({ quiet: true }); }} className={`rounded-xl px-4 py-3 text-sm font-black ${tab === "organization" ? "bg-violet-700 text-white" : "text-slate-700"}`}><Stack className="ml-1 inline" />التصنيفات والقروبات</button>
-        <button onClick={() => setTab("catalog")} className={`rounded-xl px-4 py-3 text-sm font-black ${tab === "catalog" ? "bg-violet-700 text-white" : "text-slate-700"}`}><Cube className="ml-1 inline" />إدارة العناصر والتكاليف</button>
+        {!accessMode && <button onClick={() => setTab("catalog")} className={`rounded-xl px-4 py-3 text-sm font-black ${tab === "catalog" ? "bg-violet-700 text-white" : "text-slate-700"}`}><Cube className="ml-1 inline" />إدارة العناصر والتكاليف</button>}
       </nav>
 
       {error && <div className="flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-black text-rose-900"><WarningCircle size={21} className="mt-0.5 shrink-0" />{error}</div>}
@@ -226,11 +227,11 @@ export default function MezanComponentsOrganization() {
         <>
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <form onSubmit={saveCategory} className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row">
+              {canWrite && <form onSubmit={saveCategory} className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row">
                 <label className="min-w-0 flex-1"><span className="mb-1 block text-xs font-black text-slate-600">{editingCategory ? "تعديل اسم التصنيف" : "إضافة تصنيف تجهيز"}</span><input value={editingCategory?.name ?? categoryName} onChange={(event) => editingCategory ? setEditingCategory({ ...editingCategory, name: event.target.value }) : setCategoryName(event.target.value)} placeholder="مثال: مطليات أو ملابس" className="min-h-12 w-full rounded-xl border border-slate-200 px-3 font-bold outline-none focus:border-violet-500" /></label>
                 <button disabled={saving || !(editingCategory?.name ?? categoryName).trim()} className="min-h-12 rounded-xl bg-violet-700 px-5 font-black text-white disabled:opacity-50"><Plus className="ml-1 inline" />{editingCategory ? "حفظ الاسم" : "إضافة التصنيف"}</button>
                 {editingCategory && <button type="button" onClick={() => setEditingCategory(null)} className="min-h-12 rounded-xl border px-4 font-black">إلغاء</button>}
-              </form>
+              </form>}
               <div className="text-xs font-bold text-slate-500">العنصر الواحد يمكن أن يظهر في أكثر من تصنيف.</div>
             </div>
             <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
@@ -238,7 +239,7 @@ export default function MezanComponentsOrganization() {
               {categories.map((category) => (
                 <div key={category.id} className={`flex shrink-0 items-center rounded-xl border ${selectedCategory === String(category.id) ? "border-violet-700 bg-violet-50" : "border-slate-200"}`}>
                   <button onClick={() => setSelectedCategory(String(category.id))} className="px-4 py-2.5 text-sm font-black">{category.name} <span className="mr-1 text-[10px] text-slate-500">{category.resource_count || 0}</span></button>
-                  <button onClick={() => setEditingCategory({ ...category })} className="border-r border-slate-200 p-2.5 text-violet-700" aria-label={`تعديل ${category.name}`}><PencilSimple /></button>
+                  {canWrite && <button onClick={() => setEditingCategory({ ...category })} className="border-r border-slate-200 p-2.5 text-violet-700" aria-label={`تعديل ${category.name}`}><PencilSimple /></button>}
                 </div>
               ))}
             </div>
@@ -249,13 +250,13 @@ export default function MezanComponentsOrganization() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-black"><Tag className="ml-1 inline text-violet-700" />عناصر {selectedCategoryRow?.name || "كل التصنيفات"}</h2><p className="mt-1 text-xs font-bold text-slate-500">تظهر هنا الخدمات والمكونات التابعة للتصنيف المحدد فقط.</p></div><label className="relative"><MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="بحث…" className="min-h-11 rounded-xl border pr-10 pl-3 text-sm font-bold" /></label></div>
               {!visibleResources.length ? <div className="mt-4 rounded-2xl border border-dashed p-8 text-center text-sm font-bold text-slate-500">لا توجد عناصر ضمن هذا التصنيف.</div> : <div className="mt-4 grid gap-3 md:grid-cols-2">{visibleResources.map((resource) => (
                 <article key={resource.id} className={`rounded-2xl border p-4 ${resource.status === "inactive" ? "border-rose-200 bg-rose-50/50" : "border-slate-200"}`}>
-                  <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><div className="font-black text-slate-950">{resource.name}</div>{resource.status === "inactive" && <span className="rounded-full bg-rose-100 px-2 py-1 text-[10px] font-black text-rose-700">موقوف</span>}</div><div className="mt-1 text-xs font-bold text-slate-500">{resource.track_inventory ? "مكوّن" : "خدمة"} · {resource.code || "بدون رمز"}</div></div><button onClick={() => setAssigningResource(resource)} className="rounded-xl border px-3 py-2 text-xs font-black text-violet-700">تعديل التصنيفات</button></div>
+                  <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><div className="font-black text-slate-950">{resource.name}</div>{resource.status === "inactive" && <span className="rounded-full bg-rose-100 px-2 py-1 text-[10px] font-black text-rose-700">موقوف</span>}</div><div className="mt-1 text-xs font-bold text-slate-500">{resource.track_inventory ? "مكوّن" : "خدمة"} · {resource.code || "بدون رمز"}</div></div>{canWrite && <button onClick={() => setAssigningResource(resource)} className="rounded-xl border px-3 py-2 text-xs font-black text-violet-700">تعديل التصنيفات</button>}</div>
                   <div className="mt-3"><CategoryBadges categoryIds={resource.category_ids || []} categories={categories} /></div>
                 </article>
               ))}</div>}
             </div>
 
-            <form onSubmit={submitGroup} className="rounded-3xl border border-violet-200 bg-violet-50/40 p-5 shadow-sm" data-testid="component-group-editor">
+            {canWrite && <form onSubmit={submitGroup} className="rounded-3xl border border-violet-200 bg-violet-50/40 p-5 shadow-sm" data-testid="component-group-editor">
               <div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-black"><FolderSimple className="ml-1 inline text-violet-700" />{groupDraft.id ? "تعديل القروب" : "إنشاء قروب"}</h2><p className="mt-1 text-xs font-bold leading-5 text-slate-500">اسم القروب يتكوّن تلقائيًا من أسماء العناصر وبنفس ترتيب اختيارها.</p></div>{groupDraft.id && <button type="button" onClick={() => setGroupDraft(EMPTY_GROUP)} className="rounded-xl border bg-white p-2"><X /></button>}</div>
               <div className="mt-4 grid gap-3">
                 <label className="text-xs font-black text-slate-600">التصنيف<select value={groupDraft.category_id} onChange={(event) => setGroupDraft({ ...groupDraft, category_id: event.target.value, resource_ids: [] })} className="mt-1 min-h-12 w-full rounded-xl border bg-white px-3 text-sm font-black"><option value="">اختر التصنيف</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
@@ -270,14 +271,14 @@ export default function MezanComponentsOrganization() {
                 </div>
               </div>
               <button disabled={saving || !groupDraft.category_id || groupDraft.resource_ids.length < 2} className="mt-4 min-h-12 w-full rounded-xl bg-violet-700 px-5 font-black text-white disabled:opacity-50">{saving ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" weight="fill" />}{groupDraft.id ? "حفظ القروب" : "إنشاء القروب"}</button>
-            </form>
+            </form>}
           </section>
 
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-xl font-black"><Wrench className="ml-1 inline text-violet-700" />القروبات الجاهزة</h2>
             {!visibleGroups.length ? <div className="mt-4 rounded-2xl border border-dashed p-8 text-center text-sm font-bold text-slate-500">لا توجد قروبات ضمن التصنيف المحدد.</div> : <div className="mt-4 grid gap-3 lg:grid-cols-2">{visibleGroups.map((group) => (
               <article key={group.id} className="rounded-2xl border border-slate-200 p-4">
-                <div className="flex items-start justify-between gap-3"><div><div className="font-black text-slate-950">{group.name}</div><div className="mt-1 text-xs font-bold text-slate-500">{group.group_kind === "service" ? "قروب خدمات" : "قروب مكونات"} · {group.resources?.length || 0} عناصر</div></div><button onClick={() => editGroup(group)} className="rounded-xl border px-3 py-2 text-xs font-black text-violet-700">تعديل</button></div>
+                <div className="flex items-start justify-between gap-3"><div><div className="font-black text-slate-950">{group.name}</div><div className="mt-1 text-xs font-bold text-slate-500">{group.group_kind === "service" ? "قروب خدمات" : "قروب مكونات"} · {group.resources?.length || 0} عناصر</div></div>{canWrite && <button onClick={() => editGroup(group)} className="rounded-xl border px-3 py-2 text-xs font-black text-violet-700">تعديل</button>}</div>
                 <div className="mt-3 flex flex-wrap gap-1.5">{(group.resources || []).map((resource) => <span key={resource.id} className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700">{resource.name}</span>)}</div>
               </article>
             ))}</div>}

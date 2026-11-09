@@ -441,4 +441,4 @@ def test_employee_v2_router_page_and_navigation_are_wired_together():
     assert 'path="/employees-v2"' in app
     assert '{ to: "/employees-v2", label: "إدارة الموظفين", exactSearch: true }' in navigation
     assert '{ to: "/employees-v2?workspace=migration", label: "تقرير الترحيل والرواتب" }' in navigation
-    assert '{ to: "/employees-v2?workspace=permissions", label: "الصلاحيات وإدارة التجهيز" }' in navigation
+    assert '{ to: "/employees-v2?workspace=permissions", label: "إدارة الصلاحيات" }' in navigation

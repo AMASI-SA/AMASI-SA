@@ -24,7 +24,7 @@ function PermissionGroup({ title, rows, selected, onToggle, Icon }) {
     );
 }
 
-export default function AccountingPermissionsDialog({ open, onClose }) {
+export default function AccountingPermissionsDialog({ open, onClose, actionsOnly = false }) {
     const [catalogue, setCatalogue] = useState(null);
     const [users, setUsers] = useState([]);
     const [selectedUserId, setSelectedUserId] = useState("");
@@ -68,7 +68,10 @@ export default function AccountingPermissionsDialog({ open, onClose }) {
         if (!selectedUserId) return;
         setSaving(true);
         try {
-            const result = await updateAccountingPermissionUser(selectedUserId, Array.from(selected).sort());
+            const permissions = actionsOnly
+                ? (catalogue?.actions || []).map((row) => row.permission).filter((permission) => selected.has(permission))
+                : Array.from(selected);
+            const result = await updateAccountingPermissionUser(selectedUserId, permissions.sort(), { actionsOnly });
             setUsers((current) => current.map((row) => row.id === result.user.id ? result.user : row));
             toast.success("تم حفظ صلاحيات المحاسبة.");
         } catch (error) {
@@ -83,7 +86,7 @@ export default function AccountingPermissionsDialog({ open, onClose }) {
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-label="صلاحيات المحاسبة">
             <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white shadow-2xl" dir="rtl">
                 <header className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-slate-200 bg-white p-5">
-                    <div><h2 className="text-xl font-black text-slate-950">صلاحيات المحاسبة</h2><p className="mt-1 text-xs font-semibold text-slate-500">كل صفحة وكل إجراء حساس مستقل، ولا يرث الموظف صلاحية من دوره.</p></div>
+                    <div><h2 className="text-xl font-black text-slate-950">{actionsOnly ? "الإجراءات المحاسبية" : "صلاحيات المحاسبة"}</h2><p className="mt-1 text-xs font-semibold text-slate-500">كل إجراء حساس يحتاج صلاحية مستقلة.</p></div>
                     <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 p-2 text-slate-600"><X size={20} /></button>
                 </header>
                 <div className="p-5">
@@ -96,14 +99,14 @@ export default function AccountingPermissionsDialog({ open, onClose }) {
                                     {users.map((row) => <option key={row.id} value={row.id}>{row.name} — {row.role}</option>)}
                                 </select>
                             </label>
-                            <PermissionGroup title="صلاحيات الصفحات" rows={catalogue?.pages || []} selected={selected} onToggle={toggle} Icon={FileText} />
+                            {!actionsOnly && <PermissionGroup title="صلاحيات الصفحات" rows={catalogue?.pages || []} selected={selected} onToggle={toggle} Icon={FileText} />}
                             <PermissionGroup title="الإجراءات الحساسة" rows={catalogue?.actions || []} selected={selected} onToggle={toggle} Icon={ShieldCheck} />
                         </div>
                     )}
                 </div>
                 <footer className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-200 bg-white p-4">
                     <button type="button" onClick={onClose} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-extrabold text-slate-700">إلغاء</button>
-                    <button type="button" onClick={save} disabled={saving || !selectedUserId} className="rounded-xl bg-emerald-800 px-5 py-2 text-sm font-extrabold text-white disabled:opacity-50">{saving ? "جاري الحفظ…" : "حفظ الصلاحيات"}</button>
+                    <button type="button" onClick={save} disabled={loading || saving || !catalogue || !selectedUserId} className="rounded-xl bg-emerald-800 px-5 py-2 text-sm font-extrabold text-white disabled:opacity-50">{saving ? "جاري الحفظ…" : "حفظ الصلاحيات"}</button>
                 </footer>
             </div>
         </div>
