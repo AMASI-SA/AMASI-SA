@@ -57,3 +57,20 @@ Candidate and A-to-B validators exit0. Exact-B CI started. Terminal auth
 restored; fresh shared guard inactive, /app at reviewed720194f, only unrelated
 untracked files. No merge/publish/lease. Next isolated B adapter rehearsal and
 exact-B checks, then recheck prod/guard. Evidence-only branch must not deploy.
+
+
+## Merge / rehearsal checkpoint
+Exact B all10 applicable workflows passed; unrelated TikTok candidate skipped by
+its own condition. Real-Mongo again272+658+1cases/404subtests, zero executed skips
+or failures. Both Node20/24 clean-clone rehearsals passed in readiness42701577281.
+Isolated Emergent adapter initially failed ENOSPC on the9.8GB /root mount.
+Moved only this task's clean worktree to /tmp/mezan-aramex-1854, repaired Git
+registration, retained the failed log. Same source retry exit0 in67.92seconds,
+exact intended rg5 identity. No unrelated files deleted.
+Fresh /app guard inactive and HEAD720194f with only known unrelated untracked
+files. Normal merge c1259613df33f06c534a8e6081209a90ff31eb65 completed. Shared
+/app fast-forward and governed build now started; log
+/tmp/aramex1854-shared-adapter.log. No new lease or Publish click yet.
+Next require sharedbuildexit0, owned prepare/prepublish, Publish changes once,
+new green success, official verify3 and inactive guard. Production runtime
+changed by task:NO yet. Keep /app at this merge until release completes.
