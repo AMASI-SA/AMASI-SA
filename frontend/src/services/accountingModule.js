@@ -46,9 +46,10 @@ export async function getAccountingPermissionUsers() {
     return data;
 }
 
-export async function updateAccountingPermissionUser(userId, permissions) {
+export async function updateAccountingPermissionUser(userId, permissions, { actionsOnly = false } = {}) {
     const { data } = await api.put(`${BASE}/permissions/users/${encodeURIComponent(userId)}`, {
         permissions,
+        ...(actionsOnly ? { actions_only: true } : {}),
     });
     return data;
 }

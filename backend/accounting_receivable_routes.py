@@ -38,10 +38,11 @@ def install_accounting_receivable_routes(router, db, current_user):
     async def actor_for(user, permission):
         actor = await db.users.find_one({"id": user.get("id")}, {
             "_id": 0, "id": 1, "name": 1, "role": 1, "created_by": 1,
-            "accounting_permissions": 1, "is_active": 1, "disabled": 1,
+            "accounting_permissions": 1, "web_page_access": 1, "is_active": 1, "disabled": 1,
         })
         if not actor or actor.get("is_active") is False or actor.get("disabled") is True:
             raise HTTPException(403, "accounting_actor_unavailable")
+        actor["_session_client"] = user.get("_session_client")
         require_accounting_permission(actor, permission)
         return actor, accounting_owner_id(actor)
 

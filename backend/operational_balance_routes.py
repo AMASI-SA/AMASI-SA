@@ -559,9 +559,21 @@ def make_operational_balance_router(db, current_user):
 
     @router.get('/inventory')
     async def inventory_availability(user=Depends(current_user)):
-        _,owner,_=await scope(db,user,'reports')
         from operational_inventory_projection import projection
-        return await projection(db,owner)
+        from web_page_access import INVENTORY_PAGE, delegated_page_owner
+
+        delegated_owner = await delegated_page_owner(db, user, INVENTORY_PAGE)
+        if delegated_owner is None:
+            _, owner, _ = await scope(db, user, 'reports')
+            return await projection(db, owner)
+        result = await projection(db, delegated_owner)
+        cost_fields = {'unit_cost', 'inventory_value', 'cost_basis', 'operational_unit_cost',
+                       'operational_inventory_value', 'operational_currency'}
+        return {
+            **result,
+            'items': [{key: value for key, value in row.items() if key not in cost_fields}
+                      for row in result['items']],
+        }
 
     @router.get('/inventory-purchases')
     async def inventory_purchases(user=Depends(current_user)):

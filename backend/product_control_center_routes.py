@@ -10,15 +10,18 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException
-from pymongo import ASCENDING
+from pymongo import ASCENDING, ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 from product_v2_routes import PRODUCTS, _text
 from salla_integration.service import SallaError, call_salla
+from web_page_access import PRODUCTS_PAGE, delegated_page_owner
 
 DRAFTS = "mezan_product_change_drafts_v2"
 REVISIONS = "mezan_product_change_revisions_v2"
 POLICIES = "mezan_product_ai_policies_v2"
 ACTIVE_DRAFT_STATUSES = ["draft", "approved"]
+EMPLOYEE_DRAFT_FIELDS = frozenset({"name", "short_description", "price", "sale_price"})
 
 PROTECTED_FIELDS = {
     "base_cost", "variant_costs", "cost_price", "cost_price_from_salla",
@@ -176,9 +179,10 @@ def _before_value(product: dict[str, Any], key: str) -> Any:
     return product.get(key)
 
 
-async def _product(db: Any, user_id: str, product_id: str) -> dict[str, Any]:
+async def _product(db: Any, user_id: str, product_id: str, *, active_only: bool = False) -> dict[str, Any]:
     row = await db[PRODUCTS].find_one({
         "user_id": user_id,
+        **({"archived": {"$ne": True}} if active_only else {}),
         "$or": [
             {"id": product_id}, {"mezan_product_id": product_id},
             {"salla_product_id": product_id},
@@ -220,19 +224,81 @@ async def supersede_active_drafts(db: Any, *, user_id: str, salla_id: str, keep_
     }})
 
 
+async def _save_employee_draft(db: Any, user: dict, owner_id: str, product: dict, payload: dict) -> dict:
+    changes = payload.get("changes")
+    if not isinstance(changes, dict) or not changes or changes.keys() - EMPLOYEE_DRAFT_FIELDS:
+        raise HTTPException(422, detail={"code": "invalid_employee_product_change"})
+    for key, value in changes.items():
+        if key in {"price", "sale_price"}:
+            if (value is None and key == "sale_price") or (type(value) in (int, float) and 0 <= value <= 1e8):
+                continue
+        elif isinstance(value, str) and len(value) <= 500 and (key != "name" or value.strip()):
+            continue
+        raise HTTPException(422, detail={"code": "invalid_employee_product_change", "field": key})
+    selector = {
+        "user_id": owner_id,
+        "salla_product_id": str(product["salla_product_id"]),
+        "actor_id": str(user["id"]),
+        "source": "web_employee",
+        "status": "draft",
+    }
+    await db[DRAFTS].create_index(
+        [("user_id", 1), ("salla_product_id", 1), ("actor_id", 1)],
+        unique=True,
+        partialFilterExpression={"source": "web_employee", "status": "draft"},
+        name="uq_employee_editable_product_draft",
+    )
+    now = _now()
+    try:
+        row = await db[DRAFTS].find_one_and_update(
+            selector,
+            {"$set": {
+                "changes": changes,
+                "before": {key: _before_value(product, key) for key in changes},
+                "reason": _text(payload.get("reason"))[:500],
+                "updated_at": now,
+            }, "$setOnInsert": {
+                "id": uuid.uuid4().hex,
+                "mezan_product_id": product.get("mezan_product_id"),
+                "created_at": now,
+            }},
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+    except DuplicateKeyError as exc:
+        raise HTTPException(409, detail={"code": "product_draft_changed"}) from exc
+    return {"ok": True, "draft": _serialize(row)}
+
+
 def make_product_control_center_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
     router = APIRouter(prefix="/products-v2", tags=["Product Control Center"])
 
     @router.get("/{product_id}/control-center")
     async def get_control_center(product_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+        owner_id = await delegated_page_owner(db, user, PRODUCTS_PAGE, write=True)
         await ensure_indexes(db)
-        user_id = str(user["id"])
-        product = await _product(db, user_id, product_id)
+        user_id = owner_id or str(user["id"])
+        product = await _product(db, user_id, product_id, active_only=bool(owner_id))
         salla_id = str(product["salla_product_id"])
+        if owner_id:
+            draft = await db[DRAFTS].find_one({
+                "user_id": owner_id, "salla_product_id": salla_id, "actor_id": str(user["id"]),
+                "source": "web_employee", "status": "draft",
+            }, {"_id": 0})
+            return {
+                "product": _serialize({key: product.get(key) for key in EMPLOYEE_DRAFT_FIELDS}),
+                "draft": _serialize(draft),
+            }
         draft = await db[DRAFTS].find_one(
             {"user_id": user_id, "salla_product_id": salla_id, "status": {"$in": ACTIVE_DRAFT_STATUSES}},
             {"_id": 0}, sort=[("updated_at", -1)],
         )
+        if draft and draft.get("source") == "web_employee" and draft.get("status") == "draft":
+            approved = await db[DRAFTS].find_one(
+                {"user_id": user_id, "salla_product_id": salla_id, "status": "approved"},
+                {"_id": 0}, sort=[("updated_at", -1)],
+            )
+            draft = approved or draft
         policy = await db[POLICIES].find_one({"user_id": user_id}, {"_id": 0}) or {
             "user_id": user_id, **DEFAULT_POLICY,
         }
@@ -251,9 +317,12 @@ def make_product_control_center_router(db: Any, current_user: Callable[..., Any]
 
     @router.put("/{product_id}/control-center/draft")
     async def save_draft(product_id: str, payload: dict = Body(...), user: dict = Depends(current_user)) -> dict[str, Any]:
+        owner_id = await delegated_page_owner(db, user, PRODUCTS_PAGE, write=True)
         await ensure_indexes(db)
-        user_id = str(user["id"])
-        product = await _product(db, user_id, product_id)
+        user_id = owner_id or str(user["id"])
+        product = await _product(db, user_id, product_id, active_only=bool(owner_id))
+        if owner_id:
+            return await _save_employee_draft(db, user, owner_id, product, payload)
         patch = _clean_patch(payload.get("changes") if isinstance(payload.get("changes"), dict) else payload)
         if not patch:
             raise HTTPException(status_code=422, detail={"code": "empty_product_change"})
@@ -300,7 +369,11 @@ def make_product_control_center_router(db: Any, current_user: Callable[..., Any]
         if not draft or draft.get("status") != "approved":
             raise HTTPException(status_code=409, detail={"code": "draft_not_approved"})
         newest = await db[DRAFTS].find_one(
-            {"user_id": user_id, "salla_product_id": salla_id, "status": {"$in": ACTIVE_DRAFT_STATUSES}},
+            {
+                "user_id": user_id, "salla_product_id": salla_id,
+                "status": {"$in": ACTIVE_DRAFT_STATUSES},
+                "$or": [{"source": {"$ne": "web_employee"}}, {"status": "approved"}],
+            },
             {"_id": 0}, sort=[("updated_at", -1)],
         )
         if newest and newest.get("id") != draft_id:

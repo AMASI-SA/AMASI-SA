@@ -298,7 +298,9 @@ def make_product_category_catalog_router(db: Any, current_user: Callable) -> API
 
     @router.get("/category-catalog")
     async def category_catalog(user: dict = Depends(current_user)) -> dict[str, Any]:
-        user_id = str(user["id"])
+        from web_page_access import INTAKE_PAGE, delegated_page_owner
+
+        user_id = await delegated_page_owner(db, user, INTAKE_PAGE) or str(user["id"])
         categories: list[dict[str, Any]] = []
         page = 1
         try:

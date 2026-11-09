@@ -32,6 +32,7 @@ _USER_PROJECTION = {
     "is_owner": 1,
     "created_by": 1,
     "accounting_permissions": 1,
+    "web_page_access": 1,
 }
 
 
@@ -43,6 +44,7 @@ async def fresh_accounting_user(db, user: dict[str, Any]) -> dict[str, Any]:
     # without trusting client input or persisting it to the user document.
     if user.get("is_owner") is True:
         fresh["is_owner"] = True
+    fresh["_session_client"] = user.get("_session_client")
     return fresh
 
 

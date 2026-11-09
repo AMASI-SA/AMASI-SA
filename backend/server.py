@@ -261,6 +261,7 @@ async def readiness_check(response: Response):
 # ── Dependencies ──────────────────────────────────────────────────────────────
 async def current_user(request: Request) -> dict:
     user = await get_current_user_from_db(request, db)
+    enforce_web_catalog_access(user, request.url.path, request.method)
     # Native employees authenticate as themselves, but Mezan's historical data
     # remains tenant-scoped by the merchant owner id. Bridge those identities
     # only for an explicit native-route allow-list and only after checking the
@@ -752,6 +753,7 @@ async def me(user: dict = Depends(current_user)):
     # make the same Customer Intelligence decision.  Legacy Admin does not
     # inherit these capabilities merely from its broad legacy role.
     from ai_store_access_contract import merged_session_permissions
+    from web_page_access import web_page_access_for_user
 
     try:
         permissions = await merged_session_permissions(
@@ -772,6 +774,7 @@ async def me(user: dict = Depends(current_user)):
         # frontend can drive RBAC navigation without an extra round-trip.
         "permissions": permissions,
         "mobile_app_access": mobile_app_access,
+        "web_page_access": web_page_access_for_user(user),
         "is_owner": _is_owner(user),
         "has_security_question": bool(user.get("security_question")),
         "review_scopes": user.get("review_scopes") or [],
@@ -4321,6 +4324,8 @@ from employees_v2_routes import (
     make_employees_v2_router,
 )
 api.include_router(make_employees_v2_router(db, current_user))
+from web_page_access import enforce_web_catalog_access, make_web_page_access_router
+api.include_router(make_web_page_access_router(db, current_user))
 api.include_router(make_order_review_router(db, current_user))
 api.include_router(make_return_decision_router(db, current_user))
 attach_settlement_cycle_routes(api, db)

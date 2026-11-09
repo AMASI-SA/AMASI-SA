@@ -240,7 +240,8 @@ function CapabilityPills({ values, options }) {
     );
 }
 
-export default function WarehouseHierarchyWorkspace() {
+export default function WarehouseHierarchyWorkspace({ accessMode = null }) {
+    const canWrite = accessMode !== "read";
     const [catalog, setCatalog] = useState(FALLBACK_CATALOG);
     const [capabilityOptions, setCapabilityOptions] = useState(FALLBACK_CAPABILITIES);
     const [templates, setTemplates] = useState(FALLBACK_TEMPLATES);
@@ -432,9 +433,9 @@ export default function WarehouseHierarchyWorkspace() {
                     <Warehouse size={64} weight="duotone" className="text-slate-300" />
                     <h2 className="mt-4 text-2xl font-black text-slate-950">ابدأ بالفرع</h2>
                     <p className="mt-2 max-w-lg text-sm leading-7 text-slate-500">البنية المعتمدة ثابتة وواضحة: فرع ثم أقسام، وكل دولاب يجب أن يكون داخل قسم. لا يوجد دولاب مباشر خارج الأقسام.</p>
-                    <button type="button" onClick={() => setDialog("branch")} className="mt-5 flex items-center gap-2 rounded-xl bg-violet-700 px-5 py-3 text-sm font-extrabold text-white">
+                    {canWrite && <button type="button" onClick={() => setDialog("branch")} className="mt-5 flex items-center gap-2 rounded-xl bg-violet-700 px-5 py-3 text-sm font-extrabold text-white">
                         <Plus size={18} weight="bold" /> إضافة أول فرع
-                    </button>
+                    </button>}
                 </div>
             );
         }
@@ -487,20 +488,20 @@ export default function WarehouseHierarchyWorkspace() {
                                 <h2 className="mt-1 text-2xl font-black text-slate-950">{selectedSection.name}</h2>
                                 <p className="num mt-1 text-xs text-slate-400">{selectedBranch.code}-{selectedSection.code}</p>
                             </div>
-                            <button type="button" onClick={() => { setCabinetForm(EMPTY_CABINET); setDialog("cabinet"); }} className="flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-extrabold text-white">
+                            {canWrite && <button type="button" onClick={() => { setCabinetForm(EMPTY_CABINET); setDialog("cabinet"); }} className="flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-extrabold text-white">
                                 <Plus size={18} weight="bold" /> إضافة دولاب داخل القسم
-                            </button>
+                            </button>}
                         </div>
                         <div className="mt-4"><CapabilityPills values={selectedSection.capabilities} options={capabilityOptions} /></div>
                     </div>
-                    {!selectedSection.cabinets?.length ? (
+                    {!selectedSection.cabinets?.length ? (canWrite ? (
                         <button type="button" onClick={() => setDialog("cabinet")} className="flex min-h-[360px] w-full flex-col items-center justify-center rounded-3xl border-2 border-dashed border-violet-200 bg-violet-50/50 p-8 text-center">
                             <Cube size={52} weight="duotone" className="text-violet-400" />
                             <h3 className="mt-3 text-xl font-black text-slate-950">لا توجد دواليب في هذا القسم</h3>
                             <p className="mt-2 text-sm text-slate-500">حدد عدد الأعمدة وعدد الخانات في كل عمود، وسيولّد ميزان جميع الخانات وأكوادها تلقائيًا.</p>
                             <span className="mt-4 rounded-xl bg-violet-700 px-4 py-2 text-sm font-bold text-white">إضافة أول دولاب</span>
                         </button>
-                    ) : (
+                    ) : <p className="rounded-2xl border bg-white p-4">لا توجد دواليب في هذا القسم.</p>) : (
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                             {selectedSection.cabinets.map((cabinet) => (
                                 <button key={cabinet.id} type="button" onClick={() => setCabinetId(cabinet.id)} className="rounded-3xl border border-slate-200 bg-white p-5 text-right shadow-sm transition hover:border-violet-300 hover:shadow-md">
@@ -530,19 +531,19 @@ export default function WarehouseHierarchyWorkspace() {
                             <h2 className="mt-1 text-2xl font-black text-slate-950">{selectedBranch.name}</h2>
                             <p className="mt-2 flex items-center gap-1 text-sm text-slate-500"><MapPin size={16} /> {address}</p>
                         </div>
-                        <button type="button" onClick={() => { setSectionForm({ ...EMPTY_SECTION, capabilities: templates.storage || ["cabinets"] }); setDialog("section"); }} className="flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-extrabold text-white">
+                        {canWrite && <button type="button" onClick={() => { setSectionForm({ ...EMPTY_SECTION, capabilities: templates.storage || ["cabinets"] }); setDialog("section"); }} className="flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-extrabold text-white">
                             <Plus size={18} weight="bold" /> إضافة قسم
-                        </button>
+                        </button>}
                     </div>
                 </div>
-                {!sections.length ? (
+                {!sections.length ? (canWrite ? (
                     <button type="button" onClick={() => setDialog("section")} className="flex min-h-[360px] w-full flex-col items-center justify-center rounded-3xl border-2 border-dashed border-violet-200 bg-violet-50/50 p-8 text-center">
                         <Wrench size={52} weight="duotone" className="text-violet-400" />
                         <h3 className="mt-3 text-xl font-black text-slate-950">الفرع لا يحتوي أقسامًا بعد</h3>
                         <p className="mt-2 max-w-lg text-sm leading-6 text-slate-500">أضف قسم تخزين أو تركيب أو نحت أو تجهيز أو شحن. كل قسم يمكن أن يجمع أكثر من وظيفة، وكل دولاب سيكون داخله.</p>
                         <span className="mt-4 rounded-xl bg-violet-700 px-4 py-2 text-sm font-bold text-white">إضافة أول قسم</span>
                     </button>
-                ) : (
+                ) : <p className="rounded-2xl border bg-white p-4">لا توجد أقسام في هذا الفرع.</p>) : (
                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                         {sections.map((section) => (
                             <button key={section.id} type="button" onClick={() => chooseSection(section.id)} className="rounded-3xl border border-slate-200 bg-white p-5 text-right shadow-sm transition hover:border-violet-300 hover:shadow-md">
@@ -570,8 +571,8 @@ export default function WarehouseHierarchyWorkspace() {
                         <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">المعمارية المعتمدة: <strong>فرع ← قسم ← دولاب ← خانات</strong>. لا يمكن إنشاء دولاب خارج قسم، والترقيم والأكواد والباركودات كلها تلقائية.</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={() => setDialog("branch")} className="flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-extrabold text-white"><Plus size={18} weight="bold" /> إضافة فرع</button>
-                        {!!branches.length && <button type="button" onClick={() => setDialog("reset")} className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-extrabold text-rose-700"><Trash size={18} /> بدء من الصفر</button>}
+                        {canWrite && <button type="button" onClick={() => setDialog("branch")} className="flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-extrabold text-white"><Plus size={18} weight="bold" /> إضافة فرع</button>}
+                        {!accessMode && !!branches.length && <button type="button" onClick={() => setDialog("reset")} className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-extrabold text-rose-700"><Trash size={18} /> بدء من الصفر</button>}
                     </div>
                 </div>
             </section>
@@ -579,9 +580,9 @@ export default function WarehouseHierarchyWorkspace() {
             <section className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_270px]">
                 <aside className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
                     <div className="mb-3 px-2"><h2 className="font-black text-slate-950">الهيكل</h2><p className="text-[11px] text-slate-400">فرع ثم قسم ثم دولاب</p></div>
-                    {!branches.length ? (
+                    {!branches.length ? (canWrite ? (
                         <button type="button" onClick={() => setDialog("branch")} className="w-full rounded-2xl border border-dashed border-violet-200 bg-violet-50 p-4 text-sm font-bold text-violet-800">+ إضافة أول فرع</button>
-                    ) : (
+                    ) : <p className="px-2 text-sm">لا توجد فروع.</p>) : (
                         <div className="space-y-2">
                             {branches.map((branch) => {
                                 const activeBranch = branch.id === branchId;
@@ -633,7 +634,7 @@ export default function WarehouseHierarchyWorkspace() {
                 </aside>
             </section>
 
-            {dialog === "branch" && (
+            {canWrite && dialog === "branch" && (
                 <Modal title="إضافة فرع" subtitle="رقم الفرع ورمزه يُنشآن تلقائيًا داخل المدينة." onClose={() => setDialog(null)}>
                     <form onSubmit={createBranch} className="space-y-4">
                         <div className="grid gap-3 md:grid-cols-2">
@@ -651,7 +652,7 @@ export default function WarehouseHierarchyWorkspace() {
                 </Modal>
             )}
 
-            {dialog === "section" && (
+            {canWrite && dialog === "section" && (
                 <Modal title="إضافة قسم" subtitle={`داخل ${selectedBranch?.name || "الفرع"}. كل قسم يدعم الدواليب ويمكن أن يجمع عدة وظائف.`} onClose={() => setDialog(null)}>
                     <form onSubmit={createSection} className="space-y-4">
                         <div className="grid gap-3 md:grid-cols-2">
@@ -679,7 +680,7 @@ export default function WarehouseHierarchyWorkspace() {
                 </Modal>
             )}
 
-            {dialog === "cabinet" && (
+            {canWrite && dialog === "cabinet" && (
                 <Modal title="إضافة دولاب" subtitle={`داخل قسم ${selectedSection?.name || ""}. الخانات والترقيم والباركود تُنشأ تلقائيًا.`} onClose={() => setDialog(null)}>
                     <form onSubmit={createCabinet} className="space-y-4">
                         <div className="rounded-2xl border border-violet-100 bg-violet-50 p-4">
@@ -702,7 +703,7 @@ export default function WarehouseHierarchyWorkspace() {
                 </Modal>
             )}
 
-            {dialog === "reset" && (
+            {!accessMode && dialog === "reset" && (
                 <Modal title="بدء الفروع والمخازن من الصفر" subtitle="سيُحذف الفرع الحالي وجميع الأقسام والدواليب والخانات وبيانات التجربة، ثم تبدأ كل الأرقام من 1." onClose={() => { setDialog(null); setResetConfirmation(""); }} maxWidth="max-w-lg">
                     <form onSubmit={resetWorkspace} className="space-y-4">
                         <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm leading-6 text-rose-800">هذا الإجراء خاص ببيانات الفروع والمخازن فقط، ولا يحذف الطلبات أو المنتجات أو بيانات سلة وقيود.</div>

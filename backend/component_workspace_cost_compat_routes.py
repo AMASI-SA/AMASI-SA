@@ -22,6 +22,7 @@ from component_category_policy import (
 )
 from component_status_policy import component_is_active, component_status
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
+from web_page_access import COMPONENTS_PAGE, delegated_page_owner
 from product_option_cost_routes import BINDINGS, RESOURCES, _serialize, ensure_indexes
 from product_v2_routes import PRODUCTS, _number, _text
 
@@ -179,7 +180,8 @@ def make_component_workspace_cost_compat_router(
     async def component_workspace(user: dict = Depends(current_user)) -> dict[str, Any]:
         await ensure_indexes(db)
         await _ensure_organization_indexes(db)
-        user_id = str(user["id"])
+        owner_id = await delegated_page_owner(db, user, COMPONENTS_PAGE)
+        user_id = owner_id or str(user["id"])
         resources = await db[RESOURCES].find(
             {"user_id": user_id}, {"_id": 0}
         ).sort("name", 1).to_list(length=5000)
@@ -303,6 +305,13 @@ def make_component_workspace_cost_compat_router(
                 "updated_at": group.get("updated_at"),
             })
 
+        if owner_id:
+            fields = ("id", "name", "code", "track_inventory", "category_ids", "status")
+            return {
+                "components": [{key: row[key] for key in fields if key in row} for row in component_rows],
+                "categories": category_rows,
+                "groups": group_rows,
+            }
         return {
             "components": component_rows,
             "categories": category_rows,
@@ -330,8 +339,8 @@ def make_component_workspace_cost_compat_router(
         payload: dict = Body(...),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
+        user_id = await delegated_page_owner(db, user, COMPONENTS_PAGE, write=True) or str(user["id"])
         await _ensure_organization_indexes(db)
-        user_id = str(user["id"])
         name = re.sub(r"\s+", " ", _text(payload.get("name"))).strip()
         if not name:
             raise HTTPException(status_code=422, detail={"code": "component_category_name_required"})
@@ -359,7 +368,7 @@ def make_component_workspace_cost_compat_router(
         payload: dict = Body(...),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        user_id = str(user["id"])
+        user_id = await delegated_page_owner(db, user, COMPONENTS_PAGE, write=True) or str(user["id"])
         name = re.sub(r"\s+", " ", _text(payload.get("name"))).strip()
         if not name:
             raise HTTPException(status_code=422, detail={"code": "component_category_name_required"})
@@ -383,7 +392,7 @@ def make_component_workspace_cost_compat_router(
         payload: dict = Body(...),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        user_id = str(user["id"])
+        user_id = await delegated_page_owner(db, user, COMPONENTS_PAGE, write=True) or str(user["id"])
         category_ids = _unique_ids(payload.get("category_ids"))
         resource = await db[RESOURCES].find_one(
             {"user_id": user_id, "id": _text(resource_id)}, {"_id": 0}
@@ -469,7 +478,8 @@ def make_component_workspace_cost_compat_router(
         payload: dict = Body(...),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        saved = await save_group(payload=payload, user_id=str(user["id"]))
+        user_id = await delegated_page_owner(db, user, COMPONENTS_PAGE, write=True) or str(user["id"])
+        saved = await save_group(payload=payload, user_id=user_id)
         return {"ok": True, "group": _serialize(saved)}
 
     @router.put("/components-v2/groups/{group_id}")
@@ -478,9 +488,10 @@ def make_component_workspace_cost_compat_router(
         payload: dict = Body(...),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
+        user_id = await delegated_page_owner(db, user, COMPONENTS_PAGE, write=True) or str(user["id"])
         saved = await save_group(
             payload=payload,
-            user_id=str(user["id"]),
+            user_id=user_id,
             group_id=_text(group_id),
         )
         return {"ok": True, "group": _serialize(saved)}

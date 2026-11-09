@@ -4,6 +4,8 @@ import { useAuth } from "../context/AuthContext";
 import AmasiDeliveryApp from "../pages/AmasiDeliveryApp";
 import AuthLoadingScreen from "./AuthLoadingScreen";
 import AuthRecoveryScreen from "./AuthRecoveryScreen";
+import { EmployeePageUnavailable } from "./EmployeeWebLayout";
+import { grantedPageAt, managedWebPages } from "../lib/webPageAccess";
 
 export default function ProtectedRoute({ children }) {
     const { user, loading, authStatus, retryAuth } = useAuth();
@@ -56,6 +58,13 @@ export default function ProtectedRoute({ children }) {
         if (!allowed.includes(location.pathname)) {
             return <Navigate to="/integrations-v2?provider=meta_ads" replace />;
         }
+    }
+    const pages = managedWebPages(user);
+    if (pages) {
+        if (pages.length > 0 && ["/", "/dashboard-advanced"].includes(location.pathname)) {
+            return <Navigate to={pages[0].to} replace />;
+        }
+        if (!grantedPageAt(pages, location)) return <EmployeePageUnavailable pages={pages} />;
     }
     return children;
 }

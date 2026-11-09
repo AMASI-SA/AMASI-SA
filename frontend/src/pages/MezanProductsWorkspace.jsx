@@ -6,14 +6,15 @@ import {
 import { toast } from "sonner";
 
 import ProductControlCenterPanel from "../components/products/ProductControlCenterPanel";
+import EmployeeProductDraft from "../components/products/EmployeeProductDraft";
 import BundleEditor from "../components/products/BundleEditor";
 import BundleReportPanel from "../components/products/BundleReportPanel";
 import ProductMediaDraftEditor from "../components/products/ProductMediaDraftEditor";
 import ProductOptionCostEditor from "../components/products/ProductOptionCostEditor";
 import ProductOperationsEditor from "../components/products/ProductOperationsEditor";
 import {
-    applyMissingSkus, getProductV2Costs, getProductsV2Summary,
-    listWorkspaceProducts, previewMissingSkus, refreshProductV2Details,
+    applyMissingSkus, getProductV2, getProductV2Costs, getProductsV2Summary,
+    listProductsV2, listWorkspaceProducts, previewMissingSkus, refreshProductV2Details,
     saveProductV2Costs, syncProductsV2,
 } from "../services/mezanProductsV2";
 import {
@@ -107,11 +108,14 @@ function SkuModal({ preview, busy, onClose, onApply }) {
     </div>;
 }
 
-export default function MezanProductsWorkspace() {
+export default function MezanProductsWorkspace({ catalogSearch = null, canEditDraft = false }) {
+    const catalogOnly = catalogSearch !== null;
     const [items, setItems] = useState([]);
     const [summary, setSummary] = useState(null);
     const [pagination, setPagination] = useState({ page: 1, total: 0, total_pages: 1 });
-    const [selectedId, setSelectedId] = useState(initialSelectedProduct);
+    const [selectedId, setSelectedId] = useState(() => catalogOnly
+        ? resolveInitialSelectedProduct(catalogSearch)
+        : initialSelectedProduct());
     const [selected, setSelected] = useState(null);
     const [costs, setCosts] = useState({ base_cost: "", variant_costs: {}, notes: "" });
     const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("lookup_sku") || "");
@@ -119,9 +123,9 @@ export default function MezanProductsWorkspace() {
     const [status, setStatus] = useState("");
     const [sort, setSort] = useState("newest");
     const [missingSku, setMissingSku] = useState(false);
-    const [missingMezanCost, setMissingMezanCost] = useState(initialMissingCostFilter);
+    const [missingMezanCost, setMissingMezanCost] = useState(() => !catalogOnly && initialMissingCostFilter());
     const [missingCostRange] = useState(initialMissingCostRange);
-    const [focusCostEditor] = useState(initialCostFocus);
+    const [focusCostEditor] = useState(() => !catalogOnly && initialCostFocus());
     const [loading, setLoading] = useState(true);
     const [detailLoading, setDetailLoading] = useState(false);
     const [costSaving, setCostSaving] = useState(false);
@@ -129,13 +133,15 @@ export default function MezanProductsWorkspace() {
     const [skuPreview, setSkuPreview] = useState(null);
     const [skuBusy, setSkuBusy] = useState(false);
     const [error, setError] = useState("");
-    const [mobileView, setMobileView] = useState(initialMobileView);
+    const [mobileView, setMobileView] = useState(() => catalogOnly ? resolveInitialProductsView(catalogSearch) : initialMobileView());
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
     const load = useCallback(async ({ page = 1, search = appliedQuery } = {}) => {
         setLoading(true); setError("");
         try {
-            const [listResult, summaryResult] = await Promise.all([
+            const [listResult, summaryResult] = catalogOnly
+                ? [await listProductsV2({ page, perPage: 30, query: search, status }), null]
+                : await Promise.all([
                 listWorkspaceProducts({
                     page,
                     perPage: 30,
@@ -168,28 +174,32 @@ export default function MezanProductsWorkspace() {
             if (!selectedId && nextItems[0]) {
                 const firstId = nextItems[0].mezan_product_id || nextItems[0].id;
                 setSelectedId(firstId);
-                rememberSelectedProduct(firstId);
+                if (!catalogOnly) rememberSelectedProduct(firstId);
             }
         } catch (err) {
             const detail = err?.response?.data?.detail;
             setError((typeof detail === "string" ? detail : detail?.message) || err?.message || "تعذّر تحميل المنتجات.");
         } finally { setLoading(false); }
-    }, [appliedQuery, missingCostRange.from, missingCostRange.paymentMethods, missingCostRange.productIds, missingCostRange.shippingCompanies, missingCostRange.to, missingMezanCost, missingSku, selectedId, sort, status]);
+    }, [appliedQuery, catalogOnly, missingCostRange.from, missingCostRange.paymentMethods, missingCostRange.productIds, missingCostRange.shippingCompanies, missingCostRange.to, missingMezanCost, missingSku, selectedId, sort, status]);
 
     const loadSelected = useCallback(async () => {
         if (!selectedId) return;
         setDetailLoading(true);
         try {
+            if (catalogOnly) {
+                setSelected(await getProductV2(selectedId));
+                return;
+            }
             const [detailResult, costResult] = await Promise.all([refreshProductV2Details(selectedId), getProductV2Costs(selectedId)]);
             setSelected(detailResult.product || null);
             setCosts({ base_cost: costResult?.base_cost ?? "", variant_costs: costResult?.variant_costs || {}, notes: costResult?.notes || "" });
         } catch (err) { toast.error(err?.response?.data?.detail?.message || "تعذر جلب تفاصيل المنتج"); }
         finally { setDetailLoading(false); }
-    }, [selectedId]);
+    }, [catalogOnly, selectedId]);
 
     useEffect(() => { load({ page: 1 }); }, [status, sort, missingSku, missingMezanCost]); // eslint-disable-line react-hooks/exhaustive-deps
     useEffect(() => { loadSelected(); }, [loadSelected]);
-    useEffect(() => { if (selectedId) rememberSelectedProduct(selectedId); }, [selectedId]);
+    useEffect(() => { if (selectedId && !catalogOnly) rememberSelectedProduct(selectedId); }, [catalogOnly, selectedId]);
     useEffect(() => {
         if (!focusCostEditor || !selected || detailLoading) return undefined;
         const timer = window.setTimeout(() => {
@@ -235,7 +245,7 @@ export default function MezanProductsWorkspace() {
 
     function selectProduct(id) {
         setSelectedId(id);
-        rememberSelectedProduct(id);
+        if (!catalogOnly) rememberSelectedProduct(id);
         setMobileView("detail");
         window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
     }
@@ -262,8 +272,9 @@ export default function MezanProductsWorkspace() {
     }
 
     return <div className="min-w-0 space-y-3 overflow-x-hidden sm:space-y-4" dir="rtl">
-        <BundleReportPanel />
-        <SkuModal preview={skuPreview} busy={skuBusy} onClose={() => setSkuPreview(null)} onApply={applySkuBatch} />
+        {!catalogOnly && <><BundleReportPanel />
+            <SkuModal preview={skuPreview} busy={skuBusy} onClose={() => setSkuPreview(null)} onApply={applySkuBatch} />
+        </>}
 
         <section className="rounded-2xl border bg-white p-3 shadow-sm sm:rounded-3xl sm:p-4">
             <form onSubmit={(event) => { event.preventDefault(); setAppliedQuery(query.trim()); load({ page: 1, search: query.trim() }); }} className="relative">
@@ -271,12 +282,12 @@ export default function MezanProductsWorkspace() {
                 <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ابحث بالاسم أو SKU أو الباركود…" className="w-full rounded-2xl border py-3 pr-11 pl-4" />
             </form>
             <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4 xl:flex">
-                <select value={sort} onChange={(event) => setSort(event.target.value)} className="col-span-2 min-w-0 rounded-xl border px-3 py-2 md:col-span-1 xl:w-52"><option value="newest">المضافة حديثًا</option><option value="oldest">الأقدم</option><option value="name">الاسم</option><option value="price_high">السعر الأعلى</option><option value="price_low">السعر الأقل</option></select>
+                {!catalogOnly && <select value={sort} onChange={(event) => setSort(event.target.value)} className="col-span-2 min-w-0 rounded-xl border px-3 py-2 md:col-span-1 xl:w-52"><option value="newest">المضافة حديثًا</option><option value="oldest">الأقدم</option><option value="name">الاسم</option><option value="price_high">السعر الأعلى</option><option value="price_low">السعر الأقل</option></select>}
                 <button type="button" onClick={() => setMobileFiltersOpen((value) => !value)} className="rounded-xl border px-3 py-2 xl:hidden"><SlidersHorizontal className="ml-1 inline" /> {selectedStatusLabel}</button>
-                <button type="button" onClick={() => setMissingSku((value) => !value)} className={`rounded-xl border px-3 py-2 ${missingSku ? "border-violet-500 bg-violet-50 text-violet-800" : ""}`}>بدون SKU</button>
+                {!catalogOnly && <><button type="button" onClick={() => setMissingSku((value) => !value)} className={`rounded-xl border px-3 py-2 ${missingSku ? "border-violet-500 bg-violet-50 text-violet-800" : ""}`}>بدون SKU</button>
                 <button type="button" onClick={toggleMissingMezanCost} className={`rounded-xl border px-3 py-2 ${missingMezanCost ? "border-amber-500 bg-amber-50 text-amber-900" : ""}`}>مباعة بدون تكلفة ميزان</button>
                 <button type="button" onClick={async () => setSkuPreview(await previewMissingSkus({ limit: 50 }))} className="rounded-xl border border-violet-300 px-3 py-2 text-violet-800">توليد SKU</button>
-                <button type="button" onClick={syncNow} disabled={syncing} className="col-span-2 rounded-xl bg-violet-700 px-3 py-2 text-white md:col-span-1 xl:mr-auto xl:px-4">{syncing ? <SpinnerGap className="inline animate-spin" /> : <ArrowsClockwise className="inline" />} مزامنة سلة</button>
+                <button type="button" onClick={syncNow} disabled={syncing} className="col-span-2 rounded-xl bg-violet-700 px-3 py-2 text-white md:col-span-1 xl:mr-auto xl:px-4">{syncing ? <SpinnerGap className="inline animate-spin" /> : <ArrowsClockwise className="inline" />} مزامنة سلة</button></>}
             </div>
             {mobileFiltersOpen && <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl bg-slate-50 p-2 xl:hidden">{STATUS_FILTERS.map(([value, label]) => <button key={value} type="button" onClick={() => { setStatus(value); setMobileFiltersOpen(false); }} className={`rounded-xl px-3 py-2 text-sm ${status === value && (value !== "" || !missingMezanCost) ? "bg-violet-700 text-white" : "bg-white"}`}>{label}</button>)}</div>}
         </section>
@@ -302,8 +313,8 @@ export default function MezanProductsWorkspace() {
             <aside className="hidden rounded-3xl border bg-white p-4 xl:block">
                 <h2 className="mb-4 font-black"><SlidersHorizontal className="inline" /> تصفية المنتجات</h2>
                 {STATUS_FILTERS.map(([value, label]) => <button key={value} onClick={() => setStatus(value)} className={`mb-1 w-full rounded-xl px-3 py-3 text-right ${status === value && (value !== "" || !missingMezanCost) ? "bg-violet-700 text-white" : "hover:bg-slate-50"}`}>{label}</button>)}
-                <button type="button" onClick={toggleMissingMezanCost} className={`mt-2 w-full rounded-xl px-3 py-3 text-right font-bold ${missingMezanCost ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-900 hover:bg-amber-100"}`}>مباعة بدون تكلفة ميزان</button>
-                <div className="mt-4 text-xs text-slate-500">إجمالي V2: {summary?.total || 0}</div>
+                {!catalogOnly && <button type="button" onClick={toggleMissingMezanCost} className={`mt-2 w-full rounded-xl px-3 py-3 text-right font-bold ${missingMezanCost ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-900 hover:bg-amber-100"}`}>مباعة بدون تكلفة ميزان</button>}
+                <div className="mt-4 text-xs text-slate-500">إجمالي المنتجات: {summary?.total ?? pagination.total}</div>
             </aside>
 
             <div className={`${mobileView === "detail" ? "hidden lg:block" : "block"} min-w-0 overflow-hidden rounded-2xl border bg-white sm:rounded-3xl`}>
@@ -321,14 +332,15 @@ export default function MezanProductsWorkspace() {
                 <button type="button" onClick={() => setMobileView("list")} className="mb-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold lg:hidden"><ArrowRight /> العودة إلى المنتجات</button>
                 {detailLoading ? <div className="flex h-72 items-center justify-center"><SpinnerGap className="animate-spin" /></div> : !selected ? <div className="flex h-72 flex-col items-center justify-center text-slate-400"><Cube size={54} /><p>اختر منتجًا</p></div> : <div className="min-w-0 space-y-4 sm:space-y-5">
                     <div className="flex min-w-0 items-center gap-3 border-b pb-4 sm:gap-4 sm:pb-5"><ProductThumb product={selected} size="lg" /><div className="min-w-0"><h1 className="break-words text-lg font-black sm:text-xl">{selected.name}</h1><p className="break-all text-xs text-slate-500">Salla #{selected.salla_product_id} · {selected.sku || "بدون SKU"}</p></div></div>
-                    <ProductControlCenterPanel productId={selectedId} product={selected} onPublished={loadSelected} />
+                    {canEditDraft && <EmployeeProductDraft key={selectedId} productId={selectedId} />}
+                    {!catalogOnly && <><ProductControlCenterPanel productId={selectedId} product={selected} onPublished={loadSelected} />
                     <BundleEditor key={selectedId} productId={selectedId} salePrice={selected.sale_price ?? selected.price} />
                     <ProductMediaDraftEditor productId={selectedId} images={media} onPublished={loadSelected} />
-                    <section className="rounded-2xl border p-3 sm:p-4"><h2 className="mb-3 font-black">معاينة وصف المنتج الحالي</h2><DescriptionPreview html={selected.description_html || selected.description} /></section>
                     <section id="mezan-product-cost-editor" className="rounded-2xl border border-emerald-200 p-3 sm:p-4"><div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-black">التكلفة الأساسية — Mezan</h2><p className="text-xs text-slate-500">مستقلة عن نشر بيانات المنتج إلى سلة.</p></div><button onClick={saveCosts} disabled={costSaving} className="rounded-xl bg-emerald-700 px-4 py-2 text-white"><FloppyDisk className="inline" /> حفظ</button></div><div className="grid gap-3 sm:grid-cols-2 sm:gap-4"><label className="text-sm">تكلفة سلة<input value={selected.cost_price_from_salla ?? ""} readOnly className="mt-1 w-full rounded-xl border bg-slate-50 p-3" /></label><label className="text-sm">تكلفة المنتج في ميزان<input type="number" min="0" step="0.01" value={costs.base_cost} onChange={(event) => setCosts((current) => ({ ...current, base_cost: event.target.value }))} className="mt-1 w-full rounded-xl border border-emerald-300 p-3" /></label></div></section>
                     <ProductOperationsEditor productId={selectedId} />
-                    <ProductOptionCostEditor productId={selectedId} options={options} customFields={customFields} />
-                    <section className="rounded-2xl border p-3 sm:p-4"><h2 className="mb-3 font-black">المتغيرات ({variants.length})</h2>{!variants.length ? <p className="text-slate-400">لا توجد متغيرات مستقلة.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-right text-xs"><thead><tr><th className="p-3">المتغير</th><th>SKU</th><th>السعر</th><th>تكلفة ميزان</th></tr></thead><tbody>{variants.map((variant) => <tr key={variant.id} className="border-t"><td className="p-3 font-bold">{variant.display_name || variant.name || `متغير #${variant.id}`}</td><td>{variant.sku || "—"}</td><td>{money(variant.price)}</td><td><input type="number" min="0" step="0.01" value={costs.variant_costs?.[variant.id] ?? ""} onChange={(event) => setCosts((current) => ({ ...current, variant_costs: { ...current.variant_costs, [variant.id]: event.target.value } }))} className="w-28 rounded-lg border p-2" /></td></tr>)}</tbody></table></div>}</section>
+                    <ProductOptionCostEditor productId={selectedId} options={options} customFields={customFields} /></>}
+                    <section className="rounded-2xl border p-3 sm:p-4"><h2 className="mb-3 font-black">معاينة وصف المنتج الحالي</h2><DescriptionPreview html={selected.description_html || selected.description} /></section>
+                    <section className="rounded-2xl border p-3 sm:p-4"><h2 className="mb-3 font-black">المتغيرات ({variants.length})</h2>{!variants.length ? <p className="text-slate-400">لا توجد متغيرات مستقلة.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-right text-xs"><thead><tr><th className="p-3">المتغير</th><th>SKU</th><th>السعر</th>{!catalogOnly && <th>تكلفة ميزان</th>}</tr></thead><tbody>{variants.map((variant) => <tr key={variant.id} className="border-t"><td className="p-3 font-bold">{variant.display_name || variant.name || `متغير #${variant.id}`}</td><td>{variant.sku || "—"}</td><td>{money(variant.price)}</td>{!catalogOnly && <td><input type="number" min="0" step="0.01" value={costs.variant_costs?.[variant.id] ?? ""} onChange={(event) => setCosts((current) => ({ ...current, variant_costs: { ...current.variant_costs, [variant.id]: event.target.value } }))} className="w-28 rounded-lg border p-2" /></td>}</tr>)}</tbody></table></div>}</section>
                 </div>}
             </main>
         </section>

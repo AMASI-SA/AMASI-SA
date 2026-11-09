@@ -609,13 +609,23 @@ def make_product_inventory_receipt_router(
     )
 
     from operational_physical_receipts import attach_physical_routes
+    from web_page_access import RECEIVING_PAGE, delegated_page_owner
+
     attach_physical_routes(router, db, current_user)
 
     @router.get("/purchase-receiving/catalog")
     async def receiving_catalog(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
+        owner_id = await delegated_page_owner(db, user, RECEIVING_PAGE)
         context = await _actor_context(db, user)
+        if owner_id:
+            selector = {"user_id": owner_id, "status": "posted"}
+            if context["warehouse_ids"]:
+                selector["warehouse_id"] = {"$in": sorted(context["warehouse_ids"])}
+            fields = {"_id": 0, "id": 1, "product_name": 1, "location_code": 1, "quantity": 1}
+            receipts = await db[INVENTORY_RECEIPTS].find(selector, fields).sort("posted_at", -1).limit(30).to_list(30)
+            return {"ok": True, "recent_receipts": receipts}
         _require_permission(context, "inventory.receipts.read")
         await ensure_inventory_receipt_indexes(db)
         merchant_id = context["merchant_id"]

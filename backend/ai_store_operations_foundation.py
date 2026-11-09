@@ -7,7 +7,7 @@ features or changing Salla/Qoyod data.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -161,49 +161,32 @@ def make_ai_store_operations_router(db: Any, current_user: Callable) -> APIRoute
 
     @router.get("/product-intake")
     async def product_intake(
-        status: str = Query("needs_attention"),
+        status: Literal["needs_attention", "ready", "all"] = "needs_attention",
         limit: int = Query(50, ge=1, le=200),
+        page: int = Query(1, ge=1),
+        q: str = Query("", max_length=160),
+        category_ids: str = Query("", max_length=12000),
+        components: bool | None = None,
+        services: bool | None = None,
+        service_scope: Literal["option_service", "no_option_service", "independent_service", "service_surcharge"] | None = None,
+        option_surcharge: bool | None = None,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        user_id = str(user["id"])
-        products = await db[PRODUCTS].find(
-            {"user_id": user_id},
-            {"_id": 0, "raw_salla": 0, "raw_salla_details": 0},
-        ).sort([("salla_created_at", -1), ("created_at", -1)]).limit(limit * 3).to_list(length=limit * 3)
+        from product_intake_search import search_intake
+        from web_page_access import INTAKE_PAGE, delegated_page_owner
 
-        salla_ids = [str(row.get("salla_product_id")) for row in products if row.get("salla_product_id") is not None]
-        profiles = await db[COST_PROFILES].find(
-            {"user_id": user_id, "salla_product_id": {"$in": salla_ids}},
-            {"_id": 0},
-        ).to_list(length=max(len(salla_ids), 1))
-        profile_by_product = {str(row.get("salla_product_id")): row for row in profiles}
-
-        items = []
-        for product in products:
-            readiness = product_readiness(product, profile_by_product.get(str(product.get("salla_product_id"))))
-            if status == "ready" and not readiness["ready"]:
-                continue
-            if status == "needs_attention" and readiness["ready"]:
-                continue
-            items.append({
-                "mezan_product_id": product.get("mezan_product_id") or product.get("id"),
-                "salla_product_id": product.get("salla_product_id"),
-                "name": product.get("name"),
-                "sku": product.get("sku"),
-                "status": product.get("status"),
-                "main_image": product.get("main_image"),
-                "created_at": product.get("salla_created_at") or product.get("created_at"),
-                "readiness": readiness,
-            })
-            if len(items) >= limit:
-                break
-
-        return {
-            "ok": True,
-            "status": status,
-            "items": items,
-            "total": len(items),
-            "generated_at": _now().isoformat(),
-        }
+        owner_id = await delegated_page_owner(db, user, INTAKE_PAGE) or str(user["id"])
+        flags = {key: value for key, value in {
+            "components": components, "services": services, "option_surcharge": option_surcharge,
+        }.items() if value is not None}
+        if service_scope == "no_option_service":
+            flags["option_service"] = False
+        elif service_scope:
+            flags[service_scope] = True
+        result = await search_intake(
+            db, owner_id, q=q, category_ids=list(dict.fromkeys(value.strip() for value in category_ids.split(",") if value.strip())),
+            status=status, page=page, limit=limit, flags=flags,
+        )
+        return {"ok": True, "status": status, "generated_at": _now().isoformat(), **result}
 
     return router

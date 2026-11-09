@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -17,11 +18,21 @@ from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
 from product_cost_revision import bump_product_cost_revision, salla_cost_fingerprint
 from salla_integration.service import SallaError, call_salla
+from web_page_access import PRODUCTS_PAGE, delegated_page_owner
 
 PRODUCTS = "mezan_products_v2"
 SYNC_RUNS = "mezan_product_sync_runs_v2"
 CHANGE_LOG = "mezan_product_change_log_v2"
 PRODUCTS_PER_PAGE = 60
+EMPLOYEE_CATALOG_FIELDS = {
+    "_id": 0,
+    "id": 1, "mezan_product_id": 1, "salla_product_id": 1,
+    "name": 1, "sku": 1, "barcode": 1, "status": 1,
+    "sale_price": 1, "price": 1, "main_image": 1,
+    "description": 1, "description_html": 1,
+    "variants.id": 1, "variants.name": 1, "variants.display_name": 1,
+    "variants.sku": 1, "variants.price": 1,
+}
 # Salla may ignore the requested page size and return only 15-20 products.
 # Amasi has more than 2,000 products, so 100 pages can end a healthy sync
 # before the catalogue is exhausted.  The sync still has repeated-page and
@@ -358,14 +369,15 @@ def make_product_v2_router(db: Any, current_user: Callable[..., Any]) -> APIRout
         product_status: str | None = Query(default=None, alias="status"),
         include_archived: bool = Query(default=False),
     ) -> dict[str, Any]:
+        owner_id = await delegated_page_owner(db, user, PRODUCTS_PAGE)
         await ensure_product_v2_indexes(db)
-        query: dict[str, Any] = {"user_id": str(user["id"])}
-        if not include_archived:
+        query: dict[str, Any] = {"user_id": owner_id or str(user["id"])}
+        if owner_id or not include_archived:
             query["archived"] = {"$ne": True}
         if product_status:
             query["status"] = product_status
         if q and q.strip():
-            pattern = q.strip()
+            pattern = re.escape(q.strip()) if owner_id else q.strip()
             query["$or"] = [
                 {"name": {"$regex": pattern, "$options": "i"}},
                 {"sku": {"$regex": pattern, "$options": "i"}},
@@ -376,7 +388,7 @@ def make_product_v2_router(db: Any, current_user: Callable[..., Any]) -> APIRout
         total = await db[PRODUCTS].count_documents(query)
         cursor = (
             db[PRODUCTS]
-            .find(query, {"_id": 0, "raw_salla": 0})
+            .find(query, EMPLOYEE_CATALOG_FIELDS if owner_id else {"_id": 0, "raw_salla": 0})
             .sort([("archived", ASCENDING), ("name", ASCENDING)])
             .skip((page - 1) * per_page)
             .limit(per_page)
@@ -422,16 +434,18 @@ def make_product_v2_router(db: Any, current_user: Callable[..., Any]) -> APIRout
 
     @router.get("/{product_id}")
     async def get_product_v2(product_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+        owner_id = await delegated_page_owner(db, user, PRODUCTS_PAGE)
         product = await db[PRODUCTS].find_one(
             {
-                "user_id": str(user["id"]),
+                "user_id": owner_id or str(user["id"]),
+                **({"archived": {"$ne": True}} if owner_id else {}),
                 "$or": [
                     {"id": product_id},
                     {"mezan_product_id": product_id},
                     {"salla_product_id": product_id},
                 ],
             },
-            {"_id": 0},
+            EMPLOYEE_CATALOG_FIELDS if owner_id else {"_id": 0},
         )
         if not product:
             raise HTTPException(status_code=404, detail={"code": "product_v2_not_found"})

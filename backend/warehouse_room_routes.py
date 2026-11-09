@@ -206,9 +206,12 @@ async def _create_section_doc(
 def make_warehouse_room_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
     router = APIRouter(prefix="/warehouse-locations-v2", tags=["Mezan OS V2 Branch Sections"])
 
+    from web_page_access import WAREHOUSES_PAGE, delegated_page_owner
+
     @router.get("/section-capabilities")
     async def section_capabilities(user: dict = Depends(current_user)) -> dict[str, Any]:
-        _require_manager(user)
+        if await delegated_page_owner(db, user, WAREHOUSES_PAGE) is None:
+            _require_manager(user)
         return {
             "items": [{"value": value, "label": label} for value, label in CAPABILITY_LABELS.items()],
             "recommended": {
@@ -224,8 +227,9 @@ def make_warehouse_room_router(db: Any, current_user: Callable[..., Any]) -> API
     @router.post("/sections", status_code=status.HTTP_201_CREATED)
     @router.post("/rooms", status_code=status.HTTP_201_CREATED, include_in_schema=False)
     async def create_section(payload: SectionCreate, user: dict = Depends(current_user)) -> dict[str, Any]:
-        actor = _require_manager(user)
-        user_id = _merchant_user_id(actor)
+        user_id = await delegated_page_owner(db, user, WAREHOUSES_PAGE, write=True)
+        actor = user if user_id else _require_manager(user)
+        user_id = user_id or _merchant_user_id(actor)
         branch = await _get_branch(db, warehouse_id=payload.warehouse_id, user_id=user_id)
         await ensure_section_indexes(db)
         try:
@@ -262,8 +266,9 @@ def make_warehouse_room_router(db: Any, current_user: Callable[..., Any]) -> API
     @router.get("/warehouses/{warehouse_id}/sections")
     @router.get("/warehouses/{warehouse_id}/rooms", include_in_schema=False)
     async def list_sections(warehouse_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
-        actor = _require_manager(user)
-        user_id = _merchant_user_id(actor)
+        user_id = await delegated_page_owner(db, user, WAREHOUSES_PAGE)
+        if user_id is None:
+            user_id = _merchant_user_id(_require_manager(user))
         rows = await db[ROOMS].find(
             {"warehouse_id": warehouse_id, "user_id": user_id, "status": "active"},
             {"_id": 0},
@@ -291,8 +296,9 @@ def make_warehouse_room_router(db: Any, current_user: Callable[..., Any]) -> API
         payload: SectionCabinetCreate,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        actor = _require_manager(user)
-        user_id = _merchant_user_id(actor)
+        user_id = await delegated_page_owner(db, user, WAREHOUSES_PAGE, write=True)
+        actor = user if user_id else _require_manager(user)
+        user_id = user_id or _merchant_user_id(actor)
         await ensure_section_indexes(db)
         raw_section = await db[ROOMS].find_one(
             {"id": section_id, "user_id": user_id, "status": "active"},
