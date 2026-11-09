@@ -74,3 +74,12 @@ files. Normal merge c1259613df33f06c534a8e6081209a90ff31eb65 completed. Shared
 Next require sharedbuildexit0, owned prepare/prepublish, Publish changes once,
 new green success, official verify3 and inactive guard. Production runtime
 changed by task:NO yet. Keep /app at this merge until release completes.
+
+
+## Publication started
+Shared governed build EXIT0. Owned prepare and fresh prepublish both EXIT0,
+actor codex-aramex-completion-1854. Clicked Publish changes ONCE; UI now
+Publishing. Previous UI release was ed51d00, finished Nov10 00:02 Riyadh.
+ACTIVE owned lease: do not alter /app, advance production source or clear it.
+No success/production verification claim yet. Next newer explicit success,
+then run official verify ONCE and wait for3matchingprobes/inactive guard.
