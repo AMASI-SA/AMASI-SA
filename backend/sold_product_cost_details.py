@@ -101,7 +101,7 @@ def finish_groups(row, resources=None):
                 cell["label"] = resource["name"]
                 if resource.get("kind") == "service":
                     cell["kind"] = "service"
-            columns.setdefault(cell["key"], {k: cell[k] for k in ("key", "label", "kind")})
+            columns.setdefault(cell["key"], {k: cell.get(k) for k in ("key", "label", "kind", "resource_id")})
     row["cost_columns"] = list(columns.values())
     row["cost_groups"] = groups
     row["missing_cost_reasons"] = sorted(row.pop("_reasons"))
