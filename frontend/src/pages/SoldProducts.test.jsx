@@ -255,3 +255,15 @@ test("linked counts and sources are screen-only and sources open on demand", asy
     expect(print).not.toContain("مصادر منتج");
     await act(async () => root.unmount()); host.remove();
 });
+
+test("Salla fallback is labelled in screen and print without hiding incomplete costs", () => {
+    for (const printable of [false, true]) {
+        const html = renderToStaticMarkup(<SoldTable rows={[product("fallback", {cost_source:"salla"})]} printable={printable} />);
+        expect(html).toContain("تكلفة سلة");
+        const mezan = renderToStaticMarkup(<SoldTable rows={[product("mezan", {cost_source:"mezan"})]} printable={printable} />);
+        expect(mezan).not.toContain("تكلفة سلة");
+        const missing = renderToStaticMarkup(<SoldTable rows={[product("missing", {cost_source:"missing",cost_status:"incomplete",total_cost:null})]} printable={printable} />);
+        expect(missing).not.toContain("تكلفة سلة");
+        expect(missing).toContain("الإجمالي غير مكتمل");
+    }
+});
