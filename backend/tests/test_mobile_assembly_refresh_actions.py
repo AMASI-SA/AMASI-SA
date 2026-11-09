@@ -35,6 +35,73 @@ async def test_employee_refresh_reauthorizes_inside_real_capability(monkeypatch)
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('query', [
+    {'owner_user_id': 'other', 'user_id': 'employee'},
+    {'user_id': 'employee'},
+    {'owner_user_id': 'merchant', 'user_id': {'$ne': None}},
+    {'owner_user_id': 'merchant', 'user_id': ''},
+    {'owner_user_id': 'merchant', 'user_id': 'employee', '$or': [{}]},
+])
+async def test_employee_permission_read_rejects_unbounded_or_foreign_scope(query):
+    from operational_atomic import OperationalDatabase
+    db = AsyncMongoMockClient().test
+    state = {'profile': 'fulfillment', 'failed': False}
+    scoped = OperationalDatabase(db, None, state, 'merchant')
+    with pytest.raises(HTTPException) as exc:
+        await scoped.mezan_mobile_app_access_v1.find_one(query)
+    assert exc.value.detail['code'] == 'operational_owner_scope_conflict'
+    assert state['failed']
+
+
+@pytest.mark.asyncio
+async def test_employee_permission_read_does_not_allow_permission_writes():
+    from operational_atomic import OperationalDatabase
+    state = {'profile': 'fulfillment', 'failed': False}
+    scoped = OperationalDatabase(AsyncMongoMockClient().test, None, state, 'merchant')
+    with pytest.raises(HTTPException):
+        await scoped.mezan_mobile_app_access_v1.update_one(
+            {'owner_user_id': 'merchant', 'user_id': 'employee'},
+            {'$set': {'enabled': True}})
+    assert state['failed']
+
+
+@pytest.mark.asyncio
+async def test_employee_refresh_permission_in_real_owner_transaction(monkeypatch):
+    import os
+    from uuid import uuid4
+    from motor.motor_asyncio import AsyncIOMotorClient
+    from operational_atomic import operational_owner
+    uri = os.environ.get('BUILD37_TEST_MONGO_URI')
+    if not uri:
+        pytest.skip('requires disposable Mongo replica set')
+    client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000)
+    db = client['test_assembly_source_refresh_' + uuid4().hex]
+    try:
+        await db.users.insert_one({'id': 'employee', 'created_by': 'merchant'})
+        await db.mezan_mobile_app_access_v1.insert_one({
+            'owner_user_id': 'merchant', 'user_id': 'employee', 'enabled': True,
+            'permissions': ['app.page.assembly_shipping']})
+        async def refresh(db_arg, owner, number, **kw):
+            async def persist(scoped):
+                await kw['before_persist'](scoped)
+                await scoped.unified_orders.update_one(
+                    {'user_id': owner, 'order_number': number},
+                    {'$set': {'order_status': 'completed'}}, upsert=True)
+            await operational_owner(db_arg, owner, persist)
+            return {'ok': True, 'found': True, 'updated': True, 'order_number': number}
+        monkeypatch.setattr(source, 'refresh_order_from_salla', refresh)
+        result = await source.refresh_mobile_order(db, {
+            'id': 'merchant', '_mobile_actor_id': 'employee'}, '123',
+            page='app.page.assembly_shipping')
+        assert result['updated']
+        assert (await db.unified_orders.find_one({'order_number': '123'}))['order_status'] == 'completed'
+        assert await db.general_ledger.count_documents({}) == 0
+    finally:
+        await client.drop_database(db.name)
+        client.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('page', ['app.page.orders', 'app.page.assembly_shipping'])
 async def test_manual_refresh_scoped_and_no_automatic_side_effects(monkeypatch, page):
     db = AsyncMongoMockClient().test
