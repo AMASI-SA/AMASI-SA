@@ -93,8 +93,9 @@ export function CostDetails({ row }) {
 }
 
 export function SoldTable({ rows, printable = false, allDetails = false, expanded = {}, onToggle, range }) {
+    const [sourceRow, setSourceRow] = useState(null);
     return <table className="w-full text-sm text-right border-collapse min-w-[760px]">
-        <thead className="bg-slate-100 text-slate-700"><tr>{[...(!printable ? ["التفاصيل"] : []), "المنتج", "القطع المباعة", ...(!printable ? ["القطع حسب المنصة والحساب"] : []), "تكلفة القطعة", "إجمالي التكلفة", "الحالة"].map(label => <th key={label} className={`p-3 border-b border-slate-200 ${label === "القطع حسب المنصة والحساب" ? "product-traffic-sources-heading print:hidden" : ""}`}>{label}</th>)}</tr></thead>
+        <thead className="bg-slate-100 text-slate-700"><tr>{[...(!printable ? ["التفاصيل"] : []), "المنتج", "القطع المباعة", ...(!printable ? ["الخدمات والمكونات المرتبطة"] : []), "تكلفة القطعة", "إجمالي التكلفة", "الحالة"].map(label => <th key={label} className={`p-3 border-b border-slate-200 ${label === "الخدمات والمكونات المرتبطة" ? "product-traffic-sources-heading print:hidden" : ""}`}>{label}</th>)}</tr></thead>
         <tbody>{rows.map((row, index) => {
             const key = rowKey(row);
             const open = allDetails || (!printable && expanded[key]);
@@ -104,11 +105,12 @@ export function SoldTable({ rows, printable = false, allDetails = false, expande
                     {!printable && <td className="p-2 w-12"><button type="button" aria-expanded={!!open} aria-controls={detailId} aria-label={`تفاصيل تكلفة ${row.name}`} onClick={() => onToggle(key)} className="rounded border border-violet-200 p-2 text-violet-800 hover:bg-violet-50">{open ? "▼" : "◀"}</button></td>}
                     <td className="p-3"><div className="flex items-center gap-3">{row.image_url && <img src={row.image_url} alt="" className="h-12 w-12 object-cover rounded" />}<div className="font-semibold">{printable ? row.name : <Link target="_blank" rel="noopener noreferrer" className="text-violet-800 underline" to={row.mezan_product_id ? `/products-v2?product=${encodeURIComponent(row.mezan_product_id)}&focus=cost` : `/products-v2?view=list&lookup_sku=${encodeURIComponent(row.sku || row.name || "")}`}>{row.name || "بدون اسم"}</Link>}<span className="block text-xs font-normal text-slate-500" dir="ltr">{row.sku || "—"}</span></div></div></td>
                     <td className="p-3 tabular-nums">{formatInt(row.units_sold)}</td>
-                    {!printable && <td className="p-3 product-traffic-sources print:hidden"><ProductTrafficSources sources={row.traffic_sources} promotionContext={{ product_id: row.product_id, from_date: range?.from, to_date: range?.to, statuses: range?.statuses || "default", report_scope: "sold" }} /></td>}
+                    {!printable && <td className="p-3 print:hidden"><div className="flex items-center justify-between gap-3"><div>{["service", "component"].map(kind => <span className="block" key={kind}>{kind === "service" ? "الخدمات" : "المكونات"}: {formatInt(new Set((row.cost_columns || []).filter(column => column.kind === kind && column.key !== "historical-components").map(column => column.resource_id || column.key)).size)}</span>)}</div><button type="button" className="rounded-full border px-3 py-1 text-xl" aria-label={`مصادر ${row.name}`} aria-expanded={sourceRow === key} onClick={() => setSourceRow(sourceRow === key ? null : key)}>⋮</button></div></td>}
                     <td className="p-3 tabular-nums">{!complete(row) ? "غير مكتملة" : row.unit_cost_varies ? "تختلف حسب الخيارات" : row.unit_cost == null ? "غير مكتملة" : money(row.unit_cost)}</td>
                     <td className="p-3 tabular-nums">{complete(row) ? money(row.total_cost) : <><span className="text-amber-800">الإجمالي غير مكتمل</span><small className="block">المعروف {money(row.known_cost_total ?? 0)}</small></>}</td>
-                    <td className="p-3"><span className={`rounded-full px-2 py-1 text-xs ${complete(row) ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{complete(row) ? "مكتمل" : [...new Set((row.missing_cost_reasons || []).map(costReasonLabel))].join("، ") || "تكلفة ناقصة"}</span></td>
+                    <td className="p-3"><span className={`rounded-full px-2 py-1 text-xs ${complete(row) ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{complete(row) ? (row.cost_source === "salla" ? "تكلفة سلة" : "مكتمل") : [...new Set((row.missing_cost_reasons || []).map(costReasonLabel))].join("، ") || "تكلفة ناقصة"}</span></td>
                 </tr>
+                {!printable && sourceRow === key && <tr className="print:hidden"><td colSpan={7} className="p-3"><p className="text-xs text-slate-500 mb-2">القطع حسب المنصة والحساب</p><ProductTrafficSources sources={row.traffic_sources} promotionContext={{ product_id: row.product_id, from_date: range?.from, to_date: range?.to, statuses: range?.statuses || "default", report_scope: "sold" }} /></td></tr>}
                 {open && <tr id={detailId} className="sold-details-row"><td colSpan={printable ? 5 : 7}><CostDetails row={row} /></td></tr>}
             </Fragment>;
         })}</tbody>
