@@ -22,6 +22,21 @@ REPORT_ROW_LIMIT = 1000
 _TASKS = set()
 
 
+class ScanFailure(RuntimeError):
+    """Machine-only failure details; never retain provider text or payloads."""
+
+    def __init__(self, stage, diagnostic=None):
+        super().__init__('scan_failed')
+        diagnostic = diagnostic or {}
+        self.diagnostic = {'stage': stage}
+        error_type = diagnostic.get('error_type')
+        if isinstance(error_type, str) and error_type.isidentifier() and len(error_type) <= 80:
+            self.diagnostic['error_type'] = error_type
+        status = diagnostic.get('http_status')
+        if type(status) is int and 0 <= status <= 599:
+            self.diagnostic['http_status'] = status
+
+
 def utcnow():
     return datetime.now(timezone.utc)
 
@@ -105,11 +120,11 @@ async def execute_scan(db, *, tenant, owner):
                                     max_pages=200, page_size=50)
     settings = await db.qoyod_settings.find_one({'user_id': tenant}) or {}
     if not sync.get('ok') or not (settings.get('invoice_presence_snapshot') or {}).get('complete'):
-        raise RuntimeError('provider_refresh_incomplete')
+        raise ScanFailure('provider_refresh', sync.get('diagnostic'))
     raw = await run_reconciliation_v2(db, orders_user_id=owner, markers_user_id=tenant,
                                      from_date='2026-07-01', full_scan=True, publish_summary=False)
     if not raw.get('ok'):
-        raise RuntimeError('comparison_incomplete')
+        raise ScanFailure('comparison')
     from integrations.qoyod import unsent_orders
     from qoyod_auto_unified.queue_api import _execute_list
     view = await _execute_list(unsent_orders.snapshot_builder, db,
@@ -129,12 +144,12 @@ async def execute_scan(db, *, tenant, owner):
     latest = await db.qoyod_settings.find_one({'user_id': tenant}, {'invoice_presence_snapshot': 1}) or {}
     generation = (settings.get('invoice_presence_snapshot') or {}).get('started_at')
     if generation != (latest.get('invoice_presence_snapshot') or {}).get('started_at'):
-        raise RuntimeError('provider_snapshot_superseded')
+        raise ScanFailure('provider_snapshot_superseded')
     presence = {k: view['invoice_presence'].get(k) for k in
                 ('count', 'verification_required', 'verified_at', 'expires_at', 'complete')}
     presence.update(orders_user_id=str(owner), snapshot_started_at=generation)
     if presence.get('complete') is not True or type(presence.get('count')) is not int:
-        raise RuntimeError('summary_unverified')
+        raise ScanFailure('summary_verification')
     return report, presence, view
 
 
@@ -204,9 +219,13 @@ async def _run(db, tenant, owner, claim, executor):
                 'created_at': {'$lt': claim['last_attempt_at']},
             })
     except BaseException as exc:
+        failure = {'stage': 'scan', 'error_type': type(exc).__name__}
+        if isinstance(exc, ScanFailure):
+            failure.update(exc.diagnostic)
         if not committed:
             await db.qoyod_full_scans.update_one(selector, {'$set': {
-                'status': 'failed', 'last_error': 'scan_interrupted' if isinstance(exc, asyncio.CancelledError) else 'scan_failed'}})
+                'status': 'failed', 'last_failure': failure,
+                'last_error': 'scan_interrupted' if isinstance(exc, asyncio.CancelledError) else 'scan_failed'}})
             await db.qoyod_settings.update_one(
                 {'user_id': str(tenant), 'scheduled_scan_token': token},
                 {'$set': {'scheduled_scan_error': 'scan_failed'}},
