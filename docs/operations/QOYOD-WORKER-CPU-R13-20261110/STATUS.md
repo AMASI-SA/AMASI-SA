@@ -1,0 +1,68 @@
+# Qoyod worker CPU R13 — WIP
+
+Repository AMASI-SA/AMASI-SA; branch codex/qoyod-worker-invoice-r13-final-20261110.
+Base36980489fb8bd6e7ee95f082f203320bd59eca2c (R12 #1867).
+R12 published Nov10 21:58 Riyadh, official verify EXIT0/verified=true,
+release guard inactive. No invoices sent by this task.
+
+Production evidence: cycle heartbeat failed ownership match (RuntimeError at
+19:04:56.633Z), canceled work and resumed the same candidates. Counters remain
+129 batches,184 attempts,529 reviewed of773,0 sent. Read-only full scan failed
+19:05:19.828Z after229921.94ms: unconfirmed_404,90 pages,8950 unique IDs.
+The404 response must not be treated as absence without trustworthy evidence.
+
+Found synchronous operational balance calculation on the shared worker loop.
+Synthetic benchmark (no production data):10000 orders first22.195s and repeat
+52.473s. Profile of3000 repeated orders made27,012,000 startswith calls, mainly
+scanning every supplier obligation for every order. This establishes a concrete
+blocking path; exact attribution of the production stall remains unprofiled.
+
+R13 indexes supplier obligations and receipt facts within each pure calculation,
+preserves colon-ID fallback and rollback behavior, and runs the pure reducer
+via asyncio.to_thread. Authorization/CAS writes stay on the original loop.
+No cadence, invoice gate, lease duration, provider404 rule or header change.
+Optimized10000-order benchmark:first2.627s,repeat3.675s, unchanged result.
+
+Regression-first: original2 tests failed (120600 prefix checks and heartbeat
+blocked). Focused reducer/responsiveness25 passed; additional prefix/colon and
+rollback tests pass (4 responsiveness tests total). Expanded operational suite
+blocked at collection by missing local requests package; dependency setup and
+full relevant tests remain. No R13 merge, release intent, lease or deployment.
+
+Next: complete relevant tests/review; preserve WIP remote branch/DraftPR; freeze
+v5 A/B, exact-head CI and isolated rehearsal before authorized merge/deploy;
+verify actual cycle progress. Provider404 completion remains a separate blocker.
+No shared /app modification while another release lease is active. Issue1006
+is comment-limited; this status and PR body retain continuation evidence.
+
+Validation update: installed missing public requests dependency. Broad run then
+hit unavailable loopback Mongo; it was stopped, not reported as a code failure.
+52 unit-test files (excluding statically identified real-Mongo dependencies):
+1292 passed,8 optional skipped,exit0. The existing Operational Stock Eligibility
+CI executes test_operational_balance*.py against disposable real Mongo. Renamed
+new regressions to test_operational_balance_worker_responsiveness.py so that
+required CI includes them.60 randomized differential comparisons against the
+reviewed base reducer passed, covering initial/repeated projection, removed
+items, delivery/cancellation and invalid amounts. git diff --check passed.
+WIP remote checkpoint aa3c2898c1fe295eb962fb9870aa791120cbbe01, DraftPR1868.
+No R13 production changes. Remaining release/CI and provider404 work above apply.
+
+Provider evidence update before publishing: inspected one existing production
+quarantine detail read-only. GET /invoices HTTP404 response was exactly
+"We could not retrieve your Invoices, we found nothing." (Nov8 saved response).
+The old narrow helper recognized only "We found nothing", so the confirmed
+invoice-specific tail remained unknown. Added only this exact message for
+GET /invoices. No generic404, first-page absence, repeated-page or total-count
+relaxation. Regression first:1 failed/5 passed before fix. Added endpoint,
+method,status,prefix negatives and first-page refusal; read-only paginator
+also tests exact tail and missing declared totals. Include paginator in Qoyod CI.
+The earlier sourceA2d57ff4/intentB71734766 and successful isolated rehearsal
+are superseded, NOT for deployment. New A/B and exact-head CI required.
+No R13 production mutation, merge, lease or invoice send has occurred.
+
+Combined source uses a new branch directly from reviewed R12 base because v5
+forbids an interim intent anywhere in source ancestry. Old PR1868 remains
+recoverable and is superseded; no force push or deployment of old candidate.
+Focused provider tests97PASS. Local broad Qoyod initial run had two cwd-only
+file lookup failures; rerun from backend cwd is required. No product failure
+or provider write was caused by the local tests.

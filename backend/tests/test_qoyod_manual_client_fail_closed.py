@@ -433,3 +433,40 @@ async def test_exact_first_query_match_stops_before_later_provider_failure(
 
     assert await getattr(client, method)(*args) == expected
     assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('tail,endpoint,status,complete', [
+    ('We could not retrieve your Invoices, we found nothing.', 'GET /invoices', 404, True),
+    ('We could not retrieve your Invoices, we found nothing.', 'GET /products', 404, False),
+    ('We could not retrieve your Invoices, we found nothing.', 'POST /invoices', 404, False),
+    ('We could not retrieve your Invoices, we found nothing.', 'GET /invoices', 503, False),
+    ('Proxy: We could not retrieve your Invoices, we found nothing.', 'GET /invoices', 404, False),
+])
+async def test_observed_invoice_tail_is_endpoint_scoped(monkeypatch, tail, endpoint, status, complete):
+    import integrations.qoyod_manual.client as module
+    monkeypatch.setattr(module, '_INVOICE_SCAN_PAGE_SIZE', 2)
+    monkeypatch.setattr(module, '_INVOICE_SCAN_DELAY_SECONDS', 0)
+    client = ManualQoyodClient(api_key='synthetic', base_url='https://qoyod.invalid')
+    async def request(method, path, **kwargs):
+        assert method == 'GET'
+        if kwargs['params']['page'] == 1:
+            return {'invoices': [{'id': 1, 'reference': 'a'}, {'id': 2, 'reference': 'b'}]}
+        raise ManualQoyodError(status_code=status, endpoint=endpoint, response_excerpt=tail)
+    monkeypatch.setattr(client, '_request', request)
+    if complete:
+        result = await client._load_complete_invoice_reference_snapshot()
+        assert set(result) == {'a', 'b'}
+    else:
+        with pytest.raises(ManualQoyodError):
+            await client._load_complete_invoice_reference_snapshot()
+
+
+@pytest.mark.asyncio
+async def test_observed_invoice_empty_message_cannot_prove_empty_first_page(monkeypatch):
+    client = ManualQoyodClient(api_key='synthetic', base_url='https://qoyod.invalid')
+    monkeypatch.setattr(client, '_request', AsyncMock(side_effect=ManualQoyodError(
+        status_code=404, endpoint='GET /invoices',
+        response_excerpt='We could not retrieve your Invoices, we found nothing.')))
+    with pytest.raises(ManualQoyodError):
+        await client._load_complete_invoice_reference_snapshot()

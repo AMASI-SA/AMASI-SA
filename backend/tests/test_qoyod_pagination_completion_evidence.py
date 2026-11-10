@@ -10,6 +10,8 @@ from integrations.qoyod.fresh_start_audit import _paginate
     ("{'error': 'We found nothing'}", None, True),
     ('URL not found', None, False),
     ('We found nothing', 3, False),
+    ('We could not retrieve your Invoices, we found nothing.', None, True),
+    ('We could not retrieve your Invoices, we found nothing.', 3, False),
 ])
 async def test_full_final_page_requires_confirmed_end_and_consistent_total(tail, total, expected):
     async def fetch(*, page, limit):
@@ -18,7 +20,8 @@ async def test_full_final_page_requires_confirmed_end_and_consistent_total(tail,
             if total is not None:
                 result['meta'] = {'total': total}
             return result
-        raise QoyodAPIError(404, 'qoyod_not_found', 'not used', response_excerpt=tail)
+        raise QoyodAPIError(404, 'qoyod_not_found', 'not used', response_excerpt=tail,
+                            endpoint='GET /invoices')
     evidence = {}
     result = await _paginate(fetch, page_size=2, max_pages=3,
                              extract_keys=('invoices',), evidence=evidence)
