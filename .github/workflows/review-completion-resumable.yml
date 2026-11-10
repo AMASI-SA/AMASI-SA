@@ -45,6 +45,8 @@ on:
       - "backend/tests/test_preparation_lazy_sections.py"
       - "backend/preparation_receipt_status_message.py"
       - "backend/assembly_completion_delivery.py"
+      - "backend/assembly_evidence_recovery.py"
+      - "backend/tests/test_assembly_evidence_recovery.py"
       - "backend/assembly_print_completion.py"
       - "backend/tests/test_assembly_print_completion.py"
       - "backend/tests/test_unified_completed_carrier_label.py"
@@ -147,6 +149,7 @@ jobs:
             tests/test_preparation_piece_operations.py \
             tests/test_amasi_shipping_compat.py \
             tests/test_assembly_completion_delivery.py \
+            tests/test_assembly_evidence_recovery.py \
             tests/test_assembly_completion_scheduling.py \
             tests/test_assembly_direct_preparation_receipt.py \
             tests/test_mobile_app_request_context.py \
