@@ -197,7 +197,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
             "id": "internal", "reference_id": "local-assembly", "status": {"slug": "in_progress"}}))), \
              patch.object(delivery.shipping, "call_salla", AsyncMock()) as post:
             result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
-            self.assertEqual(result["error_code"], "assembly_completion_evidence_changed")
+            self.assertEqual(result["error_code"], "assembly_evidence_reapproval_required")
             post.assert_not_awaited()
         await self.db[delivery.WORKFLOWS].update_one({"user_id": "owner"}, {"$set": {
             f"{delivery.FIELD}.order_confirmed": True, "carrier_label_ready": True}})
@@ -365,7 +365,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
              patch.object(delivery.shipping, "call_salla", AsyncMock()) as post:
             result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
         self.assertFalse(result["ready"])
-        self.assertEqual(result["error_code"], "assembly_completion_evidence_changed")
+        self.assertEqual(result["error_code"], "assembly_evidence_reapproval_required")
         self.assertNotEqual((await self.workflow())[delivery.FIELD]["state"], "confirmed")
         post.assert_not_awaited()
 

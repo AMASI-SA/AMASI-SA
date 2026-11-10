@@ -101,6 +101,10 @@ async def guard_effect(db, operation, *, effect=None, patch=None):
         if not legacy and (not unchanged_workflow or not source
                 or source_fingerprint(source) != outbox.get("source_fingerprint")):
             raise shipping.ShippingLabelError("assembly_completion_evidence_changed", "تغيرت أدلة التجهيز؛ يلزم التحقق.")
+        if "_recovery_evidence" in operation:
+            from assembly_evidence_recovery import _capture, blocked, same_evidence
+            if not same_evidence(operation["_recovery_evidence"], await _capture(scoped, operation)):
+                raise blocked()
         if not legacy:
             from fulfillment_v2_routes import assert_component_execution, allow_legacy_component_execution
             from stock_component_consumption_service import PLANS
@@ -156,6 +160,7 @@ def public_status(workflow, *, canonical=None):
                 "assembly_order_not_ready": "حالة الطلب في سلة لا تسمح بالاستكمال.",
                 "assembly_canonical_status_blocked": "تغيرت حالة الطلب؛ الاستكمال متوقف.",
                 "assembly_completion_evidence_changed": "تغيرت بيانات التجهيز؛ يلزم التحقق.",
+                "assembly_evidence_reapproval_required": "تعذّر مطابقة بيانات التجهيز مع المراجعة المعتمدة؛ راجع الطلب.",
                 "completion_label_pending": "لم تصبح البوليصة الحالية متاحة بعد.",
                 "completion_status_unconfirmed": "العملية السابقة غير مؤكدة؛ تحقق من سلة.",
                 "TimeoutError": "تعذر تأكيد استجابة سلة خلال المهلة.",
@@ -268,6 +273,26 @@ async def _deliver(db, operation):
     return await labels.read_current_carrier_label(db, owner, number, publish=publish)
 
 
+async def _deliver_with_recovery(db, operation):
+    try:
+        return await _deliver(db, operation)
+    except shipping.ShippingLabelError as exc:
+        if exc.code != "assembly_completion_evidence_changed":
+            raise
+        from assembly_evidence_recovery import recover_evidence
+        renewed = await recover_evidence(db, operation)
+        # Start again from a fresh provider read, never publish the old response.
+        # One recovery only; retain this claim, timeout and total attempt budget.
+        return await _deliver(db, renewed)
+
+
+def _recoverable_state():
+    return {"$or": [{f"{FIELD}.state": "pending"}, {
+        f"{FIELD}.version": 2, f"{FIELD}.state": "requires_attention",
+        f"{FIELD}.error_code": "assembly_completion_evidence_changed",
+    }]}
+
+
 async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manual=False, authorize_first_issue=None):
     if manual:
         async def enroll(scoped):
@@ -289,7 +314,7 @@ async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manua
              "$or": [{"manual_label_refresh.until": {"$exists": False}},
                      {"manual_label_refresh.until": {"$lte": instant.isoformat()}}]}
     if not manual:
-        query.update({f"{FIELD}.state": "pending", f"{FIELD}.due_at": {"$lte": instant.isoformat()},
+        query.update({"$and": [_recoverable_state()], f"{FIELD}.due_at": {"$lte": instant.isoformat()},
                       f"{FIELD}.attempts": {"$lt": MAX_ATTEMPTS}})
     if authorize_first_issue:
         query.update({"stage": "completed", f"{FIELD}.version": 2, f"{FIELD}.status_attempted": False,
@@ -303,7 +328,7 @@ async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manua
         if authorize_first_issue:
             operation["_authorize_first_issue"] = authorize_first_issue
         try:
-            result = await asyncio.wait_for(_deliver(db, operation), TIMEOUT_SECONDS)
+            result = await asyncio.wait_for(_deliver_with_recovery(db, operation), TIMEOUT_SECONDS)
         except Exception as exc:
             if authorize_first_issue and getattr(exc, "status_code", None) == 403:
                 # Revoking the employee must not poison the worker's own outbox.
@@ -356,7 +381,7 @@ async def run_once(db, *, running=None):
     if capacity <= 0:
         return 0
     query = {"assembly_status": "completed", f"{FIELD}.version": {"$in": [1, 2]},
-        f"{FIELD}.state": "pending", f"{FIELD}.due_at": {"$lte": now().isoformat()},
+        "$and": [_recoverable_state()], f"{FIELD}.due_at": {"$lte": now().isoformat()},
         f"{FIELD}.lease_until": {"$lte": now().isoformat()}, f"{FIELD}.attempts": {"$lt": MAX_ATTEMPTS}}
     if running:
         query["$nor"] = [{"user_id": owner, "order_number": number} for owner, number, _ in running]
