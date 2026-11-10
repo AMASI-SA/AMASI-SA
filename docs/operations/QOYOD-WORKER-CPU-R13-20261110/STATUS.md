@@ -46,3 +46,16 @@ reviewed base reducer passed, covering initial/repeated projection, removed
 items, delivery/cancellation and invalid amounts. git diff --check passed.
 WIP remote checkpoint aa3c2898c1fe295eb962fb9870aa791120cbbe01, DraftPR1868.
 No R13 production changes. Remaining release/CI and provider404 work above apply.
+
+Provider evidence update before publishing: inspected one existing production
+quarantine detail read-only. GET /invoices HTTP404 response was exactly
+"We could not retrieve your Invoices, we found nothing." (Nov8 saved response).
+The old narrow helper recognized only "We found nothing", so the confirmed
+invoice-specific tail remained unknown. Added only this exact message for
+GET /invoices. No generic404, first-page absence, repeated-page or total-count
+relaxation. Regression first:1 failed/5 passed before fix. Added endpoint,
+method,status,prefix negatives and first-page refusal; read-only paginator
+also tests exact tail and missing declared totals. Include paginator in Qoyod CI.
+The earlier sourceA2d57ff4/intentB71734766 and successful isolated rehearsal
+are superseded, NOT for deployment. New A/B and exact-head CI required.
+No R13 production mutation, merge, lease or invoice send has occurred.

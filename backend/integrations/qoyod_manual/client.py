@@ -62,7 +62,15 @@ def _is_confirmed_empty_list(exc: "ManualQoyodError") -> bool:
         if not isinstance(body, dict) or set(body) != {"error"}:
             return False
         message = body["error"]
-    return isinstance(message, str) and message.strip().casefold() == "we found nothing"
+    if not isinstance(message, str):
+        return False
+    message = message.strip().casefold()
+    if message == "we found nothing":
+        return True
+    # Exact GET /invoices response observed in production on 2026-11-08.
+    # Do not generalize this to arbitrary 404s or other resource endpoints.
+    return (exc.endpoint == "GET /invoices" and message ==
+            "we could not retrieve your invoices, we found nothing.")
 
 
 class ManualQoyodError(Exception):
