@@ -6,6 +6,7 @@ on:
     paths:
       - 'backend/background_worker_*.py'
       - 'backend/salla_integration/scheduled_reconciliation.py'
+      - 'backend/salla_integration/scheduled_catalogue.py'
       - 'backend/salla_integration/sync.py'
       - 'backend/tests/test_salla_scheduled_reconciliation.py'
       - 'backend/tests/test_salla_sync_component_snapshot.py'

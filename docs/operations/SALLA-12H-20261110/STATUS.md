@@ -44,3 +44,28 @@ A schedule is not a diagnosis of the historical missing webhook events.
 
 API references: https://docs.salla.dev/orders/list and
 https://docs.salla.dev/5565737e0.
+
+## Verified remote milestone
+
+PR #1873 source 9fc22dfe32c59d925694c0275bb73ecc220aff74:
+GitHub isolated-real-mongo run 42899504037 / job 130121377437 SUCCESS,
+including scheduled Salla refresh and preparation-preservation acceptance
+with a no-skips assertion. Local worker tests also: 7 passed, 1 skipped
+(real-Mongo-only locally; CI executed).
+
+Publishing is blocked by another active shared release: actor
+codex-sold-order-1871, deployment 3bd72fe50a40a3a653d060e5589cd8e098dc5cff,
+source a4828b5ff0a2d729c3cb258fd08daa53df49e06e. Its verify process
+was still running; our read-only status waited on its operation lock.
+No shared workspace files changed; no release lease cleared.
+
+Issue #1006 rejects comments because it exceeded GitHub's 2500-comment
+limit. Continuation record is preserved in PR #1873 and this document.
+Next safe action: recheck shared Release Guard status; only after active=false,
+refresh production base, finish source review/CI and freeze a new v5 intent.
+No merge or deployment occurred. Do not claim schedule active yet.
+
+Update: prior release finished; our guard status returned active=false. Shared
+/app HEAD matches base3bd72fe and has no tracked modifications. Preserve all
+untracked deployment helper files. CI counts:65 worker tests and48 Salla tests
+passed, zero skipped. Preparing the governed rehearsal next.
