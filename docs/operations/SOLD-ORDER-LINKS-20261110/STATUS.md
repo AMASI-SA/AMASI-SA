@@ -34,3 +34,19 @@ Limits / next steps:
 - Verification: 19 focused backend tests pass; 65 frontend tests pass across useOrders, OrdersV2, SoldProducts and dashboard. Broad legacy routes suite cannot initialize because local `openai` dependency is absent; focused tests use the real original Order Engine route factory instead of unrelated application extension routers.
 - Remaining: non-campaign advanced searches retain existing 5000 scan cap. Campaign metadata search performance against production Mongo has not been measured; deadline bounds slow requests but does not prove index efficiency. Live screenshot campaign verification still needed after deployment. TikTok hourly data issue is diagnosed only and not changed.
 - Production unchanged. No release artifacts, deployment or writes to store data.
+
+## Search refresh regression follow-up (2026-11-10)
+- PR #1871 merged as 3bd72fe50a40a3a653d060e5589cd8e098dc5cff and Emergent published version 4900bb6. Full guard verification is still running; do not reuse/clear the owner lease codex-sold-order-1871.
+- Live smoke proved sortable headers, new-tab report/product-order links, and resolved campaign hover names. Historical campaign summary now finds 408 results, but polling reduced the list to one; product filter summary 4 also reduced to one.
+- Root cause: useOrders refresh treated every search as an exact-order lookup and replaced all rows with the refreshed first order on the 10-second timer/focus/online/visibility events.
+- Narrow fix: combined searches keep loaded cohorts and cursor until explicit search/load-more; exact-order refresh remains enabled, stale responses are ignored after a new search, and leaving combined search resets its filter reference. No new background queries/provider calls/workers.
+- Regression demonstrated before fix: 3 failed, 6 passed. After fix: 68 passed across useOrders.shippingRefresh, OrdersV2.navigation, SoldProducts, AdvancedDashboard.latestOrders; git diff --check passed.
+- Follow-up is not deployed yet. Next: preserve source in dedicated PR, finish #1871 verification, then governed A/B release rehearsal and intent-only commit; check fresh production base before merge. Live campaign and SKU lists must remain intact after 10 seconds and loading more.
+- Issue #1006 is at its 2500-comment cap; PR #1871 and follow-up PR are continuation ledgers. Unrelated cost/accounting/fulfillment/Snap synchronization remains unchanged.
+
+## Current continuation: refresh R2 after concurrent Salla release
+- #1871 production verification completed successfully: verified=true, checks=3, guard active=false, published4900bb6. Sorting/new-tab navigation/campaign hover accepted live.
+- #1872 exact intent B a087a12282a5c1244504a9894a5c954a3879453d passed all 8 applicable workflows (optional TikTok skipped) and isolated adapter rehearsal EXIT0. Do not merge its stale intent: production advanced during CI.
+- Concurrent #1873 merged as 5c7869e1a50efcaff4f5ba34f7d6640d4655c789 and its owner is materializing/preparing publication in shared /app (actor codex-salla-1873). Never interfere with that workspace/lease.
+- Refresh fix is replayed cleanly onto #1873 as R2 source; same 3 files and current production intent preserved until a new A/B freeze. Fresh integrated frontend verification: 68 tests passed. No refresh fix deployed yet.
+- Next safe action: wait for #1873 owner to finish publication/verification and guard active=false; inspect fresh remote production; if unchanged, bootstrap/freeze a new R2 intent from current source, add intent-only B, rehearse, check CI, merge and publish under a new owned lease. Never publish #1872's stale intent.
