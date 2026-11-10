@@ -195,7 +195,16 @@ class _Collection:
                     _reject(self.__state)
                 if args and isinstance(args[0], dict):
                     query = args[0]
-                    if self.__state["profile"] in {"employee_setup", "employee_lifecycle"} and self.__collection.name in {
+                    if self.__state["profile"] == "fulfillment" and self.__collection.name == "mezan_mobile_app_access_v1":
+                        # Source refresh reauthorizes the employee inside this
+                        # transaction. Here user_id identifies the employee;
+                        # owner_user_id, not user_id, is the tenant boundary.
+                        if (method != "find_one" or set(query) != {"owner_user_id", "user_id"}
+                                or query.get("owner_user_id") != self.__owner
+                                or not isinstance(query.get("user_id"), str)
+                                or not query["user_id"].strip()):
+                            _reject(self.__state, "operational_owner_scope_conflict")
+                    elif self.__state["profile"] in {"employee_setup", "employee_lifecycle"} and self.__collection.name in {
                             "mezan_role_assignments_v2", "mezan_mobile_app_access_v1"}:
                         # Here user_id is the employee's login, not the tenant.
                         # Existing management response reads use explicit owner

@@ -50,6 +50,41 @@ def _same_material_snapshot(before, current):
     return material(before) == material(current)
 
 
+def _response(result, number):
+    return {**result, 'order_number': number, 'assembly_completion_confirmed': True,
+            'contract_version': 1, 'print_state': 'ready' if result.get('ready') else 'pending'}
+
+
+async def _read_during_delivery(db, owner, number, authorize, before):
+    # A completion worker can still own its lease after Salla has completed and
+    # issued the AWB. Its write lease must not veto an independent current read.
+    # A concurrent explicit action remains single-flight. Never take, clear or
+    # extend either lease and never repeat a provider status/shipment write here.
+    instant = datetime.now(timezone.utc).isoformat()
+    workflow = await db.order_review_workflows.find_one({
+        'user_id': owner, 'order_number': number, 'assembly_status': 'completed',
+        'assembly_delivery': {'$exists': True},
+        '$or': [{'manual_label_refresh.until': {'$exists': False}},
+                {'manual_label_refresh.until': {'$lte': instant}}],
+    }, {'_id': 0, 'assembly_status': 1})
+    if not workflow:
+        return None
+    await authorize()
+    try:
+        result = await asyncio.wait_for(carrier_label(db, owner, number,
+            issue=False, completed_only=True), timeout=90)
+    except shipping.ShippingLabelError as exc:
+        if exc.code == 'carrier_order_in_progress':
+            return None
+        raise
+    await authorize()
+    if not _same_material_snapshot(before, await _capture(db, owner, number)):
+        raise HTTPException(409, detail={'code': 'shipping_snapshot_changed'})
+    # Return fresh evidence to this request. Publishing into the worker's
+    # workflow would race its result/error bookkeeping, so leave it untouched.
+    return _response(result, number)
+
+
 async def complete_and_refresh(db, owner, number, authorize):
     await authorize()
     before = await _capture(db, owner, number)
@@ -66,6 +101,9 @@ async def complete_and_refresh(db, owner, number, authorize):
             {'$or': [{'assembly_delivery.lease_until': {'$exists': False}}, {'assembly_delivery.lease_until': {'$lte': instant.isoformat()}}]},
         ]}, {'$set': {'manual_label_refresh': {'token': token, 'until': until}}}, return_document=ReturnDocument.AFTER)
     if not claim:
+        observed = await _read_during_delivery(db, owner, number, authorize, before)
+        if observed is not None:
+            return observed
         raise HTTPException(409, detail={'code': 'operation_in_progress', 'message': 'تحديث البوليصة جارٍ؛ انتظر اكتماله.'})
     try:
         await authorize()
@@ -82,8 +120,7 @@ async def complete_and_refresh(db, owner, number, authorize):
             {**selector, 'manual_label_refresh.token': token}, {'$set': _workflow_patch(result, now=datetime.now(timezone.utc).isoformat())})
         if saved.matched_count != 1:
             raise HTTPException(409, detail={'code': 'shipping_snapshot_changed'})
-        return {**result, 'order_number': number, 'assembly_completion_confirmed': True,
-                'contract_version': 1, 'print_state': 'ready' if result.get('ready') else 'pending'}
+        return _response(result, number)
     finally:
         await db.order_review_workflows.update_one({**selector, 'manual_label_refresh.token': token},
             {'$unset': {'manual_label_refresh': ''}})

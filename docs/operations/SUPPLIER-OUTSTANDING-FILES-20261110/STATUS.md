@@ -1,6 +1,8 @@
 # Supplier outstanding files — 2026-11-10
 
-Implementation checkpoint; NOT deployed. Android77 build is running, not yet accepted or delivered.
+Combined release checkpoint; NOT deployed. Android77 /1.0.62 internal APK succeeded on Expo build e4d1b852-d604-4c67-a5af-feb3dc0335a6 (22m56s). Proof: android77-build-success.png. Mobile PR347 merged into the existing release branch as 6f082c566a66386b6c0abf987f36b8bdbe338109; all five applicable CI workflows passed on a00a5eab2f98a63138eaeac9ada577468effccda. App input remains immutable05c5c5feac3adb5dcda2a072422ba81506640501; successor changed tests only. No OTA or device/physical-printer acceptance claimed.
+
+Owner explicitly requested publication of all fixes together. Integrated shipping PR1859 source8f6990cddf6fb874af4f7135d642ddbf6dda26ed into supplier PR1860 without conflicts; workflow includes both sets of tests. New combined-source local test command adds test_mobile_assembly_refresh_actions.py, test_manual_label_delivery_overlap.py and test_manual_courier_label_refresh_race.py to the supplier suite: 115 passed, one real-Mongo test explicitly skipped locally; GitHub real-Mongo CI required. Existing source-only intent9ca80c9d57c835ddb906bcd0b40d924caa4e4c2b is SUPERSEDED; do not deploy it. Freeze a new intent only after combined-source CI. Monitoring remains employee-date based; supplier date/file behavior is My Products only, stated explicitly to owner.
 
 Latest owner instruction supersedes employee-date grouping for My Products only: supplier dispatch sent_at in Riyadh, remaining products and files, received/remaining counts, hide completed files, remaining-only download with visible busy state.
 
