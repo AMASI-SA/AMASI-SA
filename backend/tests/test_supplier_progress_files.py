@@ -77,3 +77,32 @@ async def test_file_stays_on_dispatch_day_without_repeating_after_receipts(monke
         assert result['progress_supplier_totals'] == {'supplier': count}
     await db[dispatch.PIECES].update_many({'supplier_dispatch_id': 'file'}, {'$set': {'supplier_dispatch_status': 'received'}})
     assert (await supplier_progress_days(db, user_id='owner', employee_id='worker'))['days'] == [{'key': '2026-11-11'}]
+
+
+@pytest.mark.asyncio
+async def test_download_rechecks_receipts_and_passes_only_five_units_to_pdf_renderer(monkeypatch):
+    from types import SimpleNamespace
+    from fastapi import HTTPException
+    import supplier_dispatch_pdf as pdf
+    db, file, _, _ = await seed(monkeypatch)
+    await db[pdf.BATCHES].insert_one({'user_id': 'owner', 'id': 'batch',
+        'lines': [{'order_item_id': 'item', 'product_name': 'Synthetic item'}]})
+    await db[dispatch.PIECES].update_many({}, {'$set': {'order_item_id': 'item'}})
+    monkeypatch.setattr(pdf, '_line_from_batch_storage', lambda row, batch: SimpleNamespace(quantity=row['quantity']))
+    rendered = []
+    def render(lines, **kwargs):
+        rendered.append(lines)
+        return b'%PDF-synthetic-renderer-boundary'
+    monkeypatch.setattr(pdf, 'generate_amasi_product_file_pdf', render)
+    await pdf.build_supplier_dispatch_pdf(db, user_id='owner', dispatch=file, remaining_only=True)
+    assert len(rendered[-1]) == 5
+    # A receipt after opening the screen must also be excluded on download.
+    await db[dispatch.PIECES].update_one({'piece_id': 'p25'}, {'$set': {'supplier_dispatch_status': 'received'}})
+    await pdf.build_supplier_dispatch_pdf(db, user_id='owner', dispatch=file, remaining_only=True)
+    assert len(rendered[-1]) == 4
+    await db[dispatch.PIECES].update_many({}, {'$set': {'supplier_dispatch_status': 'received'}})
+    with pytest.raises(HTTPException) as error:
+        await pdf.build_supplier_dispatch_pdf(db, user_id='owner', dispatch=file, remaining_only=True)
+    assert error.value.status_code == 409
+    assert error.value.detail['code'] == 'supplier_dispatch_fully_received'
+    assert len(rendered) == 2

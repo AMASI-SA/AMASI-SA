@@ -140,6 +140,7 @@ jobs:
             tests/test_mobile_assembly_refresh_actions.py \
             tests/test_manual_courier_label_refresh_race.py \
             tests/test_preparation_progress_dates.py \
+            tests/test_supplier_progress_files.py \
             tests/test_preparation_lazy_sections.py \
             tests/test_preparation_piece_operations.py \
             tests/test_amasi_shipping_compat.py \
