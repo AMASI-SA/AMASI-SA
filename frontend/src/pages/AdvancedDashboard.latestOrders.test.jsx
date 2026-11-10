@@ -933,3 +933,32 @@ test("top product source menus start hidden, toggle independently, and remain ex
         container.remove();
     }
 });
+
+
+test("top products sort every numeric column in both directions across hidden rows", async () => {
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    const rows = Array.from({ length: 7 }, (_, i) => ({
+        identity: String(i), name: `Product ${i}`, units_sold: 7 - i,
+        total_sales: i * 20, total_cost: i * 10, net_profit: i === 0 ? null : i - 4,
+        cost_status: "complete",
+    }));
+    await act(async () => root.render(<TopProductsCard rows={rows} summary={{}} filters={{}} />));
+    const identities = () => [...host.querySelectorAll('[data-testid^="advanced-top-product-row-"]')].map(node => node.dataset.testid.replace("advanced-top-product-row-", ""));
+    expect(identities()).toEqual(["0", "1", "2", "3", "4"]);
+    for (const key of ["total_sales", "total_cost", "net_profit"]) {
+        const button = host.querySelector(`[data-testid="top-products-sort-${key}"]`);
+        await act(async () => button.click());
+        expect(identities()).toEqual(["6", "5", "4", "3", "2"]);
+        await act(async () => button.click());
+        expect(identities()[0]).toBe(key === "net_profit" ? "1" : "0");
+        expect(button.getAttribute("aria-label")).toContain("تصاعدي");
+    }
+    await act(async () => host.querySelector('[data-testid="top-products-sort-units_sold"]').click());
+    expect(identities()[0]).toBe("0");
+    await act(async () => host.querySelector('[data-testid="top-products-sort-units_sold"]').click());
+    expect(identities()[0]).toBe("6");
+    expect(rows[0].identity).toBe("0");
+    await act(async () => root.unmount());
+});
