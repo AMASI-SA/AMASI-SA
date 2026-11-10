@@ -30,6 +30,8 @@ on:
       - "backend/preparation_piece_operations.py"
       - "backend/mobile_order_refresh.py"
       - "backend/assembly_manual_label_refresh.py"
+      - "backend/preparation_supplier_progress.py"
+      - "backend/tests/test_supplier_progress_files.py"
       - "backend/preparation_progress_dates.py"
       - "backend/preparation_section_reads.py"
       - "backend/preparation_supplier_dispatch.py"
@@ -38,6 +40,7 @@ on:
       - "backend/tests/test_amasi_shipping_compat.py"
       - "backend/tests/test_mobile_assembly_refresh_actions.py"
       - "backend/tests/test_manual_courier_label_refresh_race.py"
+      - "backend/tests/test_manual_label_delivery_overlap.py"
       - "backend/tests/test_preparation_progress_dates.py"
       - "backend/tests/test_preparation_lazy_sections.py"
       - "backend/preparation_receipt_status_message.py"
@@ -137,7 +140,9 @@ jobs:
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
             tests/test_mobile_assembly_refresh_actions.py \
             tests/test_manual_courier_label_refresh_race.py \
+            tests/test_manual_label_delivery_overlap.py \
             tests/test_preparation_progress_dates.py \
+            tests/test_supplier_progress_files.py \
             tests/test_preparation_lazy_sections.py \
             tests/test_preparation_piece_operations.py \
             tests/test_amasi_shipping_compat.py \
