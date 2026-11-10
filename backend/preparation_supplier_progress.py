@@ -14,7 +14,7 @@ async def _files(db, owner, employee, day=None):
     # are never loaded merely to build the date list.
     candidates = await db[PIECES].find({
         'user_id': owner, 'responsible_employee_id': employee,
-        'status': {'$ne': 'cancelled'}, 'experiment_archived_at': None,
+        'status': {'$ne': 'cancelled'}, 'experiment_archived_at': {'$in': [None, '']},
         'supplier_dispatch_status': {'$ne': 'received'},
         'supplier_dispatch_id': {'$nin': [None, '']}},
         {'_id': 0, 'supplier_dispatch_id': 1}).to_list(None)

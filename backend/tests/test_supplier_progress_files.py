@@ -35,6 +35,7 @@ async def seed(monkeypatch):
 @pytest.mark.asyncio
 async def test_supplier_day_file_30_received_25_remaining_pdf_5(monkeypatch):
     db, file, pieces, hydrate = await seed(monkeypatch)
+    await db[dispatch.PIECES].update_many({'supplier_dispatch_status': 'sent'}, {'$set': {'experiment_archived_at': ''}})
     days = await supplier_progress_days(db, user_id='owner', employee_id='worker')
     assert days['days'] == [{'key': '2026-11-10'}]
     result = await supplier_progress_workspace(db, user_id='owner', employee_id='worker', day='2026-11-10')
