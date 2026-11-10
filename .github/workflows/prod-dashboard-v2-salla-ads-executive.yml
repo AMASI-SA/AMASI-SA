@@ -26,6 +26,7 @@ on:
       - "backend/tests/test_dashboard_v2_salla_ads_executive.py"
       - "backend/tests/test_order_currency_accounting.py"
       - "backend/tests/test_salla_nested_money.py"
+      - "backend/tests/test_salla_light_report_totals.py"
       - "frontend/src/components/AdsExecutiveBreakdownTable.jsx"
       - "frontend/src/components/OrderCurrencyAmount.jsx"
       - "frontend/src/components/ProfitSummaryCard.jsx"
@@ -97,6 +98,7 @@ jobs:
           tests/test_dashboard_eligibility_filter.py
           tests/test_dashboard_v2_product_cost.py
           tests/test_salla_nested_money.py
+          tests/test_salla_light_report_totals.py
           tests/test_dashboard_v2_ad_account_costs.py
           -q --tb=short
       - name: Enforce authoritative read-only sources
