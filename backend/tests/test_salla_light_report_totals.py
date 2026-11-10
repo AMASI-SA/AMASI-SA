@@ -1,6 +1,6 @@
 """Light list payloads must survive ingestion and report currency projection."""
 import pytest
-from mongomock_motor import AsyncMongoMockClient
+from mongomock import MongoClient
 
 from dashboard_eligibility_filter import order_is_eligible
 from order_currency import (
@@ -24,9 +24,8 @@ def test_full_explicit_zero_wins_over_light_total():
     assert doc["total_amount"] == 0
 
 
-@pytest.mark.asyncio
-async def test_existing_light_orders_survive_real_report_projection_and_filter():
-    db = AsyncMongoMockClient().db
+def test_existing_light_orders_survive_real_report_projection_and_filter():
+    db = MongoClient().db
     rows = []
     for number, amount in [("test-1", 197.72), ("test-2", 326.26)]:
         row = {"order_number": number, "total_amount": 0,
@@ -34,9 +33,9 @@ async def test_existing_light_orders_survive_real_report_projection_and_filter()
                "currency": "SAR", "original_currency": "SAR",
                "currency_conversion_status": "native_sar"}
         rows.append(row)
-        await db.orders.insert_one({**row, "raw_by_source": {"salla_direct": {
+        db.orders.insert_one({**row, "raw_by_source": {"salla_direct": {
             "total": {"amount": amount, "currency": "SAR"}, "currency": "SAR"}}})
-    projected = await db.orders.find({}, SALLA_RAW_CURRENCY_PROJECTION).to_list(None)
+    projected = list(db.orders.find({}, SALLA_RAW_CURRENCY_PROJECTION))
     hydrate_order_currency_fields(rows, projected)
     eligible = [row for row in rows if order_is_eligible(row)]
     assert len(eligible) == 2
