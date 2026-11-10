@@ -26,3 +26,11 @@ Limits / next steps:
 - All four numeric headers toggle descending/ascending across the full product cohort before slicing visible rows. Unknown values stay last, negatives sort numerically, and ties retain stable order. No network requests added.
 - AdvancedDashboard.latestOrders.test.jsx: 41 tests passed, including clicking all four sort controls and checking products previously hidden under More.
 - Issue #1006 cannot receive comments (GitHub 2500-comment cap). PR #1865 is the continuation record. Production unchanged.
+
+## Campaign history and result pagination follow-up
+- Campaign-ID searches now stream only stored attribution fields (no customer/payment/items) across tenant history and hydrate only exact campaign matches in batches of 100. Explicit user search only; no remote provider calls/background jobs. Cursor batch 250, Mongo deadline 5s, overall coroutine deadline 8s.
+- Combined results now paginate beyond 50 using a filter-bound cursor. Orders uses an explicit Load more results button, preserving filters and ignoring stale responses.
+- New regression: matching campaign after 5001 unrelated orders is found without hydrating unrelated orders; 55-result API pagination preserves cohort and rejects cross-filter cursor reuse.
+- Verification: 19 focused backend tests pass; 65 frontend tests pass across useOrders, OrdersV2, SoldProducts and dashboard. Broad legacy routes suite cannot initialize because local `openai` dependency is absent; focused tests use the real original Order Engine route factory instead of unrelated application extension routers.
+- Remaining: non-campaign advanced searches retain existing 5000 scan cap. Campaign metadata search performance against production Mongo has not been measured; deadline bounds slow requests but does not prove index efficiency. Live screenshot campaign verification still needed after deployment. TikTok hourly data issue is diagnosed only and not changed.
+- Production unchanged. No release artifacts, deployment or writes to store data.

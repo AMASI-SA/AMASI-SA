@@ -23,6 +23,7 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
     const refreshInFlightRef = useRef(false);
     const ordersRef = useRef([]);
     const searchModeRef = useRef(false);
+    const searchFiltersRef = useRef(null);
 
     const [orders, setOrders] = useState([]);
     const [nextCursor, setNextCursor] = useState(null);
@@ -98,25 +99,30 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
     useEffect(() => { loadFirstPage(); }, [loadFirstPage]);
 
     const loadMore = useCallback(async () => {
-        if (loading || initialLoading || searchMode || !hasMore || !nextCursor || refreshInFlightRef.current) return;
+        if (loading || initialLoading || !hasMore || !nextCursor || refreshInFlightRef.current) return;
+        const requestId = requestIdRef.current;
         refreshInFlightRef.current = true;
         setLoading(true);
         setError("");
         try {
             const result = await listOrders({
-                limit: ORDER_PAGE_SIZE,
+                limit: searchMode ? 50 : ORDER_PAGE_SIZE,
                 cursor: nextCursor,
-                statusGroup,
-                statusExact,
+                statusGroup: searchMode ? null : statusGroup,
+                statusExact: searchMode ? null : statusExact,
+                filters: searchMode ? searchFiltersRef.current : null,
             });
+            if (requestId !== requestIdRef.current) return;
             setOrders((current) => uniqueOrders([...current, ...result.items]));
             setNextCursor(result.nextCursor);
             setHasMore(Boolean(result.nextCursor));
         } catch (loadError) {
-            setError(loadError.message);
+            if (requestId === requestIdRef.current) setError(loadError.message);
         } finally {
-            setLoading(false);
-            refreshInFlightRef.current = false;
+            if (requestId === requestIdRef.current) {
+                setLoading(false);
+                refreshInFlightRef.current = false;
+            }
         }
     }, [hasMore, initialLoading, loading, nextCursor, searchMode, statusExact, statusGroup]);
 
@@ -155,6 +161,7 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
 
     const searchCombined = useCallback(async (filters) => {
         const requestId = ++requestIdRef.current;
+        searchFiltersRef.current = { ...filters };
         refreshInFlightRef.current = true;
         setInitialLoading(true);
         setLoading(true);
@@ -165,8 +172,8 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
             if (requestId !== requestIdRef.current) return;
             setOrders(uniqueOrders(result.items));
             setResultSummary(result.resultSummary);
-            setNextCursor(null);
-            setHasMore(false);
+            setNextCursor(result.nextCursor);
+            setHasMore(Boolean(result.nextCursor));
         } catch (searchError) {
             if (requestId !== requestIdRef.current) return;
             setOrders([]);

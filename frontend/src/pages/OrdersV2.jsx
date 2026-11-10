@@ -367,7 +367,7 @@ export default function OrdersV2() {
                         );
                     })}</div>
                 )}
-                <div ref={loadMoreRef} className="flex min-h-20 items-center justify-center border-t">{loading && !initialLoading && <span>تحميل 15 طلبًا إضافيًا…</span>}</div>
+                <div ref={loadMoreRef} className="flex min-h-20 items-center justify-center border-t">{loading && !initialLoading && <span>جارٍ تحميل طلبات إضافية…</span>}{searchMode && hasMore && !loading && <button type="button" onClick={loadMore} className="rounded-xl border px-4 py-2 text-violet-700">تحميل المزيد من نتائج البحث</button>}</div>
             </section>
 
             {drawerOpen && <div className="fixed inset-0 z-50 flex bg-slate-950/30"><button className="flex-1" onClick={() => setDrawerOpen(false)} /><aside className="h-full w-full max-w-sm overflow-y-auto bg-white p-5"><div className="flex justify-between"><b>فرز الطلبات حسب</b><button onClick={() => setDrawerOpen(false)}><X /></button></div><div className="mt-6 space-y-2">{statusCards.map((card) => <label key={card.key || "all"} className="flex justify-between rounded-xl border p-3"><span>{card.label}</span><input type="radio" checked={draftStatus === card.key} onChange={() => setDraftStatus(card.key)} /></label>)}</div><div className="mt-6 grid grid-cols-2 gap-3"><button onClick={() => { setDraftStatus(null); setActiveStatus(null); setDrawerOpen(false); }} className="rounded-xl border p-3">إعادة تعيين</button><button onClick={() => { setActiveStatus(draftStatus); setDrawerOpen(false); }} className="rounded-xl bg-violet-700 p-3 text-white">عرض النتائج</button></div></aside></div>}

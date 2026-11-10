@@ -131,7 +131,11 @@ def _summary(items: list[OrderDTO], cutoff: datetime | None) -> dict[str, Any]:
 
 
 async def search_orders(repository: OrderRepository, *, user_id: str, filters: dict[str, str | None]) -> SearchResult:
-    rows = await repository.list_salla_orders(user_id=user_id, limit=SCAN_LIMIT)
+    campaign_search = getattr(repository, "list_campaign_orders", None)
+    if filters.get("campaign_id") and callable(campaign_search):
+        rows = await campaign_search(user_id=user_id, campaign_id=filters["campaign_id"])
+    else:
+        rows = await repository.list_salla_orders(user_id=user_id, limit=SCAN_LIMIT)
     start, end, cutoff = _parse(filters.get("created_from")), _parse(filters.get("created_to")), _parse(filters.get("baseline_cutoff_at"))
     # Webhook retries, reconciliation and rerunnable backfills all converge on
     # the Salla order reference. A legacy duplicate must not inflate results.
