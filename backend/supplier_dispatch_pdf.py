@@ -202,7 +202,7 @@ async def build_supplier_dispatch_pdf(
         raise HTTPException(status_code=409, detail={"code": "supplier_dispatch_piece_snapshot_missing"})
 
     if remaining_only:
-        ordered = _remaining_dispatch_pieces(dispatch, ordered)
+        ordered = await _active_remaining_dispatch_pieces(db, user_id, dispatch, ordered)
         if not ordered:
             raise HTTPException(
                 status_code=409,
@@ -244,6 +244,24 @@ async def build_supplier_dispatch_pdf(
         file_number=_text(dispatch.get("supplier_file_number") or dispatch.get("file_number")),
         file_date=_riyadh_date(dispatch.get("sent_at") or dispatch.get("created_at")),
     )
+
+
+async def _active_remaining_dispatch_pieces(db, user_id, dispatch, pieces, *, eligible=None):
+    """Use the same current physical membership for progress and remaining PDF."""
+    from preparation_section_reads import _nonterminal_numbers
+    remaining = _remaining_dispatch_pieces(dispatch, pieces)
+    remaining = [piece for piece in remaining
+        if piece.get('status') != 'cancelled' and not piece.get('experiment_archived_at')
+        and (not piece.get('supplier_dispatch_id') or piece['supplier_dispatch_id'] == dispatch.get('id'))
+        and (not piece.get('supplier_id') or piece['supplier_id'] == dispatch.get('supplier_id'))
+        and (not dispatch.get('sent_by_id') or (
+            piece.get('responsible_employee_id') == dispatch['sent_by_id']
+            and piece.get('supplier_dispatch_id') == dispatch.get('id')
+            and piece.get('supplier_id') == dispatch.get('supplier_id')))]
+    numbers = sorted({piece.get('order_number') for piece in remaining if piece.get('order_number')})
+    if eligible is None:
+        eligible = await _nonterminal_numbers(db, user_id, numbers) if numbers else set()
+    return [piece for piece in remaining if not piece.get('order_number') or piece['order_number'] in eligible]
 
 
 def make_supplier_dispatch_pdf_router(db: Any, current_user: Callable) -> APIRouter:

@@ -151,6 +151,17 @@ async def test_http_routes_and_real_card_hydration_use_the_same_date_scope(monke
         assert watch.json()["days"] == [{"key": "2026-11-03"}, {"key": "2026-11-02"}]
         assert watch.json()["date_basis"] == "employee_assigned_at"
         assert hydrated == []
+        await db[dispatch.DISPATCHES].update_many({}, {"$set": {"sent_at": "2026-11-09T21:00:00Z"}})
+        supplied = await client.get("/supplier-dispatch-v1/progress-days?supplier_dates=true")
+        assert supplied.status_code == 200, supplied.text
+        assert supplied.json()["days"] == [{"key": "2026-11-10"}]
+        assert supplied.json()["date_basis"] == "supplier_dispatched_at"
+        supplied_page = await client.get("/supplier-dispatch-v1/progress-workspace", params={"day": "2026-11-10", "supplier_dates": "true"})
+        assert supplied_page.status_code == 200, supplied_page.text
+        assert supplied_page.json()["progress_supplier_totals"] == {"supplier": 13}
+        assert len([card for row in supplied_page.json()["files"] for card in row["products"]]) == 10
+        assert hydrated == [10]
+        hydrated.clear()
         after = ""
         loaded = []
         for expected_count in (10, 2):
