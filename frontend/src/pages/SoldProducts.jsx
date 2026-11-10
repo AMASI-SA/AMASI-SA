@@ -18,6 +18,15 @@ const money = value => `${formatMoney(value)} ر.س`;
 const complete = row => row.cost_status === "complete" && row.total_cost != null;
 const rowKey = row => row.report_key || `${row.product_id}:${row.sku || ""}`;
 
+export function productOrdersUrl(row, range = {}) {
+    const params = new URLSearchParams();
+    if (row.sku) params.set("sku", row.sku);
+    else params.set("product", row.name);
+    if (isValidISODate(range.from)) params.set("created_from", `${range.from}T00:00:00+03:00`);
+    if (isValidISODate(range.to)) params.set("created_to", `${addDaysISO(range.to, 1)}T00:00:00+03:00`);
+    return `/orders-v2?${params.toString()}`;
+}
+
 export function costReasonLabel(reason) {
     const value = String(reason || "");
     if (value.includes("cost_snapshot_line_changed")) return "بيانات الطلب لا تطابق سجل التكلفة";
@@ -108,7 +117,7 @@ export function SoldTable({ rows, printable = false, allDetails = false, expande
                     {!printable && <td className="p-3 print:hidden"><div className="flex items-center justify-between gap-3"><div>{["service", "component"].map(kind => <span className="block" key={kind}>{kind === "service" ? "الخدمات" : "المكونات"}: {formatInt(new Set((row.cost_columns || []).filter(column => column.kind === kind && column.key !== "historical-components").map(column => column.resource_id || column.key)).size)}</span>)}</div><button type="button" className="rounded-full border px-3 py-1 text-xl" aria-label={`مصادر ${row.name}`} aria-expanded={sourceRow === key} onClick={() => setSourceRow(sourceRow === key ? null : key)}>⋮</button></div></td>}
                     <td className="p-3 tabular-nums">{!complete(row) ? "غير مكتملة" : row.unit_cost_varies ? "تختلف حسب الخيارات" : row.unit_cost == null ? "غير مكتملة" : money(row.unit_cost)}</td>
                     <td className="p-3 tabular-nums">{complete(row) ? money(row.total_cost) : <><span className="text-amber-800">الإجمالي غير مكتمل</span><small className="block">المعروف {money(row.known_cost_total ?? 0)}</small></>}</td>
-                    <td className="p-3"><span className={`rounded-full px-2 py-1 text-xs ${complete(row) ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{complete(row) ? (row.cost_source === "salla" ? "تكلفة سلة" : "مكتمل") : [...new Set((row.missing_cost_reasons || []).map(costReasonLabel))].join("، ") || "تكلفة ناقصة"}</span></td>
+                    <td className="p-3"><span className={`rounded-full px-2 py-1 text-xs ${complete(row) ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{complete(row) ? (row.cost_source === "salla" ? "تكلفة سلة" : "مكتمل") : [...new Set((row.missing_cost_reasons || []).map(costReasonLabel))].join("، ") || "تكلفة ناقصة"}</span>{!printable && <Link to={productOrdersUrl(row, range)} target="_blank" rel="noopener noreferrer" className="ms-2 inline-block text-violet-700 underline print:hidden" aria-label={`فتح طلبات ${row.name}`}>فتح الطلبات ↗</Link>}</td>
                 </tr>
                 {!printable && sourceRow === key && <tr className="print:hidden"><td colSpan={7} className="p-3"><p className="text-xs text-slate-500 mb-2">القطع حسب المنصة والحساب</p><ProductTrafficSources sources={row.traffic_sources} promotionContext={{ product_id: row.product_id, from_date: range?.from, to_date: range?.to, statuses: range?.statuses || "default", report_scope: "sold" }} /></td></tr>}
                 {open && <tr id={detailId} className="sold-details-row"><td colSpan={printable ? 5 : 7}><CostDetails row={row} /></td></tr>}
