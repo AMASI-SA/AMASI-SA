@@ -34,3 +34,15 @@ v5 A/B, exact-head CI and isolated rehearsal before authorized merge/deploy;
 verify actual cycle progress. Provider404 completion remains a separate blocker.
 No shared /app modification while another release lease is active. Issue1006
 is comment-limited; this status and PR body retain continuation evidence.
+
+Validation update: installed missing public requests dependency. Broad run then
+hit unavailable loopback Mongo; it was stopped, not reported as a code failure.
+52 unit-test files (excluding statically identified real-Mongo dependencies):
+1292 passed,8 optional skipped,exit0. The existing Operational Stock Eligibility
+CI executes test_operational_balance*.py against disposable real Mongo. Renamed
+new regressions to test_operational_balance_worker_responsiveness.py so that
+required CI includes them.60 randomized differential comparisons against the
+reviewed base reducer passed, covering initial/repeated projection, removed
+items, delivery/cancellation and invalid amounts. git diff --check passed.
+WIP remote checkpoint aa3c2898c1fe295eb962fb9870aa791120cbbe01, DraftPR1868.
+No R13 production changes. Remaining release/CI and provider404 work above apply.
