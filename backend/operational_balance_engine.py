@@ -127,6 +127,14 @@ def reconcile(state, sources, as_of):
             issues.append(entry)
 
     shipping_keys = {}
+    supplier_keys = {}
+
+    def index_supplier_key(key):
+        if key.startswith('supplier:'):
+            supplier_keys.setdefault(key.split(':', 2)[1], set()).add(key)
+
+    for key in obligations:
+        index_supplier_key(key)
 
     def index_shipping_key(key):
         if key.startswith("shipping:"):
@@ -156,6 +164,8 @@ def reconcile(state, sources, as_of):
             obligations[key]["name"] = existing_name
         if kind == "shipping":
             index_shipping_key(key)
+        elif kind == "supplier":
+            index_supplier_key(key)
 
     shipping_allocations = {}
     for movement in result.get("movements", []):
@@ -311,6 +321,12 @@ def reconcile(state, sources, as_of):
             tax_evidence=deepcopy(receipt.get("tax_evidence")),
             **provenance, source_invoice_approved_at=receipt["accepted_at"])
 
+    # Receipt facts are fixed before order projection. Index them once instead
+    # of scanning the complete financial history for each physical item.
+    receipts_by_item = {}
+    for key, value in facts.items():
+        if key.startswith('receipt:'):
+            receipts_by_item.setdefault((value['order_id'], value['item_id']), {})[key] = value
     reference_owners = split_reference_owners(facts)
     order_inputs = [(order, False) for order in sources.get("orders", [])]
     order_inputs.extend((order, True) for order in sources.get("delivery_events", []))
@@ -358,7 +374,13 @@ def reconcile(state, sources, as_of):
             cancelled = order.get("status") in CANCELLED
             if not delivery_only:
                 current_item_keys = {"supplier:" + oid + ":" + str(item["id"]) for item in order.get("items", [])}
-                for old_key, old_row in obligations.items():
+                # Preserve legacy keys containing colons without guessing their
+                # component boundaries. Normal order IDs use the bounded index.
+                old_keys = obligations.keys() if ':' in oid else supplier_keys.get(oid, ())
+                for old_key in old_keys:
+                    old_row = obligations.get(old_key)
+                    if old_row is None:
+                        continue  # A prior failed order may have rolled this key back.
                     if (old_key.startswith("supplier:" + oid + ":") and ":receipt:" not in old_key
                             and old_key not in current_item_keys and order.get("items_complete") is not False):
                         obligations[old_key] = {**old_row, "expected": "0.00"}
@@ -366,8 +388,7 @@ def reconcile(state, sources, as_of):
                     iid = str(item["id"])
                     key = "supplier:" + oid + ":" + iid
                     total = money(item["cost"]) * money(item.get("quantity", 1))
-                    relevant = {k: v for k, v in facts.items() if k.startswith("receipt:")
-                                and v["order_id"] == oid and v["item_id"] == iid}
+                    relevant = receipts_by_item.get((oid, iid), {})
                     received = sum((money(v.get("net_amount", v["amount"])) for v in relevant.values()), ZERO)
                     # A validated native invoice covers the whole physical component.
                     # Its actual price replaces the old estimate, even if the price is

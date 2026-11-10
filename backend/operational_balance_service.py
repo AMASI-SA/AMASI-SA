@@ -3,6 +3,7 @@
 This module intentionally imports no accounting service. Confirmed obligations
 are not bank cash. Bank statements are optional later matching evidence.
 """
+import asyncio
 from copy import deepcopy
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
@@ -471,7 +472,10 @@ async def refresh(db, owner, *, clock=None):
         sources.setdefault("supplier_returns", []).extend(state.get("supplier_returns", []))
         from operational_customer_returns import attach_returns
         attach_returns(state, sources)
-        result = reconcile(state, sources, stamp)
+        # Pure calculation returns an independent state and performs no I/O.
+        # Keep lease heartbeats and operational jobs responsive while it runs;
+        # all authorization checks and CAS writes remain on the original loop.
+        result = await asyncio.to_thread(reconcile, state, sources, stamp)
         for order in sources.get('orders', []):
             credit = order.get('bank_credit')
             if not credit:
