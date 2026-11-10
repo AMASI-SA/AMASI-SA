@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from salla_marketing_attribution import campaign_id_candidates
+
 from .models import OrderDTO
 from .repository import OrderRepository
 from .service import _map_row
@@ -56,8 +58,11 @@ def _is_paid(order: OrderDTO) -> bool:
     return order.payment.collection_status == "paid" or order.payment.paid_amount > 0
 
 
-def _matches(order: OrderDTO, filters: dict[str, str | None], start: datetime | None, end: datetime | None) -> bool:
+def _matches(order: OrderDTO, filters: dict[str, str | None], start: datetime | None, end: datetime | None, campaign_ids: list[str] | None = None) -> bool:
     source = order.source
+    campaign_id = _text(filters.get("campaign_id"))
+    if campaign_id and campaign_id not in {_text(value) for value in (campaign_ids or [source.campaign_id])}:
+        return False
     if start and order.created_at < start:
         return False
     if end and order.created_at >= end:
@@ -75,7 +80,7 @@ def _matches(order: OrderDTO, filters: dict[str, str | None], start: datetime | 
         (skus, filters.get("sku")), (_status(order), filters.get("status")),
         (order.payment.collection_status or order.payment.status, filters.get("payment_status")),
         (source.source or source.platform, filters.get("provider")),
-        (source.campaign_name, filters.get("campaign")), (source.campaign_id, filters.get("campaign_id")),
+        (source.campaign_name, filters.get("campaign")),
         (source.ad_squad_name, filters.get("ad_squad")), (source.ad_squad_id, filters.get("ad_squad_id")),
         (source.ad_name, filters.get("ad")), (source.ad_id, filters.get("ad_id")),
         (raw_utm, filters.get("utm")), (source.match_status, filters.get("attribution_status")),
@@ -134,5 +139,6 @@ async def search_orders(repository: OrderRepository, *, user_id: str, filters: d
     for row in rows:
         unique_rows.setdefault(str(row.order_number), row)
     mapped = [_map_row(row.salla_raw, current_status=row.current_status, native_payment_source=row.native_payment_source) for row in unique_rows.values()]
-    items = [item for item in mapped if _matches(item, filters, start, end)]
+    items = [item for item, row in zip(mapped, unique_rows.values())
+             if _matches(item, filters, start, end, campaign_id_candidates(row.salla_raw) if filters.get("campaign_id") else None)]
     return SearchResult(items=items, summary=_summary(items, cutoff))

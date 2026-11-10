@@ -95,3 +95,31 @@ def test_snapchat_and_salla_are_independent_sources_of_truth():
     snapchat_purchases = 0
     salla_orders = len(FIXTURE["orders"])
     assert snapchat_purchases == 0 and salla_orders == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("evidence", [
+    {"utm_campaign": "7a9c4ad6-f520-432f-859e-d7985c0c1f50"},
+    {"campaign": {"id": "7a9c4ad6-f520-432f-859e-d7985c0c1f50", "name": "Winter"}},
+    {"source_campaign_id": "7a9c4ad6-f520-432f-859e-d7985c0c1f50"},
+])
+async def test_campaign_id_search_accepts_salla_evidence_before_name_enrichment(evidence):
+    raw = raw_order(FIXTURE["orders"][0])
+    for key in ("campaign_id", "campaign_name", "utm_campaign"):
+        raw.pop(key, None)
+    raw.update(evidence)
+    row = OrderDiscoveryRow(order_number=raw["reference_id"], order_date=raw["created_at"], salla_raw=raw)
+    result = await search_orders(Repository([row]), user_id="owner", filters={"campaign_id": "7a9c4ad6-f520-432f-859e-d7985c0c1f50"})
+    assert len(result.items) == 1
+    # IDs are exact identities, never substring matches or arbitrary click IDs.
+    result = await search_orders(Repository([row]), user_id="owner", filters={"campaign_id": "7a9c4ad6"})
+    assert not result.items
+
+
+@pytest.mark.asyncio
+async def test_product_link_period_includes_last_minute_but_not_next_riyadh_day():
+    rows = []
+    for number, created in (("first", "2026-11-09T21:00:00Z"), ("last", "2026-11-10T20:59:59Z"), ("next", "2026-11-10T21:00:00Z")):
+        rows.append(discovery({"reference_id": number, "created_at": created, "amount": 50}))
+    result = await search_orders(Repository(rows), user_id="owner", filters={"sku": "KIDS-96", "created_from": "2026-11-10T00:00:00+03:00", "created_to": "2026-11-11T00:00:00+03:00"})
+    assert [item.order_number for item in result.items] == ["first", "last"]

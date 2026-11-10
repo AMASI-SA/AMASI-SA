@@ -1,7 +1,7 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import SoldProducts, { CostDetails, CostSummary, SoldTable } from "./SoldProducts";
+import SoldProducts, { CostDetails, CostSummary, SoldTable, productOrdersUrl } from "./SoldProducts";
 import api from "../lib/api";
 
 const mockPrint = jest.fn();
@@ -266,4 +266,21 @@ test("Salla fallback is labelled in screen and print without hiding incomplete c
         expect(missing).not.toContain("تكلفة سلة");
         expect(missing).toContain("الإجمالي غير مكتمل");
     }
+});
+
+
+test("product orders open a new tab with the complete Riyadh report period and stay out of print", () => {
+    const row = product("AMS13217");
+    const range = { from: "2026-11-10", to: "2026-11-10" };
+    const url = new URL(productOrdersUrl(row, range), "https://mezansalla.com");
+    expect(url.pathname).toBe("/orders-v2");
+    expect(url.searchParams.get("sku")).toBe("AMS13217");
+    expect(url.searchParams.get("created_from")).toBe("2026-11-10T00:00:00+03:00");
+    expect(url.searchParams.get("created_to")).toBe("2026-11-11T00:00:00+03:00");
+    const holder = document.createElement("div");
+    holder.innerHTML = renderToStaticMarkup(<SoldTable rows={[row]} range={range} />);
+    const link = holder.querySelector('[aria-label="فتح طلبات منتج AMS13217"]');
+    expect(link.target).toBe("_blank");
+    expect(link.rel).toContain("noopener");
+    expect(renderToStaticMarkup(<SoldTable rows={[row]} printable />)).not.toContain("فتح الطلبات");
 });
