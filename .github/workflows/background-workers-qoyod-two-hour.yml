@@ -5,6 +5,10 @@ on:
     branches: [hotfix/prod-snap-meta-final]
     paths:
       - 'backend/background_worker_*.py'
+      - 'backend/salla_integration/scheduled_reconciliation.py'
+      - 'backend/salla_integration/sync.py'
+      - 'backend/tests/test_salla_scheduled_reconciliation.py'
+      - 'backend/tests/test_salla_sync_component_snapshot.py'
       - 'backend/integrations/qoyod/**'
       - 'backend/integrations/qoyod_manual/**'
       - 'backend/qoyod_auto_unified/**'
@@ -94,6 +98,17 @@ jobs:
           assert not root.findall('.//skipped'), 'Acceptance cases must execute on real Mongo'
           assert not root.findall('.//failure') and not root.findall('.//error')
           PY
+      - name: Verify scheduled Salla refresh and preparation preservation
+        working-directory: backend
+        env:
+          PYTHONPATH: .:tests
+        run: |
+          python -m pytest -q --tb=short tests/test_salla_scheduled_reconciliation.py tests/test_salla_sync_component_snapshot.py tests/test_salla_orders_sync_pagination_evidence.py tests/test_salla_raw_snapshot_preservation.py --junitxml=../evidence/salla-tests.xml
+          python - <<'PY_CHECK'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('../evidence/salla-tests.xml').getroot()
+          assert not root.findall('.//skipped'), 'Salla acceptance must execute'
+          PY_CHECK
       - name: Preserve source-bound evidence
         if: always()
         uses: actions/upload-artifact@v4

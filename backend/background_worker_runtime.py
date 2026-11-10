@@ -20,6 +20,7 @@ async def start_tasks(db, *, wake_event=None, assembly_wake_event=None):
         tasks.append(automatic(db, batch_limit=5, wake_event=wake_event))
         from integrations.qoyod_manual.auto_cycle import followup_loop
         from integrations.qoyod.scheduled_scan import scheduler
+        from salla_integration.scheduled_reconciliation import scheduler as salla_reconciliation
         from salla_integration.service import salla_token_maintenance_loop
         from operational_balance_worker import run as balances
         from order_review_resume_worker import start_worker as review
@@ -31,6 +32,7 @@ async def start_tasks(db, *, wake_event=None, assembly_wake_event=None):
         for name, factory in (
             ('qoyod-followup', followup_loop), ('qoyod-full-scan', scheduler),
             ('salla-token-maintenance', salla_token_maintenance_loop),
+            ('salla-orders-12h', salla_reconciliation),
             ('operational-balances', balances), ('operational-push', push),
         ):
             tasks.append(asyncio.create_task(factory(db), name=name))

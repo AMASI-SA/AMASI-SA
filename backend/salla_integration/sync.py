@@ -11,9 +11,8 @@ upserts into the existing `unified_orders` collection using
 Run modes
 ---------
     • Manual: triggered by the UI "Sync Now" button (routes.py).
-    • Scheduled: NOT enabled in Phase 2 (per user — only manual button
-      for now). When enabled later, just call `run_orders_sync()` on
-      a 15-minute timer.
+    • Scheduled: Amasi's background worker refreshes a rolling 24-hour
+      creation window every 12 hours, including authoritative order items.
 
 Sync log
 --------
@@ -30,6 +29,7 @@ import logging
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 from pymongo.errors import DuplicateKeyError
 
@@ -875,6 +875,7 @@ async def run_orders_sync(
     updated_since_hours: Optional[int] = None,
     log_id: Optional[str] = None,
     recover_marketing_attribution: bool = False,
+    refresh_window: Optional[tuple[datetime, datetime]] = None,
 ) -> dict:
     """Pull orders from Salla and upsert into unified_orders.
 
@@ -902,6 +903,12 @@ async def run_orders_sync(
                 "marketing attribution recovery is limited to three calendar days"
             )
 
+    if refresh_window:
+        start, end = refresh_window
+        if start.tzinfo is None or end.tzinfo is None or end - start != timedelta(hours=24):
+            raise ValueError("scheduled refresh requires an aware 24-hour window")
+        from_date = start.astimezone(ZoneInfo("Asia/Riyadh")).date().isoformat()
+        to_date = end.astimezone(ZoneInfo("Asia/Riyadh")).date().isoformat()
     log_id = log_id or await create_sync_log(db, user_id, "orders")
 
     created = 0
@@ -927,6 +934,9 @@ async def run_orders_sync(
         )
         while page <= max_pages:
             params: dict = {"page": page, "per_page": ORDERS_PER_PAGE, "format": "light"}
+            if refresh_window:
+                # Fetch items separately; never open /orders/{id} in background.
+                params["per_page"] = 30
             if from_date:
                 params["from_date"] = from_date
             if to_date:
@@ -986,6 +996,24 @@ async def run_orders_sync(
             for raw in data:
                 try:
                     list_row = raw
+                    if refresh_window:
+                        date = raw.get("date")
+                        zone = "Asia/Riyadh"
+                        if isinstance(date, dict):
+                            zone = date.get("timezone") or zone
+                            date = date.get("date")
+                        created_at = datetime.fromisoformat(str(date).replace("Z", "+00:00"))
+                        if created_at.tzinfo is None:
+                            created_at = created_at.replace(tzinfo=ZoneInfo(zone))
+                        if not refresh_window[0] <= created_at <= refresh_window[1]:
+                            skipped += 1
+                            continue
+                        from resource_governor import governor, ResourcePressure
+                        if governor.peek()[0] in {"blocked", "cancel"}:
+                            raise ResourcePressure("resource_pressure")
+                        raw = dict(raw)
+                        raw["items"] = await _fetch_scheduled_order_items(db, user_id, str(raw.get("id") or ""))
+                        await asyncio.sleep(0.25)
                     if (
                         recover_marketing_attribution
                         and attribution_details_fetched
@@ -1022,9 +1050,13 @@ async def run_orders_sync(
                         db, user_id, raw)
                     doc = _salla_order_to_doc(raw)
                     if not doc.get("order_number"):
+                        if refresh_window:
+                            raise ValueError("scheduled_order_missing_reference")
                         skipped += 1
                         continue
                     res = await _persist_sync_component_snapshot(db, user_id, doc, raw)
+                    if res.get("blocked") and refresh_window:
+                        raise RuntimeError("scheduled_snapshot_blocked")
                     if res.get("stale") or res.get("blocked"):
                         skipped += 1
                         continue
@@ -1061,7 +1093,7 @@ async def run_orders_sync(
         # Hitting the page cap without an observed end is incomplete even
         # when the provider omitted its total-pages metadata.
         truncated = not pagination_exhausted or not pagination_consistent
-        await finish_sync_log(db, log_id, "completed", extra={
+        await finish_sync_log(db, log_id, "partial" if refresh_window and (truncated or errors_count) else "completed", extra={
             "created": created, "updated": updated, "skipped": skipped,
             "errors_count": errors_count, "errors_sample": errors_sample[:20],
             "pages_fetched": pages_fetched,
@@ -1111,6 +1143,47 @@ async def run_orders_sync(
         "attribution_orders_recovered": attribution_orders_recovered,
         "attribution_recovery_errors": attribution_recovery_errors,
     }
+
+
+async def _fetch_scheduled_order_items(db, user_id, internal_id):
+    """Read every item page; incomplete items must never replace stored lines."""
+    if not internal_id:
+        raise ValueError("missing_internal_order_id")
+    items = {}
+    for page in range(1, 101):
+        response = await call_salla(db, user_id, "GET", "/orders/items",
+                                    params={"order_id": internal_id, "page": page, "per_page": 50})
+        rows = response.get("data") if isinstance(response, dict) else None
+        if not isinstance(rows, list) or any(not isinstance(row, dict) or not row.get("id") for row in rows):
+            raise ValueError("invalid_order_items")
+        # The documented items response is an unpaginated complete array.
+        # Also handle explicit pagination if the provider supplies it.
+        if "pagination" not in response:
+            if page != 1:
+                raise ValueError("item_pagination_disappeared")
+            return rows
+        pagination = response.get("pagination")
+        if not isinstance(pagination, dict):
+            raise ValueError("invalid_item_pagination")
+        total = _pagination_number(pagination, ("totalPages", "total_pages", "last_page"), minimum=0)
+        current = _pagination_number(pagination, ("currentPage", "current_page", "page"), minimum=1)
+        if current is not None and current != page:
+            raise ValueError("invalid_item_page")
+        if not rows:
+            if total and page <= total:
+                raise ValueError("incomplete_order_items")
+            return list(items.values())
+        before = len(items)
+        for row in rows:
+            items[str(row["id"])] = row
+        if len(items) == before:
+            raise ValueError("repeated_item_page")
+        if total is not None and page >= total:
+            if page != total:
+                raise ValueError("invalid_item_page_count")
+            return list(items.values())
+        await asyncio.sleep(0.25)
+    raise ValueError("order_items_page_limit")
 
 
 async def _fetch_salla_order_items(
