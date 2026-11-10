@@ -1,68 +1,34 @@
-# Qoyod worker CPU R13 — WIP
+# Qoyod R13 post-deployment checkpoint
 
-Repository AMASI-SA/AMASI-SA; branch codex/qoyod-worker-invoice-r13-final-20261110.
-Base36980489fb8bd6e7ee95f082f203320bd59eca2c (R12 #1867).
-R12 published Nov10 21:58 Riyadh, official verify EXIT0/verified=true,
-release guard inactive. No invoices sent by this task.
+Restores invoice-list completion when Qoyod returns its exact invoice-specific empty-tail response, and reduces synchronous operational-balance work that could delay worker heartbeats. Invoice eligibility, payment verification, idempotency, two-hour cadence and manual-only header refresh remain unchanged.
 
-Production evidence: cycle heartbeat failed ownership match (RuntimeError at
-19:04:56.633Z), canceled work and resumed the same candidates. Counters remain
-129 batches,184 attempts,529 reviewed of773,0 sent. Read-only full scan failed
-19:05:19.828Z after229921.94ms: unconfirmed_404,90 pages,8950 unique IDs.
-The404 response must not be treated as absence without trustworthy evidence.
+Release:
+- Source A: f1978b301c4096a9bafcc2c461355e3b4eda2536
+- Intent B: 2e8a5621ebf240dc36e720d6a4d357af26a0a007
+- Merge: 86562e2971f56cad1fde1e61f68744467e2d2253
+- Runtime: rg5-941480bd764685497296e40d923f44e12a8bb5e6dfdded39dcc92c5ca6114315
+- Supersedes closed, unmerged PR1868; do not deploy intermediate intents.
 
-Found synchronous operational balance calculation on the shared worker loop.
-Synthetic benchmark (no production data):10000 orders first22.195s and repeat
-52.473s. Profile of3000 repeated orders made27,012,000 startswith calls, mainly
-scanning every supplier obligation for every order. This establishes a concrete
-blocking path; exact attribution of the production stall remains unprofiled.
+Validation:
+- 1292 local operational unit tests passed;8 optional skipped.
+- 60 randomized old/new financial equivalence comparisons passed.
+- Synthetic10000-order repeat calculation52.473s→3.675s; production stall attribution remains unprofiled.
+- Broad Qoyod tests164 passed from backend cwd; focused provider tests97 passed.
+- Exact B real-Mongo operational CI run42886554147:3067 tests+7subtests passed.
+- Worker/two-hour real-Mongo42886554228 and required applicable workflows passed.
+- Isolated final rehearsal and shared materialization exited0.
+- Prepare/prepublish exited0 with matching identities.
 
-R13 indexes supplier obligations and receipt facts within each pure calculation,
-preserves colon-ID fallback and rollback behavior, and runs the pure reducer
-via asyncio.to_thread. Authorization/CAS writes stay on the original loop.
-No cadence, invoice gate, lease duration, provider404 rule or header change.
-Optimized10000-order benchmark:first2.627s,repeat3.675s, unchanged result.
+Production changed:YES. One publish started Nov10 22:54 Riyadh; explicit Deployment finished23:04, platform version0914cfd. Health confirmed exact source/runtime and identity/hash/frontend flags true.
+Official three-probe verification is still running in Terminal3, PID61376, /tmp/qoyod1869-verify.log. Do not repeat publish/verify or clear its lease.
 
-Regression-first: original2 tests failed (120600 prefix checks and heartbeat
-blocked). Focused reducer/responsiveness25 passed; additional prefix/colon and
-rollback tests pass (4 responsiveness tests total). Expanded operational suite
-blocked at collection by missing local requests package; dependency setup and
-full relevant tests remain. No R13 merge, release intent, lease or deployment.
+Post-deploy functional evidence:
+One manual read-only full scan succeeded20:09:52Z:8950 fetched,8831 in scope,119 skipped;9508 eligible,1000 missing,8363 matched,145 amount differences,323 Qoyod-only. These are reconciliation counts, not sends.
+Worker last observed529/773 processed,0sent. One owner-authorized guarded manual retry of a pre-existing404 case is in flight; do not duplicate it. Existing404 quarantines may remain blocked by their classification and require guarded recovery.
+Preview backend restored RUNNING after temporary materialization stop. No resource/cost changes.
+Shared/app now contains unrelated concurrent work; preserve it. MongoViewer tab15 changed concurrently; our temporary filter removed and further use stopped. No credential extraction.
 
-Next: complete relevant tests/review; preserve WIP remote branch/DraftPR; freeze
-v5 A/B, exact-head CI and isolated rehearsal before authorized merge/deploy;
-verify actual cycle progress. Provider404 completion remains a separate blocker.
-No shared /app modification while another release lease is active. Issue1006
-is comment-limited; this status and PR body retain continuation evidence.
+Next: obtain officialverify result and inactive guard, confirm retry outcome, diagnose worker/quarantine recovery, then confirm remaining eligible invoice sends. No all-sent claim.
+Issue1006 is comment-limited; task status document and this PR retain continuation evidence.
 
-Validation update: installed missing public requests dependency. Broad run then
-hit unavailable loopback Mongo; it was stopped, not reported as a code failure.
-52 unit-test files (excluding statically identified real-Mongo dependencies):
-1292 passed,8 optional skipped,exit0. The existing Operational Stock Eligibility
-CI executes test_operational_balance*.py against disposable real Mongo. Renamed
-new regressions to test_operational_balance_worker_responsiveness.py so that
-required CI includes them.60 randomized differential comparisons against the
-reviewed base reducer passed, covering initial/repeated projection, removed
-items, delivery/cancellation and invalid amounts. git diff --check passed.
-WIP remote checkpoint aa3c2898c1fe295eb962fb9870aa791120cbbe01, DraftPR1868.
-No R13 production changes. Remaining release/CI and provider404 work above apply.
-
-Provider evidence update before publishing: inspected one existing production
-quarantine detail read-only. GET /invoices HTTP404 response was exactly
-"We could not retrieve your Invoices, we found nothing." (Nov8 saved response).
-The old narrow helper recognized only "We found nothing", so the confirmed
-invoice-specific tail remained unknown. Added only this exact message for
-GET /invoices. No generic404, first-page absence, repeated-page or total-count
-relaxation. Regression first:1 failed/5 passed before fix. Added endpoint,
-method,status,prefix negatives and first-page refusal; read-only paginator
-also tests exact tail and missing declared totals. Include paginator in Qoyod CI.
-The earlier sourceA2d57ff4/intentB71734766 and successful isolated rehearsal
-are superseded, NOT for deployment. New A/B and exact-head CI required.
-No R13 production mutation, merge, lease or invoice send has occurred.
-
-Combined source uses a new branch directly from reviewed R12 base because v5
-forbids an interim intent anywhere in source ancestry. Old PR1868 remains
-recoverable and is superseded; no force push or deployment of old candidate.
-Focused provider tests97PASS. Local broad Qoyod initial run had two cwd-only
-file lookup failures; rerun from backend cwd is required. No product failure
-or provider write was caused by the local tests.
+Manual retry result update: browser returned a120-second proxy read timeout. Outcome UNKNOWN; no repeat attempt authorized by this checkpoint. Inspect saved sender/quarantine state before another attempt. The read-only fullscan succeeded; sender still needs functional confirmation.
