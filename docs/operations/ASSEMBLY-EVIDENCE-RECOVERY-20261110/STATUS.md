@@ -11,3 +11,12 @@ Validation: deterministic baseline positive failed ready=false. Final integrated
 Remote WIP preserved at a92706928ddad5a7ef588841e1dbe4553443a0dd, Draft PR #1874. Source checkpoint will be reparented onto current Production before freezing any intent, to avoid importing prior intent history into J..A. Shared guard observed inactive; no shared source mutation yet.
 
 Remaining: exact-source CI; fresh v5 source A/intent B and clean rehearsal; owned inactive guard before shared workspace changes; one publish and official verify3. No merge, release lease or production change by this task. Preserve other task changes/current production. Do not claim all historical failures fixed: missing approval, real material change and exhausted attempts remain blocked.
+
+
+## Final publication checkpoint — blocked by other release
+
+Source A 6d36c88d2809c16736f4cbd0b0891206a120257a; frozen intent-only B ec99f80fe9028ca052553fccc4de87b2d8684212, tree9d0411dfd8255d09c6b2c9a405ed3ff9d59aeac5. PR1874 is ready, not merged. Runtime rg5-ac9c684487edc378a1961913d9aba396a0bfccecfc88cf0b2461fe7da9a8ff3a. All exact-B applicable checks passed, including real-mongo-review and both Node20/24 clean-clone adapter rehearsals; latest check listing32:22success/10scope-skipped, no pending/failure. Earlier aggregate also included neutral CodeQL report.
+
+Other release #1873 published Emergent5fe69d4; its shared Release Guard remains active with actor codex-salla-1873, sourceec2aea9aca3215814c9849e5af9a4cb87a57c0e8/deployment5c7869e1a50efcaff4f5ba34f7d6640d4655c789. Do not clear that lease or mutate /app. Terminal restored after Preview Unavailable/resting; temporary rehearsal log was lost and its outcome is NOT claimed. No guard verify process observed at last read. No merge, shared governed mutation, owned lease or publish by1874. No Production change by1874.
+
+Next: owner of1873 completes official verify and closes its lease; then fresh status active=false, fresh production base check. If base unchanged, complete isolated adapter rehearsal exactB, normal merge retaining A/B, shared governed build (preserve existing files), own prepare/prepublish, one authorized publish, explicit new success, official verify3 and inactive status. If production source advances, prepare a fresh source/intent pair instead. Existing CI rehearsal artifacts remain on run42904016456. Keep release branchB frozen; this checkpoint lives separately as evidence, not a new deployable intent.
