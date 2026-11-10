@@ -1627,20 +1627,25 @@ def make_preparation_supplier_dispatch_router(
         return await _waiting_groups(db, _merchant_user_id(worker), _actor_id(worker))
 
     @router.get("/progress-days")
-    async def progress_dates(user: dict = Depends(current_user)) -> dict[str, Any]:
+    async def progress_dates(supplier_dates: bool = False, user: dict = Depends(current_user)) -> dict[str, Any]:
         worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
         await ensure_indexes_once()
-        from preparation_section_reads import progress_days
-        return await progress_days(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker),
-                                   date_basis="employee_assigned_at")
+        if not supplier_dates:
+            from preparation_section_reads import progress_days
+            return await progress_days(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker), date_basis="employee_assigned_at")
+        from preparation_supplier_progress import supplier_progress_days
+        return await supplier_progress_days(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker))
 
     @router.get("/progress-workspace")
-    async def progress_day_workspace(day: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$|^__unknown__$"), after: str = Query("", max_length=512), user: dict = Depends(current_user)) -> dict[str, Any]:
+    async def progress_day_workspace(supplier_dates: bool = False, day: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$|^__unknown__$"), after: str = Query("", max_length=512), user: dict = Depends(current_user)) -> dict[str, Any]:
         worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
         await ensure_indexes_once()
-        from preparation_section_reads import progress_workspace
-        return await progress_workspace(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker),
-                                        day=day, after=after, date_basis="employee_assigned_at")
+        if not supplier_dates:
+            from preparation_section_reads import progress_workspace
+            return await progress_workspace(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker), day=day, after=after, date_basis="employee_assigned_at")
+        from preparation_supplier_progress import supplier_progress_workspace
+        return await supplier_progress_workspace(db, user_id=_merchant_user_id(worker), employee_id=_actor_id(worker),
+                                                  day=day, after=after)
 
     @router.get("/workspace")
     async def workspace(

@@ -30,6 +30,8 @@ on:
       - "backend/preparation_piece_operations.py"
       - "backend/mobile_order_refresh.py"
       - "backend/assembly_manual_label_refresh.py"
+      - "backend/preparation_supplier_progress.py"
+      - "backend/tests/test_supplier_progress_files.py"
       - "backend/preparation_progress_dates.py"
       - "backend/preparation_section_reads.py"
       - "backend/preparation_supplier_dispatch.py"
