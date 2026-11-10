@@ -45,6 +45,32 @@ async def heartbeat(db, tasks):
         await asyncio.sleep(10)
 
 
+async def record_worker_exit(db, done, jobs, monitors=()):
+    """Best-effort bounded cause record, without provider messages or payloads."""
+    def summarize(tasks):
+        outcomes = []
+        for task in tasks:
+            if task not in done:
+                continue
+            outcome = {'job': task.get_name()[:80]}
+            if task.cancelled():
+                outcome['outcome'] = 'cancelled'
+            elif task.exception() is not None:
+                outcome.update(outcome='failed', error_type=type(task.exception()).__name__)
+            else:
+                outcome['outcome'] = 'returned'
+            outcomes.append(outcome)
+        return outcomes
+    # Diagnostics must never prevent the normal shutdown/restart path.
+    with suppress(Exception):
+        await asyncio.wait_for(db.background_worker_status.update_one(
+            {'_id': os.environ['MEZAN_BACKGROUND_PARENT_ID']},
+            [{'$set': {'last_exit': {'jobs': summarize(jobs), 'monitors': summarize(monitors)},
+                       'last_exit_at': '$$NOW'}}],
+            upsert=True,
+        ), timeout=2)
+
+
 async def run():
     if os.environ.get('MEZAN_BACKGROUND_WORKER_PROCESS') != '1':
         raise RuntimeError('background_worker_requires_parent')
@@ -67,9 +93,11 @@ async def run():
         wake_event = asyncio.Event()
         assembly_wake_event = asyncio.Event()
         tasks = await start_tasks(server.db, wake_event=wake_event, assembly_wake_event=assembly_wake_event)
-        monitors = [asyncio.create_task(parent_closed(wake_event, assembly_wake_event)), asyncio.create_task(stop.wait()),
-                    asyncio.create_task(heartbeat(server.db, tasks))]
+        monitors = [asyncio.create_task(parent_closed(wake_event, assembly_wake_event), name='parent-closed'),
+                    asyncio.create_task(stop.wait(), name='stop-signal'),
+                    asyncio.create_task(heartbeat(server.db, tasks), name='heartbeat')]
         done, _ = await asyncio.wait([*tasks, *monitors], return_when=asyncio.FIRST_COMPLETED)
+        await record_worker_exit(server.db, done, tasks, monitors)
         for task in done:
             if not task.cancelled() and task.exception() is not None:
                 raise RuntimeError('background_job_failed') from task.exception()

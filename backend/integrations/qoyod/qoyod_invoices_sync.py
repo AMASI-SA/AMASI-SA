@@ -207,9 +207,12 @@ async def sync_qoyod_invoices(
     except Exception as e:  # noqa: BLE001
         return {
             "ok": False,
-            "error": (
-                f"تعذر جلب فواتير قيود: {type(e).__name__}: {e}"
-            ),
+            "error": "تعذر جلب فواتير قيود",
+            "diagnostic": {
+                "stage": "provider_read",
+                "error_type": type(e).__name__,
+                "http_status": getattr(e, "status_code", None),
+            },
             "fetched": 0, "in_scope": 0,
             "created": 0, "updated": 0, "skipped": 0,
             "row_errors": 0,
