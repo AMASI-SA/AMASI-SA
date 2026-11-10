@@ -106,3 +106,45 @@ async def test_download_rechecks_receipts_and_passes_only_five_units_to_pdf_rend
     assert error.value.status_code == 409
     assert error.value.detail['code'] == 'supplier_dispatch_fully_received'
     assert len(rendered) == 2
+
+
+@pytest.mark.asyncio
+async def test_progress_and_download_exclude_cancelled_reassigned_and_terminal_pieces(monkeypatch):
+    from supplier_dispatch_pdf import _active_remaining_dispatch_pieces
+    db, file, _, _ = await seed(monkeypatch)
+    for pid, changes in [('p25', {'status': 'cancelled'}),
+                         ('p26', {'supplier_dispatch_id': 'other-file'}),
+                         ('p27', {'order_number': 'completed-order'}),
+                         ('p28', {'supplier_dispatch_id': ''})]:
+        await db[dispatch.PIECES].update_one({'piece_id': pid}, {'$set': changes})
+    await db.unified_orders.insert_one({'user_id': 'owner', 'order_number': 'completed-order', 'order_status': 'completed'})
+    result = await supplier_progress_workspace(db, user_id='owner', employee_id='worker', day='2026-11-10')
+    assert result['progress_active_piece_ids'] == ['p29']
+    pieces = await db[dispatch.PIECES].find({'user_id': 'owner'}).to_list(None)
+    assert [p['piece_id'] for p in await _active_remaining_dispatch_pieces(db, 'owner', file, pieces)] == ['p29']
+    progress = result['supplier_accounts'][0]['dispatches'][0]['progress']
+    assert progress['received'] == 25, 'excluded pieces are not falsely marked received'
+
+
+@pytest.mark.asyncio
+async def test_completed_historical_files_are_not_loaded_for_date_navigation(monkeypatch):
+    db, file, _, _ = await seed(monkeypatch)
+    old = deepcopy(file)
+    old.update(id='old-completed-file', piece_ids=['old-received-piece'], piece_count=1)
+    await db[dispatch.DISPATCHES].insert_one(old)
+    await db[dispatch.PIECES].insert_one({'user_id': 'owner', 'piece_id': 'old-received-piece',
+        'responsible_employee_id': 'worker', 'supplier_dispatch_id': old['id'], 'supplier_dispatch_status': 'received'})
+    calls = []
+    collection = db[dispatch.DISPATCHES]
+    original = collection.find
+    def observe(query, *args, **kwargs):
+        calls.append(query)
+        return original(query, *args, **kwargs)
+    monkeypatch.setattr(collection, 'find', observe)
+    class ObservedDB:
+        def __getitem__(self, name):
+            return collection if name == dispatch.DISPATCHES else db[name]
+        def __getattr__(self, name):
+            return getattr(db, name)
+    assert (await supplier_progress_days(ObservedDB(), user_id='owner', employee_id='worker'))['days'] == [{'key': '2026-11-10'}]
+    assert calls[0]['id'] == {'$in': ['file']}
