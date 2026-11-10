@@ -1,3 +1,4 @@
+import { resolveOrderCampaign } from "../lib/orderCampaignAttribution";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -134,7 +135,7 @@ function SourceBadge({ order }) {
     if (!badge) return null;
     return (
         <span
-            title={`مصدر الطلب: ${badge.label}`}
+            title={resolveOrderCampaign(order).campaignDisplay || "الحملة غير محددة"}
             aria-label={`مصدر الطلب: ${badge.label}`}
             className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[9px] font-black leading-none shadow-sm ${badge.className}`}
         >
@@ -211,7 +212,7 @@ export default function OrdersV2() {
         provider: urlParams.get("provider") || "", campaign: urlParams.get("campaign") || "",
         campaign_id: urlParams.get("campaign_id") || "", ad_squad: urlParams.get("ad_squad") || "",
         ad_squad_id: urlParams.get("ad_squad_id") || "", ad: urlParams.get("ad") || "",
-        ad_id: urlParams.get("ad_id") || "", product: "", sku: "", payment_status: "",
+        ad_id: urlParams.get("ad_id") || "", product: urlParams.get("product") || "", sku: urlParams.get("sku") || "", payment_status: "",
         utm: "", attribution_status: "", created_from: urlParams.get("created_from") || "",
         created_to: urlParams.get("created_to") || "", baseline_cutoff_at: urlParams.get("baseline_cutoff_at") || "",
     }));
@@ -320,8 +321,8 @@ export default function OrdersV2() {
                         {[["product","اسم المنتج"],["sku","SKU"],["provider","المصدر الإعلاني"],["campaign","Campaign"],["campaign_id","Campaign ID"],["ad_squad","Ad Squad / Ad Set"],["ad_squad_id","Ad Squad ID"],["ad","Ad"],["ad_id","Ad ID"],["utm","UTM الخام"]].map(([key,label]) => <input key={key} value={filters[key]} onChange={(event) => setFilters((current) => ({ ...current, [key]: event.target.value }))} placeholder={label} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />)}
                         <select value={filters.payment_status} onChange={(event) => setFilters((current) => ({ ...current, payment_status: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">كل حالات الدفع</option><option value="paid">مدفوع</option><option value="unpaid">بانتظار الدفع</option><option value="partial">مدفوع جزئيًا</option></select>
                         <select value={filters.attribution_status} onChange={(event) => setFilters((current) => ({ ...current, attribution_status: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">كل حالات الإسناد</option><option value="matched">مطابق</option><option value="unattributed">غير منسوب</option><option value="conflicted">متعارض</option></select>
-                        <input type="datetime-local" value={filters.created_from} onChange={(event) => setFilters((current) => ({ ...current, created_from: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" title="من تاريخ الإنشاء الأصلي" />
-                        <input type="datetime-local" value={filters.created_to} onChange={(event) => setFilters((current) => ({ ...current, created_to: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" title="إلى تاريخ الإنشاء الأصلي" />
+                        <input type="datetime-local" value={filters.created_from.slice(0, 16)} onChange={(event) => setFilters((current) => ({ ...current, created_from: event.target.value ? event.target.value + (current.created_from.match(/([+-]\d{2}:\d{2}|Z)$/)?.[1] || "") : "" }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" title="من تاريخ الإنشاء الأصلي" />
+                        <input type="datetime-local" value={filters.created_to.slice(0, 16)} onChange={(event) => setFilters((current) => ({ ...current, created_to: event.target.value ? event.target.value + (current.created_to.match(/([+-]\d{2}:\d{2}|Z)$/)?.[1] || "") : "" }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" title="إلى تاريخ الإنشاء الأصلي" />
                     </div>
                 </form>
             </section>
@@ -366,7 +367,7 @@ export default function OrdersV2() {
                         );
                     })}</div>
                 )}
-                <div ref={loadMoreRef} className="flex min-h-20 items-center justify-center border-t">{loading && !initialLoading && <span>تحميل 15 طلبًا إضافيًا…</span>}</div>
+                <div ref={loadMoreRef} className="flex min-h-20 items-center justify-center border-t">{loading && !initialLoading && <span>جارٍ تحميل طلبات إضافية…</span>}{searchMode && hasMore && !loading && <button type="button" onClick={loadMore} className="rounded-xl border px-4 py-2 text-violet-700">تحميل المزيد من نتائج البحث</button>}</div>
             </section>
 
             {drawerOpen && <div className="fixed inset-0 z-50 flex bg-slate-950/30"><button className="flex-1" onClick={() => setDrawerOpen(false)} /><aside className="h-full w-full max-w-sm overflow-y-auto bg-white p-5"><div className="flex justify-between"><b>فرز الطلبات حسب</b><button onClick={() => setDrawerOpen(false)}><X /></button></div><div className="mt-6 space-y-2">{statusCards.map((card) => <label key={card.key || "all"} className="flex justify-between rounded-xl border p-3"><span>{card.label}</span><input type="radio" checked={draftStatus === card.key} onChange={() => setDraftStatus(card.key)} /></label>)}</div><div className="mt-6 grid grid-cols-2 gap-3"><button onClick={() => { setDraftStatus(null); setActiveStatus(null); setDrawerOpen(false); }} className="rounded-xl border p-3">إعادة تعيين</button><button onClick={() => { setActiveStatus(draftStatus); setDrawerOpen(false); }} className="rounded-xl bg-violet-700 p-3 text-white">عرض النتائج</button></div></aside></div>}

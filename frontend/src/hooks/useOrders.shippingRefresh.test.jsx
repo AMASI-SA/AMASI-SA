@@ -104,3 +104,17 @@ test("returning to an order cannot revive its earlier in-flight response", async
     expect(host.textContent).toBe("A current courier");
     expect(getOrder).toHaveBeenCalledTimes(3);
 });
+
+test("combined search loads additional pages only on demand with the same filters", async () => {
+    listOrders.mockResolvedValueOnce({ items: [], nextCursor: null });
+    await render(<List />);
+    const filters = { campaign_id: "campaign-1" };
+    listOrders.mockResolvedValueOnce({ items: [{ order_number: "1" }], nextCursor: "search:hash:50", resultSummary: { orders: 51 } });
+    await act(async () => latest.searchCombined(filters));
+    expect(latest.hasMore).toBe(true);
+    listOrders.mockResolvedValueOnce({ items: [{ order_number: "2" }], nextCursor: null });
+    await act(async () => latest.loadMore());
+    expect(listOrders).toHaveBeenLastCalledWith(expect.objectContaining({ filters, cursor: "search:hash:50", limit: 50 }));
+    expect(latest.orders.map(row => row.order_number)).toEqual(["1", "2"]);
+    expect(latest.hasMore).toBe(false);
+});
