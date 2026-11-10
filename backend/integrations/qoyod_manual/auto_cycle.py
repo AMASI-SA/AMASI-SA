@@ -107,6 +107,7 @@ async def _heartbeat(db, owner):
         await asyncio.sleep(HEARTBEAT_SECONDS)
         result = await db[COLLECTION].update_one(_owned(owner), [{'$set': {
             'lease_until': {'$add': ['$$NOW', LEASE_SECONDS * 1000]},
+            'heartbeat_at': '$$NOW',
         }}])
         if not result.matched_count:
             raise RuntimeError('cycle_lease_lost')
@@ -223,6 +224,16 @@ async def run_due_cycle(db, *, batch_runner=None, batch_limit=5,
             work.cancel()
             with suppress(asyncio.CancelledError, Exception):
                 await work
+            cause = None if heartbeat.cancelled() else heartbeat.exception()
+            # Preserve the cause only after cancelling financial work. Never
+            # change a lease/status or let a diagnostic failure delay recovery.
+            with suppress(Exception):
+                await asyncio.wait_for(db[COLLECTION].update_one(
+                    {'_id': 'main', 'cycle_id': claim['cycle_id']},
+                    [{'$set': {'last_interruption': {
+                        'stage': 'heartbeat', 'at': '$$NOW',
+                        'error_type': type(cause).__name__ if cause is not None else 'HeartbeatStopped',
+                    }}}]), timeout=1)
             return {'claimed': True, 'status': 'lease_lost', 'cycle_id': claim['cycle_id']}
         try:
             result = await work
