@@ -1,22 +1,20 @@
-# Assembly label observation — WIP, not released
+# Supplier outstanding files — deployed 2026-11-10
 
-2026-11-10 combined release: all 14 original-source CI workflows passed on8f6990cddf6fb874af4f7135d642ddbf6dda26ed, including real-Mongo source-refresh transaction acceptance. Owner now explicitly requests all fixes in one Mezan publication. This source is integrated into supplier PR1860; combined local suite115passed/one local replica-set skip. Require combined exact-head CI and fresh v5 intent. No publication yet. Source proof does not establish every historical all-ready screenshot incident or handset print timing.
+Production publication completed on Emergent: ce90c65, Nov 10 19:21 Riyadh (100th publish). PR1862 merged normally as 4c1b945d2ad32a6d7a3b636d556aee1bbee5f6bf. Qoyod PR1861 preserved.
+Source A: 28edf681ab4c4fa6b06baf2c3190ef6817086bb9.
+Intent-only B: cc54d3c78d82c5d459d80e0b25e08990ead2cd8e.
+Release: rg5-cbb1d763e888ee077241c4f4711c0649bf6371864c96fb7922353b3a8ebdfc47.
 
-Repository: AMASI-SA/AMASI-SA. Branch: codex/assembly-label-observation-20261110.
-Base: 20dc12ac907ca7baafed620ffabbcad23b09103c.
+Official production_release_guard verify exited 0, verified:true, checks:3, 578 frontend requests per check. Exact source/release identity, runtime/control bindings, critical hashes, frontend bytes/MIME/cache and retirement service workers passed. Production boot: 2026-11-10T16:21:04.263941+00:00. Frontend artifact tree: c1dff65daf7947c45ea6c4ca0d96800d1edd6058ef77d9d64f3de6c79761eb3e.
+Fresh guard status after verification: active:false. One publication only. Screenshot: mezan1862-published.png.
+Shared build exit0/66.75s; isolated adapter exit0/84.85s. Exact B CI:36 passed,6 applicable skips. Real-Mongo workflow42848854290/job129943813032: Android291 cases+59 subtests, review658 cases+345 subtests, acceptance1 passed, zero skips/errors.
 
-Two defects reproduced before fixes:
-- A delivery worker lease rejected explicit label fetch before reading an already completed provider shipment. Added a read-only observation during delivery ownership, preserving manual single-flight, authorization, material snapshot and carrier checks. No lease stealing, provider writes, polling or background work added.
-- Employee source refresh reauthorization inside OperationalDatabase treated access-row user_id (employee) as merchant. Real permission lookup inside the restricted capability reproduced operational_owner_scope_conflict. Added an exact find_one owner_user_id + nonempty employee user_id read for fulfillment, retaining existing write restrictions.
+My Products uses original supplier dispatch sent_at in Riyadh; remaining eligible pieces/files only, received and remaining counts, completed files hidden, remaining-only PDF. Original day is preserved. Current-dispatch-ID-first querying avoids hydrating completed history. Monitoring remains employee-assignment-date based as explicitly requested.
 
-Validation: pytest --noconftest -p no:cacheprovider for test_mobile_assembly_refresh_actions.py, test_manual_label_delivery_overlap.py, test_manual_courier_label_refresh_race.py: 53 passed, exit 0. Both new cases failed with their specific reported 409 before their respective fix. Mongo mocked; real replica-set acceptance pending.
+Assembly: exact owner/employee scoped permission read inside transaction fixes refresh conflict; existing completed provider label can be read during delivery-worker lease. No lease bypass, no authorization weakening, no provider write in overlap recovery. No background timers added.
 
-Live web observation: an affected external-carrier label opened from one explicit click. Not physical Android or printer evidence. Shared Release Guard freshly returned active:false after terminal sign-in. No shared source mutation, merge, lease, publish or production data repair by this task.
+Android1.0.62(77) internal APK succeeded:
+https://expo.dev/accounts/amasi-sa/projects/amasi/builds/e4d1b852-d604-4c67-a5af-feb3dc0335a6
+Immutable application source05c5c5feac3adb5dcda2a072422ba81506640501; PR347 merged6f082c566a66386b6c0abf987f36b8bdbe338109. Test-only successor a00a5eab2f98a63138eaeac9ada577468effccda passed five CI workflows. Actual TSX loading/remaining-count/single-flight/download tests passed. APK installation is required; no OTA was started. No device or physical-printer acceptance claimed.
 
-Remaining: negative authorization/concurrency tests, CI integration and real Mongo acceptance; investigate separate all-products-ready versus completion eligibility mismatch using current order data; review and v5 release only after acceptance. Do not treat screenshot mismatch as proven cache accumulation. Preserve unrelated mobile worktree changes and prior successful release.
-
-Production changed: no. Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1859.
-
-Follow-up: negative permission queries/write denial, permission revocation during provider GET, changed piece custody and concurrent manual claim tests pass. Current targeted result: 63 passed, one explicitly skipped real-Mongo test (no local disposable replica set), exit 0. The real transaction source-refresh case is included in the existing CI Mongo job; new delivery overlap file added to that job too. Live web inspection of a second affected order shows both pieces ready and completed order; its existing PDF opened on one click. This does not prove the Android readiness mismatch fixed.
-
-Remote initial checkpoint: 6979c22278c68b287e09d32a0f4a0fdd9e8cd6d2, equivalent tree to local c013b0d850b58cbfa2182fdd6cf8650e6344ffc1. CLI push lacks credentials; use connected GitHub object tools, verify equivalent trees and fetch checkpoint before resuming. Latest exact SHA recorded in Issue #1006. Next: inspect exact-head CI including new real transaction case; continue readiness mismatch diagnosis before release. No APK/ADB or physical printer verification.
+This is a post-deployment documentation checkpoint only; no further production change is required. Prior PR1859/1860 intent candidates are superseded by1862 and must not be published.
