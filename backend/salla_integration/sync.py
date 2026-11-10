@@ -565,7 +565,6 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
     salla_order = settled_payment_snapshot(salla_order)
     customer = salla_order.get("customer") or {}
     amounts = salla_order.get("amounts") or {}
-    total_obj = amounts.get("total") or {}
     shipping_obj = amounts.get("shipping_cost") or {}
     discount_obj = amounts.get("discounts") or {}
     tax_obj = amounts.get("tax") or {}
@@ -796,7 +795,9 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         "subtotal": _money(subtotal_obj),
         "discount": _money(discount_obj),
         "tax": _money(tax_obj),
-        "total_amount": _money(total_obj),
+        # Full orders expose amounts.total; light list rows expose total.
+        # Use the same provider-native amount as the currency contract.
+        "total_amount": currency_fields["original_total_amount"],
         "currency": currency_fields["original_currency"],
         **currency_fields,
         "source": _str(salla_order.get("source") or "salla_direct"),

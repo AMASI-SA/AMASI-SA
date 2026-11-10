@@ -1,0 +1,16 @@
+{
+  "task": "SALLA-LIGHT-REPORT-TOTALS-20261111",
+  "scope": "Fix light order ingestion and report monetary hydration",
+  "branch": "codex/salla-light-report-totals-20261111",
+  "base": "791eea2cc4a0a6b7226752549a1f95cb2f1cce0f",
+  "status": "verified_source_checkpoint",
+  "root_cause": "Light top-level total omitted from canonical mapping and raw currency projection; report hydration erased promoted native total, causing eligibility exclusion.",
+  "tests": {
+    "regression_before": "4 failed, 2 passed",
+    "focused_after": "33 passed",
+    "related": "30 passed, 12 skipped (real Mongo required)"
+  },
+  "production_changed": false,
+  "next": "Run real Mongo integration; wait for active codex-assembly-evidence-1874 lease; governed source/intent build, CI and authorized publication; verify report count and sales.",
+  "risk": "One halala provider aggregate rounding difference remains to reconcile separately."
+}
