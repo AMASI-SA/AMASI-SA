@@ -103,6 +103,8 @@ _ATTRIBUTION_FIELDS = (
     "gclid",
     "ttclid",
     "source_campaign_id",
+    "utm_campaign_id",
+    "ad_campaign_id",
     "source_campaign_name",
     "device",
     "is_gift",
@@ -688,6 +690,35 @@ class MongoOrderRepository:
             },
         )
         return self._to_discovery_row(row)
+
+    async def list_campaign_orders(self, *, user_id: str, campaign_id: str) -> list[OrderDiscoveryRow]:
+        """Search stored attribution only; hydrate full orders only after matching.
+
+        This is an explicit user search, never a sync or background scan. Cursor
+        batches keep memory bounded; the database deadline fails rather than
+        returning a misleading empty/partial cohort on a slow store.
+        """
+        import asyncio
+        from salla_marketing_attribution import campaign_id_candidates
+
+        fields = ("campaign_id", "source_campaign_id", "utm_campaign_id", "ad_campaign_id",
+                  "utm_campaign", "campaign", "source", "utm", "source_details", "marketing",
+                  "attribution", "tracking", "traffic", "metadata", "meta")
+        projection = {"_id": 0, "order_number": 1, "order_date": 1}
+        for prefix in ("", "raw_by_source.salla_direct."):
+            projection.update({prefix + field: 1 for field in fields})
+        query = {"user_id": str(user_id), "raw_by_source.salla_direct": {"$exists": True}}
+        target = str(campaign_id).strip().casefold()
+        matched = []
+        async with asyncio.timeout(8):
+            cursor = self._collection.find(query, projection).max_time_ms(5000).batch_size(250)
+            async for row in cursor:
+                if target in {str(value).strip().casefold() for value in campaign_id_candidates(row)}:
+                    matched.append(str(row["order_number"]))
+            rows = []
+            for offset in range(0, len(matched), 100):
+                rows.extend(await self.get_salla_orders(user_id=user_id, order_numbers=matched[offset:offset + 100]))
+        return sorted(rows, key=lambda row: (row.order_date, row.order_number), reverse=True)
 
     async def get_salla_orders(
         self,

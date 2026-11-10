@@ -1,6 +1,9 @@
 """Read-only HTTP routes for the Mezan Order Engine."""
 from __future__ import annotations
 
+import hashlib
+import json
+
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
@@ -141,9 +144,20 @@ def make_order_engine_router(
         }
         advanced = any(value for key, value in combined_filters.items() if key != "status")
         if advanced:
-            result = await search_orders(repository(), user_id=owner_id, filters=combined_filters)
-            enriched_items = await enrich_order_campaigns(db, user_id=owner_id, orders=result.items[:limit])
-            return OrderListResponse(items=enriched_items, next_cursor=None, limit=limit, result_summary=result.summary)
+            signature = hashlib.sha256(json.dumps(combined_filters, sort_keys=True).encode()).hexdigest()[:16]
+            offset = 0
+            if cursor:
+                parts = cursor.split(":")
+                if len(parts) != 3 or parts[:2] != ["search", signature] or not parts[2].isdigit():
+                    raise HTTPException(400, "مؤشر البحث غير صالح؛ أعد البحث.")
+                offset = int(parts[2])
+            try:
+                result = await search_orders(repository(), user_id=owner_id, filters=combined_filters)
+            except TimeoutError:
+                raise HTTPException(503, "استغرق البحث وقتًا أطول من المتاح؛ حاول مرة أخرى.")
+            enriched_items = await enrich_order_campaigns(db, user_id=owner_id, orders=result.items[offset:offset + limit])
+            next_search_cursor = f"search:{signature}:{offset + limit}" if offset + limit < len(result.items) else None
+            return OrderListResponse(items=enriched_items, next_cursor=next_search_cursor, limit=limit, result_summary=result.summary)
 
         try:
             page = await list_orders(
