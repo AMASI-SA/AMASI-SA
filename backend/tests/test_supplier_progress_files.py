@@ -58,3 +58,22 @@ async def test_fully_received_file_disappears_from_days_and_accounts(monkeypatch
     assert (await supplier_progress_days(db, user_id='owner', employee_id='worker'))['days'] == []
     result = await supplier_progress_workspace(db, user_id='owner', employee_id='worker', day='2026-11-10')
     assert result['supplier_accounts'] == [] and result['progress_active_piece_ids'] == []
+
+
+@pytest.mark.asyncio
+async def test_file_stays_on_dispatch_day_without_repeating_after_receipts(monkeypatch):
+    db, original, pieces, _ = await seed(monkeypatch)
+    # A second file for the same supplier on the next day must not repeat the first.
+    second = deepcopy(original)
+    second.update(id='next-file', sent_at='2026-11-11T09:00:00Z', piece_count=1,
+                  piece_ids=['next-piece'], source_files=[{'cards': [{'piece_id': 'next-piece'}]}])
+    piece = deepcopy(pieces[-1])
+    piece.update(piece_id='next-piece', supplier_dispatch_id='next-file')
+    await db[dispatch.PIECES].insert_one(piece)
+    await db[dispatch.DISPATCHES].insert_one(second)
+    for day, expected_id, count in [('2026-11-10', 'file', 5), ('2026-11-11', 'next-file', 1)]:
+        result = await supplier_progress_workspace(db, user_id='owner', employee_id='worker', day=day)
+        assert [r['id'] for a in result['supplier_accounts'] for r in a['dispatches']] == [expected_id]
+        assert result['progress_supplier_totals'] == {'supplier': count}
+    await db[dispatch.PIECES].update_many({'supplier_dispatch_id': 'file'}, {'$set': {'supplier_dispatch_status': 'received'}})
+    assert (await supplier_progress_days(db, user_id='owner', employee_id='worker'))['days'] == [{'key': '2026-11-11'}]
