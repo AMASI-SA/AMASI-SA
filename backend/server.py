@@ -4822,7 +4822,6 @@ async def _global_startup() -> None:
     # same day and applies fresh totals — ad-balance + ad-liability
     # stay near-realtime without double-counting.
     from ad_account_routes import run_daily_cron, run_yesterday_final_sync
-    import asyncio as _asyncio
     from datetime import datetime as _dt, timedelta as _td
 
     AD_ACCOUNT_SYNC_INTERVAL_SECONDS = 30 * 60   # 30 minutes
