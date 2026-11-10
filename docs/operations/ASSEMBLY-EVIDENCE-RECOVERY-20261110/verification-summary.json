@@ -1,0 +1,15 @@
+{
+  "verified": true,
+  "checks": 3,
+  "verify_exit": 0,
+  "active": false,
+  "source_git_sha": "6d36c88d2809c16736f4cbd0b0891206a120257a",
+  "deployment_git_sha": "791eea2cc4a0a6b7226752549a1f95cb2f1cce0f",
+  "release_id": "rg5-ac9c684487edc378a1961913d9aba396a0bfccecfc88cf0b2461fe7da9a8ff3a",
+  "emergent_publication": "a980169",
+  "publication_finished_riyadh": "2026-11-11T01:38:00+03:00",
+  "boot_started_at": "2026-11-10T22:37:31.382959+00:00",
+  "frontend_requests_per_check": 576,
+  "frontend_artifact_tree_sha256": "ea01ae9c908b2b70b85a0b80604871b6dc0a4f057ad8d661a6b1b741b1b7618e",
+  "evidence_method": "Observed official guard result in shared /app terminal; summarized fields, full transient proof /tmp/mezan-1874-verify.json"
+}

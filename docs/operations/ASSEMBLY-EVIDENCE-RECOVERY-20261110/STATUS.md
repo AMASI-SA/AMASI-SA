@@ -28,3 +28,8 @@ Assembly1874 publication started Nov11 01:28 Riyadh. Shared fastforward merge791
 
 
 Emergent publication completed Nov11 01:38 Riyadh, new a980169 replacing5fe69d4. Explicit Deployment finished observed with new publication identity. Official guard verify started from/app; awaiting three-probe result, no acceptance claim yet. Ownedlease1874 retained until successful verify. Screenshot captured to task evidence. No second publication.
+
+
+## Final verified publication
+
+Assembly1874 COMPLETE: one Emergent publication a980169 finished Nov11 01:38 Riyadh. Official python -B scripts/production_release_guard.py verify --url https://mezansalla.com EXIT0 verified=true checks=3,576 frontend requests per check. Exact source6d36c88d2809c16736f4cbd0b0891206a120257a/deployment791eea2cc4a0a6b7226752549a1f95cb2f1cce0f/runtime rg5-ac9c684487edc378a1961913d9aba396a0bfccecfc88cf0b2461fe7da9a8ff3a. Subsequent status ACTIVE False; ownlease closed normally. Boot2026-11-10T22:37:31.382959+00:00. Production changed:YES and verified. No APK required; no physical printer acceptance or bulk historical order repair claimed. Preserve other release1873. Task complete; next only investigate user-reported residual cases, do not republish this intent.
