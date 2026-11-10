@@ -84,6 +84,31 @@ class SyncComponentSnapshotTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(source["g47_salla_snapshot"]["component_pending"])
         await self.assert_inventory_unchanged()
 
+    async def test_scheduled_refresh_preserves_preparation_and_item_choices(self):
+        from datetime import datetime, timedelta, timezone
+        payload = await self.seed()
+        payload["updated_at"] = "2026-09-26T12:00:10+00:00"
+        payload["date"] = {"date": "2026-09-26 12:00:00", "timezone": "UTC"}
+        end = datetime(2026, 9, 26, 13, tzinfo=timezone.utc)
+        async def provider(db, user, method, path, **kw):
+            self.assertEqual(method, "GET")
+            if path == "/orders":
+                return {"data": [payload], "pagination": {"totalPages": 1, "currentPage": 1}}
+            self.assertEqual(path, "/orders/items")
+            return {"data": payload["items"]}
+        from resource_governor import governor
+        with patch.object(sync, "call_salla", provider), \
+             patch.object(sync, "_enrich_order_receiving_bank", AsyncMock(return_value=payload)), \
+             patch.object(sync, "_refresh_plan_b_status_snapshot", AsyncMock(return_value={})), \
+             patch.object(governor, "peek", return_value=("allowed", None)):
+            result = await sync.run_orders_sync(self.db, "owner", refresh_window=(end - timedelta(hours=24), end))
+        self.assertEqual(result["errors_count"], 0, result)
+        self.assertFalse(result["truncated"], result)
+        await self.assert_inventory_unchanged()
+        source = await self.db.unified_orders.find_one({"user_id": "owner"})
+        self.assertFalse(source["g47_salla_snapshot"]["component_pending"])
+        self.assertEqual(source["raw_by_source"]["salla_direct"]["items"], payload["items"])
+
     async def test_single_resync_cancellation_stays_blocked_without_stock_work(self):
         payload = await self.seed()
         payload.update(updated_at="2026-09-26T12:00:10+00:00", status={"slug": "canceled"})
