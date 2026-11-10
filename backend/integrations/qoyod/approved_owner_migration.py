@@ -6,6 +6,7 @@ Only that exact record with a genuinely absent binding may be repaired. A
 different binding, null/empty binding, or prior recovery audit is preserved for
 operator review. No request handler calls this module.
 """
+import asyncio
 from datetime import datetime, timezone
 
 from bson import ObjectId
@@ -14,6 +15,33 @@ MIGRATION_ID = 'QOYOD-OWNER-RECOVERY-20261109'
 APPROVED_OWNER_ID = '5aee091a-cc47-42cd-b14c-a14e32f169cc'
 APPROVED_SETTINGS_ID = ObjectId('6a3e951b5f40fa3bcd76f6d7')
 TARGET_DATABASE = 'salla-analytics-test_database'
+
+
+async def run_startup_recovery(db):
+    """Keep one bounded attempt and retain its non-sensitive terminal outcome.
+
+    This diagnostic is release-startup-only. It neither retries nor changes
+    any eligibility/ownership precondition, and never stores credentials.
+    """
+    if db.name != TARGET_DATABASE:
+        return 'not_target_database'
+    try:
+        state = await asyncio.wait_for(apply_approved_recovery(db), timeout=3)
+    except asyncio.TimeoutError:
+        state = 'timeout'
+    except Exception:
+        state = 'failed'
+    try:
+        await asyncio.wait_for(db.qoyod_owner_recovery_state.update_one(
+            {'_id': MIGRATION_ID}, {'$set': {
+                'state': state,
+                'at': datetime.now(timezone.utc).isoformat(),
+            }}, upsert=True,
+        ), timeout=1)
+    except Exception:
+        # Diagnostic availability must not block startup or authorize access.
+        return state + ':diagnostic_unavailable'
+    return state
 
 
 async def apply_approved_recovery(db):

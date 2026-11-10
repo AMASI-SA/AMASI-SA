@@ -52,6 +52,40 @@ async def test_repairs_only_approved_record_and_is_idempotent():
 
 
 @pytest.mark.asyncio
+async def test_startup_recovery_persists_outcome_without_secrets():
+    from integrations.qoyod.approved_owner_migration import run_startup_recovery
+    db = await fixture()
+    assert await run_startup_recovery(db) == 'bound'
+    result = await db.qoyod_owner_recovery_state.find_one({})
+    assert result['state'] == 'bound'
+    assert set(result) == {'_id', 'state', 'at'}
+    assert 'unchanged-test-value' not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_startup_timeout_is_recorded_without_retry_or_binding(monkeypatch):
+    from integrations.qoyod import approved_owner_migration as recovery
+    db = await fixture()
+    calls = []
+    async def timed_out(_db):
+        calls.append(1)
+        raise asyncio.TimeoutError()
+    monkeypatch.setattr(recovery, 'apply_approved_recovery', timed_out)
+    assert await recovery.run_startup_recovery(db) == 'timeout'
+    assert calls == [1]
+    assert (await db.qoyod_owner_recovery_state.find_one({}))['state'] == 'timeout'
+    assert 'security_owner_id' not in await db.qoyod_settings.find_one({})
+
+
+@pytest.mark.asyncio
+async def test_non_target_startup_does_not_create_diagnostics():
+    from integrations.qoyod.approved_owner_migration import run_startup_recovery
+    db = await fixture('preview')
+    assert await run_startup_recovery(db) == 'not_target_database'
+    assert await db.qoyod_owner_recovery_state.count_documents({}) == 0
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('patch', [
     {'security_owner_id': 'other-owner'}, {'security_owner_id': None},
     {'security_owner_id': ''}, {'plan_b_auto_send_orders_user_id': 'other-owner'},
