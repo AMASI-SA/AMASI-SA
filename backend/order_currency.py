@@ -24,6 +24,7 @@ SALLA_RAW_CURRENCY_PROJECTION: dict[str, int] = {
     f"{_RAW_SALLA_PATH}.amounts.total": 1,
     f"{_RAW_SALLA_PATH}.currency": 1,
     f"{_RAW_SALLA_PATH}.total_amount": 1,
+    f"{_RAW_SALLA_PATH}.total": 1,
     f"{_RAW_SALLA_PATH}.exchange_rate": 1,
 }
 
@@ -342,7 +343,7 @@ def _hydrate_currency_steps(
         if raw:
             fields = salla_order_currency_fields(
                 raw,
-                fallback_total=order.get("total_amount"),
+                fallback_total=_stored_original_total(order),
                 fallback_currency=order.get("currency"),
             )
         else:
