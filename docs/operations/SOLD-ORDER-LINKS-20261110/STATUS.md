@@ -21,3 +21,8 @@ Limits / next steps:
 - Existing combined-search 5000-row scan cap and 50-result response/no pagination remain unchanged. Thus this patch fixes missing identity matching, not exhaustive historical search; older campaigns outside that window require a separate scoped database search design, not raising the scan limit.
 - Review PR/CI, verify the specific campaign live, and use repository Release Guard v5 if deploying. No modifications to costs, accounting, preparation or Snap synchronization.
 - GitHub Issue #1006 read attempted but connector transport closed; CLI has no GitHub auth. Retry ledger update through connector after pushing checkpoint.
+
+## Dashboard sorting follow-up
+- All four numeric headers toggle descending/ascending across the full product cohort before slicing visible rows. Unknown values stay last, negatives sort numerically, and ties retain stable order. No network requests added.
+- AdvancedDashboard.latestOrders.test.jsx: 41 tests passed, including clicking all four sort controls and checking products previously hidden under More.
+- Issue #1006 cannot receive comments (GitHub 2500-comment cap). PR #1865 is the continuation record. Production unchanged.

@@ -317,7 +317,19 @@ export function AbandonedCartsCard({ carts, summary = {} }) {
 export function TopProductsCard({ rows, summary = {}, filters = {}, loading = false }) {
     const [visibleCount, setVisibleCount] = useState(5);
     const [openSources, setOpenSources] = useState({});
-    const products = [...(rows || [])].sort((a, b) => Number(b.units_sold || 0) - Number(a.units_sold || 0));
+    const [sort, setSort] = useState({ key: "units_sold", direction: "desc" });
+    const products = [...(rows || [])].sort((a, b) => {
+        const left = finiteFinancialValue(a[sort.key]);
+        const right = finiteFinancialValue(b[sort.key]);
+        // Unknown values stay last in either direction; never treat them as zero.
+        if (left === null) return right === null ? 0 : 1;
+        if (right === null) return -1;
+        return (left - right) * (sort.direction === "asc" ? 1 : -1);
+    });
+    const toggleSort = (key) => {
+        setSort(current => ({ key, direction: current.key === key && current.direction === "desc" ? "asc" : "desc" }));
+        setVisibleCount(5);
+    };
     const productSummary = summary?.product_profit_summary || {};
     const productCount = Math.max(Number(productSummary.product_count || 0), products.length);
     // The rows contain the complete period cohort; visibleCount only controls
@@ -353,10 +365,14 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
             <style>{"@media print { .product-traffic-sources { display: none !important; } }"}</style>
             <div className="dashboard-products-table" tabIndex={0} role="region" aria-label="جدول المنتجات الأكثر مبيعًا"><div className="grid grid-cols-[48px_48px_minmax(80px,1fr)_minmax(86px,1fr)_minmax(86px,1fr)] gap-1.5 border-b px-3 py-2 text-center text-[8px] font-bold leading-4 text-slate-400">
                 <span>المنتج</span>
-                <span>القطع</span>
-                <span>إجمالي المبيعات</span>
-                <span>إجمالي تكلفة القطع</span>
-                <span>صافي الربح</span>
+                {[["units_sold", "القطع"], ["total_sales", "إجمالي المبيعات"], ["total_cost", "إجمالي تكلفة القطع"], ["net_profit", "صافي الربح"]].map(([key, label]) => (
+                    <button key={key} type="button" onClick={() => toggleSort(key)}
+                        data-testid={`top-products-sort-${key}`} aria-pressed={sort.key === key}
+                        aria-label={`${label} — ${sort.key === key ? (sort.direction === "desc" ? "تنازلي" : "تصاعدي") : "اضغط للترتيب"}`}
+                        className="rounded hover:text-indigo-700 focus-visible:outline-2 focus-visible:outline-indigo-600">
+                        {label} <span aria-hidden="true">{sort.key === key ? (sort.direction === "desc" ? "↓" : "↑") : "↕"}</span>
+                    </button>
+                ))}
             </div>
             <div className="h-[330px] overflow-y-auto overscroll-contain" data-testid="advanced-top-products-scroll">
             {visibleProducts.length ? visibleProducts.map((item) => {
