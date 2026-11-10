@@ -35,6 +35,16 @@ class ScanFailure(RuntimeError):
         status = diagnostic.get('http_status')
         if type(status) is int and 0 <= status <= 599:
             self.diagnostic['http_status'] = status
+        reason = diagnostic.get('completion_reason')
+        if reason in {'page_cap', 'confirmed_empty_tail', 'unconfirmed_404',
+                      'inconsistent_total', 'invalid_page_identity', 'reported_total',
+                      'empty_page', 'short_page', 'missing_rows', 'invoice_write_errors',
+                      'invalid_invoice_rows'}:
+            self.diagnostic['completion_reason'] = reason
+        for key in ('pages_fetched', 'unique_ids', 'expected_count'):
+            value = diagnostic.get(key)
+            if type(value) is int and 0 <= value <= 100000000:
+                self.diagnostic[key] = value
 
 
 def utcnow():
