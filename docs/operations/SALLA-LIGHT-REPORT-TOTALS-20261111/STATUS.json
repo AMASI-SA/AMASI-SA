@@ -1,17 +1,59 @@
 {
   "task": "SALLA-LIGHT-REPORT-TOTALS-20261111",
-  "scope": "Fix light order ingestion and report monetary hydration",
+  "scope": "Correct light Salla monetary ingestion and report hydration; recover inclusion of two Nov10 orders",
+  "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/salla-light-report-totals-20261111",
-  "base": "791eea2cc4a0a6b7226752549a1f95cb2f1cce0f",
-  "status": "source_ready_for_governed_build",
-  "root_cause": "Light top-level total omitted from canonical mapping and raw currency projection; report hydration erased promoted native total, causing eligibility exclusion.",
-  "tests": {
+  "handoff_branch": "codex/salla-1876-production-handoff-20261111",
+  "source_sha": "5843ff899ce8cc814ba60de1e44bb69ec732f4c4",
+  "intent_sha": "c187960fa590ea7c2e3df8daaba3b1696cc4f5f2",
+  "deployment_sha": "f439bed54579fafb79a8abcb43080c8150cb5063",
+  "release_id": "rg5-d4ff38523d7e0b0beaeff1ee672a68666393102997e6da08c78a74299c80c34d",
+  "deployment_id": "cae5e7d6-7bc9-5987-a876-d919136397bb",
+  "production_changed": true,
+  "deployment_finished_riyadh": "2026-11-11T02:25:00+03:00",
+  "root_cause": "Light top-level total omitted from canonical mapping and raw currency projection; report hydration erased promoted native total and eligibility filter excluded recovered orders.",
+  "files_changed": [
+    "backend/salla_integration/sync.py",
+    "backend/order_currency.py",
+    "backend/tests/test_salla_light_report_totals.py",
+    ".github/workflows/prod-dashboard-v2-salla-ads-executive.yml"
+  ],
+  "validation": {
     "regression_before": "4 failed, 2 passed",
-    "focused_after": "33 passed",
-    "related": "30 passed, 12 skipped (real Mongo required)",
-    "ci_previous_head": "14 workflows passed including real-Mongo background integration; dashboard test collection missing mongomock_motor dependency corrected using synchronous mongomock with explicit CI install"
+    "focused": "33 passed",
+    "related": "30 passed; 12 real-Mongo cases skipped locally",
+    "dashboard_contract": "61 passed",
+    "ci": "All relevant final B workflows passed including isolated real Mongo; unrelated TikTok candidate skipped",
+    "governed_build_exit": 0,
+    "adapter_rehearsal_exit": 0,
+    "prepare_exit": 0,
+    "prepublish_exit": 0,
+    "release_guard": {
+      "exit": 0,
+      "verified": true,
+      "checks": 3,
+      "active": false
+    }
   },
-  "production_changed": false,
-  "next": "Verify new CI; governed A/B build and intent-only commit, rehearsal, guarded publication and Nov10 dashboard verification",
-  "risk": "One halala provider aggregate rounding difference remains to reconcile separately."
+  "acceptance": {
+    "date_riyadh": "2026-11-10",
+    "orders_before": 244,
+    "orders_after": 246,
+    "sales_before_sar": 60514.62,
+    "sales_after_sar": 61038.6,
+    "recovered_order_references": [
+      "299294323",
+      "299294401"
+    ],
+    "recovered_sales_sar": 523.98
+  },
+  "remaining": [
+    "SAR0.01 versus Salla screenshot remains unproven; do not claim rounding diagnosis.",
+    "PR1873 scheduled full-window/catalogue acceptance remains partial: two other provider order IDs1232147268/1097879636 blocked by cancellation/authoritative-refresh guard; catalogue timed out and resumes stamped progress.",
+    "Historical missing webhook delivery root cause remains unproven; 20-second proximity is not proof of a race."
+  ],
+  "preserved": "Unrelated shared /app files and other terminals preserved. No manual DB repair, financial/provider writes or guard bypass.",
+  "next": "Missing-order report acceptance complete. Separately inspect authoritative details for scheduler protected-order exceptions and verify successful full catalogue run. Do not replay a successful publication.",
+  "ledger": "Issue1006 full (2500 comments); PR1876 and PR1873 comments carry evidence.",
+  "status": "published_verified_report_acceptance_pass"
 }
