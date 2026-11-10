@@ -124,14 +124,22 @@ async def _paginate(
     out: list = []
     seen_ids = set()
     evidence_valid = True
+    expected_count = None
     if evidence is not None:
-        evidence["complete"] = False
+        evidence.update(complete=False, pages_fetched=0, unique_ids=0,
+                        completion_reason='page_cap')
     for page in range(1, max_pages + 1):
         try:
             resp = await fetch(page=page, limit=page_size)
         except QoyodAPIError as exc:
             if exc.status_code == 404:
-                # Empty collection (or past-last-page). Treat as end.
+                if evidence is not None:
+                    from integrations.qoyod_manual.client import _is_confirmed_empty_list
+                    complete = (page > 1 and evidence_valid and _is_confirmed_empty_list(exc)
+                                and (expected_count is None or len(seen_ids) == expected_count))
+                    evidence.update(complete=complete, completion_reason=(
+                        'confirmed_empty_tail' if complete else 'unconfirmed_404'))
+                # Legacy read-only callers still receive the collected rows.
                 break
             raise
         items = _extract_list(resp, extract_keys)
@@ -151,14 +159,40 @@ async def _paginate(
                     or len(set(ids)) != len(ids) or seen_ids.intersection(ids)):
                 evidence_valid = False
             seen_ids.update(ids)
+            evidence.update(pages_fetched=page, unique_ids=len(seen_ids))
+            meta = resp.get('meta') if isinstance(resp, dict) else None
+            if isinstance(meta, dict) and 'total' in meta:
+                total = meta['total']
+                if isinstance(total, str) and total.isdigit():
+                    total = int(total)
+                if (type(total) is not int or total < 0
+                        or (expected_count is not None and total != expected_count)):
+                    evidence_valid = False
+                    evidence['completion_reason'] = 'inconsistent_total'
+                else:
+                    expected_count = total
+                    evidence['expected_count'] = total
+            if not evidence_valid:
+                if evidence['completion_reason'] == 'page_cap':
+                    evidence['completion_reason'] = 'invalid_page_identity'
+                break
+            if expected_count is not None and len(seen_ids) > expected_count:
+                evidence['completion_reason'] = 'inconsistent_total'
+                break
+            if expected_count is not None and len(seen_ids) == expected_count:
+                out.extend(items)
+                evidence.update(complete=True, completion_reason='reported_total')
+                break
         if not items:
             if evidence is not None:
-                evidence["complete"] = evidence_valid
+                evidence.update(complete=evidence_valid and expected_count is None,
+                                completion_reason='empty_page' if expected_count is None else 'missing_rows')
             break
         out.extend(items)
         if len(items) < page_size:
             if evidence is not None:
-                evidence["complete"] = evidence_valid
+                evidence.update(complete=evidence_valid and expected_count is None,
+                                completion_reason='short_page' if expected_count is None else 'missing_rows')
             break
         # 100ms cushion between pages — keeps us under most rate limits.
         await asyncio.sleep(0.1)

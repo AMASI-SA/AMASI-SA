@@ -207,9 +207,12 @@ async def sync_qoyod_invoices(
     except Exception as e:  # noqa: BLE001
         return {
             "ok": False,
-            "error": (
-                f"تعذر جلب فواتير قيود: {type(e).__name__}: {e}"
-            ),
+            "error": "تعذر جلب فواتير قيود",
+            "diagnostic": {
+                "stage": "provider_read",
+                "error_type": type(e).__name__,
+                "http_status": getattr(e, "status_code", None),
+            },
             "fetched": 0, "in_scope": 0,
             "created": 0, "updated": 0, "skipped": 0,
             "row_errors": 0,
@@ -346,6 +349,10 @@ async def sync_qoyod_invoices(
     invalid_rows = any(not isinstance(it, dict) or not it.get("id")
                        or _parse_iso_date(it.get("issue_date")) is None for it in items)
     evidence["complete"] = bool(evidence["complete"] and not row_errors and not invalid_rows)
+    if row_errors:
+        evidence['completion_reason'] = 'invoice_write_errors'
+    elif invalid_rows:
+        evidence['completion_reason'] = 'invalid_invoice_rows'
     await db.qoyod_settings.update_one(
         {"user_id": user_id, "invoice_presence_snapshot.started_at": started_at.isoformat()},
         {"$set": {"invoice_presence_snapshot": evidence}},
@@ -358,6 +365,8 @@ async def sync_qoyod_invoices(
         "updated":     updated,
         "skipped":     skipped,
         "row_errors":  row_errors,
+        "diagnostic": {key: evidence[key] for key in (
+            'completion_reason', 'pages_fetched', 'unique_ids', 'expected_count') if key in evidence},
         "write_batches": write_summary["write_batches"],
         "bulk_fallback_batches": write_summary["bulk_fallback_batches"],
         "sync_start":  sync_start.isoformat(),
