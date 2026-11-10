@@ -140,8 +140,8 @@ async def test_concurrent_replica_or_binding_change_cannot_overwrite():
 
 
 @pytest.mark.asyncio
-async def test_server_startup_wiring_reaches_approved_recovery():
-    """Execute the real startup hook with the server's actual asyncio import.
+async def test_server_startup_wiring_reaches_approved_recovery(monkeypatch):
+    """Execute the full startup function, preserving Python's local scope.
 
     Isolate unrelated index/worker startup, but preserve the import bindings
     and exception handler that can otherwise silently skip this repair.
@@ -152,19 +152,24 @@ async def test_server_startup_wiring_reaches_approved_recovery():
     startup = next(node for node in source.body
                    if isinstance(node, ast.AsyncFunctionDef)
                    and node.name == '_global_startup')
-    start = next(i for i, node in enumerate(startup.body)
-                 if isinstance(node, ast.ImportFrom)
-                 and node.module == 'integrations.qoyod.approved_owner_migration')
-    hook = ast.AsyncFunctionDef(
-        name='run_hook', args=ast.arguments(posonlyargs=[], args=[],
-        kwonlyargs=[], kw_defaults=[], defaults=[]),
-        body=startup.body[start:start + 2], decorator_list=[],
-    )
-    module = ast.fix_missing_locations(ast.Module(body=[*imports, hook], type_ignores=[]))
-    db = await fixture()
-    namespace = {'db': db, 'logger': logging.getLogger('test.startup_recovery')}
+    # Slicing out the hook hides later local imports: Python binds locals for
+    # the entire function, even before the import executes.
+    module = ast.fix_missing_locations(ast.Module(body=[*imports, startup], type_ignores=[]))
+    import review_acceptance_config_guard as acceptance
+    class StopAfterRecovery(Exception):
+        pass
+    async def stop_after_recovery(_db):
+        raise StopAfterRecovery
+    monkeypatch.setattr(acceptance, 'ensure_acceptance_config_storage', stop_after_recovery)
+    db = acceptance.AcceptanceConfigDatabase(await fixture())
+    namespace = {
+        'db': db, 'logger': logging.getLogger('test.startup_recovery'),
+        'app': SimpleNamespace(state=SimpleNamespace()),
+        'memory_snapshot': lambda: SimpleNamespace(current_bytes=0, max_bytes=1, process_rss_bytes=0),
+    }
     exec(compile(module, 'server_startup_recovery', 'exec'), namespace)
-    await namespace['run_hook']()
+    with pytest.raises(StopAfterRecovery):
+        await namespace['_global_startup']()
     from security_sensitive_routes import require_qoyod_security_owner
     assert (await require_qoyod_security_owner(db, {'id': OWNER}))['id'] == OWNER
     repaired = await db.qoyod_settings.find_one({'user_id': 'main'})
