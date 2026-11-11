@@ -78,6 +78,9 @@ class ManualSpendJobs:
             partialFilterExpression={"active": True}, name="manual_spend_one_active_owner")
         await self.db[spend.JOBS_COLLECTION].create_index("expires_at", expireAfterSeconds=0,
             name="manual_spend_jobs_retention")
+        await self.db[spend.JOBS_COLLECTION].create_index(
+            [("user_id", 1), ("date_from", 1), ("date_to", 1), ("finished_at", -1)],
+            name="manual_spend_owner_period_jobs")
         await self.db[spend.COLLECTION].create_index("expires_at", expireAfterSeconds=0,
             name="manual_spend_snapshots_retention")
         await self.db[spend.COLLECTION].create_index(
@@ -86,15 +89,21 @@ class ManualSpendJobs:
 
     async def _recover(self, user_id: str) -> None:
         current = spend.stored_time(self.now())
-        row = await self.db[spend.JOBS_COLLECTION].find_one(
-            {"user_id": user_id, "active": True, "deadline_at": {"$lte": current}})
-        if not row:
-            return
-        status, results = _terminal(row["account_results"], error_code="manual_spend_worker_abandoned")
-        await self.db[spend.JOBS_COLLECTION].update_one(
-            {"_id": row["_id"], "user_id": user_id, "active": True, "deadline_at": {"$lte": current}},
-            {"$set": {"active": False, "status": status, "account_results": results,
-                "finished_at": current, "error_code": "manual_spend_worker_abandoned"}})
+        collection = self.db[spend.JOBS_COLLECTION]
+        for _ in range(2):
+            row = await collection.find_one(
+                {"user_id": user_id, "active": True, "deadline_at": {"$lte": current}})
+            if not row:
+                return
+            status, results = _terminal(row["account_results"], error_code="manual_spend_worker_abandoned")
+            changed = await collection.update_one(
+                {"_id": row["_id"], "user_id": user_id, "active": True,
+                    "revision": row["revision"], "deadline_at": {"$lte": current}},
+                {"$set": {"active": False, "status": status, "account_results": results,
+                    "finished_at": current, "error_code": "manual_spend_worker_abandoned"},
+                 "$inc": {"revision": 1}})
+            if changed.matched_count == 1:
+                return
 
     def _schedule(self, row: dict[str, Any]) -> None:
         run_id = row["run_id"]
@@ -140,7 +149,7 @@ class ManualSpendJobs:
                 raise HTTPException(503, detail={"code": "snapchat_manual_refresh_busy"})
             run_id = str(uuid4())
             row = {"_id": run_id, "run_id": run_id, "user_id": user_id, "provider": "snapchat_ads",
-                "scope": spend.SCOPE, "source_mode": spend.SOURCE_MODE, "active": True, "status": "queued",
+                "scope": spend.SCOPE, "source_mode": spend.SOURCE_MODE, "active": True, "status": "queued", "revision": 0,
                 "date_from": period.date_from.isoformat(), "date_to": period.date_to.isoformat(),
                 "accounts": accounts, "created_at": current, "started_at": None, "finished_at": None,
                 "expires_at": current + spend.RECORD_RETENTION,
@@ -165,17 +174,17 @@ class ManualSpendJobs:
         row = await self.db[spend.JOBS_COLLECTION].find_one(query)
         if row:
             status, results = _terminal(row["account_results"], error_code=error_code)
-            await self.db[spend.JOBS_COLLECTION].update_one(query, {"$set": {
+            await self.db[spend.JOBS_COLLECTION].update_one({**query, "revision": row["revision"]}, {"$set": {
                 "active": False, "status": status, "account_results": results,
                 "finished_at": spend.stored_time(self.now()),
-                "error_code": error_code if status != "complete" else None}})
+                "error_code": error_code if status != "complete" else None}, "$inc": {"revision": 1}})
 
     async def _execute(self, user_id: str, run_id: str) -> None:
         collection = self.db[spend.JOBS_COLLECTION]
         current, token = spend.stored_time(self.now()), str(uuid4())
         claim = await collection.update_one({"_id": run_id, "user_id": user_id,
             "active": True, "status": "queued", "deadline_at": {"$gt": current}},
-            {"$set": {"status": "running", "started_at": current, "worker_token": token}})
+            {"$set": {"status": "running", "started_at": current, "worker_token": token}, "$inc": {"revision": 1}})
         if claim.matched_count != 1:
             return
         query = {"_id": run_id, "user_id": user_id, "active": True, "worker_token": token}
@@ -209,7 +218,7 @@ class ManualSpendJobs:
                     result["error_code"] = _error_code(exc)
                 changed = await collection.update_one(
                     {**query, "deadline_at": {"$gt": spend.stored_time(self.now())}},
-                    {"$set": {f"account_results.{index}": result}})
+                    {"$set": {f"account_results.{index}": result}, "$inc": {"revision": 1}})
                 if changed.matched_count != 1:
                     return
 

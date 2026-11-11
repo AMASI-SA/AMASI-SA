@@ -434,6 +434,58 @@ async def test_exact_period_and_enabled_accounts_are_frozen_and_requests_are_spl
 
 
 @pytest.mark.asyncio
+async def test_riyadh_business_day_has_exact_hours_across_the_usd_accounts_dst_change(harness):
+    dst_day = date(2026, 11, 1)
+    result = await refresh(harness, period(dst_day, dst_day))
+    assert result["status"] == "complete"
+    report = await dashboard(harness, dst_day, dst_day)
+    assert report["total_sar"] == 53
+    usd = next(row for row in harness.transport.calls if row["account_id"] == "usd-account")
+    # Riyadh's 24-hour reporting day crosses the Los Angeles clock change;
+    # it must not accidentally become the native 25-hour November 1 day.
+    assert usd["start"] == datetime(2026, 10, 31, 21, tzinfo=timezone.utc)
+    assert usd["end"] == datetime(2026, 11, 1, 21, tzinfo=timezone.utc)
+    assert datetime.fromisoformat(usd["query"]["start_time"]).utcoffset() == timedelta(hours=-7)
+    assert datetime.fromisoformat(usd["query"]["end_time"]).utcoffset() == timedelta(hours=-8)
+    assert len(by_account(report)["usd-account"]["hourly_sar"][dst_day.isoformat()]) == 24
+
+
+@pytest.mark.asyncio
+async def test_account_disabled_during_fetch_cannot_publish_a_spend_snapshot(harness):
+    harness.transport.blocked_account = "usd-account"
+    harness.transport.release.clear()
+    accepted = await harness.jobs.request(OWNER, period())
+    await asyncio.wait_for(harness.transport.blocked.wait(), timeout=2)
+    await harness.db.mezan_integration_accounts_v2.update_one(
+        {"user_id": OWNER, "ad_account_id": "usd-account"}, {"$set": {"mezan_selected": False}})
+    harness.transport.release.set()
+    result = await finished(harness, accepted)
+    assert result["status"] == "partial" and result["refreshed_count"] == result["failed_count"] == 1
+    usd = next(row for row in result["account_results"] if row["account_id"] == "usd-account")
+    assert usd["error_code"] == "manual_spend_account_changed"
+    assert await harness.db[jobs_module.spend.COLLECTION].count_documents(
+        {"user_id": OWNER, "ad_account_id": "usd-account"}) == 0
+    report = await dashboard(harness)
+    assert set(by_account(report)) == {"sar-account"} and report["total_sar"] == 8
+
+
+@pytest.mark.asyncio
+async def test_aged_manual_observation_is_labelled_then_expires_without_another_provider_call(harness):
+    day = DAY - timedelta(days=1)
+    assert (await refresh(harness, period(day, day)))["status"] == "complete"
+    harness.clock.value = NOW + timedelta(hours=2, seconds=1)
+    stale = await dashboard(harness, day, day)
+    assert stale["total_sar"] == 53
+    assert "snapchat_manual_spend_observation_stale" in stale["quality"]["reason_codes"]
+    assert all(utc(row["quality"]["observed_at"]) == NOW for row in stale["accounts"])
+    harness.clock.value = NOW + timedelta(hours=24, seconds=1)
+    expired = await dashboard(harness, day, day)
+    assert expired["total_sar"] == 42.5
+    assert "snapchat_manual_spend_observation" not in expired["quality"]["reason_codes"]
+    assert len(harness.transport.calls) == 2
+
+
+@pytest.mark.asyncio
 async def test_newer_complete_canonical_evidence_supersedes_only_the_whole_requested_period(harness):
     start, end = DAY - timedelta(days=2), DAY - timedelta(days=1)
     for account_id in ACCOUNT_SPECS:

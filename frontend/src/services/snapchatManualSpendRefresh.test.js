@@ -36,6 +36,7 @@ test("one spend-only POST waits for both account observations before invalidatin
     const request = refreshSnapchatSpend(period);
     await flush();
     expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post.mock.calls[0][2].timeout).toBe(15_000);
     expect(api.post.mock.calls[0].slice(0, 2)).toEqual([
         "/integrations-v2/ads-auto-sync/snapchat/refresh", { date_from: period.dateFrom, date_to: period.dateTo },
     ]);
@@ -45,6 +46,7 @@ test("one spend-only POST waits for both account observations before invalidatin
     jest.advanceTimersByTime(2000); await flush();
     expect((await request).status).toBe("complete");
     expect(api.get).toHaveBeenCalledTimes(2);
+    expect(api.get.mock.calls.every(([, options]) => options.timeout > 0 && options.timeout <= 15_000)).toBe(true);
     expect(api.post).toHaveBeenCalledTimes(1);
     expect(clearDashboardPlatformSpendCache).toHaveBeenCalledTimes(1);
 });
@@ -80,6 +82,17 @@ test("rejects an accepted legacy job before polling", async () => {
     api.post.mockResolvedValue({ data: { run_id: "old", status: "running" } });
     await expect(refreshSnapchatSpend(period)).rejects.toThrow();
     expect(api.get).not.toHaveBeenCalled();
+});
+
+test("a stalled request receives a finite transport timeout and never repeats the provider POST", async () => {
+    api.post.mockImplementation((_route, _body, options) => new Promise((_resolve, reject) => {
+        setTimeout(() => reject(new Error(options.timeoutErrorMessage)), options.timeout);
+    }));
+    const assertion = expect(refreshSnapchatSpend(period)).rejects.toThrow("تعذر تأكيد بدء");
+    await flush(); jest.advanceTimersByTime(15_000); await flush(); await assertion;
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.get).not.toHaveBeenCalled();
+    expect(clearDashboardPlatformSpendCache).not.toHaveBeenCalled();
 });
 
 test("leaving the card cancels polling without starting another provider refresh", async () => {

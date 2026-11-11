@@ -3,6 +3,7 @@ import { clearDashboardPlatformSpendCache } from "../lib/dashboardPlatformSpendC
 
 const ROUTE = "/integrations-v2/ads-auto-sync/snapchat/refresh";
 const MAX_WAIT_MS = 6 * 60_000;
+const REQUEST_TIMEOUT_MS = 15_000;
 const SCOPE = "snapchat_spend_only";
 
 function validJob(job, { dateFrom, dateTo, runId, accountIds } = {}) {
@@ -76,14 +77,15 @@ function wait(ms, signal) {
 
 export async function refreshSnapchatSpend({ dateFrom, dateTo, signal } = {}) {
     if (signal?.aborted) throw aborted();
+    const startedAt = Date.now();
     const { data: accepted } = await api.post(ROUTE,
-        { date_from: dateFrom, date_to: dateTo || dateFrom }, { signal });
+        { date_from: dateFrom, date_to: dateTo || dateFrom }, { signal, timeout: REQUEST_TIMEOUT_MS,
+            timeoutErrorMessage: "تعذر تأكيد بدء تحديث صرف سناب خلال المهلة. أعد المحاولة لمتابعته." });
     const expected = { dateFrom, dateTo: dateTo || dateFrom };
     if (!validJob(accepted, expected)) throw new Error("تعذر تأكيد بدء جلب صرف سناب فقط للفترة المحددة.");
     expected.runId = accepted.run_id;
     expected.accountIds = accepted.requested_account_ids;
     let job = accepted;
-    const startedAt = Date.now();
     while (Date.now() - startedAt <= MAX_WAIT_MS) {
         if (signal?.aborted) throw aborted();
         if (!validJob(job, expected)) throw new Error("تعذر التحقق من نتيجة تحديث صرف سناب للفترة المحددة.");
@@ -97,10 +99,15 @@ export async function refreshSnapchatSpend({ dateFrom, dateTo, signal } = {}) {
         if (!["queued", "running"].includes(job.status)) {
             throw new Error("تعذر إكمال جلب صرف سناب. تم الاحتفاظ بآخر بيانات محفوظة.");
         }
-        await wait(Date.now() - startedAt < 30_000 ? 2000 : 10_000, signal);
+        const remaining = MAX_WAIT_MS - (Date.now() - startedAt);
+        await wait(Math.min(Date.now() - startedAt < 30_000 ? 2000 : 10_000, remaining), signal);
+        if (Date.now() - startedAt >= MAX_WAIT_MS) break;
         if ((typeof document !== "undefined" && document.hidden)
             || (typeof navigator !== "undefined" && navigator.onLine === false)) continue;
-        const response = await api.get(`${ROUTE}/${encodeURIComponent(accepted.run_id)}`, { signal });
+        const response = await api.get(`${ROUTE}/${encodeURIComponent(accepted.run_id)}`, {
+            signal, timeout: Math.max(1, Math.min(REQUEST_TIMEOUT_MS, MAX_WAIT_MS - (Date.now() - startedAt))),
+            timeoutErrorMessage: "تعذر متابعة حالة تحديث صرف سناب الآن. أعد المحاولة لمتابعته.",
+        });
         job = response.data || {};
     }
     throw new Error("لم يتأكد اكتمال تحديث سناب بعد. يمكنك المحاولة لاحقًا.");

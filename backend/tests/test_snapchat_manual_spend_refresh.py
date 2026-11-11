@@ -198,6 +198,43 @@ async def test_incompatible_period_and_changed_account_scope_cannot_join(manual_
 
 
 @pytest.mark.asyncio
+async def test_abandoned_recovery_keeps_progress_committed_after_its_read(manual_app, monkeypatch):
+    client, db, finished, entered, calls, jobs = manual_app
+    monkeypatch.setattr(jobs, "_schedule", lambda row: None)
+    accepted = await jobs.request("owner-1", routes.ManualSpendPeriod(**PERIOD))
+    collection = db[spend.JOBS_COLLECTION]
+    await collection.update_one({"_id": accepted["run_id"]}, {"$set": {"deadline_at": NOW}})
+    injected = False
+
+    class InterleavedCollection:
+        async def find_one(self, query, *args, **kwargs):
+            nonlocal injected
+            row = await collection.find_one(query, *args, **kwargs)
+            if row and not injected:
+                injected = True
+                await collection.update_one({"_id": row["_id"]}, {"$set": {
+                    "account_results.0": {"account_id": "a-usd", "status": "complete",
+                        "observed_at": NOW, "snapshot_job_id": accepted["run_id"], "error_code": None}},
+                    "$inc": {"revision": 1}})
+            return row
+
+        async def update_one(self, *args, **kwargs):
+            return await collection.update_one(*args, **kwargs)
+
+    class InterleavedDB:
+        def __getitem__(self, name):
+            return InterleavedCollection() if name == spend.JOBS_COLLECTION else db[name]
+
+    jobs.db = InterleavedDB()
+    await jobs._recover("owner-1")
+    final = await jobs.read("owner-1", accepted["run_id"])
+    assert injected and final["status"] == "partial"
+    assert final["refreshed_count"] == 1 and final["failed_count"] == 1
+    assert final["account_results"][0]["status"] == "complete"
+    assert calls == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("days,requests", [(1, 1), (7, 1), (8, 2), (93, 14)])
 async def test_spend_only_transport_splits_exact_riyadh_period(days, requests):
     calls = []
