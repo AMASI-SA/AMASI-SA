@@ -290,10 +290,14 @@ async def deliver_one(db, sender=send_to_provider):
         return False
     device = await db[DEVICES].find_one({"_id": job["device_id"], "generation": job["generation"]})
     result = {"status": "discarded"}
-    if await device_is_active(db, device):
+    from operational_instruction_conversations import push_is_resolved, push_reference
+    resolved = bool(device and await push_is_resolved(db, merchant_id=device["merchant_id"],
+        recipient_id=job["actor_id"], event_id=job["event_id"]))
+    if not resolved and await device_is_active(db, device):
         try:
+            reference = await push_reference(db, merchant_id=device["merchant_id"], recipient_id=job["actor_id"], event_id=job["event_id"])
             result = await sender(device, {"title": "أماسي — تنبيه مستعجل" if job.get("priority") == "urgent" else "أماسي — تعليمات الطلب", "body": "لديك تحديث على مهمة. افتح التطبيق للاطلاع والتأكيد.",
-                "event_id": job["event_id"], "instruction_id": job["instruction_id"], "priority": job.get("priority", "normal")}, ticket=job.get("ticket"))
+                "event_id": job["event_id"], "instruction_id": job["instruction_id"], "priority": job.get("priority", "normal"), **reference}, ticket=job.get("ticket"))
         except Exception:
             # Provider exception text can contain device credentials; never log it.
             result = {"status": "retry", "error": "transport_error"}
@@ -312,6 +316,8 @@ async def deliver_one(db, sender=send_to_provider):
 
 
 async def run(db):
+    from operational_instruction_conversations import ensure_indexes
+    await ensure_indexes(db)
     await db["operational_instruction_notifications_v1"].create_index([
         ("merchant_id", 1), ("recipient_id", 1), ("read_at", 1), ("created_at", -1), ("id", -1)])
     await db["operational_instruction_notifications_v1"].create_index([

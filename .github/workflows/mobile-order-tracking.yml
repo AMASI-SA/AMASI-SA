@@ -10,6 +10,8 @@ on:
       - "backend/order_tracking_notes_routes.py"
       - "backend/instruction_edit_flow.py"
       - "backend/operational_push.py"
+      - "backend/operational_instruction_*.py"
+      - "backend/operational_notification_directory.py"
       - "backend/tests/test_instruction_*.py"
       - "backend/tests/test_operational_*.py"
       - "backend/tests/test_instruction_orders_permission.py"
@@ -79,6 +81,8 @@ jobs:
           tests/test_operational_instruction_notifications.py
           tests/test_instruction_product_cards.py
           tests/test_instruction_comments_progress.py
+          tests/test_instruction_conversations.py
+          tests/test_notification_sender_directory.py
           tests/test_operational_push.py
           tests/test_order_tracking_notes.py
           tests/test_operational_courier_instructions.py
@@ -92,6 +96,9 @@ jobs:
           tests = [row for row in root.iter('testcase') if 'test_mobile_order_tracking' in row.get('classname', '')]
           assert len(tests) >= 20, len(tests)
           assert all(row.find('skipped') is None for row in tests)
+          conversations = [row for row in root.iter('testcase') if 'test_instruction_conversations' in row.get('classname', '')]
+          assert len(conversations) >= 26, len(conversations)
+          assert all(row.find('skipped') is None for row in conversations)
           PY
       - name: Stop isolated Mongo
         if: always()

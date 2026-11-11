@@ -23,6 +23,8 @@ async def refresh_instruction_progress(db, instruction):
     workflow = await db["order_review_workflows"].find_one({"user_id": owner, "order_number": instruction["order_number"]}) or {}
     pieces = await db["mezan_preparation_pieces_v1"].find({"user_id": owner, "order_number": instruction["order_number"],
         "experiment_archived_at": {"$in": [None, ""]}}).to_list(10000)
+    from operational_instruction_conversations import reconcile_instruction
+    await reconcile_instruction(db, instruction, pieces=pieces, workflow=workflow)
     from order_tracking_notes_routes import _piece_stage
     for piece in pieces:
         pid = str(piece.get("piece_id") or "")

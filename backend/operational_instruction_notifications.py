@@ -114,6 +114,7 @@ async def emit_instruction_notification(db, *, merchant_id, instruction, event_t
         targets.update(text(task.get("assignee_id")) for task in tasks if text(task.get("assignee_id")))
     revision = str(instruction.get("notification_revision") or instruction.get("rejected_at") or instruction.get("submitted_at") or instruction.get("created_at") or "")
     now = datetime.now(timezone.utc)
+    conversation_sources = []
     for recipient in sorted(targets):
         assignment_key = await actor_assignment_key(db, merchant_id, instruction["id"], recipient)
         event_revision = revision + assignment_key if event_type == "assigned" else revision
@@ -125,9 +126,21 @@ async def emit_instruction_notification(db, *, merchant_id, instruction, event_t
             "event_type": event_type, "assignment_key": assignment_key, "title": LABELS[event_type],
             "priority": instruction.get("priority", "normal"), "metadata": instruction.get("notification_metadata") or {},
             "message": text(instruction.get("rejection_note")) if event_type == "rejected" else text(instruction.get("note")),
-            "created_at": now, "read_at": None}
+            "created_at": now, "read_at": None, "conversation_pending": True,
+            "event_key": hashlib.sha256(f"{merchant_id}:{instruction['id']}:{event_type}:{event_revision}".encode()).hexdigest()}
         await db[NOTIFICATIONS].update_one({"_id": key}, {"$setOnInsert": row}, upsert=True)
+        conversation_sources.append(await db[NOTIFICATIONS].find_one({"_id": key}))
         await _enqueue(db, row)
+    if conversation_sources:
+        try:
+            from operational_instruction_conversations import capture_notifications
+            await capture_notifications(db, {**instruction, "user_id": merchant_id}, conversation_sources)
+            await db[NOTIFICATIONS].update_many({"id": {"$in": [row["id"] for row in conversation_sources]},
+                "merchant_id": merchant_id}, {"$set": {"conversation_pending": False}})
+        except Exception:
+            # Projection failure must never fail an existing business command.
+            # The existing notification worker retries the durable marker.
+            log.warning("Instruction conversation projection deferred", exc_info=False)
     return len(targets)
 
 async def refresh_actor_instructions(db, *, merchant_id, actor_id):
