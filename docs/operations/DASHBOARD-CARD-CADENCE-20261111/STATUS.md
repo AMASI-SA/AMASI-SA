@@ -1,7 +1,7 @@
 # DASHBOARD-CARD-CADENCE-20261111
 
 ## State
-Evidence-only branch. Do not deploy this branch. Source A and intent-only B are frozen and recoverable; exact-B CI is running. Production remains unchanged by this task; no task lease or publication exists.
+Evidence-only branch. Never deploy it. PR1884 merged normally after all exact-B checks passed. Merge M is tree-equivalent to frozen B. Production Git branch changed; runtime is not published yet. No task lease exists. Actual shared adapter and publication remain pending.
 
 ## Owner request and acceptance
 - Normal Products recent Salla sync: hourly automatic admission, with manual/explicit recovery still available.
@@ -67,3 +67,9 @@ Preparation creation, automatic two-hour Snapchat sync, prior completed spend-on
 
 ## Exact-B adapter rehearsal passed
 Release-readiness run43086290023 completed successfully. Both fresh clean-clone adapter rehearsals passed: host Node20.20.2 job130752550360 and host Node24.19.0 job130752550356, each dispatching the pinned governed build. Backend preflight and Frontend reproducibility checks also passed. Five general workflows are still running; merge remains pending. No shared source mutation, lease or publication.
+
+## Normal production merge verified
+- Merge M:245a0beccbdbc2585a3ec2214e808eeef3734b57. Parents are base Jd3c9b0c946afe2418aecf0b96629e46d7f14f196 and frozen Bff648cf5ebcc29acdf25fa855a8c80481b529f6c.
+- Merge tree equals B exactly:d5240e4fe0e72890d4e06d6da43e07f5ae680962. Source A is an ancestor and the content diff after A changes only the intent.
+- Root independently confirmed27 exact-B workflows terminal:26success,1expected branch-gated TikTok skip,0failures/cancellations/pending.
+- This supersedes pending-CI/merge statements above. No publication submitted. Next fresh shared guard active:false, expected clean HEAD at J, fast-forward to exact M preserving unrelated untracked files, run actual package adapter, then own prepare/prepublish and one authorized publication.

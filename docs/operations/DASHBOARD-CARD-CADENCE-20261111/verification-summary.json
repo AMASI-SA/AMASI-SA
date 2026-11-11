@@ -2,7 +2,7 @@
   "schema_version": 1,
   "task_id": "DASHBOARD-CARD-CADENCE-20261111",
   "evidence_only": true,
-  "production_changed": false,
+  "production_changed": true,
   "repository": "AMASI-SA/AMASI-SA",
   "pr_number": 1884,
   "base_j": "d3c9b0c946afe2418aecf0b96629e46d7f14f196",
@@ -66,7 +66,7 @@
     "overlaps_initial_frontend_selection": true
   },
   "independent_reviews": "passed within task scope",
-  "release_state": "adapter_ci_passed_awaiting_remaining_ci",
+  "release_state": "merged_awaiting_shared_adapter",
   "shared_preflight": {
     "active": false,
     "head": "d3c9b0c946afe2418aecf0b96629e46d7f14f196",
@@ -100,9 +100,18 @@
   },
   "exact_b_ci_snapshot": {
     "workflows": 27,
-    "success": 21,
+    "success": 26,
     "expected_conditional_skip": 1,
-    "pending": 5,
-    "failures": 0
-  }
+    "pending": 0,
+    "failures": 0,
+    "cancelled": 0
+  },
+  "production_git_changed": true,
+  "production_runtime_changed": false,
+  "merge_commit": "245a0beccbdbc2585a3ec2214e808eeef3734b57",
+  "merge_tree_matches_intent_b": true,
+  "merge_parents": [
+    "d3c9b0c946afe2418aecf0b96629e46d7f14f196",
+    "ff648cf5ebcc29acdf25fa855a8c80481b529f6c"
+  ]
 }
