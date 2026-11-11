@@ -52,6 +52,33 @@ test('reports stay read-only even with both permissions',async()=>{
   expect(api.inventoryCatalog).not.toHaveBeenCalled();
   expect(api.entities).not.toHaveBeenCalled();
 });
+test('report purchases do not reload when window focus returns',async()=>{
+  await render(context,'reports');
+  expect(api.inventoryPurchases).toHaveBeenCalledTimes(1);
+  await act(async()=>window.dispatchEvent(new Event('focus')));
+  expect(api.inventoryPurchases).toHaveBeenCalledTimes(1);
+});
+test('manual purchase report refresh waits for its pending read and shows the new data',async()=>{
+  await render(context,'reports');
+  let complete;
+  api.inventoryPurchases.mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}));
+  await click('تحديث المشتريات');
+  expect(api.inventoryPurchases).toHaveBeenCalledTimes(2);
+  expect([...host.querySelectorAll('button')].find(button=>button.textContent==='تحديث المشتريات').disabled).toBe(true);
+  await click('تحديث المشتريات');
+  await act(async()=>window.dispatchEvent(new Event('focus')));
+  expect(api.inventoryPurchases).toHaveBeenCalledTimes(2);
+  await act(async()=>complete({items:[invoice],stock:[]}));
+  expect(host.textContent).toContain('INV1');
+  expect([...host.querySelectorAll('button')].find(button=>button.textContent==='تحديث المشتريات').disabled).toBe(false);
+});
+test.each(['purchase','payment'])('%s retains focus refresh for financial entry data',async mode=>{
+  await render(context,mode);
+  const firstReads=api.entities.mock.calls.length;
+  expect(firstReads).toBeGreaterThan(0);
+  await act(async()=>window.dispatchEvent(new Event('focus')));
+  expect(api.entities.mock.calls.length).toBe(firstReads*2);
+});
 test('type toggle and search filter the selection cards without losing selected lines',async()=>{
   api.inventoryCatalog.mockResolvedValue({items:[product,{...product,id:'c',kind:'component',name:'مكوّن ب',sku:'COMP'}]});
   await render();await fill();await click('مكوّن');await input('بحث بالاسم أو الرمز','COMP');

@@ -1,0 +1,95 @@
+{
+  "scope": "Synthetic synchronous report benchmark; not production latency or whole-platform improvement",
+  "base_sha": "245a0beccbdbc2585a3ec2214e808eeef3734b57",
+  "service_sha256": "79352eea23d2a50f9af9964c6baeb048bdd73c4efd6d287112da54982935054e",
+  "results": [
+    {
+      "cod_claims": 100,
+      "cpu_p50_ms": 181.997,
+      "event_loop_timer_max_delay_ms": 237.717,
+      "independent_bank_cod_checks": "PASS",
+      "input_unchanged": true,
+      "label": "baseline",
+      "max_ms": 238.64,
+      "movements": 5000,
+      "p50_ms": 188.273,
+      "report_sha256": "4619c9054ca6712265d91a8d45ed02d220d2c4bffb6fa863ab596441b280cfce",
+      "samples": 7,
+      "wall_ms": [
+        173.472,
+        210.764,
+        205.516,
+        165.959,
+        185.272,
+        238.64,
+        188.273
+      ]
+    },
+    {
+      "cod_claims": 100,
+      "cpu_p50_ms": 106.936,
+      "event_loop_timer_max_delay_ms": 134.664,
+      "independent_bank_cod_checks": "PASS",
+      "input_unchanged": true,
+      "label": "candidate",
+      "max_ms": 135.589,
+      "movements": 5000,
+      "p50_ms": 107.025,
+      "report_sha256": "4619c9054ca6712265d91a8d45ed02d220d2c4bffb6fa863ab596441b280cfce",
+      "samples": 7,
+      "wall_ms": [
+        109.337,
+        135.589,
+        107.025,
+        99.472,
+        94.458,
+        111.446,
+        92.384
+      ]
+    },
+    {
+      "cod_claims": 1000,
+      "cpu_p50_ms": 938.767,
+      "event_loop_timer_max_delay_ms": 1254.508,
+      "independent_bank_cod_checks": "PASS",
+      "input_unchanged": true,
+      "label": "baseline",
+      "max_ms": 1255.363,
+      "movements": 5000,
+      "p50_ms": 939.012,
+      "report_sha256": "77b7d574211eb7e42b2a448464143ae8bcbdd9af0883360e50ebebf9d87eb125",
+      "samples": 7,
+      "wall_ms": [
+        1255.363,
+        1109.189,
+        960.207,
+        893.176,
+        924.618,
+        939.012,
+        926.38
+      ]
+    },
+    {
+      "cod_claims": 1000,
+      "cpu_p50_ms": 153.424,
+      "event_loop_timer_max_delay_ms": 170.862,
+      "independent_bank_cod_checks": "PASS",
+      "input_unchanged": true,
+      "label": "candidate",
+      "max_ms": 171.683,
+      "movements": 5000,
+      "p50_ms": 156.961,
+      "report_sha256": "77b7d574211eb7e42b2a448464143ae8bcbdd9af0883360e50ebebf9d87eb125",
+      "samples": 7,
+      "wall_ms": [
+        165.588,
+        171.683,
+        156.961,
+        123.27,
+        126.221,
+        168.171,
+        120.877
+      ]
+    }
+  ]
+}
