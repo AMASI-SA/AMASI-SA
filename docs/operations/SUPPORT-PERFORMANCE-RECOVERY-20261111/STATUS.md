@@ -1,3 +1,46 @@
+# Final performance release — merged; live publication pending
+
+**Current authoritative checkpoint: 2026-11-11.** This is an evidence-only branch. Deploy from reviewed production `hotfix/prod-snap-meta-final`, not this documentation branch.
+
+## Completed release integration
+
+- Final PR [#1881](https://github.com/AMASI-SA/AMASI-SA/pull/1881) is merged by normal merge with expected-head protection.
+- Production merge commit: `77e687e6964254617b4aa9eb0e3164cc968cff3b`.
+- Reviewed source A: `8f11a73a8e53262ed938505f39a141eca3dfab8f`.
+- Reviewed intent-only B: `173cc5ca7ceae8e50aae3f4bde13e972a2a053bd`.
+- Reviewed base J: `3f60c1a08263ff1eb2412c0f9224467a198ac278`.
+- Merge/B tree: `31763cd6cf814f0809376a707c7af2de2ebf23f0`.
+- Runtime release ID: `rg5-5dca51b366b459cf1d62df9686fb97ce6385f29b652df7545cfe90270aecb8f8`.
+
+Exact-B CI completed with **37 successful workflows, one expected conditional TikTok Creator Release Candidate skip, and no failed or pending workflows**. Release-readiness [43050051800](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43050051800) passed actual Node20/24 clean-clone adapter rehearsals. Background-worker [43050052320](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43050052320) passed 293 backend tests, 48 Salla synchronization tests and 76 frontend tests. Final Review Completion Resumable [43050051345](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43050051345) also passed. Cancelled/superseded source-A runs are not counted as successes.
+
+Root freshly fetched the production branch and verified the exact merge SHA/tree, parents J and B, A/B ancestry, and that A-to-deployment changes only the intent file. The unchanged v5 `load_release_intent` and `verify_release_intent_git` accepted the merged production commit in the clean validation worktree. The source-only import warning about absent generated release_identity.json is expected; validation exited zero. An independent reviewer confirmed the same tree/ancestry and byte-identical blobs for all eleven excluded preparation files. No source or intent was changed after B.
+
+## Remaining access and publication boundary
+
+The owner explicitly authorized both merge and publication: “كمل وادحج وانشر حدث صفحة المنصه لانه انا مسجلها دخول”. This authorization remains valid; do not request it again.
+
+The requested Emergent refresh succeeded and the Salla Analytics project was authenticated. Opening its VS Code terminal led to a separate sign-in page. Automatic approval review rejected an earlier attempt to inspect matching terminal/password/link labels because it could expose authentication material. Root used the safer supported browserAuth secure form instead; that request was cancelled by the user. The terminal was then observed still at login. No secret was read or entered, no clipboard/session-token extraction occurred, and no alternative credential route was attempted. Do not retry authentication until the user requests it or completes the supported sign-in.
+
+**Live publication is NOT complete.** No shared `/app` change, release lease, actual publication, invoice send, provider synchronization or advertising mutation was performed by this task. Production latency and the 1,087 historic audit rows have not been remeasured or directly repaired. Merged code provides the recovery logic; it does not prove live recovery already ran.
+
+Once supported terminal access is available:
+
+1. Read current shared instructions and run `python scripts/production_release_guard.py status` in `/app`; require `active:false` before any shared changes or rehearsal. Never clear another task's lease.
+2. Freshly fetch the production branch and require the reviewed deployment tree/intent above. If the branch has advanced, assess that change; do not deploy this documentation branch or reset unrelated work.
+3. Fast-forward `/app` to the reviewed deployment commit while preserving unrelated files. Run the v5 package adapter rehearsal through `cd frontend` then `yarn build` with the reviewed public origin `https://mezansalla.com` and governed toolchain.
+4. Only after the rehearsal succeeds, run Release Guard `prepare` for this task, then `prepublish` immediately before one UI publication through Manage Publishing → Re-publish changes. Wait for a new Deployment Succeeded result.
+5. Run guard `verify --url https://mezansalla.com` and `status`. Require three consecutive identity/build-metadata probes, exact A/runtime release ID above, verified identity and critical hashes, frontend verification, exact canonical/cache-busted JSON metadata, and final `verified:true` / `active:false`.
+6. Perform only the read-only acceptance checks listed below. Do not generate live test invoices, scans, analyses, syncs or ad changes.
+
+No paid Emergent chat was used. The publication authorization is complete; the remaining access dependency is the separate terminal login.
+
+---
+
+## Prior checkpoints — historical context
+
+The entries below preserve implementation evidence and earlier intermediate states. The current checkpoint above supersedes earlier “pending”, “unmerged” or authorization-blocker statements.
+
 # Final performance release — evidence and continuation
 
 **Evidence-only branch. Resume deployment from `codex/support-performance-release-20261111` and PR #1881, not this documentation branch.**
