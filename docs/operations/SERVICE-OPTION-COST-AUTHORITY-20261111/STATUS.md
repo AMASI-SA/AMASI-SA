@@ -1,4 +1,119 @@
-# SERVICE-OPTION-COST-AUTHORITY-20261111
+# SERVICE-OPTION-COST-AUTHORITY-20261111 — publication evidence
+
+## Current checkpoint: published; final Release Guard verification running
+
+Recorded 2026-11-11 at 16:57 UTC. This section supersedes the archived pre-release
+status below. Repository: AMASI-SA/AMASI-SA. Implementation PR:
+https://github.com/AMASI-SA/AMASI-SA/pull/1879 (merged).
+The frozen implementation branch remains
+`codex/service-option-cost-authority-20261111`.
+This documentation-only evidence lives separately on
+`codex/service-option-cost-authority-20261111-evidence`; it is not a new
+production candidate and must not be merged or published as one.
+
+### Owner authorization and data boundary
+
+The owner explicitly authorized publication to expose the hidden direct name
+cost so they can remove it themselves. Publish and verify only. No production
+cost write, delete, historical backfill, cleanup, or repricing was performed.
+The direct name cost 10 and independent embroidery service 8 remain intact.
+
+### Immutable release chain
+
+- Base J: `77e687e6964254617b4aa9eb0e3164cc968cff3b`.
+- Source A: `19441a985ec99c3aa49b81f1d4b47472c3c86af8`.
+- Source A tree: `c5d66ca693e59403753fed180867e218df716e6c`.
+- Intent-only B: `13f1cd26f0ead560b208127d8a5c9c7ceececcff`.
+- B tree: `f95ddb857df15be7ae10aeb9b5135f1c06862716`.
+- Production merge M: `2d6d74806ab32333a1de1cfc8b8c73c3e434a851`.
+  M preserves A ancestry and has exactly B's tree.
+- Runtime release:
+  `rg5-57779cd9ec0e5963f37e4922ec895e1858879cefd4a6d94d6d024f1d40f7f1ec`.
+- Intent: 1,264,209 bytes; SHA256
+  `66a26b55b723f08412a6f2d2c2aaaf1d3931b24842bb538ad65a17624ca12037`.
+- Frontend artifact tree:
+  `ced2c43f29fe89f8c1002f5373793395a1e90a362a291b70b0d0405e4bce92a1`.
+
+### Verified release gates
+
+Source A Release Readiness run 43054461213 succeeded; artifact 13871805241
+archive SHA256 is
+`b302658c99e1d8c82c22cfd4ae21ef2032671c0b20e7e45864a2f430c5c9bd8b`.
+All applicable reviewed B workflows succeeded. Release Readiness run
+43055317705 ran both actual clean-clone adapter rehearsals successfully:
+Node 24 job 130643771858 and Node 20 job 130643771957. Conditional TikTok
+candidate and PR manual-redeploy handoff jobs were skipped as designed.
+The complete local reviewed-intent validator also exited 0.
+
+The prior foreign `support-performance-recovery-20261111` lease closed through
+its owner's verification before shared /app was changed. A fresh status was
+active:false. Shared /app was safely fast-forwarded from J to M, retaining
+untracked files and the user's unsaved editor buffer. No reset --hard was used.
+
+The existing /app/frontend `yarn build` dispatcher ran the deployment adapter,
+with reviewed public origin https://mezansalla.com and bytecode disabled.
+It printed Done in 63.21s, emitted source A and the expected release ID, and its
+actual shell exit status was 0. Full local output was retained in
+/tmp/service-option-cost-1879-adapter.log; durable summaries are in PR1879.
+
+Prepare exited 0 with actor `codex-service-option-cost-1879`,
+prepared_at `2026-11-11T16:40:00.265730+00:00`, source A, deployment M, and
+the expected runtime ID. Prepublish exited 0, explicitly ready_to_publish=true.
+One authorized Publish changes action was submitted. No subsequent source,
+guard, release-intent, or materialization change was made.
+
+The current Emergent UI displayed a new green **Deployment finished** event at
+Nov 11, 07:51 PM (16:51 UTC), and new published version `5e94faf`; the prior
+`eb8949e` moved to the previous version. This is the UI's observed wording;
+do not claim that the literal text Deployment Succeeded was displayed.
+The UI exposes runtime logs, not a complete Cloud Build transcript.
+No paid agent, credit purchase, or subscription change was used.
+
+A fresh public health read showed source A, the intended runtime ID,
+ok=true, verified_identity_available=true, frontend_build_verified=true, and
+boot_started_at `2026-11-11T16:51:11.247105+00:00`.
+
+### Live functional verification completed (read-only)
+
+A fresh product editor load for AMS10966 / mpv2_1500919302 now renders:
+- Name condition: عند ورود الخيار في الطلب (ربط سابق).
+- Direct amount: مبلغ مباشر · +10.00 ر.س.
+- An enabled تعديل التكلفة action.
+- Its dialog contains direct-cost value 10 and enabled حذف, إلغاء, حفظ buttons.
+- The independent embroidery yes choice still displays تطريز الاسم · +8.00 ر.س.
+
+The dialog was opened for inspection only. Neither delete nor save was clicked.
+Product page:
+https://mezansalla.com/products-v2?product=mpv2_1500919302&focus=cost.
+A local browser screenshot records the cost dialog; no customer data or
+credentials were extracted or persisted.
+
+### Remaining gate and exact next safe action
+
+The unmodified command
+`PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py verify --url https://mezansalla.com`
+started around 16:53 UTC in /app Terminal 1 and is still running. Its output
+is redirected to /tmp/service-option-cost-1879-verify.json. A wrapper will print
+the real exit status, three-check result, identities, artifact hash and request
+count, then run guard status only on success. This verification can take
+many minutes because it checks every public artifact in three full probes.
+
+Do not publish again, modify /app, run another guard operation behind its lock,
+or clear the active lease. Read the existing terminal's completion result.
+Require exit 0, verified=true, checks=3, exact source A/deployment M/release ID,
+and then active:false. If verification fails, diagnose the actual output and
+retain the matching lease; do not hide the failure. After success, update this
+evidence document and PR1879 with the final proof and owner-facing deletion path.
+
+Production changed: **yes, application code only**, evidenced by the new release
+identity and live fixed editor. Production cost bindings changed: **no**.
+Issue #1006 is at its comment limit; PR1879 and this evidence branch are the
+durable continuation ledger.
+
+---
+
+## Archived pre-release status (historical; superseded above)
+
 
 Repository: AMASI-SA/AMASI-SA.
 Task branch: `codex/service-option-cost-authority-20261111`.
