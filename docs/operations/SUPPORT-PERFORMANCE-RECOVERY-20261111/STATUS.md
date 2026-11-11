@@ -1,3 +1,13 @@
+# Current checkpoint — authorized live publication in progress
+
+The owned v5 prepublish command returned ready_to_publish:true for deployment 77e687e6964254617b4aa9eb0e3164cc968cff3b, source 8f11a73a8e53262ed938505f39a141eca3dfab8f and release rg5-5dca51b366b459cf1d62df9686fb97ce6385f29b652df7545cfe90270aecb8f8.
+
+Root opened Republish and clicked Publish changes exactly once. Emergent shows Publishing… and a new Deployment Started event at Nov 11, 07:06 PM (Riyadh). The visible first stage is Packaging your latest changes. No paid chat, plan change or auto top-up was used.
+
+Lease remains owned by support-performance-recovery-20261111, prepared at 2026-11-11T16:04:26.037644+00:00. Publication is in progress, not yet successful or verified. Next: observe a newer explicit Deployment Succeeded; then run the unchanged guard verify --url https://mezansalla.com with bytecode disabled, require three probes and status active:false. Do not click Publish again while this operation runs.
+
+---
+
 # Current checkpoint — owned v5 lease prepared
 
 Prepare succeeded at 2026-11-11T16:04:26.037644+00:00 (19:04:26 Riyadh), actor support-performance-recovery-20261111, protocol 5. It binds deployment 77e687e6964254617b4aa9eb0e3164cc968cff3b, source 8f11a73a8e53262ed938505f39a141eca3dfab8f and release rg5-5dca51b366b459cf1d62df9686fb97ce6385f29b652df7545cfe90270aecb8f8. This task now owns the active lease. No UI publication has occurred yet. Next: prepublish immediately before one authorized Republish action, observe fresh Deployment Succeeded, then verify and confirm inactive. Do not clear or replace this lease through another task.
