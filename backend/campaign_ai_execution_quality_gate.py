@@ -1655,10 +1655,11 @@ async def preflight_approved_execution(
     now: Callable[[], datetime] = _utcnow,
 ) -> dict[str, Any]:
     """Re-read the latest snapshot and current sync quality before any write."""
-    from campaign_ai_public_guard import VISIBLE_SNAPSHOT_FILTER
+    # Manual analysis can save a hidden core before final publication. The
+    # latest published snapshot remains the execution authority while it builds.
     latest = await _find_one(
         db[recommendation_collection],
-        {"user_id": user_id, **VISIBLE_SNAPSHOT_FILTER},
+        {"user_id": user_id, "manual_job_status": {"$ne": "building"}},
         {"_id": 0},
         sort=[("generated_at", -1)],
     )
