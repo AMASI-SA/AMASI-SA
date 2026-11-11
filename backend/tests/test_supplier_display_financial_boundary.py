@@ -31,6 +31,28 @@ def test_approved_close_posting_and_service_linkage_are_unchanged():
             assert segment.count(current) == 1
             assert original not in segment
             segment = segment.replace(current, original, 1)
+            # Pending-scan recovery corrects only the lock-expiry precondition.
+            # Assert that exact block before normalizing it to the reviewed
+            # source; retain the original hash for every financial operation.
+            # Scan-lock and approval tests exercise active, expired, malformed,
+            # and missing dates, plus recovery/close/replay with 19 pieces.
+            current_lock_check = '''            lock_expires_at = fresh_session.get("scan_lock_expires_at")
+            # Motor's default codec returns Mongo UTC dates without tzinfo.
+            # Normalize the instant; an unproven lock must still block close.
+            if isinstance(lock_expires_at, datetime) and lock_expires_at.tzinfo is None:
+                lock_expires_at = lock_expires_at.replace(tzinfo=timezone.utc)
+            if (
+                fresh_session.get("scan_lock_token")
+                and (not isinstance(lock_expires_at, datetime) or lock_expires_at > now)
+            ):'''
+            original_lock_check = '''            if (
+                fresh_session.get("scan_lock_token")
+                and fresh_session.get("scan_lock_expires_at")
+                and fresh_session["scan_lock_expires_at"] > now
+            ):'''
+            assert segment.count(current_lock_check) == 1
+            assert original_lock_check not in segment
+            segment = segment.replace(current_lock_check, original_lock_check, 1)
         actual[node.name] = hashlib.sha256(segment.encode()).hexdigest()
     assert actual==FUNCTION_HASHES
     for path,expected in FILE_HASHES.items():

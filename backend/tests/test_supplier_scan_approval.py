@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import supplier_receiving_routes as r
+import supplier_scan_attempts as attempts
 from supplier_scan_attempts import ATTEMPTS
 from test_supplier_invoice_financial_integrity import env, seed, close
 
@@ -57,3 +58,81 @@ async def test_approval_requires_settled_scans_then_posts_exactly_once(env, monk
         recovered = await http.get(f"/supplier-receiving-v1/sessions/{session['id']}/scan-requests/approval-scan-{index}")
         assert recovered.status_code == 200, recovered.text
         assert recovered.json()['outcome'] == 'confirmed'
+
+
+async def test_expired_scan_refresh_preserves_nineteen_pieces_and_closes_exactly_once(env):
+    db, http, _ = env
+    session, payload = await seed(db, (2100,) * 19)
+    session_id = session['id']
+    piece_ids = sorted(
+        row['piece_id'] for row in await db[r.PIECES].find({}).to_list(19)
+    )
+    expired = await attempts.server_now(db) - timedelta(seconds=10)
+    attempt_id = attempts.attempt_key('merchant', session_id, 'expired-before-approval')
+    await db[ATTEMPTS].insert_one({
+        '_id': attempt_id, 'user_id': 'merchant', 'session_id': session_id,
+        'client_request_id': 'expired-before-approval', 'state': 'in_progress',
+        'token': 'expired-approval-fence', 'expires_at': expired,
+    })
+    await db[r.SESSIONS].update_one({'id': session_id}, {'$set': {
+        'scan_lock_token': 'expired-approval-fence', 'scan_lock_expires_at': expired,
+    }})
+
+    blocked = await close(http, session, payload)
+    assert blocked.status_code == 409, blocked.text
+    assert blocked.json()['detail']['code'] == 'supplier_receiving_scans_pending'
+    assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 0
+    assert await db.general_ledger.count_documents({}) == 0
+
+    refreshed = await http.post(f'/supplier-receiving-v1/sessions/{session_id}/refresh')
+    assert refreshed.status_code == 200, refreshed.text
+    assert sorted(row['piece_id'] for row in refreshed.json()['scans']) == piece_ids
+    assert refreshed.json()['session']['scan_count'] == 19
+    settled = await db[ATTEMPTS].find_one({'_id': attempt_id})
+    assert settled['state'] == 'rejected'
+    assert settled['detail']['code'] == 'supplier_receiving_scan_expired'
+    assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 0
+    assert await db.general_ledger.count_documents({}) == 0
+
+    approved = await close(http, session, payload)
+    assert approved.status_code == 200, approved.text
+    assert approved.json()['financial_integrity_verified'] is True
+    invoice = approved.json()['supplier_invoice']
+    assert invoice['total_halalas'] == 39900
+    replay = await close(http, session, payload)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()['idempotent'] is True
+    assert replay.json()['supplier_invoice']['id'] == invoice['id']
+    assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 1
+    assert await db.general_ledger.count_documents({}) == 2
+
+    saved_invoice = await db[r.SUPPLIER_INVOICES].find_one({'id': invoice['id']})
+    saved_ledger = await db.general_ledger.find({}).sort('id', 1).to_list(2)
+    saved_session = await db[r.SESSIONS].find_one({'id': session_id})
+    cancelled = await http.post(f'/supplier-receiving-v1/sessions/{session_id}/cancel', json={})
+    assert cancelled.status_code == 409, cancelled.text
+    assert cancelled.json()['detail']['code'] == 'supplier_receiving_session_closed'
+    assert await db[r.SUPPLIER_INVOICES].find_one({'id': invoice['id']}) == saved_invoice
+    assert await db.general_ledger.find({}).sort('id', 1).to_list(2) == saved_ledger
+    assert await db[r.SESSIONS].find_one({'id': session_id}) == saved_session
+
+
+@pytest.mark.parametrize('expiry_kind', ['active', 'missing', 'invalid'])
+async def test_close_keeps_active_or_unproven_scan_locks_blocked(env, expiry_kind):
+    db, http, _ = env
+    session, payload = await seed(db)
+    lock = {'scan_lock_token': 'pending-scan-fence'}
+    if expiry_kind == 'active':
+        lock['scan_lock_expires_at'] = await attempts.server_now(db) + timedelta(minutes=2)
+    elif expiry_kind == 'invalid':
+        lock['scan_lock_expires_at'] = 'not-a-verified-database-date'
+    await db[r.SESSIONS].update_one({'id': session['id']}, {'$set': lock})
+    before = await db[r.SESSIONS].find_one({'id': session['id']})
+
+    blocked = await close(http, session, payload)
+
+    assert blocked.status_code == 409, blocked.text
+    assert blocked.json()['detail']['code'] == 'supplier_receiving_scan_busy'
+    assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 0
+    assert await db.general_ledger.count_documents({}) == 0
+    assert await db[r.SESSIONS].find_one({'id': session['id']}) == before
