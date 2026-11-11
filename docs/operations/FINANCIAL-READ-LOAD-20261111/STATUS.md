@@ -92,11 +92,13 @@ CI=true node node_modules/react-scripts/bin/react-scripts.js test \
               '**/src/pages/operational/SalaryStart.test.jsx'
 ```
 
+Independent read-only review of the integrated runtime diff found no material blocker. Its separate focused load + real CustomerWalletBalance component run passed **19 tests / 2 suites**, exit 0 (3.949 seconds). Fourteen overlap with the root load suite; do not add these counts as unique tests. It confirmed auth/scope fences, serialized pending reads, audit independence, unchanged write validation and preserved reconciliation offload. Admission is per mounted hook, not global across tabs/remounts; old unmounted requests may finish but cannot apply their results.
+
 This proves request-count/response-order behavior in component tests. No browser/production latency acceptance or cross-tab deduplication is claimed. The full report, cost/purchase children and context server paths still need the later bounded-read architecture.
 
 ## Remaining low-load design boundaries
 
-- Finish independent patch review and exact-head CI before any release preparation. Keep the visible 30-second cadence and existing post-mutation refresh.
+- Independent patch review is complete; finish exact-head CI before any release preparation. Keep the visible 30-second cadence and existing post-mutation refresh.
 - A durable next slice should serve a dated, prepared report tied to owner and all input versions, rather than rebuild it for each reader. Recheck permissions per request; cached display data never authorizes a financial write.
 - Cost/source changes and day-based accrual must invalidate the relevant snapshot. `as_of` changing by itself is not evidence of an economic change; current worker increments state revision on routine rounds, so revision-only caching is insufficient.
 - Use server pagination for history. Ten displayed rows do not bound work when the server still normalizes/hashes the full history.
