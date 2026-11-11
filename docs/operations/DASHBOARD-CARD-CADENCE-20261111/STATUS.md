@@ -64,3 +64,6 @@ Preparation creation, automatic two-hour Snapchat sync, prior completed spend-on
 - Exact-B release-readiness run43086290023 and all other required checks are pending; no merge/prepare/publish yet.
 - Next safe action: require exact-B terminal CI success including Node20/24 clean-clone adapter rehearsals, normal merge with B-equivalent tree, then fresh shared guard/clean-head checks and actual adapter build. Source A/B must not change.
 - Source-A focused CI frontend job130749269065:159 tests across16 suites passed, exit0, including the updated placement contract.
+
+## Exact-B adapter rehearsal passed
+Release-readiness run43086290023 completed successfully. Both fresh clean-clone adapter rehearsals passed: host Node20.20.2 job130752550360 and host Node24.19.0 job130752550356, each dispatching the pinned governed build. Backend preflight and Frontend reproducibility checks also passed. Five general workflows are still running; merge remains pending. No shared source mutation, lease or publication.
