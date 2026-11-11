@@ -66,13 +66,13 @@
     "overlaps_initial_frontend_selection": true
   },
   "independent_reviews": "passed within task scope",
-  "release_state": "merged_awaiting_shared_adapter",
+  "release_state": "prepared_own_active_lease",
   "shared_preflight": {
     "active": false,
     "head": "d3c9b0c946afe2418aecf0b96629e46d7f14f196",
     "tracked_clean": true
   },
-  "lease_created": false,
+  "lease_created": true,
   "publication_submitted": false,
   "limitations": [
     "No measured overall production speedup yet",
@@ -113,5 +113,19 @@
   "merge_parents": [
     "d3c9b0c946afe2418aecf0b96629e46d7f14f196",
     "ff648cf5ebcc29acdf25fa855a8c80481b529f6c"
-  ]
+  ],
+  "shared_adapter": {
+    "exit_code": 0,
+    "seconds": 92.18,
+    "source_git_sha": "60858eeb6074669dbd93258d7e2f69ebadb59e8e",
+    "deployment_git_sha": "245a0beccbdbc2585a3ec2214e808eeef3734b57",
+    "runtime_identity_matches": true,
+    "untracked_files_preserved": 120
+  },
+  "lease": {
+    "active": true,
+    "actor": "codex-dashboard-card-cadence-20261111",
+    "prepared_at": "2026-11-11T19:37:57.306854+00:00",
+    "protocol_version": 5
+  }
 }

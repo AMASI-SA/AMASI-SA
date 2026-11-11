@@ -1,7 +1,7 @@
 # DASHBOARD-CARD-CADENCE-20261111
 
 ## State
-Evidence-only branch. Never deploy it. PR1884 merged normally after all exact-B checks passed. Merge M is tree-equivalent to frozen B. Production Git branch changed; runtime is not published yet. No task lease exists. Actual shared adapter and publication remain pending.
+Evidence-only branch. Never deploy it. Shared /app is at verified merge M and the actual adapter passed. OUR RELEASE LEASE IS ACTIVE. No publication for this task has been submitted yet. Root owns prepublish/publication/verification; do not change shared source or clear this lease.
 
 ## Owner request and acceptance
 - Normal Products recent Salla sync: hourly automatic admission, with manual/explicit recovery still available.
@@ -73,3 +73,9 @@ Release-readiness run43086290023 completed successfully. Both fresh clean-clone 
 - Merge tree equals B exactly:d5240e4fe0e72890d4e06d6da43e07f5ae680962. Source A is an ancestor and the content diff after A changes only the intent.
 - Root independently confirmed27 exact-B workflows terminal:26success,1expected branch-gated TikTok skip,0failures/cancellations/pending.
 - This supersedes pending-CI/merge statements above. No publication submitted. Next fresh shared guard active:false, expected clean HEAD at J, fast-forward to exact M preserving unrelated untracked files, run actual package adapter, then own prepare/prepublish and one authorized publication.
+
+## Shared adapter passed and own lease prepared
+- Actual shared package adapter exit0 in92.18seconds, with exact source A, merge M and runtime identity. Shared tracked source is clean; all120 unrelated untracked files were preserved.
+- Official prepare succeeded at2026-11-11T19:37:57.306854+00:00, protocol5, actor codex-dashboard-card-cadence-20261111. OUR matching lease is active.
+- Production Git source changed; public runtime remains prior version9d4db97 until publication.
+- No task publication yet. Next official prepublish immediately before one authorized publication, newer explicit success, official verify3 and final inactive, then live card acceptance. Preserve frozen A/B and shared M throughout.
