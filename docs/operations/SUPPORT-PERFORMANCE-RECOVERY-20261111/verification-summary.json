@@ -1,0 +1,25 @@
+{
+  "evidence_provenance": {
+    "observed_by_utc": "2026-11-11T16:33:11Z",
+    "source": "Authenticated shared /app terminal; successful unchanged Release Guard verify wrapper",
+    "raw_output_path": "/tmp/support-performance-20261111-verify.json",
+    "note": "Narrow observed JSON projection; not the complete raw guard payload."
+  },
+  "verification": {
+    "verified": true,
+    "checks": 3,
+    "source_git_sha": "8f11a73a8e53262ed938505f39a141eca3dfab8f",
+    "deployment_git_sha": "77e687e6964254617b4aa9eb0e3164cc968cff3b",
+    "release_id": "rg5-5dca51b366b459cf1d62df9686fb97ce6385f29b652df7545cfe90270aecb8f8",
+    "protocol_version": 5,
+    "url": "https://mezansalla.com",
+    "boot_started_at": "2026-11-11T16:15:05.027420+00:00",
+    "boot_started_at_observations": [
+      "2026-11-11T16:15:05.027420+00:00"
+    ],
+    "frontend_artifact_tree_sha256": "8bc4ff27a8d4cedc85d5613789176c0eda9100ad5d7b7538aba33756999d8fdf"
+  },
+  "post_verification_guard_status": {
+    "active": false
+  }
+}
