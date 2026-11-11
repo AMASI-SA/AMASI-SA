@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from types import SimpleNamespace
 
+from mongomock_motor import AsyncMongoMockClient
 import pytest
 
 from integrations_control_center import (
@@ -18,7 +19,7 @@ from product_cost_revision import (
     PRODUCT_COST_REVISIONS,
     get_product_cost_revision,
 )
-from product_option_cost_routes import BINDINGS, make_product_option_cost_router
+from product_option_cost_routes import make_product_option_cost_router
 from product_v2_details_routes import COST_PROFILES, make_product_v2_details_router
 from product_v2_routes import PRODUCTS
 
@@ -313,20 +314,17 @@ async def test_product_cost_save_invalidates_profitability_across_workers(monkey
 
 @pytest.mark.asyncio
 async def test_option_cost_save_and_delete_bump_shared_revision():
-    db = _DB({
-        PRODUCTS: [{
-            "user_id": "owner-1",
-            "id": "mpv2_p-1",
-            "mezan_product_id": "mpv2_p-1",
-            "salla_product_id": "p-1",
-            "options": [{
-                "id": "option-1",
-                "name": "Size",
-                "values": [{"id": "value-1", "name": "Large"}],
-            }],
+    db = AsyncMongoMockClient().option_cost_revision
+    await db[PRODUCTS].insert_one({
+        "user_id": "owner-1",
+        "id": "mpv2_p-1",
+        "mezan_product_id": "mpv2_p-1",
+        "salla_product_id": "p-1",
+        "options": [{
+            "id": "option-1",
+            "name": "Size",
+            "values": [{"id": "value-1", "name": "Large"}],
         }],
-        BINDINGS: [],
-        PRODUCT_COST_REVISIONS: [],
     })
     router = make_product_option_cost_router(db, lambda: {"id": "owner-1"})
     path = "/products-v2/{product_id}/option-costs/{option_id}/{value_id}"

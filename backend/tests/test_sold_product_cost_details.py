@@ -140,3 +140,71 @@ def test_selected_name_service_and_without_service_keep_separate_rows():
     row = report([item(3, 'yes'), item(2), item(4, 'yes')])[0]
     assert [(g['quantity'], g['unit_cost'], g['total_cost']) for g in row['cost_groups']] == [(7, 35, 245), (2, 25, 50)]
     assert any(c['kind'] == 'service' and c['key'] == 'option:name' for c in row['cost_columns'])
+
+
+def test_alternative_bindings_keep_one_resource_identity_without_losing_cost_columns():
+    product = {'salla_product_id': 'p', 'options': [
+        {'id': 'style', 'type': 'radio', 'values': [
+            {'id': 'simple', 'name': 'اسم'}, {'id': 'crown', 'name': 'اسم وتاج'}]},
+    ]}
+    context = {
+        'product_binding_map': {'p': [{'id': 'bag-link', 'resource_id': 'bag'}]},
+        'option_map': {'p': [
+            {'id': 'simple-link', 'option_id': 'style', 'value_id': 'simple',
+             'mode': 'resource', 'resource_id': 'embroidery', 'quantity': 1},
+            {'id': 'crown-link', 'option_id': 'style', 'value_id': 'crown',
+             'mode': 'resource', 'resource_id': 'embroidery', 'quantity': 2},
+        ]},
+        'resources': {
+            'bag': {'name': 'كيس', 'kind': 'component', 'unit_cost': 5.5},
+            'embroidery': {'name': 'تطريز الاسم', 'kind': 'service', 'unit_cost': 8},
+        },
+    }
+    rows = aggregate_sold_products([{'products': [
+        {'product_id': 'p', 'quantity': 2, 'options_raw': [
+            {'option_id': 'style', 'value_id': 'simple'}]},
+        {'product_id': 'p', 'quantity': 1, 'options_raw': [
+            {'option_id': 'style', 'value_id': 'crown'}]},
+    ]}], [product], [{'salla_product_id': 'p', 'base_cost': 35}], catalog_context=context)
+    row = rows[0]
+    services = [column for column in row['cost_columns'] if column['kind'] == 'service']
+    assert len(services) == 2  # The two applicability/quantity rules stay distinct.
+    assert {column['resource_id'] for column in services} == {'embroidery'}
+    assert {column['resource_id'] for column in row['cost_columns']
+            if column['kind'] == 'component'} == {'bag'}
+    assert row['total_cost'] == 153.5  # 2 * (35 + 5.5 + 8) + (35 + 5.5 + 16).
+    assert [(group['quantity'], group['unit_cost']) for group in row['cost_groups']] == [(2, 48.5), (1, 56.5)]
+
+
+def test_direct_option_cost_is_independent_of_shared_service_and_salla_sale_price():
+    product = {'salla_product_id': 'p', 'options': [
+        {'id': 'name', 'name': 'الاسم', 'type': 'text', 'values': []},
+        {'id': 'embroidery-choice', 'type': 'radio', 'values': [{'id': 'yes', 'name': 'نعم'}]},
+    ]}
+    direct = {'id': 'name-link', 'option_id': 'name', 'value_id': '__option__',
+              'option_name': 'الاسم', 'mode': 'direct', 'direct_amount': 10, 'quantity': 1}
+    service = {'id': 'embroidery-link', 'option_id': 'embroidery-choice', 'value_id': 'yes',
+               'mode': 'resource', 'resource_id': 'embroidery', 'quantity': 1}
+    context = {
+        'product_binding_map': {'p': [{'id': 'bag-link', 'resource_id': 'bag'}]},
+        'option_map': {'p': [direct, service]},
+        'resources': {
+            'bag': {'name': 'كيس', 'unit_cost': 5.5},
+            'embroidery': {'name': 'تطريز الاسم', 'kind': 'service', 'unit_cost': 8},
+        },
+    }
+    orders = [{'products': [{'product_id': 'p', 'quantity': 3, 'options_raw': [
+        {'option_id': 'name', 'value': 'Fixture', 'price': 999, 'additional_price': 999},
+        {'option_id': 'embroidery-choice', 'value_id': 'yes'},
+    ]}]}]
+    profiles = [{'salla_product_id': 'p', 'base_cost': 35}]
+    row = aggregate_sold_products(orders, [product], profiles, catalog_context=context)[0]
+    assert row['total_cost'] == 175.5  # 3 * (35 + 5.5 + 10 + 8).
+    cells = {cell['key']: cell for cell in row['cost_groups'][0]['cells']}
+    assert cells['option:name-link']['unit_cost'] == 10
+    assert cells['option:embroidery-link']['unit_cost'] == 8
+    assert next(column for column in row['cost_columns']
+                if column['key'] == 'option:name-link')['resource_id'] is None
+    context['option_map']['p'] = [service]
+    corrected = aggregate_sold_products(orders, [product], profiles, catalog_context=context)[0]
+    assert corrected['total_cost'] == 145.5  # Removing only the direct binding changes 10 per unit.
