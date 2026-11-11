@@ -19,7 +19,7 @@ async def start_tasks(db, *, wake_event=None, assembly_wake_event=None):
         from integrations.qoyod_manual.auto_send import start_worker as automatic
         tasks.append(automatic(db, batch_limit=5, wake_event=wake_event))
         from integrations.qoyod_manual.auto_cycle import followup_loop
-        from integrations.qoyod.scheduled_scan import scheduler
+        from integrations.qoyod_manual.send_jobs import run as manual_sends
         from salla_integration.scheduled_reconciliation import scheduler as salla_reconciliation
         from salla_integration.service import salla_token_maintenance_loop
         from operational_balance_worker import run as balances
@@ -30,7 +30,7 @@ async def start_tasks(db, *, wake_event=None, assembly_wake_event=None):
         from salla_integration.cost_option_recovery import start_worker as cost_options
         from operational_push import run as push
         for name, factory in (
-            ('qoyod-followup', followup_loop), ('qoyod-full-scan', scheduler),
+            ('qoyod-followup', followup_loop), ('qoyod-manual-send-jobs', manual_sends),
             ('salla-token-maintenance', salla_token_maintenance_loop),
             ('salla-orders-12h', salla_reconciliation),
             ('operational-balances', balances), ('operational-push', push),
@@ -43,6 +43,8 @@ async def start_tasks(db, *, wake_event=None, assembly_wake_event=None):
             task = await start(db)
             if task is not None:
                 tasks.append(task)
+        from campaign_ai_shadow_jobs import run as campaign_shadow_jobs
+        tasks.append(asyncio.create_task(campaign_shadow_jobs(db), name='campaign-ai-shadow-jobs'))
         from integrations_control_center.ads_auto_sync_scheduler import auto_sync_enabled, auto_sync_loop
         if auto_sync_enabled():
             tasks.append(asyncio.create_task(auto_sync_loop(db), name='advertising-sync'))

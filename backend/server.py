@@ -4741,6 +4741,11 @@ async def _global_startup() -> None:
     from review_completion_readback import ensure_readback_storage
     await ensure_review_session_storage(db)
     await ensure_readback_storage(db)
+    # Build durable job indexes before admitting web requests.
+    from integrations.qoyod_manual.send_jobs import ensure_indexes as ensure_manual_send_job_indexes
+    from campaign_ai_shadow_jobs import ensure_indexes as ensure_campaign_job_indexes
+    await ensure_manual_send_job_indexes(db)
+    await ensure_campaign_job_indexes(db)
     await db.users.create_index("email", unique=True)
     await db.settings.create_index("user_id", unique=True)
     await db.daily_costs.create_index([("user_id", 1), ("date", 1)], unique=True)

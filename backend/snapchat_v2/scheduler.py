@@ -1,4 +1,4 @@
-"""Server-side five-minute shadow scheduler for Snapchat Reporting V2.
+"""Server-side two-hour shadow scheduler for Snapchat Reporting V2.
 
 Every backend replica may start this loop.  The per-account distributed lease
 inside ``SnapchatV2SyncPipeline`` is the authority that prevents overlapping
@@ -20,14 +20,14 @@ from .accounts import (
 )
 from .models import SNAPCHAT_PROVIDER
 from .sync_pipeline import SnapchatV2SyncPipeline
+from .cadence import (
+    DEFAULT_INTERVAL_SECONDS, MIN_INTERVAL_SECONDS,
+    INTERVAL_ENV, shadow_interval_seconds,
+)
 
 SNAPCHAT_SHADOW_SCHEDULER_COLLECTION = "mezan_snapchat_shadow_scheduler_v2"
 ENABLED_ENV = "SNAPCHAT_REPORTING_V2_SHADOW_SCHEDULER_ENABLED"
-INTERVAL_ENV = "SNAPCHAT_REPORTING_V2_SHADOW_INTERVAL_SECONDS"
 STARTUP_DELAY_ENV = "SNAPCHAT_REPORTING_V2_SHADOW_STARTUP_DELAY_SECONDS"
-DEFAULT_INTERVAL_SECONDS = 300
-MIN_INTERVAL_SECONDS = 300
-MAX_INTERVAL_SECONDS = 3600
 DEFAULT_STARTUP_DELAY_SECONDS = 45
 MAX_SCHEDULER_ACCOUNTS = 50
 # Discovery includes disabled accounts; its bound must not consume the enabled
@@ -52,14 +52,6 @@ def shadow_scheduler_enabled() -> bool:
         "yes",
         "on",
     }
-
-
-def shadow_interval_seconds() -> int:
-    try:
-        value = int(os.environ.get(INTERVAL_ENV, str(DEFAULT_INTERVAL_SECONDS)))
-    except (TypeError, ValueError, OverflowError):
-        value = DEFAULT_INTERVAL_SECONDS
-    return min(max(value, MIN_INTERVAL_SECONDS), MAX_INTERVAL_SECONDS)
 
 
 def shadow_startup_delay_seconds() -> int:
@@ -151,6 +143,7 @@ async def _run_one(
             identity["user_id"],
             identity["ad_account_id"],
             run_type="rolling_refresh",
+            automatic=True,
         )
         return {
             "user_id": identity["user_id"],
@@ -159,6 +152,7 @@ async def _run_one(
             "sync_run_id": result.get("sync_run_id"),
             "reason": result.get("reason"),
             "error": result.get("error"),
+            "next_due_at": result.get("next_due_at"),
         }
 
 
@@ -290,7 +284,7 @@ def attach_shadow_scheduler(router: Any, db: Any) -> None:
         if shadow_scheduler_enabled() and (task is None or task.done()):
             task = asyncio.create_task(
                 ready_loop(),
-                name="snapchat-reporting-v2-shadow-5m",
+                name="snapchat-reporting-v2-shadow-2h",
             )
 
     async def stop() -> None:

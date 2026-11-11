@@ -35,7 +35,9 @@ async def test_heartbeat_failure_cancels_batch_and_records_only_safe_cause(monke
     assert cancelled.is_set()
     call = db.__getitem__.return_value.update_one.call_args
     db.__getitem__.return_value.update_one.assert_awaited_once()
-    assert call.args[0] == {'_id': 'main', 'cycle_id': 'cycle'}
+    assert call.args[0] == {'_id': 'main', 'cycle_id': 'cycle',
+                            'owner': 'lease-owner', 'status': 'running'}
+    assert call.args[1][0]['$set']['resume_not_before'] == {'$add': ['$$NOW', 900000]}
     details = call.args[1][0]['$set']['last_interruption']
     assert details['error_type'] == 'TimeoutError'
     assert details['stage'] == 'heartbeat'

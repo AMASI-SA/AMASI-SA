@@ -108,7 +108,7 @@ def test_expired_openai_snapshot_is_not_reused_after_fallback():
 
 
 def test_guarded_read_route_is_registered_before_legacy_route():
-    source = Path("ads_manager/__init__.py").read_text(encoding="utf-8")
+    source = (Path(__file__).resolve().parents[1] / "ads_manager/__init__.py").read_text(encoding="utf-8")
     guarded = source.index("attach_campaign_ai_public_guard(router, db, current_user)")
     legacy = source.index("attach_campaign_ai_routes(router, db, current_user, _require_owner)")
     assert guarded < legacy

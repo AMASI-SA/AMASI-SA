@@ -1,4 +1,4 @@
-"""Five full read refreshes/day, separate from guarded order delivery.
+"""Operator-requested full read refreshes, separate from order delivery.
 
 One Mongo lease covers scheduled and manual requests across replicas. Failed
 or interrupted generations never replace the last successful display result.
@@ -77,11 +77,13 @@ def _public_state(state, owner):
     return {'ok': True, 'scan': {'running': running, 'stale': stale,
             'last_error': state.get('last_error'),
             'updated_at': result.get('updated_at'),
-            'schedule_riyadh': ['00:00', '04:48', '09:36', '14:24', '19:12']},
+            'mode': 'manual_only', 'schedule_riyadh': []},
             'report': result.get('report'), 'invoice_presence': result.get('invoice_presence')}
 
 
 async def _claim(db, tenant, owner, manual):
+    if not manual:
+        return None
     at = utcnow()
     try:
         await db.qoyod_full_scans.insert_one({'_id': str(tenant)})
@@ -270,19 +272,6 @@ async def request_scan(db, *, tenant, owner, manual=False, executor=None):
         _TASKS.add(task)
         task.add_done_callback(_TASKS.discard)
     return {**await read_scan(db, tenant=tenant, owner=owner), 'accepted': bool(claim)}
-
-
-async def scheduler(db):
-    while True:
-        try:
-            settings = await db.qoyod_settings.find_one({'user_id': 'main'},
-                {'enabled': 1, 'plan_b_auto_send_orders_user_id': 1, 'security_owner_id': 1}) or {}
-            owner = settings.get('plan_b_auto_send_orders_user_id')
-            if settings.get('enabled') and owner and settings.get('security_owner_id'):
-                await request_scan(db, tenant='main', owner=owner)
-        except Exception:
-            log.warning('Qoyod scheduled scan check unavailable')
-        await asyncio.sleep(30)
 
 
 async def stop_scans():

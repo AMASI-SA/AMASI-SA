@@ -8,6 +8,8 @@ from integrations.qoyod_manual.client import (
     ManualQoyodError,
 )
 
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
 
 @pytest.mark.asyncio
 async def test_httpx_timeout_becomes_manual_qoyod_error(monkeypatch):
@@ -33,9 +35,7 @@ async def test_httpx_timeout_becomes_manual_qoyod_error(monkeypatch):
 
 
 def test_invoice_marker_is_persisted_before_followup_get():
-    source = Path(
-        "integrations/qoyod_manual/send.py"
-    ).read_text(encoding="utf-8")
+    source = (BACKEND_ROOT / "integrations/qoyod_manual/send.py").read_text(encoding="utf-8")
 
     create_invoice_pos = source.index(
         "created_inv = await client.create_invoice"
@@ -53,9 +53,7 @@ def test_invoice_marker_is_persisted_before_followup_get():
 
 
 def test_cod_skips_payment_parity_and_payment_post():
-    source = Path(
-        "integrations/qoyod_manual/send.py"
-    ).read_text(encoding="utf-8")
+    source = (BACKEND_ROOT / "integrations/qoyod_manual/send.py").read_text(encoding="utf-8")
 
     cod = source.index(
         "# ── COD: invoice only, no payment"
@@ -71,11 +69,6 @@ def test_cod_skips_payment_parity_and_payment_post():
     assert 'actual_total_source = "local_expected_invoice_only"' in source
 
 
-def test_unhandled_route_error_releases_lock():
-    source = Path(
-        "integrations/qoyod_manual/routes.py"
-    ).read_text(encoding="utf-8")
-
-    assert '"status": "failed_unhandled"' in source
-    assert "qoyod_manual_send_locks.update_many" in source
-    assert "logger.exception(" in source
+# Durable job tests now exercise cancellation/provider ambiguity and retained
+# invoice locks. The former synchronous-route lock-release assertion no longer
+# applies: an unknown provider outcome must not reopen the send automatically.

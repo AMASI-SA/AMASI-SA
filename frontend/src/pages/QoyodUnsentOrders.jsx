@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import api from "../lib/api";
+import { sendQoyodManualJob } from "../lib/qoyodManualSendJobs";
 import QoyodTotalsDiagnosis from "../components/qoyod/QoyodTotalsDiagnosis";
 import Qoyod404Recovery from "../components/qoyod/Qoyod404Recovery";
 import {
@@ -48,6 +49,33 @@ export default function QoyodUnsentOrders() {
   const [retryConfirmOrder, setRetryConfirmOrder] = useState(null);
   const [retryingOrder, setRetryingOrder] = useState(null);
   const [retryNotice, setRetryNotice] = useState(null);
+  const sendControllersRef = useRef(new Set());
+  const sendFlowRef = useRef(null);
+  useEffect(() => () => {
+    for (const controller of sendControllersRef.current) controller.abort();
+    sendControllersRef.current.clear();
+    sendFlowRef.current = null;
+  }, []);
+  const beginSendFlow = () => {
+    // State updates become visible on the next render. This synchronous gate
+    // also covers rapid clicks and a bulk/single overlap in the same event.
+    if (sendFlowRef.current) return null;
+    const controller = new AbortController();
+    sendFlowRef.current = controller;
+    sendControllersRef.current.add(controller);
+    return controller;
+  };
+  const finishSendFlow = (controller) => {
+    sendControllersRef.current.delete(controller);
+    if (sendFlowRef.current === controller) sendFlowRef.current = null;
+  };
+  const sendFlowBusy = recoveryRunning || retryingOrder !== null;
+  const showSendProgress = (job) => {
+    if (["queued", "running"].includes(job.status)) setRetryNotice({
+      type: "pending",
+      message: `الطلب ${job.order_number}: ${job.status === "queued" ? "مهمة الإرسال محفوظة بانتظار التنفيذ" : "جارٍ التحقق والإرسال في الخلفية"}. لا تكرر الإرسال.`,
+    });
+  };
   const [diagnosisOrder, setDiagnosisOrder] = useState(null);
   const [paymentCheckRunning, setPaymentCheckRunning] = useState(false);
   const [paymentCheckOrder, setPaymentCheckOrder] = useState(null);
@@ -134,55 +162,68 @@ export default function QoyodUnsentOrders() {
   };
 
   const runRecoveryBatch = async () => {
+    if (sendFlowRef.current) return;
     if (!recoveryOrderNumbers.length) {
       setError("لا توجد طلبات مصنفة «لم يُرسل» ضمن الفترة والفلاتر الحالية");
       return;
     }
+    const controller = beginSendFlow();
+    if (!controller) return;
 
     setRecoveryRunning(true);
     setRecoveryResults([]);
     setRecoveryTotal(recoveryOrderNumbers.length);
     setError(null);
     const next = [];
-
-    for (const orderNumber of recoveryOrderNumbers) {
-      try {
-        const { data: sent } = await api.post(
-          `${QOYOD_BASE}/manual/send/${encodeURIComponent(orderNumber)}`,
-        );
-        next.push({
-          orderNumber,
-          outcome: "sent",
-          invoiceId: sent?.invoice_id || sent?.invoice_number || "—",
-          paymentId: sent?.payment_id || null,
-          invoiceOnly: !!sent?.invoice_only,
-        });
-      } catch (requestError) {
-        const detail = requestError?.response?.data?.detail || {};
-        const code = detail?.code || "unexpected_error";
-        next.push({
-          orderNumber,
-          outcome: "review",
-          code,
-          message: detail?.message || String(detail || "فشل الإرسال"),
-        });
+    try {
+      for (const orderNumber of recoveryOrderNumbers) {
+        if (controller.signal.aborted) break;
+        try {
+          const sent = await sendQoyodManualJob(orderNumber, {
+            signal: controller.signal, onProgress: showSendProgress,
+          });
+          if (controller.signal.aborted) break;
+          next.push({
+            orderNumber,
+            outcome: "sent",
+            invoiceId: sent?.invoice_id || sent?.invoice_number || "—",
+            paymentId: sent?.payment_id || null,
+            invoiceOnly: !!sent?.invoice_only,
+          });
+        } catch (requestError) {
+          if (controller.signal.aborted) break;
+          const detail = requestError?.response?.data?.detail || {};
+          const code = detail?.code || "unexpected_error";
+          next.push({
+            orderNumber,
+            outcome: "review",
+            code,
+            message: detail?.message || String(detail || "فشل الإرسال"),
+          });
+        }
         setRecoveryResults([...next]);
       }
-      setRecoveryResults([...next]);
-    }
 
-    setRecoveryRunning(false);
-    await fetchAll(days, sallaStatus, search, { force: true });
+      if (controller.signal.aborted) return;
+      setRetryNotice(null);
+      await fetchAll(days, sallaStatus, search, { force: true });
+    } finally {
+      finishSendFlow(controller);
+      if (!controller.signal.aborted) setRecoveryRunning(false);
+    }
   };
 
   const retryFailedOrder = async (orderNumber) => {
+    const controller = beginSendFlow();
+    if (!controller) return;
     setRetryingOrder(orderNumber);
     setRetryNotice(null);
     setError(null);
     try {
-      const { data: result } = await api.post(
-        `${QOYOD_BASE}/manual/retry-failed/${encodeURIComponent(orderNumber)}`,
-      );
+      const result = await sendQoyodManualJob(orderNumber, {
+        retry: true, signal: controller.signal, onProgress: showSendProgress,
+      });
+      if (controller.signal.aborted) return;
       const alreadySent = result?.retry_outcome === "already_sent";
       setRetryNotice({
         type: "success",
@@ -193,13 +234,15 @@ export default function QoyodUnsentOrders() {
       setRetryConfirmOrder(null);
       await fetchAll(days, sallaStatus, search, { force: true });
     } catch (requestError) {
+      if (controller.signal.aborted) return;
       const detail = requestError?.response?.data?.detail;
       const message = typeof detail === "string"
         ? detail
         : (detail?.message || "تعذر إعادة فحص الطلب وإرساله");
       setRetryNotice({ type: "error", message });
     } finally {
-      setRetryingOrder(null);
+      finishSendFlow(controller);
+      if (!controller.signal.aborted) setRetryingOrder(null);
     }
   };
 
@@ -383,7 +426,7 @@ export default function QoyodUnsentOrders() {
             </div>
             <button
               onClick={runRecoveryBatch}
-              disabled={recoveryRunning || !recoveryOrderNumbers.length}
+              disabled={sendFlowBusy || !recoveryOrderNumbers.length}
               data-testid="qoyod-recovery-send"
               className="rounded-lg bg-rose-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
               {recoveryRunning
@@ -415,7 +458,7 @@ export default function QoyodUnsentOrders() {
                       <td className="px-2 py-2 font-mono">{result.orderNumber}</td>
                       <td className="px-2 py-2">
                         {result.outcome === "sent" ? "تم الإرسال"
-                          : "بقي لم يُرسل — يحتاج مراجعة"}
+                          : "نتيجة الإرسال تحتاج مراجعة"}
                       </td>
                       <td className="px-2 py-2 font-mono">{result.invoiceId || "—"}</td>
                       <td className="px-2 py-2">
@@ -456,6 +499,7 @@ export default function QoyodUnsentOrders() {
       </>}
 
       <div className="rounded-lg border p-3 text-sm" data-testid="unsent-snapshot-status">
+        الفحص الشامل والعدادات تُحدّث يدويًا من صفحة المطابقة. {" "}
         {!snapshotAvailable ? "لم يكتمل فحص شامل بعد؛ لا تعني القائمة الفارغة عدم وجود طلبات." : <>
           آخر فحص ناجح: {data?.updated_at ? new Date(data.updated_at).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" }) : "—"}.
           {(error || data?.scan?.stale || data?.scan?.last_error) && " النتيجة قديمة؛ احتُفظ بآخر فحص ناجح."}
@@ -472,8 +516,11 @@ export default function QoyodUnsentOrders() {
           className={`rounded-lg border p-3 text-sm ${
             retryNotice.type === "success"
               ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : "border-red-200 bg-red-50 text-red-700"
+              : retryNotice.type === "pending"
+                ? "border-sky-200 bg-sky-50 text-sky-800"
+                : "border-red-200 bg-red-50 text-red-700"
           }`}
+          role={retryNotice.type === "error" ? "alert" : "status"}
           data-testid="qoyod-failed-retry-notice">
           {retryNotice.message}
         </div>
@@ -587,7 +634,7 @@ export default function QoyodUnsentOrders() {
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => retryFailedOrder(o.order_number)}
-                            disabled={retryingOrder === o.order_number}
+                            disabled={sendFlowBusy}
                             data-testid={`qoyod-failed-retry-confirm-${o.order_number}`}
                             className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-800 disabled:opacity-50">
                             {retryingOrder === o.order_number
@@ -596,7 +643,7 @@ export default function QoyodUnsentOrders() {
                           </button>
                           <button
                             onClick={() => setRetryConfirmOrder(null)}
-                            disabled={retryingOrder === o.order_number}
+                            disabled={sendFlowBusy}
                             data-testid={`qoyod-failed-retry-cancel-${o.order_number}`}
                             className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 disabled:opacity-50">
                             إلغاء
@@ -604,6 +651,7 @@ export default function QoyodUnsentOrders() {
                         </div>
                       ) : (
                         <button
+                          disabled={sendFlowBusy}
                           onClick={() => {
                             setRetryConfirmOrder(o.order_number);
                             setRetryNotice(null);

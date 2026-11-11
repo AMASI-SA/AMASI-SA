@@ -1,9 +1,8 @@
-"""Lightweight scheduler for Campaign AI child-process execution.
+"""Compatibility helpers for the disabled periodic Campaign AI scheduler.
 
-The FastAPI web process owns only a tiny timer and subprocess lifecycle. All
-provider reads, Salla profitability work and OpenAI analysis happen in the
-short-lived worker process. A Mongo global cadence gate inside the worker is
-the authority for whether heavy analysis is actually due.
+The owner selected explicit manual monitoring. Durable manual jobs now own
+child-process execution; old enable flags cannot restore periodic analysis.
+One-shot helpers remain for existing diagnostics and tests.
 """
 from __future__ import annotations
 
@@ -27,10 +26,6 @@ DEFAULT_WORKER_TIMEOUT_SECONDS = 10 * 60
 RETRYABLE_AI_EXIT_CODE = 2
 CADENCE_SKIP_EXIT_CODE = 3
 
-_FALSE_VALUES = {"0", "false", "no", "off", "disabled"}
-_TRUE_VALUES = {"1", "true", "yes", "on", "enabled"}
-
-
 def _float_env(name: str, default: float, *, minimum: float) -> float:
     raw = (os.environ.get(name) or "").strip()
     if not raw:
@@ -43,14 +38,10 @@ def _float_env(name: str, default: float, *, minimum: float) -> float:
 
 
 def scheduler_enabled() -> bool:
-    explicit = (os.environ.get("MEZAN_CAMPAIGN_AI_SUBPROCESS_SCHEDULER_ENABLED") or "").strip().lower()
-    if explicit in _FALSE_VALUES:
-        return False
-    if explicit in _TRUE_VALUES:
-        return True
-    if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("MEZAN_TESTING"):
-        return False
-    return True
+    # Owner selected manual-only monitoring on 2026-11-11. An old deployment
+    # flag must not silently re-enable periodic AI/provider analysis. Explicit
+    # owner-facing analysis endpoints and recommendation approvals are separate.
+    return False
 
 
 def _bounded_stdout(value: bytes | None, *, limit: int = 4000) -> str:
@@ -147,6 +138,8 @@ async def run_worker_once(*, timeout_seconds: float | None = None) -> int:
 
 
 async def scheduler_loop() -> None:
+    if not scheduler_enabled():
+        return
     initial_delay = _float_env(
         "MEZAN_CAMPAIGN_AI_INITIAL_DELAY_SECONDS",
         DEFAULT_INITIAL_DELAY_SECONDS,
@@ -169,7 +162,7 @@ async def scheduler_loop() -> None:
     )
 
     await asyncio.sleep(initial_delay)
-    while True:
+    while scheduler_enabled():
         started = time.monotonic()
         try:
             code = await run_worker_once()

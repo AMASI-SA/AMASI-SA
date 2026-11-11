@@ -46,6 +46,7 @@ from .sync_runs import (
 from .total_facts import upsert_total_facts
 from .committed_totals import publish_committed_totals
 from .empty_hierarchy import empty_hierarchy_proof, complete_empty_response
+from .cadence import automatic_next_due, shadow_interval_seconds
 
 MAX_SYNC_DAYS = 30
 HEARTBEAT_SECONDS = 20.0
@@ -480,6 +481,7 @@ class SnapchatV2SyncPipeline:
         date_to: date | str | None = None,
         action_report_time: str = "conversion",
         run_type: str = "rolling_refresh",
+        automatic: bool = False,
     ) -> dict[str, Any]:
         current = self.now().astimezone(timezone.utc)
         report_dates = _date_range(date_from, date_to, now=current)
@@ -544,6 +546,27 @@ class SnapchatV2SyncPipeline:
                 "reason": "lease_unavailable",
                 "ad_account_id": account_id,
             }
+
+        if automatic:
+            try:
+                next_due = await automatic_next_due(
+                    self.db, str(user_id), account_id, now=self.now(),
+                )
+            except BaseException:
+                await _release_lease_then_admission(
+                    self.db, user_id=str(user_id), account_id=account_id,
+                    owner_id=owner_id, outcome="cadence_unavailable", now=self.now,
+                    admission_token=admission_token,
+                )
+                raise
+            if next_due is not None:
+                await _release_lease_then_admission(
+                    self.db, user_id=str(user_id), account_id=account_id,
+                    owner_id=owner_id, outcome="cadence_gate_2h", now=self.now,
+                    admission_token=admission_token,
+                )
+                return {"status": "skipped", "reason": "cadence_gate_2h",
+                        "ad_account_id": account_id, "next_due_at": next_due}
 
         run = new_sync_run(
             str(user_id),
@@ -961,7 +984,7 @@ class SnapchatV2SyncPipeline:
                         "financial_last_success_at": success_at,
                         "last_sync_run_id": sync_run_id,
                         "last_sync_status": outcome,
-                        "next_due_at": success_at + timedelta(minutes=5),
+                        "next_due_at": success_at + timedelta(seconds=shadow_interval_seconds()),
                         "updated_at": success_at,
                     }
                 },

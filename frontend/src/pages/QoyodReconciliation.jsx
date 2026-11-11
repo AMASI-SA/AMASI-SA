@@ -230,9 +230,9 @@ export default function QoyodReconciliation() {
       </div>
 
       <div className="rounded-lg border p-3 text-sm" data-testid="recon-scan-status">
-        الفحص الشامل خمس مرات يوميًا. آخر نجاح: {data?.scan?.updated_at
+        الفحص الشامل يدوي عند الضغط على «تحديث الفحص الآن». آخر نجاح: {data?.scan?.updated_at
           ? new Date(data.scan.updated_at).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" }) : "لا توجد نتيجة ناجحة بعد"}.
-        {(data?.scan?.stale || data?.scan?.last_error) && " النتيجة قديمة؛ تعذر تحديثها أو حان موعد فحص جديد."}
+        {(data?.scan?.stale || data?.scan?.last_error) && " النتيجة قديمة؛ اضغط تحديث الفحص للحصول على نتيجة جديدة."}
         {data?.scan?.running && " التحديث جارٍ؛ تظهر آخر نتيجة ناجحة حتى اكتماله."}
         {data?.truncated && ` يعرض الجدول أول ${data.returned_row_count} من ${data.matched_row_count} نتيجة؛ العدادات تشمل الفحص الكامل.`}
       </div>
