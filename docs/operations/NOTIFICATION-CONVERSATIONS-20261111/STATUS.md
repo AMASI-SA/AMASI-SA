@@ -49,7 +49,7 @@ Checkpoint exact final source A on the latest reviewed Production base; run requ
 Publish and verify this backward-compatible backend before the companion APK. The APK uses the observed authenticated Expo GitHub build path with the existing package/project/profile/signing identity, OTA disabled and store auto-submission off. Physical phone keyboard/layout and affected-phone SQLite size are not established by synthetic tests.
 
 
-## Frozen release checkpoint — 2026-11-11 20:44 UTC
+## Frozen release checkpoint — 2026-11-11 20:43 UTC
 
 This copy is on the evidence-only branch `codex/android78-release-evidence-20261111`. Never deploy or merge this evidence branch. Frozen production candidates remain immutable on their task branches.
 
@@ -73,3 +73,8 @@ Source-derived visual evidence from the unchanged mobile UI at c2034162a1bfbfa10
 Fresh official shared guard status at approximately20:39UTC returned active:false. Shared source and120 unrelated platform files were preserved. No task merge, lease, production publication, APK build, OTA, store submission or real employee/business test. Expo authenticated GitHub form is prepared only, with Android/frontend/mezan-web-assembly-pilot and auto-submit off.
 
 Next safe action: terminal exact-head CI and compare A CI intent with frozen local bytes; normal backend merge with exact B tree; recheck Production/guard, actual governed shared adapter, own prepare/prepublish, one authorized publication, newer explicit success, official verify3 and inactive status. Then final mobile normal merge and one observed Expo exact-source build; verify APK package/version/signer/bytes before distribution.
+
+
+## Review readiness and artifact preparation — 2026-11-11 20:54 UTC
+
+PR1885 and mobile PR348 are now ready for review, with exact frozen heads unchanged. This is not merge or publication evidence; final CI is still queued. An unsubmitted APK verification template is saved at `evidence/android78-apk-evidence.yml.example`. It uses only preinstalled Android tools to check actual signature/package/version and ten registered DEX module definitions, with three narrow retired-scanner markers excluded. It preserves source/build provenance as a separate authenticated Expo record, never infers it from a package version, and activates no closed EAS transport. Root reviewed the template; YAML, Bash and Python syntax plus13 bounded in-memory parser/input checks passed. No APK has yet been downloaded or built. Replace only the observed public unsigned Expo APK URL and observed build ID once the final authorized build exists; create/run it on the separate mobile evidence branch, never the frozen source branch.

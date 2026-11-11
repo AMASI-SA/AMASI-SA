@@ -1,0 +1,257 @@
+# Preparation only. Replace the two observed-artifact placeholders before use.
+# Run on an evidence branch; this workflow commit is NOT the APK source commit.
+# Expected application source: AMASI-SA/amasi-mobile@2fe5dfe883009b23c25b83bf09517f116fb0881a.
+# No checkout, application build/execution, Expo credentials, SDK installation,
+# license acceptance, or activation of the closed EAS authority transport.
+#
+# A successful job proves only the downloaded bytes' signature, release identity,
+# and the narrowly selected native packaging checks below. The operator must
+# separately retain the authenticated Expo build-page evidence linking its actual
+# build ID, project, profile and full source SHA to this observed artifact URL.
+# The generated receipt deliberately does NOT claim that source/build binding.
+name: Android78 APK bytes and native packaging evidence
+
+'on':
+  push:
+    branches: [codex/android78-apk-evidence-20261111]
+    paths: ['.github/workflows/android78-apk-evidence.yml']
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  verify-apk-bytes:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      APK78_PUBLIC_URL: '__OBSERVED_PUBLIC_EXPO_APK_URL__'
+      APK78_OBSERVED_BUILD_ID: '__OBSERVED_EXPO_BUILD_ID__'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Validate observed public artifact inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, re
+          from urllib.parse import urlsplit
+
+          url = os.environ['APK78_PUBLIC_URL']
+          build_id = os.environ['APK78_OBSERVED_BUILD_ID']
+          if not re.fullmatch(r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}', build_id):
+              raise SystemExit('APK78_OBSERVED_BUILD_ID_REQUIRED')
+          if not url or len(url) > 4096 or any(character.isspace() for character in url):
+              raise SystemExit('APK78_OBSERVED_PUBLIC_URL_REQUIRED')
+          parsed = urlsplit(url)
+          # Only an observed public, unsigned HTTPS download link belongs in a
+          # workflow commit. A signed/authenticated URL needs another transfer.
+          if (parsed.scheme != 'https' or not parsed.hostname or not parsed.path
+                  or parsed.username or parsed.password or parsed.query or parsed.fragment):
+              raise SystemExit('APK78_UNSIGNED_PUBLIC_HTTPS_URL_REQUIRED')
+          print('APK78_INPUT_FORMATS=PASS; provider/source authentication is external')
+          PY
+
+      - name: Verify signature identity and actual DEX class definitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk78_sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          apk78_tools="$apk78_sdk/build-tools/35.0.0"
+          apk78_evidence="$RUNNER_TEMP/android78-apk-evidence"
+          apk78_file="$RUNNER_TEMP/android78.apk"
+          mkdir -p "$apk78_evidence"
+          test -x "$apk78_tools/apksigner"
+          test -x "$apk78_tools/aapt"
+          test -f "$apk78_tools/lib/apksigner.jar"
+          command -v java > /dev/null
+          java -version > "$apk78_evidence/java.txt" 2>&1
+          sha256sum "$apk78_tools/apksigner" "$apk78_tools/lib/apksigner.jar" \
+            "$apk78_tools/aapt" > "$apk78_evidence/tools.sha256"
+
+          curl --proto '=https' --proto-redir '=https' \
+            --fail --location --max-redirs 3 --silent --show-error \
+            --connect-timeout 30 --max-time 180 --retry 0 --max-filesize 536870912 \
+            "$APK78_PUBLIC_URL" -o "$apk78_file"
+          sha256sum "$apk78_file" > "$apk78_evidence/apk-before.sha256"
+
+          "$apk78_tools/apksigner" verify --verbose --print-certs "$apk78_file" \
+            > "$apk78_evidence/signature.txt" 2> "$apk78_evidence/signature.stderr.txt"
+          "$apk78_tools/aapt" dump badging "$apk78_file" \
+            > "$apk78_evidence/badging.txt" 2> "$apk78_evidence/badging.stderr.txt"
+
+          python - "$apk78_file" "$apk78_evidence" <<'PY'
+          import hashlib, json, os, re, struct, sys, zipfile
+          from pathlib import Path
+
+          EXPECTED_SOURCE = '2fe5dfe883009b23c25b83bf09517f116fb0881a'
+          EXPECTED_PROJECT = 'f285e8fe-06a6-48b4-b095-f1c42d63f7c3'
+          EXPECTED_PROFILE = 'mezan-web-assembly-pilot'
+          EXPECTED_CERT = 'ca6b376f14e01eadf611b0ea0208eab7c75576ac5ee51606d01df571f0d1ac54'
+          EXPECTED_IDENTITY = ('com.amasi.sa.mobile', '78', '1.0.63')
+          MAX_APK_BYTES = 512 * 1024 * 1024
+          MAX_DEX_BYTES = 96 * 1024 * 1024
+          MAX_TOTAL_DEX_BYTES = 256 * 1024 * 1024
+
+          # Core descriptors from exact-source tools/release/apk_artifact.py;
+          # local modules from their exact-source expo-module.config.json files;
+          # notifications from the locked expo-notifications 0.32.17 registration.
+          # No Build43/44 version/profile selector or old scanner script is used.
+          REQUIRED_CLASSES = frozenset({
+              'Lexpo/modules/camera/CameraViewModule;',
+              'Lexpo/modules/securestore/SecureStoreModule;',
+              'Lexpo/modules/localauthentication/LocalAuthenticationModule;',
+              'Lexpo/modules/amasireadytransport/AmasiReadyTransportModule;',
+              'Lexpo/modules/amasireviewcompletion/AmasiReviewCompletionModule;',
+              'Lexpo/modules/amasimezansession/AmasiMezanSessionModule;',
+              'Lexpo/modules/amasipdflauncher/AmasiPdfLauncherModule;',
+              'Lexpo/modules/notifications/tokens/PushTokenModule;',
+              'Lexpo/modules/notifications/permissions/NotificationPermissionsModule;',
+              'Lexpo/modules/notifications/notifications/emitting/NotificationsEmitter;',
+          })
+          # These helpers are useful evidence, but their standalone names may be
+          # transformed by a shrinker. Module registration is the required check;
+          # helper presence alone never proves single-attempt/cleanup behavior.
+          OBSERVED_HELPERS = (
+              'Lexpo/modules/amasireadytransport/ReadyTransport;',
+              'Lexpo/modules/amasireviewcompletion/ReviewCompletionTransport;',
+              'Lexpo/modules/camera/analyzers/AmasiScannerLease;',
+          )
+          FORBIDDEN_SCANNER_SYMBOLS = (b'AmasiFrameTracker', b'amasiFrame', b'analyzerId')
+          # There is no generic forbidden-auth-marker list. Valid current auth
+          # code uses token/cookie and device-unlock names; its behavior remains
+          # covered by the frozen source checks, not an APK string blacklist.
+
+          class VerificationFailed(ValueError):
+              pass
+
+          def need(condition, code):
+              if not condition:
+                  raise VerificationFailed(code)
+
+          def file_digest(path):
+              digest = hashlib.sha256()
+              with path.open('rb') as stream:
+                  for block in iter(lambda: stream.read(1024 * 1024), b''):
+                      digest.update(block)
+              return digest.hexdigest()
+
+          def dex_classes(data):
+              """Exact-source class_defs reader; arbitrary strings cannot prove presence."""
+              need(len(data) >= 112 and re.fullmatch(rb'dex\n0[3-4][0-9]\x00', data[:8]), 'APK_DEX_INVALID')
+              u32 = lambda offset: struct.unpack_from('<I', data, offset)[0]
+              need(u32(32) == len(data) and u32(36) == 112 and u32(40) == 0x12345678, 'APK_DEX_INVALID')
+              string_count, string_offset, type_count, type_offset = u32(56), u32(60), u32(64), u32(68)
+              class_count, class_offset = u32(96), u32(100)
+              for count, offset, width in ((string_count, string_offset, 4), (type_count, type_offset, 4),
+                                           (class_count, class_offset, 32)):
+                  need(count <= 1000000 and 112 <= offset <= len(data) and offset + count * width <= len(data),
+                       'APK_DEX_TABLE_INVALID')
+              result = set()
+              for index in range(class_count):
+                  type_index = u32(class_offset + index * 32)
+                  need(type_index < type_count, 'APK_DEX_INDEX_INVALID')
+                  string_index = u32(type_offset + type_index * 4)
+                  need(string_index < string_count, 'APK_DEX_INDEX_INVALID')
+                  offset = u32(string_offset + string_index * 4)
+                  need(112 <= offset < len(data), 'APK_DEX_INDEX_INVALID')
+                  for _ in range(5):
+                      need(offset < len(data), 'APK_DEX_STRING_INVALID')
+                      byte, offset = data[offset], offset + 1
+                      if byte < 128:
+                          break
+                  else:
+                      raise VerificationFailed('APK_DEX_STRING_INVALID')
+                  end = data.find(b'\x00', offset, min(len(data), offset + 1024))
+                  need(end >= offset, 'APK_DEX_STRING_INVALID')
+                  try:
+                      descriptor = data[offset:end].decode('ascii')
+                  except UnicodeError:
+                      # Legal non-ASCII class names cannot match required modules.
+                      continue
+                  result.add(descriptor)
+              return result
+
+          def inspect_native(apk):
+              classes, forbidden, dex_files, total = set(), set(), {}, 0
+              with zipfile.ZipFile(apk) as archive:
+                  entries = archive.infolist()
+                  names = [entry.filename for entry in entries]
+                  need(len(entries) <= 20000 and len(names) == len(set(names)), 'APK_ZIP_AMBIGUOUS')
+                  dex = [entry for entry in entries if re.fullmatch(r'classes(?:[2-9]|[1-9][0-9]+)?\.dex', entry.filename)]
+                  need(dex, 'APK_DEX_MISSING')
+                  for entry in dex:
+                      total += entry.file_size
+                      need(0 < entry.file_size <= MAX_DEX_BYTES and total <= MAX_TOTAL_DEX_BYTES, 'APK_DEX_SIZE_LIMIT')
+                      with archive.open(entry) as stream:
+                          data = stream.read(MAX_DEX_BYTES + 1)
+                      need(len(data) == entry.file_size, 'APK_DEX_SIZE_LIMIT')
+                      defined = dex_classes(data)
+                      classes.update(defined)
+                      dex_files[entry.filename] = {'size_bytes': len(data), 'class_definition_count': len(defined)}
+                      forbidden.update(marker.decode('ascii') for marker in FORBIDDEN_SCANNER_SYMBOLS if marker in data)
+              missing = sorted(REQUIRED_CLASSES - classes)
+              need(not missing, 'APK78_NATIVE_CLASSES_MISSING:' + ','.join(missing))
+              need(not forbidden, 'APK78_LEGACY_SCANNER_PRESENT:' + ','.join(sorted(forbidden)))
+              return {
+                  'required_class_definitions': sorted(REQUIRED_CLASSES),
+                  'observed_helper_class_definitions': {name: name in classes for name in OBSERVED_HELPERS},
+                  'forbidden_scanner_symbols_found': sorted(forbidden),
+                  'dex_files': dex_files,
+              }
+
+          def main():
+              apk, evidence = map(Path, sys.argv[1:])
+              need(apk.is_file() and not apk.is_symlink() and 0 < apk.stat().st_size <= MAX_APK_BYTES, 'APK78_FILE_INVALID')
+              before = (evidence / 'apk-before.sha256').read_text().split()[0]
+              need(re.fullmatch(r'[0-9a-f]{64}', before), 'APK78_INITIAL_DIGEST_REQUIRED')
+              signature = (evidence / 'signature.txt').read_text()
+              badging = (evidence / 'badging.txt').read_text()
+              certificates = re.findall(r'^Signer #[0-9]+ certificate SHA-256 digest: ([0-9a-fA-F]{64})\s*$',
+                                        signature, re.MULTILINE)
+              need([value.lower() for value in certificates] == [EXPECTED_CERT], 'APK78_SIGNER_MISMATCH')
+              identities = re.findall(r"^package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']*)'", badging, re.MULTILINE)
+              need(identities == [EXPECTED_IDENTITY] and 'application-debuggable' not in badging, 'APK78_RELEASE_IDENTITY_MISMATCH')
+              native = inspect_native(apk)
+              digest = file_digest(apk)
+              need(digest == before, 'APK78_BYTES_CHANGED_DURING_VERIFICATION')
+              result = {
+                  'artifact_checks': 'PASS',
+                  'artifact_sha256': digest,
+                  'size_bytes': apk.stat().st_size,
+                  'application_id': EXPECTED_IDENTITY[0],
+                  'version_code': int(EXPECTED_IDENTITY[1]),
+                  'version_name': EXPECTED_IDENTITY[2],
+                  'certificate_sha256': EXPECTED_CERT,
+                  'signature_verification': 'PASS',
+                  'native_packaging': native,
+                  'provenance': {
+                      'status': 'EXTERNAL_AUTHENTICATED_EXPO_RECORD_REQUIRED',
+                      'verified_by_this_job': False,
+                      'expected_source_sha': EXPECTED_SOURCE,
+                      'expected_expo_project_id': EXPECTED_PROJECT,
+                      'expected_build_profile': EXPECTED_PROFILE,
+                      'operator_observed_build_id': os.environ['APK78_OBSERVED_BUILD_ID'].lower(),
+                      'operator_supplied_public_url_sha256': hashlib.sha256(os.environ['APK78_PUBLIC_URL'].encode()).hexdigest(),
+                  },
+                  'evidence_workflow_sha': os.environ.get('GITHUB_SHA', ''),
+                  'evidence_run_id': os.environ.get('GITHUB_RUN_ID', ''),
+                  'evidence_run_attempt': os.environ.get('GITHUB_RUN_ATTEMPT', ''),
+                  'full_release_verified': False,
+                  'behavioral_device_uat': 'NOT_PERFORMED',
+              }
+              output = json.dumps(result, indent=2, sort_keys=True)
+              (evidence / 'identity.json').write_text(output + '\n')
+              print(output)
+
+          if __name__ == '__main__':
+              main()
+          PY
+
+      - name: Preserve limited verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: android78-apk-byte-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/android78-apk-evidence
+          if-no-files-found: error
+          retention-days: 14
