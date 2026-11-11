@@ -1,3 +1,15 @@
+# Current checkpoint — secure terminal access restored; shared rehearsal next
+
+The user explicitly requested the secure in-conversation login form. browserAuth submitted successfully, and fresh visible evidence showed the authenticated VS Code workspace at /app. No credential value was exposed.
+
+Shared Release Guard reported active:false. Shared AGENTS.md SHA-256 is 4f32267f74505dc424f7a55af396ca817014d611b0752e0f76832bb1daab5461, matching the instructions read locally. Shared tracked files were clean, the coordination marker was absent, and existing untracked Emergent/deployment files were preserved.
+
+Root freshly fetched production, confirmed 77e687e6964254617b4aa9eb0e3164cc968cff3b, and fast-forwarded shared /app from f439bed54579fafb79a8abcb43080c8150cb5063. The resulting tree is 31763cd6cf814f0809376a707c7af2de2ebf23f0, tracked state remains clean, and the complete untracked-file list is unchanged. Guard again reports active:false.
+
+Shared workspace changed: yes (reviewed fast-forward only). Live publication: not yet. No release lease exists. Next: run the governed frontend package adapter rehearsal with REACT_APP_BACKEND_URL=https://mezansalla.com, then prepare/prepublish, publish once, wait for a new Deployment Succeeded and require the three-probe verification. Publication authorization is already present. Earlier terminal-login blockers below are resolved.
+
+---
+
 # Final performance release — merged; live publication pending
 
 **Current authoritative checkpoint: 2026-11-11.** This is an evidence-only branch. Deploy from reviewed production `hotfix/prod-snap-meta-final`, not this documentation branch.
