@@ -99,10 +99,11 @@ three as 409 without financial writes. All these tests passed in the final
 
 ## Handoff boundary
 
-No production database change, merge, push, release intent update, release lease,
-deployment or application build was performed by this implementation task.
+The source is checkpointed remotely in draft PR #1882. No production database
+change, production merge, tracked release intent update, release lease or
+deployment has been performed for this task. CI built the source candidate.
 The live affected session has not been claimed recovered by these synthetic
-tests. The coordinator owns integration, durable checkpoint and live readback.
+tests. The coordinator owns release preparation and live readback.
 
 ## Integration review and next action
 
@@ -144,3 +145,36 @@ production changes without restoring the old release intents, run the required
 readiness gates, freeze a fresh intent-only commit, and follow `AGENTS.md`.
 Publication and recovery of the employee's live session remain unverified.
 Do not cancel a live draft or approve its invoice as a test.
+
+## Source gate correction
+
+The integrated task history was preserved on
+`codex/supplier-receiving-recovery-r2-checkpoint-20261111`. Source
+`35dd1ebbd895e19b9de4ff175cf2c89015d99847` uses the identical tested tree
+`a8e8bbb68257d53cda1cfef2b7ba25c7035ddb40` as a direct child of the reviewed
+production base. Its v5 readiness build succeeded; no intent-only B was frozen.
+
+Of its 32 CI checks, 25 succeeded, six were scope/release-stage skips and one
+failed. The failed `display-mongo` run had **163 passed and one failed**: its
+financial-boundary source hash correctly noticed the deliberate close-lock
+expiry precondition correction. Scan recovery, invoice integrity, native
+contract, backend preflight and the frontend build all succeeded.
+
+The follow-up changes only this handoff and the financial-boundary test. The
+test asserts the exact new expiry block once before normalizing that block to
+the previously reviewed text, following the existing index-gate normalization.
+All original function and file hashes are retained; authorization, invoice
+construction, posting, service linkage and other financial code remain pinned.
+The existing functional checks independently exercise active, expired, invalid
+and missing lock dates, with no financial write for blocked close attempts.
+The corrected boundary test passed locally: **1 passed**, exit **0**,
+**0.62 seconds**. Runtime source is unchanged from the reviewed 35dd checkpoint.
+Independent review accepted the correction and checked three in-memory mutants:
+reversing the expiry comparison failed the exact-block assertion, while changing
+the close fence or expected invoice total failed the original function hash.
+No files or financial data were mutated for that review.
+
+The intent artifact for 35dd is historical evidence only and must not be used
+after this source follow-up. Next: read back the fresh source's CI, obtain its
+new exact-source v5 candidate, freeze an intent-only B and check both clean-clone
+adapter rehearsals. Production publication requires separate user authorization.
