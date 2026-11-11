@@ -406,3 +406,33 @@ publication, then observe new deployment success and run official verify3.
 Do not repeat prepare or clear this lease; successful matching verify closes it.
 The preceding visible publication `eb8949e` at Nov 11 19:51 Riyadh belongs
 to PR #1879 and is only our baseline, not evidence for this supplier fix.
+
+
+## Authorized publication submitted — 2026-11-11 20:22 Riyadh
+
+Official prepublish completed with exit **0**, `ready_to_publish:true`,
+protocol **5**, source A `32919f806d17c9fd9d466b368abf807bd40ee925`,
+deployment merge `4234a88a5e01ce179c5d5711ad80107ecd208a88`, and exact
+runtime `rg5-fe87f7bb866db60c49025385479a29080e8f34fc02aef92e7bb395d50c3385b1`.
+The complete output is retained at
+`/tmp/supplier-receiving-1882-prepublish.json`.
+
+One authorized publication was submitted through Emergent Manage:
+Republish, followed by the single final **Publish changes** confirmation.
+The UI then showed **Publishing...** and
+**Deployment Started Nov 11, 08:22 PM**, followed by **Building your website**.
+No second publication was submitted. Our matching lease remains active.
+
+**Baseline correction:** after a fresh reload, the preceding publication was
+the **100th publish, `5e94faf`**, with the Nov 11 19:51 Riyadh completion
+event. The earlier `eb8949e` attribution above came from stale UI and actually
+refers to the older 99th publication. Neither is evidence for this supplier fix.
+Accept only a newly successful deployment after `5e94faf`.
+
+Production source changed by the authorized merge; deployment is now in
+progress. Production runtime adoption remains **unverified** until the new
+success event and official three-probe verifier complete. Next safe action:
+observe this single attempt, then run the official verifier against
+`https://mezansalla.com`, retain its result, and require inactive status.
+Preserve the live affected receipt; no cancellation, approval, or invoice
+mutation is part of verification.
