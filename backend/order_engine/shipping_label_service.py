@@ -509,6 +509,10 @@ def _store_courier_print_data(
     ship_from = ship_from if isinstance(ship_from, dict) else {}
     buyer_name = _text(customer.get("full_name")) or _text(customer.get("name"))
     buyer_phone = _text(customer.get("mobile")) or _text(customer.get("phone"))
+    store_name = store.get("name")
+    if isinstance(store_name, dict):
+        store_name = next((value for key in ("ar", "en", "name")
+                           if isinstance(value := store_name.get(key), str) and value.strip()), None)
 
     return {
         "order_number": order_number,
@@ -516,7 +520,7 @@ def _store_courier_print_data(
         "qr_code": _qr_data_uri(order_number),
         "order_date": _order_date(order),
         "courier_name": _text(shipment.get("courier_name")) or "مندوب المتجر",
-        "store_name": _text(store.get("name"))
+        "store_name": _text(store_name)
         or _text(ship_from.get("name"))
         or "المتجر",
         "store_logo": _url(store.get("avatar") or store.get("logo")) or None,
@@ -1183,7 +1187,10 @@ def _mobile_label_carrier(row: dict[str, Any]) -> dict[str, str]:
         return current
     # Mirror the order DTO's root display only when the current generation
     # carries no identity. That legacy display still needs fresh provider proof.
-    return {"name": _text(row.get("shipping_company")), "code": _text(row.get("shipping_company_code"))}
+    carrier = {"name": _text(row.get("shipping_company")), "code": _text(row.get("shipping_company_code"))}
+    if carrier["name"].casefold() == "shipping" and not carrier["code"]:
+        carrier["name"] = ""
+    return carrier
 
 
 def _mobile_store_courier(name, app_id):
@@ -1214,19 +1221,25 @@ def _store_label_carriers_match(left, right):
 
 
 async def _internal_delivery_document(db, user_id, order_number, order, baseline, provider_carrier,
-                                      *, allow_completion_observation=False):
+                                      *, allow_completion_observation=False, history_proof=None):
     """Internal delivery is not an external shipment or an external label.
 
     Ignore old embedded shipments, including their addresses. Recheck the
     carrier generation after provider reads; a real concurrent switch blocks.
     Assignment is read at the same final boundary, never from an old label.
     """
-    if not _store_label_carriers_match(_mobile_label_carrier(baseline), provider_carrier):
+    if history_proof is None and not _store_label_carriers_match(_mobile_label_carrier(baseline), provider_carrier):
         raise _stale_label()
-    store = await _store_identity(db, user_id)
+    if history_proof is not None:
+        from .store_courier_history_recovery import HistoryCourierProof, verify_document
+        if not isinstance(history_proof, HistoryCourierProof):
+            raise _stale_label()
+    store = history_proof.store if history_proof is not None else await _store_identity(db, user_id)
     async def document(scoped):
         current = await _label_baseline(scoped, user_id, order_number)
-        if not _internal_carrier(current) or (
+        if history_proof is not None:
+            await verify_document(scoped, user_id, order_number, order, baseline, provider_carrier, history_proof)
+        elif not _internal_carrier(current) or (
             _mobile_label_carrier(current) != _mobile_label_carrier(baseline)
             or (not allow_completion_observation
                 and _label_metadata(current).get("carrier_updated_at") !=
@@ -1271,6 +1284,7 @@ async def _persist_verified_snapshot(
     baseline: dict[str, Any] | None = None,
     created_replacement: bool = False,
     persist: bool = True,
+    allow_current_internal_child: bool = False,
 ) -> None:
     now = datetime.now(timezone.utc).isoformat()
     set_fields: dict[str, Any] = {
@@ -1327,11 +1341,19 @@ async def _persist_verified_snapshot(
         current_carrier = _label_carrier(current_row)
         snapshot_carrier = {"code": _text(snapshot.get("courier_code")), "name": _text(snapshot.get("courier_name"))}
         carrier_match = _label_carriers_match(current_carrier, snapshot_carrier)
-        if carrier_match is False:
+        # The strict print reader can prove a unique current merchant child
+        # when old local data contains only the transport mode. This permits
+        # its QR read, never a persisted AWB replacement or a changed baseline.
+        recovered_internal_child = bool(
+            allow_current_internal_child and not persist and current_row == baseline
+            and not current_id and not any(_mobile_label_carrier(current_row).values())
+        )
+        if carrier_match is False and not recovered_internal_child:
             raise _stale_label()
         baseline_current = _label_metadata(baseline)
         if baseline_current:
-            if _label_carriers_match(_label_carrier(baseline), current_carrier) is not True:
+            if (_label_carriers_match(_label_carrier(baseline), current_carrier) is not True
+                    and not recovered_internal_child):
                 raise _stale_label()
             baseline_id = _text(baseline_current.get("shipment_id") or baseline.get("salla_shipment_id"))
             if current_id and current_id not in {baseline_id, snapshot_id}:
@@ -1345,7 +1367,7 @@ async def _persist_verified_snapshot(
             created_replacement and baseline_current and carrier_match is True and
             current_id == _text(baseline_current.get("shipment_id") or baseline.get("salla_shipment_id"))
         ))
-        if different_id and not proven_replacement:
+        if different_id and not (proven_replacement or recovered_internal_child):
             # GET-only results cannot prove whether an unknown ID is a fresh
             # replacement or an archived active row. Wait for its webhook.
             raise _stale_label()

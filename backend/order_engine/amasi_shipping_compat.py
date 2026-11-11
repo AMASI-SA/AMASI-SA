@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import httpx
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from salla_integration.service import SallaError, call_salla
 from . import shipping_label_service as legacy
@@ -646,7 +646,11 @@ async def local_mezan_courier_label(db, owner: str, number: str, workflow: dict,
             "status": "store_courier", "print_data": data, "message": "تم تجهيز بوليصة مندوب المتجر."}
 
 
-async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, completed_only: bool = False, explicit_complete: bool = False) -> dict[str, Any]:
+async def carrier_label(
+    db: Any, owner: str, order_number: str, *, issue: bool,
+    completed_only: bool = False, explicit_complete: bool = False,
+    before_explicit_complete: Callable[[], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
     """One Salla order-status POST when needed; read the original carrier AWB.
 
     A rejected or ambiguous status acknowledgement is reconciled by GET,
@@ -656,6 +660,8 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, 
     if not number:
         raise legacy.ShippingLabelError("order_number_required", "رقم الطلب مطلوب.", status_code=400)
     baseline = await legacy._label_baseline(db, owner, number) if completed_only else None
+    from .store_courier_history_recovery import capture_context, recover_document
+    history_context = await capture_context(db, owner, number, baseline) if completed_only and not issue else None
     internal_id, order = await _resolve(db, owner, number)
     status = _order_status(order)
     if completed_only and (legacy._text(order.get("id")) != internal_id
@@ -663,12 +669,18 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, 
         raise legacy.ShippingLabelError("salla_order_reference_mismatch", "تعذّر تأكيد هوية الطلب في سلة.")
     if status in _CANCELLED | {"refunded"}:
         raise legacy.ShippingLabelError("order_cancelled", "الطلب ملغى أو مسترجع في سلة.")
+    if history_context is not None:
+        # This legacy cohort is a read-only order document. Do not enter the
+        # completion POST path or reinterpret its archived ID as a current AWB.
+        return await recover_document(db, order, baseline, history_context)
     if explicit_complete:
         # Only the explicit, locally fenced refresh endpoint enables this. An
         # acknowledged status write flows straight to shipment lookup: no
         # verification GET, polling or automatic status-POST retry in between.
         if status not in {"in_progress", "completed"}:
             raise legacy.ShippingLabelError("order_status_not_completed", "حالة الطلب لا تسمح بإعادة تأكيد التنفيذ.")
+        if before_explicit_complete is not None:
+            await before_explicit_complete()
         acknowledgement = await call_salla(db, owner, "POST", f"/orders/{internal_id}/status",
                          json={"slug": "completed"}, single_post_attempt=True)
         if not isinstance(acknowledgement, dict) or acknowledgement.get("success") is not True:
@@ -769,8 +781,16 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, 
             if order_internal != row_internal or legacy._label_carriers_match(provider_carrier, row_carrier) is False:
                 raise legacy._stale_label()
         if result and db is not None:
+            current_id = legacy._text(legacy._label_metadata(baseline).get("shipment_id")
+                                      or (baseline or {}).get("salla_shipment_id"))
+            # With no local/order carrier or current ID, _shipment admits a
+            # merchant child only through its unique complete current-list proof.
+            # Keep the shared cancellation, supersession and freshness guards.
+            recovered_internal_child = bool(row_internal and not current_id
+                and not any(local_carrier.values()) and not any(provider_carrier.values()))
             await legacy._persist_verified_snapshot(
                 db, owner, number, _printable(result), baseline=baseline, persist=False,
+                allow_current_internal_child=recovered_internal_child,
             )
     observed = {"observed_order_status": _order_status(order)} if _order_status(order) in _DONE else {}
     if not result:

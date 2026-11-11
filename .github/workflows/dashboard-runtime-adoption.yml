@@ -8,6 +8,7 @@ on:
     paths:
       - 'backend/dashboard_cpu_budget.py'
       - 'backend/dashboard_v2_routes.py'
+      - 'backend/integrations_control_center/google_dashboard_spend.py'
       - 'backend/dashboard_v2_ads_executive.py'
       - 'backend/product_catalog_cost_resolution.py'
       - 'backend/orders_db.py'
@@ -121,6 +122,7 @@ jobs:
           python -m pytest --noconftest -p no:cacheprovider -q -x
           tests/test_dashboard_runtime_source_contract.py
           tests/test_dashboard_runtime_authority_read_contract.py
+          tests/test_dashboard_runtime_google_read_contract.py
           tests/test_dashboard_runtime_reducers.py
           tests/test_dashboard_v2_product_cost.py
           tests/test_report_option_identity.py
@@ -151,9 +153,9 @@ jobs:
           assert len(reference) == len(baseline) == len(runtime) == 164
           assert set(reference) == set(baseline) == set(runtime)
           assert {k: expected_cost_completeness_json(v['json'], fixture_case=k) for k, v in reference.items()} == {k: v['json'] for k, v in runtime.items()}
-          # Only the approved cost-completeness JSON extension and
-          # explicitly audited, tenant-scoped empty authority reads may
-          # differ; raw command/document evidence is retained in the artifact.
+          # Only the approved cost/traffic/Google metadata extensions and
+          # exact audited, tenant-scoped saved reads may differ. Historical
+          # financial amounts and raw command/document evidence remain pinned.
           for key in reference:
               assert_runtime_read_contract(runtime[key], baseline[key], fixture_case=key)
           print(Path('runtime-responses.calls.json').read_text())

@@ -7,6 +7,8 @@ import pytest
 
 from integrations_control_center import dashboard_ads_platform_spend_routes as module
 from integrations_control_center.ads_platform_hourly import local_hour_start_utc
+from integrations_control_center.ad_daily_close_proof import close_proof
+from integrations_control_center.google_ads_reporting import GOOGLE_ADS_REPORTING_SOURCE_MODE
 
 
 def _path_value(document, dotted):
@@ -260,6 +262,13 @@ async def test_builds_selected_four_platform_daily_and_riyadh_hourly_spend(monke
             ],
             "mezan_integration_accounts_v2": [
                 {
+                    **_connected("google_ads"),
+                    "mezan_selected": True,
+                    "ad_account_id": "google-selected",
+                    "currency": "SAR",
+                    "timezone": "Asia/Riyadh",
+                },
+                {
                     "user_id": "owner-1",
                     "provider": "snapchat_ads",
                     "connection_status": "connected",
@@ -320,8 +329,23 @@ async def test_builds_selected_four_platform_daily_and_riyadh_hourly_spend(monke
                 {
                     "user_id": "owner-1",
                     "provider": "google_ads",
+                    "ad_account_id": "google-selected",
                     "date": "2026-08-05",
                     "spend_sar": 7.5,
+                    "spend_native": 7.5,
+                    "fx_rate_to_sar": 1,
+                    "currency_native": "SAR",
+                    "account_timezone": "Asia/Riyadh",
+                    "source_mode": GOOGLE_ADS_REPORTING_SOURCE_MODE,
+                    "observed_at": "2026-08-06T00:00:00+00:00",
+                    "source_close_proof": close_proof(
+                        account_id="google-selected", business_date="2026-08-05",
+                        timezone="Asia/Riyadh", currency="SAR", spend=7.5,
+                        provider_row_count=1, complete_response=True,
+                        explicit_spend_present=True, identity_proven=True,
+                        source_mode=GOOGLE_ADS_REPORTING_SOURCE_MODE,
+                        observed_at="2026-08-06T00:00:00+00:00",
+                    ),
                 }
             ],
             "mezan_ads_platform_hourly_v2": [
@@ -340,6 +364,8 @@ async def test_builds_selected_four_platform_daily_and_riyadh_hourly_spend(monke
                 {
                     "user_id": "owner-1",
                     "provider": "google",
+                    "ad_account_id": "google-selected",
+                    "source_mode": GOOGLE_ADS_REPORTING_SOURCE_MODE,
                     "hour_start_utc": one_am,
                     "spend_sar": 0.5,
                 },

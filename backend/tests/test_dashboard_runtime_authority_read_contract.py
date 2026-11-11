@@ -28,7 +28,8 @@ def evidence_pair(orders=None):
                 'collections': {'unified_orders': 152, 'settings': 4, 'products': 104}}
     audit = {'version': 1, 'owner_id': 'owner', 'database': 'dashboard_b_shared_contract_test',
              'cohorts': [_cohort_evidence('owner', orders)], 'commands': [],
-             'traffic_cohorts': [_traffic_cohort('owner', orders)], 'traffic_commands': []}
+             'traffic_cohorts': [_traffic_cohort('owner', orders)], 'traffic_commands': [],
+             'google_cohorts': [], 'google_commands': []}
     audit['commands'] = _expected_authority_commands(audit)
     audit['traffic_commands'] = _expected_traffic_commands(audit)
     runtime = copy.deepcopy(baseline)

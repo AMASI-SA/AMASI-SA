@@ -138,7 +138,9 @@ def extract_shipping(payload: dict, *, event_name: str = "order.snapshot", event
         path = "shipping_company"
     if not _has_identity(carrier) and not shipment_event:
         name = _name(payload.get("delivery_method"))
-        if name:
+        # "shipping" is a transport mode, not a carrier. It must neither
+        # filter out a named outgoing shipment nor replace a known identity.
+        if name and name.casefold() != "shipping":
             carrier = {"company_name": name, "company_code": None, "company_logo": None}
             path = "delivery_method"
     shipment = payload if shipment_event else outbound_shipment(payload, carrier)

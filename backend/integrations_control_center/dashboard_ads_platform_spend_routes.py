@@ -34,7 +34,9 @@ from .dashboard_ads_platform_refresh import (
 from .google_ads_reporting import (
     GOOGLE_ADS_DAILY_COLLECTION,
     GOOGLE_ADS_PROVIDER_ID,
+    GOOGLE_ADS_REPORTING_SOURCE_MODE,
 )
+from .google_dashboard_spend import google_account_id, load_google_dashboard_spend
 from .meta_native_reporting import META_REPORTING_COLLECTION
 from .meta_oauth_security import META_PROVIDER_ID
 from .snapchat_native_data_common import (
@@ -184,6 +186,8 @@ async def _daily_spend(
     start: date,
     end: date,
     snapchat: dict[str, Any],
+    *,
+    google: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, bool]]:
     dates = _date_list(start, end)
     by_date: dict[str, dict[str, Any]] = {
@@ -203,8 +207,15 @@ async def _daily_spend(
         or (snapchat.get("quality") or {}).get("amount_complete") is True
     )
 
+    if google is None:
+        google = await load_google_dashboard_spend(db, user_id, date_from=start, date_to=end)
+    for day in dates:
+        by_date[day.isoformat()]["google"] = google["daily_sar"].get(day.isoformat())
+    facts["google"] = (google["quality"]["amount_available"]
+                       and google["quality"]["data_state"] != "not_required")
+
     for provider, collection_name in DAILY_COLLECTION_BY_PROVIDER.items():
-        if provider == "snapchat":
+        if provider in {"snapchat", "google"}:
             continue
         query: dict[str, Any] = {
             "user_id": user_id,
@@ -291,6 +302,7 @@ async def _hourly_spend(
     snapchat: dict[str, Any],
     *,
     tiktok_daily_total: float | None = None,
+    google_account_ids: list[str] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, bool], dict[str, str]]:
     local_start = datetime.combine(selected_date, time.min, tzinfo=RIYADH_TZ)
     local_end = local_start + timedelta(days=1)
@@ -322,12 +334,17 @@ async def _hourly_spend(
                 "$lt": utc_end.isoformat(timespec="seconds"),
             },
         },
-        {"_id": 0, "provider": 1, "hour_start_utc": 1, "spend_sar": 1},
+        {"_id": 0, "provider": 1, "hour_start_utc": 1, "spend_sar": 1,
+         "ad_account_id": 1, "source_mode": 1},
     )
     for row in await _to_list(generic_cursor, MAX_HOURLY_ROWS):
         provider = str(row.get("provider") or "")
         if provider not in {"meta", "tiktok", "google"}:
             continue
+        if provider == "google" and google_account_ids is not None:
+            if (google_account_id(row.get("ad_account_id")) not in google_account_ids
+                    or row.get("source_mode") != GOOGLE_ADS_REPORTING_SOURCE_MODE):
+                continue
         point = _parse_utc(row.get("hour_start_utc"))
         spend = _number(row.get("spend_sar"))
         if point is None or spend is None:
@@ -450,7 +467,9 @@ async def build_dashboard_platform_spend(
             "accounting_write_reached": False,
             "qoyod_write_reached": False,
         }
-    daily, daily_facts = await _daily_spend(db, user_id, start, end, snapchat)
+    google = await load_google_dashboard_spend(db, user_id, date_from=start, date_to=end)
+    google_quality = google["quality"]
+    daily, daily_facts = await _daily_spend(db, user_id, start, end, snapchat, google=google)
     states = await _connection_states(db, user_id)
     single_day = start == end
     hourly: list[dict[str, Any]] = []
@@ -463,6 +482,7 @@ async def build_dashboard_platform_spend(
             start,
             snapchat,
             tiktok_daily_total=_number(daily[0].get("tiktok")),
+            google_account_ids=google["account_ids"],
         )
 
     totals = {
@@ -475,6 +495,11 @@ async def build_dashboard_platform_spend(
         for provider in FOUR_PLATFORM_KEYS
     }
     totals["snapchat"] = snapchat.get("total_sar")
+    # A provider which is not configured contributes nothing to the aggregate,
+    # but its card must not claim that Google observed zero spend.
+    totals["google"] = (
+        google["total_sar"] if google_quality["data_state"] != "not_required" else None
+    )
     provider_rows = {}
     for provider in FOUR_PLATFORM_KEYS:
         state = states.get(provider) or {}
@@ -527,6 +552,12 @@ async def build_dashboard_platform_spend(
             "last_sync_at": state.get("last_sync_at"),
             "data_delay_minutes": state.get("data_delay_minutes"),
         }
+        if provider == "google":
+            provider_rows[provider].update({
+                **google_quality,
+                "data_quality": google_quality["status"],
+                "known_total_sar": google["known_total_sar"],
+            })
 
     known_total_sar = round(
         sum(value for value in totals.values() if value is not None), 2
@@ -535,6 +566,8 @@ async def build_dashboard_platform_spend(
     snapchat_known = _number(snapchat.get("known_total_sar"))
     if totals["snapchat"] is None and snapchat_known is not None:
         known_total_sar = round(known_total_sar + snapchat_known, 2)
+    if totals["google"] is None:
+        known_total_sar = round(known_total_sar + google["known_total_sar"], 2)
     snap_amount_complete = (
         (snapchat.get("quality") or {}).get("amount_complete") is True
     )
@@ -547,7 +580,11 @@ async def build_dashboard_platform_spend(
         and not snap_amount_complete
         and (snapchat.get("quality") or {}).get("provisional") is True
     )
-    total_sar = full_provider_total_sar if snap_amount_available else None
+    amount_available = snap_amount_available and google_quality["amount_available"]
+    amount_complete = snap_amount_complete and google_quality["amount_complete"]
+    provisional = (amount_available and not amount_complete
+                   and (snap_amount_provisional or google_quality["provisional"]))
+    total_sar = full_provider_total_sar if amount_available else None
     return {
         "date_from": start.isoformat(),
         "date_to": end.isoformat(),
@@ -562,16 +599,17 @@ async def build_dashboard_platform_spend(
         "spend_quality": {
             "status": (
                 "complete"
-                if snap_amount_complete
+                if amount_complete
                 else "provisional"
-                if snap_amount_provisional
+                if provisional
                 else "incomplete"
             ),
-            "amount_complete": snap_amount_complete,
-            "amount_available": snap_amount_available,
-            "provisional": snap_amount_provisional,
+            "amount_complete": amount_complete,
+            "amount_available": amount_available,
+            "provisional": provisional,
             "known_total_sar": known_total_sar,
             "snapchat": snapchat.get("quality") or {},
+            "google": google_quality,
         },
         "unified_marketing_shadow": unified_shadow,
         "source_contract": {
@@ -579,7 +617,7 @@ async def build_dashboard_platform_spend(
             or "unified-marketing-data-v1:snapchat-v2:riyadh-dashboard-spend",
             "meta": META_REPORTING_COLLECTION,
             "tiktok": TIKTOK_REPORTING_COLLECTION,
-            "google": GOOGLE_ADS_DAILY_COLLECTION,
+            "google": google["source_contract"],
         },
         "source_only": True,
         "provider_write_reached": False,

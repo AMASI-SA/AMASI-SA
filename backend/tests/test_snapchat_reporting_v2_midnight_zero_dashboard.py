@@ -7,6 +7,7 @@ import pytest
 
 from ads_manager.account_cost_settings import COLLECTION as COST_SETTINGS
 from integrations_control_center import dashboard_ads_platform_spend_routes as routes
+from integrations_control_center.google_dashboard_spend import SOURCE_CONTRACT as GOOGLE_SOURCE_CONTRACT
 from snapchat_v2.accounts import SNAPCHAT_ACCOUNTS_COLLECTION
 from snapchat_v2.projections import SNAPCHAT_DAILY_PROJECTIONS_COLLECTION
 from snapchat_v2.reconciliation import SNAPCHAT_RECONCILIATION_COLLECTION
@@ -168,6 +169,24 @@ async def test_four_platform_route_forwards_partial_and_counts_snapchat_once(mon
             "daily_sar": {DAY.isoformat(): 81.32}, "hourly_sar": {},
             "quality": {"connected": True, "amount_available": full_snapchat_available,
                         "amount_complete": full_snapchat_available, "complete": full_snapchat_available}}
+    # This route-level fixture stubs saved reads because its db is a sentinel.
+    # Google now has a separate reader, while the tested portfolio is unchanged.
+    google = {
+        "total_sar": 0.44,
+        "known_total_sar": 0.44,
+        "daily_sar": {DAY.isoformat(): 0.44},
+        "daily_sources": {DAY.isoformat(): "native"},
+        "account_ids": ["1234567890"],
+        "source_contract": GOOGLE_SOURCE_CONTRACT,
+        "quality": {
+            "status": "complete", "data_state": "confirmed_data",
+            "amount_available": True, "amount_complete": True,
+            "coverage_complete": True, "provisional": False,
+            "expected": True, "reason_codes": [],
+            "last_observed_at": "2026-10-27T00:00:00+00:00",
+            "observed_days": 1, "requested_days": 1, "account_count": 1,
+        },
+    }
 
     async def daily(*args, **options):
         return [{"date": DAY.isoformat(), "snapchat": 81.32, "meta": 12.68, "tiktok": 3.95, "google": 0.44}], {
@@ -178,6 +197,7 @@ async def test_four_platform_route_forwards_partial_and_counts_snapchat_once(mon
             provider: "" for provider in routes.FOUR_PLATFORM_KEYS}
 
     monkeypatch.setattr(routes, "load_unified_marketing_dashboard_spend", AsyncMock(return_value=snap))
+    monkeypatch.setattr(routes, "load_google_dashboard_spend", AsyncMock(return_value=google))
     monkeypatch.setattr(routes, "load_dashboard_unified_shadow", AsyncMock(return_value={}))
     monkeypatch.setattr(routes, "_daily_spend", daily)
     monkeypatch.setattr(routes, "_hourly_spend", hourly)
