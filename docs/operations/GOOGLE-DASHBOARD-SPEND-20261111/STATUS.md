@@ -5,8 +5,9 @@
 - Repository: `AMASI-SA/AMASI-SA`
 - Current source branch: `codex/google-dashboard-spend-r2-20261112`
 - Reviewed production baseline: `245a0beccbdbc2585a3ec2214e808eeef3734b57`
-- State: R2 WIP; two exact-B CI failures diagnosed and focused fixes verified;
-  frozen-runtime contract extension and new source/release verification remain.
+- State: R2 source complete and independently reviewed; affected local tests
+  passed; exact-source runtime CI and a fresh release A/B pair remain required.
+- Current draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1887
 - Superseded candidate PR: https://github.com/AMASI-SA/AMASI-SA/pull/1886
 - Remote regression checkpoint: `924e480258c8052741c5d9999e531739238287e0`.
 - Reviewed source checkpoint before the final rounding compatibility fix:
@@ -53,12 +54,34 @@ PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 \
   backend/tests/test_dashboard_google_financial_source.py
 ```
 
-The immutable runtime gate also needs a narrow independently derived extension
+The immutable runtime gate now has a narrow independently derived extension
 for Google coverage metadata and three additional empty, owner-scoped saved
-reads. The historical financial oracle must remain unchanged; raw Mongo
-commands and document counts must remain audited. That work is pending at this
-checkpoint, so this branch is WIP and not ready to publish. Old B release build
-checks are not evidence for the future R2 identity.
+reads. It audits all four exact queries, including the replacement legacy
+query, owner/date/provider/projection/database/operation/multiplicity. It
+subtracts only three extra finds and removes only the empty new native
+collection; existing shared collection counts and all financial JSON stay
+unchanged. Concurrent wire arrival order is deliberately not constrained.
+No production helper is imported by the oracle, and the frozen reference and
+read baseline commits are unchanged. A further one-line empty accumulator
+compatibility fix preserves historical integer `0` JSON while native observed
+zero remains `0.0`; both actual executive cases are regression-tested.
+
+Fresh root affected-suite verification: **240 passed, 5 source-parity subtests,
+zero skipped**, exit 0, 7.57 seconds. This includes the earlier 12-suite
+acceptance command plus the affected Snapchat file and existing authority gate
+tests. New independent Google gate tests add 43 cases. Root then ran both
+authority and Google read-contract suites together: **112 passed**, exit 0,
+0.72 seconds. The suites overlap in the 69 authority cases. Independent review
+found and drove a JSON member-order correction, then reported no remaining
+blocking finding. All 32 original Snapchat fixture assertions remain unchanged.
+
+The independent oracle successfully derives all 164 existing frozen responses.
+This is not a claim that R2 ran all 164 real-Mongo cases locally: the available
+Mongo7 environment cannot satisfy the immutable Mongo8.0.12/performancepr1
+fixture and its startup is restricted. No assertion or environment restriction
+was bypassed. GitHub CI has successfully run both immutable arms on the required
+Mongo version; a fresh exact-source runtime run remains mandatory. Old B
+release build checks are not evidence for the future R2 identity.
 
 Fresh remote production head remains
 `245a0beccbdbc2585a3ec2214e808eeef3734b57`; old PR1886 is unmerged. No shared
@@ -197,9 +220,9 @@ Root owns this status file, public-route financial acceptance tests, Git
 checkpoints, and PR. The backend implementation agent owns the shared Google
 reader, its two consumers, and its focused tests; reviewers are read-only.
 
-Next: finish and independently review the strict Google frozen-runtime contract,
-verify all 164 immutable cases and affected regressions, checkpoint R2 and inspect
-exact-head CI, then rebuild a fresh A/B pair and complete the already authorized
+Next: checkpoint this reviewed R2 source, inspect exact-head CI including all
+164 immutable runtime cases and affected regressions, then rebuild a fresh A/B
+pair and complete the already authorized
 protocol-v5 publication. Do not deploy the superseded pair, bypass a failed gate,
 or clear another task's release lease.
 

@@ -13,6 +13,7 @@ import time
 from collections import Counter
 from contextlib import contextmanager
 from contextvars import ContextVar
+from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -24,7 +25,11 @@ current_test = None
 sequence = 0
 active_authority_audit = ContextVar('dashboard_authority_audit', default=None)
 active_traffic_audit = ContextVar('dashboard_traffic_audit', default=None)
+active_google_audit = ContextVar('dashboard_google_audit', default=None)
 TRAFFIC_LEDGER = 'mezan_attribution_order_ledger_v1'
+GOOGLE_NATIVE_COLLECTION = 'mezan_google_ads_performance_daily_v2'
+GOOGLE_SAVED_SOURCE = ('mezan_google_ads_performance_daily_v2:selected_accounts:stored_sar:'
+                       'daily_costs.google_ads_positive_legacy_days_only')
 # Reviewed polymorphic source fields preserve scalar and object source evidence.
 # All remaining projection leaves, owner scope, and the two-query limit stay pinned.
 TRAFFIC_PROJECTION_SHA256 = '9b2f00731606f76104bafa9e195b18584f5cc8cca1a514c322da4d5b916c8171'
@@ -231,6 +236,121 @@ def _expected_authority_commands(audit):
     return expected
 
 
+def _google_command(operation, command, *, database_name):
+    """Keep every command in the saved Google reader, including unexpected I/O."""
+    record = {'operation': operation, 'collection': command.get(operation),
+              'database': database_name, 'command_database': command.get('$db')}
+    if operation == 'find':
+        record.update(filter=copy.deepcopy(command.get('filter', {})),
+                      projection=copy.deepcopy(command.get('projection', {})),
+                      limit=command.get('limit'))
+        fields = {'find', 'filter', 'projection', 'limit'}
+    else:
+        fields = {operation}
+    record['unreviewed_fields'] = sorted(set(command) - fields - {'$db', 'lsid', '$clusterTime'})
+    return record
+
+
+def _expected_google_commands(audit, response):
+    """Four exact reads replace the one legacy read; net growth is three finds.
+
+    The immutable fixtures have no Google integration/account/native facts.
+    Meta/TikTok share two collection names, so their counts must remain intact.
+    Dates come from the frozen historical history, not candidate call arguments.
+    """
+    cohorts = audit['google_cohorts']
+    if 'ads_v2' not in response:
+        assert cohorts == [], 'Google must not load for a permission failure'
+        return []
+    history = response['ads_v2']['history']
+    assert history, 'Unreviewed empty Google period'
+    dates = [row['date'] for row in history]
+    start, end = date.fromisoformat(dates[0]), date.fromisoformat(dates[-1])
+    assert dates == [(start + timedelta(days=i)).isoformat() for i in range((end - start).days + 1)]
+    assert 1 <= len(dates) <= 90
+    owner = audit['owner_id']
+    assert cohorts == [{'user_id': owner, 'date_from': dates[0], 'date_to': dates[-1]}], \
+        'Google must load once for the exact request owner and historical period'
+    period = {'$gte': dates[0], '$lte': dates[-1]}
+    specifications = [
+        ('mezan_integrations_v2', {'user_id': owner, 'provider': 'google_ads'},
+         {'_id': 0, 'connection_status': 1}),
+        ('mezan_integration_accounts_v2',
+         {'user_id': owner, 'provider': 'google_ads', 'connection_status': 'connected',
+          'connection_provenance': 'api_connection'},
+         {'_id': 0, 'ad_account_id': 1, 'external_account_id': 1, 'mezan_selected': 1,
+          'currency': 1, 'timezone': 1}),
+        (GOOGLE_NATIVE_COLLECTION, {'user_id': owner, 'provider': 'google_ads', 'date': period},
+         {'_id': 0, 'ad_account_id': 1, 'date': 1, 'source_mode': 1, 'account_timezone': 1,
+          'currency_native': 1, 'spend_native': 1, 'spend_sar': 1, 'fx_rate_to_sar': 1,
+          'source_close_proof': 1, 'observed_at': 1, 'updated_at': 1}),
+        ('daily_costs', {'user_id': owner, 'date': period}, {'_id': 0, 'date': 1, 'google_ads': 1}),
+    ]
+    return [{'operation': 'find', 'collection': collection,
+             'database': audit['database'], 'command_database': audit['database'],
+             'filter': query, 'projection': projection, 'limit': None,
+             'unreviewed_fields': []} for collection, query, projection in specifications]
+
+
+def _extend_google_saved_contract(response):
+    """Derive Google coverage solely from immutable positive legacy evidence.
+
+    No financial amount is recomputed or replaced. Every old monetary byte,
+    including raw-sum period rounding, remains part of the historical oracle.
+    Missing Google observations become null history rather than fabricated zero.
+    """
+    if 'ads_v2' not in response:
+        return
+    ads = response['ads_v2']
+    old_source = 'daily_costs.google_ads:transitional_read_only:no_account_allocation'
+    assert ads['source_contract']['google'] == old_source
+    assert response['source_contract']['advertising']['google'] == old_source
+    assert 'google' not in ads['providers'] and 'google' not in ads['spend_quality']
+    history = ads['history']
+    assert history and all(isinstance(row['google'], (int, float)) and row['google'] >= 0 for row in history)
+    observed = sum(row['google'] > 0 for row in history)
+    provisional = observed > 0
+    assert (ads['breakdown']['google_transitional'] > 0) == provisional
+    # All immutable fixtures have disconnected Snapchat and no Google account.
+    # A future fixture with other quality states requires an explicit review.
+    assert ads['spend_quality']['status'] == 'complete'
+    assert ads['spend_quality']['amount_complete'] is True
+    assert ads['spend_quality']['amount_available'] is True
+    assert ads['spend_quality']['provisional'] is False
+    quality = {
+        'status': 'provisional' if provisional else 'not_required',
+        'data_state': 'provisional_data' if provisional else 'not_required',
+        'amount_available': True, 'amount_complete': not provisional,
+        'coverage_complete': not provisional, 'provisional': provisional,
+        'expected': False,
+        'reason_codes': ['google_legacy_manual_fallback'] if provisional else [],
+        'last_observed_at': None, 'observed_days': observed,
+        'requested_days': len(history), 'account_count': 0,
+    }
+    for row in history:
+        if row['google'] == 0:
+            row['google'] = None
+    providers = {}
+    assert list(ads['providers']) == ['meta', 'tiktok', 'snapchat']
+    for provider, metrics in ads['providers'].items():
+        if provider == 'snapchat':
+            providers['google'] = {'spend': ads['breakdown']['google_transitional'], **quality}
+        providers[provider] = metrics
+    ads['providers'] = providers
+    ads['spend_quality'].update(status='provisional' if provisional else 'complete',
+                                amount_complete=not provisional, provisional=provisional,
+                                google=copy.deepcopy(quality))
+    if not provisional:
+        ads['bank_commissions']['google_account_allocation'] = 'not_required'
+    ads['source_contract']['google'] = GOOGLE_SAVED_SOURCE
+    response['source_contract']['advertising']['google'] = GOOGLE_SAVED_SOURCE
+    executive = ads['executive_breakdown']['providers']['google']
+    executive.update(data_state=quality['data_state'], coverage_complete=not provisional,
+                     amount_complete=not provisional)
+    response['totals']['ads_spend_data_complete'] = not provisional
+    response['totals']['ads_spend_provisional'] = provisional
+
+
 def expected_cost_completeness_json(historical_json, *, fixture_case=None):
     """Owner-approved response extension; all other historical bytes stay exact.
 
@@ -292,6 +412,7 @@ def expected_cost_completeness_json(historical_json, *, fixture_case=None):
         response['totals']['net_profit'] = None
         if response['net_sales_config'].get('deduct_product_costs', True):
             response['totals']['net_sales'] = None
+    _extend_google_saved_contract(response)
     return json.dumps(response, ensure_ascii=False, default=str)
 
 
@@ -304,6 +425,12 @@ def assert_runtime_read_contract(runtime, baseline, *, fixture_case=None):
     assert audit['commands'] == expected, 'Unexpected authority query, scope, operation or batch count'
     traffic_expected = _expected_traffic_commands(audit)
     assert audit['traffic_commands'] == traffic_expected, 'Unexpected traffic query, scope, projection or count'
+    google_expected = _expected_google_commands(audit, json.loads(baseline['json']))
+    # The four independent reads run concurrently; preserve exact multiplicity
+    # and semantics without imposing an unsupported wire arrival order.
+    canonical = lambda rows: Counter(json.dumps(row, sort_keys=True) for row in rows)
+    assert canonical(audit['google_commands']) == canonical(google_expected), \
+        'Unexpected Google query, owner, period, projection, operation or count'
     response = json.loads(runtime['json'])
     assert len(audit['cohorts']) == (0 if 'http_error' in response else 1)
     assert len(audit['traffic_cohorts']) == len(audit['cohorts'])
@@ -317,6 +444,12 @@ def assert_runtime_read_contract(runtime, baseline, *, fixture_case=None):
         assert runtime['collections'].get(TRAFFIC_LEDGER) == 0, 'Immutable fixture has no account attribution ledger rows'
     else:
         assert TRAFFIC_LEDGER not in runtime['collections']
+    assert GOOGLE_NATIVE_COLLECTION not in baseline['collections']
+    if google_expected:
+        assert runtime['collections'].get(GOOGLE_NATIVE_COLLECTION) == 0, \
+            'Immutable fixture unexpectedly read Google native facts'
+    else:
+        assert GOOGLE_NATIVE_COLLECTION not in runtime['collections']
     normalized = {key: copy.deepcopy(value) for key, value in runtime.items()
                   if key != 'cost_authority_audit'}
     normalized['json'] = baseline['json']  # Validated exact approved extension above.
@@ -325,8 +458,15 @@ def assert_runtime_read_contract(runtime, baseline, *, fixture_case=None):
         normalized['commands'][operation] -= count
         if normalized['commands'][operation] == 0:
             del normalized['commands'][operation]
+    if google_expected:
+        # daily_costs is a replacement read, already present in the baseline.
+        assert normalized['commands'].get('find', 0) >= 3
+        normalized['commands']['find'] -= 3
+        if normalized['commands']['find'] == 0:
+            del normalized['commands']['find']
     normalized['collections'] = {key: value for key, value in normalized['collections'].items()
-                                 if key not in AUTHORITY_COLLECTIONS and key != TRAFFIC_LEDGER}
+                                 if key not in AUTHORITY_COLLECTIONS
+                                 and key not in {TRAFFIC_LEDGER, GOOGLE_NATIVE_COLLECTION}}
     extra_documents = sum(len(cohort['numbers']) for cohort in audit['traffic_cohorts'])
     if extra_documents:
         normalized['documents'] -= extra_documents
@@ -366,12 +506,17 @@ def pytest_collection_modifyitems(session, config, items):
             user = kwargs.get('user', args[4] if len(args) > 4 else cases.OWNER)
             audit = {'version': 1, 'owner_id': str(user['id']),
                      'database': _fixture_database_name(args[0]), 'cohorts': [], 'commands': [],
-                     'traffic_cohorts': [], 'traffic_commands': []}
+                     'traffic_cohorts': [], 'traffic_commands': [],
+                     'google_cohorts': [], 'google_commands': []}
             commands = args[1]
             original_started = commands.started
 
             def started(event):
                 original_started(event)
+                if active_google_audit.get() is audit:
+                    audit['google_commands'].append(_google_command(event.command_name, event.command,
+                                                                   database_name=event.database_name))
+                    return
                 if active_traffic_audit.get() is audit:
                     audit['traffic_commands'].append(_traffic_command(event.command_name, event.command,
                                                                      database_name=event.database_name))
@@ -428,6 +573,7 @@ def pytest_collection_modifyitems(session, config, items):
         original_ads = dash.build_salla_ads_executive_breakdown_cooperative
         original_cost = dash.build_mezan_v2_product_cost_cooperative
         original_traffic = getattr(dash, 'load_product_traffic_sources', None)
+        original_google = getattr(dash, 'load_google_dashboard_spend', None)
 
         class ForcedBudget(cpu.CPUWorkBudget):
             async def checkpoint(self):
@@ -471,6 +617,18 @@ def pytest_collection_modifyitems(session, config, items):
             finally:
                 active_traffic_audit.reset(token)
 
+        async def google(db, user_id, *, date_from, date_to, **kwargs):
+            audit = active_authority_audit.get()
+            if audit is None:
+                return await original_google(db, user_id, date_from=date_from, date_to=date_to, **kwargs)
+            audit['google_cohorts'].append({'user_id': str(user_id),
+                                            'date_from': str(date_from), 'date_to': str(date_to)})
+            token = active_google_audit.set(audit)
+            try:
+                return await original_google(db, user_id, date_from=date_from, date_to=date_to, **kwargs)
+            finally:
+                active_google_audit.reset(token)
+
         @contextmanager
         def actual(db, scope):
             handler = legacy_handler(db)
@@ -485,7 +643,8 @@ def pytest_collection_modifyitems(session, config, items):
              patch.object(dash, 'index_current_catalog_products_cooperative', index), \
              patch.object(dash, 'build_salla_ads_executive_breakdown_cooperative', ads), \
              patch.object(dash, 'build_mezan_v2_product_cost_cooperative', cost), \
-             patch.object(dash, 'load_product_traffic_sources', traffic, create=True):
+             patch.object(dash, 'load_product_traffic_sources', traffic, create=True), \
+             patch.object(dash, 'load_google_dashboard_spend', google, create=True):
             yield
 
     cases.configured = configured

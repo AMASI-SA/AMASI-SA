@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
+import json
 
 from mongomock_motor import AsyncMongoMockClient
 import pytest
@@ -232,6 +233,24 @@ async def test_unconfigured_card_keeps_google_unavailable_without_blocking_other
     assert card["providers"]["google"]["data_state"] == "not_required"
     assert card["total_sar"] == 25078.85
     assert card["spend_quality"]["amount_available"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("native_zero,expected_json", [
+    (False, '{"google_transitional":0,"google_transitional_spend_sar":0}'),
+    (True, '{"google_transitional":0.0,"google_transitional_spend_sar":0.0}'),
+])
+async def test_executive_google_zero_json_preserves_empty_sum_and_native_evidence(
+    db, provisional_snapchat, native_zero, expected_json,
+):
+    if native_zero:
+        await connected_google(db)
+        await db[COLLECTION].insert_one(native_fact(0))
+    ads = await executive.build_mezan_v2_ads(db, OWNER, from_date=DAY, to_date=DAY)
+    assert json.dumps({
+        "google_transitional": ads["breakdown"]["google_transitional"],
+        "google_transitional_spend_sar": ads["bank_commissions"]["google_transitional_spend_sar"],
+    }, separators=(",", ":")) == expected_json
 
 
 @pytest.mark.asyncio

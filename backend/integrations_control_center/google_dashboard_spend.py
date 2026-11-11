@@ -154,7 +154,7 @@ async def load_google_dashboard_spend(
     ))
     today = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("Asia/Riyadh")).date()
     daily, sources, reasons, observed = {}, {}, set(), []
-    known_total = 0.0
+    known_total = 0
     coverage_complete = scope_complete
     amount_complete = scope_complete
     for day in dates:
