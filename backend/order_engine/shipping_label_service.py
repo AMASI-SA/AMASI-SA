@@ -1183,7 +1183,10 @@ def _mobile_label_carrier(row: dict[str, Any]) -> dict[str, str]:
         return current
     # Mirror the order DTO's root display only when the current generation
     # carries no identity. That legacy display still needs fresh provider proof.
-    return {"name": _text(row.get("shipping_company")), "code": _text(row.get("shipping_company_code"))}
+    carrier = {"name": _text(row.get("shipping_company")), "code": _text(row.get("shipping_company_code"))}
+    if carrier["name"].casefold() == "shipping" and not carrier["code"]:
+        carrier["name"] = ""
+    return carrier
 
 
 def _mobile_store_courier(name, app_id):
@@ -1271,6 +1274,7 @@ async def _persist_verified_snapshot(
     baseline: dict[str, Any] | None = None,
     created_replacement: bool = False,
     persist: bool = True,
+    allow_current_internal_child: bool = False,
 ) -> None:
     now = datetime.now(timezone.utc).isoformat()
     set_fields: dict[str, Any] = {
@@ -1327,11 +1331,19 @@ async def _persist_verified_snapshot(
         current_carrier = _label_carrier(current_row)
         snapshot_carrier = {"code": _text(snapshot.get("courier_code")), "name": _text(snapshot.get("courier_name"))}
         carrier_match = _label_carriers_match(current_carrier, snapshot_carrier)
-        if carrier_match is False:
+        # The strict print reader can prove a unique current merchant child
+        # when old local data contains only the transport mode. This permits
+        # its QR read, never a persisted AWB replacement or a changed baseline.
+        recovered_internal_child = bool(
+            allow_current_internal_child and not persist and current_row == baseline
+            and not current_id and not any(_mobile_label_carrier(current_row).values())
+        )
+        if carrier_match is False and not recovered_internal_child:
             raise _stale_label()
         baseline_current = _label_metadata(baseline)
         if baseline_current:
-            if _label_carriers_match(_label_carrier(baseline), current_carrier) is not True:
+            if (_label_carriers_match(_label_carrier(baseline), current_carrier) is not True
+                    and not recovered_internal_child):
                 raise _stale_label()
             baseline_id = _text(baseline_current.get("shipment_id") or baseline.get("salla_shipment_id"))
             if current_id and current_id not in {baseline_id, snapshot_id}:
@@ -1345,7 +1357,7 @@ async def _persist_verified_snapshot(
             created_replacement and baseline_current and carrier_match is True and
             current_id == _text(baseline_current.get("shipment_id") or baseline.get("salla_shipment_id"))
         ))
-        if different_id and not proven_replacement:
+        if different_id and not (proven_replacement or recovered_internal_child):
             # GET-only results cannot prove whether an unknown ID is a fresh
             # replacement or an archived active row. Wait for its webhook.
             raise _stale_label()

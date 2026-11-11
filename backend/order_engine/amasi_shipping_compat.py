@@ -769,8 +769,16 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, 
             if order_internal != row_internal or legacy._label_carriers_match(provider_carrier, row_carrier) is False:
                 raise legacy._stale_label()
         if result and db is not None:
+            current_id = legacy._text(legacy._label_metadata(baseline).get("shipment_id")
+                                      or (baseline or {}).get("salla_shipment_id"))
+            # With no local/order carrier or current ID, _shipment admits a
+            # merchant child only through its unique complete current-list proof.
+            # Keep the shared cancellation, supersession and freshness guards.
+            recovered_internal_child = bool(row_internal and not current_id
+                and not any(local_carrier.values()) and not any(provider_carrier.values()))
             await legacy._persist_verified_snapshot(
                 db, owner, number, _printable(result), baseline=baseline, persist=False,
+                allow_current_internal_child=recovered_internal_child,
             )
     observed = {"observed_order_status": _order_status(order)} if _order_status(order) in _DONE else {}
     if not result:

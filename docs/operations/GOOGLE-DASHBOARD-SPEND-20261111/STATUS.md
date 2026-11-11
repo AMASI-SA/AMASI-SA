@@ -5,8 +5,9 @@
 - Repository: `AMASI-SA/AMASI-SA`
 - Current source branch: `codex/google-dashboard-spend-r2-20261112`
 - Reviewed production baseline: `245a0beccbdbc2585a3ec2214e808eeef3734b57`
-- State: R2 source complete and independently reviewed; affected local tests
-  passed; exact-source runtime CI and a fresh release A/B pair remain required.
+- State: Google R2 source and exact-source runtime CI passed. The user added
+  the store-courier print/completion repair to the same authorized publication;
+  the combined source, fresh CI and a new release A/B pair remain required.
 - Current draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1887
 - Superseded candidate PR: https://github.com/AMASI-SA/AMASI-SA/pull/1886
 - Remote regression checkpoint: `924e480258c8052741c5d9999e531739238287e0`.
@@ -17,6 +18,27 @@
 - No change to the completed bundle study or the separately released dashboard-card cadence task.
 
 ## R2 continuation: publication remains authorized
+
+### Exact Google checkpoint CI and expanded publication scope
+
+Google checkpoint `375381edd13a0d4674e6a2c3a966f024d8686e8e` passed the real
+Mongo8.0.12/performancepr1 runtime gate in run `43105194947`: all
+164 reference/baseline/runtime response identities and raw I/O audits passed;
+the regression step reported 218 passed plus 5 subtests, with zero skipped.
+Source release readiness `43105194480`, Snapchat shadow `43105194874`, and
+dashboard-card cadence `43105194990` also passed. These results supersede the
+pending-CI statements in the historical R2 notes below. They are not deployment
+evidence for a later combined source.
+
+The user's subsequent instruction explicitly adds store-courier label printing
+and Salla completion to this publication. iMile and SMSA must keep their current
+behavior. Work is recorded separately in
+`docs/operations/STORE-COURIER-PRINT-20261112/STATUS.md`. No new intent-only B has
+been frozen. Rebuild from the eventual complete source A, using
+`MEZAN_RELEASE_BOOTSTRAP_INTENT=1` and the exact public origin; setting
+`SOURCE_GIT_SHA` alone does not select the local source identity. Two earlier
+local bootstrap attempts selected the retained prior intent and were correctly
+rejected by verification; their outputs must not be reused.
 
 The user explicitly requested publication and then continuation. No additional
 publication confirmation is required. Production has not changed for this task.
