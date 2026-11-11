@@ -1,0 +1,27 @@
+{
+  "kind": "React Native Web layout of actual TSX host tree; synthetic API boundaries; not physical Android UAT",
+  "send": {
+    "x": 10,
+    "y": 798,
+    "width": 44,
+    "height": 44
+  },
+  "input": {
+    "x": 62,
+    "y": 786,
+    "width": 321,
+    "height": 56
+  },
+  "incoming": {
+    "x": 14,
+    "y": 355,
+    "width": 235.84375,
+    "height": 73
+  },
+  "own": {
+    "x": 145.15625,
+    "y": 521,
+    "width": 233.84375,
+    "height": 73
+  }
+}
