@@ -20,12 +20,21 @@ import LatestSoldProductsCard from "../components/LatestSoldProductsCard";
 import { buildPaymentFeeRows } from "../components/ProfitSummaryCard";
 import { useOrders } from "../hooks/useOrders";
 import useCampaignShadowJob from "../hooks/useCampaignShadowJob";
+import useDashboardCardSnapshot from "../hooks/useDashboardCardSnapshot";
 import { resolveOrderCampaign } from "../lib/orderCampaignAttribution";
 import OrderCurrencyAmount from "../components/OrderCurrencyAmount";
 import { mergeDashboardWithPlatformSpend, needsCanonicalDashboardSpendRefresh } from "../lib/dashboardPlatformSpendMerge";
 import { dashboardRequestRangeKey } from "../lib/dashboardLatestResponseBroker";
 import { createDashboardFetchAdmission } from "../lib/dashboardFetchAdmission";
 import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
+import {
+    DASHBOARD_CARD_REQUEST_TIMEOUT_MS,
+    EXECUTIVE_REFRESH_MS,
+    PERIOD_SUMMARY_REFRESH_MS,
+    TOP_PRODUCTS_REFRESH_MS,
+    dashboardCardQuery,
+    nextDashboardCardReadAt,
+} from "../services/dashboardCardSnapshot";
 import { buildMezanProductCostHref, buildMissingMezanCostHref } from "../lib/mezanV2CostLinks";
 import {
     DASHBOARD_AUTO_REFRESH_MS,
@@ -44,6 +53,7 @@ const PLATFORM_META = [
 const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const integer = (value) => Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
 const CARTS_AUTO_REFRESH_MS = 15_000;
+const EMPTY_PRODUCT_SUMMARY = Object.freeze({});
 
 function finiteFinancialValue(value, { nonnegative = false } = {}) {
     if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
@@ -347,54 +357,65 @@ export function AbandonedCartsCard({ carts, summary = {} }) {
     );
 }
 
-export function TopProductsCard({ rows, summary = {}, filters = {}, loading = false }) {
+export function TopProductsCard({ rows, summary = {}, filters = {}, loading = false, onRefresh, error = null }) {
     const [visibleCount, setVisibleCount] = useState(5);
     const [openSources, setOpenSources] = useState({});
     const [sort, setSort] = useState({ key: "units_sold", direction: "desc" });
-    const products = [...(rows || [])].sort((a, b) => {
+    const products = useMemo(() => [...(rows || [])].sort((a, b) => {
         const left = finiteFinancialValue(a[sort.key]);
         const right = finiteFinancialValue(b[sort.key]);
         // Unknown values stay last in either direction; never treat them as zero.
         if (left === null) return right === null ? 0 : 1;
         if (right === null) return -1;
         return (left - right) * (sort.direction === "asc" ? 1 : -1);
-    });
+    }), [rows, sort.key, sort.direction]);
     const toggleSort = (key) => {
         setSort(current => ({ key, direction: current.key === key && current.direction === "desc" ? "asc" : "desc" }));
         setVisibleCount(5);
     };
-    const productSummary = summary?.product_profit_summary || {};
+    const productSummary = summary?.product_profit_summary || EMPTY_PRODUCT_SUMMARY;
     const productCount = Math.max(Number(productSummary.product_count || 0), products.length);
     // The rows contain the complete period cohort; visibleCount only controls
     // how many rows are expanded. Sum the rows themselves so the footer always
     // includes products hidden under "المزيد" and stays consistent with the
     // displayed per-product values.
-    const totalUnits = products.reduce((sum, item) => sum + Number(item.units_sold || 0), 0);
-    const salesConversionComplete = productSummary.sales_currency_conversion_complete !== false
-        && products.every((item) => item.sales_currency_conversion_complete !== false && item.total_sales != null);
-    const totalSales = salesConversionComplete
-        ? products.reduce((sum, item) => sum + Number(item.total_sales || 0), 0)
-        : null;
-    const rowTotalCost = products.reduce((sum, item) => {
-        const value = finiteFinancialValue(item.total_cost, { nonnegative: true });
-        return sum + (value ?? 0);
-    }, 0);
-    const authoritativeTotalCost = finiteFinancialValue(productSummary.total_cost, { nonnegative: true });
-    const totalCost = authoritativeTotalCost ?? rowTotalCost;
-    const pricedProfits = products
-        .map((item) => finiteFinancialValue(item.net_profit))
-        .filter((value) => value !== null);
-    const totalNetProfit = pricedProfits.length
-        ? pricedProfits.reduce((sum, value) => sum + value, 0)
-        : null;
-    const hasUnpricedProducts = productSummary.has_unpriced_products === true
-        || products.some((item) => item.cost_status === "missing" || finiteFinancialValue(item.net_profit) === null);
+    const { totalUnits, totalSales, totalCost, totalNetProfit, hasUnpricedProducts, salesConversionComplete } = useMemo(() => {
+        let units = 0, sales = 0, cost = 0, profit = 0, pricedCount = 0;
+        let salesComplete = productSummary.sales_currency_conversion_complete !== false;
+        let unpriced = productSummary.has_unpriced_products === true;
+        for (const item of rows || []) {
+            units += Number(item.units_sold || 0);
+            sales += Number(item.total_sales || 0);
+            cost += finiteFinancialValue(item.total_cost, { nonnegative: true }) ?? 0;
+            const itemProfit = finiteFinancialValue(item.net_profit);
+            if (itemProfit !== null) { profit += itemProfit; pricedCount += 1; }
+            if (item.sales_currency_conversion_complete === false || item.total_sales == null) salesComplete = false;
+            if (item.cost_status === "missing" || itemProfit === null) unpriced = true;
+        }
+        return {
+            totalUnits: units,
+            totalSales: salesComplete ? sales : null,
+            totalCost: finiteFinancialValue(productSummary.total_cost, { nonnegative: true }) ?? cost,
+            totalNetProfit: pricedCount ? profit : null,
+            hasUnpricedProducts: unpriced,
+            salesConversionComplete: salesComplete,
+        };
+    }, [rows, productSummary]);
     const visibleProducts = products.slice(0, visibleCount);
     const hasMore = visibleCount < products.length;
     useEffect(() => { setVisibleCount(5); }, [rows]);
     return (
         <Panel className="border-indigo-200" testid="advanced-top-products" title="المنتجات الأكثر مبيعًا">
-            <div className="flex h-14 items-center justify-between border-b border-indigo-800 bg-indigo-700 px-4 text-white"><h2 className="font-extrabold"><Link to={`/products-v2/sold?from=${encodeURIComponent(filters.from || "")}&to=${encodeURIComponent(filters.to || "")}`} className="flex items-center gap-2 rounded hover:underline focus-visible:outline-2" target="_blank" rel="noopener noreferrer" data-testid="advanced-top-products-report-link"><Trophy className="h-5 w-5" />المنتجات الأكثر مبيعًا ↗</Link></h2><div className="text-left text-[9px] font-bold leading-4"><p>{loading && !rows ? "—" : integer(productCount)} منتجًا خلال الفترة</p><p className="text-indigo-100">بتكلفة سلة {loading && !rows ? "—" : integer(summary.salla_fallback_products_count)} · تكلفة ناقصة {loading && !rows ? "—" : integer(summary.missing_all_cost_products_count)}</p></div></div>
+            <div className="flex h-14 items-center justify-between border-b border-indigo-800 bg-indigo-700 px-4 text-white">
+                <h2 className="font-extrabold"><Link to={`/products-v2/sold?from=${encodeURIComponent(filters.from || "")}&to=${encodeURIComponent(filters.to || "")}`} className="flex items-center gap-2 rounded hover:underline focus-visible:outline-2" target="_blank" rel="noopener noreferrer" data-testid="advanced-top-products-report-link"><Trophy className="h-5 w-5" />المنتجات الأكثر مبيعًا ↗</Link></h2>
+                <div className="text-left text-[9px] font-bold leading-4"><p>{!rows ? "—" : integer(productCount)} منتجًا خلال الفترة</p><p className="text-indigo-100">بتكلفة سلة {!rows ? "—" : integer(summary.salla_fallback_products_count)} · تكلفة ناقصة {!rows ? "—" : integer(summary.missing_all_cost_products_count)}</p></div>
+                {onRefresh && <button type="button" onClick={onRefresh} disabled={loading} aria-busy={loading}
+                    aria-label="تحديث المنتجات الأكثر مبيعًا" title="تحديث المنتجات الأكثر مبيعًا"
+                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/30 bg-white/10 hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60">
+                    <RefreshCw aria-hidden="true" className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} />
+                </button>}
+            </div>
+            {error && <p role="alert" className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-900">{error}{rows ? " — تم الاحتفاظ بآخر بيانات موثوقة لهذه الفترة." : " — اضغط زر التحديث للمحاولة مجددًا."}</p>}
             <style>{"@media print { .product-traffic-sources { display: none !important; } }"}</style>
             <div className="dashboard-products-table" tabIndex={0} role="region" aria-label="جدول المنتجات الأكثر مبيعًا"><div className="grid grid-cols-[48px_48px_minmax(80px,1fr)_minmax(86px,1fr)_minmax(86px,1fr)] gap-1.5 border-b px-3 py-2 text-center text-[8px] font-bold leading-4 text-slate-400">
                 <span>المنتج</span>
@@ -455,7 +476,7 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
                         <ProductTrafficSources sources={item.traffic_sources} promotionContext={{ product_id: item.salla_product_id, from_date: filters.from, to_date: filters.to || filters.from, statuses: "default", report_scope: "dashboard", payment_methods: (filters.payment_methods || []).join(","), shipping_companies: (filters.shipping_companies || []).join(",") }} /></>}
                     </div>
                 </div>;
-            }) : <div className="p-8 text-center text-xs text-slate-400">{loading ? "جارٍ مزامنة المنتجات المباعة…" : "لا توجد منتجات مباعة في الفترة."}</div>}
+            }) : <div className="p-8 text-center text-xs text-slate-400">{loading ? "جارٍ مزامنة المنتجات المباعة…" : !rows ? "لم تُحمّل بيانات المنتجات لهذه الفترة بعد." : "لا توجد منتجات مباعة في الفترة."}</div>}
             </div>
             </div>
             {products.length > 5 && <button type="button" onClick={() => hasMore ? setVisibleCount((value) => Math.min(value + 5, products.length)) : setVisibleCount(5)} className="w-full border-t border-indigo-200 bg-indigo-50/60 px-4 py-3 text-xs font-extrabold text-indigo-700 hover:bg-indigo-100">{hasMore ? "المزيد" : "عرض أقل"}</button>}
@@ -526,6 +547,24 @@ export function SummaryStrip({ data, filters, loading = false }) {
         </div>
         <Link to={buildMissingMezanCostHref(data?.product_cost_v2, filters)} dir="rtl" className="flex min-h-[78px] items-center justify-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 text-center text-amber-900"><AlertTriangle className="h-5 w-5 text-amber-500" /><p className="text-xs font-extrabold">{loading && !data ? "جارٍ مزامنة تكاليف المنتجات…" : `${integer(missing)} منتجًا مبيعًا بدون تكلفة ميزان`}<span className="block text-amber-700">{loading && !data ? "" : "أضف التكلفة لاعتماد الأرباح"}</span></p></Link>
     </div>;
+}
+
+export function PeriodSummaryCard({ data, filters, loading = false, error = null, onRefresh }) {
+    return <Panel title="ملخص الفترة" testid="advanced-period-summary">
+        <div className="bg-slate-50 px-4 text-slate-800">
+            <h2 className="font-extrabold">ملخص الفترة</h2>
+            <button type="button" onClick={onRefresh} disabled={loading} aria-busy={loading}
+                aria-label="تحديث ملخص الفترة" title="تحديث ملخص الفترة"
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-blue-700 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60">
+                <RefreshCw aria-hidden="true" className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />تحديث
+            </button>
+        </div>
+        {error && <p role="alert" className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-900">{error}{data ? " — تم الاحتفاظ بآخر بيانات موثوقة لهذه الفترة." : " — اضغط زر التحديث للمحاولة مجددًا."}</p>}
+        <div className="p-3">
+            {data ? <SummaryStrip data={data} filters={filters} loading={loading} />
+                : <p role="status" className="p-4 text-sm text-slate-500">{loading ? "جارٍ تحميل ملخص الفترة…" : "لم تُحمّل بيانات ملخص الفترة بعد."}</p>}
+        </div>
+    </Panel>;
 }
 
 function AdsCard({ ads, unifiedShadow }) {
@@ -785,14 +824,17 @@ export async function loadDashboardPeriodSnapshot({
     platformSpendLoader = null,
     platformSpendTimeoutMs = 12000,
     now = Date.now,
+    endpoint = "/dashboard-v2",
+    refresh = false,
 }) {
     if (!background) {
         setLoading(true);
         setLoadError(null);
     }
     try {
-        const query = new URLSearchParams(filtersToQueryString(next));
-        query.set("_refresh", String(now()));
+        const query = new URLSearchParams(endpoint === "/dashboard-v2" ? filtersToQueryString(next) : dashboardCardQuery(next));
+        if (endpoint === "/dashboard-v2") query.set("_refresh", String(now()));
+        if (refresh) query.set("refresh", "true");
         const platformSpendPromise = typeof platformSpendLoader === "function"
             ? platformSpendLoader({
                 dateFrom: next.from,
@@ -800,10 +842,14 @@ export async function loadDashboardPeriodSnapshot({
                 refresh: false,
             }).catch(() => null)
             : Promise.resolve(null);
-        const requestConfig = { headers: { "Cache-Control": "no-cache", Pragma: "no-cache" } };
+        const requestConfig = () => ({
+            timeout: DASHBOARD_CARD_REQUEST_TIMEOUT_MS,
+            _mezanAuthDeadlineAt: Date.now() + DASHBOARD_CARD_REQUEST_TIMEOUT_MS,
+            headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+        });
         const matchesRange = (response) => !response?.config
-            || dashboardRequestRangeKey(response.config) === dashboardRequestRangeKey({ url: `/dashboard-v2?${query.toString()}` });
-        let response = await apiClient.get(`/dashboard-v2?${query.toString()}`, requestConfig);
+            || dashboardRequestRangeKey(response.config) === dashboardRequestRangeKey({ url: `${endpoint}?${query.toString()}` });
+        let response = await apiClient.get(`${endpoint}?${query.toString()}`, requestConfig());
         let timeoutId;
         const platformSpend = await Promise.race([
             platformSpendPromise,
@@ -818,8 +864,9 @@ export async function loadDashboardPeriodSnapshot({
             // Recompute profit and fees on the backend after saved spend proof
             // becomes available. Never derive them from a null prior base or
             // request another native platform refresh solely for this read.
-            query.set("_refresh", `${now()}-spend-recompute`);
-            response = await apiClient.get(`/dashboard-v2?${query.toString()}`, requestConfig);
+            if (endpoint === "/dashboard-v2") query.set("_refresh", `${now()}-spend-recompute`);
+            query.set("refresh", "true");
+            response = await apiClient.get(`${endpoint}?${query.toString()}`, requestConfig());
             if (!isLatest(requestSequence) || !matchesRange(response)) return;
         }
         const periodData = sameRangeSpend
@@ -828,6 +875,7 @@ export async function loadDashboardPeriodSnapshot({
         if (isLatest(requestSequence)) {
             setData(periodData);
             setLoadError(null);
+            return periodData;
         }
     } catch {
         if (!background && isLatest(requestSequence)) {
@@ -841,30 +889,53 @@ export async function loadDashboardPeriodSnapshot({
 export default function AdvancedDashboard() {
     const [filters, setFilters] = useState(() => defaultFilters("today"));
     const [data, setData] = useState(null); const [carts, setCarts] = useState([]); const [cartSummary, setCartSummary] = useState({ abandoned_count: 0, recovered_count: 0 }); const [ga, setGa] = useState(null); const [loading, setLoading] = useState(true); const [loadError, setLoadError] = useState(null);
+    const [dataKey, setDataKey] = useState(null);
+    const filterKey = dashboardCardQuery(filters);
+    const visibleData = dataKey === filterKey ? data : null;
+    const topProducts = useDashboardCardSnapshot({
+        endpoint: "/dashboard-v2/cards/top-products",
+        filters,
+        intervalMs: TOP_PRODUCTS_REFRESH_MS,
+        errorMessage: "تعذر تحديث المنتجات الأكثر مبيعًا",
+    });
+    const periodSummary = useDashboardCardSnapshot({
+        endpoint: "/dashboard-v2/cards/period-summary",
+        filters,
+        intervalMs: PERIOD_SUMMARY_REFRESH_MS,
+        errorMessage: "تعذر تحديث ملخص الفترة",
+    });
     const { orders, hasMore: hasMoreOrders, loading: ordersLoading, loadMore: loadMoreOrders } = useOrders();
     const dashboardDataRef = useRef(null);
     const requestSequenceRef = useRef(0);
+    const executiveDueRef = useRef({ key: null, at: 0 });
     const dashboardRefreshGateRef = useRef(null);
     if (dashboardRefreshGateRef.current === null) {
         dashboardRefreshGateRef.current = createDashboardFetchAdmission();
     }
     const lastOrderSignatureRef = useRef("");
     const orderSignature = useMemo(() => dashboardOrdersSignature(orders), [orders]);
-    const loadPeriod = useCallback(async (next, { background = false } = {}) => {
+    const loadPeriod = useCallback(async (next, { background = false, refresh = false } = {}) => {
+        const nextKey = dashboardCardQuery(next);
+        if (background && executiveDueRef.current.key === nextKey && Date.now() < executiveDueRef.current.at) return;
         const gate = dashboardRefreshGateRef.current;
         if (!gate.start(background)) return;
         const requestSequence = ++requestSequenceRef.current;
         try {
-            await loadDashboardPeriodSnapshot({
+            const result = await loadDashboardPeriodSnapshot({
                 next,
                 background,
+                endpoint: "/dashboard-v2/cards/executive",
+                refresh,
                 requestSequence,
                 isLatest: (sequence) => sequence === requestSequenceRef.current,
-                setData,
+                setData: (value) => { setData(value); setDataKey(nextKey); },
                 setLoading,
                 setLoadError,
                 platformSpendLoader: getDashboardAdsSpend,
             });
+            if (requestSequence === requestSequenceRef.current) {
+                executiveDueRef.current = { key: nextKey, at: nextDashboardCardReadAt(result, EXECUTIVE_REFRESH_MS) };
+            }
         } finally {
             gate.finish(background);
         }
@@ -876,8 +947,14 @@ export default function AdvancedDashboard() {
     ) return;
     void loadPeriod(filters, { background: true });
   }, [filters, loadPeriod]);
+    const refreshAll = () => {
+        void loadPeriod(filters, { refresh: true });
+        void topProducts.refresh();
+        void periodSummary.refresh();
+    };
     useEffect(() => { loadPeriod(filters); }, [filters, loadPeriod]);
-    useEffect(() => { dashboardDataRef.current = data; }, [data]);
+    useEffect(() => { dashboardDataRef.current = visibleData; }, [visibleData]);
+    useEffect(() => () => { requestSequenceRef.current += 1; }, []);
     useEffect(() => {
         const previousSignature = lastOrderSignatureRef.current;
         lastOrderSignatureRef.current = orderSignature;
@@ -950,13 +1027,27 @@ export default function AdvancedDashboard() {
 <Link to={`/dashboard-charts?from=${filters.from}&to=${filters.to}`} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-sm font-black text-white shadow-sm"><BarChart3 className="h-4 w-4" />لوحة الرسم البياني</Link>
             <Link to="/dashboard-v2" className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-bold"><ArrowRight className="h-4 w-4" />لوحة التحكم القديمة</Link>
         </header>
-        <div className="flex items-stretch gap-2"><div className="min-w-0 flex-1"><AdvancedFilters value={filters} onChange={setFilters} defaultPreset="today" /></div><button onClick={() => loadPeriod(filters)} className="rounded-xl border bg-white px-4 text-blue-700" aria-label="تحديث بيانات الفترة"><RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button></div>
-        {!loading && loadError && <Panel className="border-amber-200 bg-amber-50 p-5 text-sm font-bold text-amber-900"><span role="alert">{loadError} — {data ? "تم الاحتفاظ بآخر بيانات موثوقة." : "لم تُعرض أرقام بديلة أو بيانات من فترة سابقة."}</span></Panel>}
-        {(Boolean(data) || loading) && <>
-        <Panel title="ملخص الفترة" testid="advanced-period-summary"><div className="bg-slate-50 px-4 text-slate-800"><h2 className="font-extrabold">ملخص الفترة</h2></div><div className="p-3"><SummaryStrip data={data} filters={filters} loading={loading} /></div></Panel>
+        <div className="flex items-stretch gap-2"><div className="min-w-0 flex-1"><AdvancedFilters value={filters} onChange={setFilters} defaultPreset="today" /></div><button type="button" onClick={refreshAll} disabled={loading} aria-busy={loading} className="rounded-xl border bg-white px-4 text-blue-700 disabled:cursor-wait disabled:opacity-60" aria-label="تحديث بيانات الفترة"><RefreshCw aria-hidden="true" className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button></div>
+        {!loading && loadError && <Panel className="border-amber-200 bg-amber-50 p-5 text-sm font-bold text-amber-900"><span role="alert">{loadError} — {visibleData ? "تم الاحتفاظ بآخر بيانات موثوقة." : "لم تُعرض أرقام بديلة أو بيانات من فترة سابقة."}</span></Panel>}
+        <PeriodSummaryCard data={periodSummary.data} filters={filters} loading={periodSummary.loading} error={periodSummary.error} onRefresh={periodSummary.refresh} />
         <CampaignAdvisorCard />
-        <div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="min-w-0 space-y-4"><DashboardAdsSpendCard collapsible fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} />{ABANDONED_CARTS_DASHBOARD_AUTO_SYNC ? <AbandonedCartsCard carts={carts} summary={cartSummary} /> : <Panel testid="advanced-abandoned-carts-frozen" title="السلات المتروكة"><div className="bg-slate-800 px-4 text-white"><h2 className="font-bold">السلات المتروكة</h2></div><p role="status" className="p-4 text-sm">تم إيقاف التحديث التلقائي مؤقتًا لتحسين أداء لوحة التحكم.</p></Panel>}</aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="min-w-0 space-y-4"><ProfitCard data={data} loading={loading} fromDate={filters.from} toDate={filters.to} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="min-w-0 space-y-4"><GaLive data={ga} /><LatestSoldProductsCard collapsible /></div></div></main></div>
-        </>}
+        <div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]">
+            <aside dir="rtl" className="min-w-0 space-y-4">
+                <DashboardAdsSpendCard collapsible fromDate={filters.from} toDate={filters.to} />
+                <TopProductsCard rows={topProducts.data?.product_cost_v2?.product_rows} summary={topProducts.data?.product_cost_v2} filters={filters} loading={topProducts.loading} error={topProducts.error} onRefresh={topProducts.refresh} />
+                {ABANDONED_CARTS_DASHBOARD_AUTO_SYNC ? <AbandonedCartsCard carts={carts} summary={cartSummary} />
+                    : <Panel testid="advanced-abandoned-carts-frozen" title="السلات المتروكة"><div className="bg-slate-800 px-4 text-white"><h2 className="font-bold">السلات المتروكة</h2></div><p role="status" className="p-4 text-sm">تم إيقاف التحديث التلقائي مؤقتًا لتحسين أداء لوحة التحكم.</p></Panel>}
+            </aside>
+            <main dir="rtl" className="min-w-0">
+                <div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]">
+                    <div dir="rtl" className="min-w-0 space-y-4">
+                        {(Boolean(visibleData) || loading) && <ProfitCard data={visibleData} loading={loading} fromDate={filters.from} toDate={filters.to} />}
+                        <LatestOrders orders={orders} totals={visibleData?.totals} />
+                    </div>
+                    <div dir="rtl" className="min-w-0 space-y-4"><GaLive data={ga} /><LatestSoldProductsCard collapsible /></div>
+                </div>
+            </main>
+        </div>
     </div>;
 }
 

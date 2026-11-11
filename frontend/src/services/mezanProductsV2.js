@@ -1,17 +1,58 @@
 import api from "../lib/api";
 
-let recentSyncPromise = null;
-let recentSyncAt = 0;
-const RECENT_SYNC_TTL_MS = 45_000;
+export const RECENT_PRODUCTS_SYNC_INTERVAL_MS = 60 * 60 * 1000;
+const RECENT_SYNC_RETRY_MS = 60 * 1000;
+const RECENT_SYNC_REQUEST_TIMEOUT_MS = 105 * 1000;
+let recentSyncScope = null;
 
-export async function syncRecentProductsV2({ force = false } = {}) {
+function ownerSyncState(ownerId) {
+    const id = ownerId == null ? "" : String(ownerId).trim();
+    // Callers without an authenticated owner identity use server admission.
+    // Never share a successful timestamp or pending response across users.
+    if (!id) return null;
+    if (recentSyncScope?.ownerId !== id) {
+        recentSyncScope = { ownerId: id, nextAllowedAt: 0, promise: null };
+    }
+    return recentSyncScope;
+}
+
+export function getRecentProductsSyncNextAt(ownerId) {
+    const id = ownerId == null ? "" : String(ownerId).trim();
+    return id && recentSyncScope?.ownerId === id ? recentSyncScope.nextAllowedAt : null;
+}
+
+function nextRecentSyncAt(result, now) {
+    if (result?.ok === true && result?.skipped !== true) {
+        return now + RECENT_PRODUCTS_SYNC_INTERVAL_MS;
+    }
+    const serverTime = Date.parse(result?.next_retry_at || "");
+    const maximum = result?.skipped === true && result?.reason === "up_to_date"
+        ? RECENT_PRODUCTS_SYNC_INTERVAL_MS : 2 * RECENT_SYNC_RETRY_MS;
+    return Number.isFinite(serverTime) && serverTime > now
+        ? Math.min(serverTime, now + maximum)
+        : now + RECENT_SYNC_RETRY_MS;
+}
+
+export async function syncRecentProductsV2({ force = false, ownerId = null } = {}) {
     const now = Date.now();
-    if (!force && now - recentSyncAt < RECENT_SYNC_TTL_MS) return null;
-    if (recentSyncPromise) return recentSyncPromise;
-    recentSyncPromise = api.post("/products-v2/sync-recent")
-        .then((response) => { recentSyncAt = Date.now(); return response.data; })
-        .finally(() => { recentSyncPromise = null; });
-    return recentSyncPromise;
+    const state = ownerSyncState(ownerId);
+    if (state?.promise) return state.promise;
+    if (!force && state && now < state.nextAllowedAt) return null;
+    const request = api.post("/products-v2/sync-recent", undefined, {
+        params: { force },
+        timeout: RECENT_SYNC_REQUEST_TIMEOUT_MS,
+        _mezanAuthDeadlineAt: now + RECENT_SYNC_REQUEST_TIMEOUT_MS,
+    }).then((response) => {
+        if (state) state.nextAllowedAt = nextRecentSyncAt(response.data, Date.now());
+        return response.data;
+    }).catch((error) => {
+        if (state) state.nextAllowedAt = Date.now() + RECENT_SYNC_RETRY_MS;
+        throw error;
+    }).finally(() => {
+        if (state) state.promise = null;
+    });
+    if (state) state.promise = request;
+    return request;
 }
 
 export async function listProductsV2({ page = 1, perPage = 30, query = "", status = "" } = {}) {
@@ -61,7 +102,7 @@ export async function listWorkspaceProducts({
 }
 
 export async function getProductsV2Summary() { return (await api.get("/products-v2/summary")).data; }
-export async function syncProductsV2() { const response = await api.post("/products-v2/sync"); recentSyncAt = Date.now(); return response.data; }
+export async function syncProductsV2() { return (await api.post("/products-v2/sync")).data; }
 export async function getProductV2(productId) { return (await api.get(`/products-v2/${encodeURIComponent(productId)}`)).data; }
 export async function refreshProductV2Details(productId) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/refresh-details`)).data; }
 export async function getProductV2Costs(productId) { return (await api.get(`/products-v2/${encodeURIComponent(productId)}/costs`)).data; }

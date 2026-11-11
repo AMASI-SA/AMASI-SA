@@ -60,7 +60,7 @@ test("frozen card never loads on mount, period, timers, focus, visibility or con
     });
     for (let i = 0; i < 20; i++) await tick(15000);
     expect(cartCalls()).toHaveLength(0);
-    expect(api.get.mock.calls.some(([url]) => url.startsWith("/dashboard-v2?"))).toBe(true);
+    expect(api.get.mock.calls.some(([url]) => url.startsWith("/dashboard-v2/cards/executive?"))).toBe(true);
 });
 test("release configuration defaults to frozen", () => {
     expect(jest.requireActual("../lib/dashboardLiveRefresh").ABANDONED_CARTS_DASHBOARD_AUTO_SYNC).toBe(false);
@@ -69,7 +69,7 @@ test("release configuration defaults to frozen", () => {
 test("dashboard does not fetch a shadow comparison without a visible consumer", async () => {
     await act(async () => root.render(<AdvancedDashboard />));
     expect(api.get.mock.calls.filter(([url]) => url.startsWith("/dashboard-v2/unified-marketing-shadow"))).toHaveLength(0);
-    expect(api.get.mock.calls.some(([url]) => url.startsWith("/dashboard-v2?"))).toBe(true);
+    expect(api.get.mock.calls.some(([url]) => url.startsWith("/dashboard-v2/cards/executive?"))).toBe(true);
 });
 
 test("realtime polling pauses while hidden or offline and never overlaps a pending read", async () => {
@@ -96,10 +96,10 @@ test("realtime polling pauses while hidden or offline and never overlaps a pendi
     await act(async () => resolveGa({ data: {} }));
 });
 
-test("automatic summary refresh waits for active reads while manual refresh can proceed", async () => {
+test("automatic executive refresh waits for active reads and its cache deadline while manual refresh can proceed", async () => {
     const summaryReads = [];
     api.get.mockImplementation((url) => {
-        if (!url.startsWith("/dashboard-v2?")) return Promise.resolve({ data: {} });
+        if (!url.startsWith("/dashboard-v2/cards/executive?")) return Promise.resolve({ data: {} });
         return new Promise((resolve) => summaryReads.push(() => resolve({ data: {} })));
     });
 
@@ -109,6 +109,8 @@ test("automatic summary refresh waits for active reads while manual refresh can 
     expect(summaryReads).toHaveLength(1);
 
     await act(async () => summaryReads[0]());
+    await tick(refreshConfig.DASHBOARD_AUTO_REFRESH_MS);
+    expect(summaryReads).toHaveLength(1);
     await tick(refreshConfig.DASHBOARD_AUTO_REFRESH_MS);
     expect(summaryReads).toHaveLength(2);
     await act(async () => { window.dispatchEvent(new Event("focus")); });
@@ -120,7 +122,7 @@ test("automatic summary refresh waits for active reads while manual refresh can 
     await tick(refreshConfig.DASHBOARD_AUTO_REFRESH_MS);
     expect(summaryReads).toHaveLength(3);
     await act(async () => summaryReads[2]());
-    await tick(refreshConfig.DASHBOARD_AUTO_REFRESH_MS);
+    await tick(2 * refreshConfig.DASHBOARD_AUTO_REFRESH_MS);
     expect(summaryReads).toHaveLength(4);
     await act(async () => summaryReads[3]());
 });
