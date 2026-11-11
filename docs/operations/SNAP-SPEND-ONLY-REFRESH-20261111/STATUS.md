@@ -58,3 +58,8 @@ Fresh shared guardinactive and tracked-source checks, fast-forward /app to merge
 ## Shared platform prepare checkpoint — 2026-11-11T17:57Z
 
 Shared `/app` was fast-forwarded from expected J to merge M only after a fresh inactive guard and clean tracked-source check; unrelated untracked files were preserved. Actual `emergent_deployment_adapter.py build` passed (exit0,62.84seconds). Generated identity matches frozen A/J/runtime. Official prepare succeeded at `2026-11-11T17:57:00.106139+00:00`, protocol5, actor `codex-snap-spend-only-refresh-20261111`, exact deployment M and runtime. **Our release lease is active; do not modify shared source or publish another release.** No publication submitted yet. Next: official prepublish, one publication, new explicit success, official verify3/final inactive, live spend-only dashboard readback. This is the latest state and supersedes earlier pending-build notes.
+
+
+## Publication submitted — 2026-11-11T18:00Z
+
+Official prepublish returned `ready_to_publish:true` with exact frozen A/M/runtime identities. Emergent accepted one Publish changes action and explicitly showed `Deployment Started Nov 11, 09:00 PM` Riyadh. Deployment remains in progress at this checkpoint. Prior version baseline is `2e328d9`; do not count it as success for this task. Our release lease remains active. A logged-in dashboard baseline was read for2026-11-11 without pressing the old refresh button. Next: explicit new deployment success, official three-probe verify/final inactive, then actual new button readback. Do not repeat publication.

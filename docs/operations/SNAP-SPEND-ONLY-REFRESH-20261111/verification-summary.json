@@ -44,7 +44,12 @@
       "tree": "6089891dbfe1dfb332128d231ef78372496a7d8e",
       "normal_merge": true
     },
-    "publication": null,
+    "publication": {
+      "status": "publishing",
+      "submitted_once": true,
+      "baseline": "2e328d9",
+      "baseline_published_at_riyadh": "2026-11-11 20:32"
+    },
     "guard_observed_active": true,
     "exact_b_checks": {
       "runs": 19,
@@ -74,7 +79,12 @@
       "release_id": "rg5-2592df843af84da961459fe1f158ae677cb5ecd0173cde83483c97372af8070d"
     },
     "own_lease_active": true,
-    "publish_submitted": false
+    "publish_submitted": true,
+    "prepublish": {
+      "exit_code": 0,
+      "ready_to_publish": true,
+      "exact_identities_match": true
+    }
   },
   "next": "Run official prepublish immediately before one authorized publication; observe new explicit success, official verify3, final guard inactive, then live spend-only dashboard readback."
 }
