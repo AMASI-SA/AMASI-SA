@@ -134,7 +134,7 @@ async def emit_instruction_notification(db, *, merchant_id, instruction, event_t
     if conversation_sources:
         try:
             from operational_instruction_conversations import capture_notifications
-            await capture_notifications(db, instruction, conversation_sources)
+            await capture_notifications(db, {**instruction, "user_id": merchant_id}, conversation_sources)
             await db[NOTIFICATIONS].update_many({"id": {"$in": [row["id"] for row in conversation_sources]},
                 "merchant_id": merchant_id}, {"$set": {"conversation_pending": False}})
         except Exception:

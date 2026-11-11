@@ -17,6 +17,7 @@ import order_tracking_notes_routes as routes
 from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS
 from mobile_app_permissions import MOBILE_APP_ACCESS
 from mobile_app_request_context import mobile_app_request_user
+from supplier_receiving_routes import SUPPLIER_INVOICES
 
 PREFIX = "/api/order-tracking-notes"
 PIECES = "mezan_preparation_pieces_v1"
@@ -176,7 +177,7 @@ class InstructionConversations(unittest.IsolatedAsyncioTestCase):
         self.assertIn(cid, [row["id"] for row in (await self.listing(view="history"))["items"]])
         self.assertEqual((await self.db[ORDER_TRACKING_INSTRUCTIONS].find_one({"id": "urgent"}))["status"], "active")
         self.assertEqual(await self.db[notices.TASKS].count_documents({"status": {"$ne": "pending"}}), 0)
-        self.assertEqual(await self.db["supplier_receiving_invoices_v1"].count_documents({}), 0)
+        self.assertEqual(await self.db[SUPPLIER_INVOICES].count_documents({}), 0)
 
     async def test_visible_read_does_not_consume_concurrent_completion(self):
         await self.select("cs")
@@ -243,7 +244,7 @@ class InstructionConversations(unittest.IsolatedAsyncioTestCase):
         a = await self.detail(a_id)
         self.assertNotIn("B confidential", str(a))
         self.assertNotIn("events", a)
-        self.assertNotIn("edit_preview", a)
+        self.assertIsNone(a.get("edit_preview"))
         self.assertEqual({card["piece_id"] for card in a["product_cards"]}, {"p1", "p2"})
 
     async def test_ambiguous_creator_notice_requires_explicit_employee_choice(self):
@@ -442,4 +443,234 @@ class InstructionConversations(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["created_at"], row["completed_at"])
         self.assertEqual(await self.db[EVENTS].count_documents({"conversation_id": cid, "recipient_id": "cs", "kind": "completed"}), 1)
         self.assertEqual((await self.listing())["items"], [])
+
+    async def reset_as_blocking(self, *, edit_flow=False):
+        from operational_instruction_conversations import CONVERSATIONS, EVENTS
+        from instruction_edit_flow import snapshot
+        for collection in (CONVERSATIONS, EVENTS, notices.TASKS, notices.NOTIFICATIONS):
+            await self.db[collection].delete_many({})
+        await self.db.users.update_one({"id": "cs"}, {"$set": {"role": "customer_service"}})
+        items = [{"order_item_id": pid + "-item", "name": "Product " + pid,
+            "quantity": 1, "options_normalized": {"size": "M"}} for pid in ("p1", "p2", "p3")]
+        self.instruction.update(action_type="edit_order", task_protocol=1, required_action="write_result",
+            approval_required=not edit_flow, target_stages=["preparation"])
+        if edit_flow:
+            self.instruction.update(edit_flow=1, edit_phase="awaiting_stop",
+                edit_baseline=snapshot(items, [row["order_item_id"] for row in items]))
+        await self.db[ORDER_TRACKING_INSTRUCTIONS].replace_one({"id": "urgent"}, deepcopy(self.instruction))
+        await notices.ensure_instruction_tasks(self.db, "owner", self.instruction)
+        await notices.emit_instruction_notification(self.db, merchant_id="owner", instruction=self.instruction,
+            event_type="created", recipient_ids={"a", "b", "cs"})
+        return items
+
+    async def test_opt_in_edit_stop_revision_and_submission_keep_live_scoped_business_fields(self):
+        items = await self.reset_as_blocking(edit_flow=True)
+        with patch.object(routes, "get_order", AsyncMock(side_effect=lambda *args, **kwargs: {"items": deepcopy(items)})):
+            selected = {}
+            for actor in ("a", "b"):
+                await self.select(actor)
+                detail = await self.detail()
+                selected[actor] = detail["conversation"]["id"]
+                tasks = detail["instruction"]["tasks"]
+                self.assertTrue(detail["capabilities"]["can_acknowledge_edit_stop"])
+                await self.read(detail)
+                still_pending = await self.detail(selected[actor])
+                self.assertTrue(all(not task.get("stop_acknowledged_at") for task in still_pending["instruction"]["tasks"]))
+                response = await self.client.post(PREFIX + "/instructions/urgent/stop-acknowledgment", json={
+                    "task_ids": [task["id"] for task in tasks], "note": actor + " stopped"})
+                self.assertEqual(response.status_code, 200, response.text)
+                fresh = await self.detail(selected[actor])
+                self.assertTrue(all(task.get("stop_acknowledged_at") for task in fresh["instruction"]["tasks"]))
+                self.assertEqual({task["stop_note"] for task in fresh["instruction"]["tasks"]}, {actor + " stopped"})
+            items[0]["options_normalized"]["size"] = "L"
+            await self.select("cs")
+            author = await self.detail(selected["a"])
+            self.assertEqual(author["instruction"]["edit_phase"], "awaiting_salla")
+            self.assertTrue(author["capabilities"]["can_send_edit_revision"])
+            self.assertTrue(author["edit_preview"]["changed"])
+            self.assertEqual(set(author["edit_preview"]), {"changed", "revision"})
+            self.assertEqual({task["assignee_id"] for task in author["instruction"]["tasks"]}, {"a"})
+            digest = author["edit_preview"]["revision"]
+            response = await self.client.post(PREFIX + "/instructions/urgent/send-edit", json={"revision": digest})
+            self.assertEqual(response.status_code, 200, response.text)
+            for actor in ("a", "b"):
+                await self.select(actor)
+                detail = await self.detail(selected[actor])
+                self.assertEqual(detail["instruction"]["edit_phase"], "revision_sent")
+                self.assertEqual(detail["instruction"]["edit_revision"], digest)
+                self.assertTrue(detail["edit_revision_current"])
+                self.assertTrue(detail["capabilities"]["can_submit_tasks"])
+                if actor == "a":
+                    self.assertEqual(next(card for card in detail["product_cards"] if card["piece_id"] == "p1")["requested_options"]["size"], "L")
+                response = await self.client.post(PREFIX + "/instructions/urgent/tasks/submit", json={
+                    "task_ids": [task["id"] for task in detail["instruction"]["tasks"]], "confirmation": "modified",
+                    "note": actor + " completed work", "revision": digest})
+                self.assertEqual(response.status_code, 200, response.text)
+                fresh = await self.detail(selected[actor])
+                self.assertEqual({task["status"] for task in fresh["instruction"]["tasks"]}, {"submitted"})
+                self.assertEqual({task["result_note"] for task in fresh["instruction"]["tasks"]}, {actor + " completed work"})
+                self.assertTrue(all(task.get("submitted_at") for task in fresh["instruction"]["tasks"]))
+            final = await self.db[ORDER_TRACKING_INSTRUCTIONS].find_one({"id": "urgent"})
+            self.assertEqual(final["status"], "completed")  # edit_flow=1 has no second approval.
+
+    async def test_opt_in_existing_approval_flow_keeps_submission_rejection_and_approval(self):
+        await self.reset_as_blocking()
+        selected = {}
+
+        async def submit(actor):
+            await self.select(actor)
+            detail = await self.detail(selected.get(actor, ""))
+            selected[actor] = detail["conversation"]["id"]
+            response = await self.client.post(PREFIX + "/instructions/urgent/tasks/submit", json={
+                "task_ids": [task["id"] for task in detail["instruction"]["tasks"]],
+                "confirmation": "modified", "note": actor + " submitted"})
+            self.assertEqual(response.status_code, 200, response.text)
+
+        await submit("a")
+        await submit("b")
+        await self.select("cs")
+        author = await self.detail(selected["a"])
+        self.assertEqual(author["instruction"]["status"], "waiting_customer_service_approval")
+        self.assertTrue(author["capabilities"]["can_approve_resume"])
+        self.assertEqual({task["assignee_id"] for task in author["instruction"]["tasks"]}, {"a"})
+        response = await self.client.post(PREFIX + "/instructions/urgent/reject", json={
+            "task_ids": [task["id"] for task in author["instruction"]["tasks"]], "note": "A should correct the size"})
+        self.assertEqual(response.status_code, 200, response.text)
+        await self.select("a")
+        rejected = await self.detail(selected["a"])
+        self.assertEqual({task["status"] for task in rejected["instruction"]["tasks"]}, {"pending"})
+        self.assertEqual({task["rejection_note"] for task in rejected["instruction"]["tasks"]}, {"A should correct the size"})
+        await self.select("b")
+        other = await self.detail(selected["b"])
+        self.assertNotIn("A should correct the size", str(other))
+        await submit("a")
+        await self.select("cs")
+        author = await self.detail(selected["a"])
+        self.assertTrue(author["capabilities"]["can_approve_resume"])
+        response = await self.client.post(PREFIX + "/instructions/urgent/approve", json={"note": "Approved after actual execution"})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual((await self.detail(selected["a"]))["instruction"]["status"], "completed")
+
+    async def test_preupgrade_notice_reconstructs_only_proven_supplier_receipt_history(self):
+        from operational_instruction_conversations import CONVERSATIONS, EVENTS
+        source = await self.db[notices.NOTIFICATIONS].find_one({"recipient_id": "a", "event_type": "created"})
+        for collection in (CONVERSATIONS, EVENTS):
+            await self.db[collection].delete_many({})
+        await self.db[notices.NOTIFICATIONS].update_many({}, {"$unset": {"conversation_pending": ""}})
+        at = datetime.now(timezone.utc)
+        await self.db[PIECES].update_many({"responsible_employee_id": "a"}, {"$set": {
+            "responsible_employee_id": "b", "previous_responsible_employee_id": "a", "reassignment_reason": "supplier_receipt",
+            "reassignment_invoice_id": "legacy-receipt", "reassignment_session_id": "legacy-session", "reassigned_at": at,
+            "status": "received", "execution_status": "received_from_supplier", "supplier_dispatch_status": "received",
+            "received_at": at, "remaining_service_count": 0}})
+        await notices.ensure_instruction_tasks(self.db, "owner", self.instruction)
+        self.assertEqual(await self.db[notices.TASKS].count_documents({"assignee_id": "a"}), 0)
+        from operational_instruction_progress import refresh_instruction_progress
+        await refresh_instruction_progress(self.db, self.instruction)
+        self.assertIsNone((await self.db[notices.NOTIFICATIONS].find_one({"id": source["id"]}))["read_at"])
+        self.assertEqual((await self.listing())["items"], [])
+        await self.select("cs")
+        result = next(row for row in (await self.listing())["items"] if row["peer"]["id"] == "a")
+        self.assertEqual(result["outcome"], "completed")
+        self.assertGreater(result["unread_count"], 0)
+        await self.select("a")
+        detail = await self.detail(notice_id=source["id"])
+        self.assertEqual(detail["conversation"]["outcome"], "completed")
+        self.assertEqual({card["piece_id"] for card in detail["product_cards"]}, {"p1", "p2"})
+        self.assertEqual(await self.db[notices.TASKS].count_documents({"assignee_id": "a"}), 0)
+        for collection in (CONVERSATIONS, EVENTS):
+            await self.db[collection].delete_many({})
+        await self.db[PIECES].update_many({"piece_id": {"$in": ["p1", "p2"]}}, {"$set": {"reassignment_reason": "manual"}})
+        denied = await self.client.get(PREFIX + "/instructions/urgent", params={"conversation_only": "true", "notice_id": source["id"]})
+        self.assertEqual(denied.status_code, 404)
+        await self.select("unrelated")
+        response = await self.client.get(PREFIX + "/instructions/urgent", params={"conversation_only": "true", "notice_id": source["id"]})
+        self.assertEqual(response.status_code, 404)
+
+    async def test_preupgrade_closed_history_uses_owned_task_snapshot_when_pieces_are_archived(self):
+        from operational_instruction_conversations import CONVERSATIONS, EVENTS
+        source = await self.db[notices.NOTIFICATIONS].find_one({"recipient_id": "a", "event_type": "created"})
+        for collection in (CONVERSATIONS, EVENTS):
+            await self.db[collection].delete_many({})
+        await self.db[notices.NOTIFICATIONS].update_many({}, {"$unset": {"conversation_pending": ""}})
+        await self.db[ORDER_TRACKING_INSTRUCTIONS].update_one({"id": "urgent"}, {"$set": {"status": "completed"}})
+        await self.db[PIECES].delete_many({"responsible_employee_id": "a"})
+        detail = await self.detail(notice_id=source["id"])
+        self.assertEqual({card["piece_id"] for card in detail["product_cards"]}, {"p1", "p2"})
+        self.assertEqual({card["name"] for card in detail["product_cards"]}, {"Product p1", "Product p2"})
+        self.assertTrue(all(card["assigned_at"] is None for card in detail["product_cards"]))
+        self.assertNotIn("p3", str(detail["product_cards"]))
+
+    async def test_preupgrade_submitted_history_survives_second_get_and_read_without_new_owner_fields(self):
+        from operational_instruction_conversations import CONVERSATIONS, EVENTS
+        source = await self.db[notices.NOTIFICATIONS].find_one({"recipient_id": "a", "event_type": "created"})
+        for collection in (CONVERSATIONS, EVENTS):
+            await self.db[collection].delete_many({})
+        await self.db[notices.NOTIFICATIONS].update_many({}, {"$unset": {"conversation_pending": ""}})
+        await self.db[ORDER_TRACKING_INSTRUCTIONS].update_one({"id": "urgent"}, {"$set": {"status": "completed"}})
+        await self.db[notices.TASKS].update_many({"assignee_id": "a"}, {"$set": {"status": "submitted", "result_note": "A historical work"}})
+        await self.db[PIECES].update_many({"responsible_employee_id": "a"}, {"$set": {
+            "responsible_employee_id": "b", "product_name": "B new private change", "reassignment_reason": "manual"}})
+        first = await self.detail(notice_id=source["id"])
+        second = await self.detail(first["conversation"]["id"])
+        await self.read(second)
+        third = await self.detail(first["conversation"]["id"])
+        self.assertNotIn("B new private change", str(third))
+        self.assertEqual({card["name"] for card in third["product_cards"]}, {"Product p1", "Product p2"})
+
+    async def test_manual_nonblocking_close_is_closed_history_not_a_ready_result(self):
+        cid = (await self.listing())["items"][0]["id"]
+        await self.db[ORDER_TRACKING_INSTRUCTIONS].update_one({"id": "urgent"}, {"$set": {
+            "status": "completed", "completed_by": "cs", "completed_at": datetime.now(timezone.utc)}})
+        await self.select("cs")
+        detail = await self.detail(cid)
+        self.assertEqual(detail["conversation"]["outcome"], "closed")
+        self.assertFalse(detail["conversation"]["alert_active"])
+        self.assertNotIn("جاهز", detail["conversation"]["completion_label"])
+
+    async def test_direct_preparation_requires_committed_readiness_timestamp(self):
+        cid = (await self.listing())["items"][0]["id"]
+        from operational_instruction_progress import refresh_instruction_progress
+        await self.db[PIECES].update_many({"responsible_employee_id": "a"}, {"$set": {"assembly_status": "ready"}})
+        await refresh_instruction_progress(self.db, self.instruction)
+        self.assertEqual((await self.detail(cid))["conversation"]["state"], "active")
+        await self.db[PIECES].update_many({"responsible_employee_id": "a"}, {"$set": {"assembly_ready_at": datetime.now(timezone.utc)}})
+        await refresh_instruction_progress(self.db, self.instruction)
+        self.assertEqual((await self.listing())["items"], [])
+        await self.select("cs")
+        detail = await self.detail(cid)
+        self.assertEqual(detail["conversation"]["outcome"], "completed")
+        self.assertEqual(detail["conversation"]["completion_label"], "المنتج جاهز")
+
+    async def test_item_and_piece_scopes_preserve_target_semantics_and_employee_cards(self):
+        from operational_instruction_conversations import CONVERSATIONS, EVENTS
+        # Multiple physical units of the same item belong to different employees.
+        await self.db[PIECES].update_many({}, {"$set": {"order_item_id": "shared-item"}})
+        for scope, target, own_ids in (("item", "shared-item", {"p1", "p2"}), ("piece", "p1", {"p1"})):
+            with self.subTest(scope=scope):
+                for collection in (CONVERSATIONS, EVENTS, notices.NOTIFICATIONS, notices.TASKS):
+                    await self.db[collection].delete_many({})
+                self.instruction.update(scope=scope, target_id=target, target_ids=[target])
+                await self.db[ORDER_TRACKING_INSTRUCTIONS].replace_one({"id": "urgent"}, deepcopy(self.instruction))
+                await notices.ensure_instruction_tasks(self.db, "owner", self.instruction)
+                await notices.emit_instruction_notification(self.db, merchant_id="owner", instruction=self.instruction,
+                    event_type="created", recipient_ids={"a", "b", "cs"} if scope == "item" else {"a", "cs"})
+                await self.select("a")
+                detail = await self.detail()
+                cid = detail["conversation"]["id"]
+                self.assertEqual({card["piece_id"] for card in detail["product_cards"]}, own_ids)
+                self.assertEqual(detail["instruction"]["target_ids"], [target])
+                self.assertEqual(set(detail["instruction"]["target_piece_ids"]), own_ids)
+                await self.select("cs")
+                author = await self.detail(cid)
+                self.assertEqual({card["piece_id"] for card in author["product_cards"]}, own_ids)
+                await self.select("b")
+                forbidden = await self.client.get(PREFIX + "/instructions/urgent", params={
+                    "conversation_only": "true", "conversation_id": cid})
+                self.assertEqual(forbidden.status_code, 404)
+                if scope == "item":
+                    self.assertEqual({card["piece_id"] for card in (await self.detail())["product_cards"]}, {"p3"})
+                else:
+                    forbidden = await self.client.get(PREFIX + "/instructions/urgent", params={"conversation_only": "true"})
+                    self.assertEqual(forbidden.status_code, 404)
 

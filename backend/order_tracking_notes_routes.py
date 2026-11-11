@@ -1125,9 +1125,21 @@ def make_order_tracking_notes_router(
             # capabilities and evidence produced by the selected employee.
             assignee_id = (conversation["conversation"]["peer"]["id"]
                 if conversation["instruction"].get("created_by") == context["actor_id"] else context["actor_id"])
+            visible_pieces = {card["piece_id"] for card in conversation["product_cards"]}
+            current_instruction = legacy.get("instruction") or {}
+            live_tasks = [task for task in current_instruction.get("tasks", [])
+                if task.get("assignee_id") == assignee_id and task.get("piece_id") in visible_pieces]
+            if live_tasks:
+                conversation["instruction"]["tasks"] = live_tasks
+            for field in ("status", "edit_flow", "edit_phase", "edit_revision", "edit_submission_started", "required_action",
+                    "approval_required", "enforcement", "activation_state", "can_approve_resume", "can_close_instruction"):
+                if field in current_instruction:
+                    conversation["instruction"][field] = current_instruction[field]
+            preview = legacy.get("edit_preview")
+            safe_preview = {key: preview[key] for key in ("changed", "revision", "error") if key in preview} if isinstance(preview, dict) else None
             return {"capabilities": legacy.get("capabilities", {}),
                 "evidence": [entry for entry in legacy.get("evidence", []) if entry.get("created_by") == assignee_id],
-                "edit_revision_current": legacy.get("edit_revision_current", False), **conversation}
+                "edit_preview": safe_preview, "edit_revision_current": legacy.get("edit_revision_current", False), **conversation}
         context, row, can_manage = await authorized_instruction(instruction_id, user, history=True)
         current_recipients = await recipients(db, context["merchant_id"], row)
         current = context["actor_id"] in current_recipients

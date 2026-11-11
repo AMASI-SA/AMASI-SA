@@ -35,7 +35,9 @@ PIECE_SNAPSHOT_FIELDS = (
     "received_at", "preparation_receipt_status", "preparation_received_at", "preparation_received_from_employee_id",
     "assembly_status", "assembly_ready_at", "remaining_service_count", "service_plan_status",
 )
-TASK_SNAPSHOT_FIELDS = ("id", "piece_id", "order_item_id", "product_name", "assignee_id", "stage", "status", "current")
+TASK_SNAPSHOT_FIELDS = ("id", "piece_id", "order_item_id", "product_name", "assignee_id", "stage", "status", "current",
+    "result_note", "stop_acknowledged_at", "stop_acknowledged_by", "stop_note", "submitted_at", "submitted_by",
+    "submitted_revision", "rejection_note", "acknowledged_at", "acknowledged_by", "confirmation")
 
 
 def now():
@@ -92,6 +94,8 @@ def completion_for(piece, stage):
         if (piece.get("preparation_receipt_status") == "received"
                 and stamp(piece.get("preparation_received_at")) > EPOCH):
             return "اكتمل تجهيز المنتج"
+        if piece.get("assembly_status") == "ready" and stamp(piece.get("assembly_ready_at")) > EPOCH:
+            return "المنتج جاهز"  # Direct preparation can finish without a supplier route.
     if stage == "preparation_receiving" and (piece.get("preparation_receipt_status") == "received"
             and stamp(piece.get("preparation_received_at")) > EPOCH):
         return "تم الاستلام من موظف التجهيز"
@@ -113,13 +117,14 @@ def receipt_transfer_completed(piece, assignee, stage):
 
 def _snapshot_instruction(instruction, tasks):
     piece_ids = {task["piece_id"] for task in tasks}
-    item_ids = {task.get("order_item_id") for task in tasks}
+    item_ids = {text(task.get("order_item_id")) for task in tasks if text(task.get("order_item_id"))}
     fields = ("id", "order_number", "scope", "action_type", "action_label", "priority", "note", "target_stages",
         "target_stage_labels", "enforcement", "required_action", "approval_required", "status", "created_by",
         "created_by_name", "created_at", "task_protocol", "thread_protocol", "edit_flow", "edit_phase", "edit_revision")
     result = {key: instruction[key] for key in fields if key in instruction}
-    result.update(tasks=tasks, target_piece_ids=sorted(piece_ids), target_ids=sorted(piece_ids),
-        target_id=next(iter(sorted(piece_ids)), None))
+    target_ids = sorted(item_ids if instruction.get("scope") == "item" else piece_ids)
+    result.update(tasks=tasks, target_piece_ids=sorted(piece_ids), target_ids=target_ids,
+        target_id=next(iter(target_ids), None))
     result["proposed_changes"] = [change for change in instruction.get("proposed_changes", [])
         if not change.get("order_item_id") or change["order_item_id"] in item_ids]
     for field in ("edit_baseline", "edit_requested"):
@@ -127,7 +132,7 @@ def _snapshot_instruction(instruction, tasks):
     return result
 
 
-async def reconcile_instruction(db, instruction, *, pieces=None, workflow=None, tasks=None):
+async def reconcile_instruction(db, instruction, *, pieces=None, workflow=None, tasks=None, historical_recipients=()):
     """Called by existing event/progress hooks, or once on explicit thread open."""
     merchant, iid, creator = instruction["user_id"], instruction["id"], text(instruction.get("created_by"))
     if not creator:
@@ -141,6 +146,27 @@ async def reconcile_instruction(db, instruction, *, pieces=None, workflow=None, 
     previous_by_actor = {row["assignee_id"]: row for row in previous}
     by_piece = {text(piece.get("piece_id")): piece for piece in pieces}
     tasks = list(tasks)
+    historical_recipients = set(historical_recipients) - {creator, ""}
+    historical_recipients.update(row["assignee_id"] for row in previous if row.get("terminal_history_authorized"))
+    if not previous:
+        old_delivery = await db[NOTIFICATIONS].find({"merchant_id": merchant, "instruction_id": iid,
+            "event_type": {"$in": ["created", "assigned", "edit_sent"]}}, {"recipient_id": 1}).limit(5000).to_list(5000)
+        historical_recipients.update(text(source.get("recipient_id")) for source in old_delivery)
+        historical_recipients -= {creator, ""}
+    # Pre-upgrade tasks may already belong to the employee who approved the
+    # receipt. Rebuild only the earlier recipient's proven receipt references;
+    # these are projection records, never restored business task assignments.
+    for assignee in historical_recipients:
+        for piece in pieces:
+            pid = text(piece.get("piece_id"))
+            if not pid or not instruction_targets(instruction, piece_id=pid, order_item_id=text(piece.get("order_item_id"))):
+                continue
+            stage = next((stage for stage in instruction.get("target_stages", [])
+                if receipt_transfer_completed(piece, assignee, stage)), None)
+            if stage and not any(task.get("assignee_id") == assignee and task.get("piece_id") == pid for task in tasks):
+                tasks.append({"id": identity(merchant, iid, pid, stage), "piece_id": pid,
+                    "order_item_id": text(piece.get("order_item_id")), "product_name": text(piece.get("product_name")),
+                    "assignee_id": assignee, "stage": stage, "status": "pending", "current": False})
     # The pending business task may already have transferred to the receiver.
     # Its former participant is retained only with the committed custody proof.
     for prior in previous:
@@ -154,24 +180,30 @@ async def reconcile_instruction(db, instruction, *, pieces=None, workflow=None, 
         piece = by_piece.get(task.get("piece_id"))
         if not assignee or assignee == creator:
             continue
+        terminal_history = instruction.get("status") in TERMINAL_LABELS and assignee in historical_recipients
         # A pending reassignment revokes the former employee's access. Moving
         # to a later stage after their own completed work preserves history.
         if piece and task.get("stage") in {"preparation", "supplier_dispatch", "supplier_receiving", "preparation_receiving"}:
             if (text(piece.get("responsible_employee_id")) != assignee
                     and text(piece.get("preparation_received_from_employee_id")) != assignee
                     and not receipt_transfer_completed(piece, assignee, task.get("stage"))):
-                continue
-        if not task.get("current", True) and not piece and previous_by_actor.get(assignee, {}).get("state") != "completed":
+                if not terminal_history:
+                    continue
+                task = {**task, "_history_only": True}
+        if terminal_history and not piece:
+            task = {**task, "_history_only": True}
+        if not task.get("current", True) and not piece and previous_by_actor.get(assignee, {}).get("state") != "completed" and not terminal_history:
             continue
         established = any(old.get("id") == task["id"] for old in previous_by_actor.get(assignee, {}).get("tasks", []))
-        if not (task.get("current", True) or established or task.get("status") == "submitted"
+        if not (task.get("current", True) or established or terminal_history or task.get("status") == "submitted"
                 or task.get("acknowledged_at") or completion_for(piece or {}, task.get("stage"))):
             continue  # A future-stage task is not permission to read its note early.
         grouped.setdefault(assignee, []).append(task)
     # Keep a proven terminal snapshot if archived products no longer exist.
     for assignee, prior in previous_by_actor.items():
         if prior.get("state") == "completed" and assignee not in grouped and (
-                prior.get("receipt_transfer_authorized") or all(task["piece_id"] not in by_piece for task in prior.get("tasks", []))):
+                prior.get("receipt_transfer_authorized") or prior.get("terminal_history_authorized")
+                or all(task["piece_id"] not in by_piece for task in prior.get("tasks", []))):
             grouped[assignee] = prior.get("tasks", [])
     account_ids = set(grouped) | {creator}
     accounts = await db.users.find({"id": {"$in": sorted(account_ids)},
@@ -187,13 +219,19 @@ async def reconcile_instruction(db, instruction, *, pieces=None, workflow=None, 
         # moved between stages. Its first applicable task defines the goal.
         selected = {task["piece_id"]: task for task in prior.get("tasks", []) if task["piece_id"] in {t["piece_id"] for t in own}}
         for task in own:
-            selected.setdefault(task["piece_id"], task)
+            existing = selected.get(task["piece_id"])
+            if existing and existing["id"] == task["id"]:
+                selected[task["piece_id"]] = task
+            else:
+                selected.setdefault(task["piece_id"], task)
         new_pieces = bool(set(selected) - {task["piece_id"] for task in prior.get("tasks", [])}) if prior else False
         own = [{key: task.get(key) for key in TASK_SNAPSHOT_FIELDS} for task in selected.values()]
         own.sort(key=lambda task: (text(task.get("piece_id")), text(task.get("id"))))
         snapshots = {piece["piece_id"]: piece for piece in prior.get("pieces", [])}
         for pid in selected:
-            if pid in by_piece and (prior.get("state") != "completed" or pid not in snapshots):
+            if selected[pid].get("_history_only") and pid not in snapshots:
+                snapshots[pid] = {key: selected[pid].get(key) for key in ("piece_id", "order_item_id", "product_name")}
+            elif pid in by_piece and not selected[pid].get("_history_only") and (prior.get("state") != "completed" or pid not in snapshots):
                 old_assignment_at = snapshots.get(pid, {}).get("assigned_at")
                 snapshots[pid] = {key: by_piece[pid][key] for key in PIECE_SNAPSHOT_FIELDS if key in by_piece[pid]}
                 from preparation_progress_dates import employee_assignment_at, progress_timestamp
@@ -204,18 +242,24 @@ async def reconcile_instruction(db, instruction, *, pieces=None, workflow=None, 
                     employee_assignment_at({**by_piece[pid], "responsible_employee_id": assignee}, {}))
         snapshots = [snapshots[pid] for pid in sorted(selected) if pid in snapshots]
         terminal = instruction.get("status") in TERMINAL_LABELS
+        terminal_outcome = ("closed" if instruction.get("status") == "archived" or
+            instruction.get("status") == "completed" and instruction.get("action_type") not in BLOCKING_ACTION_TYPES
+            else instruction.get("status"))
         labels = [completion_for(by_piece.get(task["piece_id"], {}), task.get("stage")) for task in own]
         observed = (instruction.get("action_type") not in BLOCKING_ACTION_TYPES and bool(labels) and all(labels))
         retained_completion = prior.get("state") == "completed" and not new_pieces
         completed = terminal or observed or retained_completion
-        outcome = ("closed" if instruction.get("status") == "archived" else instruction["status"]) if terminal else (
+        outcome = terminal_outcome if terminal else (
             prior.get("outcome", "completed") if retained_completion else "completed" if observed else "active")
-        completion_label = (TERMINAL_LABELS[instruction["status"]] if terminal else
+        completion_label = (TERMINAL_LABELS[terminal_outcome] if terminal else
             (prior.get("completion_label") if retained_completion else "") or
             (labels[0] if observed and len(set(labels)) == 1 else "اكتمل المطلوب" if completed else ""))
         new_completion = completed and (not retained_completion or prior.get("outcome") != outcome)
         completion_key = identity(cid, outcome, *sorted(selected)) if new_completion else prior.get("completion_key", "")
         completed_at = now() if new_completion else prior.get("completed_at") if completed else None
+        terminal_actor = text(instruction.get("completed_by") or instruction.get("closed_by") or
+            instruction.get("cancelled_by") or instruction.get("rejected_by"))
+        alert_creator = not (terminal and terminal_actor == creator)
         first = snapshots[0] if snapshots else {}
         summary = {"name": text(first.get("product_name") or first.get("item_name")) or "منتجات الطلب",
             "image_url": text(first.get("selected_image_url") or first.get("resolved_image_url") or first.get("image_url")),
@@ -226,6 +270,9 @@ async def reconcile_instruction(db, instruction, *, pieces=None, workflow=None, 
             "instruction": _snapshot_instruction(instruction, own), "state": "completed" if completed else "active",
             "completion_label": completion_label, "outcome": outcome, "product_summary": summary,
             "completion_key": completion_key, "completed_at": completed_at,
+            "completion_alert_creator": alert_creator,
+            "terminal_history_authorized": bool(prior.get("terminal_history_authorized") or
+                terminal and assignee in historical_recipients),
             "receipt_transfer_authorized": bool(prior.get("receipt_transfer_authorized") or completed and any(
                 receipt_transfer_completed(by_piece.get(task["piece_id"], {}), assignee, task.get("stage")) for task in own)),
             "routing_task_ids": sorted({task["id"] for task in grouped[assignee]} | set(prior.get("routing_task_ids", []))),
@@ -250,13 +297,14 @@ async def reconcile_instruction(db, instruction, *, pieces=None, workflow=None, 
             completion_key = row["completion_key"]
             await append_event(db, row, key="outcome:" + completion_key, kind="completed", body=row["completion_label"],
                 author_id=SYSTEM, author_name="حالة المنتج", at=row["completed_at"],
-                alert_recipients={creator})
+                alert_recipients={creator} if row.get("completion_alert_creator", True) else set())
             if row.get("completion_notification_pending"):
-                from operational_instruction_notifications import emit_instruction_notification
-                await emit_instruction_notification(db, merchant_id=merchant,
-                    instruction={**instruction, "notification_revision": "conversation-completed:" + completion_key,
-                        "notification_metadata": {"conversation_id": cid, "conversation_completion_key": completion_key}, "note": row["completion_label"]},
-                    event_type="progress", recipient_ids={creator})
+                if row.get("completion_alert_creator", True):
+                    from operational_instruction_notifications import emit_instruction_notification
+                    await emit_instruction_notification(db, merchant_id=merchant,
+                        instruction={**instruction, "notification_revision": "conversation-completed:" + completion_key,
+                            "notification_metadata": {"conversation_id": cid, "conversation_completion_key": completion_key}, "note": row["completion_label"]},
+                        event_type="progress", recipient_ids={creator})
                 await db[CONVERSATIONS].update_one({"_id": cid, "completion_key": completion_key},
                     {"$set": {"completion_notification_pending": False}})
         result.append(row)
@@ -347,9 +395,11 @@ async def capture_notifications(db, instruction, sources, *, conversations=None)
                 key = "message:" + metadata["conversation_message_id"]
             if metadata.get("conversation_completion_key"):
                 key, kind = "outcome:" + metadata["conversation_completion_key"], "completed"
+            if event_type in {"approved", "completed", "closed"} and conversation.get("state") == "completed":
+                key, kind = "outcome:" + conversation["completion_key"], "completed"
             author = text(source.get("sender_id")) or conversation["creator_id"]
             await append_event(db, conversation, key=key, kind=kind,
-                body=text(source.get("message")) or text(source.get("title")), author_id=author,
+                body=(conversation.get("completion_label") if kind == "completed" else "") or text(source.get("message")) or text(source.get("title")), author_id=author,
                 author_name=text(source.get("sender_name")) or conversation["creator_name"], at=source.get("created_at"),
                 source=source, metadata=source.get("metadata"),
                 alert_recipients={conversation["creator_id"]} if event_type == "progress" else None)
@@ -362,7 +412,7 @@ async def backfill_actor(db, merchant_id, actor_id):
     query = {"merchant_id": merchant_id, "recipient_id": actor_id, "conversation_pending": {"$ne": False}}
     if bookmark.get("last_id") is not None:
         query["_id"] = {"$gt": bookmark["last_id"]}
-    rows = await db[NOTIFICATIONS].find(query).sort("_id", 1).to_list(40)
+    rows = await db[NOTIFICATIONS].find(query).sort("_id", 1).limit(40).to_list(40)
     if not rows:
         return
     by_instruction = {}
@@ -374,7 +424,8 @@ async def backfill_actor(db, merchant_id, actor_id):
             continue
         from operational_instruction_notifications import ensure_instruction_tasks
         await ensure_instruction_tasks(db, merchant_id, instruction)
-        conversations = await reconcile_instruction(db, instruction)
+        conversations = await reconcile_instruction(db, instruction,
+            historical_recipients={source["recipient_id"] for source in sources})
         await capture_notifications(db, instruction, sources, conversations=conversations)
         await db[NOTIFICATIONS].update_many({"merchant_id": merchant_id,
             "id": {"$in": [source["id"] for source in sources]}}, {"$set": {"conversation_pending": False}})
@@ -483,12 +534,15 @@ async def context(db, merchant_id, actor_id, instruction_id, cid="", notice_id="
         "$or": [{"creator_id": actor_id}, {"assignee_id": actor_id, "assignee_active": True}]}, {"_id": 1})
     assigned = await db[TASKS].find_one({"merchant_id": merchant_id, "instruction_id": instruction_id,
         "assignee_id": actor_id}, {"_id": 1}) if not participating else None
-    if not participating and not assigned and (not instruction or instruction.get("created_by") != actor_id):
+    historical_notice = await db[NOTIFICATIONS].find_one({"merchant_id": merchant_id, "instruction_id": instruction_id,
+        "recipient_id": actor_id, "event_type": {"$in": ["created", "assigned", "edit_sent"]}}, {"_id": 1}) if not participating else None
+    if not participating and not assigned and not historical_notice and (not instruction or instruction.get("created_by") != actor_id):
         raise HTTPException(404, detail={"code": "instruction_conversation_not_found"})
     if instruction and refresh:
         from operational_instruction_notifications import ensure_instruction_tasks
         tasks = await ensure_instruction_tasks(db, merchant_id, instruction)
-        await reconcile_instruction(db, instruction, tasks=tasks)
+        await reconcile_instruction(db, instruction, tasks=tasks,
+            historical_recipients={actor_id} if historical_notice else set())
     query = {"merchant_id": merchant_id, "instruction_id": instruction_id,
         "$or": [{"creator_id": actor_id}, {"assignee_id": actor_id, "assignee_active": True}]}
     if notice_id:
@@ -515,6 +569,8 @@ async def context(db, merchant_id, actor_id, instruction_id, cid="", notice_id="
     if not cid and len(rows) > 1 and rows[0]["creator_id"] == actor_id:
         return {"choices": [{"id": row["id"], "peer": {"id": row["assignee_id"], "name": row["assignee_name"]}} for row in rows]}
     row = rows[0]
+    if notice_id and ((source and not _applies(source, row)) or (not source and projected["conversation_id"] != row["id"])):
+        raise HTTPException(404, detail={"code": "instruction_conversation_not_found"})
     # Fill only this authorized thread's old messages/events. It is bounded and
     # uses immutable event identities; metadata polling does not call this.
     if instruction:
@@ -660,3 +716,4 @@ async def ensure_indexes(db):
     await db[EVENTS].create_index([("merchant_id", 1), ("recipient_id", 1), ("source_notice_id", 1)])
     await db[NOTIFICATIONS].create_index([("merchant_id", 1), ("recipient_id", 1), ("_id", 1)])
     await db[NOTIFICATIONS].create_index([("conversation_pending", 1), ("_id", 1)])
+    await db[NOTIFICATIONS].create_index([("merchant_id", 1), ("instruction_id", 1), ("event_type", 1), ("recipient_id", 1)])

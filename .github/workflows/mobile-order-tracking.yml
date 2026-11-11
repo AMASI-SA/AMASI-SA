@@ -97,7 +97,7 @@ jobs:
           assert len(tests) >= 20, len(tests)
           assert all(row.find('skipped') is None for row in tests)
           conversations = [row for row in root.iter('testcase') if 'test_instruction_conversations' in row.get('classname', '')]
-          assert len(conversations) >= 14, len(conversations)
+          assert len(conversations) >= 26, len(conversations)
           assert all(row.find('skipped') is None for row in conversations)
           PY
       - name: Stop isolated Mongo
