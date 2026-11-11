@@ -50,9 +50,10 @@ afterEach(async () => {
   await act(async () => root.unmount()); host.remove(); jest.restoreAllMocks(); jest.useRealTimers();
 });
 
-test('closed audit performs no reads or row rendering across normal report polling', async () => {
-  await render(); await advance(30000); await advance(30000);
-  expect(api.reports).toHaveBeenCalledTimes(3);
+test('visible report and context read once over several minutes, with no closed audit reads', async () => {
+  await render(); await advance(300000); await advance(300000);
+  await act(async () => window.dispatchEvent(new Event('focus')));
+  expect(api.context).toHaveBeenCalledTimes(1); expect(api.reports).toHaveBeenCalledTimes(1);
   expect(api.audit).not.toHaveBeenCalled();
   expect(host.textContent).not.toContain('سجل مصدر موثق');
   expect(host.textContent).toContain('123.45 SAR');
@@ -81,14 +82,14 @@ test('audit failure keeps a successful financial report and its saved date visib
   expect(api.reports).toHaveBeenCalledTimes(1);
 });
 
-test.each(['hidden', 'offline'])('%s pages pause context and report polls and resume one read', async state => {
+test.each(['hidden', 'offline'])('%s pages do not request idle reads after visibility or connectivity returns', async state => {
   await render();
   if (state === 'hidden') visible.mockReturnValue('hidden'); else online.mockReturnValue(false);
   await advance(90000);
   expect(api.context).toHaveBeenCalledTimes(1); expect(api.reports).toHaveBeenCalledTimes(1);
   visible.mockReturnValue('visible'); online.mockReturnValue(true);
   await act(async () => (state === 'hidden' ? document : window).dispatchEvent(new Event(state === 'hidden' ? 'visibilitychange' : 'online')));
-  expect(api.context).toHaveBeenCalledTimes(2); expect(api.reports).toHaveBeenCalledTimes(2);
+  expect(api.context).toHaveBeenCalledTimes(1); expect(api.reports).toHaveBeenCalledTimes(1);
   expect(api.audit).not.toHaveBeenCalled();
 });
 
@@ -101,28 +102,29 @@ test.each(['hidden', 'offline'])('initial %s entry waits for visibility and conn
   expect(api.context).toHaveBeenCalledTimes(1); expect(api.reports).toHaveBeenCalledTimes(1);
 });
 
-test('a slow context read cannot overlap recurring polls', async () => {
+test('a slow initial context read remains single and does not repeat after completion', async () => {
   const first = deferred(); api.context.mockReturnValueOnce(first.promise);
   await render(); await advance(90000);
   expect(api.context).toHaveBeenCalledTimes(1); expect(api.reports).not.toHaveBeenCalled();
   await act(async () => first.resolve(context()));
   expect(api.reports).toHaveBeenCalledTimes(1);
-  await advance(30000); expect(api.context).toHaveBeenCalledTimes(2);
+  await advance(300000); expect(api.context).toHaveBeenCalledTimes(1);
 });
 
-test('a slow report read cannot overlap visible recurring polls', async () => {
+test('a slow initial report read remains single until an explicit manual refresh', async () => {
   const first = deferred(); api.reports.mockReturnValueOnce(first.promise);
   await render(); await advance(90000);
   expect(api.reports).toHaveBeenCalledTimes(1);
   await act(async () => first.resolve(report()));
   expect(host.textContent).toContain('123.45 SAR');
-  await advance(30000); expect(api.reports).toHaveBeenCalledTimes(2);
+  await advance(300000); expect(api.reports).toHaveBeenCalledTimes(1);
+  await click('تحديث الأرصدة'); expect(api.reports).toHaveBeenCalledTimes(2);
 });
 
 test('mutation refresh waits for one pending read and rejects its older report revision', async () => {
   const old = deferred(), fresh = deferred();
   api.reports.mockResolvedValueOnce(report()).mockReturnValueOnce(old.promise).mockReturnValueOnce(fresh.promise);
-  await render(); await advance(30000); await click('تم حفظ المصدر');
+  await render(); await click('تحديث الأرصدة'); await click('تم حفظ المصدر');
   expect(api.reports).toHaveBeenCalledTimes(2);
   await act(async () => old.resolve(report('999.00')));
   expect(api.reports).toHaveBeenCalledTimes(3);
@@ -158,16 +160,6 @@ test('actor change immediately removes old content and ignores an old-scope resp
   expect(host.textContent).toContain('222.00 SAR');
 });
 
-test('changed server session scope ignores a pending report from the earlier context', async () => {
-  const old = deferred();
-  api.context.mockResolvedValueOnce(context('session-a')).mockResolvedValue(context('session-b'));
-  api.reports.mockReturnValueOnce(old.promise).mockResolvedValue(report('222.00'));
-  await render(); await advance(30000);
-  expect(api.context).toHaveBeenCalledTimes(2); expect(api.reports).toHaveBeenCalledTimes(2);
-  expect(host.textContent).toContain('222.00 SAR');
-  await act(async () => old.resolve(report('111.00')));
-  expect(host.textContent).not.toContain('111.00 SAR');
-});
 
 test('an earlier actor context response cannot replace the new actor scope', async () => {
   const old = deferred();
@@ -179,4 +171,99 @@ test('an earlier actor context response cannot replace the new actor scope', asy
   await act(async () => old.resolve({...context('owner:actor-a'), permissions: {view: true, reports: false}}));
   expect(host.textContent).toContain('123.45 SAR');
   expect(api.context).toHaveBeenCalledTimes(2); expect(api.reports).toHaveBeenCalledTimes(1);
+});
+
+test('manual refresh rechecks context before the same-scope report and coalesces slow clicks without refreshing audit', async () => {
+  const checked = deferred(), refreshed = deferred();
+  api.context.mockResolvedValueOnce(context()).mockReturnValueOnce(checked.promise);
+  api.reports.mockResolvedValueOnce(report()).mockReturnValueOnce(refreshed.promise);
+  await render(); await toggleAudit(true);
+  await act(async () => {
+    const control = [...host.querySelectorAll('button')].find(element => element.textContent === 'تحديث الأرصدة');
+    control.click(); control.click();
+  });
+  expect(api.context).toHaveBeenCalledTimes(2); expect(api.reports).toHaveBeenCalledTimes(1);
+  await click('تحديث الأرصدة'); await advance(300000);
+  expect(api.context).toHaveBeenCalledTimes(2); expect(api.reports).toHaveBeenCalledTimes(1);
+  await act(async () => checked.resolve(context()));
+  expect(api.reports).toHaveBeenCalledTimes(2); expect(api.audit).toHaveBeenCalledTimes(1);
+  await click('تحديث الأرصدة'); expect(api.context).toHaveBeenCalledTimes(2);
+  await act(async () => refreshed.resolve(report('222.00')));
+  expect(host.textContent).toContain('222.00 SAR');
+  expect(api.audit).toHaveBeenCalledTimes(1);
+});
+
+test('revoked report permission in manual context hides data and prevents the follow-up report read', async () => {
+  api.context.mockResolvedValueOnce(context()).mockResolvedValue({...context(), permissions: {view: true, reports: false, manage: false}});
+  await render(); expect(host.textContent).toContain('123.45 SAR');
+  await click('تحديث الأرصدة');
+  expect(api.context).toHaveBeenCalledTimes(2); expect(api.reports).toHaveBeenCalledTimes(1);
+  expect(host.textContent).not.toContain('123.45 SAR');
+  expect(host.textContent).not.toContain('تم حفظ المصدر');
+});
+
+test.each(['saved mutation', 'tab navigation'])('%s waits for a pending manual context before reading the report', async action => {
+  const checked = deferred();
+  const initial = {...context(), permissions: {...context().permissions, move: true}};
+  api.context.mockResolvedValueOnce(initial).mockReturnValueOnce(checked.promise);
+  await render(); await click('تحديث الأرصدة');
+  if (action === 'saved mutation') await click('تم حفظ المصدر');
+  else {
+    await click('الحركات المالية اليومية'); await click('الأرصدة والتقارير التشغيلية');
+  }
+  await advance(300000);
+  expect(api.context).toHaveBeenCalledTimes(2); expect(api.reports).toHaveBeenCalledTimes(1);
+  await act(async () => checked.resolve(initial));
+  expect(api.reports).toHaveBeenCalledTimes(2);
+});
+
+test('queued mutation and tab reopening cannot read a report when the pending context revokes access', async () => {
+  const checked = deferred();
+  api.context.mockResolvedValueOnce({...context(), permissions: {...context().permissions, move: true}})
+    .mockReturnValueOnce(checked.promise);
+  await render(); await click('تحديث الأرصدة'); await click('تم حفظ المصدر');
+  await click('الحركات المالية اليومية'); await click('الأرصدة والتقارير التشغيلية');
+  expect(api.reports).toHaveBeenCalledTimes(1);
+  await act(async () => checked.resolve({...context(), permissions: {view: true, reports: false, manage: false}}));
+  expect(api.reports).toHaveBeenCalledTimes(1);
+  expect(host.textContent).not.toContain('123.45 SAR');
+});
+
+test('manual context phase changes update the report and remove active financial controls', async () => {
+  api.context.mockResolvedValueOnce(context()).mockResolvedValue({...context(), status: 'frozen'});
+  api.reports.mockResolvedValueOnce(report()).mockResolvedValue(report('222.00'));
+  await render(); await click('تحديث الأرصدة');
+  expect(api.context).toHaveBeenCalledTimes(2); expect(api.reports).toHaveBeenCalledTimes(2);
+  expect(host.textContent).toContain('222.00 SAR'); expect(host.textContent).not.toContain('تم حفظ المصدر');
+});
+
+test('offline manual refresh stays queued until connectivity resumes, then reads context before report', async () => {
+  const checked = deferred();
+  api.context.mockResolvedValueOnce(context()).mockReturnValueOnce(checked.promise);
+  await render(); online.mockReturnValue(false); await click('تحديث الأرصدة');
+  await advance(300000); expect(api.context).toHaveBeenCalledTimes(1); expect(api.reports).toHaveBeenCalledTimes(1);
+  online.mockReturnValue(true); await act(async () => window.dispatchEvent(new Event('online')));
+  expect(api.context).toHaveBeenCalledTimes(2); expect(api.reports).toHaveBeenCalledTimes(1);
+  await act(async () => checked.resolve(context())); expect(api.reports).toHaveBeenCalledTimes(2);
+});
+
+test('leaving reports stops reads and reopening serializes one new read behind any pending one', async () => {
+  const old = deferred(), fresh = deferred();
+  api.context.mockResolvedValue({...context(), permissions: {...context().permissions, move: true}});
+  api.reports.mockReturnValueOnce(old.promise).mockReturnValueOnce(fresh.promise);
+  await render(); await click('الحركات المالية اليومية'); await advance(300000);
+  expect(api.context).toHaveBeenCalledTimes(1); expect(api.reports).toHaveBeenCalledTimes(1);
+  await click('الأرصدة والتقارير التشغيلية'); expect(api.reports).toHaveBeenCalledTimes(1);
+  await act(async () => old.resolve(report('999.00')));
+  expect(api.reports).toHaveBeenCalledTimes(2); expect(host.textContent).not.toContain('999.00 SAR');
+  await act(async () => fresh.resolve(report('321.00'))); expect(host.textContent).toContain('321.00 SAR');
+});
+
+test('failed report can be retried manually without a polling timer', async () => {
+  api.reports.mockRejectedValueOnce(new Error('report unavailable')).mockResolvedValue(report());
+  await render(); expect(host.textContent).toContain('تعذر إتمام العملية');
+  await advance(300000); expect(api.reports).toHaveBeenCalledTimes(1);
+  await click('تحديث الأرصدة');
+  expect(api.context).toHaveBeenCalledTimes(2); expect(api.reports).toHaveBeenCalledTimes(2);
+  expect(host.textContent).toContain('123.45 SAR');
 });

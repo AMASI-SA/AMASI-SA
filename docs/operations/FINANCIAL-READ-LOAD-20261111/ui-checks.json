@@ -1,15 +1,20 @@
 {
   "success": true,
-  "numPassedTests": 105,
+  "numPassedTests": 156,
   "numFailedTests": 0,
   "numPendingTests": 0,
-  "numPassedTestSuites": 3,
+  "numPassedTestSuites": 4,
   "numFailedTestSuites": 0,
-  "scope": "Local integrated component tests; no browser or production performance claim",
+  "scope": "Demand-only follow-up: local integrated component tests; no browser or production performance claim",
   "suites": [
     {
       "file": "frontend/src/pages/operational/OperationalBalances.test.jsx",
       "passed": 62,
+      "failed": []
+    },
+    {
+      "file": "frontend/src/pages/operational/InventoryPurchases.test.jsx",
+      "passed": 43,
       "failed": []
     },
     {
@@ -19,13 +24,13 @@
     },
     {
       "file": "frontend/src/pages/operational/OperationalBalances.readLoad.test.jsx",
-      "passed": 14,
+      "passed": 22,
       "failed": []
     }
   ],
   "load_cases": [
     {
-      "name": "closed audit performs no reads or row rendering across normal report polling",
+      "name": "visible report and context read once over several minutes, with no closed audit reads",
       "status": "passed"
     },
     {
@@ -37,11 +42,11 @@
       "status": "passed"
     },
     {
-      "name": "hidden pages pause context and report polls and resume one read",
+      "name": "hidden pages do not request idle reads after visibility or connectivity returns",
       "status": "passed"
     },
     {
-      "name": "offline pages pause context and report polls and resume one read",
+      "name": "offline pages do not request idle reads after visibility or connectivity returns",
       "status": "passed"
     },
     {
@@ -53,11 +58,11 @@
       "status": "passed"
     },
     {
-      "name": "a slow context read cannot overlap recurring polls",
+      "name": "a slow initial context read remains single and does not repeat after completion",
       "status": "passed"
     },
     {
-      "name": "a slow report read cannot overlap visible recurring polls",
+      "name": "a slow initial report read remains single until an explicit manual refresh",
       "status": "passed"
     },
     {
@@ -73,11 +78,43 @@
       "status": "passed"
     },
     {
-      "name": "changed server session scope ignores a pending report from the earlier context",
+      "name": "an earlier actor context response cannot replace the new actor scope",
       "status": "passed"
     },
     {
-      "name": "an earlier actor context response cannot replace the new actor scope",
+      "name": "manual refresh rechecks context before the same-scope report and coalesces slow clicks without refreshing audit",
+      "status": "passed"
+    },
+    {
+      "name": "revoked report permission in manual context hides data and prevents the follow-up report read",
+      "status": "passed"
+    },
+    {
+      "name": "saved mutation waits for a pending manual context before reading the report",
+      "status": "passed"
+    },
+    {
+      "name": "tab navigation waits for a pending manual context before reading the report",
+      "status": "passed"
+    },
+    {
+      "name": "queued mutation and tab reopening cannot read a report when the pending context revokes access",
+      "status": "passed"
+    },
+    {
+      "name": "manual context phase changes update the report and remove active financial controls",
+      "status": "passed"
+    },
+    {
+      "name": "offline manual refresh stays queued until connectivity resumes, then reads context before report",
+      "status": "passed"
+    },
+    {
+      "name": "leaving reports stops reads and reopening serializes one new read behind any pending one",
+      "status": "passed"
+    },
+    {
+      "name": "failed report can be retried manually without a polling timer",
       "status": "passed"
     }
   ]
