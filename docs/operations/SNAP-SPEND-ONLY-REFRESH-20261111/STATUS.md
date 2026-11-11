@@ -63,3 +63,8 @@ Shared `/app` was fast-forwarded from expected J to merge M only after a fresh i
 ## Publication submitted — 2026-11-11T18:00Z
 
 Official prepublish returned `ready_to_publish:true` with exact frozen A/M/runtime identities. Emergent accepted one Publish changes action and explicitly showed `Deployment Started Nov 11, 09:00 PM` Riyadh. Deployment remains in progress at this checkpoint. Prior version baseline is `2e328d9`; do not count it as success for this task. Our release lease remains active. A logged-in dashboard baseline was read for2026-11-11 without pressing the old refresh button. Next: explicit new deployment success, official three-probe verify/final inactive, then actual new button readback. Do not repeat publication.
+
+
+## Live spend-only acceptance — passed, 2026-11-11T18:12Z
+
+New publication `9d4db97` explicitly finished at21:10Riyadh. The new label and tooltip appeared after reloading the logged-in dashboard. One authorized manual click at18:12:21.690Z for2026-11-11 showed the spend-only in-progress state, then `اكتمل جلب صرف سناب.` by18:12:40.549Z. Both Snapchat accounts displayed newer21:12Riyadh observations and changed native spend amounts; other provider amounts stayed unchanged. Both readings correctly displayed provisional status, and the button re-enabled. No raw financial values, account IDs or customer data are recorded here. This confirms functional readback separately from release verification. Official verify3 is still running in owned Terminal6; retain the lease until it completes and status is inactive. No further publication or source change.

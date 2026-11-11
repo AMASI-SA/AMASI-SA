@@ -38,17 +38,20 @@
     "conclusion": "development_environment_has_no_authorized_snapchat_scope; live acceptance deferred"
   },
   "release": {
-    "production_changed_by_task": false,
+    "production_changed_by_task": true,
     "merge": {
       "sha": "d3c9b0c946afe2418aecf0b96629e46d7f14f196",
       "tree": "6089891dbfe1dfb332128d231ef78372496a7d8e",
       "normal_merge": true
     },
     "publication": {
-      "status": "publishing",
+      "status": "finished",
+      "version": "9d4db97",
+      "published_at_riyadh": "2026-11-11 21:10",
+      "explicit_ui_text": "Deployment finished Nov 11, 09:10 PM",
       "submitted_once": true,
       "baseline": "2e328d9",
-      "baseline_published_at_riyadh": "2026-11-11 20:32"
+      "proof_file": "snap-spend-1883-published.png"
     },
     "guard_observed_active": true,
     "exact_b_checks": {
@@ -59,7 +62,7 @@
     },
     "own_lease_created": true,
     "production_git_branch_changed": true,
-    "production_runtime_changed": false,
+    "production_runtime_changed": true,
     "shared_app_head": "d3c9b0c946afe2418aecf0b96629e46d7f14f196",
     "shared_tracked_clean": true,
     "shared_unrelated_untracked_preserved": true,
@@ -84,7 +87,33 @@
       "exit_code": 0,
       "ready_to_publish": true,
       "exact_identities_match": true
+    },
+    "verification": {
+      "status": "running",
+      "command": "python -B scripts/production_release_guard.py verify --url https://mezansalla.com",
+      "terminal": "owned Terminal 6",
+      "output": "/tmp/snap-spend-1883-verify.json"
     }
   },
-  "next": "Run official prepublish immediately before one authorized publication; observe new explicit success, official verify3, final guard inactive, then live spend-only dashboard readback."
+  "next": "Functional acceptance passed. Allow official verify3 to finish, require exact identities and final guard inactive; then persist final evidence and close continuation ledger entry.",
+  "live_acceptance": {
+    "status": "passed",
+    "dashboard_url": "https://mezansalla.com/dashboard-advanced",
+    "selected_date_from": "2026-11-11",
+    "selected_date_to": "2026-11-11",
+    "button": "تحديث صرف سناب فقط",
+    "clicked_at": "2026-11-11T18:12:21.690Z",
+    "success_observed_at": "2026-11-11T18:12:40.549Z",
+    "success_message": "اكتمل جلب صرف سناب.",
+    "accounts_updated": 2,
+    "both_observation_times_advanced": true,
+    "displayed_observation_time_riyadh": "21:12",
+    "both_native_spend_values_changed": true,
+    "other_provider_displayed_amounts_unchanged": true,
+    "provisional_label_observed": true,
+    "button_reenabled": true,
+    "manual_click_count": 1,
+    "financial_or_ad_writes": false,
+    "raw_financial_values_excluded": true
+  }
 }
