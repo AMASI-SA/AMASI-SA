@@ -37,6 +37,7 @@ from dashboard_snapchat_spend import load_snapchat_dashboard_spend
 from integrations_control_center.meta_oauth_security import META_PROVIDER_ID
 from integrations_control_center.snapchat_oauth_security import SNAPCHAT_PROVIDER_ID
 from integrations_control_center.tiktok_oauth_security import TIKTOK_PROVIDER_ID
+from integrations_control_center.google_dashboard_spend import load_google_dashboard_spend
 from order_cost_authority import (
     calculate_catalog_line_cost,
     load_order_cost_authority,
@@ -1364,17 +1365,13 @@ async def build_mezan_v2_ads(
         if provider != "snapchat"
     }
     breakdown["snapchat"] = snapchat.get("total_sar")
-    google_rows = await _to_list(
-        db.daily_costs.find(
-            {"user_id": user_id, "date": {"$gte": start, "$lte": end}},
-            {"_id": 0, "date": 1, "google_ads": 1},
-        ),
-        100000,
+    google = await load_google_dashboard_spend(
+        db, user_id, date_from=start_date, date_to=end_date,
     )
-    breakdown["google_transitional"] = round(
-        sum(_float(row.get("google_ads")) for row in google_rows),
-        2,
-    )
+    google_quality = google["quality"]
+    # Retain the single compatibility key: adding another numeric alias here
+    # would double-count Google in totals and the cost-breakdown endpoint.
+    breakdown["google_transitional"] = google["total_sar"]
     snap_quality = snapchat.get("quality") if isinstance(snapchat.get("quality"), dict) else {}
     amount_complete = snap_quality.get("amount_complete") is True
     amount_available = (
@@ -1419,7 +1416,7 @@ async def build_mezan_v2_ads(
             },
             "google_transitional_spend_sar": breakdown["google_transitional"],
             "google_account_allocation": (
-                "not_available" if breakdown["google_transitional"] > 0 else "not_required"
+                "not_required" if google_quality["data_state"] == "not_required" else "not_available"
             ),
         }
     history_by_date: dict[str, dict[str, float | None]] = {
@@ -1429,7 +1426,7 @@ async def build_mezan_v2_ads(
             ),
             "meta": 0.0,
             "tiktok": 0.0,
-            "google": 0.0,
+            "google": google["daily_sar"].get((start_date + timedelta(days=offset)).isoformat()),
         }
         for offset in range((end_date - start_date).days + 1)
     }
@@ -1445,12 +1442,6 @@ async def build_mezan_v2_ads(
                 if row.get("effective_spend_sar") is not None
                 else row.get("spend_sar")
             )
-    for row in google_rows:
-        row_date = str(row.get("date") or "")[:10]
-        if row_date in history_by_date:
-            history_by_date[row_date]["google"] = _float(
-                history_by_date[row_date]["google"]
-            ) + _float(row.get("google_ads"))
     history = [
         {
             "date": row_date,
@@ -1466,6 +1457,7 @@ async def build_mezan_v2_ads(
         for provider, rows in platform_rows.items()
         if provider != "snapchat"
     }
+    provider_metrics["google"] = {"spend": google["total_sar"], **google_quality}
     if amount_available:
         provider_metrics["snapchat"] = _aggregate_provider_rows(
             platform_rows["snapchat"], start, end
@@ -1494,14 +1486,20 @@ async def build_mezan_v2_ads(
         "amount_available": amount_available,
         "provisional": provisional_amount,
     })
-    known_subtotal = round(sum(
+    known_subtotal = round(google["known_total_sar"] + sum(
         float(value)
         for provider, value in breakdown.items()
-        if provider != "snapchat" and value is not None
+        if provider not in {"snapchat", "google_transitional"} and value is not None
     ), 2)
+    overall_available = amount_available and google_quality["amount_available"]
+    overall_complete = amount_complete and google_quality["amount_complete"]
+    overall_provisional = (
+        overall_available and not overall_complete
+        and (provisional_amount or google_quality["provisional"])
+    )
     total = (
         round(known_subtotal + float(breakdown["snapchat"]), 2)
-        if amount_available and breakdown["snapchat"] is not None
+        if overall_available and breakdown["snapchat"] is not None
         else None
     )
     return {
@@ -1513,16 +1511,17 @@ async def build_mezan_v2_ads(
         "spend_quality": {
             "status": (
                 "complete"
-                if amount_complete
+                if overall_complete
                 else "provisional"
-                if provisional_amount
+                if overall_provisional
                 else "incomplete"
             ),
-            "amount_complete": amount_complete,
-            "amount_available": amount_available,
-            "provisional": provisional_amount,
+            "amount_complete": overall_complete,
+            "amount_available": overall_available,
+            "provisional": overall_provisional,
             "known_subtotal_sar": known_subtotal,
             "snapchat": snap_quality,
+            "google": google_quality,
         },
         "bank_commissions": bank_commissions,
         "source_contract": {
@@ -1531,7 +1530,7 @@ async def build_mezan_v2_ads(
             "tiktok": f"{TIKTOK_FACTS}:connected_accounts:spend_native",
             "exchange_rates": "mezan_ad_account_cost_settings_v2:per_account",
             "bank_commissions": "mezan_ad_account_cost_settings_v2:per_account",
-            "google": "daily_costs.google_ads:transitional_read_only:no_account_allocation",
+            "google": google["source_contract"],
             "excluded": ["legacy_ad_ledger", "legacy_ads_currency_settings", "daily_costs.snapchat_ads", "daily_costs.instagram_ads"],
         },
     }
