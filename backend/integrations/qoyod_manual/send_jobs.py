@@ -96,9 +96,10 @@ async def enqueue(db, *, user, order_number, operation="send", request_id=None):
         return _public(row)
     except DuplicateKeyError:
         existing = await db.qoyod_manual_send_jobs.find_one({"_id": row["_id"]})
-    # Only an explicit *new* failed-order retry can rearm a known refusal.
-    # Unknown/cancelled work and completed sends are never rearmed here.
-    if (operation == "retry" and request_id != "legacy"
+    # A new explicit send/retry may rearm a definite pre-write refusal. Such
+    # a refusal can precede failure metadata, so the UI may still use /send.
+    # Same-key replays, unknown work and completed sends never rearm here.
+    if (request_id != "legacy"
             and existing["status"] == "refused"
             and request_id != existing.get("request_id")):
         restarted = await db.qoyod_manual_send_jobs.find_one_and_update(

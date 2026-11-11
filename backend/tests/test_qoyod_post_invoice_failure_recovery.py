@@ -8,6 +8,8 @@ from integrations.qoyod_manual.client import (
     ManualQoyodError,
 )
 
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
 
 @pytest.mark.asyncio
 async def test_httpx_timeout_becomes_manual_qoyod_error(monkeypatch):
@@ -33,9 +35,7 @@ async def test_httpx_timeout_becomes_manual_qoyod_error(monkeypatch):
 
 
 def test_invoice_marker_is_persisted_before_followup_get():
-    source = Path(
-        "integrations/qoyod_manual/send.py"
-    ).read_text(encoding="utf-8")
+    source = (BACKEND_ROOT / "integrations/qoyod_manual/send.py").read_text(encoding="utf-8")
 
     create_invoice_pos = source.index(
         "created_inv = await client.create_invoice"
@@ -53,9 +53,7 @@ def test_invoice_marker_is_persisted_before_followup_get():
 
 
 def test_cod_skips_payment_parity_and_payment_post():
-    source = Path(
-        "integrations/qoyod_manual/send.py"
-    ).read_text(encoding="utf-8")
+    source = (BACKEND_ROOT / "integrations/qoyod_manual/send.py").read_text(encoding="utf-8")
 
     cod = source.index(
         "# ── COD: invoice only, no payment"

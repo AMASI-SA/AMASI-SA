@@ -21,7 +21,7 @@ from .accounts import (
 from .models import SNAPCHAT_PROVIDER
 from .sync_pipeline import SnapchatV2SyncPipeline
 from .cadence import (
-    DEFAULT_INTERVAL_SECONDS, MIN_INTERVAL_SECONDS, MAX_INTERVAL_SECONDS,
+    DEFAULT_INTERVAL_SECONDS, MIN_INTERVAL_SECONDS,
     INTERVAL_ENV, shadow_interval_seconds,
 )
 

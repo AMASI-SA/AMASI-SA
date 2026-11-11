@@ -38,7 +38,9 @@ export default function useCampaignShadowJob(api, endpoint, days = 1) {
             state.inFlight = true;
             state.controller = new AbortController();
             try {
-                const { data } = await api.get(`${endpoint}?days=${days}`, { signal: state.controller.signal });
+                const { data } = await api.get(`${endpoint}?days=${days}`, {
+                    signal: state.controller.signal, timeout: 10_000,
+                });
                 accept(data);
             } catch {
                 if (state.active) {
@@ -63,7 +65,7 @@ export default function useCampaignShadowJob(api, endpoint, days = 1) {
             state.controller = new AbortController();
             try {
                 const { data } = await api.post(`${endpoint}/refresh?days=${days}`, null,
-                    { signal: state.controller.signal });
+                    { signal: state.controller.signal, timeout: 15_000 });
                 accept(data);
                 if (data?.request_blocked_by === "active_job") {
                     setError("هناك مهمة أخرى جارية. انتظر اكتمالها ثم اطلب التحديث.");

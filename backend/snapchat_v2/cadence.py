@@ -9,7 +9,6 @@ from .sync_runs import SNAPCHAT_SYNC_RUNS_COLLECTION
 INTERVAL_ENV = "SNAPCHAT_REPORTING_V2_SHADOW_INTERVAL_SECONDS"
 DEFAULT_INTERVAL_SECONDS = 7200
 MIN_INTERVAL_SECONDS = 7200
-MAX_INTERVAL_SECONDS = 86400
 
 
 def shadow_interval_seconds() -> int:
@@ -19,7 +18,7 @@ def shadow_interval_seconds() -> int:
         value = DEFAULT_INTERVAL_SECONDS
     # The owner chose two hours. Surviving five-minute settings must not
     # silently restore the old load after deployment or a process restart.
-    return min(max(value, MIN_INTERVAL_SECONDS), MAX_INTERVAL_SECONDS)
+    return max(value, MIN_INTERVAL_SECONDS)
 
 
 def _instant(value):

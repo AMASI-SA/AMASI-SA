@@ -118,7 +118,9 @@ async def test_canonical_runtime_boots_against_empty_isolated_database_and_drain
                 await asyncio.sleep(.1)
         assert row['jobs']['qoyod-plan-b-auto-send-worker'] is True
         assert row['jobs']['qoyod-followup'] is True
-        assert row['jobs']['qoyod-full-scan'] is True
+        assert 'qoyod-full-scan' not in row['jobs']
+        assert row['jobs']['qoyod-manual-send-jobs'] is True
+        assert row['jobs']['campaign-ai-shadow-jobs'] is True
         assert row['jobs']['operational-balances'] is True
         assert row['jobs']['salla-cost-options'] is True
         assert await db.qoyod_manual_auto_runs.count_documents({}) == 0

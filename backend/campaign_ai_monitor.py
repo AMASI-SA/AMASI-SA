@@ -255,7 +255,10 @@ async def run_campaign_ai_monitor(
             # not dispatch defensive pauses or autonomous budget/status writes.
             manual = {"trigger": "manual", "automatic_execution": False,
                       "writes_performed": False, "next_run_at": None,
-                      "decision_interval_hours": None, "manual_job_status": "complete"}
+                      "decision_interval_hours": None,
+                      # A job's canonical snapshot stays hidden until its
+                      # final transaction publishes both advice and cache.
+                      "manual_job_status": "building" if kwargs.get("snapshot_publisher") else "complete"}
             for name in ("google_periodic", "tiktok_periodic"):
                 if isinstance(result.get(name), dict):
                     manual[name] = {**result[name], "source": "campaign_ai_manual",

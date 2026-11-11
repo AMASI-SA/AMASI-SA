@@ -608,3 +608,19 @@ async def ensure_qoyod_indexes(db) -> None:
          ("finished_at", pymongo.DESCENDING)],
         name="qoyod_manual_auto_runs_status_finished",
     )
+    # Takeover recovery walks current in-progress owners by start time without
+    # first scanning historical ownerless audits or completed financial work.
+    await db.qoyod_manual_auto_runs.create_index(
+        [("status", pymongo.ASCENDING), ("started_at", pymongo.ASCENDING),
+         ("lease_owner", pymongo.ASCENDING)],
+        name="qoyod_manual_auto_runs_takeover",
+        partialFilterExpression={"status": "in_progress", "lease_owner": {"$type": "string"}},
+    )
+    # Legacy missing/null/empty owner values use equality bounds before the
+    # age-ordered page. Finished audits leave both partial indexes automatically.
+    await db.qoyod_manual_auto_runs.create_index(
+        [("status", pymongo.ASCENDING), ("lease_owner", pymongo.ASCENDING),
+         ("started_at", pymongo.ASCENDING)],
+        name="qoyod_manual_auto_runs_legacy_recovery",
+        partialFilterExpression={"status": "in_progress"},
+    )

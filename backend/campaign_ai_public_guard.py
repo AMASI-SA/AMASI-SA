@@ -27,6 +27,9 @@ BLOCKED_RECOMMENDATION_SOURCES = {"mezan_fallback"}
 VALID_OPENAI_SOURCE = "openai"
 OPENAI_SNAPSHOT_VALIDITY = timedelta(hours=5)
 BUDGET_ACTIONS = {"reduce", "scale"}
+# A durable manual analysis may save its core before platform enrichment.
+# Only the final lease-fenced transaction may make that advice visible.
+VISIBLE_SNAPSHOT_FILTER = {"manual_job_status": {"$ne": "building"}}
 
 
 def _text(value: Any, *, limit: int = 120) -> str:
@@ -69,7 +72,7 @@ def _recent_valid_openai(
     *,
     now: datetime | None = None,
 ) -> bool:
-    if not document or _fallback_present(document):
+    if not document or document.get("manual_job_status") == "building" or _fallback_present(document):
         return False
     if _text(document.get("recommendation_source"), limit=80) != VALID_OPENAI_SOURCE:
         return False
@@ -130,12 +133,12 @@ def _strip_unexecutable_budget_recommendations(
 
 
 def _public_document(document: dict[str, Any] | None) -> dict[str, Any]:
-    if not document:
+    if not document or document.get("manual_job_status") == "building":
         return {
             "available": False,
             "mode": "recommend_then_approve",
             "writes_performed": False,
-            "summary": "سيظهر أول تحليل بعد اكتمال التشغيل الدوري.",
+            "summary": "المراقبة يدوية؛ اضغط تحديث المراقبة لطلب تحليل جديد.",
             "recommendations": [],
             "next_run_at": None,
         }
@@ -155,7 +158,7 @@ def _public_document(document: dict[str, Any] | None) -> dict[str, Any]:
     # Never expose deterministic Mezan decisions as if they came from AI.
     public.update({
         "available": True,
-        "summary": "تعذر تشغيل تحليل الذكاء، لا توجد توصيات جديدة. سيعاد التحليل تلقائيًا.",
+        "summary": "تعذر تشغيل تحليل الذكاء، لا توجد توصيات جديدة. يمكنك طلب تحديث المراقبة يدويًا.",
         "recommendations": [],
         "recommendation_source": "openai_unavailable",
         "decision_authority": "openai_unavailable",
@@ -198,7 +201,7 @@ def attach_campaign_ai_public_guard(
         user_id = _text(user.get("id") or user.get("_id"))
         collection = db[RECOMMENDATION_COLLECTION]
         latest = await collection.find_one(
-            {"user_id": user_id},
+            {"user_id": user_id, **VISIBLE_SNAPSHOT_FILTER},
             {"execution_targets": 0},
             sort=[("generated_at", -1)],
         )
@@ -211,6 +214,7 @@ def attach_campaign_ai_public_guard(
         recent_openai = await collection.find_one(
             {
                 "user_id": user_id,
+                **VISIBLE_SNAPSHOT_FILTER,
                 "recommendation_source": VALID_OPENAI_SOURCE,
             },
             {"execution_targets": 0},
@@ -232,6 +236,7 @@ def attach_campaign_ai_public_guard(
             .find(
                 {
                     "user_id": user_id,
+                    **VISIBLE_SNAPSHOT_FILTER,
                     "recommendation_source": {"$ne": "mezan_fallback"},
                 },
                 {"_id": 0, "user_id": 0, "execution_targets": 0},

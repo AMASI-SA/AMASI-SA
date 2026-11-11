@@ -106,7 +106,7 @@ async def test_manual_builder_disables_sync_and_ad_execution_and_uses_fenced_pub
     monkeypatch.setattr(monitor, "run_campaign_ai_monitor", analyze)
     monkeypatch.setattr(profits, "make_mezan_campaign_profit_loader", lambda db: "existing-profit-loader")
     result = await jobs._build_monitor(object(), {"user_id": "owner"})
-    assert result == {"snapshot_id": "s"}
+    assert result == {"snapshot_id": "s", "manual_job_status": "complete"}
     args = analyze.await_args.kwargs
     assert args["refresh_meta"] is False
     assert args["recommendation_only"] is True

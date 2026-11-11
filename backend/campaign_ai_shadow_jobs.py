@@ -260,16 +260,20 @@ async def _build_monitor(db, row):
         prior = await db[RECOMMENDATION_COLLECTION].find_one({
             "user_id": row["user_id"], "snapshot_id": row["monitor_snapshot_id"],
             "manual_job_request_id": row["request_id"],
-        }, {"_id": 0, "user_id": 0, "execution_targets": 0})
+        }, {"_id": 0})
         if prior:
-            if prior.get("manual_job_status") != "complete":
-                prior["manual_job_status"] = "partial"
-                prior["limitations"] = [*(prior.get("limitations") or []), "manual_worker_interrupted_after_core_analysis"]
-                await db[RECOMMENDATION_COLLECTION].update_one(
-                    {"user_id": row["user_id"], "snapshot_id": prior["snapshot_id"]},
-                    {"$set": {"manual_job_status": "partial", "limitations": prior["limitations"]}},
-                )
-            return prior
+            # A lost child may still be enriching its old, hidden source for a
+            # moment before its supervisor kills it. Never expose that same
+            # mutable document during recovery. Copy the saved core into a new
+            # attempt-owned snapshot and leave the old one permanently hidden.
+            recovered = {**prior, "snapshot_id": uuid.uuid4().hex,
+                         "manual_job_source_snapshot_id": prior["snapshot_id"],
+                         "limitations": list(dict.fromkeys([*(prior.get("limitations") or []),
+                             "manual_worker_interrupted_after_core_analysis"]))}
+            await _publish_monitor_snapshot(db, row, recovered)
+            return {**{key: value for key, value in recovered.items()
+                       if key not in {"_id", "user_id", "execution_targets"}},
+                    "manual_job_status": "partial"}
     await ensure_campaign_ai_indexes(db)
     async def publish(document):
         await _publish_monitor_snapshot(db, row, document)
@@ -279,7 +283,8 @@ async def _build_monitor(db, row):
         snapshot_publisher=publish,
     )
     # The cached status never exposes internal execution targets or Mongo IDs.
-    return {key: value for key, value in result.items() if key not in {"_id", "user_id", "execution_targets"}}
+    return {**{key: value for key, value in result.items() if key not in {"_id", "user_id", "execution_targets"}},
+            "manual_job_status": "complete"}
 
 
 async def execute_claim(db, key, token, *, builder=None):
@@ -316,6 +321,19 @@ async def execute_claim(db, key, token, *, builder=None):
         )
         if runner.matched_count != 1 or saved.matched_count != 1:
             raise ClaimLost("campaign_job_publication_lease_lost")
+        if row["kind"] == "monitor":
+            from campaign_ai_monitor_legacy import RECOMMENDATION_COLLECTION
+            # Enrichment only mutates this hidden source snapshot. Visibility
+            # and the cached completed result become public atomically under
+            # the current owner/job/global-runner claim, including recovery.
+            visible = await db[RECOMMENDATION_COLLECTION].update_one(
+                {"user_id": row["user_id"], "snapshot_id": result.get("snapshot_id"),
+                 "manual_job_request_id": row["request_id"], "manual_job_status": "building"},
+                {"$set": {"manual_job_status": result["manual_job_status"],
+                          "limitations": result.get("limitations") or []}}, session=session,
+            )
+            if visible.matched_count != 1:
+                raise ClaimLost("campaign_job_snapshot_publication_lost")
     try:
         async with await db.client.start_session() as session:
             await session.with_transaction(publish, read_concern=ReadConcern("snapshot"),

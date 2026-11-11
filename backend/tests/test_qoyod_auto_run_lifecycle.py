@@ -8,6 +8,7 @@ from mongomock_motor import AsyncMongoMockClient
 
 from integrations.qoyod_manual import auto_cycle as cycles, auto_send, cycle_manifest
 from test_qoyod_plan_b_auto_send import _candidate, _prepare_run
+from test_qoyod_real_mongo import real_db
 
 
 @pytest.mark.asyncio
@@ -251,6 +252,61 @@ async def test_stale_repair_stops_if_worker_ownership_changes(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_recent_crashed_run_is_held_before_another_provider_call(monkeypatch):
+    db = AsyncMongoMockClient().lifecycle
+    now = datetime.now(timezone.utc)
+    # A full historical backlog must not hide the newly interrupted request.
+    await db.qoyod_manual_auto_runs.insert_many([{
+        'run_id': f'legacy-{index}', 'status': 'in_progress',
+        'started_at': now - timedelta(hours=1), 'order_numbers': [f'legacy-{index}'],
+    } for index in range(auto_send._ABANDONED_RUN_PAGE)])
+    await db.qoyod_manual_auto_runs.insert_one({
+        'run_id': 'recent-crash', 'status': 'in_progress', 'started_at': now,
+        'lease_owner': 'previous-worker', 'active_order_number': '1001',
+        'order_numbers': ['1001', '1002'],
+    })
+    provider_calls = ['1001']  # Previous process died after starting this call.
+    async def send(_db, **kwargs):
+        provider_calls.append(kwargs['order_number'])
+        return {'invoice_id': 'confirmed-1002'}
+    recovery = auto_send._recover_abandoned_runs
+    await _prepare_run(monkeypatch, candidates=[_candidate('1001'), _candidate('1002')], send_one=send)
+    monkeypatch.setattr(auto_send, '_recover_abandoned_runs', recovery)
+    result = await auto_send.run_once(db)
+    assert provider_calls == ['1001', '1002']
+    assert result['sent_count'] == 1
+    old = await db.qoyod_manual_auto_runs.find_one({'run_id': 'recent-crash'})
+    assert old['status'] == 'interrupted'
+    hold = await db.qoyod_manual_auto_quarantines.find_one({'order_number': '1001'})
+    assert hold['code'] == 'automatic_run_interrupted'
+    assert hold['detail']['provider_outcome_unconfirmed'] is True
+    assert await db.qoyod_manual_auto_runs.count_documents({'status': 'interrupted'}) == auto_send._ABANDONED_RUN_PAGE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('legacy_owner', [None, ''])
+async def test_takeover_preserves_current_owner_and_recent_legacy_audits(monkeypatch, legacy_owner):
+    db = AsyncMongoMockClient().lifecycle
+    now = datetime.now(timezone.utc)
+    current = {'run_id': 'current', 'status': 'in_progress', 'lease_owner': 'owned',
+               'started_at': now - timedelta(hours=1), 'active_order_number': 'current-order'}
+    await db.qoyod_manual_auto_runs.insert_many([
+        current,
+        {'run_id': 'recent-legacy', 'status': 'in_progress', 'lease_owner': legacy_owner,
+         'started_at': now, 'order_numbers': ['recent-order']},
+        {'run_id': 'old-legacy', 'status': 'in_progress', 'lease_owner': legacy_owner,
+         'started_at': now - timedelta(hours=1), 'order_numbers': ['old-order']},
+    ])
+    before = await db.qoyod_manual_auto_runs.find_one({'run_id': 'current'})
+    monkeypatch.setattr(auto_send, '_lease_is_current', AsyncMock(return_value=True))
+    assert await auto_send._recover_abandoned_runs(db, 'owned') == 1
+    assert await db.qoyod_manual_auto_runs.find_one({'run_id': 'current'}) == before
+    assert (await db.qoyod_manual_auto_runs.find_one({'run_id': 'recent-legacy'}))['status'] == 'in_progress'
+    assert (await db.qoyod_manual_auto_runs.find_one({'run_id': 'old-legacy'}))['status'] == 'interrupted'
+    assert await db.qoyod_manual_auto_quarantines.distinct('order_number') == ['old-order']
+
+
+@pytest.mark.asyncio
 async def test_stale_repair_preserves_a_later_completed_send(monkeypatch):
     db = AsyncMongoMockClient().lifecycle
     now = datetime.now(timezone.utc)
@@ -345,3 +401,43 @@ async def test_failed_terminal_audit_write_is_reported_and_keeps_completed_evide
     assert audit['results'][0]['invoice_id'] == 'known-invoice'
     assert await backing.qoyod_manual_auto_quarantines.count_documents({}) == 0
     sender.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_real_mongo_recovery_lanes_are_indexed_and_prioritize_takeover(real_db):
+    db, _ = real_db
+    now = datetime.now(timezone.utc)
+    old = now - timedelta(hours=1)
+    await db.qoyod_manual_auto_runs.insert_many([
+        {'run_id': f'completed-{index}', 'status': 'succeeded', 'started_at': old}
+        for index in range(500)
+    ] + [
+        {'run_id': f'legacy-{index}', 'status': 'in_progress', 'started_at': old,
+         **({'lease_owner': ''} if index % 2 else {})}
+        for index in range(500)
+    ] + [
+        {'run_id': 'current', 'status': 'in_progress', 'started_at': old,
+         'lease_owner': 'replacement', 'active_order_number': 'current-order'},
+        {'run_id': 'recent-unknown', 'status': 'in_progress', 'started_at': now,
+         'lease_owner': 'previous', 'active_order_number': 'unknown-order'},
+    ])
+    for selector, index_name in (
+        ({'lease_owner': {'$type': 'string', '$nin': ['', 'replacement']}},
+         'qoyod_manual_auto_runs_takeover'),
+        ({'lease_owner': {'$in': [None, '']}, 'started_at': {'$lt': now - timedelta(minutes=15)}},
+         'qoyod_manual_auto_runs_legacy_recovery'),
+    ):
+        plan = await db.command('explain', {
+            'find': 'qoyod_manual_auto_runs', 'filter': {'status': 'in_progress', **selector},
+            'sort': {'started_at': 1}, 'limit': auto_send._ABANDONED_RUN_PAGE, 'hint': index_name,
+        }, verbosity='executionStats')
+        assert index_name in str(plan['queryPlanner']['winningPlan'])
+        assert plan['executionStats']['totalDocsExamined'] <= auto_send._ABANDONED_RUN_PAGE
+    await db.qoyod_manual_auto_worker_leases.insert_one({
+        '_id': 'main', 'owner': 'replacement', 'lease_until': now + timedelta(minutes=1),
+    })
+    assert await auto_send._recover_abandoned_runs(db, 'replacement', limit=1) == 1
+    assert (await db.qoyod_manual_auto_runs.find_one({'run_id': 'recent-unknown'}))['status'] == 'interrupted'
+    assert (await db.qoyod_manual_auto_runs.find_one({'run_id': 'current'}))['status'] == 'in_progress'
+    assert await db.qoyod_manual_auto_runs.count_documents({'status': 'interrupted'}) == 1
+    assert await db.qoyod_manual_auto_quarantines.distinct('order_number') == ['unknown-order']

@@ -7,6 +7,8 @@ import sys
 import uuid
 from unittest.mock import AsyncMock
 
+from fastapi import APIRouter, FastAPI
+from httpx import ASGITransport, AsyncClient
 from motor.motor_asyncio import AsyncIOMotorClient
 import pytest
 import pytest_asyncio
@@ -175,9 +177,12 @@ async def test_canonical_monitor_snapshot_and_claim_publish_atomically(real_db):
     # Recovery uses the existing source snapshot, never another billed model call.
     refreshed = await db[jobs.COLLECTION].find_one({"_id": live["_id"]})
     result = await jobs._build_monitor(db, refreshed)
-    assert result["snapshot_id"] == "live"
+    assert result["snapshot_id"] != "live"
+    assert result["manual_job_source_snapshot_id"] == "live"
     assert result["manual_job_status"] == "partial"
     assert "manual_worker_interrupted_after_core_analysis" in result["limitations"]
+    assert (await db[RECOMMENDATION_COLLECTION].find_one({"snapshot_id": "live"}))["manual_job_status"] == "building"
+    assert (await db[RECOMMENDATION_COLLECTION].find_one({"snapshot_id": result["snapshot_id"]}))["manual_job_status"] == "building"
 
 
 @pytest.mark.asyncio
@@ -228,6 +233,96 @@ async def test_manual_job_reaches_existing_policy_and_publishes_saved_advice(rea
     assert stored["snapshot_id"] == saved["result"]["snapshot_id"]
     assert stored["manual_job_request_id"] == row["request_id"]
     model.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_lost_child_after_core_cannot_publish_or_mutate_recovered_visible_advice(real_db, monkeypatch):
+    import campaign_ai_monitor as monitor
+    import campaign_ai_monitor_legacy as legacy
+    import campaign_ai_google_periodic as google
+    import campaign_ai_tiktok_periodic as tiktok
+    import campaign_ai_public_guard as public
+    import campaign_ai_execution_quality_gate as quality
+    db = real_db
+    now = datetime.now(timezone.utc)
+    await db[legacy.RECOMMENDATION_COLLECTION].insert_one({
+        "user_id": "owner", "snapshot_id": "previous", "generated_at": (now - timedelta(minutes=1)).isoformat(),
+        "summary": "previous verified advice", "recommendation_source": "openai", "recommendations": [],
+    })
+    await jobs.request_refresh(db, "owner", days=3, kind="monitor")
+    old = await jobs.claim_next(db)
+    await db[jobs.COLLECTION].update_one({"_id": old["_id"]}, {"$set": {"cached_results.monitor": {
+        "days": 3, "result": {"snapshot_id": "previous"}, "generated_at": now,
+        "expires_at": now + timedelta(hours=1),
+    }}})
+    entered, proceed = asyncio.Event(), asyncio.Event()
+    async def core(_db, user, **kwargs):
+        assert kwargs["refresh_meta"] is False
+        document = {"user_id": user, "snapshot_id": "old-hidden-core", "generated_at": now.isoformat(),
+            "recommendation_source": "openai", "summary": "core advice", "limitations": [],
+            "recommendations": [{"recommendation_id": "candidate", "approval_available": True}],
+            "execution_targets": {"candidate": {"provider": "snapchat"}}}
+        await kwargs["snapshot_publisher"](document)
+        return {key: value for key, value in document.items() if key != "user_id"}
+    async def google_after_core(_db, user, document, **kwargs):
+        entered.set(); await proceed.wait()
+        await _db[legacy.RECOMMENDATION_COLLECTION].update_one(
+            {"user_id": user, "snapshot_id": document["snapshot_id"]},
+            {"$set": {"google_periodic": {"late_old_child": True}}})
+        return {**document, "google_periodic": {"late_old_child": True}}
+    async def tiktok_after_loss(_db, user, document, **kwargs):
+        await _db[legacy.RECOMMENDATION_COLLECTION].update_one(
+            {"user_id": user, "snapshot_id": document["snapshot_id"]},
+            {"$set": {"tiktok_periodic": {"late_old_child": True}}})
+        return {**document, "tiktok_periodic": {"late_old_child": True}}
+    monkeypatch.setattr(monitor, "_base_run_campaign_ai_monitor", core)
+    monkeypatch.setattr(google, "append_google_periodic_recommendations", google_after_core)
+    monkeypatch.setattr(tiktok, "append_tiktok_periodic_recommendations", tiktok_after_loss)
+    app, router = FastAPI(), APIRouter()
+    actor = lambda: {"id": "owner", "role": "owner"}
+    public.attach_campaign_ai_public_guard(router, db, actor)
+    legacy.attach_campaign_ai_routes(router, db, actor, lambda user: user)
+    app.include_router(router)
+    task = asyncio.create_task(jobs.execute_claim(db, old["_id"], old["lease_token"]))
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            assert (await client.get("/ai-monitor/latest")).json()["snapshot_id"] == "previous"
+            assert [item["snapshot_id"] for item in (await client.get("/ai-monitor/history")).json()["items"]] == ["previous"]
+            denied = await client.post("/ai-monitor/recommendations/candidate/approve", json={"snapshot_id": "old-hidden-core"})
+            assert denied.status_code == 409
+            assert (await jobs.read_status(db, "owner", days=3, kind="monitor"))["result"]["snapshot_id"] == "previous"
+            await expire(db, old)
+            recovered = await jobs.claim_next(db)
+            assert await jobs.execute_claim(db, recovered["_id"], recovered["lease_token"])
+            visible = (await client.get("/ai-monitor/latest")).json()
+            assert visible["snapshot_id"] not in {"previous", "old-hidden-core"}
+            assert visible["manual_job_status"] == "partial"
+            assert visible["manual_job_source_snapshot_id"] == "old-hidden-core"
+            # The old child now finishes both appenders and the real wrapper's
+            # final metadata write after recovery has already published.
+            proceed.set()
+            assert await task is False
+            assert (await client.get("/ai-monitor/latest")).json() == visible
+            hidden = await db[legacy.RECOMMENDATION_COLLECTION].find_one({"snapshot_id": "old-hidden-core"})
+            assert hidden["manual_job_status"] == "building"
+            assert hidden["google_periodic"]["late_old_child"] is True
+            assert hidden["tiktok_periodic"]["late_old_child"] is True
+            history = (await client.get("/ai-monitor/history")).json()["items"]
+            assert "old-hidden-core" not in {item["snapshot_id"] for item in history}
+            assert (await client.post("/ai-monitor/recommendations/candidate/approve",
+                json={"snapshot_id": "old-hidden-core"})).status_code == 409
+            with pytest.raises(quality.ExecutionQualityBlocked):
+                await quality.preflight_approved_execution(db, recommendation_collection=legacy.RECOMMENDATION_COLLECTION,
+                    user_id="owner", snapshot_id="old-hidden-core", recommendation_id="candidate")
+            cached = await jobs.read_status(db, "owner", days=3, kind="monitor")
+            assert cached["result"]["snapshot_id"] == visible["snapshot_id"]
+            assert "google_periodic" not in cached["result"]
+    finally:
+        proceed.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
 
 @pytest.mark.asyncio

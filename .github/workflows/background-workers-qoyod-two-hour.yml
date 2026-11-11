@@ -23,6 +23,8 @@ on:
       - 'backend/campaign_ai_unified_shadow_routes.py'
       - 'backend/campaign_ai_monitor.py'
       - 'backend/campaign_ai_monitor_legacy.py'
+      - 'backend/campaign_ai_public_guard.py'
+      - 'backend/campaign_ai_execution_quality_gate.py'
       - 'backend/campaign_ai_policy_v2.py'
       - 'backend/campaign_ai_subprocess_scheduler.py'
       - 'backend/tests/test_campaign_ai_shadow_jobs.py'
@@ -106,9 +108,18 @@ jobs:
             backend/tests/test_qoyod_scheduled_incremental.py \
             backend/tests/test_qoyod_auto_run_lifecycle.py \
             backend/tests/test_qoyod_manual_send_jobs.py \
+            backend/tests/test_qoyod_plan_b_auto_send.py \
+            backend/tests/test_qoyod_cycle_interruption_diagnostic.py \
+            backend/tests/test_qoyod_post_invoice_failure_recovery.py \
+            backend/tests/test_qoyod_failed_retry.py \
             backend/tests/test_campaign_ai_shadow_jobs.py \
             backend/tests/test_campaign_jobs_real_mongo.py \
+            backend/tests/test_campaign_ai_subprocess_scheduler.py \
+            backend/tests/test_campaign_ai_no_mezan_fallback_guard.py \
+            backend/tests/test_campaign_ai_execution_quality_p0_3.py \
+            backend/tests/test_campaign_ai_execution_retry.py \
             backend/tests/test_snapchat_shadow_cadence.py \
+            backend/tests/test_snapchat_reporting_v2_scheduler.py \
             backend/tests/test_background_worker_process.py \
             backend/tests/test_scheduler_readiness_gate.py \
             backend/tests/test_web_process_background_isolation.py \

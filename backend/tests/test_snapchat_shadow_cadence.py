@@ -13,7 +13,7 @@ NOW = datetime(2026, 11, 11, 12, tzinfo=timezone.utc)
 
 @pytest.mark.parametrize("configured,expected", [
     (None, 7200), ("300", 7200), ("1800", 7200), ("7200", 7200),
-    ("10800", 10800), ("999999", 86400), ("invalid", 7200),
+    ("10800", 10800), ("172800", 172800), ("invalid", 7200),
 ])
 def test_owner_cadence_survives_legacy_configuration(monkeypatch, configured, expected):
     if configured is None:

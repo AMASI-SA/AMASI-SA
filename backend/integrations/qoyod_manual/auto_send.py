@@ -952,18 +952,32 @@ async def _hold_interrupted_order(db, *, order_number, run_id, provider_started,
 async def _recover_abandoned_runs(db, owner, *, limit=_ABANDONED_RUN_PAGE):
     """Close a bounded page after exclusive lease takeover, without guessing sends.
 
-    A hard process exit cannot run finally. Old run evidence is therefore
-    retained as interrupted, and any outcome not durably known is held for
-    review. This never unlocks an invoice or proves absence at the provider.
+    A new worker's exclusive lease proves prior owners cannot start more work.
+    Recover their audits immediately; only legacy audits without an owner need
+    the age fallback. This never unlocks an invoice or proves provider absence.
     """
     cutoff = _now() - timedelta(seconds=_ABANDONED_RUN_AGE_SECONDS)
-    cursor = db.qoyod_manual_auto_runs.find(
-        {"status": "in_progress", "started_at": {"$lt": cutoff}},
-        {"_id": 0, "run_id": 1, "started_at": 1, "order_numbers": 1,
-         "results": 1, "result.results": 1, "active_order_number": 1, "cycle_id": 1},
-    ).sort("started_at", 1).limit(max(1, min(_ABANDONED_RUN_PAGE, int(limit)))).max_time_ms(2000)
+    page_size = max(1, min(_ABANDONED_RUN_PAGE, int(limit)))
+    projection = {"_id": 0, "run_id": 1, "started_at": 1, "order_numbers": 1,
+                  "results": 1, "result.results": 1, "active_order_number": 1,
+                  "cycle_id": 1, "lease_owner": 1}
+    audits = []
+    # Prioritize known lease takeovers so a large historical backlog cannot
+    # postpone the hold for a request interrupted just before this worker won.
+    for selector, index in (
+        ({"lease_owner": {"$type": "string", "$nin": ["", owner]}},
+         "qoyod_manual_auto_runs_takeover"),
+        ({"lease_owner": {"$in": [None, ""]}, "started_at": {"$lt": cutoff}},
+         "qoyod_manual_auto_runs_legacy_recovery"),
+    ):
+        remaining = page_size - len(audits)
+        if not remaining:
+            break
+        audits.extend(await db.qoyod_manual_auto_runs.find(
+            {"status": "in_progress", **selector}, projection,
+        ).hint(index).sort("started_at", 1).limit(remaining).max_time_ms(2000).to_list(length=remaining))
     recovered = 0
-    async for audit in cursor:
+    for audit in audits:
         if not await _lease_is_current(db, owner):
             break
         run_id = audit.get("run_id")
@@ -992,7 +1006,8 @@ async def _recover_abandoned_runs(db, owner, *, limit=_ABANDONED_RUN_PAGE):
                   "reason": "abandoned_run", "results": results,
                   "finished_at": finished_at.isoformat(), **_result_counts(results)}
         updated = await db.qoyod_manual_auto_runs.update_one(
-            {"run_id": run_id, "status": "in_progress", "started_at": audit["started_at"]},
+            {"run_id": run_id, "status": "in_progress", "started_at": audit["started_at"],
+             "lease_owner": audit["lease_owner"] if "lease_owner" in audit else {"$exists": False}},
             {"$set": {"status": "interrupted", "finished_at": finished_at,
                       "result": result, "results": results,
                       "active_order_number": None}},

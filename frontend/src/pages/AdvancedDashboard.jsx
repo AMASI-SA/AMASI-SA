@@ -239,6 +239,7 @@ export function CampaignAdvisorCard() {
                     : monitorJob.snapshot?.job?.active
                     ? monitorJob.pollingPaused ? "التحليل مستمر؛ اضغط عرض الحالة لمتابعته." : "جارٍ تحليل الحملات في الخلفية…"
                     : monitorJob.snapshot?.job?.status === "failed" ? "تعذر إكمال التحليل؛ آخر تحليل محفوظ ظاهر إن توفر."
+                    : monitorJob.snapshot?.result?.manual_job_status === "partial" ? "حُفظ تحليل جزئي؛ يمكنك طلب تحديث المراقبة لإكمال التحليل."
                     : "تشغيل يدوي · فترة الأداء الأساسية 3 أيام · التوصيات تحتاج اعتمادًا مستقلًا للتنفيذ.")}
             </span>
             <button type="button" onClick={monitorJob.refresh}

@@ -1655,13 +1655,15 @@ async def preflight_approved_execution(
     now: Callable[[], datetime] = _utcnow,
 ) -> dict[str, Any]:
     """Re-read the latest snapshot and current sync quality before any write."""
+    from campaign_ai_public_guard import VISIBLE_SNAPSHOT_FILTER
     latest = await _find_one(
         db[recommendation_collection],
-        {"user_id": user_id},
+        {"user_id": user_id, **VISIBLE_SNAPSHOT_FILTER},
         {"_id": 0},
         sort=[("generated_at", -1)],
     )
-    if not latest or latest.get("snapshot_id") != snapshot_id:
+    if (not latest or latest.get("manual_job_status") == "building"
+            or latest.get("snapshot_id") != snapshot_id):
         raise ExecutionQualityBlocked(["execution_snapshot_drift"])
     generated_at = _parse_datetime(latest.get("generated_at"))
     current = now().astimezone(timezone.utc)
