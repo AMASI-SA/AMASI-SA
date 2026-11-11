@@ -1,7 +1,7 @@
 > **Evidence-only checkpoint — do not deploy this branch.**
 > Deployable candidate is intent-only B `3949adc402ff828d2e15b2d53d8daab54bf821bc` on
-> `codex/supplier-receiving-recovery-r2-20261111`, subject to final CI and user
-> publication authorization. This post-intent document is continuity evidence.
+> `codex/supplier-receiving-recovery-r2-20261111`, with final CI passed; production merge/publication awaits separate user
+> authorization. This post-intent document is continuity evidence.
 
 # Supplier receiving pending-scan regression recovery
 
@@ -266,9 +266,10 @@ B readiness run
 classified B correctly. Frontend double build, backend preflight and host
 compatibility checks passed. The actual adapter rehearsals are running under
 host Node 20.20.2 (job 130657410463) and Node 24.19.0 (job 130657410505).
-Exact-B CI is still being checked; this checkpoint is not publication approval.
+Exact-B CI subsequently completed successfully; the final handoff below records
+the complete result. No checkpoint is production publication authorization.
 
-**Production changed by this task: no.** PR remains Draft and unmerged. There
+**Production changed by this task: no.** PR is ready for review and unmerged. There
 has been no shared `/app` edit, owned release lease, deployment, APK update or
 live invoice/session mutation. The affected employee session remains unread
 and unverified. No old 35dd/f4 artifact may be deployed.
@@ -281,3 +282,59 @@ those actions. On authorization, use the shared guard only after observing
 new explicit Deployment Succeeded and official three-probe verification, then
 verify continuation from the original employee session. Do not cancel the
 live receipt or approve an invoice as a test.
+
+
+## Final handoff — ready for separate publication approval
+
+Verified at **2026-11-11 16:40 UTC**. PR #1882 is **ready for review, open,
+unmerged and mergeable**. The deployable task branch remains exactly
+`3949adc402ff828d2e15b2d53d8daab54bf821bc`; A and B were not rewritten.
+The reviewed production branch still points to
+`2d6d74806ab32333a1de1cfc8b8c73c3e434a851`.
+
+All **34 exact-B checks** completed: **28 success and six expected skips**,
+with **zero failures, pending checks or neutral results**. Both CodeQL analyses
+and their aggregate completed successfully. The six skips are four unrelated
+advertising-scope jobs, the TikTok candidate job explicitly restricted to a
+different task branch, and the production-only manual redeploy handoff. No
+receiving, invoice, stock, financial-boundary or required release check was
+skipped. Readiness run **43059200630**, attempt 1, completed **SUCCESS**.
+
+Both real adapter rehearsals passed all steps, including adapter execution,
+artifact and package verification, and governed runtime JSON checks:
+
+- [Host Node 20.20.2 — job 130657410463](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43059200630/job/130657410463)
+- [Host Node 24.19.0 — job 130657410505](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43059200630/job/130657410505)
+
+The existing published Android 76 source at
+`AMASI-SA/amasi-mobile@3f0567991c20c1b229811ceb8b852d8bb040bf6c` was also
+reviewed: Continue mounts the compact receiving screen, whose load/refocus
+path calls the existing authorized POST session-refresh endpoint. This fix
+changes only the server and requires no new APK. The affected device's actual
+installed build and its live pending-attempt rows were not inspected. The web
+catalog-refresh button remains GET-based; its valid expired attempts can
+recover through the repaired background reconciler. Malformed attempts without
+expiry proof deliberately require explicit cancellation or further evidence
+before a preserving repair can be designed.
+
+**Production changed by this task: NO.** There was no production merge,
+publication, shared `/app` modification, owned lease or live session/invoice
+mutation. No claim is made that the live affected receipt has recovered.
+Unrelated #1879/#1881 code and other conversations' work were preserved.
+
+The code, reviewed intent, CI and rehearsal preparation are complete. The only
+next user decision is authorization to merge PR #1882 and publish it under the
+repository's v5 protocol. After authorization, first fetch current production
+and verify that the reviewed base remains compatible; check the shared guard
+and proceed only with `active:false`. Preserve all foreign leases and files.
+Use the frozen B or its tree-equivalent normal merge, never this evidence-only
+branch. Complete the governed build/own prepare/prepublish, publish once, then
+require a newer explicit Deployment Succeeded and official three-probe verify
+with the intended runtime/source and an inactive guard. Verify continuation
+from the original employee session afterward, preserving confirmed pieces;
+do not approve the invoice or cancel the receipt as a test.
+
+Local detailed evidence is under `release-evidence/3949adc4/`:
+`B-validation.json`, `B-rehearsals.json` and `B-ci-proof.json`. Durable proof is
+also in the immutable A/B commits, the linked CI run/jobs, PR #1882 and Issue
+#1006. Re-read this final handoff and the live branch/PR state before resuming.
