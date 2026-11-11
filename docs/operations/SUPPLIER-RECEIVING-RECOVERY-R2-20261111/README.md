@@ -1,0 +1,135 @@
+# Supplier receiving pending-scan regression recovery
+
+## Scope and source
+
+Base: `3f60c1a08263ff1eb2412c0f9224467a198ac278`.
+Task branch: `codex/supplier-receiving-recovery-r2-20261111`.
+
+This restores the reviewed source behavior from
+`d1c2a3268e81ef6305cf853a66e7c7e1e855082f` (PR #1809) and
+`71d5d48a11078c57dcbdcb27a10b90a27f3625c1` (PR #1837) on the current base.
+No historical release intent is copied.
+
+The production source had reverted to a scan reconciler that could fail an
+entire sweep on a legacy pending row without a token. Expired valid attempts
+then left refresh and cancellation returning `supplier_receiving_scans_pending`.
+These mechanisms were reproduced against the base with synthetic data.
+
+## Behavior
+
+- The existing sweeper expires only attempts with valid date and fencing
+  evidence, and checks expiry again during the atomic state transition.
+- Authorized POST refresh settles that session's expired valid attempts inside
+  its existing transaction, preserving already committed receipt pieces.
+- Explicit cancellation claims the session and fences all its pending attempts
+  in the same transaction as the existing draft rollback. A racing scan either
+  commits first and is included in rollback, or loses its write fence.
+- GET session and scan-outcome recovery remain read-only.
+- A newer lock or another session's attempt is not cleared by old-attempt expiry.
+- Close interprets Mongo's timezone-naive UTC lock expiry correctly instead of
+  comparing it directly to an aware datetime and returning a misleading 503.
+  Present locks with missing or invalid expiry continue to block finalization.
+- Malformed attempts without expiry evidence are not silently expired by
+  refresh. Explicit cancellation can fence them; preserving such a session may
+  require further evidence. No direct production repair is included here.
+
+## Verification
+
+The combined expiry/cancellation restoration passed **181 tests, 0 failed,
+0 errors, 0 skipped**, pytest exit **0**, duration **65.07 seconds**, against an
+isolated MongoDB **7.0.17** replica set. After the final close-date correction,
+the affected approval, scan-lock and financial-integrity suites passed afresh:
+**73 passed, 0 failed, 0 errors, 0 skipped**, exit **0**, **52.45 seconds**.
+The supplier scan CI workflow pins MongoDB **7.0.16**. The first local runner
+banner incorrectly named another workflow's version; its banner was corrected
+after inspecting `.github/workflows/build20-supplier-scan-recovery.yml`.
+
+The 12 suites were:
+
+```text
+test_supplier_optional_unstarted_receipt.py
+test_supplier_scan_recovery.py
+test_supplier_scan_lock.py
+test_supplier_scan_approval.py
+test_supplier_receiving.py
+test_supplier_invoice_financial_integrity.py
+test_supplier_multi_supplier_lifecycle.py
+test_supplier_invoice_live_cost_session.py
+test_supplier_invoice_service_eligibility.py
+test_supplier_refresh_real_mongo.py
+test_supplier_refresh_wrapper.py
+test_supplier_receiving_concurrency.py
+```
+
+The new regression checks prove that refreshing a stale session with **19**
+confirmed synthetic pieces retains all 19 exact piece identities and its count,
+with no invoice or general-ledger write. Reading an expired pending outcome is
+verified not to mutate its saved attempt. Additional checks cover valid expiry
+despite a malformed foreign-session row, a newer lock, active-scan cancellation,
+foreign-employee denial and both orders of the scan/cancellation commit race.
+
+Baseline checks failed for the intended defects: missing-token sweep exception,
+expired refresh/cancel returning 409, and active cancellation returning 409.
+An initial broad run had 48 fixture setup errors from an omitted isolated
+invoice Mongo URI. The local runner was corrected and the complete 181-case
+suite then passed. Two newly added assertions initially assumed cancellation
+zeroes the historical scan count; they were corrected to verify the existing
+`cancelled_piece_count` audit contract. No runtime behavior was changed for
+those assertions.
+
+`git diff --check` and Python compilation of the three changed Python files
+passed initially; both checks were repeated successfully for the final four
+Python files. Evidence is retained locally in `.test-runtime/supplier-regression.log`
+and `.test-runtime/supplier-regression.xml`, and final-source evidence is in
+`.test-runtime/supplier-final-approval.log` and
+`.test-runtime/supplier-final-approval.xml`, pending the coordinator's durable
+checkpoint.
+
+The new combined acceptance test covers 19 confirmed pieces and a valid expired
+pending attempt: close blocks with 409, authorized refresh preserves all 19,
+close creates one invoice for 39,900 halalas, replay returns that same invoice,
+and cancellation after close rejects with 409 while preserving the invoice,
+two ledger entries and session. This test exposed the previously untested
+timezone-naive lock comparison: before correction, close returned 503. Separate
+baseline checks also proved active and invalid expiry returned 503, while a
+missing expiry incorrectly permitted close. The final comparison handles all
+three as 409 without financial writes. All these tests passed in the final
+73-test run; no live invoice was created.
+
+## Handoff boundary
+
+No production database change, merge, push, release intent update, release lease,
+deployment or application build was performed by this implementation task.
+The live affected session has not been claimed recovered by these synthetic
+tests. The coordinator owns integration, durable checkpoint and live readback.
+
+## Integration review and next action
+
+The independent source review accepted the authorization, transaction fencing,
+19-piece preservation, read-only GET and closed-invoice invariants. The root
+coordinator independently checked the complete diff and confirmed that all
+three original affected files are identical between the observed deployed
+source `5843ff899ce8cc814ba60de1e44bb69ec732f4c4` and the task base above.
+The root coordinator then independently reran the five approval checks on the
+final source with a fresh disposable replica set: **5 passed**, exit **0**, in
+**5.37 seconds**, including the complete 19-piece recovery/close/replay path.
+
+Run the affected final-source suite with the repository's disposable replica-set
+setup from `.github/workflows/build20-supplier-scan-recovery.yml`:
+
+```bash
+cd backend
+python -m pytest tests/test_supplier_scan_approval.py tests/test_supplier_scan_lock.py tests/test_supplier_invoice_financial_integrity.py -q
+```
+
+The broader supplier regression command is the same workflow's supplier/invoice
+test step, with `test_supplier_refresh_real_mongo.py`,
+`test_supplier_refresh_wrapper.py` and `test_supplier_receiving_concurrency.py`
+included as documented above. Only synthetic local test data was used.
+
+This is a source candidate for a new reviewed v5 release. Before a release,
+recheck the production branch and shared guard, integrate any newer reviewed
+production changes without restoring the old release intents, run the required
+readiness gates, freeze a fresh intent-only commit, and follow `AGENTS.md`.
+Publication and recovery of the employee's live session remain unverified.
+Do not cancel a live draft or approve its invoice as a test.
