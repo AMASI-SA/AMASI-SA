@@ -58,6 +58,7 @@ export const operationalApi = {
   obligations: (party_type, party_id) => data(api.get(`${base}/obligations`, {params:{party_type, party_id}})),
   receiptContent: id => data(api.get(`${base}/receipts/${encodeURIComponent(id)}`, {responseType:"blob"})),
   reports: () => data(api.get(`${base}/reports`)),
+  dailyFinancialMovements: params => data(api.get(`${base}/daily-financial-movements`, {params})),
   costExposure: () => data(api.get(`${base}/cost-exposure`)),
   financialPosition: () => data(api.get(`${base}/financial-position`)),
   audit: () => data(api.get(`${base}/audit`))
