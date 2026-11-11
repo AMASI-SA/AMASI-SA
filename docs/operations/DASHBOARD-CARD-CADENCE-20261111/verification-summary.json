@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "task_id": "DASHBOARD-CARD-CADENCE-20261111",
+  "evidence_only": true,
+  "production_changed": false,
+  "repository": "AMASI-SA/AMASI-SA",
+  "pr_number": 1884,
+  "base_j": "d3c9b0c946afe2418aecf0b96629e46d7f14f196",
+  "source_a": "60858eeb6074669dbd93258d7e2f69ebadb59e8e",
+  "intent_b": "ff648cf5ebcc29acdf25fa855a8c80481b529f6c",
+  "intent_b_tree": "d5240e4fe0e72890d4e06d6da43e07f5ae680962",
+  "runtime_release_id": "rg5-cfe81337974d09f350b54dcb41587c0fcade8596714493ffd753d4332d94819d",
+  "intent_sha256": "5405191a0544b5dc2c8f01aaa75d47b3e6d8cbbb3838d8a962679c5f79b7c2b7",
+  "intent_bytes": 1267519,
+  "local_build": {
+    "exit_code": 0,
+    "seconds": 28.71,
+    "passes": [
+      {
+        "ordinal": 1,
+        "build_meta": {
+          "path": "build-meta.json",
+          "bytes": 463179,
+          "sha256": "52c470e4651c58e9897f1419cb6c83bea07889da0be9e1132a4e9102e4612bda"
+        },
+        "artifact_tree_sha256": "ab6e7d8994e8a5e32bb2843225bd156c34996798bb1ee780a5643ee35c535325"
+      },
+      {
+        "ordinal": 2,
+        "build_meta": {
+          "path": "build-meta.json",
+          "bytes": 463179,
+          "sha256": "52c470e4651c58e9897f1419cb6c83bea07889da0be9e1132a4e9102e4612bda"
+        },
+        "artifact_tree_sha256": "ab6e7d8994e8a5e32bb2843225bd156c34996798bb1ee780a5643ee35c535325"
+      }
+    ],
+    "verify_exit_code": 0,
+    "freeze_exit_code": 0,
+    "isolated_existing_locked_dependencies": true
+  },
+  "source_ci_intent": {
+    "run_id": 43085668667,
+    "artifact_id": 13886551580,
+    "source_and_base_match": true,
+    "archive_digest_match": true,
+    "byte_identical_to_local": true
+  },
+  "root_backend_tests": {
+    "passed": 126,
+    "ast_subtests_passed": 5,
+    "skipped": 0,
+    "exit_code": 0,
+    "real_disposable_mongo": true,
+    "live_provider_calls": false
+  },
+  "root_frontend_tests": {
+    "passed": 155,
+    "suites": 15,
+    "exit_code": 0
+  },
+  "placement_followup_tests": {
+    "passed": 54,
+    "suites": 3,
+    "exit_code": 0,
+    "overlaps_initial_frontend_selection": true
+  },
+  "independent_reviews": "passed within task scope",
+  "release_state": "frozen_b_awaiting_exact_ci",
+  "shared_preflight": {
+    "active": false,
+    "head": "d3c9b0c946afe2418aecf0b96629e46d7f14f196",
+    "tracked_clean": true
+  },
+  "lease_created": false,
+  "publication_submitted": false,
+  "limitations": [
+    "No measured overall production speedup yet",
+    "Automatic timing verified with controlled clocks, not a five-hour live wait",
+    "Saved card cache is local to each application router/process"
+  ],
+  "source_ci_frontend_tests": {
+    "passed": 159,
+    "suites": 16,
+    "exit_code": 0,
+    "job_id": 130749269065
+  }
+}

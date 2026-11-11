@@ -1,7 +1,7 @@
 # DASHBOARD-CARD-CADENCE-20261111
 
 ## State
-Implementation and independent review complete. Root integrated verification passed. Candidate source checkpoint is ready for release CI and the protocol-v5 A/B handoff. Production unchanged by this task; no task lease or publication exists.
+Evidence-only branch. Do not deploy this branch. Source A and intent-only B are frozen and recoverable; exact-B CI is running. Production remains unchanged by this task; no task lease or publication exists.
 
 ## Owner request and acceptance
 - Normal Products recent Salla sync: hourly automatic admission, with manual/explicit recovery still available.
@@ -49,3 +49,18 @@ PR1884 is open. After the development environment resumed, official status fresh
 Next: validate the updated source candidate in exact-head CI, run the local governed two-clean-build proof with the reviewed public origin, compare CI candidate intent, freeze intent-only B, require exact-head CI and normal merge. Then repeat guard/clean-head checks, fast-forward shared /app to the exact merge while preserving unrelated untracked files, run the actual adapter, and only then own prepare/prepublish and one already-authorized publication.
 Final acceptance requires newer explicit deployment success, official verify with three probes, final inactive guard, and live visual/manual card readback. Timing tests use controlled clocks; no claim of five-hour live observation or overall production speedup is made.
 Preparation creation, automatic two-hour Snapchat sync, prior completed spend-only release, other worktrees and platform files remain outside this task. No live provider, invoice, financial or advertising mutation was used as a test.
+
+
+## Frozen release identities and evidence branch
+- Evidence branch: codex/dashboard-card-cadence-evidence-20261111 (never deploy).
+- PR: https://github.com/AMASI-SA/AMASI-SA/pull/1884
+- Final source A: 60858eeb6074669dbd93258d7e2f69ebadb59e8e.
+- Intent-only B: ff648cf5ebcc29acdf25fa855a8c80481b529f6c.
+- B tree: d5240e4fe0e72890d4e06d6da43e07f5ae680962.
+- Deterministic runtime: rg5-cfe81337974d09f350b54dcb41587c0fcade8596714493ffd753d4332d94819d.
+- Intent SHA256: 5405191a0544b5dc2c8f01aaa75d47b3e6d8cbbb3838d8a962679c5f79b7c2b7; 1267519 bytes.
+- Governed local two-clean builds completed in 28.71 seconds; verify and freeze exit 0. Both build-meta hashes and full artifact-tree hashes agree. The task-generated untracked backend pytest cache was removed before freeze; tracked source was unchanged.
+- Downloaded final-A release-readiness artifact 13886551580 from run43085668667; exact source and base verified, archive digest checked, and intent bytes identical to local.
+- Exact-B release-readiness run43086290023 and all other required checks are pending; no merge/prepare/publish yet.
+- Next safe action: require exact-B terminal CI success including Node20/24 clean-clone adapter rehearsals, normal merge with B-equivalent tree, then fresh shared guard/clean-head checks and actual adapter build. Source A/B must not change.
+- Source-A focused CI frontend job130749269065:159 tests across16 suites passed, exit0, including the updated placement contract.
