@@ -142,33 +142,107 @@ async def test_crashed_worker_expires_without_replaying_post(env, monkeypatch):
     assert await db[r.RECEIVING_EVENTS].count_documents({}) == 0
 
 
-async def test_pending_attempt_blocks_cancel_and_other_employee(env, monkeypatch):
+async def test_cancel_fences_an_active_scan_and_rolls_back_confirmed_pieces(env, monkeypatch):
     db, http, identity = env
     session, pieces = await seed(env, 2)
+    session_id = session['id']
+    endpoint = f'/supplier-receiving-v1/sessions/{session_id}'
+    confirmed = await post_scan(http, session_id, pieces[0], 'confirmed-before-cancel', 1)
+    assert confirmed.status_code == 200, confirmed.text
     entered, release = asyncio.Event(), asyncio.Event()
     original = r.resolve_scanned_piece
+
     async def pause(*args, **kwargs):
         entered.set()
         await release.wait()
         return await original(*args, **kwargs)
+
     monkeypatch.setattr(r, 'resolve_scanned_piece', pause)
-    task = asyncio.create_task(post_scan(http, session['id'], pieces[0], 'active-request-1', 1))
-    await asyncio.wait_for(entered.wait(), 5)
-    busy = await post_scan(http, session['id'], pieces[1], 'competing-request-1', 1)
-    assert busy.status_code == 409
-    assert (await outcome(http, session['id'], 'competing-request-1'))['outcome'] == 'rejected'
-    cancel = await http.post(f"/supplier-receiving-v1/sessions/{session['id']}/cancel", json={})
-    assert cancel.status_code == 409 and cancel.json()['detail']['code'] == 'supplier_receiving_scans_pending'
-    identity['id'] = 'another-employee'
-    denied = await post_scan(http, session['id'], pieces[1], 'other-employee-1', 1)
-    assert denied.status_code == 403
-    identity['id'] = 'receiver'
-    release.set()
-    assert (await task).status_code == 200
-    cancel = await http.post(f"/supplier-receiving-v1/sessions/{session['id']}/cancel", json={})
+    task = asyncio.create_task(post_scan(http, session_id, pieces[1], 'active-request-1', 1))
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        busy = await post_scan(http, session_id, pieces[1], 'competing-request-1', 1)
+        assert busy.status_code == 409
+        assert (await outcome(http, session_id, 'competing-request-1'))['outcome'] == 'rejected'
+        refresh = await http.post(endpoint + '/refresh')
+        assert refresh.status_code == 409
+        assert refresh.json()['detail']['code'] == 'supplier_receiving_scans_pending'
+        identity['id'] = 'another-employee'
+        denied = await post_scan(http, session_id, pieces[1], 'other-employee-1', 1)
+        assert denied.status_code == 403
+        assert (await http.post(endpoint + '/cancel', json={})).status_code == 403
+        identity['id'] = 'receiver'
+
+        # An older attempt may lack expiry evidence. Explicit cancellation still fences it.
+        legacy_id = attempts.attempt_key('merchant', session_id, 'legacy-pending-1')
+        await db[attempts.ATTEMPTS].insert_one({
+            '_id': legacy_id, 'user_id': 'merchant', 'session_id': session_id,
+            'state': 'in_progress',
+        })
+        cancel = await http.post(endpoint + '/cancel', json={})
+    finally:
+        identity['id'] = 'receiver'
+        release.set()
+        late_scan = await task
     assert cancel.status_code == 200, cancel.text
-    assert await db[r.PIECES].count_documents({'supplier_receiving_session_id': session['id']}) == 0
-    assert (await db[r.SESSIONS].find_one({'id': session['id']}))['status'] == 'cancelled'
+    assert cancel.json()['session']['cancelled_piece_count'] == 1
+    assert late_scan.status_code == 409, late_scan.text
+    rejected = await outcome(http, session_id, 'active-request-1')
+    assert rejected['outcome'] == 'rejected' and not rejected['committed']
+    assert rejected['rejection']['code'] == 'supplier_receiving_session_cancelled'
+    assert (await db[attempts.ATTEMPTS].find_one({'_id': legacy_id}))['state'] == 'rejected'
+    assert await db[r.PIECES].count_documents({'supplier_receiving_session_id': session_id}) == 0
+    assert await db[r.RECEIVING_EVENTS].count_documents({
+        'session_id': session_id, 'event_type': 'supplier_piece_scanned',
+    }) == 0
+    saved = await db[r.SESSIONS].find_one({'id': session_id})
+    assert saved['status'] == 'cancelled' and not saved.get('scan_lock_token')
+    assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 0
+    assert await db.general_ledger.count_documents({}) == 0
+
+
+async def test_cancel_retries_if_scan_commits_after_cancellation_reads(env, monkeypatch):
+    db, http, _ = env
+    session, pieces = await seed(env)
+    session_id = session['id']
+    scan_wrote, allow_scan_commit = asyncio.Event(), asyncio.Event()
+    cancel_read, allow_cancel_write = asyncio.Event(), asyncio.Event()
+    price = r._supplier_product_reference_price
+    read_scans = r._cancellable_session_events
+
+    async def pause_scan(*args, **kwargs):
+        scan_wrote.set()
+        await allow_scan_commit.wait()
+        return await price(*args, **kwargs)
+
+    async def pause_cancel(*args, **kwargs):
+        scans = await read_scans(*args, **kwargs)
+        cancel_read.set()
+        await allow_cancel_write.wait()
+        return scans
+
+    monkeypatch.setattr(r, '_supplier_product_reference_price', pause_scan)
+    monkeypatch.setattr(r, '_cancellable_session_events', pause_cancel)
+    scan = asyncio.create_task(post_scan(http, session_id, pieces[0], 'concurrent-cancel-1'))
+    cancel = None
+    try:
+        await asyncio.wait_for(scan_wrote.wait(), 5)
+        cancel = asyncio.create_task(http.post(f'/supplier-receiving-v1/sessions/{session_id}/cancel', json={}))
+        await asyncio.wait_for(cancel_read.wait(), 5)
+        allow_scan_commit.set()
+        assert (await scan).status_code == 200
+    finally:
+        allow_scan_commit.set()
+        allow_cancel_write.set()
+        await scan
+        if cancel is not None:
+            cancelled = await cancel
+
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()['rolled_back_piece_count'] == 1
+    assert await db[r.PIECES].count_documents({'supplier_receiving_session_id': session_id}) == 0
+    recovered = await outcome(http, session_id, 'concurrent-cancel-1')
+    assert recovered['outcome'] == 'rejected' and recovered['cancelled']
 
 
 async def test_alias_lost_response_for_one_piece_of_quantity_group(env):
