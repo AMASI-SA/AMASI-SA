@@ -15,7 +15,8 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException
-from pymongo import ASCENDING
+from pymongo import ASCENDING, ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 from product_cost_revision import bump_product_cost_revision
 from component_status_policy import (
@@ -32,6 +33,7 @@ RESOURCES = "mezan_cost_resources_v2"
 BINDINGS = "mezan_product_option_cost_bindings_v2"
 AUDIT = "mezan_cost_change_log_v2"
 OPTION_LEVEL_VALUE_ID = "__option__"
+FILL_BASED_OPTION_TYPES = frozenset({"text", "textarea", "long_text", "number", "date", "time", "file"})
 
 
 def _now() -> datetime:
@@ -110,6 +112,48 @@ def _binding_is_selected(
     if value_id == OPTION_LEVEL_VALUE_ID:
         return option_id in selected_option_ids
     return (option_id, value_id) in selected_keys
+
+
+def _is_fill_based_option(product: dict[str, Any], option_id: str) -> bool:
+    return any(
+        isinstance(option, dict)
+        and str(option.get("id")) == str(option_id)
+        and _text(option.get("type")).lower() in FILL_BASED_OPTION_TYPES
+        and not (option.get("values") or [])
+        for option in product.get("options") or []
+    )
+
+
+def _binding_audit_state(binding: dict[str, Any] | None) -> dict[str, Any] | None:
+    if binding is None:
+        return None
+    # Record cost provenance, never an arbitrary document or customer answers.
+    return {key: binding[key] for key in (
+        "id", "salla_product_id", "option_id", "value_id", "mode", "resource_id",
+        "direct_amount", "quantity", "cost_currency", "cost_fx_rate_to_sar",
+        "cost_treatment", "created_at", "updated_at",
+    ) if key in binding}
+
+
+async def _audit_option_cost_change(
+    db: Any, *, user_id: str, actor_id: str, before: dict[str, Any] | None,
+    after: dict[str, Any] | None, now: datetime,
+) -> None:
+    identity = after if after is not None else before or {}
+    await db[AUDIT].insert_one({
+        "id": uuid.uuid4().hex,
+        "user_id": user_id,
+        "actor_id": actor_id,
+        "source": "products_v2_option_cost_api",
+        "event_type": "product_option_cost_saved" if after is not None else "product_option_cost_deleted",
+        "binding_id": identity.get("id"),
+        "salla_product_id": identity.get("salla_product_id"),
+        "option_id": identity.get("option_id"),
+        "value_id": identity.get("value_id"),
+        "before": _binding_audit_state(before),
+        "after": _binding_audit_state(after),
+        "created_at": now,
+    })
 
 
 async def _binding_view(db: Any, binding: dict[str, Any]) -> dict[str, Any]:
@@ -345,6 +389,31 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             "option_id": str(option_id),
             "value_id": str(value_id),
         }
+        existing = await db[BINDINGS].find_one(selector)
+        fill_subject = (
+            str(value_id) in {"filled", OPTION_LEVEL_VALUE_ID}
+            and _is_fill_based_option(product, option_id)
+        )
+        if existing is None and fill_subject:
+            # New text-field costs have one identity. Retain existing legacy
+            # IDs and their present-option semantics; never create another one.
+            if str(value_id) == OPTION_LEVEL_VALUE_ID:
+                raise HTTPException(status_code=409, detail={
+                    "code": "option_cost_binding_conflict",
+                    "reason": "legacy_subject_requires_filled",
+                    "canonical_value_id": "filled",
+                })
+            counterpart = await db[BINDINGS].find_one(
+                {**selector, "value_id": OPTION_LEVEL_VALUE_ID},
+                {"_id": 0, "id": 1},
+            )
+            if counterpart is not None:
+                raise HTTPException(status_code=409, detail={
+                    "code": "option_cost_binding_conflict",
+                    "reason": "legacy_subject_exists",
+                    "existing_binding_id": counterpart.get("id"),
+                    "existing_value_id": OPTION_LEVEL_VALUE_ID,
+                })
         patch = {
             **selector,
             "product_name": product.get("name"),
@@ -356,28 +425,51 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             "quantity": quantity,
             "updated_at": now,
         }
-        await db[BINDINGS].update_one(
-            selector,
-            {"$set": patch, "$setOnInsert": {"id": uuid.uuid4().hex, "created_at": now}},
-            upsert=True,
-        )
+        on_insert = {"id": uuid.uuid4().hex, "created_at": now}
+        write_selector = {**selector, "_id": existing["_id"]} if existing is not None else selector
+        try:
+            # An update never recreates a concurrently deleted legacy binding.
+            # Since new legacy aliases are refused above, a concurrent filled
+            # creation cannot race with a legacy insert through this API.
+            before = await db[BINDINGS].find_one_and_update(
+                write_selector,
+                {"$set": patch, "$setOnInsert": on_insert},
+                upsert=existing is None,
+                return_document=ReturnDocument.BEFORE,
+            )
+        except DuplicateKeyError as exc:
+            raise HTTPException(status_code=409, detail={
+                "code": "option_cost_binding_conflict", "reason": "binding_changed",
+            }) from exc
+        if existing is not None and before is None:
+            raise HTTPException(status_code=409, detail={
+                "code": "option_cost_binding_conflict", "reason": "binding_changed",
+            })
+        saved = {**(before if before is not None else on_insert), **patch}
         await bump_product_cost_revision(db, user_id)
-        saved = await db[BINDINGS].find_one(selector, {"_id": 0})
-        return {"ok": True, "binding": await _binding_view(db, saved or patch)}
+        await _audit_option_cost_change(
+            db, user_id=user_id, actor_id=str(user.get("_mobile_actor_id") or user["id"]),
+            before=before, after=saved, now=now,
+        )
+        return {"ok": True, "binding": await _binding_view(db, saved)}
 
     @router.delete("/products-v2/{product_id}/option-costs/{option_id}/{value_id}")
     async def delete_option_cost(product_id: str, option_id: str, value_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
         user_id = str(user["id"])
         product = await _product(db, user_id, product_id)
-        result = await db[BINDINGS].delete_one({
+        before = await db[BINDINGS].find_one_and_delete({
             "user_id": user_id,
             "salla_product_id": str(product["salla_product_id"]),
             "option_id": str(option_id),
             "value_id": str(value_id),
         })
-        if result.deleted_count:
+        if before is not None:
             await bump_product_cost_revision(db, user_id)
-        return {"ok": True, "deleted": result.deleted_count}
+            await _audit_option_cost_change(
+                db, user_id=user_id, actor_id=str(user.get("_mobile_actor_id") or user["id"]),
+                before=before, after=None, now=_now(),
+            )
+        return {"ok": True, "deleted": int(before is not None)}
 
     @router.post("/products-v2/{product_id}/calculate-cost")
     async def calculate_selected_cost(product_id: str, payload: dict = Body(...), user: dict = Depends(current_user)) -> dict[str, Any]:

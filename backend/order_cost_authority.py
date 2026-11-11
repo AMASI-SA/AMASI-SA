@@ -178,6 +178,9 @@ def calculate_catalog_line_cost(
             cell = {"key": kind + ":" + (binding_id or str(index)),
                     "label": resource.get("name") or binding.get("name") or binding.get("option_name") or binding.get("resource_id") or "بند تكلفة",
                     "kind": "service" if resource.get("kind") == "service" or kind == "option" and binding.get("mode") != "resource" else "component",
+                    # Presentation counts resources, while independent binding
+                    # rules and their monetary amounts remain separate.
+                    "resource_id": binding.get("resource_id") if kind == "product" or binding.get("mode") == "resource" else None,
                     "status": "costed", "unit_cost": None}
             details.append(cell)
             policy_key = ("product_resource" if kind == "product" else "option_resource") + ":" + binding_id
