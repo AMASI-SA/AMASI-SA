@@ -1,8 +1,8 @@
-# SERVICE-OPTION-COST-AUTHORITY-20261111 — publication evidence
+# SERVICE-OPTION-COST-AUTHORITY-20261111 — completed publication evidence
 
-## Current checkpoint: published; final Release Guard verification running
+## Current checkpoint: published and verified
 
-Recorded 2026-11-11 at 16:57 UTC. This section supersedes the archived pre-release
+Recorded 2026-11-11 at 17:08 UTC. This section supersedes the archived pre-release
 status below. Repository: AMASI-SA/AMASI-SA. Implementation PR:
 https://github.com/AMASI-SA/AMASI-SA/pull/1879 (merged).
 The frozen implementation branch remains
@@ -88,27 +88,64 @@ https://mezansalla.com/products-v2?product=mpv2_1500919302&focus=cost.
 A local browser screenshot records the cost dialog; no customer data or
 credentials were extracted or persisted.
 
-### Remaining gate and exact next safe action
+### Final production verification
 
 The unmodified command
 `PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py verify --url https://mezansalla.com`
-started around 16:53 UTC in /app Terminal 1 and is still running. Its output
-is redirected to /tmp/service-option-cost-1879-verify.json. A wrapper will print
-the real exit status, three-check result, identities, artifact hash and request
-count, then run guard status only on success. This verification can take
-many minutes because it checks every public artifact in three full probes.
+ran in /app Terminal 1 from about 16:53 UTC and completed by 17:08 UTC.
+The wrapper printed **VERIFY_OK**, which is emitted only for the actual
+guard exit status 0. It then ran guard status and displayed **active:false**.
+The successful guard completed its required three full consecutive probes,
+binding source A to deployment M and the exact intended runtime release.
 
-Do not publish again, modify /app, run another guard operation behind its lock,
-or clear the active lease. Read the existing terminal's completion result.
-Require exit 0, verified=true, checks=3, exact source A/deployment M/release ID,
-and then active:false. If verification fails, diagnose the actual output and
-retain the matching lease; do not hide the failure. After success, update this
-evidence document and PR1879 with the final proof and owner-facing deletion path.
+Observed completion evidence:
+- Frontend artifact tree:
+  `ced2c43f29fe89f8c1002f5373793395a1e90a362a291b70b0d0405e4bce92a1`.
+- `frontend_checked_requests_count`: **576 per probe**.
+- Three complete public checks: **1,728 frontend requests**, plus the
+  health identity checks.
+- Boot identity:
+  `2026-11-11T16:51:11.247105+00:00`.
+  The boot observation list contained this same value.
+- The verified v5 code requires intended identity, backend/control manifests,
+  critical hashes, frontend proof, public file bytes, both canonical and
+  cache-busted build-meta JSON bytes/MIME, cache policy and service-worker checks.
+  No validator or verification gate was changed or skipped.
+- Matching release lease closed automatically; the subsequent status was
+  `{"active": false}`.
+
+Full operational output is retained in
+/tmp/service-option-cost-1879-verify.json on the authenticated project host.
+The material outcome and identity are preserved here and in PR1879, rather
+than depending on that temporary log.
+
+### Final handoff and next action
+
+Publication and read-only functional verification are complete. Do not republish
+this task. The product page is ready for the owner to review the visible legacy
+direct name binding and choose deletion:
+تكاليف الخيارات والحقول → الاسم → عند ورود الخيار في الطلب (ربط سابق) →
+تعديل التكلفة → حذف.
+
+The cost dialog still shows 10 and its delete control. Embroidery 8 remains
+independent. No save or delete was clicked by this task. Actual production
+save/delete acceptance is deliberately outside the requested publication-only
+boundary; the owner performs the next data action.
 
 Production changed: **yes, application code only**, evidenced by the new release
-identity and live fixed editor. Production cost bindings changed: **no**.
+identity, successful full public verification, and live fixed editor.
+Production cost bindings changed by this task: **no**.
+
+Previous evidence-only checkpoint:
+`d7e23dc063da62849215e6c5d5d6bfd490f961e2`.
+The final evidence commit is recorded with its full SHA in PR1879. This evidence
+branch is documentation only and must not be merged or published as another
+release. The frozen A/B pair, production M and shared /app remain unchanged.
+
 Issue #1006 is at its comment limit; PR1879 and this evidence branch are the
-durable continuation ledger.
+durable continuation ledger. No blocker remains for the requested publication.
+Historical frozen report cells are not backfilled; the limitations in the
+archived implementation evidence still apply.
 
 ---
 
