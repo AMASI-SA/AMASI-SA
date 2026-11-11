@@ -195,6 +195,35 @@ async def test_unconfigured_google_does_not_block_sparse_legacy_period(db):
 
 
 @pytest.mark.asyncio
+async def test_legacy_fractional_days_round_only_after_period_sum(db):
+    await db.daily_costs.insert_many([
+        {"user_id": OWNER, "date": DAY, "google_ads": 11.115},
+        {"user_id": OWNER, "date": "2026-08-06", "google_ads": 11.115},
+    ])
+    result = await read_google(db, end="2026-08-06")
+    assert result["total_sar"] == result["known_total_sar"] == 22.23
+    assert result["daily_sar"] == {DAY: 11.12, "2026-08-06": 11.12}
+    assert result["quality"]["amount_available"] is True
+    assert result["quality"]["provisional"] is True
+
+
+@pytest.mark.asyncio
+async def test_native_days_sum_saved_cents_without_repricing_native_or_manual(db):
+    await connected_google(db)
+    await db[COLLECTION].insert_many([
+        native_fact(0.015), native_fact(0.015, day="2026-08-06"),
+    ])
+    await db.daily_costs.insert_many([
+        {"user_id": OWNER, "date": DAY, "google_ads": 11.115},
+        {"user_id": OWNER, "date": "2026-08-06", "google_ads": 11.115},
+    ])
+    result = await read_google(db, end="2026-08-06")
+    assert result["total_sar"] == result["known_total_sar"] == 0.02
+    assert result["daily_sar"] == {DAY: 0.01, "2026-08-06": 0.01}
+    assert set(result["daily_sources"].values()) == {"native"}
+
+
+@pytest.mark.asyncio
 async def test_unconfigured_card_keeps_google_unavailable_without_blocking_other_spend(db, provisional_snapchat):
     card = await platforms.build_dashboard_platform_spend(db, OWNER, date_from=DAY, date_to=DAY)
     assert card["provider_totals_sar"]["google"] is None

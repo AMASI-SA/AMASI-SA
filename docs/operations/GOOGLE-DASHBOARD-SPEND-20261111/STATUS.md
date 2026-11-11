@@ -3,16 +3,68 @@
 ## Scope and current state
 
 - Repository: `AMASI-SA/AMASI-SA`
-- Task branch: `codex/google-dashboard-spend-20261111`
+- Current source branch: `codex/google-dashboard-spend-r2-20261112`
 - Reviewed production baseline: `245a0beccbdbc2585a3ec2214e808eeef3734b57`
-- State: implementation complete; local acceptance passed; remote CI pending.
-- Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1886
+- State: R2 WIP; two exact-B CI failures diagnosed and focused fixes verified;
+  frozen-runtime contract extension and new source/release verification remain.
+- Superseded candidate PR: https://github.com/AMASI-SA/AMASI-SA/pull/1886
 - Remote regression checkpoint: `924e480258c8052741c5d9999e531739238287e0`.
 - Reviewed source checkpoint before the final rounding compatibility fix:
   `cc21d961e111fdf83b2427399e571f9d1e12f715`.
 - Production changed by this task: **no**.
 - No campaign, budget, bid, provider configuration, scheduler, sync, backfill, or business-data writes.
 - No change to the completed bundle study or the separately released dashboard-card cadence task.
+
+## R2 continuation: publication remains authorized
+
+The user explicitly requested publication and then continuation. No additional
+publication confirmation is required. Production has not changed for this task.
+Old source A `9365a39e0b3dee0a88191eb0b58ca660a3d91a32` and intent-only B
+`adb79110b2c25143730a784de2f4c9dc552cac57` remain immutable and must not be
+deployed. R2 starts from A, excluding the superseded intent B, so its eventual
+new A/B pair will preserve the two-commit protocol.
+
+Exact-B CI exposed two real failures while GitHub also reported an Actions
+incident. Neither failure is classified as infrastructure:
+
+- Runtime adoption job `130785062969`, run `43099171646`: legacy values
+  `11.115` on two selected dates were rounded individually and then summed to
+  `22.24`, versus the frozen raw-sum period total `22.23`. The helper now sums
+  raw positive legacy amounts and rounds the period once. Daily display remains
+  rounded; native stored SAR cents remain authoritative. The new regression
+  failed before the fix, and a native-cent negative control passed throughout.
+- Snapchat reporting jobs `130785029460` and `130785700474`: both runs report
+  `2 failed, 559 passed`. The existing route fixture passed `object()` as its DB
+  without isolating the newly shared Google saved reader. Its fixture now
+  supplies the full synthetic `0.44 SAR` Google projection. All 32 original
+  assertions are unchanged, including `98.39`, Snapchat counted once, and
+  unknown conversion handling.
+
+Fresh root integrated check of the helper, affected Snapchat file, and actual
+dashboard financial routes: **65 passed**, exit 0, 2.75 seconds. Command:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 \
+  PYTHONPATH=/workspace/scratch/68020b1592fb/google-spend-test-deps:backend:backend/tests \
+  /workspace/scratch/81f2839b514c/courier-test-env/bin/python -m pytest \
+  --noconftest -p no:cacheprovider -p snapchat_v2_test_bootstrap -q --tb=short \
+  backend/tests/test_google_dashboard_spend.py \
+  backend/tests/test_snapchat_reporting_v2_midnight_zero_dashboard.py \
+  backend/tests/test_dashboard_google_financial_source.py
+```
+
+The immutable runtime gate also needs a narrow independently derived extension
+for Google coverage metadata and three additional empty, owner-scoped saved
+reads. The historical financial oracle must remain unchanged; raw Mongo
+commands and document counts must remain audited. That work is pending at this
+checkpoint, so this branch is WIP and not ready to publish. Old B release build
+checks are not evidence for the future R2 identity.
+
+Fresh remote production head remains
+`245a0beccbdbc2585a3ec2214e808eeef3734b57`; old PR1886 is unmerged. No shared
+`/app` source mutation, lease, merge, republish, provider sync, or business-data
+write was performed. Preserve the concurrent Android78 release task. Recheck
+Issue #1006, production HEAD, and official inactive guard before release work.
 
 ## Evidence and root cause
 
@@ -145,11 +197,11 @@ Root owns this status file, public-route financial acceptance tests, Git
 checkpoints, and PR. The backend implementation agent owns the shared Google
 reader, its two consumers, and its focused tests; reviewers are read-only.
 
-Next: push the completed source checkpoint and review exact-head CI results,
-then request the applicable publication authorization for the concrete PR.
-Do not merge or publish this task without the
-separate applicable release authorization and protocol-v5 gates. Do not clear
-another task's release lease or modify the shared `/app` workspace.
+Next: finish and independently review the strict Google frozen-runtime contract,
+verify all 164 immutable cases and affected regressions, checkpoint R2 and inspect
+exact-head CI, then rebuild a fresh A/B pair and complete the already authorized
+protocol-v5 publication. Do not deploy the superseded pair, bypass a failed gate,
+or clear another task's release lease.
 
 Issue #1006 is the shared continuation ledger and has reached GitHub's comment
 limit. The task PR will pin the exact checkpoint SHA; any ledger-body update

@@ -228,7 +228,9 @@ async def load_google_dashboard_spend(
             continue
         if manual_amount is not None and manual_amount > 0:
             daily[day], sources[day] = round(manual_amount, 2), "legacy_manual"
-            known_total += daily[day]
+            # Legacy totals sum stored values before rounding the period;
+            # the separately rounded daily display must not change that sum.
+            known_total += manual_amount
             coverage_complete = amount_complete = False
             reasons.add("google_legacy_manual_fallback")
         elif expected:
