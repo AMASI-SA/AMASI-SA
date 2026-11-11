@@ -1,0 +1,56 @@
+{
+  "task": "SUPPLIER-RECEIVING-RECOVERY-R2-20261111",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pull_request": 1882,
+  "source_git_sha": "32919f806d17c9fd9d466b368abf807bd40ee925",
+  "deployment_git_sha": "4234a88a5e01ce179c5d5711ad80107ecd208a88",
+  "frozen_intent_git_sha": "3949adc402ff828d2e15b2d53d8daab54bf821bc",
+  "release_id": "rg5-fe87f7bb866db60c49025385479a29080e8f34fc02aef92e7bb395d50c3385b1",
+  "publication_id": "2e328d9",
+  "previous_publication_id": "5e94faf",
+  "publication_success_observed": "2026-11-11 20:32 Asia/Riyadh",
+  "verification_command": "PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py verify --url https://mezansalla.com",
+  "verification_started_at": "2026-11-11T17:33:14.563473+00:00",
+  "verification_exit_code": 0,
+  "verified": true,
+  "checks": 3,
+  "protocol_version": 5,
+  "frontend_requests_per_probe": 576,
+  "frontend_artifact_tree_sha256": "ced2c43f29fe89f8c1002f5373793395a1e90a362a291b70b0d0405e4bce92a1",
+  "boot_started_at": "2026-11-11T17:31:36.399815+00:00",
+  "boot_started_at_observations": [
+    "2026-11-11T17:31:36.399815+00:00",
+    "2026-11-11T17:31:43.408443+00:00"
+  ],
+  "final_status_exit_code": 0,
+  "final_guard_status": {
+    "active": false
+  },
+  "full_shared_result_path": "/tmp/supplier-receiving-1882-verify.json",
+  "full_shared_result_bytes": 32941,
+  "full_shared_result_sha256": "0a29cc88d7d2e2d2c2143c22956150052cba8fc20d9ee3690c975d0a69fda46d",
+  "independent_live_health": {
+    "ok": true,
+    "source_git_sha": "32919f806d17c9fd9d466b368abf807bd40ee925",
+    "release_id": "rg5-fe87f7bb866db60c49025385479a29080e8f34fc02aef92e7bb395d50c3385b1",
+    "boot_started_at": "2026-11-11T17:31:36.399815+00:00",
+    "verified_identity_available": true,
+    "critical_file_hashes_match": true,
+    "backend_runtime_source_verified": true,
+    "release_control_source_bound": true,
+    "frontend_build_verified": true
+  },
+  "merged_commit_checks": {
+    "total": 11,
+    "success": 11,
+    "failed": 0,
+    "pending": 0
+  },
+  "live_receipt_recovery_verified": false,
+  "live_receipt_invoice_mutations_performed": false,
+  "limitation": "Live employee receipt was not independently queried. User confirms cancellation succeeded. A newly reported Android SQLITE_FULL storage problem is a separate read-only investigation before cleanup changes.",
+  "evidence_origin": "Compact summary transcribed from the official verifier result and post-verification status displayed in the authenticated shared terminal; full result hash and screenshot retained.",
+  "live_receipt_cancellation_user_confirmed": true,
+  "live_receipt_cancellation_user_report": "User confirmed cancellation succeeded after the publication.",
+  "next_task": "Study local Android persistence, growth and safe cleanup for SQLITE_FULL; no mobile code changes or data clearing authorized in this study."
+}

@@ -1,9 +1,29 @@
-> **Evidence-only checkpoint — do not deploy this branch.**
-> Deployable candidate is intent-only B `3949adc402ff828d2e15b2d53d8daab54bf821bc` on
-> `codex/supplier-receiving-recovery-r2-20261111`, with final CI passed and owner authorization now granted for merge/publication.
-> Follow the latest execution checkpoint below; no repeat approval is needed. This post-intent document is continuity evidence.
+> **Evidence-only branch — do not deploy it.**
+> Production PR #1882 is merged, published and verified. The frozen deployable
+> A/B history is preserved; this branch contains post-release evidence only.
+> Earlier approval waits and in-progress checkpoints below are historical.
 
 # Supplier receiving pending-scan regression recovery
+
+## Current accepted state
+
+- **Publication completed:** `2e328d9`, Nov 11 **20:32 Riyadh**, newer than `5e94faf`.
+- **Official verification PASS:** exit **0**, **three probes**, **576 public
+  Frontend requests per probe**, intended source/runtime, and final official
+  status exit **0**, `active:false`.
+- Source A: `32919f806d17c9fd9d466b368abf807bd40ee925`.
+- Production merge: `4234a88a5e01ce179c5d5711ad80107ecd208a88`.
+- Runtime: `rg5-fe87f7bb866db60c49025385479a29080e8f34fc02aef92e7bb395d50c3385b1`.
+- **Owner now confirms cancellation succeeded.** No live receipt/invoice write
+  was executed by this task as a test.
+- The next user request is a **separate study** of Android local storage growth
+  and `SQLITE_FULL`, before changing its cleanup policy.
+
+Evidence: [verification summary](verification-summary.json),
+[official verifier screen](verification-success.png),
+[published version](deployment-overview.png), and the original
+[completion event](deployment-success.png).
+
 
 ## Scope and source
 
@@ -479,3 +499,40 @@ No live session, piece, invoice or financial write was performed.
 Next: wait for the official verifier's exit/result and inactive status, then
 complete the deployment record and give the employee the same-session Continue
 steps. A new APK is not needed for the inspected Android 76 refresh contract.
+
+
+## Final release acceptance and user confirmation
+
+The official verifier completed with `verified:true`, `checks:3`, protocol
+**5**, exact source A and merge P, and the reviewed deterministic runtime ID.
+All required identity, complete Backend source, release-control binding,
+critical hash and Frontend proof checks therefore passed. Its public byte/MIME
+checks passed in canonical and cache-busted requests, including valid governed
+`/build-meta.json`. The observed Frontend artifact tree is
+`ced2c43f29fe89f8c1002f5373793395a1e90a362a291b70b0d0405e4bce92a1`.
+
+The verifier recorded two valid runtime boot identities across its three
+probes: `2026-11-11T17:31:36.399815+00:00` and
+`2026-11-11T17:31:43.408443+00:00`. Both expose the same intended source and
+runtime identity. The subsequent official status returned exit **0** and
+**`active:false`**, confirming our matching release lease is closed.
+The full shared result is 32,941 bytes; its observed SHA256 is
+`0a29cc88d7d2e2d2c2143c22956150052cba8fc20d9ee3690c975d0a69fda46d`.
+The compact summary is transcribed from the displayed official result and
+status; it is labeled accordingly and accompanied by the verifier screenshot.
+
+A final remote read confirms PR #1882 merged at
+`2026-11-11T17:10:06Z`, and the production branch still at P. Merge CI is
+**11/11 success**. Source A, intent-only B, all hashes and the authorized
+normal merge remain unchanged. The evidence branch must never be deployed.
+
+**Production changed: YES, verified.** There was one authorized publication,
+no rollback, no second publication, and no remaining lease owned by this task.
+Unrelated source, platform files, leases and financial behavior were preserved.
+
+The owner subsequently reported that cancellation now succeeds. This is user
+confirmation of the formerly blocked cancellation path, not an independent
+database read or a live test performed by the agent. The employee's newly
+reported `SQLITE_FULL` after sustained app usage is a different local-storage
+investigation, to be studied before any cleanup change. No further action is
+needed on this release. Do not republish it merely to continue that study.
