@@ -1,3 +1,15 @@
+# Current checkpoint — newer publication completed; final verification running
+
+Emergent changed the latest deployment event from Started to the green “Deployment finished Nov 11, 07:15 PM” and replaced the newest published revision 276cb53 with eb8949e (“Few seconds ago”). The retained history still labels the newest slot “100th publish”; do not infer a total publish count from that slot label. The current UI wording is “Deployment finished”, not a captured literal “Deployment Succeeded”. The new completed event, new published revision and runtime logs establish a new completed publication; full exact release acceptance still requires the running guard.
+
+Root started the unchanged guard verify --url https://mezansalla.com with Python bytecode disabled. Its final JSON is captured before a narrow summary is printed. The verifier checks all 284 reviewed frontend public files, canonical/cache-busted responses, metadata MIME/bytes, shell and retired service-worker headers across three rounds. Do not start a second verification while this process runs or claim verified:true yet. The owned lease is still pending successful verification and closure.
+
+Read-only live UI checks succeeded in separate tabs: dashboard-advanced shows the manual monitoring status (“تشغيل يدوي · فترة الأداء الأساسية 3 أيام”) plus “تحديث المراقبة” and “تحديث المقارنة”. Qoyod overview reports automatic sending operational and a two-hour cadence; observed cycle progress was 754 processed of 773, 102 sent and 651 held for review. These are displayed aggregate cycle counters, not a reconciliation of the 1,087 historical audit rows. No manual cycle, scan, analysis, invoice send, approval or ad change was triggered.
+
+Next: collect the running verification's exit/JSON and require checks:3, intended release/source/deployment and status active:false. If it refuses, inspect the concrete error without altering the guard. Preserve the successful publication evidence and perform no repeat publication without a diagnosed need.
+
+---
+
 # Current checkpoint — authorized live publication in progress
 
 The owned v5 prepublish command returned ready_to_publish:true for deployment 77e687e6964254617b4aa9eb0e3164cc968cff3b, source 8f11a73a8e53262ed938505f39a141eca3dfab8f and release rg5-5dca51b366b459cf1d62df9686fb97ce6385f29b652df7545cfe90270aecb8f8.
