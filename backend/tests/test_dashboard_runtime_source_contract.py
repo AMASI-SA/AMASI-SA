@@ -57,6 +57,43 @@ class RemoveCheckpoints(ast.NodeTransformer):
         return self.generic_visit(node)
 
 
+class SelectDefaultProductRows(ast.NodeTransformer):
+    """Evaluate only the new explicit True default, retaining the frozen oracle."""
+    conditional_count = 0
+    skip_count = 0
+    unpack_count = 0
+
+    def visit_IfExp(self, node):
+        if isinstance(node.test, ast.Name) and node.test.id == 'include_product_rows':
+            assert ast.unparse(node.orelse) in {'{}', '([], {})'}
+            self.conditional_count += 1
+            return self.visit(node.body)
+        return self.generic_visit(node)
+
+    def visit_If(self, node):
+        if ast.unparse(node.test) == 'not include_product_rows':
+            assert len(node.body) == 1 and isinstance(node.body[0], ast.Continue)
+            assert not node.orelse
+            self.skip_count += 1
+            return None
+        return self.generic_visit(node)
+
+    def visit_Dict(self, node):
+        node = self.generic_visit(node)
+        keys, values = [], []
+        for key, value in zip(node.keys, node.values):
+            if key is None and isinstance(value, ast.Dict):
+                assert [key.value for key in value.keys] == ['product_rows', 'product_profit_summary']
+                self.unpack_count += 1
+                keys.extend(value.keys)
+                values.extend(value.values)
+            else:
+                keys.append(key)
+                values.append(value)
+        node.keys, node.values = keys, values
+        return node
+
+
 class SourceContract(unittest.TestCase):
     def test_reducers_and_unchanged_shared_apis(self):
         for file, name in PAIRS:
@@ -87,7 +124,15 @@ class SourceContract(unittest.TestCase):
                     before = current_function
                 else:
                     self.assertEqual(ast.dump(before), ast.dump(current_function))
-                adopted = RemoveCheckpoints().visit(copy.deepcopy(function(current, name+'_cooperative')))
+                adopted = copy.deepcopy(function(current, name+'_cooperative'))
+                if name == 'build_mezan_v2_product_cost':
+                    self.assertEqual([arg.arg for arg in adopted.args.kwonlyargs], ['include_product_rows'])
+                    self.assertEqual([ast.dump(value) for value in adopted.args.kw_defaults], [ast.dump(ast.Constant(value=True))])
+                    adopted.args.kwonlyargs, adopted.args.kw_defaults = [], []
+                    default_rows = SelectDefaultProductRows()
+                    adopted = default_rows.visit(adopted)
+                    self.assertEqual((default_rows.conditional_count, default_rows.skip_count, default_rows.unpack_count), (3, 1, 1))
+                adopted = RemoveCheckpoints().visit(adopted)
                 adopted.name = name
                 if name == 'summarize_orders_sar':
                     self.assertEqual([a.arg for a in adopted.args.kwonlyargs], ['checkpoint'])

@@ -15,6 +15,7 @@ import functools
 import latency_evidence
 from copy import deepcopy
 from dashboard_cpu_budget import CPUWorkBudget, COST_PROFIT_BUDGET_MS, PARSER_BUDGET_MS
+from dashboard_snapshot_cache import DashboardSnapshotBusy, DashboardSnapshotCache, DashboardSnapshotTimeout
 import logging
 import re
 import unicodedata
@@ -58,6 +59,7 @@ from product_catalog_cost_resolution import (
     resolve_current_catalog_line_product,
 )
 from product_v2_details_routes import COST_PROFILES
+from product_cost_revision import get_product_cost_revision
 from product_v2_routes import PRODUCTS, _number
 from recurring_obligations_routes import compute_recurring_obligations_for_range
 from resource_governor import ResourcePressure, StageMetric, governor
@@ -118,6 +120,22 @@ def _heavy_dashboard_stage(stage: str):
             return result
         return wrapped
     return decorate
+
+
+async def _gather_dashboard_reads(*reads):
+    """Keep child reads inside their parent's admission and execution budget."""
+    tasks = [asyncio.ensure_future(read) for read in reads]
+    try:
+        return await asyncio.gather(*tasks)
+    except BaseException:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        # asyncio.gather alone leaves siblings running after a child fails.
+        # Drain them before releasing the governor/cache computation slot.
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+
 
 PRODUCT_COST_CATALOG_PROJECTION = {
     "_id": 0,
@@ -817,6 +835,8 @@ async def build_mezan_v2_product_cost_cooperative(
     db: Any,
     user_id: str,
     orders: list[dict[str, Any]],
+    *,
+    include_product_rows: bool = True,
 ) -> dict[str, Any]:
     products = await _to_list(
         db[PRODUCTS].find(
@@ -877,7 +897,10 @@ async def build_mezan_v2_product_cost_cooperative(
     authority = await load_order_cost_authority(
         db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS),
     )
-    traffic_by_order = await load_product_traffic_sources(db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS))
+    traffic_by_order = (
+        await load_product_traffic_sources(db, user_id, orders, budget=CPUWorkBudget(COST_PROFIT_BUDGET_MS))
+        if include_product_rows else {}
+    )
 
     totals = defaultdict(float)
     source_lines = defaultdict(int)
@@ -978,6 +1001,8 @@ async def build_mezan_v2_product_cost_cooperative(
             order_parts[result["base_cost_source"]] += result["base_total"]
             order_parts["product_components"] += result["product_components_total"]
             order_parts["selected_options"] += result["selected_options_total"]
+            if not include_product_rows:
+                continue
             native_line_sales = _line_sales_total(item, result["quantity"])
             order_product_lines.append({
                 "identity": identity,
@@ -1070,7 +1095,10 @@ async def build_mezan_v2_product_cost_cooperative(
             "fallback_sources": sorted(row["fallback_sources"]),
         })
     missing_product_rows.sort(key=lambda row: (str(row.get("name") or "").casefold(), row["identity"]))
-    product_rows, product_profit_summary = _finalize_product_profit_rows(product_profit_rows)
+    product_rows, product_profit_summary = (
+        _finalize_product_profit_rows(product_profit_rows)
+        if include_product_rows else ([], {})
+    )
 
     return {
         "total": round(totals["total"], 2),
@@ -1098,8 +1126,10 @@ async def build_mezan_v2_product_cost_cooperative(
         "missing_all_cost_lines_count": missing_all_cost_lines,
         "salla_fallback_products_count": len(salla_fallback_products),
         "missing_products": missing_product_rows,
-        "product_rows": product_rows,
-        "product_profit_summary": product_profit_summary,
+        **({
+            "product_rows": product_rows,
+            "product_profit_summary": product_profit_summary,
+        } if include_product_rows else {}),
         "no_products_orders_count": no_products_orders,
         "incomplete_orders_count": incomplete_orders,
         "source_contract": {
@@ -1607,6 +1637,7 @@ def make_dashboard_v2_router(
     require_owner: Callable[[dict[str, Any]], Any],
 ) -> APIRouter:
     router = APIRouter(tags=["Mezan Dashboard V2"])
+    snapshots = DashboardSnapshotCache()
 
     def owner(user: dict[str, Any]) -> dict[str, Any]:
         require_owner(user)
@@ -1743,15 +1774,16 @@ def make_dashboard_v2_router(
             "qoyod_write_reached": False,
         }
 
-    @router.get("/dashboard-v2")
-    @_heavy_dashboard_stage("dashboard_v2_summary")
-    async def dashboard_v2(
+    async def compute_dashboard_v2(
+        *,
+        user: dict,
         from_date: str | None = None,
         to_date: str | None = None,
         payment_methods: str | None = None,
         shipping_companies: str | None = None,
         report_statuses: str | None = None,
-        user: dict = Depends(current_user),
+        include_month_kpis: bool = True,
+        include_product_rows: bool = True,
     ) -> dict[str, Any]:
         current = owner(user)
         user_id = str(current["id"])
@@ -1785,7 +1817,7 @@ def make_dashboard_v2_router(
                 **report_filter,
             ),
         ]
-        if not selected_is_current_month:
+        if include_month_kpis and not selected_is_current_month:
             initial_reads.append(_filtered_orders(
                 db,
                 user_id,
@@ -1794,16 +1826,18 @@ def make_dashboard_v2_router(
                 payment_methods=payment_methods,
                 shipping_companies=shipping_companies,
             ))
-        initial_results = await asyncio.gather(*initial_reads)
+        initial_results = await _gather_dashboard_reads(*initial_reads)
         response = initial_results[0]
         orders = initial_results[1]
-        if selected_is_current_month:
-            month_orders = orders
-        else:
-            month_orders = initial_results[2]
+        month_orders = (
+            orders if selected_is_current_month else initial_results[2]
+        ) if include_month_kpis else None
         budget = CPUWorkBudget(PARSER_BUDGET_MS)
         with latency_evidence.phase("cooperative_computation_wall"):
-            month_sales = await summarize_orders_sar_cooperative(month_orders, checkpoint=budget.checkpoint)
+            month_sales = (
+                await summarize_orders_sar_cooperative(month_orders, checkpoint=budget.checkpoint)
+                if month_orders is not None else None
+            )
             if month_orders is orders:
                 sales_currency = deepcopy(month_sales)
             else:
@@ -1815,7 +1849,7 @@ def make_dashboard_v2_router(
             "total_sales": month_sales["total_sar"],
             "accounting_currency": "SAR",
             "currency_conversion": month_sales,
-        }
+        } if month_orders is not None else None
         totals = response["totals"]
         # The V2 filtered order set is the authoritative source for both the
         # count and gross sales.  The legacy dashboard can under-report fresh
@@ -1851,8 +1885,11 @@ def make_dashboard_v2_router(
             operating_to = today
         if operating_to < operating_from:
             operating_from, operating_to = operating_to, operating_from
-        product_cost, ads, recurring = await asyncio.gather(
-            build_mezan_v2_product_cost_cooperative(db, user_id, orders),
+        product_cost, ads, recurring = await _gather_dashboard_reads(
+            build_mezan_v2_product_cost_cooperative(
+                db, user_id, orders,
+                **({"include_product_rows": False} if not include_product_rows else {}),
+            ),
             build_mezan_v2_ads(
                 db,
                 user_id,
@@ -2003,7 +2040,7 @@ def make_dashboard_v2_router(
             "recent_analyses": [],
             "product_cost_v2": product_cost,
             "ads_v2": ads,
-            "month_kpis": month_kpis,
+            **({"month_kpis": month_kpis} if include_month_kpis else {}),
             "currency_conversion": sales_currency,
             "dashboard_source": "mezan_v2",
             "source_contract": {
@@ -2032,6 +2069,177 @@ def make_dashboard_v2_router(
                 totals[field] = None
         response["recurring_obligations_v2"] = recurring
         return response
+
+    @router.get("/dashboard-v2")
+    @_heavy_dashboard_stage("dashboard_v2_summary")
+    async def dashboard_v2(
+        from_date: str | None = None,
+        to_date: str | None = None,
+        payment_methods: str | None = None,
+        shipping_companies: str | None = None,
+        report_statuses: str | None = None,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        # Existing callers retain the complete, uncached response contract.
+        return await compute_dashboard_v2(
+            user=user, from_date=from_date, to_date=to_date,
+            payment_methods=payment_methods, shipping_companies=shipping_companies,
+            report_statuses=report_statuses,
+        )
+
+    async def card_snapshot(
+        section: str,
+        *,
+        user: dict,
+        from_date: str | None,
+        to_date: str | None,
+        payment_methods: str | None,
+        shipping_companies: str | None,
+        report_statuses: str | None,
+        refresh: bool,
+    ) -> dict[str, Any]:
+        # Authorization and scope validation run even when a result is saved.
+        current = owner(user)
+        user_id = str(current["id"])
+        if report_statuses is not None:
+            from sold_financial_report import validate_report_statuses
+            report_statuses = validate_report_statuses(report_statuses)
+        try:
+            start = date.fromisoformat(from_date) if from_date else None
+            end = date.fromisoformat(to_date) if to_date else None
+            if start and end and end < start:
+                raise ValueError("reversed_date_range")
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail="invalid_date_range") from exc
+        from_date = start.isoformat() if start else None
+        to_date = end.isoformat() if end else None
+        today = _today_riyadh()
+        revision, settings, policy = await asyncio.gather(
+            get_product_cost_revision(db, user_id),
+            db.settings.find_one(
+                {"user_id": user_id},
+                {"_id": 0, "hide_inferred_date_orders": 1, "report_included_statuses": 1},
+            ),
+            get_policy_map(db, user_id),
+        )
+        settings = settings or {}
+
+        def filter_key(value: str | None) -> tuple[str, ...]:
+            return tuple(sorted({part.strip().casefold() for part in (value or "").split(",") if part.strip()}))
+
+        key = (
+            user_id, section, today.isoformat(), from_date, to_date,
+            filter_key(payment_methods), filter_key(shipping_companies),
+            None if report_statuses is None else filter_key(report_statuses),
+            revision, bool(settings.get("hide_inferred_date_orders")),
+            tuple(sorted(str(value) for value in (settings.get("report_included_statuses") or []))),
+            tuple(sorted(policy.items())),
+        )
+        filters = {
+            "from_date": from_date, "to_date": to_date,
+            "payment_methods": payment_methods, "shipping_companies": shipping_companies,
+            **({"report_statuses": report_statuses} if report_statuses is not None else {}),
+        }
+
+        @_heavy_dashboard_stage("dashboard_v2_" + section.replace("-", "_"))
+        async def build() -> dict[str, Any]:
+            if section == "executive":
+                return await compute_dashboard_v2(
+                    user=current, **filters,
+                    include_month_kpis=False, include_product_rows=False,
+                )
+            orders = await _filtered_orders(
+                db, user_id, **filters,
+                include_marketing_attribution=True,
+            )
+            if section == "top-products":
+                return {"product_cost_v2": await build_mezan_v2_product_cost_cooperative(db, user_id, orders)}
+
+            month_from = today.replace(day=1).isoformat()
+            month_to = today.isoformat()
+            if from_date == month_from and to_date == month_to:
+                month_orders = orders
+            else:
+                month_orders = await _filtered_orders(
+                    db, user_id, **{**filters, "from_date": month_from, "to_date": month_to},
+                )
+            product_cost, ads, month_sales = await _gather_dashboard_reads(
+                build_mezan_v2_product_cost_cooperative(db, user_id, orders, include_product_rows=False),
+                build_mezan_v2_ads(db, user_id, from_date=from_date, to_date=to_date),
+                summarize_orders_sar_cooperative(month_orders, checkpoint=CPUWorkBudget(PARSER_BUDGET_MS).checkpoint),
+            )
+            executive = await build_salla_ads_executive_breakdown_cooperative(orders, ads)
+            return {
+                "month_kpis": {
+                    "from_date": month_from, "to_date": month_to,
+                    "total_orders": len(month_orders), "total_sales": month_sales["total_sar"],
+                    "accounting_currency": "SAR", "currency_conversion": month_sales,
+                },
+                "product_cost_v2": product_cost,
+                "ads_v2": {"executive_breakdown": executive},
+            }
+
+        try:
+            return await snapshots.get(
+                key, ttl_seconds={"executive": 60, "top-products": 1800, "period-summary": 18000}[section],
+                build=build, refresh=refresh,
+            )
+        except DashboardSnapshotBusy as exc:
+            raise HTTPException(status_code=503, detail={
+                "code": "resource_pressure", "retryable": True, "data_complete": False,
+            }) from exc
+        except DashboardSnapshotTimeout as exc:
+            raise HTTPException(status_code=504, detail={
+                "code": "dashboard_snapshot_timeout", "retryable": True, "data_complete": False,
+            }) from exc
+
+    @router.get("/dashboard-v2/cards/top-products")
+    async def top_products_card(
+        from_date: str | None = None,
+        to_date: str | None = None,
+        payment_methods: str | None = None,
+        shipping_companies: str | None = None,
+        report_statuses: str | None = None,
+        refresh: bool = False,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        return await card_snapshot(
+            "top-products", user=user, from_date=from_date, to_date=to_date,
+            payment_methods=payment_methods, shipping_companies=shipping_companies,
+            report_statuses=report_statuses, refresh=refresh,
+        )
+
+    @router.get("/dashboard-v2/cards/period-summary")
+    async def period_summary_card(
+        from_date: str | None = None,
+        to_date: str | None = None,
+        payment_methods: str | None = None,
+        shipping_companies: str | None = None,
+        report_statuses: str | None = None,
+        refresh: bool = False,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        return await card_snapshot(
+            "period-summary", user=user, from_date=from_date, to_date=to_date,
+            payment_methods=payment_methods, shipping_companies=shipping_companies,
+            report_statuses=report_statuses, refresh=refresh,
+        )
+
+    @router.get("/dashboard-v2/cards/executive")
+    async def executive_card(
+        from_date: str | None = None,
+        to_date: str | None = None,
+        payment_methods: str | None = None,
+        shipping_companies: str | None = None,
+        report_statuses: str | None = None,
+        refresh: bool = False,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        return await card_snapshot(
+            "executive", user=user, from_date=from_date, to_date=to_date,
+            payment_methods=payment_methods, shipping_companies=shipping_companies,
+            report_statuses=report_statuses, refresh=refresh,
+        )
 
     @router.get("/dashboard-v2/unified-marketing-shadow")
     async def unified_marketing_shadow(

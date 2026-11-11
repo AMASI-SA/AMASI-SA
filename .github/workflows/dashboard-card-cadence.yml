@@ -1,0 +1,113 @@
+name: Dashboard card cadence and catalogue admission
+
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - "backend/dashboard_v2_routes.py"
+      - "backend/dashboard_snapshot_cache.py"
+      - "backend/product_v2_recent_sync_routes.py"
+      - "backend/tests/test_dashboard_card_snapshots.py"
+      - "backend/tests/test_dashboard_snapshot_cache.py"
+      - "backend/tests/test_product_v2_recent_sync_cadence.py"
+      - "frontend/src/pages/AdvancedDashboard*"
+      - "frontend/src/pages/MezanProductsAutoSync*"
+      - "frontend/src/hooks/useDashboardCardSnapshot*"
+      - "frontend/src/services/dashboardCardSnapshot*"
+      - "frontend/src/services/mezanProductsV2*"
+      - ".github/workflows/dashboard-card-cadence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Saved card authority and real Mongo hourly admission
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      mongo:
+        image: mongo:7.0
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHON_DOTENV_DISABLED: "1"
+      PYTHONPATH: backend:backend/tests
+      PRODUCT_RECENT_SYNC_TEST_MONGO_URI: mongodb://127.0.0.1:27017
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies constrained to the production backend
+        run: >-
+          python -m pip install -q -c backend/requirements.txt
+          pytest pytest-asyncio==1.4.1.post1 fastapi pydantic httpx pymongo motor
+          mongomock==4.3.0 mongomock-motor==0.0.36 cryptography openpyxl bcrypt
+          PyJWT reportlab python-dotenv python-multipart psutil
+      - name: Verify cadence, concurrency and unchanged financial authority
+        run: >-
+          python -B -m pytest -q --tb=short --junitxml=dashboard-card-results.xml
+          backend/tests/test_dashboard_snapshot_cache.py
+          backend/tests/test_dashboard_card_snapshots.py
+          backend/tests/test_product_v2_recent_sync_cadence.py
+          backend/tests/test_product_v2_recent_sync_contract.py
+          backend/tests/test_dashboard_runtime_source_contract.py
+          backend/tests/test_dashboard_v2_live_refresh_contract.py
+          backend/tests/test_dashboard_v2_product_cost.py
+          backend/tests/test_dashboard_bundle_cost_authority.py
+          backend/tests/test_dashboard_v2_salla_ads_executive.py
+          backend/tests/test_dashboard_memory_admission.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dashboard-card-backend-results
+          path: dashboard-card-results.xml
+
+  frontend:
+    name: Independent automatic and manual card refresh
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install locked frontend dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Verify card deadlines, filter races, failures and existing spend refresh
+        run: >-
+          CI=true yarn test --watchAll=false --runInBand --runTestsByPath
+          src/hooks/useDashboardCardSnapshot.test.jsx
+          src/services/dashboardCardSnapshot.test.js
+          src/pages/AdvancedDashboard.cardRefresh.test.jsx
+          src/pages/AdvancedDashboard.latestOrders.test.jsx
+          src/pages/AdvancedDashboard.cartFreeze.test.jsx
+          src/pages/AdvancedDashboard.mobile.test.jsx
+          src/pages/AdvancedDashboard.campaignJobs.test.jsx
+          src/components/DashboardPanel.test.jsx
+          src/services/mezanProductsV2.recentSync.test.js
+          src/pages/MezanProductsAutoSync.cadence.test.jsx
+          src/campaignProfitabilityProductNavigation.test.js
+          src/lib/dashboardPlatformSpendMerge.test.js
+          src/lib/dashboardLatestResponseBroker.test.js
+          src/components/DashboardAdsSpendCard.manualRefresh.test.jsx
+          src/services/snapchatManualSpendRefresh.test.js
