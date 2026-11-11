@@ -1,3 +1,8 @@
+> **Evidence-only checkpoint — do not deploy this branch.**
+> Deployable candidate is intent-only B `3949adc402ff828d2e15b2d53d8daab54bf821bc` on
+> `codex/supplier-receiving-recovery-r2-20261111`, subject to final CI and user
+> publication authorization. This post-intent document is continuity evidence.
+
 # Supplier receiving pending-scan regression recovery
 
 ## Scope and source
@@ -226,3 +231,53 @@ base, run its required CI/readiness gates, obtain its exact-source v5 candidate,
 freeze a fresh intent-only B and verify both clean-clone adapter rehearsals.
 Recheck production ancestry before release. The live affected session remains
 unread and has not been claimed recovered.
+
+
+## Reviewed intent checkpoint
+
+Source A: `32919f806d17c9fd9d466b368abf807bd40ee925` (tree `aefc95c9dd5daf896d7c4a62ef4d4b82891136ab`).
+Reviewed production base J: `2d6d74806ab32333a1de1cfc8b8c73c3e434a851`.
+Intent-only B: `3949adc402ff828d2e15b2d53d8daab54bf821bc` (tree `d696d29e828044c808778e95a20e48c3fb93f921`).
+PR: https://github.com/AMASI-SA/AMASI-SA/pull/1882.
+
+All source-A checks completed: **32 total, 26 success, six expected scope/stage
+skips**, with zero failures, pending or neutral checks. The production branch
+still matched J immediately before B was frozen. B has A as its sole parent
+and changes only `release/release-intent-v5.json`.
+
+The exact artifact came from source readiness run
+[43058175802](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43058175802),
+artifact **13873100762**. The downloaded ZIP SHA-256 matches GitHub metadata:
+`654fee8f3440e7a1de5d54043180247d6f4a807566917f771d49ee95a34b1a3a`.
+The intent is **1,264,209 bytes**, SHA-256
+`a4a6c018b9f7bc06bf7234ab4a6c2cb1678788a07e839341e137a98f50d73b31`, Git blob
+`2960c61c2d51801880f2019ea826a7fa1e940bcd`. Its runtime identity is
+`rg5-fe87f7bb866db60c49025385479a29080e8f34fc02aef92e7bb395d50c3385b1`.
+
+Full candidate validation matched independently derived Git manifests: 1171
+backend runtime files and 272 release-control files. Independent clean-clone
+B validation then passed (exit 0): `load_release_intent`,
+`verify_release_intent_git`, sole-parent and only-intent diff, exact tracked
+bytes and artifact provenance. No new local build or workflow dispatch was
+needed. CI performs the actual adapter rehearsals.
+
+B readiness run
+[43059200630](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43059200630)
+classified B correctly. Frontend double build, backend preflight and host
+compatibility checks passed. The actual adapter rehearsals are running under
+host Node 20.20.2 (job 130657410463) and Node 24.19.0 (job 130657410505).
+Exact-B CI is still being checked; this checkpoint is not publication approval.
+
+**Production changed by this task: no.** PR remains Draft and unmerged. There
+has been no shared `/app` edit, owned release lease, deployment, APK update or
+live invoice/session mutation. The affected employee session remains unread
+and unverified. No old 35dd/f4 artifact may be deployed.
+
+Next: finish exact-B checks and both adapter rehearsals, recheck production
+base, and leave the final evidence checkpoint. Ask the user for separate
+production merge/publication authorization required by `AGENTS.md` before
+those actions. On authorization, use the shared guard only after observing
+`active:false`; preserve other owners' leases and files, publish once, require
+new explicit Deployment Succeeded and official three-probe verification, then
+verify continuation from the original employee session. Do not cancel the
+live receipt or approve an invoice as a test.
