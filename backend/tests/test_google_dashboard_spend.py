@@ -408,6 +408,66 @@ async def test_usd_uses_verified_stored_conversion_including_subcent_spend(db, n
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("currency,fx,hourly_cost_micros,raw,stored_sar_expected", [
+    ("SAR", 1.0, [500, 4500], 0.004999999999999999, 0.0),
+    ("USD", 3.75, [4179, 15821], 0.020000000000000004, 0.08),
+])
+async def test_writer_native_rounding_does_not_invalidate_saved_cent_amount(
+    db, currency, fx, hourly_cost_micros, raw, stored_sar_expected,
+):
+    await connected_google(db)
+    await db.mezan_integration_accounts_v2.update_one(
+        {"user_id": OWNER, "provider": "google_ads"}, {"$set": {"currency": currency}},
+    )
+    # Match the writer's hourly float accumulation, followed by independent
+    # six-decimal native storage and two-decimal SAR storage.
+    daily_native = 0.0
+    for micros in hourly_cost_micros:
+        daily_native += micros / 1_000_000
+    stored_native = round(daily_native, 6)
+    stored_sar = round(daily_native * fx, 2)
+    assert daily_native == raw
+    assert stored_sar == stored_sar_expected
+    assert stored_sar != round(stored_native * fx, 2)
+    row = native_fact(stored_native)
+    row.update(currency_native=currency, fx_rate_to_sar=fx, spend_sar=stored_sar)
+    row["source_close_proof"] = close_proof(
+        account_id=ACCOUNT, business_date=DAY, timezone="Asia/Riyadh", currency=currency,
+        spend=sum(hourly_cost_micros) / 1_000_000, provider_row_count=len(hourly_cost_micros),
+        complete_response=True, explicit_spend_present=True, identity_proven=True,
+        source_mode=SOURCE, observed_at=row["observed_at"],
+    )
+    await db[COLLECTION].insert_one(row)
+    await db.daily_costs.insert_one({"user_id": OWNER, "date": DAY, "google_ads": 999})
+
+    result = await read_google(db)
+    assert result["total_sar"] == stored_sar
+    assert result["daily_sources"][DAY] == "native"
+    assert result["quality"]["amount_complete"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("native,sar,currency,fx", [
+    (0.005001, 0.0, "SAR", 1.0),  # Outside half a cent plus native-storage rounding.
+    (10.0, 10.01, "SAR", 1.0),
+    (10.0, 10.001, "SAR", 1.0),  # Within half a cent, but not a stored cent amount.
+    (0.001334, 0.0, "USD", 3.75),
+])
+async def test_amount_consistency_rejects_excess_error_and_noncent_sar(db, native, sar, currency, fx):
+    await connected_google(db)
+    await db.mezan_integration_accounts_v2.update_one(
+        {"user_id": OWNER, "provider": "google_ads"}, {"$set": {"currency": currency}},
+    )
+    row = native_fact(native)
+    row.update(currency_native=currency, fx_rate_to_sar=fx, spend_sar=sar)
+    row["source_close_proof"]["currency"] = currency
+    await db[COLLECTION].insert_one(row)
+    result = await read_google(db)
+    assert result["total_sar"] is None
+    assert "google_native_amount_or_currency_unproven" in result["quality"]["reason_codes"]
+
+
+@pytest.mark.asyncio
 async def test_missing_google_preserves_snapchat_independent_availability(db, provisional_snapchat):
     await connected_google(db)
     ads = await executive.build_mezan_v2_ads(db, OWNER, from_date=DAY, to_date=DAY)

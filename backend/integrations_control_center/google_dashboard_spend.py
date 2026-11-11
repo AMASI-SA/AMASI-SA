@@ -58,10 +58,14 @@ def _native_amount(row: dict, account: dict | None) -> tuple[float | None, bool,
             or (account.get("currency") and account["currency"] != currency)
             or (account.get("timezone") and account["timezone"] != row["account_timezone"])):
         return None, False, "google_native_identity_or_timezone_unproven"
+    # The writer independently rounds its original float sum to six native
+    # decimals and SAR cents. Re-rounding the stored native value can choose
+    # the opposite cent at a tie; allow only the combined quantization bound.
     if (native is None or sar is None or fx is None or fx <= 0
             or (currency == "SAR" and fx != 1)
             or not math.isfinite(native * fx)
-            or abs(sar - round(native * fx, 2)) > 0.000001):
+            or sar != round(sar, 2)
+            or abs(sar - native * fx) > 0.005 + fx * 0.0000005 + 1e-9):
         return None, False, "google_native_amount_or_currency_unproven"
 
     if "source_close_proof" not in row:

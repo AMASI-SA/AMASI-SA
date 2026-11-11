@@ -8,6 +8,8 @@
 - State: implementation complete; local acceptance passed; remote CI pending.
 - Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1886
 - Remote regression checkpoint: `924e480258c8052741c5d9999e531739238287e0`.
+- Reviewed source checkpoint before the final rounding compatibility fix:
+  `cc21d961e111fdf83b2427399e571f9d1e12f715`.
 - Production changed by this task: **no**.
 - No campaign, budget, bid, provider configuration, scheduler, sync, backfill, or business-data writes.
 - No change to the completed bundle study or the separately released dashboard-card cadence task.
@@ -51,6 +53,15 @@ after midnight until an observation after the business day is available. Positiv
 legacy fallback also remains provisional. Google hourly account scope matches the
 selected daily projection. These reads trigger no provider or business mutation.
 
+The final compatibility fix preserves the writer's independently rounded native
+and SAR amounts. For actual writer arithmetic, SAR hourly micros `[500, 4500]`
+persist native `0.005` and SAR `0.00`; USD micros `[4179, 15821]` at stored FX
+`3.75` persist native `0.02` and SAR `0.08`. Re-rounding the already rounded native
+amount selected the opposite cent and rejected both valid facts. The reader now
+requires SAR cent precision and an absolute consistency bound of
+`0.005 + fx * 0.0000005 + 1e-9`, derived from the two original quantizations.
+It still uses stored SAR unchanged and rejects amounts outside the bound.
+
 Google account-level fee allocation remains a separately identified limitation
 of the existing fee engine; this patch does not invent FX or bank-fee settings.
 
@@ -74,8 +85,8 @@ also returns zero. Both failures are the expected assertions, not setup errors.
 
 ## Final local verification
 
-Result on the completed patch: **143 passed, 5 source-parity subtests passed,
-zero skipped**, exit 0, 8.74 seconds. Two existing Pydantic deprecation warnings
+Result on the completed patch: **149 passed, 5 source-parity subtests passed,
+zero skipped**, exit 0, 9.57 seconds. Two existing Pydantic deprecation warnings
 remain. Six changed Python files also passed AST parsing, and `git diff --check`
 returned exit 0.
 
@@ -116,9 +127,11 @@ existing dashboard-card CI workflow.
 Independent read-only integration review found no blocking issue in the two
 consumers. Helper review found and drove fixes for day closure, sub-cent zero,
 duplicate legacy days, and invalid legacy amounts. The final independent helper
-rerun passed **36 tests**, exit 0, in 2.17 seconds, with no remaining blocking
-finding. The reviewed helper blob is `6da9fe4182875990beda9aeb9324c4c84dbba732`,
-and its test blob is `47859f5086d30add300642b634840221b86abe8a`.
+rerun passed **36 tests**, exit 0, in 2.17 seconds. The final rounding delta was
+then independently reviewed and its six new boundary cases passed, exit 0,
+in 1.84 seconds, with no remaining blocking finding. The final reviewed helper
+blob is `c1fc7119a53aa6375bc4feaf73a5cb55a1fa1dcb`, and its test blob is
+`59dd751b145ca35a4336946c298184abc640ad6c`.
 No frontend implementation changed.
 
 Limits retained: Google-specific bank fee allocation is not added. Per-provider
