@@ -374,3 +374,35 @@ the target later. The actual affected session remains unread/unverified.
 
 **Production source branch changed: yes (authorized merge). Production runtime
 changed by this task: no.** No owned release lease or live data mutation yet.
+
+
+## Shared build and owned lease prepared
+
+The official shared guard was checked again and was inactive; tracked files
+were clean. Shared `/app` was fast-forwarded from J to normal merge
+**4234a88a5e01ce179c5d5711ad80107ecd208a88**, after confirming its exact
+B-equivalent tree. No reset or untracked-file cleanup occurred.
+
+The actual shared Emergent adapter completed with **exit 0 in 66.65 seconds**.
+Retained sanitized output:
+`/tmp/supplier-receiving-1882-adapter-20261111T171333Z.log`.
+Materialized source A and runtime identity matched the reviewed intent exactly;
+tracked files remained clean. The merge's own Release Readiness run
+[43065494129](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43065494129)
+also succeeded, including both actual host adapter rehearsals.
+
+Official `prepare` succeeded, exit **0**, at
+**2026-11-11T17:17:16.351252+00:00**, actor
+`codex-supplier-receiving-recovery-r2-20261111`. It binds source
+`32919f806d17c9fd9d466b368abf807bd40ee925`, deployment merge
+`4234a88a5e01ce179c5d5711ad80107ecd208a88`, and runtime
+`rg5-fe87f7bb866db60c49025385479a29080e8f34fc02aef92e7bb395d50c3385b1`.
+The exact prepare output is retained at
+`/tmp/supplier-receiving-1882-prepare.json`.
+
+**Our release lease is now active.** No publish has been submitted yet.
+Next: official prepublish immediately before the already authorized single
+publication, then observe new deployment success and run official verify3.
+Do not repeat prepare or clear this lease; successful matching verify closes it.
+The preceding visible publication `eb8949e` at Nov 11 19:51 Riyadh belongs
+to PR #1879 and is only our baseline, not evidence for this supplier fix.
