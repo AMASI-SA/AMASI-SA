@@ -5,11 +5,22 @@ import campaign_ai_subprocess_scheduler as scheduler
 import campaign_ai_worker_runner as worker
 
 
-def test_scheduler_defaults_to_enabled_outside_tests(monkeypatch):
+def test_owner_manual_only_mode_is_preserved_outside_tests(monkeypatch):
     monkeypatch.delenv("MEZAN_CAMPAIGN_AI_SUBPROCESS_SCHEDULER_ENABLED", raising=False)
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     monkeypatch.delenv("MEZAN_TESTING", raising=False)
-    assert scheduler.scheduler_enabled() is True
+    assert scheduler.scheduler_enabled() is False
+
+
+def test_legacy_enabled_flag_cannot_restore_periodic_ai_work(monkeypatch):
+    monkeypatch.setenv("MEZAN_CAMPAIGN_AI_SUBPROCESS_SCHEDULER_ENABLED", "true")
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.delenv("MEZAN_TESTING", raising=False)
+    assert scheduler.scheduler_enabled() is False
+    async def forbidden():
+        raise AssertionError("automatic analysis was launched")
+    monkeypatch.setattr(scheduler, "run_worker_once", forbidden)
+    asyncio.run(scheduler.scheduler_loop())
 
 
 def test_scheduler_can_be_disabled_explicitly(monkeypatch):

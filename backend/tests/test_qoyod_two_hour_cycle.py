@@ -67,7 +67,7 @@ async def test_round_failure_keeps_auto_enabled_and_does_not_retry_after_15_seco
 
 
 @pytest.mark.asyncio
-async def test_crashed_cycle_resumes_only_after_lease_expiry(real_db):
+async def test_cancelled_cycle_resumes_only_after_interruption_cooldown(real_db):
     db, _ = real_db
     await arm(db)
     entered = asyncio.Event()
@@ -86,6 +86,11 @@ async def test_crashed_cycle_resumes_only_after_lease_expiry(real_db):
     assert (await cycles.run_due_cycle(db, batch_runner=idle))['status'] == 'not_due'
     await db.qoyod_auto_cycles.update_one({'_id': 'main'}, [
         {'$set': {'lease_until': {'$subtract': ['$$NOW', 1]}}},
+    ])
+    assert (await cycles.run_due_cycle(db, batch_runner=idle))['status'] == 'not_due'
+    assert row['resume_not_before'] - row['lease_until'] == timedelta(minutes=15)
+    await db.qoyod_auto_cycles.update_one({'_id': 'main'}, [
+        {'$set': {'resume_not_before': {'$subtract': ['$$NOW', 1]}}},
     ])
     recovered = await cycles.run_due_cycle(db, batch_runner=idle)
     assert recovered['claimed'] is True
@@ -108,6 +113,7 @@ async def test_replaced_owner_cannot_send_a_second_batch_or_publish(real_db):
     row = await db.qoyod_auto_cycles.find_one({})
     assert row['owner'] == 'replacement'
     assert 'finished_at' not in row
+    assert 'resume_not_before' not in row
 
 
 @pytest.mark.asyncio
@@ -183,7 +189,74 @@ async def test_lost_heartbeat_cancels_inflight_batch_before_another_send(real_db
     result = await asyncio.wait_for(task, 5)
     assert result['status'] == 'lease_lost'
     assert cancelled.is_set()
-    assert 'finished_at' not in (await db.qoyod_auto_cycles.find_one({}))
+    row = await db.qoyod_auto_cycles.find_one({})
+    assert 'finished_at' not in row
+    assert 'resume_not_before' not in row
+
+
+@pytest.mark.asyncio
+async def test_no_progress_cooldown_fences_running_cycle_and_preserves_next_orders(real_db):
+    db, _ = real_db
+    await arm(db)
+    calls = []
+    async def repeated(*args, **kwargs):
+        calls.append(1)
+        return {'ok': True, 'status': 'succeeded', 'sent_count': 0,
+                'results': [{'order_number': str(index), 'outcome': 'skipped_in_progress'}
+                            for index in range(5)]}
+    result = await cycles.run_due_cycle(db, batch_runner=repeated, batch_pause=0)
+    assert result['status'] == 'no_progress'
+    assert len(calls) == 2
+    row = await db.qoyod_auto_cycles.find_one({})
+    assert row['status'] == 'running' and row['phase'] == 'cooldown'
+    assert row['resume_not_before'] - row['lease_until'] == timedelta(minutes=15)
+    assert (await cycles.run_due_cycle(db, batch_runner=repeated))['status'] == 'not_due'
+    assert len(calls) == 2
+
+    await db.qoyod_auto_cycles.update_one({'_id': 'main'}, [
+        {'$set': {'resume_not_before': {'$subtract': ['$$NOW', 1]}}},
+    ])
+    fresh = []
+    async def different(*args, **kwargs):
+        fresh.append(1)
+        return ({'ok': True, 'status': 'succeeded', 'sent_count': 1,
+                 'results': [{'order_number': 'different-order', 'outcome': 'sent'}]}
+                if len(fresh) == 1 else {'ok': True, 'status': 'idle'})
+    resumed = await cycles.run_due_cycle(db, batch_runner=different, batch_pause=0)
+    assert resumed['cycle_id'] == result['cycle_id']
+    assert resumed['status'] == 'idle' and resumed['sent_count'] == 1
+    finished = await db.qoyod_auto_cycles.find_one({})
+    assert finished['next_due_at'] - finished['finished_at'] == timedelta(hours=2)
+
+
+@pytest.mark.asyncio
+async def test_hard_crash_without_finalizer_keeps_same_cohort_recoverable(real_db):
+    db, _ = real_db
+    await arm(db)
+    old = await cycles._claim(db, 'owner')
+    await db.qoyod_auto_cycles.update_one({'_id': 'main'}, [
+        {'$set': {'lease_until': {'$subtract': ['$$NOW', 1]}}},
+    ])
+    async def idle(*args, **kwargs):
+        return {'ok': True, 'status': 'idle'}
+    recovered = await cycles.run_due_cycle(db, batch_runner=idle)
+    assert recovered['cycle_id'] == old['cycle_id']
+    assert recovered['status'] == 'idle'
+
+
+@pytest.mark.asyncio
+async def test_held_discovery_rows_are_progress_without_invoice_writes(real_db):
+    db, _ = real_db
+    await arm(db)
+    calls = []
+    async def held(*args, **kwargs):
+        calls.append(1)
+        return {'ok': True, 'status': 'idle', 'results': [], 'sent_count': 0,
+                'runnable_candidate_count': 0,
+                'discovery': {'scope': 'cycle_manifest', 'checked': 5 if len(calls) == 1 else 0}}
+    result = await cycles.run_due_cycle(db, batch_runner=held, batch_pause=0)
+    assert result['status'] == 'idle'
+    assert calls == [1, 1]
 
 
 @pytest.mark.asyncio

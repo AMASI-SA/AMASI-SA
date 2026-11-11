@@ -156,7 +156,7 @@ async def test_followup_continues_while_full_scan_is_blocked():
     async def slow(*args, **kwargs):
         await gate.wait()
         return {'rows': []}, {'count': 0}
-    await scans.request_scan(db, tenant='main', owner='owner', executor=slow)
+    await scans.request_scan(db, tenant='main', owner='owner', manual=True, executor=slow)
     await db.unified_orders.insert_one(order('live'))
     await incremental.mark_dirty(db, 'owner', 'live')
     candidates, _ = await auto_send._load_candidate_rows(
@@ -206,7 +206,7 @@ async def test_executor_publishes_provider_verified_views_without_second_candida
     monkeypatch.setattr(routes, '_build_qoyod_client_for', AsyncMock(return_value=client))
     spy = AsyncMock(wraps=candidate_orders.build_candidate_audit)
     monkeypatch.setattr(reconciliation_v2, 'build_candidate_audit', spy)
-    await scans.request_scan(db, tenant='main', owner='owner', executor=scans.execute_scan)
+    await scans.request_scan(db, tenant='main', owner='owner', manual=True, executor=scans.execute_scan)
     await asyncio.gather(*list(scans._TASKS))
     state = await scans.read_scan(db, tenant='main', owner='owner')
     assert state['scan']['last_error'] is None
@@ -255,3 +255,15 @@ async def test_expired_worker_lease_does_not_authorize_new_send():
     await db.qoyod_manual_auto_worker_leases.update_one({}, {'$set': {
         'lease_until': datetime.now(timezone.utc) - timedelta(seconds=1)}})
     assert not await auto_send._lease_is_current(db, owner)
+
+
+@pytest.mark.asyncio
+async def test_full_scan_requires_explicit_manual_request_and_retains_saved_result():
+    db = AsyncMongoMockClient().db
+    executor = AsyncMock(side_effect=AssertionError("scheduled full scan must not run"))
+    result = await scans.request_scan(db, tenant='main', owner='owner', executor=executor)
+    assert result['accepted'] is False
+    assert result['scan']['mode'] == 'manual_only'
+    assert result['scan']['schedule_riyadh'] == []
+    assert await db.qoyod_full_scans.count_documents({}) == 0
+    executor.assert_not_awaited()

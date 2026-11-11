@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 from datetime import datetime, timezone
+import hashlib
 import logging
 import time
 import uuid
@@ -22,6 +23,7 @@ LEASE_SECONDS = 60
 HEARTBEAT_SECONDS = 10
 SLICE_BATCHES = 100
 SLICE_SECONDS = 60
+NO_PROGRESS_COOLDOWN_SECONDS = 15 * 60
 COLLECTION = 'qoyod_auto_cycles'
 log = logging.getLogger(__name__)
 
@@ -72,6 +74,8 @@ async def _claim(db, orders_user_id):
     return await collection.find_one_and_update(
         {'_id': 'main', '$expr': {'$and': [
             {'$lte': ['$lease_until', '$$NOW']},
+            {'$lte': [{'$ifNull': ['$resume_not_before',
+                         datetime(1970, 1, 1, tzinfo=timezone.utc)]}, '$$NOW']},
             {'$or': [resume, {'$eq': ['$manual_requested', True]},
                      {'$lte': ['$next_due_at', '$$NOW']}]},
         ]}},
@@ -93,11 +97,12 @@ async def _claim(db, orders_user_id):
             'processed_count': {'$cond': [resume, '$processed_count', 0]},
             'already_sent_count': {'$cond': [resume, '$already_sent_count', 0]},
             'review_count': {'$cond': [resume, '$review_count', 0]},
+            'last_batch_fingerprint': {'$cond': [resume, '$last_batch_fingerprint', None]},
             'phase': {'$cond': [resume, '$phase', 'preparing']},
             'last_error': None,
             'lease_until': {'$add': ['$$NOW', LEASE_SECONDS * 1000]},
             'next_due_at': {'$add': ['$$NOW', INTERVAL_SECONDS * 1000]},
-        }}, {'$unset': 'finished_at'}],
+        }}, {'$unset': ['finished_at', 'resume_not_before']}],
         return_document=ReturnDocument.AFTER,
     )
 
@@ -120,12 +125,40 @@ async def read_status(db):
         'attempted_count': 1, 'last_error': 1,
         'phase': 1, 'eligible_count': 1, 'processed_count': 1, 'already_sent_count': 1,
         'review_count': 1, 'manual_requested': 1, 'trigger': 1,
+        'resume_not_before': 1, 'last_interruption': 1,
     }) or {}
     row = {key: ((value if value.tzinfo else value.replace(tzinfo=timezone.utc)).isoformat()
                   if isinstance(value, datetime) else value) for key, value in row.items()}
     return {**row, 'automatic_interval_seconds': INTERVAL_SECONDS,
             'automatic_interval_minutes': 120, 'cadence_basis': 'last_finished_at',
-            'slice_batch_limit': SLICE_BATCHES, 'batch_limit': 5}
+            'slice_batch_limit': SLICE_BATCHES, 'batch_limit': 5,
+            'no_progress_cooldown_seconds': NO_PROGRESS_COOLDOWN_SECONDS}
+
+
+def _batch_progress(result):
+    rows = result.get('results') or []
+    dispositions = sorted({f"{row['order_number']}\0{row.get('outcome') or ''}"
+                           for row in rows if row.get('order_number')})
+    fingerprint = hashlib.sha256('\n'.join(dispositions).encode()).hexdigest() if dispositions else None
+    progress = max(0, int(result.get('sent_count') or 0)) > 0 or bool(rows)
+    discovery = result.get('discovery') or {}
+    if discovery.get('scope') == 'cycle_manifest':
+        # Discovery itself disposes held/ineligible entries. Those are real
+        # cohort progress even though no external write was appropriate.
+        progress = progress or int(discovery.get('checked') or 0) > int(
+            result.get('runnable_candidate_count') or 0)
+    return progress, fingerprint
+
+
+async def _pause_interrupted_cycle(db, claim, *, stage, error_type):
+    """Keep the cohort resumable, but fence a lost owner's diagnostic update."""
+    with suppress(Exception):
+        await asyncio.wait_for(db[COLLECTION].update_one(
+            {'_id': 'main', 'owner': claim['owner'], 'cycle_id': claim['cycle_id'], 'status': 'running'},
+            [{'$set': {'phase': 'cooldown', 'lease_until': '$$NOW',
+                'resume_not_before': {'$add': ['$$NOW', NO_PROGRESS_COOLDOWN_SECONDS * 1000]},
+                'last_interruption': {'stage': stage, 'at': '$$NOW', 'error_type': error_type},
+            }}]), timeout=1)
 
 
 async def _drain_body(db, claim, batch_runner, batch_limit, max_batches, batch_pause, use_manifest):
@@ -138,6 +171,7 @@ async def _drain_body(db, claim, batch_runner, batch_limit, max_batches, batch_p
     deadline = time.monotonic() + SLICE_SECONDS
     units = 0
     manifest_complete = bool(claim.get('manifest_complete'))
+    previous_fingerprint = claim.get('last_batch_fingerprint')
     while units < max_batches and time.monotonic() < deadline:
         if not await db[COLLECTION].find_one(_owned(owner), {'_id': 1}):
             return {'status': 'lease_lost', 'batches': batches, 'sent_count': sent}
@@ -163,9 +197,14 @@ async def _drain_body(db, claim, batch_runner, batch_limit, max_batches, batch_p
         units += 1
         sent += max(0, int(result.get('sent_count') or 0))
         attempted += len(result.get('results') or [])
+        made_progress, fingerprint = _batch_progress(result)
+        repeated_without_send = bool(fingerprint and fingerprint == previous_fingerprint
+                                     and not result.get('sent_count'))
         checkpoint = await db[COLLECTION].update_one(_owned(owner), {'$set': {
             'batches': batches, 'sent_count': sent, 'attempted_count': attempted,
+            'last_batch_fingerprint': fingerprint,
         }})
+        previous_fingerprint = fingerprint
         if not checkpoint.matched_count:
             return {'status': 'lease_lost', 'batches': batches, 'sent_count': sent}
         if use_manifest:
@@ -181,6 +220,10 @@ async def _drain_body(db, claim, batch_runner, batch_limit, max_batches, batch_p
             break
         if state == 'idle' and not (result.get('discovery') or {}).get('checked'):
             status = 'idle'
+            break
+        if state in {'succeeded', 'idle'} and (not made_progress or repeated_without_send):
+            status = 'no_progress'
+            error = 'repeated_batch' if repeated_without_send else 'no_progress'
             break
         await asyncio.sleep(max(0, batch_pause))
     return {'status': status, 'last_error': error, 'batches': batches,
@@ -225,15 +268,8 @@ async def run_due_cycle(db, *, batch_runner=None, batch_limit=5,
             with suppress(asyncio.CancelledError, Exception):
                 await work
             cause = None if heartbeat.cancelled() else heartbeat.exception()
-            # Preserve the cause only after cancelling financial work. Never
-            # change a lease/status or let a diagnostic failure delay recovery.
-            with suppress(Exception):
-                await asyncio.wait_for(db[COLLECTION].update_one(
-                    {'_id': 'main', 'cycle_id': claim['cycle_id']},
-                    [{'$set': {'last_interruption': {
-                        'stage': 'heartbeat', 'at': '$$NOW',
-                        'error_type': type(cause).__name__ if cause is not None else 'HeartbeatStopped',
-                    }}}]), timeout=1)
+            await _pause_interrupted_cycle(db, claim, stage='heartbeat',
+                error_type=type(cause).__name__ if cause is not None else 'HeartbeatStopped')
             return {'claimed': True, 'status': 'lease_lost', 'cycle_id': claim['cycle_id']}
         try:
             result = await work
@@ -242,13 +278,18 @@ async def run_due_cycle(db, *, batch_runner=None, batch_limit=5,
         if use_manifest and result['status'] != 'lease_lost':
             from .cycle_manifest import summary
             result.update(await summary(db, claim['cycle_id']))
+        if result['status'] == 'lease_lost':
+            await _pause_interrupted_cycle(db, claim, stage='batch', error_type='BatchLeaseLost')
         if result['status'] != 'lease_lost':
             progress = {key: result[key] for key in ('eligible_count', 'processed_count',
                 'sent_count', 'already_sent_count', 'review_count') if key in result}
-            if result['status'] == 'continuing':
+            if result['status'] in {'continuing', 'no_progress'}:
                 # A slice is a checkpoint, not the end of the two-hour cycle.
                 # Another healthy replica can resume this exact cohort at once.
                 update = {'status': 'running', 'lease_until': '$$NOW', **progress}
+                if result['status'] == 'no_progress':
+                    update.update({'phase': 'cooldown', 'last_error': result.get('last_error'),
+                        'resume_not_before': {'$add': ['$$NOW', NO_PROGRESS_COOLDOWN_SECONDS * 1000]}})
             else:
                 update = {'status': result['status'], 'last_error': result.get('last_error'),
                     'phase': 'complete' if result['status'] == 'idle' else 'stopped',
@@ -257,12 +298,18 @@ async def run_due_cycle(db, *, batch_runner=None, batch_limit=5,
             finished = await db[COLLECTION].update_one(_owned(owner), [{'$set': update}])
             if not finished.matched_count:
                 result['status'] = 'lease_lost'
-            elif use_manifest and result['status'] != 'continuing':
+            elif use_manifest and result['status'] not in {'continuing', 'no_progress'}:
                 from .cycle_manifest import expire_finished
                 await expire_finished(db, claim['cycle_id'])
         log.info('Qoyod automatic cycle status=%s batches=%s sent=%s interval=%s',
                  result['status'], result.get('batches', 0), result.get('sent_count', 0), INTERVAL_SECONDS)
         return {**result, 'claimed': True, 'cycle_id': claim['cycle_id']}
+    except asyncio.CancelledError:
+        work.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await work
+        await _pause_interrupted_cycle(db, claim, stage='cancelled', error_type='CancelledError')
+        raise
     finally:
         for task in (heartbeat, work):
             task.cancel()

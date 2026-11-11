@@ -62,6 +62,13 @@ _WORKER_TASK: Optional[asyncio.Task] = None
 _LAST_RUN_AT: Optional[datetime] = None
 _LAST_RUN_OK = True
 _LAST_ROUND: dict[str, Any] = {}
+_AUDIT_FINISH_TIMEOUT_SECONDS = 3
+_ABANDONED_RUN_AGE_SECONDS = 15 * 60
+_ABANDONED_RUN_PAGE = 20
+
+
+class _RunCheckpointFailed(RuntimeError):
+    """Known provider outcomes must not be reclassified after storage failure."""
 
 # Settings store the exact Salla slug selected by the operator.  Salla can
 # expose the in-delivery state under more than one equivalent slug, so map the
@@ -863,6 +870,165 @@ async def _quarantine_order(
     )
 
 
+def _result_counts(results: list[dict[str, Any]]) -> dict[str, int]:
+    return {
+        key: sum(row.get("outcome") == outcome for row in results)
+        for key, outcome in (
+            ("sent_count", "sent"), ("already_sent_count", "already_sent"),
+            ("manual_review_count", "manual_review"),
+            ("retry_later_count", "retry_later"),
+            ("credential_paused_count", "credentials_paused"),
+        )
+    }
+
+
+async def _hold_interrupted_order(db, *, order_number, run_id, provider_started, attempt_started_at):
+    # An older abandoned audit must not reopen work that completed later.
+    # Invoice-only success remains distinct from paid invoice success.
+    from integrations.qoyod.unsent_orders import _is_real
+    completed = await db.qoyod_manual_send_locks.find_one({
+        "user_id": _TENANT, "order_number": order_number, "status": "succeeded",
+        "finished_at": {"$gt": attempt_started_at},
+    }, {"_id": 0, "manual_qoyod_invoice_id": 1, "manual_qoyod_payment_id": 1})
+    if completed and _is_real(completed.get("manual_qoyod_invoice_id")):
+        paid = _is_real(completed.get("manual_qoyod_payment_id"))
+        invoice_only = False
+        if not paid:
+            invoice_only = bool(await db.integration_inbox.find_one({
+                "salla_order_number": order_number,
+                "manual_qoyod_invoice_id": completed["manual_qoyod_invoice_id"],
+                "manual_send_last_status": "succeeded_invoice_only",
+                "manual_send_at": {"$gt": attempt_started_at},
+            }, {"_id": 1}))
+        if paid or invoice_only:
+            return {"order_number": order_number, "outcome": "already_sent",
+                    "code": "later_send_completed", "invoice_only": invoice_only,
+                    "invoice_id": completed["manual_qoyod_invoice_id"],
+                    "payment_id": completed.get("manual_qoyod_payment_id")}
+    refusal = ManualSendRefused(
+        "automatic_run_interrupted",
+        "توقفت المحاولة قبل تثبيت النتيجة؛ يحتاج الطلب إلى مراجعة المرجع "
+        "في قيود قبل السماح بمحاولة جديدة.",
+        {"provider_outcome_unconfirmed": bool(provider_started)},
+    )
+    # This code is deliberately outside the automatic retry allow-list. The
+    # existing reviewed reconciliation/manual path must resolve the hold.
+    collection = db.qoyod_manual_auto_quarantines
+    identity = f"{_TENANT}:{order_number}"
+    existing = await collection.find_one({"_id": identity})
+    from qoyod_auto_unified.common import RETRYABLE_SYNC_FAILURE_CODES
+    if existing and existing.get("status") == "open" and existing.get("code") not in RETRYABLE_SYNC_FAILURE_CODES:
+        # Preserve the original actionable refusal rather than replacing it
+        # with a less specific interruption message during stale-run repair.
+        return {"order_number": order_number, "outcome": "manual_review",
+                "code": existing.get("code"), "detail": existing.get("detail") or {}}
+    at = (existing or {}).get("resolved_at")
+    if (existing or {}).get("status") == "resolved" and isinstance(at, datetime):
+        at = at.replace(tzinfo=timezone.utc) if at.tzinfo is None else at
+        started = attempt_started_at.replace(tzinfo=timezone.utc) if attempt_started_at.tzinfo is None else attempt_started_at
+        if at > started:
+            return {"order_number": order_number, "outcome": "manual_review",
+                    "code": "later_review_evidence_preserved"}
+    selector = {"_id": identity}
+    if existing:
+        selector.update({key: existing[key] if key in existing else {"$exists": False}
+                         for key in ("status", "last_seen_at", "resolved_at")})
+    now = _now()
+    try:
+        await collection.update_one(selector, {
+            "$set": {"user_id": _TENANT, "order_number": order_number, "status": "open",
+                     "code": refusal.code, "message": refusal.message, "detail": refusal.extra,
+                     "run_id": run_id, "last_seen_at": now},
+            "$setOnInsert": {"first_seen_at": now}, "$inc": {"attempt_count": 1},
+            "$unset": {"next_retry_at": "", "recovery_class": "", "retry_scheduled_at": ""},
+        }, upsert=not bool(existing))
+    except DuplicateKeyError:
+        # A newer review won the insert race; never overwrite its evidence.
+        pass
+    return {"order_number": order_number, "outcome": "manual_review",
+            "code": refusal.code, "detail": refusal.extra}
+
+
+async def _recover_abandoned_runs(db, owner, *, limit=_ABANDONED_RUN_PAGE):
+    """Close a bounded page after exclusive lease takeover, without guessing sends.
+
+    A new worker's exclusive lease proves prior owners cannot start more work.
+    Recover their audits immediately; only legacy audits without an owner need
+    the age fallback. This never unlocks an invoice or proves provider absence.
+    """
+    cutoff = _now() - timedelta(seconds=_ABANDONED_RUN_AGE_SECONDS)
+    page_size = max(1, min(_ABANDONED_RUN_PAGE, int(limit)))
+    projection = {"_id": 0, "run_id": 1, "started_at": 1, "order_numbers": 1,
+                  "results": 1, "result.results": 1, "active_order_number": 1,
+                  "cycle_id": 1, "lease_owner": 1}
+    audits = []
+    # Prioritize known lease takeovers so a large historical backlog cannot
+    # postpone the hold for a request interrupted just before this worker won.
+    for selector, index in (
+        ({"lease_owner": {"$type": "string", "$nin": ["", owner]}},
+         "qoyod_manual_auto_runs_takeover"),
+        ({"lease_owner": {"$in": [None, ""]}, "started_at": {"$lt": cutoff}},
+         "qoyod_manual_auto_runs_legacy_recovery"),
+    ):
+        remaining = page_size - len(audits)
+        if not remaining:
+            break
+        audits.extend(await db.qoyod_manual_auto_runs.find(
+            {"status": "in_progress", **selector}, projection,
+        ).hint(index).sort("started_at", 1).limit(remaining).max_time_ms(2000).to_list(length=remaining))
+    recovered = 0
+    for audit in audits:
+        if not await _lease_is_current(db, owner):
+            break
+        run_id = audit.get("run_id")
+        if not run_id:
+            continue
+        results = list(audit.get("results") or (audit.get("result") or {}).get("results") or [])
+        known = {str(row.get("order_number")) for row in results}
+        # New audits identify the exact interrupted order. Historical audits
+        # lack that evidence, so an unrecorded outcome must remain uncertain.
+        unresolved = ([audit["active_order_number"]] if audit.get("active_order_number")
+                      else [] if "active_order_number" in audit
+                      else audit.get("order_numbers") or [])
+        for reference in unresolved:
+            reference = str(reference)
+            if reference and reference not in known:
+                results.append(await _hold_interrupted_order(
+                    db, order_number=reference, run_id=run_id, provider_started=True,
+                    attempt_started_at=audit["started_at"]))
+                known.add(reference)
+        from .cycle_manifest import CURRENT_CYCLE, record_results
+        cycle = CURRENT_CYCLE.get()
+        if cycle and cycle.get("cycle_id") == audit.get("cycle_id"):
+            await record_results(db, {"results": results})
+        finished_at = _now()
+        result = {"ok": False, "status": "interrupted", "run_id": run_id,
+                  "reason": "abandoned_run", "results": results,
+                  "finished_at": finished_at.isoformat(), **_result_counts(results)}
+        updated = await db.qoyod_manual_auto_runs.update_one(
+            {"run_id": run_id, "status": "in_progress", "started_at": audit["started_at"],
+             "lease_owner": audit["lease_owner"] if "lease_owner" in audit else {"$exists": False}},
+            {"$set": {"status": "interrupted", "finished_at": finished_at,
+                      "result": result, "results": results,
+                      "active_order_number": None}},
+        )
+        recovered += int(updated.modified_count == 1)
+    return recovered
+
+
+async def _recover_abandoned_audit_page(db):
+    """Repair metadata during a financial cooldown under the same worker lease."""
+    owner = await _acquire_lease(db)
+    if not owner:
+        return 0
+    try:
+        # This page cannot send. Its wall-time budget stays below the 45-second
+        # lease, and each audit additionally checks current ownership.
+        return await asyncio.wait_for(_recover_abandoned_runs(db, owner), timeout=10)
+    finally:
+        await _release_lease(db, owner)
+
+
 async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
     """Run one bounded, sequential automatic-send round."""
     global _LAST_RUN_AT, _LAST_RUN_OK, _LAST_ROUND
@@ -897,7 +1063,35 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         return result
 
     client_scope_token = None
+    run_id = None
+    audit_inserted = False
+    results: list[dict[str, Any]] = []
+    result = None
+    active_order_number = None
+    provider_started = False
+    candidate_counts = {}
+    started_at = None
     lease_heartbeat = asyncio.create_task(_renew_worker_lease(db, owner))
+
+    async def record_result(row):
+        nonlocal active_order_number
+        results.append(row)
+        try:
+            saved = await db.qoyod_manual_auto_runs.update_one(
+                {"run_id": run_id, "status": "in_progress", "lease_owner": owner},
+                {"$set": {"results": results, "last_progress_at": _now(),
+                          "active_order_number": None}},
+            )
+            if not saved.matched_count:
+                raise _RunCheckpointFailed("automatic_run_audit_changed")
+            # Commit each disposition before the next external call. A later
+            # cancellation can no longer replay the completed prefix forever.
+            from .cycle_manifest import record_results
+            await record_results(db, {"results": [row]})
+            active_order_number = None
+        except Exception as exc:
+            raise _RunCheckpointFailed(type(exc).__name__) from exc
+
     try:
         # Re-read after the lease. A save/disable may have happened while the
         # worker was waiting.
@@ -908,6 +1102,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
             _LAST_ROUND = result
             return result
 
+        await _recover_abandoned_runs(db, owner)
         orders_user_id = str(settings["plan_b_auto_send_orders_user_id"])
         candidates, candidate_counts = await _load_candidate_rows(
             db,
@@ -932,10 +1127,15 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
 
         run_id = f"qoyod-auto-{uuid.uuid4().hex[:16]}"
         started_at = _now()
+        from .cycle_manifest import CURRENT_CYCLE
+        cycle = CURRENT_CYCLE.get()
         audit = {
             "run_id": run_id,
             "status": "in_progress",
             "actor": "auto-plan-b",
+            "lease_owner": owner,
+            "active_order_number": None,
+            "cycle_id": (cycle or {}).get("cycle_id"),
             "order_numbers": [str(r["order_number"]) for r in candidates],
             "started_at": started_at,
             "settings_armed_at": settings.get("plan_b_auto_send_armed_at"),
@@ -943,17 +1143,25 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         }
         # Audit exists before the first external write.
         await db.qoyod_manual_auto_runs.insert_one(audit)
+        audit_inserted = True
 
         # The loop is sequential. Keep one task-local client (and therefore
         # one complete Qoyod invoice-reference snapshot) for this batch only.
         client_scope_token = begin_shared_manual_qoyod_client()
-        results: list[dict[str, Any]] = []
         lease_lost = False
         for row in candidates:
             if not await _lease_is_current(db, owner):
                 lease_lost = True
                 break
             order_number = str(row["order_number"])
+            active_order_number = order_number
+            provider_started = False
+            progress = await db.qoyod_manual_auto_runs.update_one(
+                {"run_id": run_id, "status": "in_progress", "lease_owner": owner},
+                {"$set": {"active_order_number": order_number}},
+            )
+            if not progress.matched_count:
+                raise _RunCheckpointFailed("automatic_run_audit_changed")
             try:
                 still_eligible, refresh = await _refresh_and_verify_salla_status(
                     db,
@@ -962,7 +1170,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                 )
                 if not still_eligible:
                     snapshot = refresh.get("plan_b_status_snapshot") or {}
-                    results.append({
+                    await record_result({
                         "order_number": order_number,
                         "outcome": "skipped_status_changed",
                         "current_status": snapshot.get("status_native")
@@ -972,6 +1180,20 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                 if not await _lease_is_current(db, owner):
                     lease_lost = True
                     break
+                manual_job = await db.qoyod_manual_send_jobs.find_one({
+                    "user_id": _TENANT, "order_number": order_number,
+                    "status": {"$in": ["queued", "running", "needs_review"]},
+                }, {"_id": 0, "status": 1})
+                if manual_job:
+                    # The durable job itself fences automatic work even when
+                    # its separate quarantine projection could not be written.
+                    await record_result({
+                        "order_number": order_number, "outcome": "manual_review",
+                        "code": ("manual_job_outcome_unknown" if manual_job["status"] == "needs_review"
+                                 else "manual_job_pending"),
+                    })
+                    continue
+                provider_started = True
                 payload = await manual_send_one(
                     db,
                     user_id=_TENANT,
@@ -980,13 +1202,15 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                     actor=f"auto-plan-b:{run_id}",
                     allow_historical_positive_total=True,
                 )
-                results.append({
+                await record_result({
                     "order_number": order_number,
                     "outcome": "sent",
                     "invoice_only": bool(payload.get("invoice_only")),
                     "invoice_id": payload.get("invoice_id"),
                     "payment_id": payload.get("payment_id"),
                 })
+            except _RunCheckpointFailed:
+                raise
             except ManualSendRefused as exc:
                 if is_credential_failure(exc):
                     await _pause_for_credential_failure(
@@ -995,7 +1219,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                         exc=exc,
                         run_id=run_id,
                     )
-                    results.append({
+                    await record_result({
                         "order_number": order_number,
                         "outcome": "credentials_paused",
                         "code": exc.code,
@@ -1020,7 +1244,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                         exc=retryable,
                         run_id=run_id,
                     )
-                    results.append({
+                    await record_result({
                         "order_number": order_number,
                         "outcome": "retry_later",
                         "code": retryable.code,
@@ -1029,14 +1253,14 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                     })
                     continue
                 if exc.code in SAFE_ALREADY_SENT_CODES:
-                    results.append({
+                    await record_result({
                         "order_number": order_number,
                         "outcome": "already_sent",
                         "code": exc.code,
                     })
                     continue
                 if exc.code == "in_progress":
-                    results.append({
+                    await record_result({
                         "order_number": order_number,
                         "outcome": "skipped_in_progress",
                         "code": exc.code,
@@ -1052,7 +1276,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                         exc=exc,
                         run_id=run_id,
                     )
-                    results.append({
+                    await record_result({
                         "order_number": order_number,
                         "outcome": "retry_later",
                         "code": exc.code,
@@ -1066,7 +1290,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                     exc=exc,
                     run_id=run_id,
                 )
-                results.append({
+                await record_result({
                     "order_number": order_number,
                     "outcome": "manual_review",
                     "code": exc.code,
@@ -1091,7 +1315,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                     exc=isolated,
                     run_id=run_id,
                 )
-                results.append({
+                await record_result({
                     "order_number": order_number,
                     "outcome": "manual_review",
                     "code": "unhandled_exception",
@@ -1132,26 +1356,23 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
             "started_at": started_at.isoformat(),
             "finished_at": finished_at.isoformat(),
         }
-        await db.qoyod_manual_auto_runs.update_one(
-            {"run_id": run_id},
-            {"$set": {
-                "status": result["status"],
-                "finished_at": finished_at,
-                "result": result,
-            }},
-        )
         _LAST_RUN_OK = True
         _LAST_ROUND = result
         return result
-    except Exception as exc:  # failure before an audited external mutation
+    except asyncio.CancelledError:
+        result = {"ok": False, "status": "cancelled", "run_id": run_id}
+        _LAST_RUN_OK = False
+        _LAST_ROUND = result
+        raise
+    except Exception as exc:
         _LAST_RUN_OK = False
         error_reference = uuid.uuid4().hex[:8]
         logger.exception(
             "Plan-B auto-send round failed before completion ref=%s",
             error_reference,
         )
-        # Keep the application armed.  No order was selected safely enough to
-        # quarantine here. The durable cycle scheduler applies its cooldown.
+        # Keep the application armed. Finally records any interrupted order
+        # conservatively, even if an earlier provider write already completed.
         result = {
             "ok": False,
             "status": "round_failed",
@@ -1162,6 +1383,50 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         return result
     finally:
         _LAST_RUN_AT = _now()
+        if audit_inserted:
+            async def finish_audit():
+                nonlocal result
+                if active_order_number and not any(
+                    row.get("order_number") == active_order_number for row in results
+                ):
+                    held = await _hold_interrupted_order(
+                        db, order_number=active_order_number, run_id=run_id,
+                        provider_started=provider_started, attempt_started_at=started_at,
+                    )
+                    results.append(held)
+                if result is None or result.get("status") != "succeeded":
+                    # The audit is owned by this run even if the cycle lease
+                    # moved. Restore any result interrupted between its audit
+                    # checkpoint and manifest checkpoint, under the live owner.
+                    from .cycle_manifest import record_results
+                    with suppress(Exception):
+                        await record_results(db, {"results": results})
+                finished = _now()
+                result = result if result is not None else {"ok": False, "status": "interrupted"}
+                result.update({"run_id": run_id, "results": results,
+                               "started_at": started_at.isoformat(),
+                               "finished_at": finished.isoformat(), **_result_counts(results)})
+                finalized = await db.qoyod_manual_auto_runs.update_one(
+                    {"run_id": run_id, "status": "in_progress", "lease_owner": owner},
+                    {"$set": {"status": result["status"], "finished_at": finished,
+                              "result": result, "results": results,
+                              "active_order_number": None}},
+                )
+                if not finalized.matched_count:
+                    raise _RunCheckpointFailed("automatic_run_audit_changed")
+            try:
+                await asyncio.wait_for(finish_audit(), _AUDIT_FINISH_TIMEOUT_SECONDS)
+            except (asyncio.CancelledError, Exception) as exc:
+                # A down database/hard exit cannot be finalized synchronously;
+                # the bounded takeover repair handles it without provider I/O.
+                logger.warning("Plan-B audit finalization deferred run=%s code=%s",
+                               run_id, type(exc).__name__)
+                _LAST_RUN_OK = False
+                if result is not None:
+                    result["audit_finalized"] = False
+                    if result.get("status") == "succeeded":
+                        result.update(ok=False, status="audit_finalize_pending",
+                                      exception_type=type(exc).__name__)
         lease_heartbeat.cancel()
         with suppress(asyncio.CancelledError, Exception):
             await lease_heartbeat
@@ -1185,7 +1450,9 @@ async def _loop(db, *, interval_sec: float, batch_limit: int, wake_event=None) -
         INTERVAL_SECONDS, batch_limit,
     )
     while True:
+        recovered = 0
         try:
+            recovered = await _recover_abandoned_audit_page(db)
             cycle = await run_due_cycle(db, batch_limit=batch_limit)
             if cycle.get('status') == 'continuing':
                 await asyncio.sleep(.05)
@@ -1193,11 +1460,14 @@ async def _loop(db, *, interval_sec: float, batch_limit: int, wake_event=None) -
         except Exception:
             # run_once already isolates failures; this protects task liveness.
             logger.exception("Plan-B Qoyod auto-send worker tick escaped")
+        # Drain old audit metadata in small pages without shortening the
+        # database-enforced financial cooldown. Normal idle polling stays 60s.
+        pause = min(interval_sec, 5) if recovered == _ABANDONED_RUN_PAGE else interval_sec
         if wake_event is None:
-            await asyncio.sleep(interval_sec)
+            await asyncio.sleep(pause)
         else:
             try:
-                await asyncio.wait_for(wake_event.wait(), interval_sec)
+                await asyncio.wait_for(wake_event.wait(), pause)
             except asyncio.TimeoutError:
                 pass
             wake_event.clear()

@@ -33,6 +33,8 @@ async function cleanup(container, root) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  api.get.mockReset();
+  api.post.mockReset();
   __resetQoyodUnsentOrdersClientForTests();
   api.get.mockResolvedValue({
     data: {
@@ -41,6 +43,119 @@ beforeEach(() => {
       salla_status_counts: {},
     },
   });
+});
+
+test.each(["bulk", "single"])("one synchronous send gate rejects rapid clicks and overlap when %s starts first", async (first) => {
+  api.get.mockResolvedValue({ data: { counts: { "لم يُرسل": 2 }, salla_status_counts: {},
+    orders: [
+      { order_number: "SYN-OVERLAP-1", status: "فشل", retry_allowed: true },
+      { order_number: "990000001", status: "لم يُرسل" },
+      { order_number: "990000002", status: "لم يُرسل" },
+    ] } });
+  const signals = [];
+  api.post.mockImplementation((_url, _body, { signal }) => new Promise((_resolve, reject) => {
+    signals.push(signal);
+    signal.addEventListener("abort", () => reject({ code: "ERR_CANCELED" }), { once: true });
+  }));
+  const { container, root } = await renderRecoveryPage("/?recovery=1");
+  try {
+    // Open a row confirmation before either send starts; both handlers are
+    // invoked before React can render their disabled state.
+    const failedTab = container.querySelector('[data-testid="unsent-tab-فشل"]');
+    await act(async () => failedTab.click());
+    await act(async () => container.querySelector('[data-testid="qoyod-failed-retry-SYN-OVERLAP-1"]').click());
+    const confirm = container.querySelector('[data-testid="qoyod-failed-retry-confirm-SYN-OVERLAP-1"]');
+    const bulk = container.querySelector('[data-testid="qoyod-recovery-send"]');
+    await act(async () => {
+      if (first === "bulk") {
+        bulk.click();
+        bulk.click();
+        confirm.click();
+      } else {
+        confirm.click();
+        confirm.click();
+        bulk.click();
+      }
+    });
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(confirm.disabled).toBe(true);
+    expect(signals).toHaveLength(1);
+  } finally {
+    await cleanup(container, root);
+  }
+  expect(signals.every((signal) => signal.aborted)).toBe(true);
+});
+
+test("accepted single send displays pending and running status before confirmed success", async () => {
+  jest.useFakeTimers();
+  const order = "990001001";
+  const queued = { id: "status-job", order_number: order, status: "queued", poll_after_seconds: 5 };
+  let polls = 0;
+  api.get.mockImplementation((url) => Promise.resolve({ data: url.includes("/jobs/")
+    ? { job: ++polls === 1 ? { ...queued, status: "running" }
+      : { ...queued, status: "succeeded", result: { invoice_id: "confirmed-invoice" } } }
+    : { counts: { "لم يُرسل": 1 }, salla_status_counts: {},
+      orders: [{ order_number: order, status: "لم يُرسل", retry_allowed: true }] } }));
+  api.post.mockResolvedValue({ data: { ok: true, job: queued } });
+  const { container, root } = await renderRecoveryPage();
+  try {
+    await act(async () => container.querySelector(`[data-testid="qoyod-failed-retry-${order}"]`).click());
+    await act(async () => container.querySelector(`[data-testid="qoyod-failed-retry-confirm-${order}"]`).click());
+    const notice = () => container.querySelector('[data-testid="qoyod-failed-retry-notice"]');
+    expect(notice().getAttribute("role")).toBe("status");
+    expect(notice().textContent).toContain("بانتظار التنفيذ");
+    expect(notice().className).toContain("bg-sky-50");
+    expect(container.querySelector(`[data-testid="qoyod-failed-retry-confirm-${order}"]`).disabled).toBe(true);
+    await act(async () => { jest.advanceTimersByTime(5000); });
+    expect(notice().textContent).toContain("جارٍ التحقق والإرسال في الخلفية");
+    await act(async () => { jest.advanceTimersByTime(5000); });
+    expect(notice().textContent).toContain("إلى قيود بنجاح");
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(polls).toBe(2);
+  } finally {
+    await cleanup(container, root);
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  }
+});
+
+test("unmount aborts an in-flight bulk submission and a late acknowledgement cannot send the next order", async () => {
+  const order = "990001101";
+  api.get.mockResolvedValue({ data: { counts: { "لم يُرسل": 2 }, salla_status_counts: {},
+    orders: [{ order_number: order, status: "لم يُرسل" }, { order_number: "990001102", status: "لم يُرسل" }] } });
+  let acknowledge;
+  api.post.mockImplementation(() => new Promise((resolve) => { acknowledge = resolve; }));
+  const { container, root } = await renderRecoveryPage("/?recovery=1");
+  await act(async () => container.querySelector('[data-testid="qoyod-recovery-send"]').click());
+  expect(api.post).toHaveBeenCalledTimes(1);
+  const request = api.post.mock.calls[0][2];
+  await cleanup(container, root);
+  expect(request.signal.aborted).toBe(true);
+  await act(async () => { acknowledge({ data: { invoice_id: "late-invoice" } }); });
+  expect(api.post).toHaveBeenCalledTimes(1);
+  expect(window.sessionStorage.getItem(`qoyod-manual-job:${order}`)).toBe(request.headers["Idempotency-Key"]);
+});
+
+test("known refusal releases the page gate but a new send waits for a new explicit click", async () => {
+  const order = "990001201";
+  api.get.mockResolvedValue({ data: { counts: { "لم يُرسل": 1 }, salla_status_counts: {},
+    orders: [{ order_number: order, status: "لم يُرسل", retry_allowed: true }] } });
+  api.post.mockResolvedValueOnce({ data: { job: { id: "refused-job", order_number: order, status: "refused",
+    error: { code: "not_qoyod_eligible_status", message: "الحالة غير مؤهلة" } } } })
+    .mockResolvedValueOnce({ data: { invoice_id: "later-invoice" } });
+  const { container, root } = await renderRecoveryPage();
+  try {
+    await act(async () => container.querySelector(`[data-testid="qoyod-failed-retry-${order}"]`).click());
+    await act(async () => container.querySelector(`[data-testid="qoyod-failed-retry-confirm-${order}"]`).click());
+    expect(api.post).toHaveBeenCalledTimes(1);
+    const confirm = container.querySelector(`[data-testid="qoyod-failed-retry-confirm-${order}"]`);
+    expect(confirm.disabled).toBe(false);
+    expect(container.querySelector('[data-testid="qoyod-failed-retry-notice"]').textContent).toContain("الحالة غير مؤهلة");
+    await act(async () => confirm.click());
+    expect(api.post).toHaveBeenCalledTimes(2);
+    expect(api.post.mock.calls[1][2].headers["Idempotency-Key"])
+      .not.toBe(api.post.mock.calls[0][2].headers["Idempotency-Key"]);
+  } finally { await cleanup(container, root); }
 });
 
 test("stored provider failure distinguishes the operation without a retry or fresh probe", async () => {
@@ -164,10 +279,14 @@ test("bulk resend automatically selects every unsent order and requires no paste
     expect(api.post).toHaveBeenNthCalledWith(
       1,
       "/integrations/qoyod/manual/send/275623757",
+      undefined,
+      expect.objectContaining({ headers: { "Idempotency-Key": expect.any(String) } }),
     );
     expect(api.post).toHaveBeenNthCalledWith(
       2,
       "/integrations/qoyod/manual/send/275633528",
+      undefined,
+      expect.objectContaining({ headers: { "Idempotency-Key": expect.any(String) } }),
     );
   } finally {
     await cleanup(container, root);
@@ -203,7 +322,7 @@ test("one failed order does not stop the remaining automatic batch", async () =>
 
     expect(api.post).toHaveBeenCalledTimes(2);
     expect(container.querySelector('[data-testid="qoyod-recovery-results"]')?.textContent)
-      .toContain("بقي لم يُرسل — يحتاج مراجعة");
+      .toContain("نتيجة الإرسال تحتاج مراجعة");
     expect(container.querySelector('[data-testid="qoyod-recovery-results"]')?.textContent)
       .toContain("تم الإرسال");
   } finally {

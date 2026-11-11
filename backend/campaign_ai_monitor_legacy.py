@@ -2807,14 +2807,15 @@ def attach_campaign_ai_routes(
 ) -> None:
     @router.get("/ai-monitor/latest")
     async def latest_campaign_recommendations(user: dict = Depends(current_user)) -> dict[str, Any]:
+        from campaign_ai_public_guard import VISIBLE_SNAPSHOT_FILTER
         user_id = _text(user.get("id") or user.get("_id"), limit=120)
         document = await db[RECOMMENDATION_COLLECTION].find_one(
-            {"user_id": user_id}, {"_id": 0, "user_id": 0, "execution_targets": 0}, sort=[("generated_at", -1)]
+            {"user_id": user_id, **VISIBLE_SNAPSHOT_FILTER}, {"_id": 0, "user_id": 0, "execution_targets": 0}, sort=[("generated_at", -1)]
         )
         if not document:
             return {
                 "available": False, "mode": "recommend_then_approve", "writes_performed": False,
-                "summary": "سيظهر أول تحليل بعد اكتمال التشغيل الدوري.",
+                "summary": "المراقبة يدوية؛ اضغط تحديث المراقبة لطلب تحليل جديد.",
                 "recommendations": [], "next_run_at": None,
             }
         return {"available": True, **document}
@@ -2824,9 +2825,10 @@ def attach_campaign_ai_routes(
         limit: int = Query(default=12, ge=1, le=48),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
+        from campaign_ai_public_guard import VISIBLE_SNAPSHOT_FILTER
         user_id = _text(user.get("id") or user.get("_id"), limit=120)
         cursor = db[RECOMMENDATION_COLLECTION].find(
-            {"user_id": user_id}, {"_id": 0, "user_id": 0, "execution_targets": 0}
+            {"user_id": user_id, **VISIBLE_SNAPSHOT_FILTER}, {"_id": 0, "user_id": 0, "execution_targets": 0}
         ).sort("generated_at", -1).limit(limit)
         return {"items": await cursor.to_list(length=limit), "mode": "recommend_then_approve"}
 
@@ -2837,10 +2839,11 @@ def attach_campaign_ai_routes(
         background_tasks: BackgroundTasks,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
+        from campaign_ai_public_guard import VISIBLE_SNAPSHOT_FILTER
         owner = require_owner(user)
         user_id = _text(owner.get("id") or owner.get("_id"), limit=120)
         latest = await db[RECOMMENDATION_COLLECTION].find_one(
-            {"user_id": user_id}, {"_id": 0}, sort=[("generated_at", -1)]
+            {"user_id": user_id, **VISIBLE_SNAPSHOT_FILTER}, {"_id": 0}, sort=[("generated_at", -1)]
         )
         if not latest or latest.get("snapshot_id") != payload.snapshot_id:
             raise HTTPException(status_code=409, detail={"code": "recommendation_snapshot_stale"})
