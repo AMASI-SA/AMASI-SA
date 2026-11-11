@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import httpx
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from salla_integration.service import SallaError, call_salla
 from . import shipping_label_service as legacy
@@ -646,7 +646,11 @@ async def local_mezan_courier_label(db, owner: str, number: str, workflow: dict,
             "status": "store_courier", "print_data": data, "message": "تم تجهيز بوليصة مندوب المتجر."}
 
 
-async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, completed_only: bool = False, explicit_complete: bool = False) -> dict[str, Any]:
+async def carrier_label(
+    db: Any, owner: str, order_number: str, *, issue: bool,
+    completed_only: bool = False, explicit_complete: bool = False,
+    before_explicit_complete: Callable[[], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
     """One Salla order-status POST when needed; read the original carrier AWB.
 
     A rejected or ambiguous status acknowledgement is reconciled by GET,
@@ -669,6 +673,8 @@ async def carrier_label(db: Any, owner: str, order_number: str, *, issue: bool, 
         # verification GET, polling or automatic status-POST retry in between.
         if status not in {"in_progress", "completed"}:
             raise legacy.ShippingLabelError("order_status_not_completed", "حالة الطلب لا تسمح بإعادة تأكيد التنفيذ.")
+        if before_explicit_complete is not None:
+            await before_explicit_complete()
         acknowledgement = await call_salla(db, owner, "POST", f"/orders/{internal_id}/status",
                          json={"slug": "completed"}, single_post_attempt=True)
         if not isinstance(acknowledgement, dict) or acknowledgement.get("success") is not True:

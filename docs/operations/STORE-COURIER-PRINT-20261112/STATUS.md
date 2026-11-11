@@ -8,9 +8,12 @@
 - The user authorized fixing and publishing store-courier label printing and
   automatic/explicit completion together with the Google dashboard fix.
 - User reports iMile and SMSA work. Their official-label path must remain intact.
-- Current state: implementation and independent verification in progress.
-- Production changed: **no**. No live order mutation, provider status write,
-  shipment creation, source merge, release lease or publication by this task.
+- Current state: source complete and independently reviewed; root integrated
+  tests passed. Exact-source CI and protocol-v5 publication remain required.
+- Production changed: **no deployment**. No provider status write, shipment
+  creation, source merge or release lease by this task. The user subsequently
+  authorized direct label/print trials on the reported orders in Mezan; those
+  UI reads may update the existing local label-verification bookkeeping.
 
 ## Observed defect and evidence boundary
 
@@ -73,9 +76,9 @@ workflow state. No credentials were printed or transferred. The live
 The extractor regression was red before implementation (16 failed, 5 passed)
 and green after (21 passed). Its combined current-shipping/mapper/repository
 run passed 151 tests with zero skips; independent rerun of the 21 cases passed.
-Actual HTTP recovery tests use synthetic fixtures matching the observed shape
-and reject all provider writes. Integrated source and required real-Mongo CI
-results are still pending; mock DB tests do not prove transaction races.
+Actual HTTP identity-recovery tests use synthetic fixtures matching the observed
+shape and reject all provider writes. Required real-Mongo CI results are still
+pending; mock DB tests do not prove transaction races.
 
 Root identity-slice verification after integrating extraction and recovery:
 **225 passed, 59 subtests passed, zero skips**, exit0, 8.70 seconds. Independent
@@ -94,11 +97,47 @@ PYTHONPATH=backend:backend/tests \
   backend/tests/test_order_engine_repository.py
 ```
 
-This verified checkpoint does not contain the unfinished explicit-completion
-slice or its final CI registration. Do not freeze or deploy it as the combined A.
+The identity-only remote checkpoint is
+`45183c09fbb3a718b154af999aa450f896115de5`. It is not the combined release A.
 
-Finish independent review and root integrated tests, checkpoint the complete
-source, rerun exact-source CI, then freeze a new protocol-v5 intent-only B.
+The completed explicit-fetch slice adds 21 actual-route cases. Initial tests
+were red (9 failed, 6 passed). A second deterministic regression exposed a
+status POST after employee revocation or handoff during the provider order GET
+(2 failed, 19 passed). The internal-only pre-POST callback now reauthorizes and
+compares the real captured state immediately before sending. Both cases perform
+zero POST. The optional completed-stage guard is enabled only for this new
+internal fallback; the external call and defaults are unchanged.
+
+Independent final completion/recovery integration: **84 passed, zero skips**,
+exit0, 6.53 seconds. Root final courier integration: **306 passed, 59 subtests,
+13 skipped**, exit0, 17.33 seconds. The 13 skipped cases are the Mongo variant
+of `test_shipping_refresh_latency.py`; its fixture explicitly requires
+`BUILD37_TEST_MONGO_URI` for an isolated replica set. They remain mandatory in
+the existing Shipping Print Boundary CI and are not waived. The root command
+above was extended with these four files:
+
+```text
+backend/tests/test_courier_explicit_completion_recovery.py
+backend/tests/test_manual_courier_label_refresh_race.py
+backend/tests/test_manual_label_delivery_overlap.py
+backend/tests/test_shipping_refresh_latency.py
+```
+
+Shipping CI now includes all three new regression files and tracks the affected
+route, compatibility reader and explicit-completion helper. Completed/confirmed
+and repeated courier reads remain local; matched current-child evidence after
+completion is ready on the first fetch. A genuinely absent/unavailable child
+with sparse provider identity remains nonprintable, without automatic POST
+replay. That negative scenario is not claimed as the observed production cause.
+
+An existing display-only inconsistency can still arise if a historical root
+carrier differs from canonical metadata: `projected_shipping` prefers the root.
+This task does not broadly rewrite those rows or change real carrier precedence;
+the current-document recovery and prevention are separately tested. No claim of
+physical-paper printing or live post-deployment success is made yet.
+
+Checkpoint the complete reviewed source, rerun exact-source CI, then freeze a
+new protocol-v5 intent-only B.
 Fresh-fetch the production ref and Issue1006, verify the official shared guard
 inactive, run the actual governed adapter, own prepare/prepublish, publish once
 under existing authorization, and verify three consecutive matching probes

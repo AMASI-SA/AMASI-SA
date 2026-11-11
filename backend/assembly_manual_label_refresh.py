@@ -85,10 +85,12 @@ async def _read_during_delivery(db, owner, number, authorize, before):
     return _response(result, number)
 
 
-async def complete_and_refresh(db, owner, number, authorize):
+async def complete_and_refresh(db, owner, number, authorize, *, require_completed_stage=False):
     await authorize()
     before = await _capture(db, owner, number)
-    if not before or canonical_status({**before['source'], 'raw_by_source': {'salla_direct': before['raw']}}) not in {'in_progress', 'completed'}:
+    if (not before
+            or (require_completed_stage and before['workflow'].get('stage') != 'completed')
+            or canonical_status({**before['source'], 'raw_by_source': {'salla_direct': before['raw']}}) not in {'in_progress', 'completed'}):
         raise HTTPException(409, detail={'code': 'assembly_completion_required',
             'message': 'أكمل جاهز لجميع القطع وحدّث الطلب قبل جلب البوليصة.'})
     instant = datetime.now(timezone.utc)
@@ -111,8 +113,17 @@ async def complete_and_refresh(db, owner, number, authorize):
         current = await _capture(db, owner, number)
         if not _same_material_snapshot(before, current):
             raise HTTPException(409, detail={'code': 'shipping_snapshot_changed'})
+        completion_guard = {}
+        if require_completed_stage:
+            async def before_explicit_complete():
+                # The provider order read yields control. Recheck the employee
+                # and captured completion immediately before its status write.
+                await authorize()
+                if not _same_material_snapshot(before, await _capture(db, owner, number)):
+                    raise HTTPException(409, detail={'code': 'shipping_snapshot_changed'})
+            completion_guard['before_explicit_complete'] = before_explicit_complete
         result = await asyncio.wait_for(carrier_label(db, owner, number, issue=False,
-            completed_only=True, explicit_complete=True), timeout=90)
+            completed_only=True, explicit_complete=True, **completion_guard), timeout=90)
         await authorize()
         if not _same_material_snapshot(before, await _capture(db, owner, number)):
             raise HTTPException(409, detail={'code': 'shipping_snapshot_changed'})

@@ -7,7 +7,8 @@
 - Reviewed production baseline: `245a0beccbdbc2585a3ec2214e808eeef3734b57`
 - State: Google R2 source and exact-source runtime CI passed. The user added
   the store-courier print/completion repair to the same authorized publication;
-  the combined source, fresh CI and a new release A/B pair remain required.
+  the combined source is now implemented and independently reviewed. Fresh
+  exact-source CI and a new release A/B pair remain required.
 - Current draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1887
 - Superseded candidate PR: https://github.com/AMASI-SA/AMASI-SA/pull/1886
 - Remote regression checkpoint: `924e480258c8052741c5d9999e531739238287e0`.
