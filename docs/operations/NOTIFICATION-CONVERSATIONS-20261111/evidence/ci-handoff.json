@@ -1,0 +1,267 @@
+{
+  "observed_at": "2026-11-11 21:00:06 UTC",
+  "production_changed": false,
+  "backend_merge": null,
+  "mobile_merge": null,
+  "apk_build": null,
+  "github_incident": {
+    "url": "https://www.githubstatus.com/",
+    "observed_actions": "Major Outage",
+    "reported_at": "2026-11-11T20:48:00Z",
+    "causality": "Official active incident alongside observed queue/artifact failures; individual failure attribution not proven."
+  },
+  "backend": {
+    "runs": [
+      {
+        "id": 43098423563,
+        "name": "Snapchat Direct Active Publication",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "ec84e55f33905db7e761fc7c24c61b07930ee4e5",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43098423563",
+        "created_at": "2026-11-11T20:50:56Z",
+        "updated_at": "2026-11-11T20:50:56Z"
+      },
+      {
+        "id": 43098423571,
+        "name": "Snapchat Settings Management V2",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "ec84e55f33905db7e761fc7c24c61b07930ee4e5",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43098423571",
+        "created_at": "2026-11-11T20:50:56Z",
+        "updated_at": "2026-11-11T20:50:56Z"
+      },
+      {
+        "id": 43096664460,
+        "name": "Qoyod Payment Freshness",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "ec84e55f33905db7e761fc7c24c61b07930ee4e5",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43096664460",
+        "created_at": "2026-11-11T20:32:32Z",
+        "updated_at": "2026-11-11T20:32:32Z"
+      },
+      {
+        "id": 43096664459,
+        "name": "Assembly Mobile Settings",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "ec84e55f33905db7e761fc7c24c61b07930ee4e5",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43096664459",
+        "created_at": "2026-11-11T20:32:32Z",
+        "updated_at": "2026-11-11T20:32:32Z"
+      },
+      {
+        "id": 43096664622,
+        "name": "G47 Focused Integration",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "ec84e55f33905db7e761fc7c24c61b07930ee4e5",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43096664622",
+        "created_at": "2026-11-11T20:32:32Z",
+        "updated_at": "2026-11-11T20:32:32Z"
+      },
+      {
+        "id": 43096664447,
+        "name": "Mobile Order Tracking",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "ec84e55f33905db7e761fc7c24c61b07930ee4e5",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43096664447",
+        "created_at": "2026-11-11T20:32:32Z",
+        "updated_at": "2026-11-11T20:32:32Z"
+      },
+      {
+        "id": 43096664449,
+        "name": "Mezan Release Readiness",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "ec84e55f33905db7e761fc7c24c61b07930ee4e5",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43096664449",
+        "created_at": "2026-11-11T20:32:32Z",
+        "updated_at": "2026-11-11T20:32:32Z"
+      },
+      {
+        "id": 43096664607,
+        "name": "CodeQL",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "ec84e55f33905db7e761fc7c24c61b07930ee4e5",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43096664607",
+        "created_at": "2026-11-11T20:32:32Z",
+        "updated_at": "2026-11-11T20:32:32Z"
+      },
+      {
+        "id": 43096664540,
+        "name": "Security Gate",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "ec84e55f33905db7e761fc7c24c61b07930ee4e5",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43096664540",
+        "created_at": "2026-11-11T20:32:32Z",
+        "updated_at": "2026-11-11T20:32:32Z"
+      },
+      {
+        "id": 43096664531,
+        "name": "TikTok Creator Release Candidate",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "ec84e55f33905db7e761fc7c24c61b07930ee4e5",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43096664531",
+        "created_at": "2026-11-11T20:32:32Z",
+        "updated_at": "2026-11-11T20:32:32Z"
+      },
+      {
+        "id": 43096664668,
+        "name": "Operational Stock Eligibility",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "ec84e55f33905db7e761fc7c24c61b07930ee4e5",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43096664668",
+        "created_at": "2026-11-11T20:32:32Z",
+        "updated_at": "2026-11-11T20:32:32Z"
+      },
+      {
+        "id": 43096664624,
+        "name": "Snapchat Settings Management V2",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "ec84e55f33905db7e761fc7c24c61b07930ee4e5",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43096664624",
+        "created_at": "2026-11-11T20:32:32Z",
+        "updated_at": "2026-11-11T20:32:32Z"
+      },
+      {
+        "id": 43096664491,
+        "name": "Operational Balance Web",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "ec84e55f33905db7e761fc7c24c61b07930ee4e5",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43096664491",
+        "created_at": "2026-11-11T20:32:32Z",
+        "updated_at": "2026-11-11T20:32:32Z"
+      },
+      {
+        "id": 43096664649,
+        "name": "Snapchat Direct Active Publication",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "ec84e55f33905db7e761fc7c24c61b07930ee4e5",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43096664649",
+        "created_at": "2026-11-11T20:32:32Z",
+        "updated_at": "2026-11-11T20:32:32Z"
+      }
+    ],
+    "source_sha": "19d1ab486f0c196b693a9b3c912787d967945168",
+    "intent_sha": "ec84e55f33905db7e761fc7c24c61b07930ee4e5",
+    "tree": "2e29beb705c57c8a405d4ffa8ebe81f6724627ac",
+    "pr": 1885,
+    "draft": false,
+    "mergeable_state": "blocked",
+    "source_a_readiness": 43095867004,
+    "source_a_artifact_available": false,
+    "clean_clone_adapters": "NOT_STARTED"
+  },
+  "mobile": {
+    "runs": [
+      {
+        "id": 43096023339,
+        "name": "Android 56 session and browser checks",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "2fe5dfe883009b23c25b83bf09517f116fb0881a",
+        "url": "https://github.com/AMASI-SA/amasi-mobile/actions/runs/43096023339",
+        "created_at": "2026-11-11T20:26:02Z",
+        "updated_at": "2026-11-11T20:26:02Z"
+      },
+      {
+        "id": 43096023148,
+        "name": "Android combined release bundle",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "2fe5dfe883009b23c25b83bf09517f116fb0881a",
+        "url": "https://github.com/AMASI-SA/amasi-mobile/actions/runs/43096023148",
+        "created_at": "2026-11-11T20:26:02Z",
+        "updated_at": "2026-11-11T20:26:02Z"
+      },
+      {
+        "id": 43096023072,
+        "name": "Shipping print latency and courier recovery",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "2fe5dfe883009b23c25b83bf09517f116fb0881a",
+        "url": "https://github.com/AMASI-SA/amasi-mobile/actions/runs/43096023072",
+        "created_at": "2026-11-11T20:26:02Z",
+        "updated_at": "2026-11-11T20:26:02Z"
+      },
+      {
+        "id": 43096023117,
+        "name": "Android78 conversations and storage",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "2fe5dfe883009b23c25b83bf09517f116fb0881a",
+        "url": "https://github.com/AMASI-SA/amasi-mobile/actions/runs/43096023117",
+        "created_at": "2026-11-11T20:26:02Z",
+        "updated_at": "2026-11-11T20:26:02Z"
+      },
+      {
+        "id": 43096023102,
+        "name": "AMASI Mobile CI",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "2fe5dfe883009b23c25b83bf09517f116fb0881a",
+        "url": "https://github.com/AMASI-SA/amasi-mobile/actions/runs/43096023102",
+        "created_at": "2026-11-11T20:26:02Z",
+        "updated_at": "2026-11-11T20:26:02Z"
+      },
+      {
+        "id": 43096023321,
+        "name": "Assembly print Android lifecycle",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "2fe5dfe883009b23c25b83bf09517f116fb0881a",
+        "url": "https://github.com/AMASI-SA/amasi-mobile/actions/runs/43096023321",
+        "created_at": "2026-11-11T20:26:02Z",
+        "updated_at": "2026-11-11T20:26:02Z"
+      },
+      {
+        "id": 43096023144,
+        "name": "Supplier outstanding files",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "2fe5dfe883009b23c25b83bf09517f116fb0881a",
+        "url": "https://github.com/AMASI-SA/amasi-mobile/actions/runs/43096023144",
+        "created_at": "2026-11-11T20:26:02Z",
+        "updated_at": "2026-11-11T20:26:02Z"
+      },
+      {
+        "id": 43096023220,
+        "name": "Android61 Supplier Direct Assignment",
+        "status": "queued",
+        "conclusion": null,
+        "head_sha": "2fe5dfe883009b23c25b83bf09517f116fb0881a",
+        "url": "https://github.com/AMASI-SA/amasi-mobile/actions/runs/43096023220",
+        "created_at": "2026-11-11T20:26:02Z",
+        "updated_at": "2026-11-11T20:26:02Z"
+      }
+    ],
+    "source_sha": "2fe5dfe883009b23c25b83bf09517f116fb0881a",
+    "tree": "150832e5326a3ac02c7722018d45dcf14b475138",
+    "pr": 348,
+    "draft": false,
+    "planned_version": "1.0.63",
+    "planned_version_code": 78
+  },
+  "publication_baseline": {
+    "production_git": "245a0beccbdbc2585a3ec2214e808eeef3734b57",
+    "emergent_visible_version": "7577839",
+    "emergent_visible_publish_number": 100,
+    "expo_latest_visible_version": "1.0.62",
+    "expo_latest_visible_version_code": 77,
+    "expo_build_form": "Closed without submission",
+    "last_guard_observation": "active:false at approximately20:39UTC; recheck before any shared mutation",
+    "own_lease_created": false
+  },
+  "watcher_state": "Stopped at handoff; no unattended publication or build scheduled."
+}
