@@ -1,15 +1,19 @@
-# Support performance recovery — final source handoff
+# Final performance release — evidence and continuation
 
-Repository: AMASI-SA/AMASI-SA. Task branch: `codex/support-performance-recovery-20261111`.
-Reviewed production base: `f439bed54579fafb79a8abcb43080c8150cb5063`.
-Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1878.
-Active implementation source: `b4da6e337e4794a3f6aa5094502c84d38bf18976`, tree `c69ab1b4c41b5bff62f5ca77059190020b1fdd1e`.
-This final record is on evidence-only branch `codex/support-performance-handoff-20261111`; resume code from the active implementation branch, not this documentation branch.
+**Evidence-only branch. Resume deployment from `codex/support-performance-release-20261111` and PR #1881, not this documentation branch.**
+
+# Support performance recovery — authorized release integration
+
+Repository: AMASI-SA/AMASI-SA. Task branch: `codex/support-performance-release-20261111`. Original reviewed implementation remains in #1878 on `codex/support-performance-recovery-20261111`.
+Current reviewed production Git base: `3f60c1a08263ff1eb2412c0f9224467a198ac278` (merged prerequisite #1880). The original source acceptance below used prior base `f439bed54579fafb79a8abcb43080c8150cb5063`.
+Original implementation PR: https://github.com/AMASI-SA/AMASI-SA/pull/1878. The final release PR is linked there and records the exact new source.
+Previous verified implementation source: `b4da6e337e4794a3f6aa5094502c84d38bf18976`, tree `c69ab1b4c41b5bff62f5ca77059190020b1fdd1e`. The current exact source is recorded in the final release PR linked from #1878.
+This record is now carried into the implementation source. Earlier evidence-only handoffs remain on `codex/support-performance-handoff-20261111`; continue from the exact final release head linked from PR #1878.
 Scope-preserving prerequisite PR: https://github.com/AMASI-SA/AMASI-SA/pull/1880.
 Prerequisite source: `7028093e03999191860b91757c8c6246d93a6cd4`, branch `codex/campaign-snapshot-visibility-20261111`, tree `63bb41401bf39dfdd299960dc1be880067f3d56b`.
 Previous remote checkpoint: `8e775226f031074e77f28ea2b3dad94205c8fd90`.
 The PR records the exact latest candidate SHA, tree, CI runs and continuation state. Read its current head before resuming; do not deploy the older checkpoint.
-Production changed: **no**. No live invoice send, advertising change, scan, lease, merge or publication was performed by this task.
+Live application/data changed: **no**. Production Git now includes prerequisite #1880; no live invoice send, advertising change, scan, release lease or publication was performed by this task.
 
 ## Owner decisions
 
@@ -56,7 +60,7 @@ Production changed: **no**. No live invoice send, advertising change, scan, leas
 
 Focused suite counts overlap and must not be added together.
 
-## Release and continuation state
+## Earlier release boundary — superseded by the continuation entries below
 
 Implementation and independent reviews are complete. Inspect the final exact-head PR checks and generated source-candidate intent artifacts before release work. Source/test changes remain on dedicated task branches; no intent-only deployment commit has been frozen yet.
 
@@ -70,7 +74,7 @@ Issue #1006 is already comment-limited and its read connector failed in this ses
 
 The repository's other pending financial, preparation and reporting work is outside this change. No old rollback feature or unrelated draft PR was restored.
 
-## Final exact-source acceptance — 2026-11-11 14:42 UTC
+## Previous exact-source acceptance — 2026-11-11 14:42 UTC
 
 All observed runs have completed.
 
@@ -119,3 +123,54 @@ The owner explicitly requested continuation, merge and publication, and stated t
 Prerequisite source A remains 7028093e03999191860b91757c8c6246d93a6cd4. Its verified candidate intent is now frozen in intent-only B 02e9c5f25953e87e04ba969b9df44028eecc88c0, tree 0634c14c47af35dd81bbb9292ae62db3f6e785d6. Remote blob 2760c273b39e1620d93382492d0f088a76c4ab2e exactly matches the 1,260,920-byte verified artifact; only release/release-intent-v5.json changes after A. Exact B checks and clean-clone rehearsals are pending.
 
 Production branch still f439bed54579fafb79a8abcb43080c8150cb5063; main task source still b4da6e337e4794a3f6aa5094502c84d38bf18976. No merge, shared /app change, lease or publication has occurred. Next: complete secure terminal access and require guard active=false, inspect successful B checks, mark prerequisite ready and merge with expected-head protection. Then merge updated production ancestry into main, preserving inherited intent, freeze a new combined A/B, require final gates and rehearsal, and publish once under v5.
+
+## Prerequisite integrated; combined source A in preparation
+
+Prerequisite #1880 was marked ready and merged by regular merge, preserving source A1 7028093e03999191860b91757c8c6246d93a6cd4 and intent-only B1 02e9c5f25953e87e04ba969b9df44028eecc88c0. New production Git base J1 is 3f60c1a08263ff1eb2412c0f9224467a198ac278; its tree is identical to B1.
+
+Exact B1 checks completed: ten successful workflows and one conditional TikTok workflow skipped. Release-readiness run 43043656133 passed the actual clean-clone adapter rehearsals on Host Node 20.20.2 and 24.19.0, including verified artifact/proof/identity/package boundaries and JSON metadata serving. The unchanged Snapchat scope and suite passed in run 43043655858. The merge used expected-head protection and no squash/rebase.
+
+The main implementation now incorporates J1 ancestry using a normal merge, carrying J1's intent unchanged. No feature/test code is changed by this integration. This status update is included before the new source A is frozen. The exact new source/tree and candidate build will be recorded in PR #1878. Require the quality-gate trigger to be absent from the J1 triple-dot diff, all preparation files unchanged, and zero intent changes in J1..A full-history.
+
+The Emergent session is authenticated. VS Code still shows a separate sign-in page after the secure credential form was canceled; no credential value was read or entered. A prior attempt to print matching terminal-link/password labels was rejected by automatic review; subsequent inspection used only button labels and the supported secure authentication form. No alternate credential path was used. Do not retry authentication until the user requests it or completes the supported sign-in. Continue the authorized GitHub integration/build work.
+
+Production Git branch changed: yes, to J1 above. Live application/data changed by this task: no. Shared /app was not changed, no release lease was created, and no publication was performed. Next: publish the combined source A on the task branch, require final source checks, freeze its exact reviewed intent-only B, require B clean-clone rehearsals, and merge normally. When terminal access is available, require active=false, fast-forward /app, rehearse, prepare/prepublish, publish once, then verify three probes and active=false. No new publication permission is needed; the owner's explicit authorization remains valid.
+
+## Final source rebuilt directly on the reviewed prerequisite base
+
+The proposed normal merge ab5dd65afdd7b7b76cd8f2eb8b7eea63d227c223 preserved the exact intended files, but root's actual v5 preflight found that `git rev-list --full-history 3f60c1a08263ff1eb2412c0f9224467a198ac278..ab5dd65afdd7b7b76cd8f2eb8b7eea63d227c223 -- release/release-intent-v5.json` returns that merge commit. A byte-identical intent diff was not sufficient. This candidate must not be released.
+
+The original branch and PR are preserved. The final source branch codex/support-performance-release-20261111 starts directly from reviewed J1=3f60c1a08263ff1eb2412c0f9224467a198ac278. Root applied the exact reviewed implementation diff with Git, verified the resulting tree was identical to ab5dd65a, and then updated only this status document. No guard, allowlist or workflow was weakened; no prior A/B pair was squashed, rebased or force-pushed. The final source has J1 as its sole parent, while the original reviewed commits remain recoverable on their original branch.
+
+Feature and test files are identical to the prior fully tested implementation. The inherited intent is byte-identical to J1; the final source's J1..A intent history must be empty. The execution-quality trigger is already present in the reviewed base and is absent from the new PR diff. All eleven preparation exclusions remain byte-identical to J1.
+
+Next: require all new exact-source CI checks and a fresh candidate intent, freeze a new intent-only B, require reviewed-B clean-clone rehearsals, and merge the final release PR normally. Terminal login remains the only known access prerequisite for shared /app rehearsal and actual publication. User merge/publication authorization remains valid; do not request it again. Live deployment has not occurred.
+
+## Frozen final A/B — current continuation
+
+Final PR: https://github.com/AMASI-SA/AMASI-SA/pull/1881.
+Source A: 8f11a73a8e53262ed938505f39a141eca3dfab8f; source tree: 1ce136cfe6c4bf6f12155b95d547b76767ba52b7.
+Intent-only B: 173cc5ca7ceae8e50aae3f4bde13e972a2a053bd; deployment tree: 31763cd6cf814f0809376a707c7af2de2ebf23f0.
+Reviewed base J: 3f60c1a08263ff1eb2412c0f9224467a198ac278.
+Runtime ID: rg5-5dca51b366b459cf1d62df9686fb97ce6385f29b652df7545cfe90270aecb8f8.
+
+Source-candidate build run 43049065057 passed. Artifact 13867343869 archive SHA-256: 801bfc6a6ea82f124f676e1b8b1e1a57ed393c2c20e342f7f952d5b8a4c6ec80. Intent SHA-256: 3b580317093129ae534f26f35b4f213ec5c5d0c934188fc0da07ae93d85ccbbe, Git blob f263787a2da9b33b209e221ae0c45d58506e9b81, 1,263,919 bytes. Artifact tree: 8bc4ff27a8d4cedc85d5613789176c0eda9100ad5d7b7538aba33756999d8fdf. Build-meta SHA-256: 60d36db7392328f82523379e2ee1b964f15e6c5858258189e9828bbdc51b62ef. Toolchain Node22.23.2/Yarn1.22.22/Vite8.2.4.
+
+The original mixed checkout contains test bytecode and is not a clean release validation root. Root used a clean detached worktree under /workspace/scratch/e2ab5db77417/release-validation/source-a with PYTHONDONTWRITEBYTECODE=1. The unchanged candidate loader, derived Backend/control Git manifests, matching clean-build passes, load_release_intent and verify_release_intent_git all passed there. Missing generated release_identity.json at import time is expected for source-only validation; no ignored release output was substituted.
+
+Final-B CI is pending. Its reviewed release-readiness run is 43050051800. A had 33 successful workflows before B superseded three residual runs under the unchanged concurrency rules; one A run was still running. The final B checks, including actual clean-clone Node20/24 rehearsals, are the merge acceptance authority. No cancelled run is counted as successful.
+
+PR #1878 is closed as superseded and remains review evidence. #1880 is merged. #1881 is still draft/unmerged at this checkpoint. No shared /app changes, lease or publication occurred. Live application/data remain unchanged. The explicit owner merge/publication authorization remains valid. The VS Code secure credential request was cancelled and the terminal remains at sign-in; respect that state and do not extract or replay credentials through another route.
+
+After final B checks pass: mark #1881 ready, refresh the production base, merge normally with expected B protection, record the merge SHA, and require the merged production tree to equal B. Once supported terminal access is completed, run /app guard status and require active=false before any shared changes or rehearsal; fast-forward to that reviewed production commit, run the package adapter, prepare/prepublish, publish once, wait for newer Deployment Succeeded, and run verify plus status. No additional authorization for merge/publication is required.
+
+## Read-only production acceptance after successful guard verification
+
+These source-derived checks are prepared, not yet run against production. Do not create test invoices, scans, analyses, provider synchronizations or ad changes.
+
+- Use the required guard probes for /health, /ready and canonical/cache-busted /build-meta.json and the exact A/runtime ID above.
+- Authenticated GET /api/ads-manager/ai-monitor/manual and /api/ads-manager/ai-monitor/unified-shadow?days=1 must return stored job/results, kind monitor/comparison, and provider_writes_performed=false without changing request identity. Latest/history must hide building snapshots. Full /dashboard-advanced also reads a separate GA4 widget, so direct GETs are the provider-free acceptance surface.
+- GET /api/integrations/qoyod/worker/status and /api/integrations/qoyod/auto-send/cycle: observe background execution, qoyod-manual-send-jobs, campaign-ai-shadow-jobs and automatic Plan-B worker; no qoyod-full-scan. Cadence 7200 seconds and no-progress cooldown 900 seconds.
+- GET /api/integrations/qoyod/manual/health; only observe a manual/jobs/<existing id> if already known. Do not enqueue a live test job.
+- GET /api/integrations/qoyod/reconciliation-report: scan.mode manual_only and scan.schedule_riyadh empty. Saved stale data is permitted until an explicit manual scan.
+- Snapchat's configured interval helper must return at least7200 and periodic Campaign AI scheduler_enabled must return false. Prefer existing read-only account status and narrowly projected persisted terminal-run timestamps for cadence evidence. There is no HTTP shadow_scheduler_status route; do not invent one. Immediate verification cannot prove two hours of future runtime behavior.
