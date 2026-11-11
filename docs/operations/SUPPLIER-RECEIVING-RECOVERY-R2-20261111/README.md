@@ -436,3 +436,46 @@ observe this single attempt, then run the official verifier against
 `https://mezansalla.com`, retain its result, and require inactive status.
 Preserve the live affected receipt; no cancellation, approval, or invoice
 mutation is part of verification.
+
+
+## New publication succeeded; official verification running
+
+Emergent showed the green **Deployment successful** confirmation and a new
+**Deployment finished Nov 11, 08:32 PM** event. Published version
+**`2e328d9`** is newer than the verified baseline **`5e94faf`**.
+The UI's publication ordinal changed while refreshing; version identity and
+timestamp, rather than its unstable ordinal, distinguish this attempt.
+A screenshot of the completed publication is retained in
+[`deployment-success.png`](deployment-success.png), SHA256
+`c51a1d66506745569b28bc02d901af23728f90621343d67489633605001cb0f9`.
+The available log surface shows runtime logs, not a complete Cloud Build
+transcript; do not infer unobserved Cloud invocation or snapshot details.
+
+A fresh root read of exact merge P's checks confirms **11/11 success**, no
+pending checks or failures, including both actual adapter rehearsals, CodeQL,
+backend security and frontend dependency/CSP checks.
+
+The official command was started once at
+**2026-11-11T17:33:14.563473+00:00**:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py verify --url https://mezansalla.com
+```
+
+It is running in our shared Terminal 5. Output is retained in
+`/tmp/supplier-receiving-1882-verify.json`. The wrapper will assert verified,
+three probes and exact A/P/runtime identity, then run official status and
+require `active:false`. **Verification has not completed yet.** Preserve
+the owned lease and running process; do not submit another publication.
+Production publication changed **yes**; exact runtime acceptance is pending.
+
+The bounded query through the existing workspace backend environment completed
+read-only and returned zero matching session references. That result does not
+establish whether it is the live data environment or whether the affected
+session exists. The authenticated owner web catalog shows a different
+owner-opened session; source confirms catalog lists sessions by opening actor.
+Neither observation proves recovery or deletion of the employee's receipt.
+No live session, piece, invoice or financial write was performed.
+Next: wait for the official verifier's exit/result and inactive status, then
+complete the deployment record and give the employee the same-session Continue
+steps. A new APK is not needed for the inspected Android 76 refresh contract.
