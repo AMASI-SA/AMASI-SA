@@ -66,14 +66,14 @@
     "overlaps_initial_frontend_selection": true
   },
   "independent_reviews": "passed within task scope",
-  "release_state": "prepared_own_active_lease",
+  "release_state": "publication_submitted_awaiting_explicit_success",
   "shared_preflight": {
     "active": false,
     "head": "d3c9b0c946afe2418aecf0b96629e46d7f14f196",
     "tracked_clean": true
   },
   "lease_created": true,
-  "publication_submitted": false,
+  "publication_submitted": true,
   "limitations": [
     "No measured overall production speedup yet",
     "Automatic timing verified with controlled clocks, not a five-hour live wait",
@@ -127,5 +127,15 @@
     "actor": "codex-dashboard-card-cadence-20261111",
     "prepared_at": "2026-11-11T19:37:57.306854+00:00",
     "protocol_version": 5
+  },
+  "prepublish": {
+    "ready_to_publish": true,
+    "source_and_deployment_identity_match": true
+  },
+  "publication": {
+    "clicks": 1,
+    "started_riyadh": "2026-11-11 22:40",
+    "previous_version": "9d4db97",
+    "explicit_success": false
   }
 }

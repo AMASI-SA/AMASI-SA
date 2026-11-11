@@ -1,7 +1,7 @@
 # DASHBOARD-CARD-CADENCE-20261111
 
 ## State
-Evidence-only branch. Never deploy it. Shared /app is at verified merge M and the actual adapter passed. OUR RELEASE LEASE IS ACTIVE. No publication for this task has been submitted yet. Root owns prepublish/publication/verification; do not change shared source or clear this lease.
+Evidence-only branch. Never deploy it. One authorized publication was submitted; Emergent shows Deployment Started Nov11,10:40PM Riyadh. OUR RELEASE LEASE IS ACTIVE. Do not publish again, change shared source, or clear the lease. Await a newer explicit success, then official verify3/inactive and live card acceptance.
 
 ## Owner request and acceptance
 - Normal Products recent Salla sync: hourly automatic admission, with manual/explicit recovery still available.
@@ -79,3 +79,6 @@ Release-readiness run43086290023 completed successfully. Both fresh clean-clone 
 - Official prepare succeeded at2026-11-11T19:37:57.306854+00:00, protocol5, actor codex-dashboard-card-cadence-20261111. OUR matching lease is active.
 - Production Git source changed; public runtime remains prior version9d4db97 until publication.
 - No task publication yet. Next official prepublish immediately before one authorized publication, newer explicit success, official verify3 and final inactive, then live card acceptance. Preserve frozen A/B and shared M throughout.
+
+## Publication submitted once
+Official prepublish returned ready_to_publish:true with exact A/M/runtime identities. The Publish changes button was clicked once. Emergent explicitly shows Deployment Started Nov11,10:40PM Riyadh and Packaging your latest changes. Prior publication baseline is9d4db97. No new success or production identity claim yet. Own lease actor remains codex-dashboard-card-cadence-20261111. Do not repeat publication or modify/app.
