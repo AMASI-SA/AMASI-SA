@@ -111,3 +111,11 @@ The CI candidate archives expire on 13 November 2026. They are source-candidate 
 Production changed by this task: **no**. Preparation-file creation remains excluded. The 1,087 legacy production audit rows have not been directly changed; bounded recovery takes effect only after the authorized deployment. No invoice, payment, budget, bid, campaign status, target cost, scan or provider synchronization was executed against production.
 
 No unrelated worktree or branch was reset. The main worktree has no tracked pending changes; .test-runtime contains disposable local verification tools/evidence and must not be staged.
+
+## Authorized release resumed — 2026-11-11
+
+The owner explicitly requested continuation, merge and publication, and stated the Emergent session is signed in. Refresh confirmed the authenticated Salla Analytics project. The previous production-authorization blocker is resolved. The preparation exclusion remains binding.
+
+Prerequisite source A remains 7028093e03999191860b91757c8c6246d93a6cd4. Its verified candidate intent is now frozen in intent-only B 02e9c5f25953e87e04ba969b9df44028eecc88c0, tree 0634c14c47af35dd81bbb9292ae62db3f6e785d6. Remote blob 2760c273b39e1620d93382492d0f088a76c4ab2e exactly matches the 1,260,920-byte verified artifact; only release/release-intent-v5.json changes after A. Exact B checks and clean-clone rehearsals are pending.
+
+Production branch still f439bed54579fafb79a8abcb43080c8150cb5063; main task source still b4da6e337e4794a3f6aa5094502c84d38bf18976. No merge, shared /app change, lease or publication has occurred. Next: complete secure terminal access and require guard active=false, inspect successful B checks, mark prerequisite ready and merge with expected-head protection. Then merge updated production ancestry into main, preserving inherited intent, freeze a new combined A/B, require final gates and rehearsal, and publish once under v5.
