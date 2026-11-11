@@ -1,0 +1,49 @@
+{
+  "task_id": "SNAP-SPEND-ONLY-REFRESH-20261111",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pr": 1883,
+  "task_branch": "codex/snapchat-dashboard-refresh-v2-20261111",
+  "source_a": "dcde835e08dbf7c0fe3acb5d2bbe92e7b05588f3",
+  "intent_b": "a908fb0cff5f9f74b90cfbec03a21295a7cceb6e",
+  "deployment_tree": "6089891dbfe1dfb332128d231ef78372496a7d8e",
+  "source_base_j": "4234a88a5e01ce179c5d5711ad80107ecd208a88",
+  "runtime_release_id": "rg5-2592df843af84da961459fe1f158ae677cb5ecd0173cde83483c97372af8070d",
+  "targeted_validation": {
+    "frontend_passed": 132,
+    "managed_mongo_passed": 41,
+    "managed_mongo_skipped": 0,
+    "existing_backend_passed": 87,
+    "independent_review": {
+      "material_findings_remaining": 0,
+      "frontend_passed": 19,
+      "in_memory_cross_layer_passed": 13,
+      "mongo_only_skipped": 2
+    }
+  },
+  "candidate_build": {
+    "node": "22.23.2",
+    "yarn": "1.22.22",
+    "local_clean_builds": 2,
+    "local_ci_intent_identical": true,
+    "intent_sha256": "192235e4e262aee85b4df6d1528d61ef3f139d675060b89f49457fd86922a1fd",
+    "source_ci_run": 43070388891,
+    "artifact": 13878356149,
+    "artifact_zip_sha256": "ae6a061ac58b64559849be1977ff270669dffeb6c79dfb88f8f4ab47e43d73bc",
+    "frontend_artifact_tree_sha256": "be9dcb70201124024db23b07229bf83654b7ff3e94f02bcc653b22c9bbd147f0"
+  },
+  "development_scope_preflight": {
+    "active_snapchat_owners": 0,
+    "provider_requests": 0,
+    "report_fact_writes": 0,
+    "conclusion": "development_environment_has_no_authorized_snapchat_scope; live acceptance deferred"
+  },
+  "release": {
+    "production_changed_by_task": false,
+    "merge": null,
+    "publication": null,
+    "guard_observed_active": false,
+    "exact_b_checks": "in_progress",
+    "own_lease_created": false
+  },
+  "next": "Require exact-B CI and adapter rehearsals, fresh production/guard checks, normal merge, authorized shared adapter build and prepare/prepublish/publication, then verify3 and live spend-only readback."
+}
