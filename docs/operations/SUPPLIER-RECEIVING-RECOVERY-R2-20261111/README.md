@@ -1,7 +1,7 @@
 > **Evidence-only checkpoint — do not deploy this branch.**
 > Deployable candidate is intent-only B `3949adc402ff828d2e15b2d53d8daab54bf821bc` on
-> `codex/supplier-receiving-recovery-r2-20261111`, with final CI passed; production merge/publication awaits separate user
-> authorization. This post-intent document is continuity evidence.
+> `codex/supplier-receiving-recovery-r2-20261111`, with final CI passed and owner authorization now granted for merge/publication.
+> Follow the latest execution checkpoint below; no repeat approval is needed. This post-intent document is continuity evidence.
 
 # Supplier receiving pending-scan regression recovery
 
@@ -338,3 +338,39 @@ Local detailed evidence is under `release-evidence/3949adc4/`:
 `B-validation.json`, `B-rehearsals.json` and `B-ci-proof.json`. Durable proof is
 also in the immutable A/B commits, the linked CI run/jobs, PR #1882 and Issue
 #1006. Re-read this final handoff and the live branch/PR state before resuming.
+
+
+## Authorized publication execution — 2026-11-11 17:12:22 UTC
+
+The owner explicitly instructed to merge, publish and continue now. This
+supersedes every earlier approval-wait statement for this release. The frozen
+A/B pair is unchanged. Fresh B checks now total **40 completed: 30 success and
+10 expected scope/stage skips**, with no failure, pending or neutral check;
+the additional six came from ready-for-review advertising scope triggers.
+
+The preceding PR #1879 release was already live while its official verifier
+held the shared operation mutex. We waited for that verifier to finish; the
+official shared `status` then returned **active:false**. No foreign lease or
+process was cleared or stopped. Shared tracked files were clean at J; the
+visible untracked platform files were preserved.
+
+PR #1882 was normally merged after another fresh GitHub base/head/check read:
+merge **4234a88a5e01ce179c5d5711ad80107ecd208a88**, parents J and frozen B,
+tree **d696d29e828044c808778e95a20e48c3fb93f921**. Its tree is exactly B.
+This preserves source A and the reviewed intent. Publication is authorized
+but has not yet been submitted for this task.
+
+Next: fresh inactive guard and clean tracked-file checks, fast-forward shared
+`/app` to this merge, verify the exact B-equivalent tree, and run the governed
+adapter with bytecode writes disabled and the reviewed public backend origin.
+Retain sanitized build output, then own prepare/prepublish, submit one publish,
+require the newer explicit successful deployment and official verify3/inactive.
+No live receipt cancellation or invoice approval is authorized as a test.
+
+A bounded read-only session diagnostic was attempted but stopped at import
+because the default Python lacks `dotenv`; no database connection or data
+operation occurred. Use an already installed backend interpreter when checking
+the target later. The actual affected session remains unread/unverified.
+
+**Production source branch changed: yes (authorized merge). Production runtime
+changed by this task: no.** No owned release lease or live data mutation yet.
