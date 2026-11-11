@@ -19,6 +19,7 @@ import DashboardAdsSpendCard from "../components/DashboardAdsSpendCard";
 import LatestSoldProductsCard from "../components/LatestSoldProductsCard";
 import { buildPaymentFeeRows } from "../components/ProfitSummaryCard";
 import { useOrders } from "../hooks/useOrders";
+import useCampaignShadowJob from "../hooks/useCampaignShadowJob";
 import { resolveOrderCampaign } from "../lib/orderCampaignAttribution";
 import OrderCurrencyAmount from "../components/OrderCurrencyAmount";
 import { mergeDashboardWithPlatformSpend, needsCanonicalDashboardSpendRefresh } from "../lib/dashboardPlatformSpendMerge";
@@ -157,29 +158,31 @@ function aiActionMeta(item) {
 
 export function CampaignAdvisorCard() {
     const [snapshot, setSnapshot] = useState(null);
-    const [unifiedShadow, setUnifiedShadow] = useState(null);
+    const monitorJob = useCampaignShadowJob(api, "/ads-manager/ai-monitor/manual", 3);
+    const shadowJob = useCampaignShadowJob(api, "/ads-manager/ai-monitor/unified-shadow");
+    const unifiedShadow = shadowJob.snapshot?.result;
     const [loading, setLoading] = useState(true);
     const [approving, setApproving] = useState({});
+    const completedMonitor = monitorJob.snapshot?.result?.snapshot_id;
     useEffect(() => {
         let active = true;
         const load = async () => {
             try {
-                const [latestResult, shadowResult] = await Promise.allSettled([
-                    api.get("/ads-manager/ai-monitor/latest"),
-                    api.get("/ads-manager/ai-monitor/unified-shadow?days=1"),
-                ]);
-                if (active && latestResult.status === "fulfilled") setSnapshot(latestResult.value.data);
-                if (active && shadowResult.status === "fulfilled") setUnifiedShadow(shadowResult.value.data);
+                const { data } = await api.get("/ads-manager/ai-monitor/latest");
+                if (active) setSnapshot(data);
             } catch {
-                if (active) setSnapshot(null);
+                // A failed refresh does not erase the last saved analysis.
             } finally {
                 if (active) setLoading(false);
             }
         };
         load();
-        const timer = window.setInterval(load, 5 * 60 * 1000);
-        return () => { active = false; window.clearInterval(timer); };
-    }, []);
+        return () => { active = false; };
+    }, [completedMonitor]);
+    const latestJob = [monitorJob.snapshot?.job, shadowJob.snapshot?.job].filter(Boolean)
+        .sort((left, right) => Math.max(...[right.requested_at, right.started_at, right.finished_at].map((v) => Date.parse(v) || 0))
+            - Math.max(...[left.requested_at, left.started_at, left.finished_at].map((v) => Date.parse(v) || 0)))[0];
+    const activeKind = latestJob?.active ? latestJob.kind : null;
     const recommendations = (snapshot?.recommendations || []).filter((item) => ["snapchat", "meta", "google"].includes(item.provider));
     const visible = [...recommendations].sort((a, b) => ({ critical: 4, high: 3, medium: 2, low: 1 }[b.priority] || 0) - ({ critical: 4, high: 3, medium: 2, low: 1 }[a.priority] || 0)).slice(0, 5);
     const urgent = recommendations.filter((item) => ["PAUSE_AD", "PAUSE_ADSET", "PAUSE_CAMPAIGN", "DECREASE_BUDGET"].includes(item.recommended_action)).length;
@@ -204,7 +207,7 @@ export function CampaignAdvisorCard() {
                 try {
                     const latest = await api.get("/ads-manager/ai-monitor/latest");
                     setSnapshot(latest.data);
-                } catch { /* the regular five-minute refresh remains available */ }
+                } catch { /* Keep the last saved analysis visible. */ }
             }, 6000);
         } catch (error) {
             window.alert(error?.response?.data?.detail?.message || "تعذّر تنفيذ التوصية بأمان. حدّث التحليل وحاول مجددًا.");
@@ -224,11 +227,40 @@ export function CampaignAdvisorCard() {
             </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-violet-50/60 px-4 py-2 text-[10px] text-violet-900">
-            <span className="font-bold">{loading ? "جارٍ قراءة آخر تحليل…" : (snapshot?.summary || "سيظهر أول تحليل بعد اكتمال التشغيل الدوري.")}</span>
+            <span className="font-bold">{loading ? "جارٍ قراءة آخر تحليل…" : (snapshot?.available === false ? "المراقبة يدوية؛ اضغط تحديث المراقبة عند الحاجة." : snapshot?.summary || "المراقبة يدوية؛ اضغط تحديث المراقبة عند الحاجة.")}</span>
             <div className="flex items-center gap-3 whitespace-nowrap text-violet-600">
                 <span className="flex items-center gap-1"><Clock3 className="h-3 w-3" />{snapshot?.generated_at ? relativeTime(snapshot.generated_at) : "بانتظار أول تشغيل"}</span>
                 <span className="flex items-center gap-1"><ShieldCheck className="h-3 w-3" />Ads write فقط بعد موافقتك</span>
             </div>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-violet-50 px-4 py-2 text-[10px] text-violet-900" data-testid="campaign-monitor-job">
+            <span role="status">
+                {monitorJob.error || (activeKind === "comparison" ? "مقارنة المصادر جارية؛ تتاح المراقبة بعد اكتمالها."
+                    : monitorJob.snapshot?.job?.active
+                    ? monitorJob.pollingPaused ? "التحليل مستمر؛ اضغط عرض الحالة لمتابعته." : "جارٍ تحليل الحملات في الخلفية…"
+                    : monitorJob.snapshot?.job?.status === "failed" ? "تعذر إكمال التحليل؛ آخر تحليل محفوظ ظاهر إن توفر."
+                    : "تشغيل يدوي · فترة الأداء الأساسية 3 أيام · التوصيات تحتاج اعتمادًا مستقلًا للتنفيذ.")}
+            </span>
+            <button type="button" onClick={monitorJob.refresh}
+                disabled={monitorJob.busy || shadowJob.busy || activeKind === "comparison" || (activeKind === "monitor" && !monitorJob.pollingPaused)}
+                className="rounded-lg bg-violet-700 px-3 py-1 font-bold text-white disabled:opacity-50">
+                {monitorJob.snapshot?.job?.active ? "عرض الحالة" : "تحديث المراقبة"}
+            </button>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-slate-50 px-4 py-2 text-[10px] text-slate-600" data-testid="campaign-shadow-job">
+            <span role="status">
+                {shadowJob.error || (activeKind === "monitor" ? "المراقبة جارية؛ تتاح مقارنة المصادر بعد اكتمالها."
+                    : shadowJob.snapshot?.job?.active
+                    ? shadowJob.pollingPaused ? "المقارنة مستمرة؛ اضغط عرض الحالة لمتابعتها." : "جارٍ تحديث المقارنة في الخلفية…"
+                    : shadowJob.snapshot?.job?.status === "failed" ? "تعذر تحديث المقارنة؛ آخر نتيجة محفوظة ظاهرة إن توفرت."
+                    : shadowJob.snapshot?.generated_at ? `آخر مقارنة: ${relativeTime(shadowJob.snapshot.generated_at)}${shadowJob.snapshot.stale ? " · تحتاج تحديثًا" : ""}`
+                    : "مقارنة مصادر البيانات اختيارية ومستقلة عن تحليل الحملات.")}
+            </span>
+            <button type="button" onClick={shadowJob.refresh}
+                disabled={shadowJob.busy || monitorJob.busy || activeKind === "monitor" || (activeKind === "comparison" && !shadowJob.pollingPaused)}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1 font-bold disabled:opacity-50">
+                {shadowJob.snapshot?.job?.active ? "عرض الحالة" : "تحديث المقارنة"}
+            </button>
         </div>
         {unifiedShadow && <div className={`border-b px-4 py-2 text-[10px] font-extrabold ${unifiedShadow.shadow_passed ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`} data-testid="campaign-ai-unified-shadow-status">
             {unifiedShadow.cutover_active

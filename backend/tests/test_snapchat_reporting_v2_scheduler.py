@@ -51,7 +51,7 @@ def test_shadow_scheduler_is_disabled_by_default_and_clamps_interval(monkeypatch
     monkeypatch.delenv(scheduler.ENABLED_ENV, raising=False)
     monkeypatch.setenv(scheduler.INTERVAL_ENV, "1")
     assert scheduler.shadow_scheduler_enabled() is False
-    assert scheduler.shadow_interval_seconds() == 300
+    assert scheduler.shadow_interval_seconds() == 7200
 
 
 @pytest.mark.asyncio
@@ -95,6 +95,7 @@ async def test_shadow_cycle_persists_source_only_result(monkeypatch):
 
         async def run(self, user_id, ad_account_id, **_kwargs):
             assert (user_id, ad_account_id) == ("u1", "a1")
+            assert _kwargs["automatic"] is True
             return {"status": "partial", "sync_run_id": "run-1"}
 
     monkeypatch.setattr(scheduler, "SnapchatV2SyncPipeline", Pipeline)

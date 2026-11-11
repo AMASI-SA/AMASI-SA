@@ -35,9 +35,19 @@ async def main():
     try:
         if action in {'scheduled_scan', 'manual_scan', 'crash_scan'}:
             result = await scans.request_scan(db, tenant='main', owner='owner',
-                manual=action == 'manual_scan', executor=executor)
+                manual=action in {'manual_scan', 'crash_scan'}, executor=executor)
             await db.test_workers.update_one({'_id': label}, {'$set': {'accepted': result['accepted']}})
             await asyncio.gather(*list(scans._TASKS))
+        elif action == 'manual_job':
+            from integrations.qoyod_manual import send_jobs
+            async def deliver(inner, row):
+                await inner.test_invoice_sink.insert_one({'order_number': row['order_number'], 'actor': label})
+                await inner.test_workers.update_one({'_id': label}, {'$set': {'entered': True}})
+                while not await inner.test_control.find_one({'_id': 'release'}):
+                    await asyncio.sleep(.03)
+                return {'invoice_id': 'synthetic-once', 'payment_id': 'synthetic-receipt'}
+            worked = await send_jobs.run_once(db, executor=deliver)
+            await db.test_workers.update_one({'_id': label}, {'$set': {'accepted': worked}})
         elif action in {'failed_lock', 'fresh_lock'}:
             class Collection:
                 async def find_one(self, *args, **kwargs):

@@ -71,11 +71,6 @@ def test_cod_skips_payment_parity_and_payment_post():
     assert 'actual_total_source = "local_expected_invoice_only"' in source
 
 
-def test_unhandled_route_error_releases_lock():
-    source = Path(
-        "integrations/qoyod_manual/routes.py"
-    ).read_text(encoding="utf-8")
-
-    assert '"status": "failed_unhandled"' in source
-    assert "qoyod_manual_send_locks.update_many" in source
-    assert "logger.exception(" in source
+# Durable job tests now exercise cancellation/provider ambiguity and retained
+# invoice locks. The former synchronous-route lock-release assertion no longer
+# applies: an unknown provider outcome must not reopen the send automatically.

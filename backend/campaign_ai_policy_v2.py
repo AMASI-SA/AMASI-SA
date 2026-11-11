@@ -1131,6 +1131,7 @@ async def run_campaign_ai_monitor(
     now: Callable[[], datetime] = _legacy._utcnow,
     refresh_meta: bool = True,
     business_context_loader: Callable[..., Any] | None = None,
+    snapshot_publisher: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
     current = now().astimezone(timezone.utc)
     end = current.astimezone(_legacy.RIYADH_OFFSET).date()
@@ -1454,7 +1455,13 @@ async def run_campaign_ai_monitor(
                 "experiment_memory": "owner_approved_executed_changes_only",
             },
         }
-        await db[RECOMMENDATION_COLLECTION].insert_one(document)
+        if snapshot_publisher is None:
+            await db[RECOMMENDATION_COLLECTION].insert_one(document)
+        else:
+            # The durable manual job publishes under its live claim in the
+            # same transaction as the source snapshot. A stale worker cannot
+            # replace the latest advice after another worker recovers its job.
+            await snapshot_publisher(document)
         await db[RUN_COLLECTION].update_one(
             {"run_id": run_id, "user_id": user_id},
             {"$set": {

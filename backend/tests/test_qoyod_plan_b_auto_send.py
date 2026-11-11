@@ -349,6 +349,7 @@ async def test_stored_salla_id_requires_exact_reference_before_enrichment(
 
 class _UpdateResult:
     modified_count = 1
+    matched_count = 1
 
 
 class _RecoveryLookupCollection:
@@ -549,6 +550,9 @@ class _RunDb:
     def __init__(self):
         self.qoyod_manual_auto_runs = _AutoRunsCollection()
         self.qoyod_manual_auto_quarantines = _QuarantinesCollection()
+        from unittest.mock import AsyncMock
+        self.qoyod_manual_send_jobs = AsyncMock()
+        self.qoyod_manual_send_jobs.find_one.return_value = None
 
 
 def _candidate(order_number, salla_status="تم التنفيذ"):
@@ -640,6 +644,9 @@ async def _prepare_run(
     async def current_lease(db, owner):
         return True
     monkeypatch.setattr(auto_send, '_lease_is_current', current_lease)
+    async def no_abandoned_audits(db, owner):
+        return 0
+    monkeypatch.setattr(auto_send, '_recover_abandoned_runs', no_abandoned_audits)
     monkeypatch.setattr(auto_send, "_release_lease", fake_release)
     monkeypatch.setattr(
         auto_send, "build_candidate_audit", fake_candidate_snapshot
@@ -795,7 +802,7 @@ async def test_actual_total_mismatch_isolated_and_next_candidate_sends(
     assert result["results"][0]["outcome"] == "manual_review"
     assert result["results"][0]["detail"]["invoice_id"] == 900
     assert result["results"][1]["outcome"] == "sent"
-    assert db.qoyod_manual_auto_runs.updated[0][1]["$set"]["status"] == "succeeded"
+    assert db.qoyod_manual_auto_runs.updated[-1][1]["$set"]["status"] == "succeeded"
     quarantine = db.qoyod_manual_auto_quarantines.rows["main:273811870"]
     assert quarantine["status"] == "open"
     assert quarantine["code"] == "qoyod_actual_total_mismatch"

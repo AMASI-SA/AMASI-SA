@@ -100,7 +100,7 @@ async def test_worker_crash_recovers_in_same_slot_after_expiry(real_db):
     await wait_for(expired, seconds=6)
     async def replacement(*args, **kwargs):
         return {'ok': True, 'rows': ['recovered']}, {'count': 0, 'complete': True}
-    result = await scans.request_scan(db, tenant='main', owner='owner', executor=replacement)
+    result = await scans.request_scan(db, tenant='main', owner='owner', manual=True, executor=replacement)
     assert result['accepted'] is True
     await asyncio.gather(*list(scans._TASKS))
     assert (await scans.read_scan(db, tenant='main', owner='owner'))['report']['rows'] == ['recovered']
@@ -132,6 +132,42 @@ def canonical(ref, **extra):
     return {'user_id': 'owner', 'order_number': ref, 'order_date': '2026-11-01',
             'order_status': 'completed', 'payment_method': 'mada', 'payment_status': 'paid',
             'total_amount': 100, **extra}
+
+
+@pytest.mark.asyncio
+async def test_manual_send_durable_job_coalesces_two_processes_and_repeated_clicks(real_db):
+    from integrations.qoyod_manual import send_jobs
+    db, children = real_db
+    owner = {'id': 'owner', 'role': 'owner'}
+    await db.users.insert_one(owner)
+    await db.qoyod_settings.insert_one({'user_id': 'main', 'security_owner_id': 'owner'})
+    await send_jobs.ensure_indexes(db)
+    queued = await asyncio.gather(*[
+        send_jobs.enqueue(db, user=owner, order_number='same-order', request_id=str(i))
+        for i in range(8)])
+    assert len({result['job']['id'] for result in queued}) == 1
+    spawn(db, children, 'manual_job', 'manual-a')
+    spawn(db, children, 'manual_job', 'manual-b')
+    async def ready():
+        return await db.test_workers.count_documents({'ready': True}) == 2
+    await wait_for(ready)
+    await db.test_control.insert_one({'_id': 'start'})
+    async def entered():
+        return await db.test_workers.count_documents({'entered': True}) == 1
+    await wait_for(entered)
+    async def other_done():
+        return await db.test_workers.count_documents({'accepted': False}) == 1
+    await wait_for(other_done)
+    assert await db.test_invoice_sink.count_documents({}) == 1
+    await db.test_control.insert_one({'_id': 'release'})
+    async def done():
+        return await db.test_workers.count_documents({'done': True}) == 2
+    await wait_for(done)
+    result = await send_jobs.read_job(db, user=owner, job_id=queued[0]['job']['id'])
+    assert result['job']['status'] == 'succeeded'
+    assert result['job']['result']['invoice_id'] == 'synthetic-once'
+    assert (await send_jobs.enqueue(db, user=owner, order_number='same-order',
+                                   operation='retry', request_id='again'))['job']['status'] == 'succeeded'
 
 
 @pytest.mark.asyncio

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+from contextvars import ContextVar
 import os
 from typing import Any, Optional
 
@@ -28,6 +29,18 @@ from integrations.qoyod.base_url import normalize_qoyod_api_base
 
 
 MEZAN_MANUAL_VERSION = "plan-b-manual-1.0"
+
+# Set only by the durable manual-job executor. Existing sender callers retain
+# their exact behavior. A job must still own its lease before every POST.
+_JOB_WRITE_GUARD = ContextVar("qoyod_manual_job_write_guard", default=None)
+
+
+def begin_job_write_guard(guard):
+    return _JOB_WRITE_GUARD.set(guard)
+
+
+def end_job_write_guard(token):
+    _JOB_WRITE_GUARD.reset(token)
 
 # Qoyod's supported invoice-list endpoint is the fail-closed fallback when
 # the optional exact-reference filter responds with 404.  The same complete
@@ -138,6 +151,9 @@ class ManualQoyodClient:
         idem: Optional[str] = None,
     ) -> Any:
         url = f"{self._base_url}{path}"
+        guard = _JOB_WRITE_GUARD.get()
+        if guard is not None and method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+            await guard()
         try:
             async with httpx.AsyncClient(
                 timeout=self._timeout,

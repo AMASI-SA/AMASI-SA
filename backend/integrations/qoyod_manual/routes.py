@@ -2,7 +2,8 @@
 
 Endpoints (all mounted under /api/integrations/qoyod/manual):
     GET  /pending-orders            List orders eligible for manual push.
-    POST /send/{order_number}       Push ONE order end-to-end.
+    POST /send/{order_number}       Queue ONE guarded order send.
+    GET  /jobs/{job_id}              Read its durable outcome.
     POST /auto-canary               Run the closed four-order canary.
     GET  /status/{order_number}     Latest manual-send lock row.
     GET  /health                    Frozen-flag + module presence probe.
@@ -208,148 +209,17 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
                     "traceback_tail":    tb_text.splitlines()[-15:],
                 })
 
-    @router.post("/send/{order_number}")
-    async def send_one(order_number: str,
-                       request: Request,
+    @router.post("/send/{order_number}", status_code=202)
+    async def send_one(order_number: str, request: Request,
                        user=Depends(current_user)):
-        actor = "manual-ui"
-        try:
-            username = (user or {}).get("email") or (user or {}).get("id")
-            if username:
-                actor = f"manual-ui:{username}"
-        except Exception:
-            pass
-        try:
-            # A manual recovery request is still an accounting write. Refresh
-            # the order from Salla immediately before the Qoyod path and use
-            # the same closed three-status gate as the automatic worker. This
-            # prevents a stale eligible inbox row from posting an order that
-            # has since moved to a cancelled/refunded state.
-            from integrations.qoyod_manual.auto_send import (
-                _refresh_and_verify_salla_status,
-            )
-            orders_user = orders_owner_id(user)
-            still_eligible, refresh = await _refresh_and_verify_salla_status(
-                db,
-                orders_user_id=orders_user,
-                order_number=str(order_number),
-            )
-            if not still_eligible:
-                snapshot = refresh.get("plan_b_status_snapshot") or {}
-                raise ManualSendRefused(
-                    "not_qoyod_eligible_status",
-                    "حالة الطلب الحالية في سلة ليست ضمن الحالات المسموحة "
-                    "(تم التنفيذ / جاري التوصيل / تم التوصيل)",
-                    {
-                        "order_number": str(order_number),
-                        "current_status": (
-                            snapshot.get("status_native")
-                            or snapshot.get("status_slug")
-                        ),
-                    },
-                )
-            result = await manual_send_one(
-                db, user_id=_TENANT, orders_user_id=orders_user,
-                order_number=str(order_number),
-                actor=actor,
-                # This operator-confirmed path is bounded to explicit order
-                # numbers and already rechecks the live native Salla status.
-                # Qoyod invoice/payment dates remain the send date.
-                allow_missing_salla_order_date=True,
-                allow_historical_positive_total=True)
-            return result
-        except ManualSendRefused as exc:
-            # 409 = business-rule / guard refusal.
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=exc.to_dict())
-        except HTTPException:
-            # Never wrap explicit HTTPException in the diagnostic path.
-            raise
-        except Exception as exc:  # noqa: BLE001
-            # ── Diagnostic Mode (temporary, opt-in) ────────────────
-            # By default the operator sees a plain HTTP 500 with no
-            # payload — the full Python traceback goes ONLY to the
-            # backend logger. This preserves production hygiene.
-            #
-            # To surface the traceback in the API response for a
-            # single call, either:
-            #   • append `?diag=1` to the URL
-            #   • or send header `X-Debug-Diagnostic: 1`
-            # Both routes require the authenticated `Depends(current_user)`,
-            # so a random visitor cannot trigger the diagnostic payload.
-            #
-            # REMOVE THIS ENTIRE except-block once the root cause of
-            # the current 500 is found and fixed.
-            import traceback as _tb
-            import uuid as _uuid
-            ref = _uuid.uuid4().hex[:8]
-            tb_text = _tb.format_exc()
-            logger.exception(
-                "manual/send unhandled_exception order=%s ref=%s",
-                order_number,
-                ref,
-            )
+        from .send_jobs import enqueue
+        return await enqueue(db, user=user, order_number=order_number,
+                             request_id=request.headers.get("Idempotency-Key"))
 
-            # Never leave a manual-send lock hanging after the request
-            # has already terminated with an unexpected exception.
-            try:
-                await db.qoyod_manual_send_locks.update_many(
-                    {
-                        "order_number": str(order_number),
-                        "user_id": _TENANT,
-                        "status": "in_progress",
-                    },
-                    {
-                        "$set": {
-                            "status": "failed_unhandled",
-                            "finished_at": datetime.now(timezone.utc),
-                            "last_error": {
-                                "code": "unhandled_exception",
-                                "error_reference": ref,
-                                "exception_type": type(exc).__name__,
-                                "exception_message": str(exc)[:500],
-                                "traceback_tail":
-                                    tb_text.splitlines()[-15:],
-                            },
-                        }
-                    },
-                )
-            except Exception:
-                logger.exception(
-                    "failed to release manual-send lock "
-                    "order=%s ref=%s",
-                    order_number,
-                    ref,
-                )
-
-            diag_flag = False
-            try:
-                if str(request.query_params.get("diag") or "") == "1":
-                    diag_flag = True
-                if request.headers.get("X-Debug-Diagnostic") == "1":
-                    diag_flag = True
-            except Exception:
-                diag_flag = False
-            if not diag_flag:
-                # Production-hygiene default: HTTP 500, no body detail.
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail={"error_reference": ref})
-            # Diagnostic on: return the last few frames only.
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail={
-                    "code":              "unhandled_exception",
-                    "error_reference":   ref,
-                    "exception_type":    type(exc).__name__,
-                    "exception_message": str(exc)[:500],
-                    "traceback_tail":    tb_text.splitlines()[-20:],
-                    "diagnostic_mode":   True,
-                    "note":              ("هذا الرد التشخيصي مؤقّت — "
-                                           "يُحذَف من الكود بعد إصلاح "
-                                           "السبب الجذري."),
-                })
+    @router.get("/jobs/{job_id}")
+    async def manual_job(job_id: str, user=Depends(current_user)):
+        from .send_jobs import read_job
+        return await read_job(db, user=user, job_id=job_id)
 
     @router.post("/auto-canary")
     async def auto_canary(
@@ -468,44 +338,13 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         )
         return result
 
-    @router.post("/retry-failed/{order_number}")
-    async def retry_failed(order_number: str,
+    @router.post("/retry-failed/{order_number}", status_code=202)
+    async def retry_failed(order_number: str, request: Request,
                            user=Depends(current_user)):
-        """Safely retry one failed order after a fresh Salla status check."""
-        actor = "failed-retry-ui"
-        try:
-            username = (user or {}).get("email") or (user or {}).get("id")
-            if username:
-                actor = f"failed-retry-ui:{username}"
-        except Exception:
-            pass
-
-        try:
-            return await retry_failed_order(
-                db,
-                orders_user_id=orders_owner_id(user),
-                order_number=str(order_number),
-                actor=actor,
-            )
-        except ManualSendRefused as exc:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=exc.to_dict(),
-            )
-        except Exception as exc:  # noqa: BLE001
-            ref = uuid.uuid4().hex[:8]
-            logger.exception(
-                "failed Qoyod retry ref=%s order=%s actor=%s",
-                ref, order_number, actor,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail={
-                    "code": "failed_retry_unexpected",
-                    "message": "تعذر إكمال إعادة الإرسال بأمان",
-                    "error_reference": ref,
-                },
-            ) from exc
+        from .send_jobs import enqueue
+        return await enqueue(db, user=user, order_number=order_number,
+                             operation="retry",
+                             request_id=request.headers.get("Idempotency-Key"))
 
     @router.post("/recheck-payment/{order_number}")
     async def recheck_payment(order_number: str,

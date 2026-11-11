@@ -189,6 +189,7 @@ async def run_campaign_ai_monitor(
     db: Any,
     user_id: str,
     *args: Any,
+    recommendation_only: bool = False,
     **kwargs: Any,
 ):
     _legacy.AsyncOpenAI = AsyncOpenAI
@@ -214,12 +215,13 @@ async def run_campaign_ai_monitor(
             # TikTok availability never discards the other platforms' snapshot.
             import logging
             logging.getLogger(__name__).warning("tiktok_periodic_snapshot_unavailable")
-        from integrations_control_center.tiktok_spend_guard import run_spend_guard
-        try:
-            result = await run_spend_guard(db, user_id, result, current=kwargs.get("now"))
-        except Exception:
-            import logging
-            logging.getLogger(__name__).warning("tiktok_spend_guard_unavailable")
+        if not recommendation_only:
+            from integrations_control_center.tiktok_spend_guard import run_spend_guard
+            try:
+                result = await run_spend_guard(db, user_id, result, current=kwargs.get("now"))
+            except Exception:
+                import logging
+                logging.getLogger(__name__).warning("tiktok_spend_guard_unavailable")
         goal_context = _monthly_goal.current_goal_context()
         snapshot_id = result.get("snapshot_id") if isinstance(result, dict) else None
         if goal_context and snapshot_id:
@@ -228,7 +230,7 @@ async def run_campaign_ai_monitor(
                 {"$set": {"monthly_profit_goal": goal_context}},
             )
             result = {**result, "monthly_profit_goal": goal_context}
-        if snapshot_id:
+        if snapshot_id and not recommendation_only:
             from campaign_ai_snapchat_autonomy import dispatch_snapchat_autonomy
             try:
                 dispatch_options = {"now": kwargs["now"]} if kwargs.get("now") else {}
@@ -248,6 +250,20 @@ async def run_campaign_ai_monitor(
                 )
             except Exception:
                 _legacy.logger.exception("Could not persist Snapchat autonomy status")
+        if snapshot_id and recommendation_only:
+            # Explicit monitoring creates advice only. In particular it must
+            # not dispatch defensive pauses or autonomous budget/status writes.
+            manual = {"trigger": "manual", "automatic_execution": False,
+                      "writes_performed": False, "next_run_at": None,
+                      "decision_interval_hours": None, "manual_job_status": "complete"}
+            for name in ("google_periodic", "tiktok_periodic"):
+                if isinstance(result.get(name), dict):
+                    manual[name] = {**result[name], "source": "campaign_ai_manual",
+                                    "decision_interval_hours": None}
+            await db[RECOMMENDATION_COLLECTION].update_one(
+                {"user_id": user_id, "snapshot_id": snapshot_id}, {"$set": manual},
+            )
+            result = {**result, **manual}
         return result
     finally:
         _monthly_goal.clear_goal_context()
