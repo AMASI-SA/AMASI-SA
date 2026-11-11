@@ -53,8 +53,16 @@ test("the advanced dashboard owns GA4, ads, payment fees, and profit details", (
 
 test("the advanced dashboard retains governed date refresh and latest-snapshot behavior", () => {
     expect(advancedDashboardSource).toContain(
-        'let response = await apiClient.get(`/dashboard-v2?${query.toString()}`',
+        "const result = await loadDashboardPeriodSnapshot({",
     );
+    expect(advancedDashboardSource).toContain('endpoint: "/dashboard-v2/cards/executive"');
+    expect(advancedDashboardSource).toContain(
+        "isLatest: (sequence) => sequence === requestSequenceRef.current",
+    );
+    expect(advancedDashboardSource).toContain(
+        "const visibleData = dataKey === filterKey ? data : null",
+    );
+    expect(advancedDashboardSource).toContain("<ProfitCard data={visibleData}");
     expect(advancedDashboardSource).toContain("isLatest(requestSequence)");
     expect(advancedDashboardSource).not.toContain("setData(null)");
     expect(advancedDashboardSource).toContain("requestSequenceRef");

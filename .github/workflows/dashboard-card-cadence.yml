@@ -104,6 +104,7 @@ jobs:
           src/pages/AdvancedDashboard.mobile.test.jsx
           src/pages/AdvancedDashboard.campaignJobs.test.jsx
           src/components/DashboardPanel.test.jsx
+          src/components/DashboardAnalyticsPlacement.test.js
           src/services/mezanProductsV2.recentSync.test.js
           src/pages/MezanProductsAutoSync.cadence.test.jsx
           src/campaignProfitabilityProductNavigation.test.js
