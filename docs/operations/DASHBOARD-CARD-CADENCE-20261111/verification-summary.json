@@ -66,7 +66,7 @@
     "overlaps_initial_frontend_selection": true
   },
   "independent_reviews": "passed within task scope",
-  "release_state": "publication_submitted_awaiting_explicit_success",
+  "release_state": "explicit_publication_success_official_verify_running",
   "shared_preflight": {
     "active": false,
     "head": "d3c9b0c946afe2418aecf0b96629e46d7f14f196",
@@ -107,7 +107,7 @@
     "cancelled": 0
   },
   "production_git_changed": true,
-  "production_runtime_changed": false,
+  "production_runtime_changed": true,
   "merge_commit": "245a0beccbdbc2585a3ec2214e808eeef3734b57",
   "merge_tree_matches_intent_b": true,
   "merge_parents": [
@@ -136,6 +136,14 @@
     "clicks": 1,
     "started_riyadh": "2026-11-11 22:40",
     "previous_version": "9d4db97",
-    "explicit_success": false
+    "explicit_success": true,
+    "finished_riyadh": "2026-11-11 22:50",
+    "version": "7577839"
+  },
+  "official_verify": {
+    "state": "running",
+    "started_at": "2026-11-11T19:51:54.468999+00:00",
+    "terminal": 4,
+    "full_output": "/tmp/dashboard-cadence-1884-verify.json"
   }
 }

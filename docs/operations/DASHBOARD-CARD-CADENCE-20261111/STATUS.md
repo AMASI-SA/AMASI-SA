@@ -1,7 +1,7 @@
 # DASHBOARD-CARD-CADENCE-20261111
 
 ## State
-Evidence-only branch. Never deploy it. One authorized publication was submitted; Emergent shows Deployment Started Nov11,10:40PM Riyadh. OUR RELEASE LEASE IS ACTIVE. Do not publish again, change shared source, or clear the lease. Await a newer explicit success, then official verify3/inactive and live card acceptance.
+Evidence-only branch. Never deploy it. Emergent explicitly finished the one authorized publication at Nov11,22:50 Riyadh; new version7577839 is green and newer than baseline9d4db97. Official verify3 is running in owned Terminal4 since2026-11-11T19:51:54.468999+00:00. OUR RELEASE LEASE remains active until successful verification. Do not publish again, change shared source, interrupt verification or clear the lease. Live card acceptance is in progress.
 
 ## Owner request and acceptance
 - Normal Products recent Salla sync: hourly automatic admission, with manual/explicit recovery still available.
@@ -82,3 +82,6 @@ Release-readiness run43086290023 completed successfully. Both fresh clean-clone 
 
 ## Publication submitted once
 Official prepublish returned ready_to_publish:true with exact A/M/runtime identities. The Publish changes button was clicked once. Emergent explicitly shows Deployment Started Nov11,10:40PM Riyadh and Packaging your latest changes. Prior publication baseline is9d4db97. No new success or production identity claim yet. Own lease actor remains codex-dashboard-card-cadence-20261111. Do not repeat publication or modify/app.
+
+## Explicit publication success; official verification running
+Emergent shows green Deployment finished Nov11,10:50PM Riyadh and new published version7577839. The baseline was9d4db97. Exactly one publication click was submitted. Official verify was launched at2026-11-11T19:51:54.468999+00:00 in owned Terminal4; full output is captured at/tmp/dashboard-cadence-1884-verify.json and stderr alongside it. No verification success/inactive claim yet. Shared source and frozen release identities remain unchanged.
