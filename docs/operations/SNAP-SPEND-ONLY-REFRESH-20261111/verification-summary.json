@@ -39,11 +39,22 @@
   },
   "release": {
     "production_changed_by_task": false,
-    "merge": null,
+    "merge": {
+      "sha": "d3c9b0c946afe2418aecf0b96629e46d7f14f196",
+      "tree": "6089891dbfe1dfb332128d231ef78372496a7d8e",
+      "normal_merge": true
+    },
     "publication": null,
     "guard_observed_active": false,
-    "exact_b_checks": "in_progress",
-    "own_lease_created": false
+    "exact_b_checks": {
+      "runs": 19,
+      "success": 18,
+      "expected_skipped": 1,
+      "rehearsal_run": 43071281589
+    },
+    "own_lease_created": false,
+    "production_git_branch_changed": true,
+    "production_runtime_changed": false
   },
-  "next": "Require exact-B CI and adapter rehearsals, fresh production/guard checks, normal merge, authorized shared adapter build and prepare/prepublish/publication, then verify3 and live spend-only readback."
+  "next": "Fresh shared guardinactive and tracked-source checks, fast-forward /app to merged d3c9b0c, run actual adapter build, own prepare/prepublish and one authorized publication; verify3/inactive and live spend-only readback."
 }

@@ -46,10 +46,10 @@ Local isolated worktree is based on freshly fetched production. Another conversa
 - PR#1883 is ready for review. SourceA: `dcde835e08dbf7c0fe3acb5d2bbe92e7b05588f3`; intent-onlyB: `a908fb0cff5f9f74b90cfbec03a21295a7cceb6e`; Btree: `6089891dbfe1dfb332128d231ef78372496a7d8e`.
 - Runtime identity: `rg5-2592df843af84da961459fe1f158ae677cb5ecd0173cde83483c97372af8070d`. SourcebaseJ remains `4234a88a5e01ce179c5d5711ad80107ecd208a88`.
 - Governed local two-build proof passed. The frozen intent exactly matches the sourceA CI artifact from run43070388891/artifact13878356149, SHA256`192235e4e262aee85b4df6d1528d61ef3f139d675060b89f49457fd86922a1fd`.
-- Exact-A independent review has no material blockers. Exact-B GitHub jobs and both host adapter rehearsals are in progress; no merge, own lease or publication yet.
+- Exact-A independent review has no material blockers. Exact-B GitHub verification completed:18successful runs and1expected conditional skip; both host adapter rehearsals passed. PR#1883 merged normally as `d3c9b0c946afe2418aecf0b96629e46d7f14f196`, whose tree exactly matches B. No own release lease or publication yet.
 - The shared Release Guard was freshly observed inactive after the supplierR2 verifier finished. A read-only development-database scope check found zero active Snapchat owners, so it made no provider request and wrote no report facts; live account acceptance remains a post-publication check.
 - This evidence branch is documentation only and must never be deployed. FrozenA/B are unchanged.
 
 ## Next safe action
 
-Require exact-B CI and adapter rehearsals, fresh production/guard checks, normal merge, authorized shared adapter build and prepare/prepublish/publication, then verify3 and live spend-only readback.
+Fresh shared guardinactive and tracked-source checks, fast-forward /app to merged d3c9b0c, run actual adapter build, own prepare/prepublish and one authorized publication; verify3/inactive and live spend-only readback.
