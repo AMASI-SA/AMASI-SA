@@ -9,7 +9,7 @@ from datetime import date
 from pydantic import field_validator
 from uuid import uuid5, NAMESPACE_URL
 
-from fastapi import APIRouter, Depends, File, UploadFile, Response, HTTPException
+from fastapi import APIRouter, Depends, File, UploadFile, Response, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import DuplicateKeyError
 
@@ -397,7 +397,7 @@ def make_operational_balance_router(db, current_user):
                 permission = "reports"
             elif re.fullmatch(r"/(inventory-purchases|supplier-adjustments)/entry/[^/]+/.+", path):
                 permission = "move"
-            elif path in {"/reports", "/cost-exposure", "/suppliers", "/supplier-invoice-review", "/financial-position", "/movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
+            elif path in {"/reports", "/cost-exposure", "/suppliers", "/supplier-invoice-review", "/financial-position", "/movements", "/obligations", "/daily-financial-movements"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
                 permission = "reports"
             elif path in {"/customer-returns", "/customer-exchanges"}:
                 permission = "reports"
@@ -853,6 +853,28 @@ def make_operational_balance_router(db, current_user):
         state = await read(db, owner)
         items = state["movements"]
         return {"items": list(reversed(items))}
+
+    @router.get("/daily-financial-movements")
+    async def daily_movements(
+        from_date: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$"),
+        to_date: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$"),
+        page: int = Query(default=1, ge=1),
+        page_size: int = Query(default=10, ge=1, le=10),
+        snapshot: str | None = Query(default=None, pattern=r"^[a-f0-9]{64}$"),
+        user=Depends(current_user),
+    ):
+        from operational_financial_activity import daily_financial_movements
+        actor, owner, _ = await scope(db, user, "reports")
+        if (actor.get("role") == "store_driver" or
+                actor.get("role") != "owner" and user.get("_session_client") != "amasi_mobile"):
+            fail("operational_app_permission_required", "لا توجد صلاحية لهذه الوظيفة", 403)
+        result = await daily_financial_movements(db, owner=owner, actor=actor,
+            from_date=from_date, to_date=to_date, page=page, page_size=page_size, snapshot=snapshot)
+        fresh_actor, fresh_owner, _ = await scope(db, user, "reports")
+        if (fresh_actor["id"] != actor["id"] or fresh_owner != owner
+                or fresh_actor.get("role") != actor.get("role")):
+            fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
+        return result
 
     @router.get("/customer-returns/order/{order_number}")
     async def return_order(order_number: str, user=Depends(current_user)):
