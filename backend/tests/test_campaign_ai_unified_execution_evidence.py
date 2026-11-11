@@ -312,7 +312,10 @@ def test_unified_preflight_preserves_owner_digest_and_revision_guards(evidence):
             return self
 
         async def find_one(self, query, projection, sort=None):
-            return deepcopy(snapshot) if query == {"user_id": "owner-1"} else None
+            assert query.get("manual_job_status") == {"$ne": "building"}
+            if query.get("user_id") != "owner-1" or snapshot.get("manual_job_status") == "building":
+                return None
+            return deepcopy(snapshot)
 
     digest = gate.execution_snapshot_digest("s1", recommendation, target)
     def preflight(user="owner-1", expected=digest):
@@ -325,6 +328,11 @@ def test_unified_preflight_preserves_owner_digest_and_revision_guards(evidence):
         preflight(user="different-owner")
     with pytest.raises(gate.ExecutionQualityBlocked, match="execution_snapshot_drift"):
         preflight(expected="tampered")
+    snapshot["manual_job_status"] = "building"
+    with pytest.raises(gate.ExecutionQualityBlocked, match="execution_snapshot_drift"):
+        preflight()
+    snapshot["manual_job_status"] = "complete"
+    assert preflight()["execution_quality"]["status"] == "complete"
     row["commerce_outcomes"] = {"orders": 3}
     with pytest.raises(gate.ExecutionQualityBlocked, match="execution_source_revision_changed"):
         preflight()
