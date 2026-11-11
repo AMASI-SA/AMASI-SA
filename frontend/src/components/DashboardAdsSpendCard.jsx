@@ -20,7 +20,7 @@ import {
     DASHBOARD_ADS_PROVIDERS,
     getDashboardAdsSpend,
 } from "../services/dashboardAdsSpend";
-import { refreshSnapchatSpend } from "../services/snapchatManualSpendRefresh";
+import { refreshSnapchatSpend, snapchatSpendReadbackMatches } from "../services/snapchatManualSpendRefresh";
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
 const PROVIDER_META = Object.freeze({
@@ -180,6 +180,9 @@ function SnapchatAccountCard({ account, ready, color }) {
         {ready && observed && <time className="mt-1 block text-[9px] text-slate-500" dateTime={observed}>
             آخر رصد: {new Date(observed).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit" })}
         </time>}
+        {available && account.quality?.reason_codes?.includes("snapchat_manual_spend_observation_stale") && <p className="mt-1 text-[9px] leading-4 text-amber-700">
+            هذه آخر قراءة محفوظة. اضغط تحديث لجلب صرف سناب الآن.
+        </p>}
         {noActivity && <p className="mt-1 text-[9px] leading-4 text-amber-700" data-testid="dashboard-snapchat-account-no-activity-hint">
             لم يُرصد نشاط في هذا الحساب حتى آخر فحص. الأرقام أولية وقد تتأخر تقارير سناب.
         </p>}
@@ -258,8 +261,8 @@ export function DashboardAdsSpendCardContent({
                     onClick={onRefresh}
                     disabled={refreshing}
                     className="inline-flex shrink-0 items-center gap-1 rounded-full border border-black/10 bg-white/80 px-2.5 py-1 text-[10px] font-extrabold transition hover:bg-white disabled:cursor-wait disabled:opacity-50"
-                    aria-label="تحديث صرفيات الإعلانات"
-                    title="جلب صرف سناب الآن وتحديث البطاقة"
+                    aria-label="تحديث صرف سناب فقط"
+                    title="جلب صرف سناب فقط للفترة المحددة"
                     data-testid="dashboard-ads-spend-refresh"
                 >
                     <ArrowsClockwise
@@ -474,7 +477,7 @@ export default function DashboardAdsSpendCard({ fromDate, toDate, collapsible = 
             if (requestId.current !== currentRequest) return;
             setData(next);
             setError("");
-            return true;
+            return next;
         } catch (requestError) {
             if (requestId.current !== currentRequest) return;
             const detail = requestError?.response?.data?.detail;
@@ -499,16 +502,21 @@ export default function DashboardAdsSpendCard({ fromDate, toDate, collapsible = 
         const sequence = ++manualSequence.current;
         setManualRefreshing(true);
         setError("");
-        setRefreshStatus("جارٍ جلب صرف سناب…");
+        setRefreshStatus("جارٍ جلب صرف سناب فقط…");
         try {
             const job = await refreshSnapchatSpend({ dateFrom: fromDate,
                 dateTo: toDate || fromDate, signal: controller.signal });
             if (sequence !== manualSequence.current) return;
             const loaded = await load({ refresh: false });
             if (sequence !== manualSequence.current) return;
-            setRefreshStatus(!loaded ? "اكتمل جلب سناب، وتعذر قراءة البيانات الجديدة. أعد المحاولة."
-                : job.status === "partial" ? "اكتمل جلب سناب ببيانات غير مكتملة."
+            if (!loaded || !snapchatSpendReadbackMatches(job, loaded)) {
+                setRefreshStatus("");
+                setError("تم جلب صرف سناب، لكن لم يتأكد ظهور القراءة الجديدة في البطاقة. أعد المحاولة.");
+            } else {
+                setRefreshStatus(job.status === "partial"
+                    ? `تم تحديث صرف سناب لـ ${job.refreshed_count} حساب. تعذر تحديث ${job.failed_count} حساب؛ تظهر آخر بياناته المحفوظة إن توفرت.`
                     : "اكتمل جلب صرف سناب.");
+            }
         } catch (requestError) {
             if (controller.signal.aborted || sequence !== manualSequence.current) return;
             const detail = requestError?.response?.data?.detail;

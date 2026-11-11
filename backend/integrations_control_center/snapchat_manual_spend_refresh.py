@@ -1,25 +1,23 @@
-"""Owner-requested spend refresh through the existing canonical Snapchat writer.
-
-No startup polling or alternate fact writer: a click starts one supervised,
-bounded task. The canonical Mongo/provider lease still excludes other replicas.
-"""
+"""Explicit, bounded account-spend jobs; independent of full reporting sync."""
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime, timezone
-import logging
+from datetime import date, timedelta
+import re
 from typing import Any, Callable
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, model_validator
+from pymongo.errors import DuplicateKeyError
 
-from .snapchat_native_data_common import BUSINESS_TIMEZONE, _timezone
+from snapchat_v2.accounts import list_enabled_accounts
+from snapchat_v2 import manual_spend as spend
 
-START_TIMEOUT_SECONDS = 10
-JOB_TIMEOUT_SECONDS = 25 * 60
-MAX_OWNED_JOBS = 8
 ROUTE = "/ads-auto-sync/snapchat/refresh"
-logger = logging.getLogger(__name__)
+MAX_OWNED_JOBS = 8
+JOB_TIMEOUT_SECONDS = spend.JOB_TIMEOUT_SECONDS
+ACCOUNT_TIMEOUT_SECONDS = spend.ACCOUNT_TIMEOUT_SECONDS
 
 
 class ManualSpendPeriod(BaseModel):
@@ -29,122 +27,223 @@ class ManualSpendPeriod(BaseModel):
 
     @model_validator(mode="after")
     def valid_period(self):
-        today = datetime.now(timezone.utc).astimezone(_timezone(BUSINESS_TIMEZONE)).date()
-        if self.date_to < self.date_from or (self.date_to - self.date_from).days >= 93 or self.date_to > today:
-            raise ValueError("invalid_snapchat_manual_spend_period")
+        spend.period_window(self.date_from, self.date_to, spend.utcnow())
         return self
 
 
-def _safe_job(scheduler: Any, row: dict[str, Any]) -> dict[str, Any]:
-    result = scheduler._safe_provider_run_status(row)
-    summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
-    for field in ("date_from", "date_to"):
-        try:
-            result[field] = date.fromisoformat(str(summary.get(field))).isoformat()
-        except ValueError:
-            result[field] = None
-    return result
+def _safe_job(row: dict[str, Any]) -> dict[str, Any]:
+    results = [{key: result.get(key) for key in
+        ("account_id", "status", "observed_at", "error_code", "snapshot_job_id")}
+        for result in row.get("account_results", [])]
+    refreshed = sum(result["status"] == "complete" for result in results)
+    failed = sum(result["status"] == "failed" for result in results)
+    return {"run_id": row["run_id"], "provider": "snapchat_ads", "scope": spend.SCOPE,
+        "source_mode": spend.SOURCE_MODE, "status": row["status"],
+        "date_from": row["date_from"], "date_to": row["date_to"],
+        "requested_account_ids": [account["ad_account_id"] for account in row["accounts"]],
+        "selected_accounts": len(results), "accounts_attempted": refreshed + failed,
+        "accounts_complete": refreshed, "refreshed_count": refreshed, "failed_count": failed,
+        "account_results": results, "started_at": row.get("started_at"),
+        "finished_at": row.get("finished_at"), "error_code": row.get("error_code"),
+        "source_only": True, "provider_write_reached": False, "campaign_write_reached": False,
+        "accounting_write_reached": False, "qoyod_write_reached": False}
+
+
+def _error_code(exc: BaseException) -> str:
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)):
+        return "manual_spend_account_timeout"
+    code = getattr(exc, "code", None)
+    if not code and isinstance(exc, ValueError):
+        code = str(exc)
+    return code if isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,95}", code) else "manual_spend_account_failed"
+
+
+def _terminal(results: list[dict[str, Any]], *, error_code: str) -> tuple[str, list[dict[str, Any]]]:
+    final = [dict(result) if result.get("status") in {"complete", "failed"} else
+        {**result, "status": "failed", "error_code": error_code,
+         "observed_at": None, "snapshot_job_id": None} for result in results]
+    complete = sum(result["status"] == "complete" for result in final)
+    return ("complete" if final and complete == len(final) else "partial" if complete else "failed"), final
 
 
 class ManualSpendJobs:
-    def __init__(self, db: Any):
-        self.db = db
-        self.owned: dict[str, dict[str, Any]] = {}
+    def __init__(self, db: Any, *, now: Callable = spend.utcnow, client_factory: Callable | None = None):
+        self.db, self.now, self.client_factory = db, now, client_factory
+        self.owned: dict[str, asyncio.Task] = {}
 
-    async def _active(self, user_id: str, period: ManualSpendPeriod) -> dict[str, Any] | None:
-        from . import ads_auto_sync_scheduler as scheduler
-        active = await scheduler._active_run(self.db, user_id=user_id,
-            provider=scheduler.SNAPCHAT_PROVIDER_ID, now=scheduler._utcnow())
-        if not active:
-            return None
-        row = await self.db[scheduler.RUNS_COLLECTION].find_one({
-            "user_id": user_id, "run_id": active["run_id"],
-            "provider": scheduler.SNAPCHAT_PROVIDER_ID, "run_type": scheduler.SNAP_RUN_TYPE,
-        })
-        if row:
-            job = _safe_job(scheduler, row)
-            if job.get("date_from") and job.get("date_to") and job["date_from"] <= period.date_from.isoformat() and job["date_to"] >= period.date_to.isoformat():
-                return job
-        raise HTTPException(409, detail={"code": "snapchat_sync_in_progress",
-            "message": "يوجد تحديث سناب جارٍ. انتظر اكتماله ثم أعد المحاولة."})
+    async def _indexes(self) -> None:
+        # The default _id uniqueness protects immutable jobs/snapshots. This
+        # partial index makes admission atomic across processes and replicas.
+        await self.db[spend.JOBS_COLLECTION].create_index("user_id", unique=True,
+            partialFilterExpression={"active": True}, name="manual_spend_one_active_owner")
+        await self.db[spend.JOBS_COLLECTION].create_index("expires_at", expireAfterSeconds=0,
+            name="manual_spend_jobs_retention")
+        await self.db[spend.JOBS_COLLECTION].create_index(
+            [("user_id", 1), ("date_from", 1), ("date_to", 1), ("finished_at", -1)],
+            name="manual_spend_owner_period_jobs")
+        await self.db[spend.COLLECTION].create_index("expires_at", expireAfterSeconds=0,
+            name="manual_spend_snapshots_retention")
+        await self.db[spend.COLLECTION].create_index(
+            [("user_id", 1), ("ad_account_id", 1), ("date_from", 1), ("date_to", 1), ("observed_at", -1)],
+            name="manual_spend_period_observations")
+
+    async def _recover(self, user_id: str) -> None:
+        current = spend.stored_time(self.now())
+        collection = self.db[spend.JOBS_COLLECTION]
+        for _ in range(2):
+            row = await collection.find_one(
+                {"user_id": user_id, "active": True, "deadline_at": {"$lte": current}})
+            if not row:
+                return
+            status, results = _terminal(row["account_results"], error_code="manual_spend_worker_abandoned")
+            changed = await collection.update_one(
+                {"_id": row["_id"], "user_id": user_id, "active": True,
+                    "revision": row["revision"], "deadline_at": {"$lte": current}},
+                {"$set": {"active": False, "status": status, "account_results": results,
+                    "finished_at": current, "error_code": "manual_spend_worker_abandoned"},
+                 "$inc": {"revision": 1}})
+            if changed.matched_count == 1:
+                return
+
+    def _schedule(self, row: dict[str, Any]) -> None:
+        run_id = row["run_id"]
+        if row["status"] != "queued" or run_id in self.owned or len(self.owned) >= MAX_OWNED_JOBS:
+            return
+        task = asyncio.create_task(self._execute(row["user_id"], run_id), name="manual-snapchat-spend-only")
+        self.owned[run_id] = task
+
+        def done(completed):
+            if self.owned.get(run_id) is completed:
+                self.owned.pop(run_id, None)
+            if not completed.cancelled():
+                completed.exception()
+
+        task.add_done_callback(done)
 
     async def request(self, user_id: str, period: ManualSpendPeriod) -> dict[str, Any]:
-        current = self.owned.get(user_id)
-        if current is None:
-            active = await self._active(user_id, period)
+        user_id = str(user_id)
+        current = spend.stored_time(self.now())
+        spend.period_window(period.date_from, period.date_to, current)
+        try:
+            accounts = sorted([spend.account_identity(row) for row in await list_enabled_accounts(self.db, user_id)],
+                              key=lambda row: row["ad_account_id"])
+        except (ValueError, KeyError):
+            raise HTTPException(409, detail={"code": "manual_spend_account_identity_invalid"}) from None
+        if not accounts:
+            raise HTTPException(409, detail={"code": "manual_spend_no_enabled_accounts"})
+        if len(accounts) > spend.MAX_ACCOUNTS or len({row["ad_account_id"] for row in accounts}) != len(accounts):
+            raise HTTPException(422, detail={"code": "manual_spend_account_limit"})
+        await self._indexes()
+        await self._recover(user_id)
+        collection = self.db[spend.JOBS_COLLECTION]
+        for _ in range(2):
+            active = await collection.find_one({"user_id": user_id, "active": True})
             if active:
-                return active
-            # A second request may have completed that lookup in the same loop.
-            current = self.owned.get(user_id)
-        if current is None:
+                if (active.get("scope") != spend.SCOPE or active.get("date_from") != period.date_from.isoformat()
+                        or active.get("date_to") != period.date_to.isoformat() or active.get("accounts") != accounts):
+                    raise HTTPException(409, detail={"code": "snapchat_sync_in_progress",
+                        "message": "يوجد تحديث صرف سناب جارٍ لفترة أو حسابات أخرى."})
+                self._schedule(active)
+                return _safe_job(active)
             if len(self.owned) >= MAX_OWNED_JOBS:
                 raise HTTPException(503, detail={"code": "snapchat_manual_refresh_busy"})
-            started = asyncio.get_running_loop().create_future()
-            task = asyncio.create_task(self._execute(user_id, period, started),
-                                       name="manual-snapchat-spend-refresh")
-            current = {"task": task, "started": started, "period": period}
-            self.owned[user_id] = current
+            run_id = str(uuid4())
+            row = {"_id": run_id, "run_id": run_id, "user_id": user_id, "provider": "snapchat_ads",
+                "scope": spend.SCOPE, "source_mode": spend.SOURCE_MODE, "active": True, "status": "queued", "revision": 0,
+                "date_from": period.date_from.isoformat(), "date_to": period.date_to.isoformat(),
+                "accounts": accounts, "created_at": current, "started_at": None, "finished_at": None,
+                "expires_at": current + spend.RECORD_RETENTION,
+                "deadline_at": current + timedelta(seconds=JOB_TIMEOUT_SECONDS),
+                "account_results": [{"account_id": account["ad_account_id"], "status": "queued",
+                    "observed_at": None, "error_code": None, "snapshot_job_id": None} for account in accounts]}
+            try:
+                await collection.insert_one(row)
+            except DuplicateKeyError:
+                continue
+            self._schedule(row)
+            return _safe_job(row)
+        raise HTTPException(503, detail={"code": "snapchat_manual_refresh_busy"})
 
-            def completed(done):
-                if self.owned.get(user_id) is current:
-                    self.owned.pop(user_id, None)
-                if not done.cancelled():
-                    done.exception()
-                if started.done() and not started.cancelled():
-                    started.exception()
+    async def _authorized(self, user_id: str, frozen: dict[str, Any]) -> None:
+        rows = await list_enabled_accounts(self.db, user_id)
+        if not any(spend.account_identity(row) == frozen for row in rows):
+            raise ValueError("manual_spend_account_changed")
 
-            task.add_done_callback(completed)
-        selected = current["period"]
-        if selected.date_from > period.date_from or selected.date_to < period.date_to:
-            raise HTTPException(409, detail={"code": "snapchat_sync_in_progress"})
+    async def _finish(self, user_id: str, run_id: str, token: str, error_code: str) -> None:
+        query = {"_id": run_id, "user_id": user_id, "active": True, "worker_token": token}
+        row = await self.db[spend.JOBS_COLLECTION].find_one(query)
+        if row:
+            status, results = _terminal(row["account_results"], error_code=error_code)
+            await self.db[spend.JOBS_COLLECTION].update_one({**query, "revision": row["revision"]}, {"$set": {
+                "active": False, "status": status, "account_results": results,
+                "finished_at": spend.stored_time(self.now()),
+                "error_code": error_code if status != "complete" else None}, "$inc": {"revision": 1}})
+
+    async def _execute(self, user_id: str, run_id: str) -> None:
+        collection = self.db[spend.JOBS_COLLECTION]
+        current, token = spend.stored_time(self.now()), str(uuid4())
+        claim = await collection.update_one({"_id": run_id, "user_id": user_id,
+            "active": True, "status": "queued", "deadline_at": {"$gt": current}},
+            {"$set": {"status": "running", "started_at": current, "worker_token": token}, "$inc": {"revision": 1}})
+        if claim.matched_count != 1:
+            return
+        query = {"_id": run_id, "user_id": user_id, "active": True, "worker_token": token}
+        row = await collection.find_one(query)
+        if row is None:
+            return
+        budget = {"used": 0}
+
+        async def work():
+            for index, account in enumerate(row["accounts"]):
+                guarded = {**query, "deadline_at": {"$gt": spend.stored_time(self.now())}}
+                if not await collection.find_one(guarded, {"_id": 1}):
+                    return
+                result = {"account_id": account["ad_account_id"], "status": "failed",
+                          "observed_at": None, "snapshot_job_id": None, "error_code": None}
+                try:
+                    async def fetch():
+                        await self._authorized(user_id, account)
+                        snapshot = await spend.fetch_manual_spend(self.db, user_id=user_id, account=account,
+                            date_from=date.fromisoformat(row["date_from"]), date_to=date.fromisoformat(row["date_to"]),
+                            job_id=run_id, requested_at=spend.stored_time(row["created_at"]), now=self.now,
+                            client_factory=self.client_factory, job_budget=budget)
+                        await self._authorized(user_id, account)
+                        return snapshot
+                    snapshot = await asyncio.wait_for(fetch(), ACCOUNT_TIMEOUT_SECONDS)
+                    # Immutable candidates become visible only after the parent
+                    # terminal CAS and matching successful account proof.
+                    await self.db[spend.COLLECTION].insert_one(snapshot)
+                    result.update(status="complete", observed_at=snapshot["observed_at"], snapshot_job_id=run_id)
+                except Exception as exc:
+                    result["error_code"] = _error_code(exc)
+                changed = await collection.update_one(
+                    {**query, "deadline_at": {"$gt": spend.stored_time(self.now())}},
+                    {"$set": {f"account_results.{index}": result}, "$inc": {"revision": 1}})
+                if changed.matched_count != 1:
+                    return
+
         try:
-            return await asyncio.wait_for(asyncio.shield(current["started"]), START_TIMEOUT_SECONDS)
-        except asyncio.TimeoutError as exc:
-            # The coordinator retains ownership. A retry joins this same task;
-            # it never creates a second provider call after an ambiguous reply.
-            raise HTTPException(503, detail={"code": "snapchat_refresh_start_unconfirmed",
-                "message": "تعذر تأكيد بدء التحديث الآن. أعد المحاولة بعد قليل."}) from exc
-
-    async def _execute(self, user_id: str, period: ManualSpendPeriod, started) -> None:
-        from . import ads_auto_sync_scheduler as scheduler
-
-        def registered(run_id: str):
-            if not started.done():
-                started.set_result({"run_id": run_id, "provider": scheduler.SNAPCHAT_PROVIDER_ID,
-                    "run_type": scheduler.SNAP_RUN_TYPE, "status": "running",
-                    "date_from": period.date_from.isoformat(), "date_to": period.date_to.isoformat()})
-
-        async def run():
-            return await scheduler._refresh_snapchat(self.db, user_id=user_id,
-                start_date=period.date_from, end_date=period.date_to, now=scheduler._utcnow(),
-                manual=True, on_started=registered)
-
-        try:
-            await asyncio.wait_for(run(), JOB_TIMEOUT_SECONDS)
-            if not started.done():
-                # Another replica can acquire the provider lease after our
-                # initial read. Join only a canonical run covering this range.
-                active = await self._active(user_id, period)
-                if active:
-                    started.set_result(active)
-                else:
-                    started.set_exception(HTTPException(503, detail={
-                        "code": "snapchat_manual_refresh_unavailable",
-                        "message": "تعذر بدء جلب صرف سناب الآن.",
-                    }))
+            remaining = max(0.01, (spend.stored_time(row["deadline_at"]) - spend.stored_time(self.now())).total_seconds())
+            await asyncio.wait_for(work(), min(JOB_TIMEOUT_SECONDS, remaining))
+            await self._finish(user_id, run_id, token, "manual_spend_incomplete")
+        except (TimeoutError, asyncio.TimeoutError):
+            await self._finish(user_id, run_id, token, "manual_spend_job_timeout")
         except asyncio.CancelledError:
-            if not started.done():
-                started.cancel()
+            await asyncio.shield(self._finish(user_id, run_id, token, "manual_spend_worker_stopped"))
             raise
-        except Exception as exc:
-            logger.warning("Manual Snapchat spend job failed exception_type=%s",
-                           scheduler._safe_exception_type(exc))
-            if not started.done():
-                started.set_exception(exc if isinstance(exc, HTTPException) else HTTPException(503,
-                    detail={"code": "snapchat_manual_refresh_unavailable"}))
+        except Exception:
+            await self._finish(user_id, run_id, token, "manual_spend_worker_failed")
+
+    async def read(self, user_id: str, run_id: str) -> dict[str, Any]:
+        await self._recover(str(user_id))
+        row = await self.db[spend.JOBS_COLLECTION].find_one({"_id": run_id,
+            "user_id": str(user_id), "scope": spend.SCOPE})
+        if not row:
+            raise HTTPException(404, detail="snapchat_refresh_not_found")
+        return _safe_job(row)
 
     async def stop(self) -> None:
-        tasks = [entry["task"] for entry in self.owned.values()]
+        tasks = list(self.owned.values())
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -164,13 +263,7 @@ def attach_manual_spend_routes(router: APIRouter, db: Any,
 
     @router.get(f"{ROUTE}/{{run_id}}", name="read_manual_snapchat_spend_refresh")
     async def read_manual_spend(run_id: str, user: dict = Depends(current_user)):
-        from . import ads_auto_sync_scheduler as scheduler
         owner = require_owner(user)
-        row = await db[scheduler.RUNS_COLLECTION].find_one({"user_id": str(owner["id"]),
-            "run_id": run_id, "provider": scheduler.SNAPCHAT_PROVIDER_ID,
-            "run_type": scheduler.SNAP_RUN_TYPE})
-        if not row:
-            raise HTTPException(404, detail="snapchat_refresh_not_found")
-        return _safe_job(scheduler, row)
+        return await jobs.read(str(owner["id"]), run_id)
 
     router.on_shutdown.append(jobs.stop)
