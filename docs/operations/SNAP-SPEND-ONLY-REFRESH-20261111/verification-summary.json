@@ -53,7 +53,7 @@
       "baseline": "2e328d9",
       "proof_file": "snap-spend-1883-published.png"
     },
-    "guard_observed_active": true,
+    "guard_observed_active": false,
     "exact_b_checks": {
       "runs": 19,
       "success": 18,
@@ -81,7 +81,7 @@
       "deployment_git_sha": "d3c9b0c946afe2418aecf0b96629e46d7f14f196",
       "release_id": "rg5-2592df843af84da961459fe1f158ae677cb5ecd0173cde83483c97372af8070d"
     },
-    "own_lease_active": true,
+    "own_lease_active": false,
     "publish_submitted": true,
     "prepublish": {
       "exit_code": 0,
@@ -89,13 +89,33 @@
       "exact_identities_match": true
     },
     "verification": {
-      "status": "running",
-      "command": "python -B scripts/production_release_guard.py verify --url https://mezansalla.com",
-      "terminal": "owned Terminal 6",
-      "output": "/tmp/snap-spend-1883-verify.json"
-    }
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 676.25,
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "dcde835e08dbf7c0fe3acb5d2bbe92e7b05588f3",
+      "source_base_git_sha": "4234a88a5e01ce179c5d5711ad80107ecd208a88",
+      "deployment_git_sha": "d3c9b0c946afe2418aecf0b96629e46d7f14f196",
+      "release_id": "rg5-2592df843af84da961459fe1f158ae677cb5ecd0173cde83483c97372af8070d",
+      "boot_started_at": "2026-11-11T18:09:30.052989+00:00",
+      "frontend_artifact_tree_sha256": "be9dcb70201124024db23b07229bf83654b7ff3e94f02bcc653b22c9bbd147f0",
+      "final_guard_active": false,
+      "output": "/tmp/snap-spend-1883-verify.json",
+      "final_status_output": "/tmp/snap-spend-1883-final-status.json",
+      "gates_verified_by_official_command": [
+        "verified_identity_available",
+        "critical_file_hashes_match",
+        "backend_runtime_source_verified",
+        "release_control_source_bound",
+        "frontend_build_verified",
+        "canonical_and_cache_busted_exact_public_bytes_and_json_content_type"
+      ],
+      "observed_complete_at": "2026-11-11T18:22:58Z"
+    },
+    "release_accepted": true
   },
-  "next": "Functional acceptance passed. Allow official verify3 to finish, require exact identities and final guard inactive; then persist final evidence and close continuation ledger entry.",
+  "next": "Completed. No further deployment or source change required for this task. Follow-on legacy retirement requires migrating identified active consumers before disabling any native scheduler.",
   "live_acceptance": {
     "status": "passed",
     "dashboard_url": "https://mezansalla.com/dashboard-advanced",

@@ -1,70 +1,66 @@
-# Snapchat dashboard spend-only refresh — 2026-11-11
+# Snapchat spend-only refresh — final status
 
-## Scope and authorization
+**2026-11-11 — COMPLETE: published, live button acceptance passed, official verification passed three times, final release lease inactive.**
 
-The owner requested that the dashboard advertising-expense refresh button fetch Snapchat spend only, for the selected period and enabled accounts, without campaign statistics or other providers. The owner also requested an audit of old Mezan paths and stopping them only if unused. Earlier authorization to merge and publish the performance repairs remains in the conversation. Preparation-file creation remains excluded.
+## Release identity
 
-Task branch: `codex/snapchat-dashboard-refresh-v2-20261111`.
-Reviewed starting production commit: `4234a88a5e01ce179c5d5711ad80107ecd208a88`.
-Starting tree: `d696d29e828044c808778e95a20e48c3fb93f921`.
+| Item | Frozen identity |
+| --- | --- |
+| Source A | `dcde835e08dbf7c0fe3acb5d2bbe92e7b05588f3` |
+| Intent-only B | `a908fb0cff5f9f74b90cfbec03a21295a7cceb6e` |
+| Merged production M | `d3c9b0c946afe2418aecf0b96629e46d7f14f196` |
+| Pull request | #1883 |
+| Verified runtime release | `rg5-2592df843af84da961459fe1f158ae677cb5ecd0173cde83483c97372af8070d` |
+| New publication | `9d4db97`, 21:10 Asia/Riyadh |
 
-## Confirmed defect and intended repair
+B contains the frozen release intent for A. The reviewed producer, reader, and button files match merged M. Official production verification established that the observed deployed identity exactly matches the frozen release intent.
 
-The button currently calls the native legacy refresh while the visible amount is read through the unified reporting V2 reader. A completed legacy job does not prove the displayed amount refreshed.
+## Implemented scope
 
-Implement a bounded asynchronous account-level HOUR stats request with `fields=spend` and no breakdown; split requests into at most seven-day windows. Freeze the authorized enabled account scope and selected Riyadh period. Publish independently validated spend observations in a separate collection, and consume them only as provisional dashboard presentation data using the existing account FX authority. Do not change financial facts, close proofs, reconciliation, campaign metrics, or the two-hour automatic cadence.
+The dashboard button now requests Snapchat **spend only** for the selected Riyadh date period and the enabled accounts captured when the job starts. It uses account-level hourly statistics with `fields=spend`, without a breakdown. It does not fetch campaign, ad, conversion, or hierarchy statistics. The asynchronous job returns promptly and exposes account outcomes while the page polls for completion.
 
-Do not invoke the full V2 pipeline, old native refresh, entity discovery, conversions, AI, or other provider refreshes from this button. Completion must reflect per-account provider evidence and matching dashboard readback.
+Successful observations are stored separately and read through the actual unified dashboard reader as provisional spend. Existing currency conversion and bank-fee rules remain authoritative. The refresh does not alter canonical financial facts, reconciliation or closing proofs, campaign metrics, or ledger entries. A newer canonical result replaces a manual observation only when the requested period is ready for display, including the required financial-source and reconciliation evidence.
 
-## Legacy audit
+The frontend checks the job scope, dates, account outcomes, and refreshed dashboard observations before showing completion. A successful provider request alone cannot produce a success message. Partial failures are explicit, previous valid readings remain available, and an unchanged amount is valid when the observation is newly confirmed. Missing hourly data is not interpreted as zero.
 
-The native legacy producer is not unused. It feeds the reachable all-platform Ads Manager and native Snapchat reports. The current Mezan 2 Snapchat entity-settings API and creative metadata enrichment also read the rich legacy entity catalogue. The much older Ads V2 Snapchat connection/sync is already explicitly frozen. No wholesale scheduler disable or data deletion is justified by this audit.
+## Bounded execution
 
-## Implementation ownership
+The job allows at most 10 enabled accounts, a 93-day selected period, seven-day provider windows, and 128 provider HTTP attempts. Limits are 15 seconds per HTTP request, 120 seconds per account, and 300 seconds per job. Frontend polling has a six-minute overall deadline and does not automatically retry the submission request.
 
-- Backend producer/job: `backend/snapchat_v2/manual_spend.py`, `backend/integrations_control_center/snapchat_manual_spend_refresh.py`, and its existing tests.
-- Root: unified dashboard reader, frontend refresh/readback, task documentation and release coordination.
-- Independent regression agent: new `backend/tests/test_snapchat_reporting_v2_manual_spend_dashboard.py`.
+Frozen account identity, authorization rechecks, an active-job uniqueness constraint, and revision-fenced claims and recovery prevent duplicate execution and stale workers overwriting newer results. Snapshots are eligible for display for 24 hours, become visibly stale after two hours, and have seven-day storage retention. Unsupported account-hour requests fail explicitly without falling back to heavy campaign synchronization.
 
-## Verification and release state
+## Validation and independent review
 
-Implementation and targeted validation are complete; final GitHub/release gates remain pending. Production changed: **no** for this task. Recoverable WIP checkpoint: `d78290f895fd2ab30db694fa4a317bfa1efb9548`.
+| Evidence | Result |
+| --- | --- |
+| Affected frontend suites | 132 unique tests passed |
+| Disposable MongoDB 7 producer-to-dashboard and job tests | 41 passed; zero skipped |
+| Existing affected backend reader and operational tests | 87 passed |
+| CI workflow runs at exact B | 18 successful; one expected conditional skip |
+| Actual shared-adapter frontend build | Passed in 62.84 seconds |
 
-- The dedicated manual route now freezes enabled account identities and the exact Riyadh period; durable admission/worker claims prevent duplicate work. It fetches only account HOUR spend, validates every returned hour, and publishes immutable per-account observations behind terminal job evidence. HTTP400 cannot trigger a campaign fallback. Runtime/request budgets and seven-day retention bound the job/observation storage; presentation accepts observations for at most24hours and labels those older than2hours.
-- The unified dashboard reader consumes the same validated observations with the existing account FX authority. Display remains provisional; canonical financial/hierarchy facts and close proofs are unchanged. Newer canonical data supersedes only when every day and every source run are display-ready. An independent review found an unreconciled-canonical fallback defect; the full reader readiness gate and permanent regressions now cover it.
-- The frontend verifies spend-only job scope, exact dates, all requested account results, and genuinely newer dashboard observation times before success. Partial failures are explicit. Unchanged numeric spend can legitimately succeed; stale readback cannot.
-- Root frontend verification: eight affected suites,132unique tests passed (refresh service/component, main card, shared cache, normalization, executive-spend merge/interceptor and dashboard order loading), all invocations exit0. The final19-test refresh rerun includes finite15second POST/status transport timeouts, the six-minute overall observation deadline and no automatic POST retry.
-- Independent managed Mongo7 verification:41tests passed,0skipped, exit0 in5.58seconds, using a disposable loopback database and fake provider HTTP boundary. This includes15 real producer-to-dashboard cases plus26 manual route/producer cases. Coverage includes a revision-fenced abandoned-worker recovery interleaving, DST and disabling an account during a fetch. No live provider or production database was used.
-- Existing affected backend reader/operational regressions:87passed, exit0 in2.51seconds. Combined targeted backend coverage is128passing tests.
-- Independent implementation review found two concrete issues (unreconciled canonical supersession and an unbounded stalled frontend request); both are fixed and covered. The current review reports no additional material scope/security issue. The final verdict will be bound to the exact candidate SHA in the continuation ledger.
-- Command: validation venv Python with `PYTHONDONTWRITEBYTECODE=1`, new-worktree `PYTHONPATH`, disposable `ADS_LEASE_TEST_MONGO_PORT`, `-m pytest -p snapchat_v2_test_bootstrap backend/tests/test_snapchat_reporting_v2_manual_spend_dashboard.py backend/tests/test_snapchat_manual_spend_refresh.py -q --tb=short`. The harness stops Mongo and cleans its temporary database.
+The MongoDB tests exercise the real producer, parser, publication rules, and dashboard reader with provider HTTP responses controlled at the transport boundary. Coverage includes currency/timezone handling, DST, explicit zero versus missing data, partial failures, account disablement during a request, frozen periods, duplicate claims, and canonical supersession. Local validation did not access production data or live providers.
 
-Local isolated worktree is based on freshly fetched production. Another conversation has been releasing supplier-receiving PR1882. Before any shared `/app` change or rehearsal, check the latest production ref and Release Guard with `python -B scripts/production_release_guard.py status`; proceed only with `active:false`. Preserve unrelated work. No lease or deployment was started for this task.
+Independent review identified premature supersession by unreconciled canonical data and an unbounded frontend transport wait. Both were corrected and covered by regressions. The reviewed scope had no additional material issue reported before publication.
 
-## Frozen release checkpoint
+## Production acceptance
 
-- PR#1883 is ready for review. SourceA: `dcde835e08dbf7c0fe3acb5d2bbe92e7b05588f3`; intent-onlyB: `a908fb0cff5f9f74b90cfbec03a21295a7cceb6e`; Btree: `6089891dbfe1dfb332128d231ef78372496a7d8e`.
-- Runtime identity: `rg5-2592df843af84da961459fe1f158ae677cb5ecd0173cde83483c97372af8070d`. SourcebaseJ remains `4234a88a5e01ce179c5d5711ad80107ecd208a88`.
-- Governed local two-build proof passed. The frozen intent exactly matches the sourceA CI artifact from run43070388891/artifact13878356149, SHA256`192235e4e262aee85b4df6d1528d61ef3f139d675060b89f49457fd86922a1fd`.
-- Exact-A independent review has no material blockers. Exact-B GitHub verification completed:18successful runs and1expected conditional skip; both host adapter rehearsals passed. PR#1883 merged normally as `d3c9b0c946afe2418aecf0b96629e46d7f14f196`, whose tree exactly matches B. No own release lease or publication yet.
-- The shared Release Guard was freshly observed inactive after the supplierR2 verifier finished. A read-only development-database scope check found zero active Snapchat owners, so it made no provider request and wrote no report facts; live account acceptance remains a post-publication check.
-- This evidence branch is documentation only and must never be deployed. FrozenA/B are unchanged.
+After publication `9d4db97`, the release owner observed one button click at **18:12:21.690 UTC** and visible success at **18:12:40.549 UTC**, success was observed within **18.859 seconds** of the click. Both enabled Snapchat accounts advanced their displayed observation time to **21:12 Riyadh**, and their native spend changed. Other providers' amounts remained unchanged. The provisional label was correct.
 
-## Next safe action
+This interval is an upper bound from two UI observations for that invocation, not a provider-job latency benchmark or a general performance percentage. No amounts, account identifiers, or customer data are included here.
 
-Fresh shared guardinactive and tracked-source checks, fast-forward /app to merged d3c9b0c, run actual adapter build, own prepare/prepublish and one authorized publication; verify3/inactive and live spend-only readback.
+## Legacy dependencies and exclusions
 
+The older native Snapchat scheduler was retained because reachable consumers still use its daily performance and rich entity snapshots: the ads-manager overview, the native campaign workspace, and management settings on the current Snapchat accounts page. The newer reporting pipeline writes different collections. Dashboard spend migration alone therefore does not establish that the older writer is unused. This button bypasses heavy synchronization; retiring the older writer requires migrating its remaining consumers first.
 
-## Shared platform prepare checkpoint — 2026-11-11T17:57Z
+Preparation batch/file creation and the existing two-hour automatic Snapchat cadence were outside this change and remain unchanged.
 
-Shared `/app` was fast-forwarded from expected J to merge M only after a fresh inactive guard and clean tracked-source check; unrelated untracked files were preserved. Actual `emergent_deployment_adapter.py build` passed (exit0,62.84seconds). Generated identity matches frozen A/J/runtime. Official prepare succeeded at `2026-11-11T17:57:00.106139+00:00`, protocol5, actor `codex-snap-spend-only-refresh-20261111`, exact deployment M and runtime. **Our release lease is active; do not modify shared source or publish another release.** No publication submitted yet. Next: official prepublish, one publication, new explicit success, official verify3/final inactive, live spend-only dashboard readback. This is the latest state and supersedes earlier pending-build notes.
+## Official release verification — PASSED
 
+The official command `python -B scripts/production_release_guard.py verify --url https://mezansalla.com` completed with exit0 in **676.25 seconds**, returning `verified:true` and `checks:3`. Its output matched A, source base J `4234a88a5e01ce179c5d5711ad80107ecd208a88`, deployment M and the runtime release identity above. Completion was observed at18:22:58UTC on2026-11-11.
 
-## Publication submitted — 2026-11-11T18:00Z
+The official checks verified runtime source identity, critical-file hashes, backend source, release-control source, frontend build proof, and exact governed public bytes. Canonical and cache-busted build metadata returned the required JSON and content type. Observed boot identity: `2026-11-11T18:09:30.052989+00:00`. Verified frontend artifact tree: `be9dcb70201124024db23b07229bf83654b7ff3e94f02bcc653b22c9bbd147f0`.
 
-Official prepublish returned `ready_to_publish:true` with exact frozen A/M/runtime identities. Emergent accepted one Publish changes action and explicitly showed `Deployment Started Nov 11, 09:00 PM` Riyadh. Deployment remains in progress at this checkpoint. Prior version baseline is `2e328d9`; do not count it as success for this task. Our release lease remains active. A logged-in dashboard baseline was read for2026-11-11 without pressing the old refresh button. Next: explicit new deployment success, official three-probe verify/final inactive, then actual new button readback. Do not repeat publication.
+The subsequent official status returned **`active:false`** and the wrapper printed `SNAP_1883_VERIFY3_AND_INACTIVE_CONFIRMED`. Only the matching owned lease was closed; no foreign lease was cleared. Raw operator outputs remain at `/tmp/snap-spend-1883-verify.json` and `/tmp/snap-spend-1883-final-status.json` on the shared platform. Sanitized durable evidence is in [verification-summary.json](verification-summary.json), with [publication proof](published.png).
 
-
-## Live spend-only acceptance — passed, 2026-11-11T18:12Z
-
-New publication `9d4db97` explicitly finished at21:10Riyadh. The new label and tooltip appeared after reloading the logged-in dashboard. One authorized manual click at18:12:21.690Z for2026-11-11 showed the spend-only in-progress state, then `اكتمل جلب صرف سناب.` by18:12:40.549Z. Both Snapchat accounts displayed newer21:12Riyadh observations and changed native spend amounts; other provider amounts stayed unchanged. Both readings correctly displayed provisional status, and the button re-enabled. No raw financial values, account IDs or customer data are recorded here. This confirms functional readback separately from release verification. Official verify3 is still running in owned Terminal6; retain the lease until it completes and status is inactive. No further publication or source change.
+No further source change or publication is required for this task. Frozen A/B are unchanged. This documentation-only branch must never be deployed; production remains the reviewed merge M. Any future legacy retirement must first migrate the active consumers identified above.
