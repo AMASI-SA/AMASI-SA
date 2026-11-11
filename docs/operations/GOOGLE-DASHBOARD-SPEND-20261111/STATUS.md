@@ -5,8 +5,8 @@
 - Repository: `AMASI-SA/AMASI-SA`
 - Task branch: `codex/google-dashboard-spend-20261111`
 - Reviewed production baseline: `245a0beccbdbc2585a3ec2214e808eeef3734b57`
-- State: implementation complete; local acceptance passed; remote CI pending.
-- Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1886
+- State: publication explicitly authorized; source A and intent-only B frozen and independently validated; remote CI queued; no Production publication.
+- PR ready for review: https://github.com/AMASI-SA/AMASI-SA/pull/1886
 - Remote regression checkpoint: `924e480258c8052741c5d9999e531739238287e0`.
 - Reviewed source checkpoint before the final rounding compatibility fix:
   `cc21d961e111fdf83b2427399e571f9d1e12f715`.
@@ -145,8 +145,7 @@ Root owns this status file, public-route financial acceptance tests, Git
 checkpoints, and PR. The backend implementation agent owns the shared Google
 reader, its two consumers, and its focused tests; reviewers are read-only.
 
-Next: push the completed source checkpoint and review exact-head CI results,
-then request the applicable publication authorization for the concrete PR.
+Publication is now explicitly authorized by the user ("انشر"). Next: resolve the queued exact-B CI gates, then perform the normal protocol-v5 merge, adapter, lease, publication and verify3 steps. No further publication confirmation is needed for this exact fix.
 Do not merge or publish this task without the
 separate applicable release authorization and protocol-v5 gates. Do not clear
 another task's release lease or modify the shared `/app` workspace.
@@ -154,3 +153,87 @@ another task's release lease or modify the shared `/app` workspace.
 Issue #1006 is the shared continuation ledger and has reached GitHub's comment
 limit. The task PR will pin the exact checkpoint SHA; any ledger-body update
 must preserve concurrent tasks and be based on a fresh read.
+
+
+## Authorized publication preparation — 2026-11-12 00:03 Asia/Riyadh
+
+Source A is `9365a39e0b3dee0a88191eb0b58ca660a3d91a32`. Frozen intent-only
+B is **`adb79110b2c25143730a784de2f4c9dc552cac57`**, tree
+`61fda783293ff312a2b5b3c3ae114b8b4977b026`, on the deployment task branch
+`codex/google-dashboard-spend-20261111`. It changes only
+`release/release-intent-v5.json` after A. Fresh Production J remains
+`245a0beccbdbc2585a3ec2214e808eeef3734b57`. Do not squash, rebase or amend A/B.
+
+The pinned toolchain ensure returned warm_verified, Node22.23.2/Yarn1.22.22.
+A local frozen install remained stalled at package fetching and was interrupted
+with exit130. The local bootstrap used an isolated copy of the preceding approved
+release's dependency tree, after verifying identical package.json and yarn.lock
+SHA256 values. No dependency, proxy, network or source setting was changed.
+This does not substitute for the fresh frozen installs in exact-B clean-clone CI
+or the actual shared adapter.
+
+Governed two-clean bootstrap build passed, exit0,21.86seconds, with the reviewed
+public origin. Frontend artifact validation, external candidate freeze and
+load_candidate_release_intent all passed, exit0. Independent read-only validation
+verified exact A/J transitions, both full Git-derived manifests, actual frontend
+artifact bytes and reproducibility proof against the candidate. Root then
+validated the canonical remote B using load_release_intent and
+verify_release_intent_git; exit0, clean local and remote tree equality.
+The expected pre-adapter import diagnostic about absent ignored
+backend/release_identity.json is not a runtime validation claim.
+
+- Runtime: `rg5-4cf2a091b25ebe5cf33e80523dffc0917424630e9067ae3a7b4030acdcbdbebd`.
+- Intent:1268111bytes; SHA256 `9db3a411a19da5d5a3ac3a2ad60224968c8ef7c8a28cb40d6702219a2ca36c23`.
+- Backend manifest:1174files,added1/modified2/deleted0; SHA256 `360974cbaee739720388c3f55b0dbd70019a601b94782a4af756268e6da1c71d`.
+- Release-control manifest:273files,modified1/deleted0; SHA256 `6c76070e032227083acca8abf580586ee99dac8008a92fb6bcb5049190ef7215`.
+- Frontend artifact:`ab6e7d8994e8a5e32bb2843225bd156c34996798bb1ee780a5643ee35c535325`.
+- build-meta:`c7b9b3b5c162cf2602ebcaff12871333da31d5c8c4b35e756c6af8fb0b42c4cf`.
+- Reproducibility proof:`a4fcef88a75e96d14c13f930bec0597a0f24714578bb6b7e0313df0ffb88ce11`.
+
+### External CI blocker
+
+At00:02Riyadh the final B has20 workflow runs, allqueued with no conclusions
+(17synchronize runs plus3ready-for-review runs). PR1886 is ready for review,
+mergeable:true, mergeable_state:blocked. The exact-A16 runs also remain queued.
+B release gate: https://github.com/AMASI-SA/AMASI-SA/actions/runs/43099171683
+B Google/card tests: https://github.com/AMASI-SA/AMASI-SA/actions/runs/43099171528
+
+Independent diagnosis found old PR1886 Release43095000753 (source924e480)
+still in_progress despite completed steps and a failed candidate artifact upload.
+Its concurrency group mezan-release-readiness-1886 has cancel-in-progress:false.
+Superseded cc21 Release43096228904 is also queued. Cancelling these old runs may
+release that group, but cannot be claimed to fix all queues: several other old
+runs have all steps/jobs finished yet still in_progress, and some queued
+workflows define no concurrency group. No confirmed general GitHub outage is
+claimed. The official public status page reported Actions operational.
+
+No workflow cancellation was exposed by the connected GitHub tools. The public
+GitHub run page showed Sign in. Automatic approval review rejected reading
+browserAuth capability documentation, citing the recorded restriction on hidden
+browser authentication/credential access. No credential/auth access occurred,
+no workaround attempted, and no workflow cancelled or rerun. The ordinary
+authorized GitHub connector remains available for source/checkpoint operations.
+
+### Production and exact next step
+
+Production publication has **not** occurred. Shared /app tracked source was not
+changed; no release lease acquired, prepare/prepublish, merge or republish.
+Official shared guard returned active:false. Emergent Manage still shows the
+previous100th publication, version7577839, finished Nov11 at22:50Riyadh.
+Concurrent Android78 work and all unrelated platform files are preserved.
+
+This evidence branch **must never be merged or deployed**; deployment input is
+the immutable A/B task branch above. Next: obtain terminal passing exact-B CI,
+including actual Node20/24 clean-clone adapter jobs. If queue management requires
+browser authentication, user must explicitly authorize that distinct access or
+perform the old-run cancellation in their own GitHub account. Publication
+authorization is already recorded and must not be requested again.
+
+After CI passes, fresh-read Issue1006, Production ref and shared guard before
+any shared source/rehearsal. If Production advanced, integrate/rebuild a new
+reviewed A/B pair without losing the concurrent task. Otherwise normal merge
+with exact B tree, actual adapter, own prepare/prepublish, one publication,
+newer explicit DeploymentSucceeded, official verify3, active:false, then
+authenticated same-period Google card/executive reconciliation. Since Riyadh
+midnight passed, explicitly select2026-11-11 for comparison with the earlier
+96.48SAR observation; today's data can differ.
