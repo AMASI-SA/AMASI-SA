@@ -509,6 +509,10 @@ def _store_courier_print_data(
     ship_from = ship_from if isinstance(ship_from, dict) else {}
     buyer_name = _text(customer.get("full_name")) or _text(customer.get("name"))
     buyer_phone = _text(customer.get("mobile")) or _text(customer.get("phone"))
+    store_name = store.get("name")
+    if isinstance(store_name, dict):
+        store_name = next((value for key in ("ar", "en", "name")
+                           if isinstance(value := store_name.get(key), str) and value.strip()), None)
 
     return {
         "order_number": order_number,
@@ -516,7 +520,7 @@ def _store_courier_print_data(
         "qr_code": _qr_data_uri(order_number),
         "order_date": _order_date(order),
         "courier_name": _text(shipment.get("courier_name")) or "مندوب المتجر",
-        "store_name": _text(store.get("name"))
+        "store_name": _text(store_name)
         or _text(ship_from.get("name"))
         or "المتجر",
         "store_logo": _url(store.get("avatar") or store.get("logo")) or None,
@@ -1217,19 +1221,25 @@ def _store_label_carriers_match(left, right):
 
 
 async def _internal_delivery_document(db, user_id, order_number, order, baseline, provider_carrier,
-                                      *, allow_completion_observation=False):
+                                      *, allow_completion_observation=False, history_proof=None):
     """Internal delivery is not an external shipment or an external label.
 
     Ignore old embedded shipments, including their addresses. Recheck the
     carrier generation after provider reads; a real concurrent switch blocks.
     Assignment is read at the same final boundary, never from an old label.
     """
-    if not _store_label_carriers_match(_mobile_label_carrier(baseline), provider_carrier):
+    if history_proof is None and not _store_label_carriers_match(_mobile_label_carrier(baseline), provider_carrier):
         raise _stale_label()
-    store = await _store_identity(db, user_id)
+    if history_proof is not None:
+        from .store_courier_history_recovery import HistoryCourierProof, verify_document
+        if not isinstance(history_proof, HistoryCourierProof):
+            raise _stale_label()
+    store = history_proof.store if history_proof is not None else await _store_identity(db, user_id)
     async def document(scoped):
         current = await _label_baseline(scoped, user_id, order_number)
-        if not _internal_carrier(current) or (
+        if history_proof is not None:
+            await verify_document(scoped, user_id, order_number, order, baseline, provider_carrier, history_proof)
+        elif not _internal_carrier(current) or (
             _mobile_label_carrier(current) != _mobile_label_carrier(baseline)
             or (not allow_completion_observation
                 and _label_metadata(current).get("carrier_updated_at") !=

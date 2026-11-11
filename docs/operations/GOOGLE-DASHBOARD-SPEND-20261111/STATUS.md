@@ -252,3 +252,24 @@ or clear another task's release lease.
 Issue #1006 is the shared continuation ledger and has reached GitHub's comment
 limit. The task PR will pin the exact checkpoint SHA; any ledger-body update
 must preserve concurrent tasks and be based on a fresh read.
+
+## Combined courier release follow-up
+
+Combined source `cf37d3dad789d123612c8c21b7768235abe561f2` passed all 22 workflows,
+including exact Mongo runtime run43110863290 (164/164/164 identities, full saved
+read audit, zero-skip gate), and the local governed A build/verification. No
+intent-only B exists. Live authorized print trials then established a historical
+generic-carrier corruption requiring a further narrowly scoped courier recovery.
+See `docs/operations/STORE-COURIER-PRINT-20261112/STATUS.md`. Google code is unchanged;
+the final combined source must pass its gates before publication. Production
+remains unchanged by this task. Post-publication Google acceptance must use the
+reported November 11 date range; a new-day zero does not reproduce that issue.
+
+The subsequent historical courier recovery is now implemented and independently
+reviewed: it produces an ID-free merchant QR from current corroborated evidence,
+preserves all canonical/superseded records, and rejects conflicting recipients,
+gifts and concurrent source/workflow changes. The observed localized store-name
+print defect is also corrected at its output boundary. No Google source changed
+in this follow-up. The next combined source A must receive its own CI/build and
+intent-only B before the already-authorized publication; the cf37 checkpoint's
+green evidence must not be presented as evidence for this new delta.

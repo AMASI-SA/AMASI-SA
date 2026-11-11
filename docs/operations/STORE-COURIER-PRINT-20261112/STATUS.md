@@ -8,8 +8,12 @@
 - The user authorized fixing and publishing store-courier label printing and
   automatic/explicit completion together with the Google dashboard fix.
 - User reports iMile and SMSA work. Their official-label path must remain intact.
-- Current state: source complete and independently reviewed; root integrated
-  tests passed. Exact-source CI and protocol-v5 publication remain required.
+- Current state: the reviewed combined checkpoint `cf37d3dad789d123612c8c21b7768235abe561f2`
+  passed all 22 exact-source workflows and the local governed build. A subsequent
+  live investigation proved historical generic-identity corruption on both
+  reported examples. The narrowly fenced recovery is now implemented and has
+  passed independent review. The next source checkpoint requires fresh exact
+  CI/build evidence and a new intent-only B; publication remains pending.
 - Production changed: **no deployment**. No provider status write, shipment
   creation, source merge or release lease by this task. The user subsequently
   authorized direct label/print trials on the reported orders in Mezan; those
@@ -142,3 +146,105 @@ Fresh-fetch the production ref and Issue1006, verify the official shared guard
 inactive, run the actual governed adapter, own prepare/prepublish, publish once
 under existing authorization, and verify three consecutive matching probes
 with the lease closed. Preserve all concurrent tasks and untracked platform files.
+
+## Live historical investigation after the combined checkpoint
+
+The authenticated existing `GET /api/orders` reader, scoped to the current owner
+and one exact order reference at a time, exposed the production metadata without
+DB credentials. Both reported examples have generic `shipping`,
+`source_kind=order`, `source_path=delivery_method`, `event_name=order.snapshot`,
+no current shipment ID, and one superseded ID. In each case that ID is exactly
+the sole active merchant child returned by Salla. Actual Mezan UI label attempts
+still return pending/no-outgoing before publication. No customer data or live
+identifiers are retained in this record.
+
+Executing the old extractor and acceptor reproduces this state. However, a real
+carrier change followed by a generic overwrite can produce identical local
+metadata. Therefore, no general deletion or bypass of superseded IDs is valid.
+The provider history for both examples contains four events, one native
+`activity` with the exact carrier-change template
+`تم تعديل بيانات الشحن من iMile للتوصيل إلى: مندوب الرياض`, then ordinary
+in-progress/completed status changes. The complete list contains one child.
+
+Salla's official Order Details documentation now states that expanded order
+responses ended on 2026-09-01. Both fresh light orders lack a street destination.
+The first local address has verified order-webhook provenance; the other is
+only a customer-city projection and cannot form a complete delivery label.
+References: https://docs.salla.dev/orders/details and
+https://docs.salla.dev/order-histories/list. The native history schema separates
+`activity` from `comment`; the append-history request accepts a note, not a type.
+Treating an exact native activity as provider evidence is a bounded inference,
+not a claim that arbitrary free text proves current identity.
+
+The proposed narrow recovery returns an order-bound internal QR with shipment,
+tracking and label URL fields null, and leaves all source/superseded records
+unchanged. It requires the exact generic signature, a singleton superseded ID,
+a complete unfiltered singleton shipment list matching that ID and order, one
+native external-to-current-courier reassignment in complete history, no later
+ambiguous carrier/address/shipment activity, and matching fresh child details.
+The child is not reactivated as a shipment or external AWB. Its freshly verified
+destination may be used only within this uniquely corroborated cohort, never
+by copying an old rendered label or saved child snapshot. Provider identity,
+material order content/version, local status/g47/address/assignment, and verified
+cancellation evidence require final fences. This proposal remains subject to
+actual-route red/green tests and independent review before the next source A.
+
+Exact checkpoint CI evidence: Shipping Print Boundary run43110863797 passed
+26 Mongo latency cases, 58 new courier cases and 596 broader cases, with one
+intentional memory-only transaction-rollback skip (Mongo counterpart passed).
+Runtime run43110863290 passed all 164 reference/baseline/runtime identities and
+the zero-skip/I/O audit gate. The local exact-A build and verification both
+returned exit0; artifact tree
+`ab6e7d8994e8a5e32bb2843225bd156c34996798bb1ee780a5643ee35c535325`.
+These are checkpoint evidence, not evidence for the pending recovery delta.
+
+## Reviewed historical recovery implementation
+
+The new `store_courier_history_recovery.py` helper implements the bounded
+order-document path above without changing canonical or superseded source data.
+It reads order A, a complete unfiltered singleton shipment list, complete native
+history, the same complete list again, and order B; it then checks the captured
+local source and workflow at the existing final owner boundary. A complete
+order-scoped list is sufficient when a global endpoint is unavailable. Missing,
+partial or contradictory evidence remains nonprintable.
+
+Destination data comes from the current provider order, or the freshly bound
+child when the light order omits its destination. Saved shipment/address
+snapshots cannot override this fresh data. Current or saved independent
+recipients and gift indicators exclude this narrow buyer-matched recovery.
+The proof also rejects concurrent provider material/version changes, local
+status/g47/address/assignment/handoff changes, revoked employee access, and a
+verified cancellation or unapplied inbox observation. No archived shipment is
+reactivated, and no provider mutation occurs for completed orders.
+
+Actual `/v1/refresh` and `/v1/complete-and-refresh` tests use prepared pieces and
+the normal route gates. Already-completed historical orders perform only GETs;
+a valid in-progress order stays on the existing explicit completion path and
+performs its single authorized POST. Localized store-name objects are converted
+to Arabic/English/name text at the print-data boundary, fixing the serialized
+object visible in the user's working-label screenshot.
+
+The new regression files contain 44 identity/history cases and 18 race cases.
+Writer integration: 204 passed plus 59 subtests, zero skips, exit0/13.17s.
+Independent broad review: 153 passed plus 59 subtests, zero skips; the final
+gift-only delta then passed all 9 selected concrete boundary cases (35 other
+cases deliberately deselected), exit0/4.74s. No unresolved review blocker.
+Final reviewed helper SHA256:
+`85d0be985eed3b1cee0b79480f90c25943907eb5d980f284dcaf0dc4ae7338fe`.
+
+This is deliberately not a general historical-data migration. Other order or
+handover pages may retain a generic canonical display because source rows are
+unchanged; the recovered print card/document uses the verified courier. The
+cohort is the observed single iMile-to-city-courier reassignment, not arbitrary
+carrier history. No live post-deployment preview or physical-paper success has
+been claimed. Root integrated results and the next exact remote A belong in
+the continuation ledger before build/freeze.
+
+Root final integration on the frozen sources: **376 passed, 59 subtests,
+13 skipped**, exit0/18.23s. The same 13 isolated Mongo latency variants described
+above remain mandatory in Shipping CI. This run extends the earlier 306-case
+command with `test_courier_history_identity_recovery.py`,
+`test_courier_history_recovery_races.py`, and
+`test_recipient_delivery_projection.py`. `git diff --check` also passed. Both
+new files and the helper are registered in Shipping CI scope/classification;
+the new regression step includes both actual-route files.

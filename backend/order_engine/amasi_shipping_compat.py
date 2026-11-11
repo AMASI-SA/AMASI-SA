@@ -660,6 +660,8 @@ async def carrier_label(
     if not number:
         raise legacy.ShippingLabelError("order_number_required", "رقم الطلب مطلوب.", status_code=400)
     baseline = await legacy._label_baseline(db, owner, number) if completed_only else None
+    from .store_courier_history_recovery import capture_context, recover_document
+    history_context = await capture_context(db, owner, number, baseline) if completed_only and not issue else None
     internal_id, order = await _resolve(db, owner, number)
     status = _order_status(order)
     if completed_only and (legacy._text(order.get("id")) != internal_id
@@ -667,6 +669,10 @@ async def carrier_label(
         raise legacy.ShippingLabelError("salla_order_reference_mismatch", "تعذّر تأكيد هوية الطلب في سلة.")
     if status in _CANCELLED | {"refunded"}:
         raise legacy.ShippingLabelError("order_cancelled", "الطلب ملغى أو مسترجع في سلة.")
+    if history_context is not None:
+        # This legacy cohort is a read-only order document. Do not enter the
+        # completion POST path or reinterpret its archived ID as a current AWB.
+        return await recover_document(db, order, baseline, history_context)
     if explicit_complete:
         # Only the explicit, locally fenced refresh endpoint enables this. An
         # acknowledged status write flows straight to shipment lookup: no

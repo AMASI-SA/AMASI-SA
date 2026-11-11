@@ -11,11 +11,14 @@ on:
       - backend/tests/test_shipping_snapshot_bootstrap.py
       - backend/order_engine/shipping_label_service.py
       - backend/order_engine/amasi_shipping_compat.py
+      - backend/order_engine/store_courier_history_recovery.py
       - backend/fulfillment_v2_routes.py
       - backend/assembly_manual_label_refresh.py
       - backend/tests/test_salla_generic_shipping_mode.py
       - backend/tests/test_courier_generic_identity_recovery.py
       - backend/tests/test_courier_explicit_completion_recovery.py
+      - backend/tests/test_courier_history_identity_recovery.py
+      - backend/tests/test_courier_history_recovery_races.py
       - backend/tests/test_shipping_print_boundary.py
       - backend/tests/test_shipping_print_legacy_path.py
       - backend/tests/test_store_courier_unified_print.py
@@ -56,6 +59,7 @@ jobs:
               "backend/salla_integration/webhook_event_capture.py",
               "backend/order_engine/shipping_label_service.py",
               "backend/order_engine/amasi_shipping_compat.py",
+              "backend/order_engine/store_courier_history_recovery.py",
               "backend/fulfillment_v2_routes.py",
               "backend/assembly_manual_label_refresh.py",
               "backend/fulfillment_carrier_label.py",
@@ -68,6 +72,8 @@ jobs:
               "backend/tests/test_shipping_", "backend/tests/test_salla_current_shipping",
               "backend/tests/test_salla_generic_shipping_mode", "backend/tests/test_courier_generic_identity_recovery",
               "backend/tests/test_courier_explicit_completion_recovery",
+              "backend/tests/test_courier_history_identity_recovery",
+              "backend/tests/test_courier_history_recovery_races",
               "backend/tests/test_fulfillment_carrier_label", "backend/tests/test_store_courier_unified_print"))}
           affected = bool(changed & owned or shipping_tests)
           bootstrap = bool(changed & {
@@ -125,6 +131,8 @@ jobs:
           backend/tests/test_salla_generic_shipping_mode.py
           backend/tests/test_courier_generic_identity_recovery.py
           backend/tests/test_courier_explicit_completion_recovery.py
+          backend/tests/test_courier_history_identity_recovery.py
+          backend/tests/test_courier_history_recovery_races.py
       - name: Shipping, replacement, concurrency and transaction regression
         if: needs.scope.outputs.bootstrap_present == 'true'
         run: >-
