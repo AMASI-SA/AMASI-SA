@@ -145,5 +145,41 @@
     "started_at": "2026-11-11T19:51:54.468999+00:00",
     "terminal": 4,
     "full_output": "/tmp/dashboard-cadence-1884-verify.json"
+  },
+  "live_acceptance": {
+    "url": "https://mezansalla.com/dashboard-advanced",
+    "independent_manual_buttons": true,
+    "period_summary": {
+      "busy_seen": true,
+      "completed": true,
+      "orders_before": 1857,
+      "orders_after": 1858,
+      "sales_before": 466992.9,
+      "sales_after": 467313.66
+    },
+    "top_products": {
+      "busy_seen": true,
+      "completed": true,
+      "products_before": 87,
+      "products_after": 88,
+      "units_before": 467,
+      "units_after": 468
+    },
+    "displayed_errors": false,
+    "desktop_visual": "passed",
+    "mobile_visual": "Automated mobile suites passed; no separate live device viewport claim",
+    "screenshots": [
+      {
+        "name": "dashboard-cadence-1884-cards.png",
+        "bytes": 133044,
+        "sha256": "4b7f4d4dbbe1d05d6368ec350bb5f408f852f87dae88bf88abaebc46f4a6ca29"
+      },
+      {
+        "name": "dashboard-cadence-1884-publication.png",
+        "bytes": 118485,
+        "sha256": "3aec0a5d91b772214605aae9e9fb9d2ac6f04802d76f59e93bf20a6b014ad103"
+      }
+    ],
+    "provider_or_financial_test_mutations": false
   }
 }

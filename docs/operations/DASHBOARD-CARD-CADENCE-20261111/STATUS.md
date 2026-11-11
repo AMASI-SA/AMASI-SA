@@ -1,7 +1,7 @@
 # DASHBOARD-CARD-CADENCE-20261111
 
 ## State
-Evidence-only branch. Never deploy it. Emergent explicitly finished the one authorized publication at Nov11,22:50 Riyadh; new version7577839 is green and newer than baseline9d4db97. Official verify3 is running in owned Terminal4 since2026-11-11T19:51:54.468999+00:00. OUR RELEASE LEASE remains active until successful verification. Do not publish again, change shared source, interrupt verification or clear the lease. Live card acceptance is in progress.
+Evidence-only branch. Never deploy it. Emergent explicitly finished the one authorized publication at Nov11,22:50 Riyadh; new version7577839 is green and newer than baseline9d4db97. Official verify3 is running in owned Terminal4 since2026-11-11T19:51:54.468999+00:00. OUR RELEASE LEASE remains active until successful verification. Do not publish again, change shared source, interrupt verification or clear the lease. Live desktop visual and both manual card reads have passed; official verify3 is still running.
 
 ## Owner request and acceptance
 - Normal Products recent Salla sync: hourly automatic admission, with manual/explicit recovery still available.
@@ -85,3 +85,6 @@ Official prepublish returned ready_to_publish:true with exact A/M/runtime identi
 
 ## Explicit publication success; official verification running
 Emergent shows green Deployment finished Nov11,10:50PM Riyadh and new published version7577839. The baseline was9d4db97. Exactly one publication click was submitted. Official verify was launched at2026-11-11T19:51:54.468999+00:00 in owned Terminal4; full output is captured at/tmp/dashboard-cadence-1884-verify.json and stderr alongside it. No verification success/inactive claim yet. Shared source and frozen release identities remain unchanged.
+
+## Live card acceptance passed
+Authenticated production dashboard shows the circular icon-only Top Products button and Arabic تحديث Period Summary button. Each became busy and returned enabled without a displayed error. Period Summary updated month orders1857→1858 and sales466992.90→467313.66; Top Products updated products87→88 and units467→468. This is observed read refresh behavior, not a timing benchmark. Only stored-data card reads were manually invoked; no provider, financial, ad or preparation mutation was tested. Desktop screenshot evidence is captured alongside publication proof. Mobile suites passed in automated verification; no separate live narrow-device claim. A read-only final comparison also confirmed unchanged preparation and two-hour Snapchat files, and unchanged stored-platform-count semantics. Official verify3 remains running; its success and final inactive guard are still required.
