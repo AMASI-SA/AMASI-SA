@@ -28,10 +28,17 @@ The native legacy producer is not unused. It feeds the reachable all-platform Ad
 
 ## Verification and release state
 
-This is an initial WIP checkpoint of the diagnosis and plan. No source fix or new test run is claimed yet. Production changed: **no** for this task.
+This is a WIP implementation checkpoint; release readiness is not claimed yet. Production changed: **no** for this task.
+
+- The dedicated manual route now freezes enabled account identities and the exact Riyadh period; durable admission/worker claims prevent duplicate work. It fetches only account HOUR spend, validates every returned hour, and publishes immutable per-account observations behind terminal job evidence. HTTP400 cannot trigger a campaign fallback. Runtime/request budgets and seven-day retention bound the job/observation storage; presentation accepts observations for at most24hours and labels those older than2hours.
+- The unified dashboard reader consumes the same validated observations with the existing account FX authority. Display remains provisional; canonical financial/hierarchy facts and close proofs are unchanged. Newer canonical data supersedes only when every day and every source run are display-ready. An independent review found an unreconciled-canonical fallback defect; the full reader readiness gate and permanent regressions now cover it.
+- The frontend verifies spend-only job scope, exact dates, all requested account results, and genuinely newer dashboard observation times before success. Partial failures are explicit. Unchanged numeric spend can legitimately succeed; stale readback cannot.
+- Root frontend verification: eight affected suites,131tests passed (refresh service/component, main card, shared cache, normalization, executive-spend merge/interceptor and dashboard order loading), both invocations exit0.
+- Independent managed Mongo7 verification:37tests passed,0skipped, exit0 in4.99seconds, using a disposable loopback database and fake provider HTTP boundary. This includes12 real producer-to-dashboard cases plus25 manual route/producer cases. No live provider or production database was used.
+- Command: validation venv Python with `PYTHONDONTWRITEBYTECODE=1`, new-worktree `PYTHONPATH`, disposable `ADS_LEASE_TEST_MONGO_PORT`, `-m pytest -p snapchat_v2_test_bootstrap backend/tests/test_snapchat_reporting_v2_manual_spend_dashboard.py backend/tests/test_snapchat_manual_spend_refresh.py -q --tb=short`. The harness stops Mongo and cleans its temporary database.
 
 Local isolated worktree is based on freshly fetched production. Another conversation has been releasing supplier-receiving PR1882. Before any shared `/app` change or rehearsal, check the latest production ref and Release Guard with `python -B scripts/production_release_guard.py status`; proceed only with `active:false`. Preserve unrelated work. No lease or deployment was started for this task.
 
 ## Next safe action
 
-Implement and test the producer-to-dashboard chain on a disposable database with an HTTP boundary fake that rejects every non-spend request. Verify both enabled accounts, per-account partial failures, explicit zero/missing data, duplicate admission/claim, date scope, currency, and financial isolation. Obtain independent review, checkpoint verified work, then follow the repository v5 source A / intent-only B release protocol.
+Finish independent candidate review and affected existing regression gates, then create a draft PR and follow the repository v5 source A / intent-only B release protocol against freshly verified production. No source A/intent B, merge, release lease, or publication exists for this task yet. Preserve the old native scheduler because its current consumers remain active.

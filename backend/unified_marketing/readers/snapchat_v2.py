@@ -23,6 +23,7 @@ from snapchat_v2.total_facts import SNAPCHAT_TOTAL_FACTS_COLLECTION, load_total_
 from snapchat_v2.period_evidence import total_period_complete
 from snapchat_v2.empty_hierarchy import empty_period_complete
 from snapchat_v2.operational_hours import current_operational_overlay
+from snapchat_v2.manual_spend import load_manual_spend_overlay
 from snapchat_v2.routes import _add_sar_spend, _entity_performance_report
 from unified_marketing.adapters.snapchat_v2 import build_snapchat_v2_unified_report
 from unified_marketing.commerce_carts import load_abandoned_cart_outcomes
@@ -1104,6 +1105,27 @@ async def _load_snapchat_v2_single_account_dashboard_spend(
     if operational_overlay:
         projections = [{**projections[0], "base_spend_native": operational_overlay["spend_native"],
             "hours": operational_overlay["hours"]}]
+    manual_overlay = None
+    if timezone_name == RIYADH_TIMEZONE:
+        canonical_display_ready = bool(
+            projection_complete and financial_status == "complete"
+            and (reconciliation_status == "reconciled"
+                or (range_ends_on_open_day
+                    and closed_reconciliation_status in {"reconciled", "not_required_open_day"}
+                    and isinstance(open_day_projection, dict)
+                    and _open_day_has_source_evidence(open_day_projection))))
+        manual_overlay = await load_manual_spend_overlay(
+            db, user_id=str(user_id), account=account, date_from=date_from,
+            date_to=date_to, projections=projections if canonical_display_ready else [],
+            now=_operational_now())
+        if (manual_overlay and operational_overlay
+                and operational_overlay["observed_at"] >= manual_overlay["observed_at"]):
+            manual_overlay = None
+        if manual_overlay:
+            # A direct account spend observation belongs only to this display.
+            # The stored financial projection and its close evidence are untouched.
+            projections = manual_overlay["projections"]
+            operational_overlay = manual_overlay
     total_native = _sum(projections, "base_spend_native")
     try:
         cost = await calculate_cost_components(
@@ -1223,14 +1245,19 @@ async def _load_snapchat_v2_single_account_dashboard_spend(
     reasons = (
         []
         if amount_complete
+        else ["manual_spend_observation_pending_reconciliation"]
+        if manual_overlay and provisional_amount_available
         else ["open_riyadh_day_reconciliation_pending"]
         if provisional_amount_available
         else ["unified_projection_financial_reconciliation_or_fx_incomplete"]
     )
     if operational_overlay and provisional_amount_available:
-        reasons.append("snapchat_operational_no_activity_observed"
+        reasons.append("snapchat_manual_spend_observation" if manual_overlay else
+            "snapchat_operational_no_activity_observed"
             if operational_overlay["data_state"] == "observed_no_activity"
             else "snapchat_operational_hour_observation")
+        if manual_overlay and manual_overlay.get("stale"):
+            reasons.append("snapchat_manual_spend_observation_stale")
     result = {
         "rows": rows if amount_available else [],
         "daily_sar": daily_sar,
@@ -1265,12 +1292,12 @@ async def _load_snapchat_v2_single_account_dashboard_spend(
             "connected": True,
             "reason_codes": reasons,
             "timezone": timezone_name,
-            "source_collection": SNAPCHAT_DAILY_PROJECTIONS_COLLECTION,
+            "source_collection": manual_overlay["source_collection"] if manual_overlay else SNAPCHAT_DAILY_PROJECTIONS_COLLECTION,
             "amount_field": "base_spend_native",
             "fx_authority": "mezan_ad_account_cost_settings_v2",
-            "reconciliation_status": reconciliation_status,
-            "closed_reconciliation_status": closed_reconciliation_status,
-            "financial_status": financial_status,
+            "reconciliation_status": "not_evaluated" if manual_overlay else reconciliation_status,
+            "closed_reconciliation_status": "not_evaluated" if manual_overlay else closed_reconciliation_status,
+            "financial_status": "not_evaluated" if manual_overlay else financial_status,
             "operational_observation": ({key: operational_overlay[key] for key in
                 ("data_state", "source_mode", "observed_at", "sync_run_id")} if operational_overlay else None),
             "source_sync_run_ids": sorted({
