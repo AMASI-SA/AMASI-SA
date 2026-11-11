@@ -1,8 +1,10 @@
-# Support performance recovery — source candidate
+# Support performance recovery — authorized release integration
 
 Repository: AMASI-SA/AMASI-SA. Task branch: `codex/support-performance-recovery-20261111`.
 Reviewed production base: `f439bed54579fafb79a8abcb43080c8150cb5063`.
 Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1878.
+Previous verified implementation source: `b4da6e337e4794a3f6aa5094502c84d38bf18976`, tree `c69ab1b4c41b5bff62f5ca77059190020b1fdd1e`. The current exact source is recorded in PR #1878.
+This record is now carried into the implementation source. Earlier evidence-only handoffs remain on `codex/support-performance-handoff-20261111`; continue from the exact implementation head recorded in PR #1878.
 Scope-preserving prerequisite PR: https://github.com/AMASI-SA/AMASI-SA/pull/1880.
 Prerequisite source: `7028093e03999191860b91757c8c6246d93a6cd4`, branch `codex/campaign-snapshot-visibility-20261111`, tree `63bb41401bf39dfdd299960dc1be880067f3d56b`.
 Previous remote checkpoint: `8e775226f031074e77f28ea2b3dad94205c8fd90`.
@@ -67,3 +69,65 @@ After authorization: authenticate through the supported secure flow, inspect sha
 Issue #1006 is already comment-limited and its read connector failed in this session. The remotely recoverable task branch, this document, and PR #1878 provide the continuation record. The next safe action without new authorization is read-only inspection of the exact PR head, CI and candidate artifact.
 
 The repository's other pending financial, preparation and reporting work is outside this change. No old rollback feature or unrelated draft PR was restored.
+
+## Final exact-source acceptance — 2026-11-11 14:42 UTC
+
+All observed runs have completed.
+
+| Candidate | Exact-source CI result | Remaining gate |
+| --- | --- | --- |
+| Main #1878, b4da6e337e4794a3f6aa5094502c84d38bf18976 | 36 successful workflows out of 37 | The one failing Snapchat settings scope guard intentionally blocks the mixed diff until prerequisite integration |
+| Prerequisite #1880, 7028093e03999191860b91757c8c6246d93a6cd4 | All 10 workflows successful | Human review/integration and the separately authorized release procedure |
+
+There are no pending CI runs and no remaining test/code failure reported by these exact-source runs. The broad PR remains **not merge-ready** because its scope gate is still enforced. The successful prerequisite does not by itself make that broad check green.
+
+Main background-worker acceptance run 43039360749 used MongoDB 8.0.12 and passed:
+- 293 backend tests, zero skipped acceptance cases, 66.03 seconds;
+- 48 Salla synchronization/preservation tests, 8.80 seconds;
+- 76 frontend tests across five suites.
+Its job IDs are 130586692786 (backend) and 130586693360 (frontend).
+The corrected Snapchat autonomy and reporting workflows also succeeded.
+Main source-candidate release-readiness run 43039361196 succeeded.
+
+Prerequisite scope guard, backend settings/no-write tests, and frontend tests/build all succeeded in run 43039154097. Its source-candidate release-readiness run 43039154235 succeeded. Independent isolated production-base verification had already passed 152 tests for only the two prerequisite files.
+
+Both candidate archives were downloaded as read-only evidence, their ZIP digests were verified, and their schema-2 intents were checked against the exact source SHA and production base. Each contains matching clean-build passes using Node 22.23.2, Yarn 1.22.22 and Vite 8.2.4. No adapter rehearsal in shared /app, intent-only deployment commit, lease, merge or publication was performed.
+
+| Candidate | CI artifact ID | Intent JSON SHA-256 |
+| --- | --- | --- |
+| Main |13865401114|af2d7f4fa0fc3ca23afe9b312d9aad628fab49d95662d682a633f338ec3489cb|
+| Prerequisite |13863668442|c6db9e0191e4c2d8047a974b5845b33e4d0d9c6bf1bec4cfc494428881fd7751|
+
+The CI candidate archives expire on 13 November 2026. They are source-candidate evidence, not final deployment artifacts. Rebuild if an artifact is unavailable or the source/base changes; do not silently reuse an old intent.
+
+### Exact continuation boundary
+
+1. Obtain explicit authorization for the production-access/deployment phase rejected by automatic review. Source/test/review work is complete and remotely recoverable; the sign-in handoff must not be retried without that authorization.
+2. After authorization, use the supported secure authentication flow and require shared /app Release Guard active=false before release rehearsal or shared changes.
+3. Complete the reviewed v5 prerequisite A/B sequence for #1880 and integrate it without publishing the application at that intermediate step.
+4. Merge the updated production ancestry into the main task branch, preserve the identical prerequisite blobs, confirm the quality-gate path is absent from the main triple-dot diff, and require every final exact-head gate to pass.
+5. Build/freeze the new combined source A and intent-only B, run the required rehearsal, prepare/prepublish, publish once, and require Deployment Succeeded plus the three successful guard probes and active=false.
+
+Production changed by this task: **no**. Preparation-file creation remains excluded. The 1,087 legacy production audit rows have not been directly changed; bounded recovery takes effect only after the authorized deployment. No invoice, payment, budget, bid, campaign status, target cost, scan or provider synchronization was executed against production.
+
+No unrelated worktree or branch was reset. The main worktree has no tracked pending changes; .test-runtime contains disposable local verification tools/evidence and must not be staged.
+
+## Authorized release resumed — 2026-11-11
+
+The owner explicitly requested continuation, merge and publication, and stated the Emergent session is signed in. Refresh confirmed the authenticated Salla Analytics project. The previous production-authorization blocker is resolved. The preparation exclusion remains binding.
+
+Prerequisite source A remains 7028093e03999191860b91757c8c6246d93a6cd4. Its verified candidate intent is now frozen in intent-only B 02e9c5f25953e87e04ba969b9df44028eecc88c0, tree 0634c14c47af35dd81bbb9292ae62db3f6e785d6. Remote blob 2760c273b39e1620d93382492d0f088a76c4ab2e exactly matches the 1,260,920-byte verified artifact; only release/release-intent-v5.json changes after A. Exact B checks and clean-clone rehearsals are pending.
+
+Production branch still f439bed54579fafb79a8abcb43080c8150cb5063; main task source still b4da6e337e4794a3f6aa5094502c84d38bf18976. No merge, shared /app change, lease or publication has occurred. Next: complete secure terminal access and require guard active=false, inspect successful B checks, mark prerequisite ready and merge with expected-head protection. Then merge updated production ancestry into main, preserving inherited intent, freeze a new combined A/B, require final gates and rehearsal, and publish once under v5.
+
+## Prerequisite integrated; combined source A in preparation
+
+Prerequisite #1880 was marked ready and merged by regular merge, preserving source A1 7028093e03999191860b91757c8c6246d93a6cd4 and intent-only B1 02e9c5f25953e87e04ba969b9df44028eecc88c0. New production Git base J1 is 3f60c1a08263ff1eb2412c0f9224467a198ac278; its tree is identical to B1.
+
+Exact B1 checks completed: ten successful workflows and one conditional TikTok workflow skipped. Release-readiness run 43043656133 passed the actual clean-clone adapter rehearsals on Host Node 20.20.2 and 24.19.0, including verified artifact/proof/identity/package boundaries and JSON metadata serving. The unchanged Snapchat scope and suite passed in run 43043655858. The merge used expected-head protection and no squash/rebase.
+
+The main implementation now incorporates J1 ancestry using a normal merge, carrying J1's intent unchanged. No feature/test code is changed by this integration. This status update is included before the new source A is frozen. The exact new source/tree and candidate build will be recorded in PR #1878. Require the quality-gate trigger to be absent from the J1 triple-dot diff, all preparation files unchanged, and zero intent changes in J1..A full-history.
+
+The Emergent session is authenticated. VS Code still shows a separate sign-in page after the secure credential form was canceled; no credential value was read or entered. A prior attempt to print matching terminal-link/password labels was rejected by automatic review; subsequent inspection used only button labels and the supported secure authentication form. No alternate credential path was used. Do not retry authentication until the user requests it or completes the supported sign-in. Continue the authorized GitHub integration/build work.
+
+Production Git branch changed: yes, to J1 above. Live application/data changed by this task: no. Shared /app was not changed, no release lease was created, and no publication was performed. Next: publish the combined source A on the task branch, require final source checks, freeze its exact reviewed intent-only B, require B clean-clone rehearsals, and merge normally. When terminal access is available, require active=false, fast-forward /app, rehearse, prepare/prepublish, publish once, then verify three probes and active=false. No new publication permission is needed; the owner's explicit authorization remains valid.
