@@ -45,16 +45,36 @@
       "normal_merge": true
     },
     "publication": null,
-    "guard_observed_active": false,
+    "guard_observed_active": true,
     "exact_b_checks": {
       "runs": 19,
       "success": 18,
       "expected_skipped": 1,
       "rehearsal_run": 43071281589
     },
-    "own_lease_created": false,
+    "own_lease_created": true,
     "production_git_branch_changed": true,
-    "production_runtime_changed": false
+    "production_runtime_changed": false,
+    "shared_app_head": "d3c9b0c946afe2418aecf0b96629e46d7f14f196",
+    "shared_tracked_clean": true,
+    "shared_unrelated_untracked_preserved": true,
+    "actual_adapter_build": {
+      "exit_code": 0,
+      "seconds": 62.84,
+      "identity_matches": true,
+      "log": "/tmp/snap-spend-1883-adapter.log"
+    },
+    "prepare": {
+      "exit_code": 0,
+      "actor": "codex-snap-spend-only-refresh-20261111",
+      "prepared_at": "2026-11-11T17:57:00.106139+00:00",
+      "protocol_version": 5,
+      "source_git_sha": "dcde835e08dbf7c0fe3acb5d2bbe92e7b05588f3",
+      "deployment_git_sha": "d3c9b0c946afe2418aecf0b96629e46d7f14f196",
+      "release_id": "rg5-2592df843af84da961459fe1f158ae677cb5ecd0173cde83483c97372af8070d"
+    },
+    "own_lease_active": true,
+    "publish_submitted": false
   },
-  "next": "Fresh shared guardinactive and tracked-source checks, fast-forward /app to merged d3c9b0c, run actual adapter build, own prepare/prepublish and one authorized publication; verify3/inactive and live spend-only readback."
+  "next": "Run official prepublish immediately before one authorized publication; observe new explicit success, official verify3, final guard inactive, then live spend-only dashboard readback."
 }
