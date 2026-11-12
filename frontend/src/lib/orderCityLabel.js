@@ -1,6 +1,16 @@
 // Display aliases only: preserve the canonical delivery address and never
 // request city data while rendering the recent-orders list.
+// AddressDTO exposes city text, without a canonical city ID or Arabic-label
+// field. Jeddah/Makkah/Madinah labels match the existing warehouse city catalog.
 const ARABIC_CITY_NAMES = new Map([
+    ["jeddah", "جدة"],
+    ["jedda", "جدة"],
+    ["makkah", "مكة المكرمة"],
+    ["mecca", "مكة المكرمة"],
+    ["makkah al mukarramah", "مكة المكرمة"],
+    ["madinah", "المدينة المنورة"],
+    ["medina", "المدينة المنورة"],
+    ["al madinah", "المدينة المنورة"],
     ["al khobar", "الخبر"],
     ["khobar", "الخبر"],
     ["taif", "الطائف"],

@@ -1,6 +1,8 @@
 import { loadDashboardPlatformSpend } from "../lib/dashboardPlatformSpendClient";
 import {
     DASHBOARD_ADS_PROVIDERS,
+    dashboardAvailableAmount,
+    dashboardCanonicalSpendMatches,
     dashboardKnownIncompleteAmount,
     getDashboardAdsSpend,
     normalizeDashboardAdsHourlySpend,
@@ -145,6 +147,58 @@ test.each([false, true, [], {}, "", " "])(
         expect(dashboardKnownIncompleteAmount(normalized, portfolioRange)).toBeNull();
     },
 );
+
+test.each([false, true, [], {}, "", " ", null, undefined, -1, Infinity])(
+    "full display spend rejects malformed totals %p before and after normalization", (total_sar) => {
+        const snapshot = fourPlatformPayload({ total_sar,
+            spend_quality: { status: "complete", amount_available: true, amount_complete: true } });
+        expect(dashboardAvailableAmount(snapshot, portfolioRange)).toBeNull();
+        expect(dashboardAvailableAmount(normalizeDashboardAdsSpend(snapshot), portfolioRange)).toBeNull();
+    },
+);
+
+test.each([0, 200])("full display spend preserves observed amount %s while missing dates remain unknown", (total_sar) => {
+    const snapshot = fourPlatformPayload({ total_sar,
+        spend_quality: { status: "provisional", amount_available: true, amount_complete: false, provisional: true } });
+    expect(dashboardAvailableAmount(snapshot, portfolioRange)).toBe(total_sar);
+    expect(dashboardAvailableAmount(snapshot, { fromDate: "2026-08-04" })).toBeNull();
+});
+
+test("canonical matching uses the financial provider basis, not its freshly attached display snapshot", () => {
+    const snapshot = fourPlatformPayload({ total_sar: 100,
+        provider_totals_sar: { snapchat: 0, meta: 0, tiktok: 0, google: 100 },
+        spend_quality: { status: "provisional", amount_available: true } });
+    const canonical = { totals: { total_ads_cost: 100 }, dashboard_platform_spend: snapshot,
+        ads_v2: { breakdown: { snapchat: 100, meta: 0, tiktok: 0, google_transitional: 0 },
+            spend_quality: { status: "provisional" } } };
+    expect(dashboardCanonicalSpendMatches(canonical, snapshot)).toBe(false);
+    canonical.ads_v2.breakdown.snapchat = 0;
+    canonical.ads_v2.breakdown.google_transitional = 100;
+    expect(dashboardCanonicalSpendMatches(canonical, snapshot)).toBe(true);
+});
+
+test("same-provider account shifts wait for the canonical bank-fee basis", () => {
+    const snapshot = fourPlatformPayload({ total_sar: 100,
+        provider_totals_sar: { snapchat: 100, meta: 0, tiktok: 0, google: 0 },
+        spend_quality: { status: "provisional", amount_available: true },
+        providers: { snapchat: { accounts: [
+            { account_id: "sample-one", total_sar: 70, total_native: 70, currency: "SAR" },
+            { account_id: "sample-two", total_sar: 30, total_native: 30, currency: "SAR" },
+        ] } } });
+    const canonical = { totals: { total_ads_cost: "100.00" }, ads_v2: {
+        breakdown: { snapchat: 100, meta: 0, tiktok: 0, google_transitional: 0 },
+        spend_quality: { status: "provisional" }, bank_commissions: { accounts: [
+            { provider: "snapchat_ads", external_account_id: "sample-one", spend_sar: 50, spend_native: 50, native_currency: "SAR" },
+            { provider: "snapchat_ads", external_account_id: "sample-two", spend_sar: 50, spend_native: 50, native_currency: "SAR" },
+        ] },
+    } };
+    expect(dashboardCanonicalSpendMatches(canonical, snapshot)).toBe(false);
+    Object.assign(canonical.ads_v2.bank_commissions.accounts[0], { spend_sar: 70, spend_native: 70 });
+    Object.assign(canonical.ads_v2.bank_commissions.accounts[1], { spend_sar: 30, spend_native: 30 });
+    expect(dashboardCanonicalSpendMatches(canonical, snapshot)).toBe(true);
+    canonical.ads_v2.spend_quality.status = "complete";
+    expect(dashboardCanonicalSpendMatches(canonical, snapshot)).toBe(false);
+});
 
 
 test("normalizes and sorts all four Riyadh hourly provider series", () => {
