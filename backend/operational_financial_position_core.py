@@ -5,6 +5,7 @@ obligation belongs here. Prepared cost exposure is a separate, optional input;
 its stage buckets replace overlapping estimates rather than being added to
 them. A recorded subtotal is not proof that an entire forecast is covered.
 """
+from operational_financial_activity_runtime import preparation_checkpoint
 from collections import Counter
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -12,8 +13,10 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from operational_balance_service import report
 from operational_prestart_cod_forecast import snapshot_cod_preview
 from operational_delivery_report_coverage import delivery_coverage_diagnostics
-from operational_profit_payroll import recorded_salary_subtotals
+from operational_profit_projection import project_profit, valid_snapshot
+from operational_forecast_projection import cod_forecast_coverage, project_forecast
 from operational_provider_report_coverage import provider_evidence_coverage
+from operational_balance_completeness import GLOBAL_FAILURES, apply_table_coverage, annotate_report_coverage
 
 
 ZERO = Decimal("0")
@@ -45,15 +48,25 @@ def _money(value):
     value = _number(value)
     if value is None:
         return None
+    preparation_checkpoint()
     return format((value or ZERO).quantize(CENT, rounding=ROUND_HALF_UP), ".2f")
 
 
 def _sum(values):
     values = [_number(value) for value in values]
+    preparation_checkpoint()
     return None if any(value is None for value in values) else sum(values, ZERO)
 
 
+def _known_sum(values):
+    values = list(values)
+    known = [value for value in (_number(value) for value in values) if value is not None]
+    preparation_checkpoint()
+    return sum(known, ZERO) if known or not values else None
+
+
 def _column(key, label, kind="money", role=None):
+    preparation_checkpoint()
     return {"key": key, "label": label, "type": kind, **({"role": role} if role else {})}
 
 
@@ -64,27 +77,31 @@ def _table(identity, title, section, columns, rows, *, complete=True, notes=None
     ) for column in columns}
     if totals:
         calculated.update(totals)
+    preparation_checkpoint()
     return {"id": identity, "title": title, "section": section,
-            "kind": "forecast" if section == "forecast" else "actual", "columns": columns,
+            "kind": "forecast" if section == "forecast" else "actual", "columns": deepcopy(columns),
             "rows": rows, "totals": calculated, "complete": complete, "notes": notes or []}
 
 
 def _row(identity, label, amount, emphasis=None, reason=None):
+    preparation_checkpoint()
     return {"id": identity, "label": label, "amount": _money(amount),
             **({"emphasis": emphasis} if emphasis else {}), **({"reason": reason} if reason else {})}
 
 
 def _party_id(row):
+    preparation_checkpoint()
     return ":".join(str(row.get(key) or "") for key in ("party_type", "party_id", "currency"))
 
 
 def _name(row):
+    preparation_checkpoint()
     return str(row.get("name") or row.get("party_name") or row.get("party_id") or "جهة غير محددة")
 
 
 def _shipping_order(row):
     identity = str(row.get("id") or "")
-    prefix = next((prefix for prefix in ("shipping:", "shipping-prepaid:") if identity.startswith(prefix)), None)
+    prefix = next((prefix for prefix in ("shipping:", "shipping-prepaid:", "shipping-completed:") if identity.startswith(prefix)), None)
     if prefix is None:
         return None
     if row.get("order_id"):
@@ -93,10 +110,12 @@ def _shipping_order(row):
     component = row.get("fee_component")
     if component and identity.endswith(":" + str(component)):
         identity = identity[:-(len(str(component)) + 1)]
+    preparation_checkpoint()
     return identity or None
 
 
 def _source_issue(row):
+    preparation_checkpoint()
     return {**deepcopy(row), "code": str(row.get("code") or "source_incomplete"),
             "message": row.get("message") or UNKNOWN + "يوجد مصدر تشغيلي يحتاج إلى استكمال أو مراجعة."}
 
@@ -106,14 +125,17 @@ def _balance_origin(parties, obligations, complete):
     kinds = {"provider", "courier", "store_driver"}
     index = {}
     for item in obligations:
+        preparation_checkpoint()
         if item.get("party_type") in kinds and item.get("direction") in {"receivable", "payable"}:
             index.setdefault((item["party_type"], item.get("party_id"), item["direction"]), []).append(item)
     rows = []
     for party in parties:
+        preparation_checkpoint()
         kind = party["party_type"]
         if kind not in kinds:
             continue
         for direction, label in (("receivable", "لنا"), ("payable", "علينا")):
+            preparation_checkpoint()
             items = index.get((kind, party["party_id"], direction), [])
             remaining = party["outstanding_" + direction]
             if not items and _number(remaining) == ZERO:
@@ -130,6 +152,7 @@ def _balance_origin(parties, obligations, complete):
                               "السداد المخصّص يشمل الافتتاحي والقيود اللاحقة. قد يتضمن الرصيد المسجّل أيضًا تسويات أو دفعات غير مخصّصة."])
     breakdown["show_totals"] = False  # Opposite directions must not be added together.
     breakdown["totals"] = {column["key"]: None if column["type"] == "money" else "" for column in cols}
+    preparation_checkpoint()
     return breakdown
 
 
@@ -145,6 +168,7 @@ def _actual_tables(parties, complete):
                          notes=["تسويات أجهزة الشبكة حقوق لنا؛ لا تدخل ضمن النقد المتاح ولا تربط ببنك بالاسم."]))
     for kind, identity, title in (("cash", "cash", "الصناديق"),
                                   ("employee_custody", "employee_custody", "العهد لدى الموظفين")):
+        preparation_checkpoint()
         key = "custody_remaining" if kind == "employee_custody" else "actual"
         rows = [{"id": _party_id(row), "name": _name(row), "available": row[key]}
                 for row in parties if row["party_type"] == kind]
@@ -154,6 +178,7 @@ def _actual_tables(parties, complete):
     debt_columns = [_column("name", "الجهة", "text"), _column("receivable", "لنا", role="receivable"),
                     _column("payable", "علينا", role="payable")]
     for kind, identity, title, section in PARTIES:
+        preparation_checkpoint()
         if kind in {"provider", "customer_wallet"}:
             continue
         rows = [{"id": _party_id(row), "name": _name(row),
@@ -167,6 +192,7 @@ def _actual_tables(parties, complete):
         tables.append(_table(identity, title, section, debt_columns, rows, complete=complete, notes=notes))
     converted_ads = []
     for row in parties:
+        preparation_checkpoint()
         valuation = row.get("ad_sar_valuation")
         if row["party_type"] != "ad_account" or not valuation:
             continue
@@ -200,6 +226,7 @@ def _actual_tables(parties, complete):
                              notes=["هذه أرصدة موثقة في المصدر التشغيلي؛ لا تعني أن السحب أو التمويل مصروف ربح."]))
     order = ["banks_network", "cash", "suppliers", "employees", "external", "ads_currency_conversion", "ads", "employee_custody",
              "other_balances", "couriers", "drivers", "providers"]
+    preparation_checkpoint()
     return sorted(tables, key=lambda item: order.index(item["id"]))
 
 
@@ -214,6 +241,7 @@ def _cost_table(exposure, currency, identity, title, buckets, match):
     groups = [group for group in (exposure.get("groups") or []) if group.get("currency") == currency and match(group)] if available else []
     rows = []
     for group in groups:
+        preparation_checkpoint()
         period = "قبل بدء التشغيل" if group.get("period") == "prestart" else "بعد بدء التشغيل"
         stage = {"awaiting_review": "انتظار المراجعة", "under_fulfillment": "قيد التنفيذ"}.get(group.get("stage"))
         rows.append({"id": ":".join(str(group.get(key) or "") for key in ("period", "kind", "stage", "party_id", "currency")),
@@ -241,6 +269,7 @@ def _cost_table(exposure, currency, identity, title, buckets, match):
             order_count = exposure["distinct_order_counts"].get(currency, {}).get(identity, 0 if not rows else None)
         elif len(rows) == 1:
             order_count = rows[0]["orders"]
+    preparation_checkpoint()
     return _table(identity, title, "forecast", [_column("name", "الجهة والفترة", "text"),
                   _column("orders", "طلبات المجموعة", "count"), _column("quantity", "الكمية", "count"),
                   _column("amount", "التكلفة المتوقعة", role="payable")], rows, complete=complete, notes=notes,
@@ -271,24 +300,38 @@ def _cost_tables(exposure, currency, obligations):
                             if row.get("kind") == "shipping" and (_number(row.get("expected")) or ZERO) > ZERO]
         shipping["notes"].append("هذه البنود تقديرات التشغيل الحالية فقط؛ تغطية الطلبات السابقة لبدء التشغيل غير متاحة.")
         shipping["totals"].update(orders=None, amount=None)
+    preparation_checkpoint()
     return tables
 
 
 def _provider_table(rows, issues):
-    columns = [_column("name", "المنصة", "text"), _column("orders", "عدد الطلبات", "count"),
-               _column("gross", "إجمالي المدفوع"), _column("fees", "العمولات مع ضريبتها"),
-               _column("refunded", "الاستردادات"), _column("net", "صافي المتبقي لنا", role="receivable")]
+    columns = [_column("name", "المنصة", "text"), _column("orders", "طلبات مدفوعة مثبتة", "count"),
+               _column("gross", "المدفوع المثبت"), _column("fees", "العمولات المحتسبة مع ضريبتها"),
+               _column("refunded", "الاستردادات"), _column("net", "صافي محتسب متبقٍ لنا", role="receivable"),
+               _column("pending_orders", "طلبات تحتاج مراجعة", "exceptions")]
     complete = all(row["complete"] for row in rows) and not any(
         str(issue.get("source_id", "")).startswith("provider:") or str(issue.get("code", "")).startswith("provider_")
         for issue in issues)
-    result = _table("providers", "منصات الدفع", "fulfillment", columns,
-                  [{"id": row["provider"], **row} for row in rows],
+    displayed = [{"id": row["provider"], **row,
+                  "orders": row.get("paid_orders", row.get("confirmed_orders", row["orders"])),
+                  **{field: row.get("known_" + field, row.get(field)) for field in ("gross", "fees", "net")}}
+                 for row in rows]
+    result = _table("providers", "منصات الدفع", "fulfillment", columns, displayed,
                   complete=complete,
-                  totals={"orders": sum(row["orders"] for row in rows)},
+                  totals={"orders": (sum(row["orders"] for row in displayed if row["orders"] is not None)
+                                     if not displayed or any(row["orders"] is not None for row in displayed) else None),
+                          "pending_orders": len({item["order_id"] for row in rows for item in row.get("pending_order_details", [])})
+                              + sum(row.get("unidentified_pending_orders", 0) for row in rows)},
                   notes=["الصافي يشمل الافتتاحي المدخل والتسويات المثبتة. تقدير العمولة يخص المدفوع بعد البداية فقط، والعمولة الفعلية تحل محل تقدير الجزء المسوّى.",
-                         "المبالغ التي تنتظر مطابقة الهوية أو حوالة غير موزعة تظهر مع عدم اكتمال الصافي."])
+                         "الصافي المحتسب يجمع المبالغ التي اكتمل مدفوعها ورسومها؛ الطلبات المعلقة لا تلغي هذا الجزء المثبت. اضغط عدد الطلبات لمراجعة الأرقام والأسباب.",
+                         "المدفوع للمنصة مستقل عن وصول حوالتها إلى البنك؛ التحويل البنكي يثبت بتسوية منفصلة."])
     if not complete and not rows:
         result["totals"].update(gross=None, fees=None, refunded=None, net=None)
+    elif not complete:
+        result["totals"].update({key: _money(_known_sum(row.get(key) for row in displayed))
+                                for key in ("gross", "fees", "refunded", "net")})
+        result["totals_basis"] = "known_subtotals"
+    preparation_checkpoint()
     return result
 
 
@@ -315,6 +358,7 @@ def _fully_paid_provider_claim(row, facts):
             or provider not in fact.get("booked_providers", [])):
         return False
     tenders = split.get("tenders", [])
+    preparation_checkpoint()
     return (bool(tenders) and all((_number(leg.get("amount")) or ZERO) > ZERO for leg in tenders)
             and _sum(leg["amount"] for leg in tenders) == _number(split.get("gross"))
             and _sum(leg["amount"] for leg in tenders if leg.get("provider") == provider) == confirmed)
@@ -327,6 +371,7 @@ def _provider_collection_table(obligations, details, issues):
     complete = not any(str(issue.get("source_id", "")).startswith("provider:")
                        or str(issue.get("code", "")).startswith("provider_") for issue in issues)
     for row in obligations:
+        preparation_checkpoint()
         if row.get("kind") != "provider" or row.get("derived_credit"):
             continue
         if _fully_paid_provider_claim(row, details.get("facts") or {}):
@@ -356,16 +401,18 @@ def _provider_collection_table(obligations, details, issues):
     if not complete:
         collection_table["notes"].append(UNKNOWN + "تفاصيل بعض مطالبات منصات الدفع غير مكتملة.")
         collection_table["totals"]["amount"] = None
+    preparation_checkpoint()
     return collection_table
 
 
-def _cod_table(obligations, details, prestart=None, customer=None):
+def _cod_table(obligations, details, prestart=None, customer=None, *, coverage=None):
     facts = details.get("facts") or {}
     metrics = details.get("cod_reports") or {}
     customer = customer or {}
     replaced = set(customer.get("replaced", []))
     rows = []
     for obligation in obligations:
+        preparation_checkpoint()
         if obligation.get("kind") != "cod" or not str(obligation.get("id", "")).startswith("cod:"):
             continue
         identity = obligation["id"]
@@ -398,15 +445,21 @@ def _cod_table(obligations, details, prestart=None, customer=None):
                      "orders":prestart["orders"], "amount":prestart["amount"]})
     rows.extend(customer.get("rows", []))
     known = [row["amount"] for row in rows if row["amount"] is not None]
-    return _table("cod_expected", "تحصيل متوقع من العملاء للطلبات غير المسلمة", "forecast",
+    complete = bool(coverage and coverage.get("complete")) and all(row["amount"] is not None for row in rows)
+    result = _table("cod_expected", "تحصيل متوقع من العملاء للطلبات غير المسلمة", "forecast",
                   [_column("name", "مسار التحصيل / المطالبة", "text"), _column("orders", "الطلبات", "count"),
-                   _column("amount", "تحصيل متوقع من العميل", role="receivable")], rows, complete=False,
-                  totals={"amount": None, "orders": None},
-                  notes=[UNKNOWN + COD_SCOPE,
+                   _column("amount", "تحصيل متوقع من العميل", role="receivable")], rows, complete=complete,
+                  totals={"amount": _money(_sum(known)) if complete else None,
+                          "orders": sum(row.get("orders", 0) for row in rows) if complete else None},
+                  notes=([UNKNOWN + COD_SCOPE] if not complete else []) + [
                          "تظهر مبالغ الطلبات المفتوحة المؤيدة بصفحة الطلب قبل الإسناد وبعده. تتطلب الطلبات السابقة دليلًا مؤرخًا بعد بداية التشغيل.",
                          "المبالغ المتوقعة ليست عهدة نقدية لدى المندوب ولا تضاف إلى رصيد شركة الشحن المثبت.",
                          ("مجموع التحصيل المتوقع في الصفوف المتاحة " + _money(_sum(known)) + ".") if known
                          else "لم يثبت مبلغ تحصيل متوقع في الصفوف المتاحة."])
+    result["coverage"] = coverage or {"complete": False}
+    result["known_totals"] = {"amount": _money(_sum(known)) if known or complete else None}
+    preparation_checkpoint()
+    return result
 
 
 def _deliveries(obligations, details, currency, names, source_issues, *, coverage_note=None):
@@ -414,6 +467,7 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
     metrics = {key: value for key, value in (details.get("cod_reports") or {}).items() if value.get("currency") == currency}
     cod_obligations = {row["id"]: row for row in obligations if row.get("kind") == "cod"}
     for key, obligation in cod_obligations.items():
+        preparation_checkpoint()
         if key not in metrics and key.startswith("cod:") and (_number(obligation.get("confirmed")) or ZERO) > ZERO:
             # Old confirmed obligations can precede rich collection metadata.
             # Retain the recorded responsibility without guessing its method.
@@ -423,11 +477,13 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
                             "outstanding": obligation.get("outstanding"), "legacy_obligation_only": True}
     shipping = {}
     for row in obligations:
+        preparation_checkpoint()
         order = _shipping_order(row)
         if order and ((_number(row.get("confirmed")) or ZERO) > ZERO or facts.get("shipping:" + order)):
             shipping.setdefault((order, row.get("party_type"), row.get("party_id")), []).append(row)
     collections = {}
     for key, source in metrics.items():
+        preparation_checkpoint()
         order = str(source.get("order_id") or key.removeprefix("cod:"))
         cod = cod_obligations.get(key) or {}
         context = (order, source.get("party_type") or cod.get("party_type"), source.get("party_id") or cod.get("party_id"))
@@ -442,11 +498,15 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
         collections[context] = source
     contexts = set(shipping) | set(collections)
     order_contexts = Counter(context[0] for context in contexts)
-    rows, complete = [], True
+    rows = []
+    coverage_issues = sorted({row["code"] for row in source_issues if row.get("code") in GLOBAL_FAILURES
+                             and row.get("currency") in {None, currency}})
     missing_fee_orders = {str(issue.get("source_id", "")).removeprefix("shipping:") for issue in source_issues
                           if str(issue.get("code", "")).startswith("shipping_")
                           or issue.get("component") in {"shipping_fee", "base_shipping", "cod_commission"}}
     for context in sorted(contexts, key=lambda row: tuple(str(value or "") for value in row)):
+        preparation_checkpoint()
+        incomplete_reasons = set()
         order, party_type, party_id = context
         key = "cod:" + order
         source = collections.get(context)
@@ -454,15 +514,16 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
         if frozen.get("id") != party_id or frozen.get("party_type") != party_type:
             frozen = {}  # Evidence and fees stay with the carrier that owns them.
         fee_rows = shipping.get(context, [])
-        prepaid_rows = [row for row in fee_rows if row.get("payment_mode") == "prepaid"
-                        or row.get("recognition_event") == "order_completed"]
+        completed_rows = [row for row in fee_rows if row.get("recognition_event") == "order_completed"]
+        prepaid_rows = [row for row in fee_rows if row.get("payment_mode") == "prepaid"]
         prepaid = prepaid_rows[0] if prepaid_rows else None
-        completed_times = {row.get("completed_at") for row in prepaid_rows}
+        completed = completed_rows[0] if completed_rows else None
+        completed_times = {row.get("completed_at") for row in completed_rows}
         completed_at = next(iter(completed_times)) if len(completed_times) == 1 else None
         cash_accounts = {row.get("cash_account_id") for row in prepaid_rows}
         cash_account_id = next(iter(cash_accounts)) if len(cash_accounts) == 1 else None
         if prepaid and (not completed_at or not cash_account_id):
-            complete = False
+            incomplete_reasons.add("prepaid_payment_evidence_incomplete")
         original = facts.get("cod_collection:" + order) or {}
         proof = facts.get("cod_customer_confirmation:" + order) or original
         evidence = proof.get("evidence") or {}
@@ -473,9 +534,9 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
         if source is None:
             # Paying the courier at execution says nothing about whether the
             # customer owes COD or has already paid for the order.
-            destination = status = "unavailable" if prepaid else "not_applicable"
+            destination = status = "unavailable" if completed or prepaid else "not_applicable"
         elif not source.get("party_id") or not source.get("party_type"):
-            complete = False
+            incomplete_reasons.add("collection_party_unproven")
         elif party_type == "store_driver":
             if method == "cash":
                 destination = "driver_custody"
@@ -488,7 +549,7 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
                     store_collection = _money(source.get("collection_amount"))
                 # Receiver identity is not in this operational report. Native
                 # approval is display evidence, never a second cash posting.
-                complete = False
+                incomplete_reasons.add("collection_destination_unresolved")
             else:
                 status = "not_confirmed"
             if proof_valid:
@@ -502,7 +563,7 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
                     and cod.get("party_id") == party_id and cod.get("currency") == currency
                     and (_number(cod.get("confirmed")) or ZERO) > ZERO):
                 courier_responsibility = _money(cod["confirmed"])
-            complete = False
+            incomplete_reasons.add("courier_collection_unverified")
         if source is not None and proof_valid:
             settled, outstanding = _money(source.get("settled")), _money(source.get("outstanding"))
         elif source is not None and source.get("legacy_obligation_only"):
@@ -511,20 +572,21 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
                 for field, key in (("shipping_confirmed", "confirmed"), ("shipping_settled", "settled"),
                                    ("shipping_outstanding", "outstanding"))}
         if order in missing_fee_orders:
-            complete = False
-            if not prepaid:
-                fees = {key: None for key in fees}
-        if any(value is None for value in fees.values()) or status in {"unavailable", "not_confirmed", "pending_review"}:
-            complete = False
+            incomplete_reasons.add("shipping_fee_incomplete")
+        if any(value is None for value in fees.values()):
+            incomplete_reasons.add("shipping_fee_unknown")
+        if status in {"unavailable", "not_confirmed", "pending_review"}:
+            incomplete_reasons.add("collection_unconfirmed")
         identity = "delivery:" + order
         if order_contexts[order] > 1:
             identity += ":" + str(party_type) + ":" + str(party_id)
-        rows.append({"id": identity, "order_id": order,
-                     "order_number": prepaid.get("order_number") if prepaid else None,
+        rows.append({"id": identity, "order_id": order, "complete": not incomplete_reasons,
+                     "incomplete_reasons": sorted(incomplete_reasons),
+                     "order_number": (completed or prepaid or {}).get("order_number"),
                      "party_id": party_id, "party_type": party_type,
                      "party_name": names.get((party_type, party_id), party_id),
-                     "payment_mode": "prepaid" if prepaid else None,
-                     "recognition_event": "order_completed" if prepaid else None,
+                     "payment_mode": "prepaid" if prepaid else "deferred" if completed else None,
+                     "recognition_event": "order_completed" if completed else None,
                      "completed_at": completed_at, "cash_account_id": cash_account_id,
                      "cash_account_name": names.get(("cash", cash_account_id)) if cash_account_id else None,
                      "delivered_at": frozen.get("delivered_at"), "payment_method": method,
@@ -534,7 +596,9 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
                      "driver_custody": custody, "collection_settled": settled,
                      "collection_outstanding": outstanding, "store_collection": store_collection,
                      "customer_outstanding": _money((source or {}).get("customer_outstanding"))})
-    return {"complete": complete, "rows": rows, "notes": [
+    preparation_checkpoint()
+    return {"complete": not coverage_issues and all(row["complete"] for row in rows),
+            "coverage_contract_version": 1, "coverage_issues": coverage_issues, "rows": rows, "notes": [
         "الرسوم من التزامات الشحن التشغيلية فقط؛ لا تضاف أرباح تطبيق المندوب مرة أخرى.",
         "الشحن المدفوع مقدمًا يُخصم من الصندوق عند تم التنفيذ. تاريخ التنفيذ مستقل عن تاريخ التسليم، والتسليم اللاحق لا يكرر الخصم. دفع أجرة الشحن لا يثبت تحصيل قيمة الطلب من العميل.",
         "ذمة شركة الشحن تتبع مبلغ الدفع عند الاستلام المسجل عليها. السداد المخصص يخفّض المتبقي، وإثبات تحصيل الشركة من العميل يحتاج مستندًا مستقلًا.",
@@ -569,26 +633,33 @@ def _profit_rows(recorded_salary):
                          f"{recorded_salary['currency']} عن {recorded_salary['employee_days']} يوم موظف، "
                          f"بين {recorded_salary['first_day']} و{recorded_salary['last_day']} بتوقيت الرياض. "
                          "يتطلب إجمالي الرواتب مطابقة جميع الموظفين وأيام الاستحقاق للفترة.")
+    preparation_checkpoint()
     return rows
 
 
 def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     """Build JSON v1 from one saved operational snapshot without side effects."""
-    projection = report(state, provider_balances_sar=True, ad_balances_sar=True, provider_balances_net=True)
+    preparation_checkpoint()
+    projection = annotate_report_coverage(report(state, provider_balances_sar=True, ad_balances_sar=True, provider_balances_net=True))
     result = {"schema_version": 1, "authority": "operational_balance_report", "status": projection["status"],
               "started_at": projection["started_at"], "as_of": projection["as_of"],
               "generated_at": generated_at or projection["as_of"], "currency_order": [], "currencies": {},
               "issues": [_source_issue(row) for row in projection["issues"]], "dependencies": []}
     if projection["status"] != "active":
         return result
-    recorded_salaries = recorded_salary_subtotals(state)
     delivery_coverage = delivery_coverage_diagnostics(state, projection)
+    cod_coverage = cod_forecast_coverage(cost_exposure, projection["started_at"], projection["as_of"],
+        [*projection["issues"], *(cost_exposure.get("issues", []) if isinstance(cost_exposure, dict) else [])])
+    profit_source = valid_snapshot(state)
     cost_ready = isinstance(cost_exposure, dict) and cost_exposure.get("status") == "preview"
     result["dependencies"] = [
         {"code": "open_cost_exposure", "status": "ready" if cost_ready and cost_exposure.get("complete") is True else "incomplete" if cost_ready else "unavailable",
          "message": "تقديرات مراحل الطلبات المفتوحة من مصدرها التشغيلي." if cost_ready else UNKNOWN + "مصدر تكاليف الطلبات المفتوحة غير متاح بعد."},
-        {"code": "complete_collection_forecast", "status": "incomplete", "message": UNKNOWN + COD_SCOPE},
-        {"code": "profit_period_coverage", "status": "unavailable", "message": UNKNOWN + "مصادر الربح الكامل لنفس فترة المبيعات لم تكتمل."},
+        {"code": "complete_collection_forecast", "status": "ready" if cod_coverage["complete"] else "incomplete",
+         "message": "تغطية مصادر التحصيل المتوقع للفترة المعروضة." if cod_coverage["complete"] else UNKNOWN + COD_SCOPE,
+         "reason_codes": cod_coverage["reason_codes"]},
+        {"code": "profit_period_coverage", "status": "incomplete" if profit_source else "unavailable",
+         "message": "مصادر الربح محفوظة لنفس الفترة؛ يظهر كل عنصر معلوم مع حالة اكتماله." if profit_source else UNKNOWN + "مصادر الربح الكامل لنفس فترة المبيعات لم تكتمل."},
         *delivery_coverage["dependencies"],
         *provider_evidence_coverage(projection),
     ]
@@ -605,6 +676,8 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     payment_sar = tender_coverage.get("sar")
     other_tenders = tender_coverage.get("by_currency", {})
     customer_wallets = projection["details"].get("customer_wallet_balances", {})
+    wallet_statement_missing = any(row.get("code") == "customer_wallet_balance_missing"
+                                   for row in projection["issues"])
     currencies.update(page_payments)
     currencies.update(paid_totals)
     currencies.update(projection["details"]["provider_balances"])
@@ -612,10 +685,13 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     currencies.update(customer_wallets)
     if payment_sar is not None:
         currencies.add("SAR")
+    if profit_source:
+        currencies.add("SAR")
     if cost_ready:
         currencies.update((cost_exposure.get("currencies") or {}).keys())
     result["currency_order"] = sorted(currencies, key=lambda currency: (currency != "SAR", currency))
     for currency in result["currency_order"]:
+        preparation_checkpoint()
         parties = sorted((row for row in projection["parties"] if row["currency"] == currency), key=_party_id)
         obligations = [row for row in projection["obligations"] if row.get("currency") == currency]
         actual_complete = bool(projection["as_of"]) and not any(row.get("currency") in {None, currency} for row in projection["issues"])
@@ -632,9 +708,12 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
             wallet_table.update(show_totals=False, totals={})
             tables.append(wallet_table)
         tables.append(_balance_origin(parties, obligations, actual_complete))
+        apply_table_coverage(tables, parties, obligations, projection["issues"], projection["details"].get("facts", {}),
+                             currency=currency, as_of=projection["as_of"])
         if other_tenders.get(currency):
             rows = [{"id": row["method"], **row} for row in other_tenders[currency]]
             for row in rows:
+                preparation_checkpoint()
                 if row["method"] == "wallet":
                     row["name"] = "المستخدم من أرصدة محافظ العملاء"
             tender_table = _table("customer_other_tenders", "تفصيل طرق الدفع الأخرى بعملة الطلب", "fulfillment",
@@ -651,23 +730,35 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         categories = [("pos_receivable", "banks_network", "تسويات أجهزة الشبكة"),
                       *((kind, identity, title) for kind, identity, title, _ in PARTIES), ("ad_account", "ads", "حسابات الإعلانات")]
         for kind, identity, title in categories:
+            preparation_checkpoint()
             if kind == "customer_wallet":
                 if wallet is not None:
                     debt_rows.append({"id": identity, "name": title, "receivable": "0.00", "payable": wallet["remaining"]})
                 continue
             selected = [row for row in parties if row["party_type"] == kind]
             debt_rows.append({"id": identity, "name": title,
-                              "receivable": "0.00" if kind == "ad_account" else _money(_sum(row["outstanding_receivable"] for row in selected)),
-                              "payable": _money(_sum(row["outstanding_payable"] for row in selected))})
+                              "receivable": "0.00" if kind == "ad_account" else _money(_known_sum(
+                                  row.get("known_outstanding_receivable", row.get("outstanding_receivable")) for row in selected)),
+                              "payable": _money(_known_sum(row.get("known_outstanding_payable", row.get("outstanding_payable")) for row in selected))})
         other = next((table for table in tables if table["id"] == "other_balances"), None)
         if other:
             debt_rows.append({"id": "other_balances", "name": other["title"],
                               **{key: other["totals"][key] for key in ("receivable", "payable")}})
         liquidity = _sum(row["actual"] for row in parties if row["party_type"] in {"bank", "cash"})
         receivable, payable = (_sum(row[key] for row in debt_rows) for key in ("receivable", "payable"))
+        known_receivable, known_payable = (_known_sum(row[key] for row in debt_rows)
+                                         for key in ("receivable", "payable"))
+        if wallet_statement_missing:
+            # Order tender currency does not establish the wallet ledger's
+            # currency or closing liability. Preserve recorded subtotals, but
+            # never certify a zero aggregate from the absent statement.
+            payable = None
         prepaid = _sum(row["ad_wallet_balance"] for row in parties if row["party_type"] == "ad_account")
         custody = _sum(row["custody_remaining"] for row in parties if row["party_type"] == "employee_custody")
-        position = liquidity + receivable - payable if actual_complete else None
+        known_position = (liquidity + known_receivable - known_payable
+                          if all(value is not None for value in (liquidity, known_receivable, known_payable)) else None)
+        position = (liquidity + receivable - payable
+                    if actual_complete and all(value is not None for value in (liquidity, receivable, payable)) else None)
         displayed = position + prepaid + custody if position is not None else None
         unavailable_actual = None if actual_complete else UNKNOWN + "المصادر الحالية تحتاج إلى مراجعة؛ المجاميع الظاهرة تخص الأرصدة المسجلة فقط."
         current_rows = [
@@ -679,28 +770,37 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
             _row("employee_custody", "العهد المتبقية لدى الموظفين", custody),
             _row("displayed_position", "المركز مع الأرصدة المقدمة والعهد المعروضة", displayed, "total", unavailable_actual),
         ]
+        for identity, total, subtotal in (("debts_receivable", receivable, known_receivable),
+                                          ("debts_payable", payable, known_payable)):
+            if total is None:
+                next(row for row in current_rows if row["id"] == identity).update(
+                    known_subtotal=_money(subtotal), reason=UNKNOWN + (
+                        "رصيد محافظ العملاء وعملته يحتاجان إلى كشف سلة موثق؛ المجموع المعلوم يخص الالتزامات المسجلة فقط."
+                        if identity == "debts_payable" and wallet_statement_missing else
+                        "المجموع المعلوم يخص الأرصدة المتاحة فقط."))
+        if not actual_complete:
+            next(row for row in current_rows if row["id"] == "monetary_position")["known_subtotal"] = _money(known_position)
+            next(row for row in current_rows if row["id"] == "displayed_position")["known_subtotal"] = _money(
+                known_position + prepaid + custody if known_position is not None and prepaid is not None and custody is not None else None)
         costs = _cost_tables(cost_exposure, currency, obligations)
         currency_issues = [row for row in projection["issues"] if row.get("currency") in {None, currency}]
         provider_future = _provider_collection_table(obligations, projection["details"], currency_issues)
-        cod = _cod_table(obligations, projection["details"], prestart_cod.get(currency), customer_cod.get(currency))
+        cod = _cod_table(obligations, projection["details"], prestart_cod.get(currency), customer_cod.get(currency), coverage=cod_coverage)
         tables.extend([costs[-1], *costs[:-1], cod, provider_future])
-        forecast_rows = [_row(table["id"], table["title"], table["totals"]["amount"],
-                              "positive" if table["id"] in {"cod_expected", "provider_collections_expected"} else "negative",
-                              None if table["complete"] else UNKNOWN + "تغطية هذا البند غير مكتملة.")
-                         for table in (cod, provider_future, *costs)]
-        forecast_rows.extend([
-            _row("forecast_change", "صافي التغير المتوقع", None, "total", UNKNOWN + COD_SCOPE),
-            _row("forecast_monetary_position", "المركز النقدي والديون المتوقع", None, "total", UNKNOWN + "التكاليف والتحصيل المستقبليان غير مكتملين."),
-        ])
+        forecast = project_forecast(tables, current_position=_money(position), actual_complete=actual_complete)
+        profit = project_profit(state, currency)
         result["currencies"][currency] = {
             "tables": tables, "debt_rows": debt_rows,
             "debt_totals": {"receivable": _money(receivable), "payable": _money(payable)},
-            "current_rows": current_rows, "forecast_rows": forecast_rows, "profit_rows": _profit_rows(recorded_salaries.get(currency)),
+            "known_debt_totals": {"receivable": _money(known_receivable), "payable": _money(known_payable)},
+            "current_rows": current_rows, "forecast_rows": forecast["rows"], "profit_rows": profit["rows"],
             "metrics": {"liquidity": _money(liquidity), "debts_receivable": _money(receivable), "debts_payable": _money(payable),
                         "monetary_position": _money(position), "prepaid_ad_credit": _money(prepaid), "employee_custody": _money(custody),
-                        "displayed_position": _money(displayed), "forecast_change": None, "forecast_monetary_position": None,
-                        "operating_profit": None, "net_profit": None},
-            "completeness": {"actual": actual_complete, "forecast": False, "profit": False},
+                        "displayed_position": _money(displayed), "known_monetary_position": _money(known_position),
+                        "forecast_change": forecast["forecast_change"], "forecast_monetary_position": forecast["forecast_monetary_position"],
+                        "operating_profit": profit["operating_profit"], "net_profit": profit["net_profit"]},
+            "completeness": {"actual": actual_complete, "forecast": forecast["complete"], "profit": profit["complete"]},
+            "profit_quality": profit["quality"], "forecast_scope": forecast["scope"],
             "notes": ["كل المبالغ بهذه العملة؛ لا تحويل ولا جمع بين العملات.",
                       "المركز النقدي والديون = النقد المتاح + الحقوق القابلة للتحصيل − الالتزامات المثبتة.",
                       "الرصيد الإعلاني المقدم والعهد يعرضان منفصلين ثم يضافان مرة واحدة إلى مجموع الأرصدة المعروضة.",
@@ -710,4 +810,5 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
                 coverage_note=(delivery_coverage["event_note"] if currency == "SAR" else
                     "تغطية تسليم الطلبات السابقة لبدء التشغيل بهذه العملة غير مثبتة؛ لا تحويل أو إعادة تسمية لمبالغ الشحن.")),
         }
+    preparation_checkpoint()
     return result

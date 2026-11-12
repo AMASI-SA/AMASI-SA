@@ -81,7 +81,6 @@ def test_closed_foreign_tender_keeps_paid_amount_separate_from_mismatching_order
 
 @pytest.mark.parametrize('kwargs', [
     {'paid':'30.00'}, {'tender':'99.96'}, {'changes':lambda r:r['payment_methods'][0].pop('transaction_reference')},
-    {'changes':lambda r:r['payment_actions']['remaining_action'].update(has_remaining_amount=True)},
     {'changes':lambda r:r['payment_actions']['refund_action'].update(paid_amount={'amount':'99.98','currency':'SAR'})},
     {'changes':lambda r:r['payment_actions']['refund_action'].update(refund_amount={'amount':5,'currency':'KWD'})},
     {'changes':lambda r:r['payment_actions']['refund_action'].update(pending_refund_amount={'amount':5,'currency':'KWD'})},
@@ -94,6 +93,15 @@ def test_unproved_tender_never_enters_customer_paid_detail(kwargs):
     payment, issues = foreign_payment(**kwargs)
     assert not payment or 'order_page_balance' not in payment
     assert not any(i.get('paid_tender_observation') for i in issues)
+
+
+def test_explicit_partial_foreign_payment_keeps_paid_without_inventing_remaining():
+    payment, issues = foreign_payment(
+        changes=lambda raw: raw['payment_actions']['remaining_action'].update(has_remaining_amount=True))
+    assert not issues and payment['gross'] == '100'
+    assert payment['order_page_balance']['source'] == 'canonical_salla_partial_tender'
+    assert payment['order_page_balance']['paid'] == '99.98'
+    assert payment['order_page_balance']['remaining'] is None and not payment.get('captures')
 
 
 def test_foreign_observation_never_counts_a_frozen_different_provider_or_reference_owner_twice():

@@ -14,8 +14,9 @@ const payload={schema:'receiving_component_coverage_v1',session_scope:scope,read
         {piece_id:'missing-piece',component:'service:tailoring',status:'missing',source_amount_sar:'5.00'}]}]};
 const click=async name=>act(async()=>[...host.querySelectorAll('button')].find(el=>el.textContent===name).click());
 beforeEach(async()=>{global.IS_REACT_ACT_ENVIRONMENT=true;api.receivingInvoiceCoverage.mockReset();api.receivingCorrectionPreview.mockReset();host=document.createElement('div');
+  Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});
   document.body.appendChild(host);root=createRoot(host);await act(async()=>root.render(<ReceivingInvoiceCoverage sessionScope={scope}/>));});
-afterEach(async()=>{await act(async()=>root.unmount());host.remove();});
+afterEach(async()=>{await act(async()=>root.unmount());host.remove();delete document.visibilityState;});
 
 test('opens receiving-only differences on demand and keeps each source and saved currency visible',async()=>{
   api.receivingInvoiceCoverage.mockResolvedValue(payload);
@@ -53,7 +54,7 @@ test('requests one invoice on demand and displays separate simulated gross legs'
   await loadCoverage();
   expect(api.receivingCorrectionPreview).not.toHaveBeenCalled();
   await click(previewButton);
-  expect(api.receivingCorrectionPreview).toHaveBeenCalledWith('two',payload.saved_balance_as_of,7);
+  expect(api.receivingCorrectionPreview).toHaveBeenCalledWith('two',payload.saved_balance_as_of,7,expect.objectContaining({signal:expect.any(AbortSignal)}));
   const section = host.querySelector('[aria-label="مقترح التصحيح التاريخي"]');
   expect([...section.querySelectorAll('tbody tr')].map(tr => [...tr.cells].map(td => td.textContent))).toEqual([
     ['wrong-piece','منتج','QAR','5.00','0.00'], ['wrong-piece','منتج','SAR','0.00','5.00'],
@@ -96,4 +97,28 @@ test('rejects responses with another invoice, snapshot or session, or permission
     expect(host.querySelector('[role="alert"]').textContent).toContain('تعذر');
     expect(host.querySelector('[aria-label="مقترح التصحيح التاريخي"]')).toBeNull();
   }
+});
+
+const visibility=async value=>act(async()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value});document.dispatchEvent(new Event('visibilitychange'));});
+test('coverage remains on demand while hidden and completed reads never retry on visibility',async()=>{
+  api.receivingInvoiceCoverage.mockResolvedValue(payload);
+  await visibility('hidden');await click('فحص فواتير استلام المورد');
+  expect(api.receivingInvoiceCoverage).not.toHaveBeenCalled();
+  await visibility('visible');expect(api.receivingInvoiceCoverage).toHaveBeenCalledTimes(1);
+  await visibility('hidden');await visibility('visible');
+  expect(api.receivingInvoiceCoverage).toHaveBeenCalledTimes(1);
+});
+test('hiding coverage cancels its transport and does not display its late invoice data',async()=>{
+  let resolve;api.receivingInvoiceCoverage.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));
+  await click('فحص فواتير استلام المورد');const config=api.receivingInvoiceCoverage.mock.calls[0][0];
+  await visibility('hidden');expect(config.signal.aborted).toBe(true);
+  await act(async()=>resolve(payload));expect(host.textContent).not.toContain('TEST-PARTIAL');
+  await act(async()=>root.render(null));
+});
+test('unmount cancels the invoice correction preview without exposing stale simulated amounts',async()=>{
+  let resolve;api.receivingCorrectionPreview.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));
+  await loadCoverage();await click(previewButton);
+  const config=api.receivingCorrectionPreview.mock.calls[0][3];
+  await act(async()=>root.render(null));expect(config.signal.aborted).toBe(true);
+  await act(async()=>resolve(preview));expect(host.textContent).not.toContain('wrong-piece');
 });

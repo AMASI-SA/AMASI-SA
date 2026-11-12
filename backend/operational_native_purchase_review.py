@@ -13,6 +13,7 @@ from accounting_ledger_v2 import AccountingLedgerV2Error, read_reporting_entries
 from operational_balance_sources import instant
 from operational_balance_store import digest
 from purchase_receiving_service import SCHEMA, purchase_amounts
+from operational_financial_activity_runtime import checked_rows, preparation_checkpoint, prepare_in_thread
 
 NATIVE_INVOICE_EVIDENCE_FIELDS = ('id', 'user_id', 'schema_version', 'state', 'supplier_entity_id',
     'supplier_counterparty_id', 'supplier_account_id', 'supplier_id', 'currency', 'approved_at',
@@ -42,6 +43,7 @@ def _id(value):
 
 
 def _require(condition, code):
+    preparation_checkpoint()
     if not condition:
         raise ValueError(code)
 
@@ -60,7 +62,7 @@ class _LedgerEvidence:
         self.owner, self.groups = owner, defaultdict(list)
         self.invoices, self.liabilities = defaultdict(set), defaultdict(set)
         self.reversals, self.rows = set(), {}
-        for row in entries:
+        for row in checked_rows(entries):
             _require(isinstance(row, dict) and row.get('user_id') == owner
                      and row.get('currency') == 'SAR' and row.get('status') == 'posted',
                      'native_purchase_ledger_scope_mismatch')
@@ -108,7 +110,7 @@ def review_native_purchase(invoice, liabilities, entries, *, owner, started_at, 
         _require(all(not isinstance(line.get(k), bool) for line in lines for k in ('quantity', 'unit_cost')),
                  'native_purchase_lines_incomplete')
         _money(invoice.get('tax_amount'))
-        for line in lines:
+        for line in checked_rows(lines):
             _id(line.get('id'))
         totals = purchase_amounts(lines, invoice.get('tax_amount'), invoice.get('tax_treatment'))
         gross = _money(invoice.get('total'))
@@ -146,7 +148,7 @@ def review_native_purchase(invoice, liabilities, entries, *, owner, started_at, 
         if totals['input_vat']:
             expected.append(dict(entity_type='tax', entity_id=_id(invoice.get('input_vat_account_id')),
                 sub_account='input_vat', entry_type='purchase_input_vat', side='debit', amount=totals['input_vat']))
-        for exp in expected:
+        for exp in checked_rows(expected):
             hits = [row for row in purchase if all(row.get(k) == exp[k] for k in
                     ('entity_type', 'entity_id', 'sub_account', 'entry_type', 'side'))]
             _require(len(hits) == 1 and _money(hits[0].get('amount')) == exp['amount'],
@@ -162,7 +164,7 @@ def review_native_purchase(invoice, liabilities, entries, *, owner, started_at, 
         paid = Decimal(0)
         operations = set()
         payment_rows = []
-        for gid in sorted(linked - {group}):
+        for gid in checked_rows(sorted(linked - {group})):
             payment = groups[gid]
             _require(len(payment) == 2 and all(row.get('source') == 'supplier_payment'
                      and row.get('entry_type') == 'supplier_payment' for row in payment),
@@ -182,7 +184,7 @@ def review_native_purchase(invoice, liabilities, entries, *, owner, started_at, 
             operations.add(op)
             payment_at = instant(supplier_legs[0].get('effective_at'))
             _require(payment_at <= upper, 'native_purchase_payment_after_review_time')
-            for row in payment:
+            for row in checked_rows(payment):
                 m = row.get('metadata') or {}
                 _require(m.get('invoice_id') == iid and m.get('liability_id') == lid
                          and m.get('supplier_entity_id') == supplier and m.get('payment_operation_id') == op,
@@ -228,9 +230,6 @@ async def load_native_purchase_reviews(db, owner, invoices, *, session, started_
         liabilities.extend(chunk)
         if len(liabilities) > LIMIT:
             raise ValueError('supplier_preview_native_scope_incomplete')
-    by_liability = defaultdict(list)
-    for row in liabilities:
-        by_liability[row.get('id')].append(row)
     try:
         # The public API verifies WHOLE groups/audits, including zero-leg damage.
         # This manual preview reads the ledger once, not once per bundle leaf.
@@ -240,12 +239,22 @@ async def load_native_purchase_reviews(db, owner, invoices, *, session, started_
     except AccountingLedgerV2Error as error:
         return {iid: {**_base(), 'issues': ['native_purchase_ledger_verification_failed', error.code]}
                 for iid in identities if isinstance(iid, str)}
+    return await prepare_in_thread(_review_native_batch, invoices, liabilities, entries,
+        owner=owner, started_at=started_at, as_of=as_of)
+
+
+def _review_native_batch(invoices, liabilities, entries, *, owner, started_at, as_of):
+    preparation_checkpoint()
+    identities = [row.get('id') for row in checked_rows(invoices) if isinstance(row, dict)]
+    by_liability = defaultdict(list)
+    for row in checked_rows(liabilities):
+        by_liability[row.get('id')].append(row)
     try:
         indexed = _LedgerEvidence(entries, owner)
     except ValueError as error:
         return {iid: {**_base(), 'issues': [str(error)]} for iid in identities if isinstance(iid, str)}
     result, counts = {}, Counter(identities)
-    for invoice in invoices:
+    for invoice in checked_rows(invoices):
         iid = invoice.get('id') if isinstance(invoice, dict) else None
         if not isinstance(iid, str):
             continue

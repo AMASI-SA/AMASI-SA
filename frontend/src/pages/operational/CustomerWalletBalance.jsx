@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { formatRiyadhDateTime } from '../../lib/dates';
 import { operationalApi as api, messageFor, requestId } from './api';
 import { formatPositionMoney } from './financialPositionPresentation';
+import { visibleOperationalRead } from './visibleOperationalRead';
 
 export default function CustomerWalletBalance({ sessionScope, onSaved }) {
   const [opened, setOpened] = useState(false);
@@ -23,17 +24,15 @@ export default function CustomerWalletBalance({ sessionScope, onSaved }) {
 
   useEffect(() => {
     if (!opened) return undefined;
-    let current = true;
     setContext(null);
     setError('');
-    api.customerWalletContext().then(result => {
-      if (!current) return;
-      if (result.session_scope !== sessionScope) throw Error('تغيرت الجلسة. أعد فتح التقرير.');
-      setContext(result);
-    }).catch(failure => {
-      if (current) setError(failure.response ? messageFor(failure) : failure.message);
+    return visibleOperationalRead(config => api.customerWalletContext(config), {
+      onData: result => {
+        if (result.session_scope !== sessionScope) { setError('تغيرت الجلسة. أعد فتح التقرير.'); return; }
+        setContext(result);
+      },
+      onError: failure => setError(failure.response ? messageFor(failure) : failure.message),
     });
-    return () => { current = false; };
   }, [opened, sessionScope]);
 
   const edit = patch => {

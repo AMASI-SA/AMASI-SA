@@ -6,7 +6,7 @@ from operational_split_payment import provider_shares, split_reference_owners
 
 PLATFORMS = {"salla": "سلة", "tabby": "تابي", "tamara": "تمارا", "emkan": "إمكان"}
 LABELS = {
-    "order_page": "لها إثبات مدفوع ومتبقٍ من صفحة الطلب",
+    "order_page": "لها مبلغ مدفوع مثبت في صفحة الطلب",
     "capture": "لها قيد تحصيل محفوظ", "settlement_allocation": "خُصص لها سداد كلي أو جزئي",
     "missing_time": "ينقصها وقت التحصيل", "fee_review": "تحتاج مطابقة الرسوم",
     "settlement_review": "تحتاج مطابقة التسوية", "capture_review": "تحتاج مراجعة إثبات التحصيل",
@@ -39,7 +39,7 @@ def provider_evidence_coverage(projection):
             order, party = key[len("provider:"):], row["party_id"]
             party_for_order[order] = party
             if Decimal(row["settled"]) > 0:
-                counts[party]["settlement_allocation"].add(order)
+                counts[party]["settlement_allocation"].add(order.removesuffix(":" + party))
     for key, fact in projection["details"].get("facts", {}).items():
         if key.startswith("capture:") and isinstance(fact, dict) and fact.get("order_id") and fact.get("provider"):
             counts[fact["provider"]]["capture"].add(fact["order_id"])
@@ -52,6 +52,8 @@ def provider_evidence_coverage(projection):
         counts[party]["order_page" if status == "saved" else "settlement_review"].add(oid)
 
     for issue in projection["issues"]:
+        if issue.get("code") == "provider_net_balance_incomplete":
+            continue  # This is an account status, never an additional order.
         order = issue.get("source_id") or ""
         if issue.get("scope") != "provider_payment":
             if not order.startswith("provider:"):
@@ -71,6 +73,12 @@ def provider_evidence_coverage(projection):
             group = "capture_review"
         counts[party][group].add(order.removesuffix(":" + party))
 
+    balances = defaultdict(list)
+    for providers in projection["details"].get("provider_balances", {}).values():
+        for row in providers:
+            balances[row["provider"]].append(row)
+            if row.get("orders"):
+                counts[row["provider"]]
     if not counts:
         return [{"code":"provider_evidence_coverage", "status":"unavailable", "observed_order_counts":{},
                  "message":"لا تتوفر باللقطة أدلة تكفي لقياس تغطية تحصيل المنصات وتسوياتها."}]
@@ -78,15 +86,21 @@ def provider_evidence_coverage(projection):
     for party, groups in sorted(counts.items()):
         observed = {key: len(groups[key]) for key in LABELS if groups.get(key)}
         text = "، ".join(f"{n} {LABELS[key]}" for key, n in observed.items())
-        rows.append({"code":"provider_evidence_coverage_"+party, "status":"incomplete",
-                     "observed_order_counts":observed,
+        confirmed = groups["order_page"] | groups["capture"]
+        pending = set().union(*(groups[key] for key in ("missing_time", "fee_review", "settlement_review", "capture_review")))
+        for balance in balances[party]:
+            pending.update(balance.get("pending_order_ids", []))
+        complete = not pending and all(row.get("complete") for row in balances[party])
+        rows.append({"code":"provider_evidence_coverage_"+party, "status":"complete" if complete else "incomplete",
+                     "observed_order_counts":observed, "confirmed_orders": len(confirmed), "pending_orders": len(pending),
                      "message":f"طلبات {PLATFORMS.get(party, 'المنصة غير المحددة')} في اللقطة المحفوظة (كل العملات): {text}. "
-                               "قد يظهر الطلب في أكثر من فئة. اكتمال التغطية يتطلب كشف المنصة."})
+                               f"الطلبات المثبتة {len(confirmed)}، والتي تحتاج استكمالًا {len(pending)}. "
+                               "قد يظهر الطلب في أكثر من فئة. تحويل المنصة إلى البنك يُثبت بتسوية مستقلة."})
     return rows
 
 def provider_customer_payments(projection):
     """Return the page breakdown and distinct evidenced gross payments in each native currency."""
-    from operational_provider_transaction_evidence import is_closed_tender_balance
+    from operational_provider_transaction_evidence import is_closed_tender_balance, is_partial_tender_balance
 
     records = {}
     for key, row in projection["details"].get("facts", {}).items():
@@ -107,7 +121,7 @@ def provider_customer_payments(projection):
             continue
         try:
             paid, gross = (Decimal(str(row[k])) for k in ("paid", "gross"))
-            due = None if is_closed_tender_balance(row, currency) else Decimal(str(row["remaining"]))
+            due = None if (is_closed_tender_balance(row, currency) or is_partial_tender_balance(row, currency)) else Decimal(str(row["remaining"]))
             if (not all(n.is_finite() and n >= 0 for n in (paid, gross))
                     or (due is not None and (not due.is_finite() or due < 0 or paid + due != gross))):
                 continue

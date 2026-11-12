@@ -7,6 +7,7 @@ from operational_balance_sources import collect_sources
 from operational_balance_store import audit, check_authorization, digest, fail, mutate, now, read, remember, replay
 from operational_historical_shipping_fee import APPROVALS, review, saved_for
 from operational_supplier_invoice_preview import SnapshotReads
+from operational_financial_activity_runtime import checked_rows, preparation_checkpoint, prepare_in_thread
 
 
 async def _owner(db, owner, actor):
@@ -25,34 +26,41 @@ async def _preview(db, owner, actor, number, stamp):
                 await active_gate(scoped, owner, state)
                 sources = await collect_sources(scoped, owner, state["started_at"], stamp, operational_state=state,
                                                 historical_fee_order=number)
-                hits = [p for p in sources.get("historical_fee_candidates", []) if p["order_number"] == number]
-                p = hits[0] if len(hits) == 1 else None
-                saved = saved_for(state, number)
-                openings, payouts, issues = review(state, p)
-                native_conflict = sources.get("historical_fee_native_conflicts", {}).get(number)
-                if native_conflict:
-                    issues.append(native_conflict)
-                if not p:
-                    for entry in sources["issues"]:
-                        details = entry.get("driver_fee_review") or entry.get("courier_fee_review") or {}
-                        action = entry.get("required_action")
-                        if details.get("order_number") == number and action and action not in issues:
-                            issues.append(action)
-                applied = saved and state.get("engine", {}).get("facts", {}).get(
-                    "historical_base_fee:" + saved["candidate"]["order_id"])
-                same_approval = saved and saved["candidate"] == p and (
-                    saved["opening_payout_hash"] == digest([openings, payouts]))
-                if applied or same_approval:
-                    issues.append("سبق اعتماد أجرة هذا الطلب.")
-                result = {"order_number": number, "candidate": p, "openings": openings, "payouts": payouts,
-                          "issues": issues, "can_approve": bool(p and not issues), "already_approved": bool(applied or same_approval),
-                          "session_scope": digest([owner, actor])}
-                result["preview_hash"] = digest([state["revision"], result])
+                result = await prepare_in_thread(_preview_result, state, sources, number, owner, actor)
                 return state, result
     except PyMongoError:
         fail("historical_shipping_snapshot_unavailable", "تعذرت قراءة مصادر الأجرة من لقطة متسقة", 503)
     except (TypeError, KeyError, ValueError, ArithmeticError):
         fail("historical_shipping_source_invalid", "تحتاج بيانات التسليم أو السداد إلى مطابقة")
+
+
+def _preview_result(state, sources, number, owner, actor):
+    preparation_checkpoint()
+    hits = [p for p in checked_rows(sources.get("historical_fee_candidates", [])) if p["order_number"] == number]
+    candidate = hits[0] if len(hits) == 1 else None
+    saved = saved_for(state, number)
+    openings, payouts, issues = review(state, candidate)
+    native_conflict = sources.get("historical_fee_native_conflicts", {}).get(number)
+    if native_conflict:
+        issues.append(native_conflict)
+    if not candidate:
+        for entry in checked_rows(sources["issues"]):
+            details = entry.get("driver_fee_review") or entry.get("courier_fee_review") or {}
+            action = entry.get("required_action")
+            if details.get("order_number") == number and action and action not in issues:
+                issues.append(action)
+    applied = saved and state.get("engine", {}).get("facts", {}).get(
+        "historical_base_fee:" + saved["candidate"]["order_id"])
+    same_approval = saved and saved["candidate"] == candidate and (
+        saved["opening_payout_hash"] == digest([openings, payouts]))
+    if applied or same_approval:
+        issues.append("سبق اعتماد أجرة هذا الطلب.")
+    result = {"order_number": number, "candidate": candidate, "openings": openings, "payouts": payouts,
+              "issues": issues, "can_approve": bool(candidate and not issues), "already_approved": bool(applied or same_approval),
+              "session_scope": digest([owner, actor])}
+    result["preview_hash"] = digest([state["revision"], result])
+    preparation_checkpoint()
+    return result
 
 
 async def preview(db, owner, actor, number, *, clock=None):

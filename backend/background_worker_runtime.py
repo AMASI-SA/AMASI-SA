@@ -22,7 +22,6 @@ async def start_tasks(db, *, wake_event=None, assembly_wake_event=None):
         from integrations.qoyod_manual.send_jobs import run as manual_sends
         from salla_integration.scheduled_reconciliation import scheduler as salla_reconciliation
         from salla_integration.service import salla_token_maintenance_loop
-        from operational_balance_worker import run as balances
         from order_review_resume_worker import start_worker as review
         from assembly_completion_delivery import start_worker as delivery
         from salla_integration.shipping_label_inbox import start_worker as labels
@@ -33,7 +32,7 @@ async def start_tasks(db, *, wake_event=None, assembly_wake_event=None):
             ('qoyod-followup', followup_loop), ('qoyod-manual-send-jobs', manual_sends),
             ('salla-token-maintenance', salla_token_maintenance_loop),
             ('salla-orders-12h', salla_reconciliation),
-            ('operational-balances', balances), ('operational-push', push),
+            ('operational-push', push),
         ):
             tasks.append(asyncio.create_task(factory(db), name=name))
         task = await delivery(db, wake_event=assembly_wake_event)

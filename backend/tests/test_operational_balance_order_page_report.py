@@ -2,6 +2,7 @@
 from copy import deepcopy
 
 from operational_financial_position import build_financial_position
+from operational_balance_service import report
 from test_operational_balance_financial_position import NOW, opening, obligation, state_for, table
 
 
@@ -27,9 +28,12 @@ def test_page_breakdown_keeps_remaining_with_customer_and_held_amounts_out_of_de
     held = table(result, "providers", currency="QAR")
     assert [(r["orders"],r["gross"],r["net"]) for r in held["rows"]] == [(1,"100.00",None)]
     assert not held["complete"] and held["rows"][0]["held_orders"] == 1
-    assert result["currencies"]["SAR"]["debt_totals"]["receivable"] == "540.00"
+    assert result["currencies"]["SAR"]["debt_totals"]["receivable"] == "500.00"
+    assert rows[0]["known_gross"] == "40.00" and rows[0]["known_net"] == "500.00"
+    assert report(s)["summaries"]["SAR"]["receivable"] == "540.00"
     assert result["currencies"]["SAR"]["metrics"]["liquidity"] == "90.00"
-    assert result["currencies"]["QAR"]["debt_totals"]["receivable"] == "0.00"
+    assert result["currencies"]["QAR"]["debt_totals"]["receivable"] is None
+    assert result["currencies"]["QAR"]["known_debt_totals"]["receivable"] == "0.00"
     assert s == before
 
 
@@ -48,8 +52,10 @@ def test_source_paid_total_counts_a_page_and_its_captures_once_and_keeps_opening
     result = build_financial_position(s, generated_at=NOW)
     totals = table(result, "providers")["rows"]
     assert [(row["orders"], row["gross"]) for row in totals] == [(2, "105.00")]
-    assert totals[0]["net"] is None
-    assert result["currencies"]["SAR"]["debt_totals"]["receivable"] == "560.00"
+    assert totals[0]["net"] == "500.00" and totals[0]["complete"] is False
+    assert result["currencies"]["SAR"]["debt_totals"]["receivable"] == "500.00"
+    assert totals[0]["known_gross"] == "105.00" and totals[0]["known_net"] == "500.00"
+    assert report(s)["summaries"]["SAR"]["receivable"] == "560.00"
 
 
 def test_foreign_order_is_reported_once_in_the_sar_customer_total():

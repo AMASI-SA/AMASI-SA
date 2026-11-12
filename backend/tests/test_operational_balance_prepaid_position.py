@@ -39,7 +39,8 @@ def test_paid_execution_charge_has_its_own_date_and_cashbox_without_false_delive
     assert row["shipping_confirmed"] == row["shipping_settled"] == "34.50"
     assert row["shipping_outstanding"] == "0.00"
     assert currency["metrics"]["liquidity"] == currency["metrics"]["monetary_position"] == "65.50"
-    assert table(result, "couriers")["totals"] == {"name": "الإجمالي", "receivable": "0.00", "payable": "0.00"}
+    assert table(result, "couriers")["totals"] == {"name": "الإجمالي", "receivable": "0.00", "payable": "0.00",
+                                                 "confirmed_orders": 1, "pending_orders": 0}
     assert row["collection_amount"] is None and row["courier_responsibility"] is None
     assert row["collection_status"] == row["collection_destination"] == "unavailable"
     assert state == before

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from pymongo.errors import PyMongoError
+from operational_balance_store import check_authorization
 from salla_paid_sar_evidence import FIELD, list_payment_evidence, matching_sar_payment
 from .service import call_salla
 
@@ -41,12 +42,12 @@ async def observe_list_evidence(db, owner, row):
     try:
         await persist_list_evidence(db, owner, row)
     except PyMongoError:
-        # Discovery and status refresh remain available; the scoped worker retries.
+        # Discovery remains available; a later explicit balance refresh can retry.
         log.warning("Salla list payment evidence deferred")
 
 
 async def acquire_missing(db, owner, requests, *, limit=4):
-    """Spend at most four Salla list reads per worker tick across this owner's missing targets."""
+    """Spend at most four Salla list reads in one explicit acquisition request."""
     targets = {str(r["order_number"]):str(r["order_id"]) for r in requests}
     if not targets:
         return
@@ -62,6 +63,7 @@ async def acquire_missing(db, owner, requests, *, limit=4):
         number = order["order_number"]
         if str(order.get("order_id") or order.get("salla_order_id") or "") != targets[number]:
             continue
+        await check_authorization()
         response = await call_salla(db, owner, "GET", "/orders", params={"reference_id":number,"per_page":10})
         matches = [row for row in response.get("data", []) if isinstance(row, dict)
                    and str(row.get("reference_id")) == number and str(row.get("id")) == targets[number]]

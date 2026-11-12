@@ -15,6 +15,7 @@ from operational_purchase_metadata import products, locations, configuration
 from product_inventory_rules import canonical_specifications, build_inventory_configuration_key
 from inventory_write_gate import admitted, read_control, root_db, writes_paused
 from operational_atomic import operational_owner
+from operational_financial_activity_runtime import prepare_in_thread, preparation_checkpoint, checked_rows
 
 BATCHES = 'mz2_operational_inventory_openings_v1'
 RECEIPTS = 'mezan_inventory_receipts_v2'
@@ -100,14 +101,18 @@ def line_total(cost, quantity):
 
 
 async def components(db, owner):
+    raw = await records(db, owner, 'mezan_cost_resources_v2')
+    return await prepare_in_thread(_components, raw)
+
+
+def _components(raw):
     from collections import Counter
     from operational_balance_sources import usable
     from component_status_policy import component_is_active
     from operational_balance_inventory import image_url
-    raw = await records(db, owner, 'mezan_cost_resources_v2')
-    counts = Counter(row.get('id') for row in raw if isinstance(row.get('id'), str))
+    counts = Counter(row.get('id') for row in checked_rows(raw) if isinstance(row.get('id'), str))
     result = []
-    for row in raw:
+    for row in checked_rows(raw):
         if (not usable(row) or not component_is_active(row) or row.get('deleted_at')
                 or row.get('track_inventory') is not True or row.get('kind') not in (None, '', 'stock_component')):
             continue
@@ -136,19 +141,24 @@ async def context(db, user):
             'fulfillment_reason': 'inventory_valuation_reconciliation_required'}
 
 
-async def compile_preview(db, owner, request, *, standalone=False):
-    if not standalone and await db[BATCHES].find_one({'_id': owner, 'user_id': owner}):
-        fail('opening_inventory_already_approved', 'اعتمد المخزون الافتتاحي مسبقًا؛ يلزم مسار تسوية مستقل')
-    locs = await records(db, owner, LOCATIONS)
+def _require_empty_locations(locs):
     # No ambiguous zero/negative legacy records or previous receipts can be
     # adopted as a new opening. This is intentionally stricter than addition.
-    for location in ([] if standalone else locs):
+    for location in checked_rows(locs):
         occupancy = location.get('occupancy')
         if occupancy is not None and (not isinstance(occupancy, dict)
                 or occupancy.get('items') != []
                 or type(occupancy.get('total_quantity', 0)) not in (int, float)
                 or occupancy.get('total_quantity', 0) != 0):
             fail('opening_inventory_existing_stock', 'يوجد مخزون سابق؛ يلزم مطابقته قبل تسجيل افتتاحية')
+
+
+async def compile_preview(db, owner, request, *, standalone=False):
+    if not standalone and await db[BATCHES].find_one({'_id': owner, 'user_id': owner}):
+        fail('opening_inventory_already_approved', 'اعتمد المخزون الافتتاحي مسبقًا؛ يلزم مسار تسوية مستقل')
+    locs = await records(db, owner, LOCATIONS)
+    if not standalone:
+        await prepare_in_thread(_require_empty_locations, locs)
     for name in (RECEIPTS, 'mezan_inventory_reservations_v2', 'mezan_component_consumption_units_v1',
                  'mz2_opening_inventory_initializations', 'mz2_inventory_cost_states'):
         if not standalone and await db[name].find_one({'user_id': owner}):
@@ -159,8 +169,20 @@ async def compile_preview(db, owner, request, *, standalone=False):
     raw_components = await records(db, owner, 'mezan_cost_resources_v2')
     raw_warehouses = await records(db, owner, 'warehouse_locations_warehouses')
     available = {l['id']: l for l in await locations(db, owner)}
-    rows = []; used = set(); capacity = {}; snapshots = []
+    definitions = {}
     for line in request['lines']:
+        if line['kind'] == 'product' and line['item_id'] not in definitions:
+            definitions[line['item_id']] = await db['mezan_bundle_definitions_v2'].find_one(
+                {'user_id': owner, 'product_id': line['item_id']})
+    return await prepare_in_thread(_compile_preview_rows, owner, request, standalone, locs,
+        candidates, raw_products, raw_components, raw_warehouses, available, definitions)
+
+
+def _compile_preview_rows(owner, request, standalone, locs, candidates, raw_products,
+                          raw_components, raw_warehouses, available, definitions):
+    preparation_checkpoint()
+    rows = []; used = set(); capacity = {}; snapshots = []
+    for line in checked_rows(request['lines']):
         product = candidates.get((line['kind'], line['item_id']))
         location = available.get(line['location_id'])
         if not product or not location:
@@ -169,9 +191,9 @@ async def compile_preview(db, owner, request, *, standalone=False):
         # An archived/disabled duplicate is still an ambiguous physical identity
         # and would be excluded by the inventory projection after approval.
         source_rows, source_key = (raw_products, 'mezan_product_id') if line['kind'] == 'product' else (raw_components, 'id')
-        product_matches = [p for p in source_rows if p.get(source_key) == product['id']]
-        location_matches = [l for l in locs if l.get('id') == location['id']]
-        warehouse_matches = [w for w in raw_warehouses if w.get('id') == location['warehouse_id']]
+        product_matches = [p for p in checked_rows(source_rows) if p.get(source_key) == product['id']]
+        location_matches = [l for l in checked_rows(locs) if l.get('id') == location['id']]
+        warehouse_matches = [w for w in checked_rows(raw_warehouses) if w.get('id') == location['warehouse_id']]
         if len(product_matches) != 1 or len(location_matches) != 1 or len(warehouse_matches) != 1:
             fail('opening_inventory_identity_ambiguous', 'هوية المنتج أو الموقع مكررة؛ يلزم تصحيحها قبل الافتتاحية', 409)
         raw = product_matches[0]
@@ -201,7 +223,7 @@ async def compile_preview(db, owner, request, *, standalone=False):
         if line['kind'] == 'product':
             if product.get('configuration_issues'):
                 fail('opening_inventory_options_incomplete', 'أكمل خيارات المنتج في ميزان 2 قبل إدخال افتتاحيته', 422)
-            definition = await db['mezan_bundle_definitions_v2'].find_one({'user_id': owner, 'product_id': product['id']})
+            definition = definitions.get(product['id'])
             if (raw.get('product_type') in {'service', 'digital', 'composite', 'bundle'}
                     or raw.get('type') in {'service', 'digital'} or definition and definition.get('product_type') == 'composite'):
                 fail('opening_inventory_nonphysical_product', 'هذا المنتج يتطلب مسار مكونات أو منتج غير مخزني', 422)
@@ -216,7 +238,7 @@ async def compile_preview(db, owner, request, *, standalone=False):
             if variants:
                 from operational_purchase_metadata import combinations
                 matches = []
-                for candidate in variants:
+                for candidate in checked_rows(variants):
                     combos = combinations({**raw, 'variants': [candidate], 'variants_count': 1}, product['options'])
                     variant_options = {v['option_id'] for v in combos[0]} if combos else set()
                     selected_variant = [v for v in config['selections'] if v['option_id'] in variant_options]
@@ -261,7 +283,7 @@ async def compile_preview(db, owner, request, *, standalone=False):
                      'preparation_state': state, 'specifications': specs, 'purchase_configuration': config})
         snapshots.append([raw, stored, definition, location, warehouse])
     by_unit = {}
-    for row in rows:
+    for row in checked_rows(rows):
         by_unit[row['unit']] = by_unit.get(row['unit'], Decimal(0)) + Decimal(str(row['quantity']))
     totals = [{'unit': unit, 'quantity': stored_quantity(value)} for unit, value in sorted(by_unit.items())]
     result = {'lines': rows, 'quantity_totals': totals,

@@ -10,6 +10,7 @@ from decimal import Decimal
 from operational_balance_store import digest
 from operational_balance_sources import instant
 from operational_native_purchase_review import _money, _id, _require, NATIVE_INVOICE_EVIDENCE_FIELDS
+from operational_financial_activity_runtime import checked_rows, preparation_checkpoint
 
 LINKS = 'native_purchase_links'
 VERSION = 1
@@ -73,6 +74,7 @@ def _balances(state, supplier, banks):
 
 def validate_saved_link(state, invoice, source):
     """Validate exact persisted identities against fresh sealed source evidence."""
+    preparation_checkpoint()
     record = (state.get(LINKS) or {}).get(invoice.get('id'))
     result = dict(matched=False, posting_allowed=False, issues=[])
     if record is None:
@@ -88,7 +90,7 @@ def validate_saved_link(state, invoice, source):
                  'native_link_target_missing')
         obligations = state.get('engine', {}).get('obligations') or {}
         gross = Decimal(0)
-        for key in targets:
+        for key in checked_rows(targets):
             row = obligations.get(key) or {}
             _require(row.get('id') == key and row.get('kind') == 'supplier'
                 and row.get('party_type') == 'supplier' and row.get('party_id') == record['supplier_id']
@@ -99,23 +101,23 @@ def validate_saved_link(state, invoice, source):
         _require(gross == _money(source.get('native_invoice_gross_sar')) == _money(record['gross_sar']),
                  'native_link_target_amount_changed')
         saved = record['payments']
-        observed = {_payment_key(p): p for p in source['payment_journals']}
+        observed = {_payment_key(p): p for p in checked_rows(source['payment_journals'])}
         _require(len(observed) == len(source['payment_journals']) and set(saved) == set(observed),
                  'native_link_new_or_changed_payments')
         moves = state.get('movements', [])
         used = set()
-        for op, payment in observed.items():
+        for op, payment in checked_rows(observed.items()):
             link = saved[op]
             _require(all(link.get(k) == payment.get(k) for k in (
                 'txn_group_id', 'bank_account_id', 'amount_sar', 'effective_at', 'payment_operation_id',
                     'supplier_entry_id', 'bank_entry_id')),
                 'native_link_payment_source_changed')
-            matches = [m for m in moves if m.get('id') == link.get('movement_id')]
+            matches = [m for m in checked_rows(moves) if m.get('id') == link.get('movement_id')]
             _require(len(matches) == 1 and link['movement_id'] not in used,
                      'native_link_payment_identity_ambiguous')
             _movement_matches(matches[0], payment, supplier=record['supplier_id'], targets=targets)
             used.add(link['movement_id'])
-        allocated = {m['id'] for m in moves if any(a.get('obligation_id') in targets for a in m.get('allocations', []))}
+        allocated = {m['id'] for m in checked_rows(moves) if any(a.get('obligation_id') in targets for a in checked_rows(m.get('allocations', [])))}
         _require(allocated == used, 'native_link_unmatched_operational_payment')
         _require(record.get('source_evidence_sha256') == source.get('source_evidence_sha256'),
                  'native_link_saved_source_changed')
@@ -136,6 +138,7 @@ def build_link_plan(state, invoice, source, selection, *, supplier, banks, as_of
     payments. Reusing unallocated/partly allocated old cash needs a separate
     correction; this operation will not edit old movement allocations.
     """
+    preparation_checkpoint()
     try:
         _require(state.get('status') == 'active' and state.get('started_at')
                  and state.get('owner_id') == invoice.get('user_id'), 'native_link_owner_or_state_invalid')
@@ -168,18 +171,18 @@ def build_link_plan(state, invoice, source, selection, *, supplier, banks, as_of
         creates = not targets
         if creates:
             targets = [key]
-        others = [v for k, v in (state.get(LINKS) or {}).items() if k != iid]
+        others = [v for k, v in checked_rows((state.get(LINKS) or {}).items()) if k != iid]
         _require(not any(v.get('invoice_id') == iid or v.get('liability_id') == invoice['liability_id']
             or v.get('purchase_txn_group_id') == invoice['txn_group_id']
             or set(v.get('obligation_ids', [])) & set(targets) for v in others), 'native_link_identity_already_bound')
         current_obligations = state.get('engine', {}).get('obligations') or {}
         if creates:
-            _require(key not in current_obligations and not any(r.get('invoice_id') == iid for r in current_obligations.values())
+            _require(key not in current_obligations and not any(r.get('invoice_id') == iid for r in checked_rows(current_obligations.values()))
                      and not collisions, 'native_link_existing_invoice_must_be_selected')
         else:
             total = Decimal(0)
             target_documents = set()
-            for target in targets:
+            for target in checked_rows(targets):
                 row = current_obligations.get(target) or {}
                 _require(row.get('id') == target and row.get('kind') == 'supplier'
                     and row.get('party_type') == 'supplier' and row.get('party_id') == sid
@@ -201,13 +204,13 @@ def build_link_plan(state, invoice, source, selection, *, supplier, banks, as_of
         choices = {_id(p.get('payment_operation_id')): p.get('movement_id') for p in requested}
         _require(len(choices) == len(requested) and set(choices) == set(payment_map),
                  'native_link_payment_selection_incomplete')
-        for op, old in (previous or {}).get('payments', {}).items():
+        for op, old in checked_rows((previous or {}).get('payments', {}).items()):
             _require(op in payment_map and choices.get(op) == old['movement_id']
                 and all(old.get(k) == payment_map[op].get(k) for k in (
                     'txn_group_id', 'bank_account_id', 'amount_sar', 'effective_at', 'payment_operation_id',
                     'supplier_entry_id', 'bank_entry_id')),
                 'native_link_saved_payment_changed')
-        bank_map = {b['id']: b for b in banks}
+        bank_map = {b['id']: b for b in checked_rows(banks)}
         _require(len(bank_map) == len(banks), 'native_link_bank_identity_ambiguous')
         referenced_banks = {p['bank_account_id'] for p in payments}
         for bid in referenced_banks:
@@ -216,6 +219,7 @@ def build_link_plan(state, invoice, source, selection, *, supplier, banks, as_of
                 and bank.get('ready') is not False and bank.get('settings_complete') is not False,
                 'native_link_bank_unavailable')
         proposed = deepcopy(state)
+        preparation_checkpoint()
         obligations = proposed.setdefault('engine', {}).setdefault('obligations', {})
         if creates:
             obligations[key] = dict(id=key, kind='supplier', party_type='supplier', party_id=sid,
@@ -229,12 +233,12 @@ def build_link_plan(state, invoice, source, selection, *, supplier, banks, as_of
         selected_moves = set()
         linked_payments = {}
         missing = []
-        for op, payment in sorted(payment_map.items()):
+        for op, payment in checked_rows(sorted(payment_map.items())):
             choice = choices[op]
             _require(instant(payment['effective_at']) >= instant(state['started_at']),
                      'native_link_prestart_payment_requires_separate_review')
-            matches = [m for m in existing_moves if choice and m.get('id') == choice]
-            marked = [m for m in existing_moves if (m.get('native_payment_operation_id') == op
+            matches = [m for m in checked_rows(existing_moves) if choice and m.get('id') == choice]
+            marked = [m for m in checked_rows(existing_moves) if (m.get('native_payment_operation_id') == op
                 or m.get('native_txn_group_id') == payment['txn_group_id']
                 or m.get('reference') in {op, payment['txn_group_id']})]
             _require(not any(op in v.get('payments', {}) or any(
@@ -249,15 +253,15 @@ def build_link_plan(state, invoice, source, selection, *, supplier, banks, as_of
             else:
                 _require(not marked, 'native_link_existing_payment_must_be_selected')
                 missing.append((op, payment))
-        allocated = {m['id'] for m in existing_moves if any(a.get('obligation_id') in targets for a in m.get('allocations', []))}
+        allocated = {m['id'] for m in checked_rows(existing_moves) if any(a.get('obligation_id') in targets for a in checked_rows(m.get('allocations', [])))}
         _require(allocated == selected_moves, 'native_link_unmatched_operational_payment')
         remaining = {target: _money(obligations[target]['confirmed']) - sum((_money(a['amount'])
-            for m in movements for a in m.get('allocations', []) if a['obligation_id'] == target), Decimal(0)) for target in targets}
+            for m in checked_rows(movements) for a in checked_rows(m.get('allocations', [])) if a['obligation_id'] == target), Decimal(0)) for target in checked_rows(targets)}
         _require(all(v >= 0 for v in remaining.values()), 'native_link_target_overpaid')
-        for op, payment in missing:
+        for op, payment in checked_rows(missing):
             amount = _money(payment['amount_sar'])
             rest, allocations = amount, []
-            for target in targets:
+            for target in checked_rows(targets):
                 take = min(remaining[target], rest)
                 if take:
                     allocations.append(dict(obligation_id=target, amount=_fmt(take)))
@@ -265,7 +269,7 @@ def build_link_plan(state, invoice, source, selection, *, supplier, banks, as_of
                     rest -= take
             _require(rest == 0, 'native_link_payment_exceeds_remaining')
             mid = 'native-payment:' + digest([owner, op, payment['txn_group_id']])
-            _require(not any(m.get('id') == mid for m in movements), 'native_link_movement_identity_collision')
+            _require(not any(m.get('id') == mid for m in checked_rows(movements)), 'native_link_movement_identity_collision')
             movements.append(dict(id=mid, actor_id=owner, request_id=mid, party_type='supplier', party_id=sid,
                 party_name=supplier.get('name', sid), bank_id=payment['bank_account_id'], bank_kind='bank',
                 bank_name=bank_map[payment['bank_account_id']].get('name', payment['bank_account_id']),
@@ -293,6 +297,7 @@ def build_link_plan(state, invoice, source, selection, *, supplier, banks, as_of
             unrecorded_money_confirmation_required=creates or bool(missing))
         public['preview_hash'] = digest(dict(state=state, invoice=invoice, proof=source, selection=selection,
             supplier=supplier, banks=sorted(banks, key=lambda b:b['id']), collisions=list(collisions)))
+        preparation_checkpoint()
         return public, proposed
     except (ValueError, KeyError, TypeError, ArithmeticError) as exc:
         return dict(invoice_id=invoice.get('id'), can_approve=False, read_only=True, posting_allowed=False,

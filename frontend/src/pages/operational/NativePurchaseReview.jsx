@@ -3,6 +3,7 @@ import {useEffect, useRef, useState} from 'react';
 import {operationalApi as api, requestId, messageFor} from './api';
 import {formatPositionMoney} from './financialPositionPresentation';
 import PaginatedReportTable from './PaginatedReportTable';
+import {visibleOperationalRead} from './visibleOperationalRead';
 import './nativePurchaseReview.css';
 
 const messages = {
@@ -54,9 +55,21 @@ export default function NativePurchaseReview({sessionScope, onRefresh}) {
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [saved, setSaved] = useState(null);
   const [pending, setPending] = useState(() => pendingRequest(sessionScope));
   const alive = useRef(true), lock = useRef(false), scopeRef = useRef(sessionScope);
+  const readCleanup=useRef(null),readLane=useRef({pending:null});
+  scopeRef.current=sessionScope;
   // Parent keys this component by authenticated actor AND server session scope.
-  useEffect(() => {alive.current = true; return () => {alive.current = false;};}, []);
-  const current = key => alive.current && key === scopeRef.current && key === sessionScope;
+  useEffect(() => {alive.current = true; return () => {alive.current = false;readCleanup.current?.();};}, [sessionScope]);
+  const current = (key,config) => alive.current && key === scopeRef.current && key === sessionScope && !config?.signal?.aborted;
+  const read = fn => {
+    if(lock.current)return;
+    const key=sessionScope;
+    readCleanup.current?.();
+    readCleanup.current=visibleOperationalRead(config=>fn(key,config),{
+      onStart:()=>{lock.current=true;setBusy(true);setError('');},
+      onError:e=>{if(current(key))setError(e.response?messageFor(e):e.message||'تعذر تحميل المطابقة.');},
+      onEnd:()=>{if(current(key)){lock.current=false;setBusy(false);}},
+    },readLane.current);
+  };
   const run = async fn => {
     if (lock.current) return;
     lock.current = true; setBusy(true); setError('');
@@ -68,19 +81,19 @@ export default function NativePurchaseReview({sessionScope, onRefresh}) {
   async function open() {
     setOpened(true);
     if (pending) return;
-    await run(async key => {
-      const r = await api.supplierInvoiceReview();
+    read(async (key,config) => {
+      const r = await api.supplierInvoiceReview(config);
       if (r.session_scope !== key || r.read_only !== true || !Array.isArray(r.native_purchase_review)) throw invalid();
-      if (current(key)) setList(r.native_purchase_review);
+      if (current(key,config)) setList(r.native_purchase_review);
     });
   }
   async function choose(invoiceId) {
     if (pending || busy) return;
     setCandidate(null); setPreview(null); setSaved(null); setConfirmed(false); setMoneyConfirmed(false);
-    await run(async key => {
-      const c = await api.nativePurchaseCandidates(invoiceId);
+    read(async (key,config) => {
+      const c = await api.nativePurchaseCandidates(invoiceId,config);
       if (c.session_scope !== key || c.read_only !== true || c.invoice_id !== invoiceId || !Array.isArray(c.source?.payment_journals) || !Array.isArray(c.existing_obligations) || !Array.isArray(c.existing_movements)) throw invalid();
-      if (!current(key)) return;
+      if (!current(key,config)) return;
       const link = c.saved_link;
       setCandidate(c); setMode(link ? 'existing' : '');
       setSelection({invoice_id: invoiceId, existing_obligation_ids: link?.obligation_ids || [],
@@ -98,12 +111,12 @@ export default function NativePurchaseReview({sessionScope, onRefresh}) {
     selection.payment_links.every(p => p.movement_id !== '');
   async function inspect() {
     if (!ready || pending) return;
-    await run(async key => {
+    read(async (key,config) => {
       setPreview(null); setConfirmed(false); setMoneyConfirmed(false);
-      const p = await api.previewNativePurchaseLink(selection);
+      const p = await api.previewNativePurchaseLink(selection,config);
       if (p.session_scope !== key || p.read_only !== true || typeof p.can_approve !== 'boolean' || p.invoice_id !== selection.invoice_id) throw invalid();
       if (p.can_approve && !validPreview(p)) throw invalid();
-      if (current(key)) setPreview(p);
+      if (current(key,config)) setPreview(p);
     });
   }
   async function approve() {

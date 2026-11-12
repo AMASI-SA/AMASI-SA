@@ -1,5 +1,6 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {operationalApi as api, messageFor} from './api';
+import {visibleOperationalRead} from './visibleOperationalRead';
 
 const states = {requires_preparation:'خام غير مخصص بالكامل', ready_complete:'جاهز', standard:'عادي'};
 const conditions = {sellable:'صالح', available:'صالح', good:'صالح', quarantined:'بانتظار الفحص', quarantine:'بانتظار الفحص', pending_inspection:'بانتظار الفحص', damaged:'تالف', held:'موقوف', unknown:'غير محدد'};
@@ -10,18 +11,16 @@ export default function InventoryAvailability({context,onOpeningInventory}) {
   const allowed = context.permissions?.reports === true;
   const [result,setResult]=useState(null), [error,setError]=useState(''), [loading,setLoading]=useState(false);
   const [version,setVersion]=useState(0), [search,setSearch]=useState(''), [kind,setKind]=useState('');
+  const readLane=useRef({});
   useEffect(()=>{
-    let alive=true;
     setResult(null);setError('');
-    if(!allowed) return ()=>{alive=false;};
-    setLoading(true);
-    api.inventoryAvailability().then(data=>{
+    if(!allowed){setLoading(false);return;}
+    return visibleOperationalRead(async config=>{
+      const data=await api.inventoryAvailability(config);
       if(!Array.isArray(data?.items)||data.schema_version!==1||data.read_only!==true||data.source!=='warehouse_locations') throw Error('invalid_inventory_response');
-      if(alive)setResult(data);
-    }).catch(e=>{if(alive)setError(messageFor(e));}).finally(()=>{if(alive)setLoading(false);});
-    return ()=>{alive=false;};
+      return data;
+    },{onStart:()=>setLoading(true),onData:setResult,onError:e=>setError(messageFor(e)),onEnd:()=>setLoading(false)},readLane.current);
   },[allowed,context.session_scope,version]);
-  useEffect(()=>{const refresh=()=>setVersion(v=>v+1);window.addEventListener('focus',refresh);return()=>window.removeEventListener('focus',refresh);},[]);
   if(!allowed)return <p role="alert">لا تتوفر صلاحية عرض المخزون.</p>;
   const items=(result?.items||[]).filter(row=>(!kind||(row.resource_id?'component':'product')===kind)&&`${row.name} ${row.sku||''} ${specificationText(row.specifications)} ${row.location_code||''} ${row.warehouse_name||''}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
   const operationalCosts=items.some(row=>row.operational_unit_cost!=null||row.operational_inventory_value!=null);

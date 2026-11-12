@@ -8,6 +8,10 @@ import {refreshOrderActivity} from '../../services/orderActivity';
 jest.mock('../../lib/api', () => ({get:jest.fn(), post:jest.fn()}));
 jest.mock('../../services/orderActivity', () => ({refreshOrderActivity:jest.fn()}));
 let host, root;
+const visibility = async value => {
+    Object.defineProperty(document, 'visibilityState', {configurable:true, value});
+    await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+};
 const button = text => [...host.querySelectorAll('button')].find(b => b.textContent.includes(text));
 const press = async text => { await act(async () => button(text).click()); };
 async function change(input,value) {
@@ -18,11 +22,12 @@ async function change(input,value) {
 }
 beforeEach(() => {
     jest.resetAllMocks();
+    Object.defineProperty(document, 'visibilityState', {configurable:true, value:'visible'});
     global.IS_REACT_ACT_ENVIRONMENT = true;
     Object.defineProperty(global, 'crypto', {configurable:true, value:{randomUUID:()=>'test-request-id'}});
     host=document.createElement('div'); document.body.appendChild(host); root=createRoot(host);
 });
-afterEach(async () => { await act(async()=>root.unmount()); host.remove(); });
+afterEach(async () => { if (root) await act(async()=>root.unmount()); host.remove(); delete document.visibilityState; });
 
 test('saved deferred tariff and hash require explicit dates and review before sending approval', async () => {
     api.get.mockResolvedValue({data:{items:[{id:'smsa', name:'سمسا', keys:['smsa'], source_hash:'abc',
@@ -152,4 +157,74 @@ test('requesting evidence for a missing date loads only the selected order then 
     expect(button('اعتماد أجرة')).toBeUndefined();
     await press('جلب سجل'); expect(refreshOrderActivity).toHaveBeenCalledWith('456');
     expect(api.post.mock.calls.every(([p])=>p.endsWith('/preview'))).toBe(true);
+});
+
+const historicalPreview = {order_number:'123',preview_hash:'abc',session_scope:'scope',can_approve:true,
+    candidate:{amount:'17.25',party_id:'smsa',currency:'SAR'},issues:[],openings:[],payouts:[]};
+async function openHistorical() {
+    await act(async()=>root.render(<HistoricalShippingFeeReview/>));
+    await press('مطابقة أجرة'); await change(host.querySelector('input'),'123');
+}
+async function approveHistorical() {
+    await change(host.querySelector('input[maxlength="300"]'),'كشف الفترة');
+    await act(async()=>host.querySelector('[type=checkbox]').click());
+    await press('اعتماد أجرة');
+}
+
+test('historical preview waits while hidden and completed reads never refresh on focus', async () => {
+    api.post.mockResolvedValue({data:historicalPreview});
+    await visibility('hidden'); await openHistorical(); await press('معاينة الأجرة');
+    expect(api.post).not.toHaveBeenCalled();
+    await visibility('visible');
+    expect(api.post).toHaveBeenCalledWith('/operational-balances/historical-shipping-fees/preview',
+        {order_number:'123'},expect.objectContaining({signal:expect.any(AbortSignal),timeout:30000}));
+    expect(host.textContent).toContain('17.25');
+    await visibility('hidden'); await visibility('visible');
+    await act(async()=>window.dispatchEvent(new Event('focus')));
+    expect(api.post).toHaveBeenCalledTimes(1);
+});
+
+test.each(['hidden','unmount'])('historical preview cancels on %s and ignores late results', async departure => {
+    let resolve;
+    api.post.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));
+    await openHistorical(); await press('معاينة الأجرة');
+    const signal=api.post.mock.calls[0][2].signal;
+    if(departure==='hidden') await visibility('hidden');
+    else {await act(async()=>root.unmount());root=null;}
+    expect(signal.aborted).toBe(true);
+    await act(async()=>resolve({data:historicalPreview}));
+    expect(host.textContent).not.toContain('17.25');
+    expect(api.post).toHaveBeenCalledTimes(1);
+});
+
+test.each(['hidden','unmount'])('historical source acquisition cannot start preview after %s', async departure => {
+    api.post.mockResolvedValue({data:{order_number:'123',candidate:null,issues:['وقت التسليم مفقود'],can_approve:false}});
+    let resolve;
+    refreshOrderActivity.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));
+    await openHistorical(); await press('معاينة الأجرة'); await press('جلب سجل');
+    expect(refreshOrderActivity).toHaveBeenCalledWith('123');
+    if(departure==='hidden') await visibility('hidden');
+    else {await act(async()=>root.unmount());root=null;}
+    await act(async()=>resolve({events:[]}));
+    expect(api.post).toHaveBeenCalledTimes(1);
+    if(departure==='hidden') {
+        await visibility('visible');
+        expect(api.post).toHaveBeenCalledTimes(2);
+        expect(refreshOrderActivity).toHaveBeenCalledTimes(1);
+    }
+});
+
+test.each(['hidden','unmount'])('historical approval is signal-free and durable after %s', async departure => {
+    api.post.mockResolvedValueOnce({data:historicalPreview});
+    await openHistorical(); await press('معاينة الأجرة');
+    let resolve;
+    api.post.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));
+    await approveHistorical();
+    expect(api.post.mock.calls[1]).toHaveLength(2);
+    if(departure==='hidden') await visibility('hidden');
+    else {await act(async()=>root.unmount());root=null;}
+    await act(async()=>resolve({data:{ok:true,order_number:'123',pending_reconciliation:true}}));
+    if(departure==='hidden') await visibility('visible');
+    expect(api.post).toHaveBeenCalledTimes(2);
+    expect(refreshOrderActivity).not.toHaveBeenCalled();
 });

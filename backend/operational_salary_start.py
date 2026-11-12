@@ -16,6 +16,7 @@ from hashlib import sha256
 import json
 
 from operational_salary_projection import candidates, legacy_salary_day_matches
+from operational_financial_activity_runtime import preparation_checkpoint, prepare_in_thread, checked_rows
 
 RIYADH = timezone(timedelta(hours=3))
 POLICY_KEY = 'salary_accrual_policy'
@@ -70,6 +71,7 @@ def select_first_day(state, as_of):
 
 def preview_from_sources(state, employees, source_issues, first_day, as_of):
     """Pure preview: a stale/ambiguous source cannot authorize financial changes."""
+    preparation_checkpoint()
     first = strict_day(first_day)
     started, clock = instant(state['started_at']), instant(as_of)
     today = clock.astimezone(RIYADH).date()
@@ -85,7 +87,7 @@ def preview_from_sources(state, employees, source_issues, first_day, as_of):
     if any(not isinstance(identity, str) or not identity for identity in ids) or len(ids) != len(set(ids)):
         issues.append({'code': 'operational_salary_employee_identity_ambiguous'})
     else:
-        for employee in employees:
+        for employee in checked_rows(employees):
             try:
                 if not isinstance(employee.get('currency'), str) or len(employee['currency']) != 3:
                     raise ValueError('operational_salary_currency_required')
@@ -98,7 +100,7 @@ def preview_from_sources(state, employees, source_issues, first_day, as_of):
     engine = state.get('engine') or {}
     recorded = engine.get('salary_days') or {}
     obligations = engine.get('obligations') or {}
-    for key, previous in recorded.items():
+    for key, previous in checked_rows(recorded.items()):
         following = proposed.get(key)
         currency = previous.get('currency', obligations.get(key, {}).get('currency'))
         unchanged = following is not None and previous.get('amount') == following['amount'] and currency == following['currency']
@@ -108,13 +110,14 @@ def preview_from_sources(state, employees, source_issues, first_day, as_of):
                            'proposed': following.get('amount') if following else None})
     additions = {key: value for key, value in proposed.items() if key not in recorded}
     totals = {}
-    for row in additions.values():
+    for row in checked_rows(additions.values()):
         totals[row['currency']] = totals.get(row['currency'], Decimal(0)) + Decimal(row['amount'])
     proof = {'owner_id': state['owner_id'], 'started_at': state['started_at'], 'first_day': first_day,
              'business_date': today.isoformat(), 'employees': sorted(deepcopy(employees), key=lambda row: str(row.get('id'))),
              'source_issues': source_issues, 'recorded': recorded, 'openings': state.get('openings') or {},
              'salary_obligations': {key: row for key, row in obligations.items() if row.get('kind') == 'salary'},
              'policy': state.get(POLICY_KEY)}
+    preparation_checkpoint()
     return {'first_day': first_day, 'business_date': today.isoformat(), 'employee_count': len(employees),
             'new_days': len(additions), 'additional_amounts': {key: format(value, '.2f') for key, value in sorted(totals.items())},
             'can_approve': not issues, 'issues': issues, 'preview_hash': fingerprint(proof),
@@ -130,12 +133,31 @@ async def _owner(db, owner, actor):
         fail('operational_salary_owner_required', 'اعتماد بداية الرواتب متاح للمالك فقط', 403)
 
 
-async def _sources(db, owner):
-    from operational_balance_sources import rows, _employees
+def _normalize_sources(data):
+    from collections import defaultdict
+    from operational_balance_sources import _employees
     out = {'employees': [], 'issues': []}
-    data = {name: await rows(db, owner, name) for name in ('mezan_employees_v2', 'mezan_employee_salary_contracts_v2')}
-    _employees(data, out)
+    contracts = defaultdict(list)
+    all_contracts = data['mezan_employee_salary_contracts_v2']
+    for contract in checked_rows(all_contracts):
+        try:
+            contracts[contract.get('employee_id')].append(contract)
+        except TypeError:
+            pass  # Preserve the source normalizer's handling of malformed identities.
+    for employee in checked_rows(data['mezan_employees_v2']):
+        try:
+            matches = contracts[employee.get('id')]
+        except TypeError:
+            matches = [row for row in checked_rows(all_contracts) if row.get('employee_id') == employee.get('id')]
+        _employees({'mezan_employees_v2': [employee],
+                    'mezan_employee_salary_contracts_v2': matches}, out)
     return out
+
+
+async def _sources(db, owner):
+    from operational_balance_sources import rows
+    data = {name: await rows(db, owner, name) for name in ('mezan_employees_v2', 'mezan_employee_salary_contracts_v2')}
+    return await prepare_in_thread(_normalize_sources, data)
 
 
 async def read_context(db, owner, actor, *, clock=None):
@@ -173,7 +195,7 @@ async def preview(db, owner, actor, first_day, *, clock=None):
     await active_gate(db, owner, state)
     sources = await _sources(db, owner)
     try:
-        result = preview_from_sources(state, sources['employees'], sources['issues'], first_day, clock or now())
+        result = await prepare_in_thread(preview_from_sources, state, sources['employees'], sources['issues'], first_day, clock or now())
     except (ValueError, KeyError) as exc:
         fail(str(exc), 'تعذر معاينة بداية الرواتب؛ راجع الفترة والإعدادات')
     result['session_scope'] = digest([owner, actor])

@@ -37,6 +37,46 @@ def _instant(value: Any) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def _noncash_dependency(state, projection, matching):
+    from operational_driver_review_report import validated_review_facts
+
+    valid, conflicts = validated_review_facts(state)
+    linked_orders = {str(row['order_id']) for row in valid}
+    engine = state.get('engine') or {}
+    facts = engine.get('facts') or {}
+    expected = set()
+    for key, row in facts.items():
+        if not str(key).startswith('shipping:') or not isinstance(row, Mapping) or row.get('party_type') != 'store_driver':
+            continue
+        oid = str(key).removeprefix('shipping:')
+        evidence = (facts.get('cod_collection:' + oid) or {}).get('evidence') or row.get('cod_evidence') or {}
+        if evidence.get('payment_method') in {'bank_transfer', 'card_terminal'}:
+            expected.add(oid)
+    for key, row in (engine.get('cod_reports') or {}).items():
+        oid = str(row.get('order_id') or str(key).removeprefix('cod:'))
+        party_type = row.get('party_type') or (facts.get('shipping:' + oid) or {}).get('party_type')
+        if party_type == 'store_driver' and row.get('payment_method') in {'bank_transfer', 'card_terminal'}:
+            expected.add(oid)
+    source_issues = projection.get('issues')
+    issue_known = isinstance(source_issues, (list, tuple))
+    relevant_issues = [row for row in source_issues if isinstance(row, Mapping) and (
+        str(row.get('code') or '').startswith(('operational_driver_review_', 'driver_collection_'))
+        or row.get('component') == 'driver_custody')] if issue_known else []
+    pending = expected - linked_orders
+    if conflicts or pending or relevant_issues or not issue_known:
+        status, message = 'incomplete', BANK_REVIEW_GAP
+    elif matching:
+        status = 'ready'
+        message = ('الاعتمادات التشغيلية المسجلة مطابقة لحركة البنك أو ذمة الشبكة، ولا تضيف عهدة كاش على المندوب.'
+                   if valid else 'مسار اعتماد التحصيل غير النقدي متاح؛ لا توجد في هذه اللقطة تحصيلات مندوب غير نقدية تنتظر الربط.')
+    else:
+        status = 'unavailable'
+        message = 'يلزم تحديث لقطة التسليم للتحقق من تغطية تحصيل المندوب غير النقدي.'
+    return {'code': 'operational_driver_noncash_posting', 'status': status, 'message': message,
+            'confirmed_review_count': len(valid), 'pending_order_count': len(pending),
+            'effect_conflict_count': len(conflicts)}
+
+
 def delivery_coverage_diagnostics(
     state: Mapping[str, Any], projection: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -44,7 +84,7 @@ def delivery_coverage_diagnostics(
 
     ``ready`` means reader support at this snapshot, not completeness of all
     business records. Existing projection issues retain an incomplete status.
-    A separate, explicit dependency keeps the unfinished noncash bridge visible.
+    The noncash dependency validates sealed reviews against their saved effects.
     The public result contains no account IDs, personal details or raw evidence.
     """
     if not isinstance(state, Mapping) or not isinstance(projection, Mapping):
@@ -92,6 +132,6 @@ def delivery_coverage_diagnostics(
         "event_note": note,
         "dependencies": [
             {"code": "operational_delivery_coverage", "status": event_status, "message": note},
-            {"code": "operational_driver_noncash_posting", "status": "incomplete", "message": BANK_REVIEW_GAP},
+            _noncash_dependency(state, projection, matching),
         ],
     }

@@ -7,6 +7,7 @@ from operational_courier_transitions import (
     order_delivery_time,
 )
 from operational_delivery_evidence import DELIVERED, _inactive, _instant, _order_waybill, _shipment_time, _status, _text
+from operational_balance_store import check_authorization
 from salla_shipping import CURRENT_SHIPPING, SHIPPING_FIELDS, accept_shipping, extract_shipping, same_carrier, shipping_root_fields
 from .service import call_salla
 
@@ -28,6 +29,7 @@ async def _complete_pages(db, owner, path, params, *, max_pages=20):
     """A truncated or repeated page cannot prove the absence of a later return."""
     result, identities, expected = [], set(), None
     for page in range(1, max_pages + 1):
+        await check_authorization()
         response = await call_salla(db, owner, "GET", path, params={**params, "page": page, "per_page": 100})
         if not isinstance(response, dict) or response.get("success") is False:
             raise ValueError("courier_native_response_invalid")
@@ -180,7 +182,8 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
                     or any(watermark.get(key) for key in ("cancelled", "component_pending", "requires_authoritative_refresh"))
                     or not start <= version <= now or _instant(watermark.get("source_updated_at")) != version
                     or current.get("source_kind") not in {"order", "shipment"} or _inactive(current)
-                    or not _text(current.get("shipment_id")) or not _text(current.get("tracking_number"))
+                    or not completed and (not _text(current.get("shipment_id")) or not _text(current.get("tracking_number")))
+                    or completed and not (_text(current.get('company_code')) or _text(current.get('company_name')))
                     or any(source[key] != value for key, value in shipping_root_fields(current).items() if key in source)
                     or current.get("superseded_shipment_ids")):
                 continue
@@ -188,7 +191,11 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
                 from operational_completed_capture import recover_completed_capture
                 async def load_shipments():
                     return await _complete_pages(db, owner, '/shipments', {'order_id': identity}, max_pages=1)
-                recovered = await recover_completed_capture(db, owner, source, now, load_shipments=load_shipments)
+                # Capture recovery retains its original label-bound contract.
+                # Typed order history independently proves execution before any
+                # label exists; it must not be blocked by capture label checks.
+                recovered = (await recover_completed_capture(db, owner, source, now, load_shipments=load_shipments)
+                             if _text(current.get('shipment_id')) and _text(current.get('tracking_number')) else None)
                 if recovered is not None:
                     accepted, capture_binding, capture_scope = recovered
                 else:

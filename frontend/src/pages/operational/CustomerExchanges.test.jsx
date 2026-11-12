@@ -15,6 +15,7 @@ const input=async(name,value)=>act(async()=>{const e=field(name);Object.getOwnPr
 const click=async text=>act(async()=>[...host.querySelectorAll('button')].find(b=>b.textContent===text).click());
 const load=async()=>{await act(async()=>root.render(<CustomerExchanges/>));await input('رقم الطلب القديم','1001');await click('عرض الطلب والاستبدالات');await click('استبدال الطلب كاملًا — المتاح');await input('شركة شحن البدل','carrier');};
 beforeEach(()=>{
+ Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});
  global.IS_REACT_ACT_ENVIRONMENT=true;localStorage.clear();jest.resetAllMocks();host=document.createElement('div');document.body.appendChild(host);root=createRoot(host);
  requestId.mockImplementation(()=>`request-${Math.random()}`);api.context.mockResolvedValue({session_scope:scope,status:'active',permissions:{move:true}});
  api.customerExchanges.mockResolvedValue({items:[]});api.movements.mockResolvedValue({items:[]});api.saveExchange.mockResolvedValue(row);
@@ -22,7 +23,7 @@ beforeEach(()=>{
  api.exchangeOrder.mockResolvedValue({id:'order1',order_number:'1001',items:[{id:'a',name:'منتج أ',quantity:2,remaining:2,unit_estimate:'50.00'}]});
  api.returnShippingQuote.mockResolvedValue({amount:'28.75',quote_hash:'q'.repeat(64)});
 });
-afterEach(async()=>{await act(async()=>root.unmount());host.remove();});
+afterEach(async()=>{await act(async()=>root.unmount());host.remove();delete document.visibilityState;});
 test('old order and all products save expected shipping without contribution',async()=>{
  await load();expect(host.textContent).toContain('لا يُنشأ طلب بيع جديد');await click('حفظ الاستبدال');
  expect(api.saveExchange).toHaveBeenCalledWith(expect.objectContaining({order_number:'1001',items:[{id:'a',quantity:2}],contribution:null,shipping_id:'carrier'}),null);
@@ -54,4 +55,15 @@ test('existing incoming bank movement is linked with immutable amount and bank',
  api.customerExchanges.mockResolvedValue({items:[row]});api.movements.mockResolvedValue({items:[{id:'m1',bank_kind:'bank',party_type:'bank',bank_id:'bank',bank_name:'bank',kind:'collection',direction:'incoming',amount:'30.00',reference:'paid-ref',allocations:[]}]});
  await act(async()=>root.render(<CustomerExchanges/>));await click('تسجيل مساهمة العميل');await input('تسجيل المساهمة','m1');expect(field('مبلغ مساهمة العميل').disabled).toBe(true);await click('حفظ العملية');
  expect(api.saveExchange.mock.calls[0][0].contribution).toEqual(expect.objectContaining({existing_movement_id:'m1',amount:'30.00',bank_id:'bank'}));
+});
+
+test('an accepted explicit exchange finishes while hidden without starting a background reload',async()=>{
+ await load();let resolve;api.saveExchange.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));
+ await click('حفظ الاستبدال');const sent=api.saveExchange.mock.calls[0];
+ await act(async()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});document.dispatchEvent(new Event('visibilitychange'));});
+ await act(async()=>resolve(row));
+ expect(api.saveExchange).toHaveBeenCalledTimes(1);expect(sent).toHaveLength(2);
+ expect(localStorage.length).toBe(0);expect(api.customerExchanges).toHaveBeenCalledTimes(1);
+ await act(async()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});document.dispatchEvent(new Event('visibilitychange'));});
+ expect(api.customerExchanges).toHaveBeenCalledTimes(2);expect(api.saveExchange).toHaveBeenCalledTimes(1);
 });

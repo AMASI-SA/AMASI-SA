@@ -6,6 +6,7 @@ refresh, a bank transfer or a financial correction. No database or network I/O.
 """
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+from operational_financial_activity_runtime import checked_rows, preparation_checkpoint
 
 CENT = Decimal('0.01')
 LIMIT = Decimal('999999999999.99')
@@ -59,7 +60,7 @@ def _components(invoice):
     lines = invoice.get('lines')
     if not isinstance(lines, list) or not lines:
         raise ValueError('supplier_review_invoice_lines_missing')
-    for line in lines:
+    for line in checked_rows(lines):
         if not isinstance(line, dict) or line.get('product_price_authority') != 'mezan_v2':
             raise ValueError('supplier_review_invoice_line_invalid')
         ids = line.get('piece_ids')
@@ -67,7 +68,7 @@ def _components(invoice):
             raise ValueError('supplier_review_invoice_line_invalid')
         if 'quantity' in line and _money(line['quantity']) != len(ids):
             raise ValueError('supplier_review_invoice_quantity_conflict')
-        for piece in ids:
+        for piece in checked_rows(ids):
             _id(piece)
             if piece in pieces:
                 raise ValueError('supplier_review_duplicate_component')
@@ -79,7 +80,7 @@ def _components(invoice):
             if not isinstance(services, list):
                 raise ValueError('supplier_review_invoice_line_invalid')
             seen = set()
-            for service in services:
+            for service in checked_rows(services):
                 sid = _id(service.get('service_id')) if isinstance(service, dict) else _id(None)
                 if sid in seen:
                     raise ValueError('supplier_review_duplicate_component')
@@ -90,13 +91,13 @@ def _components(invoice):
 
 def _allocated(state):
     allocated, ids = {}, set()
-    for movement in state.get('movements', []):
+    for movement in checked_rows(state.get('movements', [])):
         identity = _id(movement.get('id'))
         if identity in ids:
             raise ValueError('supplier_review_duplicate_movement')
         ids.add(identity)
         seen = set()
-        for row in movement.get('allocations', []):
+        for row in checked_rows(movement.get('allocations', [])):
             key = _id(row.get('obligation_id'))
             if key in seen:
                 raise ValueError('supplier_review_duplicate_allocation')
@@ -108,7 +109,7 @@ def _allocated(state):
 def _invoice_rows(state, lookup, allocated):
     grouped, diagnostics = {}, []
     facts = state.get('engine', {}).get('facts', {})
-    for key, row in state.get('engine', {}).get('obligations', {}).items():
+    for key, row in checked_rows(state.get('engine', {}).get('obligations', {}).items()):
         if (row.get('kind') != 'supplier' or row.get('party_type') != 'supplier'
                 or row.get('derived_credit') or row.get('direction') != 'payable'
                 or not row.get('evidence_ids')):
@@ -142,7 +143,7 @@ def _invoice_rows(state, lookup, allocated):
             if ('net_amount' in fact or 'tax_amount' in fact) and (
                     _money(fact.get('net_amount')) + _money(fact.get('tax_amount')) != gross):
                 raise ValueError('supplier_review_receipt_amount_conflict')
-            returned = sum((_money(value.get('amount')) for name, value in facts.items()
+            returned = sum((_money(value.get('amount')) for name, value in checked_rows(facts.items())
                 if name.startswith('return:') and value.get('receipt_id') == rid), Decimal(0))
             confirmed = _money(row.get('confirmed'))
             if confirmed != gross - returned or confirmed > gross:
@@ -175,6 +176,7 @@ def compare_supplier_invoices(current, proposed, invoices, *, owner_id, as_of):
     amounts. The caller must separately establish the live source snapshot and
     whether each proposed amount is already covered by opening balances.
     """
+    preparation_checkpoint()
     owner_id = _id(owner_id)
     if current.get('owner_id') != owner_id or proposed.get('owner_id') != owner_id:
         raise ValueError('supplier_review_owner_mismatch')
@@ -192,7 +194,7 @@ def compare_supplier_invoices(current, proposed, invoices, *, owner_id, as_of):
             raise ValueError('supplier_review_' + name + '_changed')
     previous_facts = current.get('engine', {}).get('facts', {})
     new_facts = proposed.get('engine', {}).get('facts', {})
-    if any(new_facts.get(key) != value for key, value in previous_facts.items()):
+    if any(new_facts.get(key) != value for key, value in checked_rows(previous_facts.items())):
         raise ValueError('supplier_review_confirmed_facts_changed')
     if not isinstance(invoices, list) or len(invoices) > 20000:
         raise ValueError('supplier_review_invoice_list_invalid')
@@ -203,7 +205,7 @@ def compare_supplier_invoices(current, proposed, invoices, *, owner_id, as_of):
     issues = before_issues + after_issues
     old_obligations = current.get('engine', {}).get('obligations', {})
     money_fields = ('kind', 'party_id', 'party_type', 'currency', 'direction', 'expected', 'confirmed')
-    for key in set(old_obligations) | set(lookup):
+    for key in checked_rows(set(old_obligations) | set(lookup)):
         old_row, new_row = old_obligations.get(key, {}), lookup.get(key, {})
         if old_row.get('kind') == new_row.get('kind') == 'supplier':
             continue
@@ -213,7 +215,7 @@ def compare_supplier_invoices(current, proposed, invoices, *, owner_id, as_of):
             issues.append({'code': 'supplier_review_unrelated_financial_change', 'obligation_id': key})
     rows, excluded, seen, eligible = [], [], set(), set()
     zero = {'components': set(), 'totals': {name: Decimal(0) for name in FIELDS}}
-    for invoice in invoices:
+    for invoice in checked_rows(invoices):
         identity = None
         try:
             if not isinstance(invoice, dict) or invoice.get('user_id') != owner_id:
@@ -263,15 +265,15 @@ def compare_supplier_invoices(current, proposed, invoices, *, owner_id, as_of):
             issues.extend({'code': code, 'invoice_id': identity} for code in problems)
         except (ValueError, KeyError, TypeError) as error:
             issues.append({'code': str(error), 'invoice_id': identity})
-    for identity in sorted(set(after) - eligible):
+    for identity in checked_rows(sorted(set(after) - eligible)):
         if after.get(identity) != before.get(identity):
             issues.append({'code': 'supplier_review_change_without_eligible_invoice', 'invoice_id': identity})
-    for identity in sorted(set(before) - set(after)):
+    for identity in checked_rows(sorted(set(before) - set(after))):
         issues.append({'code': 'supplier_review_existing_invoice_disappeared', 'invoice_id': identity})
     complete = not issues
     totals = None
     if complete:
-        totals = {name: format(sum((Decimal(row[name]) for row in rows), Decimal(0)), '.2f')
+        totals = {name: format(sum((Decimal(row[name]) for row in checked_rows(rows)), Decimal(0)), '.2f')
                   for name in ('invoice_gross', 'difference')}
     return {'schema': 'supplier_invoice_readonly_comparison_v1', 'owner_id': owner_id,
             'started_at': start.isoformat(), 'as_of': now.isoformat(), 'posting_allowed': False,

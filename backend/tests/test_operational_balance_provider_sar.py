@@ -60,7 +60,14 @@ def test_distinct_sar_claim_in_both_actual_balance_tables_and_no_new_bank_money(
     assert view["summaries"]["KWD"]["actual_liquidity"] == "4.80"
     assert next(p for p in view["details"]["provider_paid_totals"]["KWD"] if p["provider"] == PARTY)["paid"] == "12.00"
     position = build_financial_position(s)
-    assert position["currencies"]["SAR"]["debt_totals"]["receivable"] == "536.07"
+    # FX proves the gross claim, not the unpriced fee on its remaining share.
+    # The saved ledger above retains 536.07; known net keeps opening 500 minus
+    # its actual settlement 50 and does not call the unknown-fee 86.07 net cash.
+    assert position["currencies"]["SAR"]["debt_totals"]["receivable"] == "450.00"
+    provider, = table(position, "providers")["rows"]
+    assert provider["known_gross"] == "147.55" and provider["known_fees"] == "2.46"
+    assert provider["known_net"] == "450.00" and provider["complete"] is False
+    assert view["summaries"]["SAR"]["receivable"] == "536.07" and item["native_balance"]["outstanding"] == "7.00"
     assert any(r["posted"] == "147.55" for r in table(position, "balance_origin")["rows"])
     assert view == report(s, provider_balances_sar=True) and s == before
 

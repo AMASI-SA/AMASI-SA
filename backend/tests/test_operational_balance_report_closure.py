@@ -15,7 +15,12 @@ def test_opening_receivable_is_not_new_provider_sales_and_currency_is_separate()
     row, = [r for r in audit["rows"] if r["side"] == "لنا"]
     assert (row["opening"], row["posted"], row["allocated"], row["remaining"]) == ("125.00", "72.30", "0.00", "197.30")
     assert audit["complete"] is False and audit["show_totals"] is False and audit["totals"]["remaining"] is None
-    assert result["currencies"]["SAR"]["debt_totals"]["receivable"] == "197.30"
+    # The old obligation preserves its gross principal in the ledger. Missing
+    # fee evidence cannot turn that principal into a proved net receivable.
+    assert result["currencies"]["SAR"]["debt_totals"]["receivable"] == "125.00"
+    provider, = [row for row in table(result, "providers")["rows"] if row["provider"] == "p"]
+    assert provider["known_gross"] == "72.30" and provider["fees"] is None
+    assert provider["known_net"] == "125.00"
 
 
 def test_carrier_opening_and_fees_separate_from_cash_collected_and_not_counted_twice():

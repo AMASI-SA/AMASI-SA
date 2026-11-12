@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from operational_balance_bank_orders import NATIVE_BANKS, native_paid_amount
 from operational_payment_evidence import _amount, _instant
+from operational_balance_store import check_authorization
 from .service import call_salla
 from .sync import _enrich_order_receiving_bank
 
@@ -71,6 +72,7 @@ async def acquire_missing(db, owner, issues, *, limit=4):
         try:
             paid = native_paid_amount(raw, source, owner=owner, order_number=number,
                 provider_order_id=identity, currency="SAR", total=(raw.get("amounts") or {}).get("total", raw.get("total")), as_of=now)
+            await check_authorization()
             response = await call_salla(db, owner, "GET", "/orders/" + identity)
             details = response.get("data") if isinstance(response, dict) else None
             if not isinstance(details, dict) or _signature(details) != _signature(raw):
@@ -83,6 +85,7 @@ async def acquire_missing(db, owner, issues, *, limit=4):
             native_bank_ids = _store_bank_ids(details)
             if len(native_bank_ids) > 1 or (previous_bank_ids and previous_bank_ids != native_bank_ids):
                 continue
+            await check_authorization()
             details = await _enrich_order_receiving_bank(db, owner, details)
             bank = details.get("bank") or {}
             if not isinstance(bank, dict) or not isinstance(bank.get("bank_name"), str):

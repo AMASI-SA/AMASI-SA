@@ -70,15 +70,33 @@ def test_active_members_share_operational_history_within_same_owner():
         await started(db)
         await routes.create_movement(db, "owner", "owner", movement())
         await routes.create_movement(db, "owner", "staff", {**movement(), "request_id": "staffmovement", "amount": "100"})
+        recorded = (await routes.read(db, "owner"))["movements"]
+        assert {row["actor_id"] for row in recorded} == {"owner", "staff"}
         await db[routes.RECEIPTS].insert_many([
             {"_id": "ownerreceipt", "owner_id": "owner", "actor_id": "owner", "content": b"%PDF-safe", "mime": "application/pdf"},
             {"_id": "staffreceipt", "owner_id": "owner", "actor_id": "staff", "content": b"%PDF-safe", "mime": "application/pdf"},
         ])
         async with await mobile_client(db) as client:
-            items = (await client.get("/api/operational-balances/movements")).json()["items"]
-            assert len(items) == 2 and {m["actor_id"] for m in items} == {"owner", "staff"}
+            # Active membership and a report-page grant do not assign financial
+            # accounts. History is shared by actor only within the granted bank.
+            before_assignment = await client.get("/api/operational-balances/movements")
+            assert before_assignment.status_code == 200, before_assignment.text
+            assert before_assignment.json()["items"] == []
+            await db.mezan_mobile_app_access_v1.update_one(
+                {"owner_user_id": "owner", "user_id": "staff"},
+                {"$set": {"operational_banks": {"bank_ids": [], "read_bank_ids": ["bank"], "read_cash_ids": []}}})
+            response = await client.get("/api/operational-balances/movements")
+            assert response.status_code == 200, response.text
+            items = response.json()["items"]
+            assert len(items) == 2 and {m["id"] for m in items} == {m["id"] for m in recorded}
+            assert all("actor_id" not in item and item["receipt_id"] is None for item in items)
+            assert all(item["bank_id"] == "bank" for item in items)
             assert (await client.get("/api/operational-balances/receipts/ownerreceipt")).status_code == 403
             assert (await client.get("/api/operational-balances/receipts/staffreceipt")).status_code == 403
+            await db.mezan_mobile_app_access_v1.update_one(
+                {"owner_user_id": "owner", "user_id": "staff"},
+                {"$set": {"operational_banks.read_bank_ids": []}})
+            assert (await client.get("/api/operational-balances/movements")).json()["items"] == []
     run(scenario)
 
 

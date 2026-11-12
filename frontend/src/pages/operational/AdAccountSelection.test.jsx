@@ -35,3 +35,21 @@ test('closing does not save and a failed load cannot submit', async () => {
   await act(async () => host.querySelectorAll('button')[1].click());
   expect(close).toHaveBeenCalledTimes(1); expect(api.saveAdAccountSelection).not.toHaveBeenCalled();
 });
+
+const visibility = async value => act(async () => {
+ Object.defineProperty(document,'visibilityState',{configurable:true,value});document.dispatchEvent(new Event('visibilitychange'));
+});
+beforeEach(()=>Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'}));
+afterEach(()=>Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'}));
+test('configuration never loads on a hidden mount or repeats a completed read on focus',async()=>{
+ await visibility('hidden');await act(async()=>root.render(<AdAccountSelection onSaved={()=>{}} onClose={()=>{}}/>));
+ expect(api.adAccountSelection).not.toHaveBeenCalled();await visibility('visible');expect(api.adAccountSelection).toHaveBeenCalledTimes(1);
+ expect(api.adAccountSelection.mock.calls[0][0].signal).toBeInstanceOf(AbortSignal);
+ await visibility('hidden');await visibility('visible');expect(api.adAccountSelection).toHaveBeenCalledTimes(1);
+});
+test('configuration read is aborted and joined when its panel closes',async()=>{
+ let resolve;api.adAccountSelection.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));
+ await act(async()=>root.render(<AdAccountSelection onSaved={()=>{}} onClose={()=>{}}/>));const signal=api.adAccountSelection.mock.calls[0][0].signal;
+ await act(async()=>root.render(<div/>));expect(signal.aborted).toBe(true);await act(async()=>resolve({items:[]}));
+ await visibility('hidden');await visibility('visible');expect(api.adAccountSelection).toHaveBeenCalledTimes(1);
+});

@@ -10,10 +10,30 @@ from order_currency import SUPPORTED_ORDER_CURRENCIES
 from salla_shipping import extract_shipping, SHIPMENT_FIELDS
 from accounting_shipping_current_guard import _store_driver
 from shipping_companies import normalize_shipping_company
+from operational_financial_activity_runtime import preparation_checkpoint
 
 COD = {"cod", "cash_on_delivery", "cashondelivery", "cash on delivery",
        "الدفع عند الاستلام", "دفع عند الاستلام", "دفع عند الإستلام"}
 TRANSIT = {"created", "pending_pickup", "picked_up", "in_transit", "shipped", "out_for_delivery", "shipping"}
+CLOSED_ORDERS = {"delivered", "cancelled", "canceled", "deleted", "refunded", "returned", "restored",
+                 "تم_التوصيل", "ملغي", "ملغى", "محذوف", "مسترجع", "تم_الاسترجاع"}
+
+
+def closed_cod_order(source, raw, stamp):
+    """Only a consistent, dated canonical terminal status closes this cohort."""
+    if canonical_status(source) not in CLOSED_ORDERS:
+        return False
+    try:
+        created = instant(raw.get("date") or raw.get("created_at") or raw.get("order_date"))
+        version = instant(raw.get("updated_at") or raw.get("date_updated") or created)
+        watermark = source.get("g47_salla_snapshot") or {}
+        source_version = watermark.get("source_updated_at")
+        status_version = source.get("last_salla_direct_status_source_updated_at")
+        return (created <= version <= stamp
+                and (source_version is None or instant(source_version) == version)
+                and (status_version is None or instant(status_version) <= version))
+    except (ValueError, TypeError, AttributeError, OverflowError):
+        return False
 
 
 def _explicit_amount(containers, fields, currency):
@@ -91,7 +111,7 @@ def _open_waybill(source, raw, started, stamp):
     return all(started <= instant(v) <= stamp for v in versions)
 
 
-def prestart_open_cod(raw_orders, data, state, started, stamp, ids, numbers, open_statuses):
+def prestart_open_cod(raw_orders, data, state, started, stamp, ids, numbers, open_statuses, *, coverage_index=False):
     """Require positive current state; absence of a delivery fact alone proves nothing."""
     engine = state.get("engine") or {}
     booked = set(engine.get("obligations", {})) | set(engine.get("cod_reports", {})) | set(engine.get("facts", {}))
@@ -103,33 +123,46 @@ def prestart_open_cod(raw_orders, data, state, started, stamp, ids, numbers, ope
     linked_numbers = {_text(row.get("order_number")) for row in linked}
     booked.update(a.get("obligation_id") for row in state.get("movements", []) for a in row.get("allocations", []))
     groups = defaultdict(lambda: [0, Decimal(0)])
-    withheld = 0
-    for source, raw in raw_orders:
+    candidates, resolved = set(), set()
+    for index, (source, raw) in enumerate(raw_orders):
+        preparation_checkpoint()
+        identity = ("row", str(index), "")
         try:
+            oid, num = _text(raw.get("id")), _text(raw.get("reference_id") or raw.get("order_number"))
+            identity = ("order", oid, num) if oid or num else identity
             payment = raw.get("payment") or {}
             methods = {str(m).strip().lower() for m in (raw.get("payment_method"), payment.get("method")) if m}
             if not methods.intersection(COD):
                 continue
             if instant(raw.get("date") or raw.get("created_at") or raw.get("order_date")) >= started:
                 continue
-            oid, num = _text(raw.get("id")), _text(raw.get("reference_id") or raw.get("order_number"))
+            candidates.add(identity)
             if (not methods <= COD or not oid or not num or ids[oid] != 1 or numbers[num] != 1
                     or _text(source.get("order_number")) != num or _text(source.get("salla_order_id")) != oid
+                    or source.get("order_id") is not None and str(source["order_id"]) != oid
                     or stored_ids[oid] != 1 or stored_numbers[num] != 1
-                    or (raw.get("order_number") is not None and _text(raw["order_number"]) != num)
-                    or num in linked_numbers or oid in linked_ids or any(prefix + oid in booked for prefix in
+                    or (raw.get("order_number") is not None and _text(raw["order_number"]) != num)):
+                continue
+            if closed_cod_order(source, raw, stamp):
+                resolved.add(identity)
+                continue
+            if (num in linked_numbers or oid in linked_ids or any(prefix + oid in booked for prefix in
                        ("cod:", "credit:cod:", "shipping:", "delivery_event:", "cod_collection:", "cod_customer_confirmation:"))
                     or canonical_status(source) not in open_statuses or not _open_waybill(source, raw, started, stamp)):
-                withheld += 1
                 continue
             currency, due = _remaining(raw)
             if due > 0:
                 groups[currency][0] += 1
                 groups[currency][1] += due
+            resolved.add(identity)
         except (ValueError, KeyError, TypeError, AttributeError, OverflowError):
-            withheld += 1
-    return {"by_currency":{ccy:{"orders":count, "amount":format(amount, ".2f")} for ccy,(count,amount) in groups.items()},
-            "withheld_candidates":withheld}
+            candidates.add(identity)
+    preparation_checkpoint()
+    result = {"by_currency":{ccy:{"orders":count, "amount":format(amount, ".2f")} for ccy,(count,amount) in groups.items()},
+              "withheld_candidates": len(candidates - resolved)}
+    if coverage_index:
+        result.update(_covered_order_keys=sorted(resolved), _withheld_order_keys=sorted(candidates - resolved))
+    return result
 
 
 def snapshot_cod_preview(exposure, started_at, as_of, key='prestart_open_cod'):

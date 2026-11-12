@@ -116,7 +116,8 @@ def configured_projection(policies, provider, gross, *, currency="SAR", method=N
 
 
 def estimate_fee(settings, provider, gross, *, method=None, refunded=ZERO, policies=(),
-                 refunds=None, payment=None, created_at=None, observed_at=None, source_mode="legacy_settings", as_of=None):
+                 refunds=None, payment=None, created_at=None, observed_at=None, source_mode="legacy_settings", as_of=None,
+                 currency="SAR"):
     """Apply the existing per-order rounding contract to evidenced SAR payments."""
     gross, refunded = number(gross), number(refunded)
     if gross is None or refunded is None or refunded > gross:
@@ -124,11 +125,13 @@ def estimate_fee(settings, provider, gross, *, method=None, refunded=ZERO, polic
     try:
         projection = configured_projection(policies, provider, gross, method=method, refunded=refunded,
             refunds=refunds, payment=payment, created_at=created_at, observed_at=observed_at,
-            source_mode=source_mode, as_of=as_of)
+            source_mode=source_mode, as_of=as_of, currency=currency)
     except (ValueError, TypeError, KeyError, InvalidOperation):
         return None
     if projection is not None:
         return number(projection['estimated_fees'])
+    if currency != "SAR":
+        return None  # Legacy fixed fees are denominated in SAR, never relabel them as native money.
     terms = configured_terms(settings, provider, method)
     if terms is None:
         return None
@@ -171,7 +174,7 @@ def refresh_provider_fee_inputs(state, sources):
             continue
         identity = str(order["id"])
         orders[identity] = {k: deepcopy(order[k]) for k in (
-            "currency", "created_at", "updated_at", "payment", "customer_payment_sar") if k in order}
+            "order_number", "currency", "created_at", "updated_at", "payment", "customer_payment_sar") if k in order}
     state["engine"]["provider_fee_inputs"] = {
         "settings": deepcopy(sources["provider_fee_settings"]), "orders": orders,
         "policies": deepcopy(sources.get("fee_policies", [])),

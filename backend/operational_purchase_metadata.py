@@ -4,6 +4,7 @@ from collections import Counter
 import unicodedata
 from operational_balance_store import digest, fail
 from operational_balance_sources import rows, usable
+from operational_financial_activity_runtime import prepare_in_thread, preparation_checkpoint, checked_rows
 
 TEXT={'text','string','textarea'}
 CHOICE={'select','radio','color','image'}
@@ -11,10 +12,15 @@ CHOICE={'select','radio','color','image'}
 async def locations(db,owner):
     warehouses=await db.warehouse_locations_warehouses.find({'user_id':owner,'status':{'$ne':'disabled'}},{'_id':0}).to_list(20001)
     stored=await db.warehouse_locations.find({'user_id':owner,'state':{'$ne':'disabled'}},{'_id':0}).to_list(20001)
+    return await prepare_in_thread(_locations, warehouses, stored)
+
+
+def _locations(warehouses, stored):
+    preparation_checkpoint()
     if len(warehouses)>20000 or len(stored)>20000:fail('inventory_locations_incomplete','تعذر قراءة المواقع كاملة',409)
     if any(n>1 for n in Counter(w.get('id') for w in warehouses).values()) or any(n>1 for n in Counter(l.get('id') for l in stored).values()):fail('inventory_locations_ambiguous','هوية الموقع غير محسومة في ميزان 2',409)
     by_id={w['id']:w for w in warehouses if w.get('id')}
-    return [{'id':l['id'],'name':str(l.get('display_code') or l.get('name') or l.get('code') or l['id']),'code':str(l.get('code') or l['id']),'warehouse_id':l['warehouse_id'],'warehouse_name':str(by_id[l['warehouse_id']].get('name') or l['warehouse_id'])} for l in stored if l.get('id') and l.get('warehouse_id') in by_id]
+    return [{'id':l['id'],'name':str(l.get('display_code') or l.get('name') or l.get('code') or l['id']),'code':str(l.get('code') or l['id']),'warehouse_id':l['warehouse_id'],'warehouse_name':str(by_id[l['warehouse_id']].get('name') or l['warehouse_id'])} for l in checked_rows(stored) if l.get('id') and l.get('warehouse_id') in by_id]
 
 
 def option_contract(row):
@@ -22,14 +28,14 @@ def option_contract(row):
     if not isinstance(source,list):return [],['خيارات المنتج غير مكتملة في ميزان 2']
     count=row.get('options_count',len(source))
     if type(count) is not int or count<0 or count>len(source):issues.append('خيارات المنتج غير مكتملة في ميزان 2')
-    for option in source:
+    for option in checked_rows(source):
         if not isinstance(option,dict) or not isinstance(option.get('id'),str) or not option['id'].strip() or option['id'] in seen or not isinstance(option.get('name'),str) or not option['name'].strip() or type(option.get('required')) is not bool or not isinstance(option.get('type'),str):
             issues.append('هوية أو نوع خيار المنتج غير مكتمل');continue
         seen.add(option['id']);kind=option['type'];values=[];ids=set()
         if kind in CHOICE:
             choices=option.get('values',[])
             if not isinstance(choices,list) or not choices:issues.append('قيم الخيار '+option['name']+' غير مكتملة');choices=[]
-            for value in choices:
+            for value in checked_rows(choices):
                 if not isinstance(value,dict) or not isinstance(value.get('id'),str) or not value['id'] or value['id'] in ids or not isinstance(value.get('name'),str) or not value['name']:
                     issues.append('هوية قيمة الخيار غير مكتملة');continue
                 ids.add(value['id'])
@@ -44,11 +50,11 @@ def option_contract(row):
 def combinations(row,options):
     variants=row.get('variants') or [];result=[]
     if not isinstance(variants,list) or not variants or row.get('variants_count',len(variants))!=len(variants):return []
-    for variant in variants:
+    for variant in checked_rows(variants):
         selections=variant.get('selections') if isinstance(variant,dict) else None
         if not isinstance(selections,list) or not selections:return []
         values=[]
-        for selected in selections:
+        for selected in checked_rows(selections):
             if not isinstance(selected,dict):return []
             field=next((f for f in options if f['id']==selected.get('option_id') or f['name']==selected.get('name')),None)
             choice=next((v for v in (field or {}).get('values',[]) if v['id']==selected.get('value_id') or v['name']==selected.get('value')),None)
@@ -59,9 +65,14 @@ def combinations(row,options):
 
 
 async def products(db,owner,*,opening_cached_options=False):
+    stored = await rows(db,owner,'mezan_products_v2')
+    return await prepare_in_thread(_products, stored, opening_cached_options=opening_cached_options)
+
+
+def _products(stored, *, opening_cached_options=False):
     from operational_balance_inventory import image_url
     result=[];seen=set()
-    for row in await rows(db,owner,'mezan_products_v2'):
+    for row in checked_rows(stored):
         if not usable(row) or row.get('archived') or row.get('deleted_at'):continue
         identity=row.get('mezan_product_id')
         if not isinstance(identity,str) or not identity or identity in seen or not row.get('name'):fail('inventory_catalog_ambiguous','هوية المنتج غير مكتملة')

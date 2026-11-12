@@ -3,6 +3,7 @@ import { operationalApi as api, entityKinds, requestId, messageFor } from './api
 import './operational.css';
 import AdAccountSelection from './AdAccountSelection';
 import AdFundingSettings from './AdFundingSettings';
+import {visibleOperationalRead} from './visibleOperationalRead';
 const setupHints = {
   bank: 'اختر الحساب البنكي أو أضف حساب جهاز الشبكة باسمه. أدخل الرصيد الموجود فعليًا وقت البداية؛ لا يتطلب ذلك مندوبًا أو إيصالًا، ولا يُستورد أي رصيد سابق تلقائيًا.',
   courier: 'ظهور شركة الشحن في الطلبات لا يثبت ربط جهة الرصيد. راجع هوية الشركة وتأكيد ربطها في إعدادات الشحن بميزان 2.',
@@ -31,25 +32,20 @@ export function EntityPicker({
     [loading, setLoading] = useState(false),
     [refresh, setRefresh] = useState(0),
     [error, setError] = useState('');
+  const readLane = useRef({});
   useEffect(() => {
-    let alive = true;
     setItems([]);
     setError('');
-    if (!kind) return;
-    setLoading(true);
-    api.entities(kind).then(result => {
-      if (alive) {
+    if (!kind) {setLoading(false); return;}
+    return visibleOperationalRead(config => api.entities(kind, config), {
+      onStart: () => setLoading(true),
+      onData: result => {
         setItems(result.items);
         onItems?.(result.items);
-      }
-    }).catch(e => {
-      if (alive) setError(messageFor(e));
-    }).finally(() => {
-      if (alive) setLoading(false);
-    });
-    return () => {
-      alive = false;
-    };
+      },
+      onError: error => setError(messageFor(error)),
+      onEnd: () => setLoading(false),
+    }, readLane.current);
   }, [kind, onItems, refresh]);
   const incomplete = items.some(i => i.ready === false || i.settings_complete === false);
   return <><Field label="الجهة"><select value={value} disabled={disabled || loading || !kind} onChange={e => onChange(e.target.value, items.find(i => i.id === e.target.value))}><option value="">{loading ? 'جاري تحميل الجهات…' : 'اختر الجهة'}</option>{items.map(i => <option key={i.id} value={i.id} disabled={i.ready === false || i.settings_complete === false}>{i.name}{i.ready === false || i.settings_complete === false ? ' — يلزم استكمال الربط' : ''}</option>)}</select></Field>{error && <p role="alert">{error}</p>}{kind && !loading && !error && !items.length && <p>لا توجد جهات مؤهلة لهذا النوع في إعدادات الأرصدة.</p>}{!loading && !error && (!items.length || incomplete) && setupHints[kind] && <p role="status" className="op-muted">{setupHints[kind]}{kind === 'courier' && <> <a href="/integrations-v2?workspace=financial&page=shipping-cod" target="_blank" rel="noopener noreferrer">فتح إعدادات الشحن والأسعار</a> <button type="button" disabled={disabled || loading} onClick={() => setRefresh(n => n + 1)}>تحديث الجهات بعد الإعداد</button></>}</p>}</>;

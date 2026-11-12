@@ -8,6 +8,7 @@ from decimal import InvalidOperation
 
 from operational_balance_sources import invoice_component_amounts
 from operational_supplier_reconciliation import _components, _id, _money, _time
+from operational_financial_activity_runtime import checked_rows, preparation_checkpoint
 
 
 def _saved_component(expected, candidates, fact, invoice, piece, component, rid):
@@ -49,15 +50,15 @@ def _saved_component(expected, candidates, fact, invoice, piece, component, rid)
 def _validate_native_line_totals(invoice, amounts):
     # Some legacy invoices omit per-line totals. When supplied they must agree
     # with the canonical per-unit net allocation (VAT is checked separately).
-    for line in invoice["lines"]:
+    for line in checked_rows(invoice["lines"]):
         pieces = line["piece_ids"]
-        product = sum(_money(amounts[(p, "product")]["net_amount"]) for p in pieces)
+        product = sum(_money(amounts[(p, "product")]["net_amount"]) for p in checked_rows(pieces))
         if line.get("product_total_halalas") is not None and _money(line["product_total_halalas"], halalas=True) != product:
             raise ValueError("supplier_review_product_amount_conflict")
         subtotal = product
-        for service in line.get("services", []):
+        for service in checked_rows(line.get("services", [])):
             key = "service:" + service["service_id"]
-            net = sum(_money(amounts[(p, key)]["net_amount"]) for p in pieces)
+            net = sum(_money(amounts[(p, key)]["net_amount"]) for p in checked_rows(pieces))
             if service.get("total_halalas") is not None and _money(service["total_halalas"], halalas=True) != net:
                 raise ValueError("supplier_review_service_amount_conflict")
             subtotal += net
@@ -67,6 +68,7 @@ def _validate_native_line_totals(invoice, amounts):
 
 def compare_receiving(state, invoices, *, owner, observed_at=None):
     """Exact invoice+piece+component IDs; no joins by nominal value, supplier name or date."""
+    preparation_checkpoint()
     if (not isinstance(owner, str) or not owner or state.get("owner_id") != owner
             or state.get("status") != "active"):
         raise ValueError("supplier_review_owner_or_state_invalid")
@@ -79,7 +81,7 @@ def compare_receiving(state, invoices, *, owner, observed_at=None):
         raise ValueError("supplier_review_invoice_list_invalid")
     engine = state["engine"]
     by_evidence, by_invoice = defaultdict(list), defaultdict(list)
-    for key, row in engine.get("obligations", {}).items():
+    for key, row in checked_rows(engine.get("obligations", {}).items()):
         if not isinstance(row, dict):
             raise ValueError("supplier_review_saved_obligation_invalid")
         ids = row.get("evidence_ids", [])
@@ -87,11 +89,11 @@ def compare_receiving(state, invoices, *, owner, observed_at=None):
                 not row.get("derived_credit") and isinstance(row.get("source_invoice_id"), str)):
             by_invoice[row["source_invoice_id"]].append(ids)
         if isinstance(ids, list):
-            for rid in set(e for e in ids if isinstance(e, str) and e.startswith("receipt:")):
+            for rid in checked_rows(set(e for e in checked_rows(ids) if isinstance(e, str) and e.startswith("receipt:"))):
                 by_evidence[rid].append((key, row))
     facts = engine.get("facts", {})
     rows, seen, after_snapshot = [], set(), 0
-    for inv in invoices:
+    for inv in checked_rows(invoices):
         if not isinstance(inv, dict) or inv.get("user_id") != owner:
             raise ValueError("supplier_review_invoice_owner_mismatch")
         if (inv.get("experiment_mode") or inv.get("experiment_run_id") or not inv.get("approved_at") or
@@ -121,7 +123,7 @@ def compare_receiving(state, invoices, *, owner, observed_at=None):
             _validate_native_line_totals(inv, amounts)
             gross = _money(inv.get("total_halalas"), halalas=True)
             parts = []
-            for (piece, component), money in amounts.items():
+            for (piece, component), money in checked_rows(amounts.items()):
                 rid = "receipt:" + iid + ":" + piece + ":" + component
                 if rid not in expected:
                     continue  # already-invoiced product; newly approved services remain independent
@@ -131,8 +133,8 @@ def compare_receiving(state, invoices, *, owner, observed_at=None):
                 raise ValueError("supplier_review_invoice_amount_conflict")
             row.update(invoice_gross_sar=format(gross, ".2f"), component_count=len(parts),
                 extra_saved_count=sum(not isinstance(refs, list) or len(refs) != 1 or not isinstance(refs[0], str) or refs[0] not in expected
-                                      for refs in by_invoice.get(iid, [])))
-            for piece, component, rid, amount in sorted(parts):
+                                      for refs in checked_rows(by_invoice.get(iid, []))))
+            for piece, component, rid, amount in checked_rows(sorted(parts)):
                 evidence = _saved_component(amount, by_evidence.get(rid, []), facts.get(rid),
                                             inv, piece, component, rid)
                 if evidence["status"] == "matched":
@@ -148,4 +150,4 @@ def compare_receiving(state, invoices, *, owner, observed_at=None):
     return {"schema": "receiving_component_coverage_v1", "read_only": True, "posting_allowed": False,
             "started_at": start.isoformat(), "saved_balance_as_of": cutoff.isoformat(),
             "after_snapshot_count": after_snapshot, "rows": rows,
-            "invoice_count": len(rows), "review_count": sum(bool(r["source_issue"] or r["differences"] or r["extra_saved_count"]) for r in rows)}
+            "invoice_count": len(rows), "review_count": sum(bool(r["source_issue"] or r["differences"] or r["extra_saved_count"]) for r in checked_rows(rows))}

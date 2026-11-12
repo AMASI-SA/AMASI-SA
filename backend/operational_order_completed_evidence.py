@@ -1,4 +1,4 @@
-"""A typed order completion proves prepaid shipping time, never customer cash."""
+"""A typed order completion proves courier service time, never customer cash."""
 from copy import deepcopy
 from datetime import datetime
 
@@ -10,16 +10,46 @@ HISTORY_SOURCE = 'verified_order_completed_history'
 WEBHOOK_SOURCE = 'verified_order_completed_update'
 
 
+def _completion_scope(current):
+    """Before label creation, bind the proof to the exact order and carrier."""
+    if _text(current.get('shipment_id')) and _text(current.get('tracking_number')):
+        return {}
+    if not (_text(current.get('company_code')) or _text(current.get('company_name'))):
+        raise ValueError('operational_prepaid_shipping_courier_identity_missing')
+    return {'evidence_scope': 'order_completion', 'carrier_code': current.get('company_code'),
+            'carrier_name': current.get('company_name')}
+
+
+def _proof_identity_matches(observation, current):
+    if observation.get('evidence_scope') == 'order_completion':
+        return (observation.get('source') in {HISTORY_SOURCE, WEBHOOK_SOURCE}
+                and bool(_text(observation.get('carrier_code')) or _text(observation.get('carrier_name')))
+                and observation.get('carrier_code') == current.get('company_code')
+                and observation.get('carrier_name') == current.get('company_name'))
+    return (observation.get('shipment_id') == current.get('shipment_id')
+            and observation.get('waybill') == current.get('tracking_number'))
+
+
 def _source_version(raw):
     date = raw.get('date') if isinstance(raw.get('date'), dict) else {}
     return _instant(raw.get('updated_at') or date.get('updated') or raw.get('date_updated'))
 
 
 def bind_completed_waybill(raw, current, shipment, waybill, at):
-    """The original prepaid label may follow completion within this snapshot."""
+    """A label is optional for completion; an existing full label must agree."""
     version = _source_version(raw)
     if at > version:
         raise ValueError('operational_prepaid_shipping_completion_time_invalid')
+    if not (_text(shipment) and _text(waybill)):
+        _completion_scope(current)
+        from salla_shipping import extract_shipping, same_carrier
+        observed = extract_shipping(raw)
+        if (current.get('superseded_shipment_ids') or observed and not same_carrier(current, observed)
+                or observed and any(_text(observed.get(key)) and _text(current.get(key))
+                                    and _text(observed[key]) != _text(current[key])
+                                    for key in ('shipment_id', 'tracking_number'))):
+            raise ValueError('operational_prepaid_shipping_completion_identity_conflict')
+        return
     # Bound label creation to the canonical source version. The authoritative
     # completion time still controls cutover, tariff selection and recognition.
     observation = current.get(COMPLETED_PROOF) or {}
@@ -69,8 +99,7 @@ def completion_time(raw, source, history, end):
                 or observation.get('source') not in {HISTORY_SOURCE, WEBHOOK_SOURCE, CAPTURE_SOURCE}
                 or observation.get('owner') != source['user_id'] or observation.get('order_id') != oid
                 or observation.get('order_number') != number or observation.get('target_status') != 'completed'
-                or observation.get('shipment_id') != current.get('shipment_id')
-                or observation.get('waybill') != current.get('tracking_number')):
+                or not _proof_identity_matches(observation, current)):
             raise ValueError('operational_prepaid_shipping_completion_ambiguous')
         if observation['source'] == HISTORY_SOURCE:
             if (observation.get('history_complete') is not True or not isinstance(observation.get('events'), list)
@@ -114,11 +143,12 @@ def verified_completed_webhook(body, raw, current, owner):
             stamp = datetime.strptime(stamp, '%a %b %d %Y %H:%M:%S GMT%z')
         at = _instant(stamp)
         bind_completed_waybill(raw, current, current.get('shipment_id'), current.get('tracking_number'), at)
+        scope = _completion_scope(current)
     except (TypeError, ValueError):
         return None
     return {'source': WEBHOOK_SOURCE, 'owner': owner, 'order_id': oid, 'order_number': number,
-            'shipment_id': current['shipment_id'], 'waybill': current['tracking_number'],
-            'at': at.isoformat(), 'target_status': 'completed'}
+            'shipment_id': current.get('shipment_id'), 'waybill': current.get('tracking_number'),
+            'at': at.isoformat(), 'target_status': 'completed', **scope}
 
 
 def verified_completed_history(source, histories, owner, now):
@@ -142,7 +172,8 @@ def verified_completed_history(source, histories, owner, now):
     bind_completed_waybill(raw, current, current.get('shipment_id'), current.get('tracking_number'), at)
     result = deepcopy(current)
     result[COMPLETED_PROOF] = {'source': HISTORY_SOURCE, 'owner': owner, 'order_id': oid, 'order_number': number,
-        'shipment_id': current['shipment_id'], 'waybill': current['tracking_number'], 'at': at.isoformat(),
+        'shipment_id': current.get('shipment_id'), 'waybill': current.get('tracking_number'), 'at': at.isoformat(),
         'target_status': 'completed', 'source_updated_at': source['g47_salla_snapshot']['source_updated_at'],
-        'history_complete': True, 'events': sorted(events, key=lambda row: row['source_event_id'])}
+        'history_complete': True, 'events': sorted(events, key=lambda row: row['source_event_id']),
+        **_completion_scope(current)}
     return result

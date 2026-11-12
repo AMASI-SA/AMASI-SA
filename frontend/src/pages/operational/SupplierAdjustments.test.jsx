@@ -12,7 +12,7 @@ const load=async()=>{await input('رقم فاتورة المورد','INV');await
 const accept=async()=>{await input('مرجع قبول المورد','CREDIT-1');await act(async()=>host.querySelector('input[type=checkbox]').click());};
 beforeEach(()=>{global.IS_REACT_ACT_ENVIRONMENT=true;localStorage.clear();host=document.createElement('div');document.body.appendChild(host);root=createRoot(host);jest.resetAllMocks();api.supplierAdjustmentEntry.mockResolvedValue(invoice);api.saveSupplierAdjustment.mockResolvedValue({...invoice,adjusted_gross:'80'});api.context.mockResolvedValue(context);});
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();});
-test('fixed gross discount looks up exact supplier invoice and creates no cash command',async()=>{await render();await load();expect(api.supplierAdjustmentEntry).toHaveBeenCalledWith('supplier','INV');await input('مبلغ الخصم','12');await accept();await click('حفظ قبول المورد');expect(api.saveSupplierAdjustment).toHaveBeenCalledWith(expect.objectContaining({invoice_id:'invoice',kind:'discount',amount:'12',lines:[],accepted:true}));expect(api.saveSupplierAdjustment.mock.calls[0][0]).not.toHaveProperty('bank_id');expect(host.textContent).toContain('دون حركة بنك أو صندوق');});
+test('fixed gross discount looks up exact supplier invoice and creates no cash command',async()=>{await render();await load();expect(api.supplierAdjustmentEntry).toHaveBeenCalledWith('supplier','INV',expect.objectContaining({signal:expect.any(AbortSignal)}));await input('مبلغ الخصم','12');await accept();await click('حفظ قبول المورد');expect(api.saveSupplierAdjustment).toHaveBeenCalledWith(expect.objectContaining({invoice_id:'invoice',kind:'discount',amount:'12',lines:[],accepted:true}));expect(api.saveSupplierAdjustment.mock.calls[0][0]).not.toHaveProperty('bank_id');expect(host.textContent).toContain('دون حركة بنك أو صندوق');});
 test('accepted item return sends quantity only and server determines invoice value',async()=>{await render({kind:'return'});await load();expect(host.querySelector('img').alt).toBe('منتج');await input('كمية الإرجاع','1');await accept();await click('حفظ قبول المورد');expect(api.saveSupplierAdjustment).toHaveBeenCalledWith(expect.objectContaining({kind:'return',amount:null,lines:[{kind:'product',item_id:'p',quantity:1}]}));});
 test('return quantity and acceptance are enforced before write',async()=>{await render({kind:'return'});await load();await input('كمية الإرجاع','3');await click('حفظ قبول المورد');expect(api.saveSupplierAdjustment).not.toHaveBeenCalled();await accept();await click('حفظ قبول المورد');expect(api.saveSupplierAdjustment).not.toHaveBeenCalled();expect(host.textContent).toContain('اختر كميات صحيحة');});
 test('lost acknowledgement survives remount and retries immutable command',async()=>{api.saveSupplierAdjustment.mockRejectedValueOnce(new Error('lost'));await render();await load();await input('مبلغ الخصم','12');await accept();await click('حفظ قبول المورد');const first=api.saveSupplierAdjustment.mock.calls[0][0];await act(async()=>root.render(<div/>));await render({kind:'return'});expect(host.querySelectorAll('input')).toHaveLength(0);expect(host.textContent).toContain('خصم · فاتورة INV');await click('إعادة محاولة الحفظ');expect(api.saveSupplierAdjustment.mock.calls[1][0]).toEqual(first);expect(localStorage.getItem('mezan.operational.supplier-adjustment.v1:owner:actor')).toBeNull();});
@@ -36,4 +36,17 @@ test('returning silver validates its own remaining quantity and leaves gold unto
   const articles=[...host.querySelectorAll('article')];
   expect(articles[0].textContent).toContain('المتاح للإرجاع: 8');
   expect(articles[1].textContent).toContain('المتاح للإرجاع: 20');
+});
+
+const visibility = async value => act(async () => {
+ Object.defineProperty(document,'visibilityState',{configurable:true,value});document.dispatchEvent(new Event('visibilitychange'));
+});
+beforeEach(()=>Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'}));
+afterEach(()=>Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'}));
+test('supplier invoice lookup aborts when hidden and never survives panel closure',async()=>{
+ let resolve;api.supplierAdjustmentEntry.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));
+ await render();await load();const signal=api.supplierAdjustmentEntry.mock.calls[0][2].signal;
+ await visibility('hidden');expect(signal.aborted).toBe(true);await act(async()=>root.render(<div/>));
+ await act(async()=>resolve(invoice));await visibility('visible');
+ expect(api.supplierAdjustmentEntry).toHaveBeenCalledTimes(1);expect(api.saveSupplierAdjustment).not.toHaveBeenCalled();
 });

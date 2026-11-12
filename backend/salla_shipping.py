@@ -297,9 +297,12 @@ def accept_shipping(existing: dict, incoming: dict | None) -> dict | None:
     completed_key = 'verified_order_completed_transition'
     previous_completed = current.get(completed_key)
     completed = incoming.get(completed_key)
-    if previous_completed and previous_completed.get('shipment_id') == result.get('shipment_id'):
+    from operational_order_completed_evidence import _proof_identity_matches
+    order_scoped = (previous_completed and previous_completed.get('evidence_scope') == 'order_completion'
+                    and _proof_identity_matches(previous_completed, result))
+    if previous_completed and (order_scoped or previous_completed.get('shipment_id') == result.get('shipment_id')):
         if (completed and completed != previous_completed
-                or previous_completed.get('waybill') != result.get('tracking_number') or carrier_changed):
+                or not order_scoped and previous_completed.get('waybill') != result.get('tracking_number') or carrier_changed):
             result[completed_key] = {**previous_completed, 'ambiguous': True}
     elif not completed:
         result.pop(completed_key, None)

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { operationalApi as api, messageFor, requestId } from './api';
+import {visibleOperationalRead} from './visibleOperationalRead';
 
 const labels = {snapchat_ads:'سناب شات', meta_ads:'ميتا', google_ads:'جوجل', tiktok_ads:'تيك توك'};
 
@@ -7,15 +8,13 @@ export default function AdAccountSelection({onSaved, onClose}) {
   const [data, setData] = useState(null), [selected, setSelected] = useState([]);
   const [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const pending = useRef(null), saving = useRef(false);
-  useEffect(() => {
-    let active = true;
-    api.adAccountSelection().then(result => {
-      if (!active) return;
-      setData(result);
-      setSelected(result.items.filter(i => i.editable && i.selected).map(i => i.id));
-    }).catch(e => {if (active) setError(messageFor(e));});
-    return () => {active = false;};
-  }, []);
+  useEffect(() => visibleOperationalRead(config => api.adAccountSelection(config), {
+      onData: result => {
+        setData(result);
+        setSelected(result.items.filter(i => i.editable && i.selected).map(i => i.id));
+      },
+      onError: e => setError(messageFor(e)),
+    }), []);
   const save = async () => {
     if (!data || saving.current) return;
     saving.current = true; setBusy(true); setError('');

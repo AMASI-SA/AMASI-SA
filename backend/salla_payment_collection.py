@@ -43,7 +43,7 @@ def _balance_amount(value, currency):
     return number
 
 
-def provider_order_page_balance(raw, currency, total):
+def provider_order_page_balance(raw, currency, total, *, allow_paid_only=False):
     """Reconcile original-currency paid/due on a single Salla order. Never invent a transaction."""
     payment = raw.get("payment") or {}
     actions = raw.get("payment_actions") or {}
@@ -102,9 +102,17 @@ def provider_order_page_balance(raw, currency, total):
         paid = Decimal(0)
     if paid == gross and due is None:
         due = Decimal(0)
-    if paid is None or due is None:
+    # A documented partial tender proves paid money independently of customer
+    # due. The operational reader opts in; ordinary order-balance callers still
+    # require both sides. Never infer a remaining balance or a capture date.
+    paid_only = (allow_paid_only and due is None and paid is not None and 0 < paid < gross
+                 and not (flags and flags[0] is False))
+    if paid_only and any(_balance_amount(container["pending_refund_amount"], currency) > 0
+                         for container in (raw, payment, refund) if container.get("pending_refund_amount") is not None):
+        raise ValueError("provider_refund_execution_evidence_required")
+    if paid is None or (due is None and not paid_only):
         return None
-    if paid + due != gross or (flags and flags[0] != (due > 0)):
+    if not paid_only and (paid + due != gross or (flags and flags[0] != (due > 0))):
         raise ValueError("provider_payment_amount_conflict")
     order_status = raw.get("status")
     names = (order_status.get("slug"), order_status.get("name")) if isinstance(order_status, dict) else (order_status,)
@@ -120,7 +128,7 @@ def provider_order_page_balance(raw, currency, total):
             or (paid > 0 and states.intersection({"unpaid", "authorized", "authorised", "غير مدفوع"}))
             or (paid == gross and (awaiting or "partial" in states))):
         raise ValueError("provider_capture_status_conflict")
-    return {"paid": format(paid, ".2f"), "remaining": format(due, ".2f")}
+    return {"paid": format(paid, ".2f"), "remaining": None if due is None else format(due, ".2f")}
 
 
 def order_page_source_current(source, raw, *, referenced_provider_payment=False, customer_balance_verified=False):

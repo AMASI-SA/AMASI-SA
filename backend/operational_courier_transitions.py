@@ -286,7 +286,8 @@ async def load_delivery_history(db, owner, sources, *, max_rows, completion_keys
                 or not completion and _state(effective) is not True and _status(current.get("status")) not in DELIVERED):
             continue
         number = _text(raw.get("reference_id") or raw.get("order_number"))
-        if number and _text(raw.get("id")) and _text(current.get("shipment_id")) and _text(current.get("tracking_number")):
+        if number and _text(raw.get("id")) and (completion or (
+                _text(current.get("shipment_id")) and _text(current.get("tracking_number")))):
             numbers.add(number)
     projection = {"_id": 0, **{k: 1 for k in ("user_id", "order_number", "provider_order_id", "source", "event_type",
                                                 "source_event_id", "native_status_transition")}}

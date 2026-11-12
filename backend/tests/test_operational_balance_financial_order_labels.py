@@ -195,3 +195,130 @@ def test_missing_owner_cannot_read_an_unscoped_label():
     db = ReadOnlyDB([source("100", "501")])
     result = attach(db, report("100"), owner="")
     assert db.calls == [] and rows(result)[0]["order_number"] is None
+
+
+def pending(identity, number='unverified saved label'):
+    return {'order_id': identity, 'order_number': number,
+            'reasons': [{'code': 'missing_tariff', 'message': 'أجرة تحتاج مراجعة'}]}
+
+
+def exceptions_report():
+    value = report('100')
+    value['currencies']['SAR']['tables'] = [
+        {'id': 'couriers', 'complete': True, 'notes': [], 'totals': {'payable': '1234567890123456.78'},
+         'rows': [{'id': 'courier:one:SAR', 'complete': True, 'payable': '1234567890123456.78',
+                   'pending_orders': 1, 'pending_order_details': [pending('100')]}],
+         'unassigned_order_details': [pending('200')]},
+        {'id': 'banks_network', 'complete': True, 'notes': [], 'totals': {'actual': '500.00'},
+         'rows': [{'id': 'bank:one:SAR', 'actual': '500.00', 'complete': True}]},
+    ]
+    value['parties'] = [
+        {'id': 'courier-one', 'outstanding_payable': '1234567890123456.78', 'complete': True,
+         'pending_orders': 2, 'pending_order_details': [pending('100'), pending('200')]},
+        {'id': 'supplier-one', 'outstanding_payable': '5.00', 'complete': True},
+    ]
+    return value
+
+
+def money_and_evidence(value):
+    if isinstance(value, dict):
+        return {key: money_and_evidence(item) for key, item in value.items() if key not in {'order_number', 'complete', 'notes'}}
+    if isinstance(value, list):
+        return [money_and_evidence(item) for item in value]
+    return value
+
+
+def test_all_exception_surfaces_share_one_exact_identity_query_without_duplicate_ids():
+    value = exceptions_report()
+    db = ReadOnlyDB([source('100', '501'), source(200, '502'), source('100', 'FOREIGN', owner='other')])
+    before = deepcopy(value)
+    result = attach(db, value)
+    assert len(db.calls) == 1
+    assert db.calls[0]['query']['raw_by_source.salla_direct.id']['$in'] == ['100', 100, '200', 200]
+    table = result['currencies']['SAR']['tables'][0]
+    assert rows(result)[0]['order_number'] == table['rows'][0]['pending_order_details'][0]['order_number'] == '501'
+    assert table['unassigned_order_details'][0]['order_number'] == '502'
+    assert [item['order_number'] for item in result['parties'][0]['pending_order_details']] == ['501', '502']
+    assert money_and_evidence(result) == money_and_evidence(value)
+    assert value == before and 'FOREIGN' not in str(result)
+
+
+def test_main_party_report_without_delivery_details_still_enriches_exception_numbers():
+    value = {'complete': True, 'parties': [{'party_type': 'courier', 'party_id': 'one', 'complete': True,
+        'outstanding_payable': '150.25', 'pending_order_details': [pending('100')]}]}
+    db = ReadOnlyDB([source('100', '501')])
+    result = attach(db, value)
+    assert len(db.calls) == 1
+    assert result['parties'][0]['pending_order_details'][0]['order_number'] == '501'
+    assert money_and_evidence(result) == money_and_evidence(value)
+
+
+def test_missing_number_marks_only_its_counterparty_and_table_and_preserves_all_money():
+    value = exceptions_report()
+    result = attach(ReadOnlyDB([source('100', '501'), source('200', 'stale', stale=True)]), value)
+    shipping, bank = result['currencies']['SAR']['tables']
+    assert shipping['complete'] is False and shipping['rows'][0]['complete'] is True
+    assert shipping['unassigned_order_details'][0]['order_number'] is None
+    assert any('تحديث موثق' in text for text in shipping['notes'])
+    assert bank == value['currencies']['SAR']['tables'][1]
+    assert result['currencies']['SAR']['deliveries']['complete'] is True
+    assert result['parties'][0]['complete'] is False
+    assert result['parties'][1] == value['parties'][1]
+    assert money_and_evidence(result) == money_and_evidence(value)
+
+
+def test_limit_never_drops_pending_orders_or_certifies_only_the_first_batch(monkeypatch):
+    monkeypatch.setattr(labels, 'MAX_ROWS', 2)
+    value = exceptions_report()
+    value['parties'][0]['pending_order_details'].append(pending('300'))
+    db = ReadOnlyDB([source('100', '501'), source('200', '502'), source('300', '503')])
+    result = attach(db, value)
+    assert db.calls == []
+    assert len(result['parties'][0]['pending_order_details']) == 3
+    assert all(item['order_number'] is None for item in result['parties'][0]['pending_order_details'])
+    assert result['parties'][0]['complete'] is False
+    assert money_and_evidence(result) == money_and_evidence(value)
+
+
+@pytest.mark.parametrize('error_kind', ['mongo', 'timeout'])
+def test_label_lookup_failure_keeps_saved_finance_visible_with_qualified_labels(error_kind):
+    from pymongo.errors import OperationFailure
+    class Unavailable(ReadOnlyDB):
+        async def to_list(self, length):
+            raise OperationFailure('synthetic source unavailable') if error_kind == 'mongo' else asyncio.TimeoutError()
+    value = exceptions_report()
+    db = Unavailable([source('100', '501'), source('200', '502')])
+    result = attach(db, value)
+    assert len(db.calls) == 1
+    assert result['currencies']['SAR']['tables'][0]['complete'] is False
+    assert result['currencies']['SAR']['tables'][1] == value['currencies']['SAR']['tables'][1]
+    assert result['parties'][0]['complete'] is False
+    assert all(item['order_number'] is None for item in result['parties'][0]['pending_order_details'])
+    assert money_and_evidence(result) == money_and_evidence(value)
+
+
+def test_unknown_exception_id_never_uses_a_saved_number_as_proof():
+    value = {'parties': [{'complete': True, 'outstanding_payable': '150.25',
+                         'pending_order_details': [pending(None, 'apparently-valid-number')]}]}
+    db = ReadOnlyDB([source('100', '501')])
+    result = attach(db, value)
+    assert db.calls == []
+    assert result['parties'][0]['pending_order_details'][0]['order_number'] is None
+    assert result['parties'][0]['complete'] is False
+    assert money_and_evidence(result) == money_and_evidence(value)
+
+
+def test_main_unassigned_currency_family_groups_share_the_party_identity_read():
+    value = {'complete': True, 'parties': [{'complete': True, 'actual': '150.25',
+        'pending_order_details': [pending('100')]}], 'unassigned_order_details': {
+            'SAR': {'courier': [pending('100')], 'store_driver': [pending('200')]},
+            'USD': {'courier': [pending('300')], 'store_driver': []}}}
+    db = ReadOnlyDB([source('100', '501'), source('200', '502')])
+    result = attach(db, value)
+    assert len(db.calls) == 1
+    grouped = result['unassigned_order_details']
+    assert grouped['SAR']['courier'][0]['order_number'] == result['parties'][0]['pending_order_details'][0]['order_number'] == '501'
+    assert grouped['SAR']['store_driver'][0]['order_number'] == '502'
+    assert grouped['USD']['courier'][0]['order_number'] is None
+    assert result['complete'] is False and result['parties'][0]['complete'] is True
+    assert money_and_evidence(result) == money_and_evidence(value)

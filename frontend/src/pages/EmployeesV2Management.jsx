@@ -415,10 +415,14 @@ function MobileAppPermissionsModal({ employee, management, busy, onClose, onSubm
     const [bankIds, setBankIds] = useState(access.operational_banks?.bank_ids || []);
     const [defaultBank, setDefaultBank] = useState(access.operational_banks?.default_bank_id || "");
     const [cashIds, setCashIds] = useState(access.operational_banks?.cash_ids || []);
+    const [readBankIds, setReadBankIds] = useState(access.operational_banks?.read_bank_ids || []);
+    const [readCashIds, setReadCashIds] = useState(access.operational_banks?.read_cash_ids || []);
     const cashChoices = management.operational_cash_choices || [];
     const needsBanks = enabled && selected.includes("operational_balance_movements_write");
+    const needsReadAccounts = enabled && selected.includes("operational_balance_reports_read");
     const banks = management.operational_bank_choices || [];
     const validBanks = (bankIds.length > 0 || cashIds.length > 0) && bankIds.every(id => banks.some(bank => bank.id === id)) && (!bankIds.length || bankIds.includes(defaultBank)) && cashIds.every(id => cashChoices.some(c => c.id === id));
+    const validReadAccounts = readBankIds.every(id => banks.some(bank => bank.id === id)) && readCashIds.every(id => cashChoices.some(c => c.id === id));
     const mezanPermissionCount = employee.operational_role?.effective_permissions?.length || 0;
 
     function toggle(permission, checked) {
@@ -469,8 +473,16 @@ function MobileAppPermissionsModal({ employee, management, busy, onClose, onSubm
                     <h4 className="mt-4 font-bold">الصناديق</h4>{cashChoices.map(c => <label key={c.id} className="flex gap-2 p-2"><input type="checkbox" disabled={busy} checked={cashIds.includes(c.id)} onChange={e => setCashIds(ids => e.target.checked ? [...ids,c.id] : ids.filter(id => id !== c.id))}/>{c.name}</label>)}
                     <label>البنك الافتراضي<select aria-label="البنك الافتراضي" disabled={busy} value={defaultBank} onChange={event => setDefaultBank(event.target.value)}><option value="">اختر البنك</option>{banks.filter(bank => bankIds.includes(bank.id)).map(bank => <option key={bank.id} value={bank.id}>{bank.name}</option>)}</select></label>
                 </section>}
+                {needsReadAccounts && <section className="mt-4 rounded-xl border p-3" aria-label="حسابات عرض الحركات">
+                    <h3 className="font-bold">حسابات عرض الحركات فقط</h3>
+                    <p className="text-xs leading-6">اختر الحسابات التي يستطيع الموظف قراءة حركاتها. اختيارها هنا لا يسمح بالسداد أو التحويل. الحسابات المخصصة له لإدخال الحركات تظهر أيضًا في سجله.</p>
+                    <h4 className="mt-3 font-bold">البنوك</h4>{banks.map(bank => <label key={bank.id} className="flex gap-2 p-2"><input type="checkbox" aria-label={`عرض حركات ${bank.name}`} disabled={busy || (needsBanks && bankIds.includes(bank.id))} checked={readBankIds.includes(bank.id) || (needsBanks && bankIds.includes(bank.id))} onChange={event => setReadBankIds(ids => event.target.checked ? [...ids, bank.id] : ids.filter(id => id !== bank.id))}/>{bank.name} · {bank.currency}</label>)}
+                    <h4 className="mt-3 font-bold">الصناديق</h4>{cashChoices.map(cash => <label key={cash.id} className="flex gap-2 p-2"><input type="checkbox" aria-label={`عرض حركات ${cash.name}`} disabled={busy || (needsBanks && cashIds.includes(cash.id))} checked={readCashIds.includes(cash.id) || (needsBanks && cashIds.includes(cash.id))} onChange={event => setReadCashIds(ids => event.target.checked ? [...ids, cash.id] : ids.filter(id => id !== cash.id))}/>{cash.name}</label>)}
+                    {!banks.length && !cashChoices.length && <p>لا توجد حسابات مكتملة الإعداد لاختيارها.</p>}
+                    {!readBankIds.length && !readCashIds.length && !needsBanks && <p>لم يُحدد أي حساب للعرض؛ سيظهر السجل فارغًا لهذا الموظف.</p>}
+                </section>}
                 <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-6 text-amber-900">أي صفحة جديدة تضاف لاحقًا لن تظهر لهذا الموظف تلقائيًا؛ تبقى للمدير فقط حتى تمنحها له من هنا.</p>
-                <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="rounded-xl border px-4 py-2.5 text-sm font-bold">إلغاء</button><button type="button" onClick={() => onSubmit({ enabled, permissions: selected, operational_banks: { bank_ids: bankIds, default_bank_id: defaultBank || null, cash_ids: cashIds } })} disabled={busy || (needsBanks && !validBanks)} data-testid="employees-v2-mobile-app-permissions-submit" className="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">حفظ صلاحيات التطبيق</button></div>
+                <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="rounded-xl border px-4 py-2.5 text-sm font-bold">إلغاء</button><button type="button" onClick={() => onSubmit({ enabled, permissions: selected, operational_banks: { bank_ids: bankIds, default_bank_id: defaultBank || null, cash_ids: cashIds, ...(needsReadAccounts ? { read_bank_ids: readBankIds, read_cash_ids: readCashIds } : {}) } })} disabled={busy || (needsBanks && !validBanks) || (needsReadAccounts && !validReadAccounts)} data-testid="employees-v2-mobile-app-permissions-submit" className="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">حفظ صلاحيات التطبيق</button></div>
             </div>
         </ModalShell>
     );

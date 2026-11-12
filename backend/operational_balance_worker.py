@@ -1,74 +1,16 @@
-"""Automatic source reconciliation for explicitly started temporary systems."""
-import asyncio
-import logging
+"""Compatibility entrypoints: operational balances have no background work.
 
-from operational_balance_service import freeze, refresh
-from operational_balance_store import STATES, mutate, now
-
-log = logging.getLogger(__name__)
+The owner's visible workspace requests a bounded refresh explicitly. Starting a
+web process or worker must never scan source collections, reconcile balances,
+acquire financial evidence, or poll accounting mode for this feature.
+"""
 
 
-async def tick(db):
-    async for item in db[STATES].find({"status": "active"}, {"_id": 1, "owner_id": 1}):
-        try:
-            refreshed = await refresh(db, item["owner_id"])
-        except Exception as exc:
-            # A failed adapter never converts missing information into zero.
-            detail = getattr(exc, "detail", {})
-            code = detail.get("code", "operational_refresh_failed") if isinstance(detail, dict) else "operational_refresh_failed"
-            if code == "operational_accounting_active":
-                # Freeze only this independent system. Do not call activation or
-                # create any accounting record. Snapshot retains its data as-of.
-                await freeze(db, item["owner_id"], "operational_worker", {
-                    "request_id": "automatic-accounting-activation-freeze",
-                    "reason": "توقفت الحسابات التشغيلية بسبب تفعيل المحاسبة؛ يلزم مطابقة آخر رصيد موثق",
-                })
-                continue
-            async def mark(state):
-                if state["status"] == "active":
-                    issues = state.setdefault("engine", {}).setdefault("issues", [])
-                    issue = {"code": code, "message": "تعذر تحديث المصادر؛ الأرصدة تعرض آخر تحديث ناجح"}
-                    if issue not in issues:
-                        issues.append(issue)
-                return None
-            await mutate(db, item["owner_id"], mark)
-            log.warning("Operational source reconciliation incomplete: %s", code)
-        else:
-            # Acquiring evidence from Salla must not make a successful balance
-            # refresh fail or hold a financial transaction open.
-            if refreshed.get("status") == "active":
-                coverage = refreshed.get("engine", {}).get("customer_tender_coverage", {})
-                pending = coverage.get("sar", {}).get("proof_lookups")
-                if pending:
-                    from salla_integration.paid_sar_sync import acquire_missing
-                    try:
-                        await acquire_missing(db, item["owner_id"], pending)
-                    except Exception:
-                        log.warning("Salla paid-SAR evidence acquisition deferred")
-                bank_issues = [issue for issue in refreshed.get("engine", {}).get("issues", [])
-                               if issue.get("code") == "operational_order_bank_binding_incomplete"]
-                if bank_issues:
-                    from salla_integration.bank_payment_sync import acquire_missing as acquire_bank
-                    try:
-                        await acquire_bank(db, item["owner_id"], bank_issues)
-                    except Exception:
-                        log.warning("Salla bank identity acquisition deferred")
-                from salla_integration.courier_delivery_sync import ISSUE_CODES, acquire_missing as acquire_courier
-                courier_issues = [issue for issue in refreshed.get("engine", {}).get("issues", [])
-                                  if issue.get("code") in ISSUE_CODES]
-                if courier_issues:
-                    try:
-                        await acquire_courier(db, item["owner_id"], courier_issues, started_at=refreshed["started_at"])
-                    except Exception:
-                        log.warning("Salla courier delivery evidence acquisition deferred")
+async def tick(db, **kwargs):
+    """Retained for old runtime imports; deliberately performs no reads or writes."""
+    return None
 
 
-async def run(db, interval=30):
-    while True:
-        try:
-            await tick(db)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            log.exception("Operational reconciliation iteration failed")
-        await asyncio.sleep(interval)
+async def run(db, interval=None, **kwargs):
+    """No scheduler is registered. A stale caller also remains harmless."""
+    return None

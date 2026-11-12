@@ -7,6 +7,7 @@ from collections import defaultdict
 from decimal import Decimal
 
 from operational_balance_service import report
+from operational_financial_activity_runtime import preparation_checkpoint
 
 
 BALANCE_FIELDS = (
@@ -29,6 +30,7 @@ def _supplier_source_issue(issue):
 
 
 def supplier_workspace(state):
+    preparation_checkpoint()
     result = {
         "authority": "operational_balance_report", "status": state["status"],
         "active": state["status"] == "active", "started_at": state.get("started_at"),
@@ -41,6 +43,7 @@ def supplier_workspace(state):
 
     snapshot = report(state)
     for row in snapshot["parties"]:
+        preparation_checkpoint()
         if row["party_type"] != "supplier" or not row.get("party_id"):
             continue
         result["accounts"].append({
@@ -50,6 +53,7 @@ def supplier_workspace(state):
 
     grouped = {}
     for row in snapshot["obligations"]:
+        preparation_checkpoint()
         if row["party_type"] != "supplier" or not row.get("party_id"):
             continue
         if row.get("kind") == "baseline":
@@ -88,15 +92,18 @@ def supplier_workspace(state):
     totals = defaultdict(lambda: {"payable": Decimal(0), "receivable": Decimal(0),
                                   "settled": Decimal(0), "invoice_count": 0})
     for account in result["accounts"]:
+        preparation_checkpoint()
         total = totals[account["currency"]]
         for source, target in (("outstanding_payable", "payable"),
                                ("outstanding_receivable", "receivable"), ("settled", "settled")):
             total[target] += Decimal(account[source])
     for invoice in result["invoices"]:
+        preparation_checkpoint()
         totals[invoice["currency"]]["invoice_count"] += 1
     result["summaries"] = {
         currency: {field: _amount(value) if isinstance(value, Decimal) else value
                    for field, value in values.items()} for currency, values in sorted(totals.items())
     }
     result["source_issues_count"] = sum(_supplier_source_issue(issue) for issue in snapshot["issues"])
+    preparation_checkpoint()
     return result

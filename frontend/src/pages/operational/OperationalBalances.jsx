@@ -8,7 +8,6 @@ import InventoryPurchases from './InventoryPurchases';
 import InventoryAvailability from './InventoryAvailability';
 import OpeningInventory from './OpeningInventory';
 import SalaryStart from './SalaryStart';
-import MovementHistory from './MovementHistory';
 import DomainDetails from './DomainDetails';
 import CustomerPaymentTotals from './CustomerPaymentTotals';
 import CustomerWalletBalance from './CustomerWalletBalance';
@@ -16,6 +15,8 @@ import { formatRiyadhDateTime } from '../../lib/dates';
 import OperationalCostExposure from './OperationalCostExposure';
 import PaginatedReportTable from './PaginatedReportTable';
 import './operational.css';
+import { visibleOperationalRead, refreshVisibleSnapshot } from './visibleOperationalRead';
+import PendingOrdersDialog from './PendingOrdersDialog';
 const labels = {
   actual_liquidity: 'السيولة الفعلية',
   receivable: 'المتبقي لنا',
@@ -75,53 +76,19 @@ function OperationalIssueAlerts({items}) {
     </details>)}
   </section>;
 }
-const pageCanRead = () => document.visibilityState !== 'hidden' && navigator.onLine !== false;
-
-// Each mounted scope owns one request. An explicit refresh invalidates an old
-// result and queues one replacement. Visibility/connectivity only resume work
-// explicitly requested while it was unavailable; they never request new work.
 function useOperationalRead({read, onData, onError, onStart, onEnd, enabled = true, refreshKey = ''}) {
   const callbacks = useRef(null);
+  const lane = useRef({});
   callbacks.current = {read, onData, onError, onStart, onEnd};
-  const request = useRef({active: false, pending: false, generation: 0, queued: false});
-  const run = useCallback(async () => {
-    const task = request.current;
-    if (!task.active || task.pending || !pageCanRead()) return;
-    task.pending = true;
-    task.queued = false;
-    const generation = task.generation;
-    const current = callbacks.current;
-    current.onStart?.();
-    try {
-      const result = await current.read();
-      if (task.active && task.generation === generation) current.onData(result);
-    } catch (error) {
-      if (task.active && task.generation === generation) current.onError(error);
-    } finally {
-      task.pending = false;
-      if (task.active && task.generation === generation) current.onEnd?.();
-      if (task.active && task.queued) run();
-    }
-  }, []);
   useEffect(() => {
-    const task = request.current;
-    task.active = enabled;
-    task.generation += 1;
-    task.queued = enabled;
-    const resume = () => { if (task.queued) run(); };
-    if (enabled) {
-      run();
-      document.addEventListener('visibilitychange', resume);
-      window.addEventListener('online', resume);
-    }
-    return () => {
-      task.active = false;
-      task.generation += 1;
-      task.queued = false;
-      document.removeEventListener('visibilitychange', resume);
-      window.removeEventListener('online', resume);
-    };
-  }, [enabled, refreshKey, run]);
+    if (!enabled) return;
+    return visibleOperationalRead(config => callbacks.current.read(config), {
+      onStart: () => callbacks.current.onStart?.(),
+      onData: result => callbacks.current.onData?.(result),
+      onError: failure => callbacks.current.onError?.(failure),
+      onEnd: () => callbacks.current.onEnd?.(),
+    }, lane.current);
+  }, [enabled, refreshKey]);
 }
 
 function AuditHistory({refreshKey}) {
@@ -129,7 +96,7 @@ function AuditHistory({refreshKey}) {
   const [items, setItems] = useState(null), [error, setError] = useState('');
   const [busy, setBusy] = useState(false), [revision, setRevision] = useState(0);
   useOperationalRead({
-    read: () => api.audit(), enabled: opened,
+    read: config => api.audit(config), enabled: opened,
     refreshKey: JSON.stringify([refreshKey, revision]),
     onStart: () => { setBusy(true); setItems(null); setError(''); },
     onData: result => setItems(result.items),
@@ -158,7 +125,8 @@ function Reports({context,source,refreshVersion,visible,onRefresh,contextBusy}) 
     [completedKey, setCompletedKey] = useState(null);
   const refreshKey = JSON.stringify([refreshVersion, revision, context.status, context.started_at]);
   useOperationalRead({
-    read: () => api.reports(), enabled: visible && !contextBusy, refreshKey,
+    read: async config => { const update = context.status === 'active' ? await refreshVisibleSnapshot(api, config) : null;
+      return {...await api.reports(config), ...(update?.refresh_warning ? {refresh_warning: update.refresh_warning} : {})}; }, enabled: visible && !contextBusy, refreshKey,
     onStart: () => setBusy(true),
     onData: result => { setReport(result); setError(''); setCompletedKey(refreshKey); },
     onError: failure => { setError(messageFor(failure)); setCompletedKey(refreshKey); },
@@ -169,17 +137,23 @@ function Reports({context,source,refreshVersion,visible,onRefresh,contextBusy}) 
     onClick={onRefresh}>تحديث الأرصدة</button>;
   if (error) return <section><Notice error={error}/>{refreshControl}</section>;
   if (!report) return <p role="status">جاري تحميل الأرصدة…</p>;
-  const summaryEntries = Object.entries(report.summaries || {});
+  const summaryEntries = Object.entries(report.known_summaries || report.summaries || {});
   if (!summaryEntries.length && Object.keys(report.summary || {}).length) summaryEntries.push(['SAR', report.summary]);
   return <section><h2>الأرصدة والتقارير التشغيلية</h2>{refreshControl}{(contextBusy || busy) && <p role="status">جاري تحديث الأرصدة…</p>}<p className="op-muted">آخر تحديث: {report.as_of ? new Date(report.as_of).toLocaleString('ar-SA') : context.status === 'draft' ? 'لم يبدأ الاحتساب بعد؛ أنهِ الأرصدة الافتتاحية أولًا.' : 'لم تكتمل قراءة التقرير بعد'}</p><CustomerPaymentTotals report={report} /><OperationalIssueAlerts items={report.issues} /><div className="op-summary">{Object.entries(labels).map(([key, label]) => <article key={key}><span>{label}</span><strong>{summaryEntries.map(([currency, summary]) => `${summary[key] ?? 'غير مكتمل'} ${currency}`).join(' / ') || (context.status === 'draft' ? 'لم يبدأ الاحتساب' : 'لا توجد بيانات محسوبة')}</strong></article>)}</div><label className="op-field">نوع الجهة<select value={kind} onChange={e => setKind(e.target.value)}><option value="">جميع الجهات</option>{entityKinds.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
     <PaginatedReportTable label="أرصدة الجهات" resetKey={kind} rows={report.parties.filter(p => !['operating_expense','owner_withdrawal'].includes(p.party_type) && (!kind || p.party_type === kind))}>{rows =>
       <div className="op-table"><table>
-        <thead><tr>{['الجهة', 'العملة', 'الابتدائي', 'التقديري لنا', 'التقديري علينا', 'المؤكد لنا', 'المؤكد علينا', 'المسدد', 'الفعلي', 'المتبقي لنا', 'المتبقي علينا'].map(label => <th key={label}>{label}</th>)}</tr></thead>
+        <thead><tr>{['الجهة', 'العملة', 'الابتدائي', 'التقديري لنا', 'التقديري علينا', 'المؤكد لنا', 'المؤكد علينا', 'المسدد', 'الفعلي', 'المتبقي المحتسب لنا', 'المتبقي المحتسب علينا', 'طلبات مدفوعة / تواصيل محتسبة', 'طلبات غير مؤكدة'].map(label => <th key={label}>{label}</th>)}</tr></thead>
         <tbody>{rows.map(party => <tr key={`${party.party_type}:${party.party_id}:${party.currency}`}>
-          {['name', 'currency', 'opening', 'expected_receivable', 'expected_payable', 'confirmed_receivable', 'confirmed_payable', 'settled', 'actual', 'outstanding_receivable', 'outstanding_payable'].map(key => <td key={key}>{party[key] ?? 'غير مكتمل'}</td>)}
+          {['name', 'currency', 'opening', 'expected_receivable', 'expected_payable', 'confirmed_receivable', 'confirmed_payable', 'settled', 'actual', 'outstanding_receivable', 'outstanding_payable'].map(key => <td key={key}>{(Object.prototype.hasOwnProperty.call(party, `known_${key}`) ? party[`known_${key}`] : party[key]) ?? 'غير مكتمل'}</td>)}
+          <td>{(party.party_type === 'provider' ? party.paid_orders : party.confirmed_orders) ?? '—'}</td>
+          <td>{party.pending_orders == null ? '—' : <PendingOrdersDialog count={party.pending_orders} details={party.pending_order_details} name={party.name} />}</td>
         </tr>)}</tbody>
       </table>{!report.parties.length && <p>لا توجد أرصدة مسجلة بعد.</p>}</div>
     }</PaginatedReportTable>
+    {report.refresh_warning && <p role="alert" className="op-error">{report.refresh_warning}</p>}
+    {report.issues?.length > 0 && <p className="op-muted">المجاميع تعرض الجزء المحتسب من الأرصدة. الطلبات غير المؤكدة لا تلغي هذا الجزء؛ اضغط عددها لمراجعة رقم الطلب والسبب.</p>}
+    {Object.entries(report.unassigned_order_details || {}).flatMap(([currency, kinds]) => Object.entries(kinds).filter(([, orders]) => orders.length).map(([kind, orders]) =>
+      <p key={`${currency}:${kind}`}><PendingOrdersDialog count={orders.length} details={orders} name={`طلبات لم تثبت جهة توصيلها · ${currency}`} /></p>))}
     {Object.entries(report.details?.customer_wallet_balances || {}).map(([currency, balance]) => <p key={currency}>
       رصيد محافظ العملاء المستحق علينا {balance.remaining ?? 'غير متاح'} {currency} · وفق كشف سلة حتى {formatRiyadhDateTime(balance.as_of)}
     </p>)}
@@ -197,7 +171,7 @@ function OperationalBalancesContent({
     [contextBusy, setContextBusy] = useState(true);
   const load = useCallback(() => { setContextBusy(true); setContextRevision(value => value + 1); }, []);
   useOperationalRead({
-    read: () => api.context(), refreshKey: contextRevision,
+    read: config => api.context(config), refreshKey: contextRevision,
     onStart: () => setContextBusy(true),
     onData: result => {
       setError(''); setContext(result);
@@ -211,7 +185,7 @@ function OperationalBalancesContent({
   if (!context) return <main className="op-page" dir="rtl" role="status">جاري تحميل النظام التشغيلي…</main>;
   const permissions = context.permissions || {};
   const active = context.status === 'active';
-  return <main className="op-page" dir="rtl"><header><span className="op-eyebrow">ميزان · التشغيل اليومي</span><h1>الأرصدة التشغيلية</h1><p>{context.status === 'draft' ? 'ابدأ بإدخال الأرصدة الافتتاحية' : active ? 'بدأ النظام التشغيلي؛ الطلبات الجديدة تُحتسب تلقائيًا.' : 'النظام للقراءة والتدقيق فقط'}</p></header><nav aria-label="صفحات الأرصدة التشغيلية">{source !== 'employee_app' && <a href="/inventory-v2">صفحة المخزون المستقلة</a>}{context.status === 'draft' && permissions.manage && <button aria-current={tab === 'openings' ? 'page' : undefined} onClick={() => setTab('openings')}>الأرصدة الافتتاحية</button>}{context.can_manage_inventory_opening === true && <button aria-current={tab === 'opening-stock' ? 'page' : undefined} onClick={() => setTab('opening-stock')}>المخزون الافتتاحي</button>}{context.can_manage_salary_start === true && source !== 'employee_app' && <button aria-current={tab === 'salary-start' ? 'page' : undefined} onClick={() => setTab('salary-start')}>بداية الرواتب</button>}{permissions.move && <button aria-current={tab === 'movements' ? 'page' : undefined} onClick={() => setTab('movements')}>الحركات المالية اليومية</button>}{permissions.reports && <button aria-current={tab === 'reports' ? 'page' : undefined} onClick={() => setTab('reports')}>الأرصدة والتقارير التشغيلية</button>}{permissions.move&&<button aria-current={tab==='inventory'?'page':undefined} onClick={()=>setTab('inventory')}>شراء المخزون</button>}{permissions.reports&&<button aria-current={tab==='stock'?'page':undefined} onClick={()=>setTab('stock')}>المخزون المتاح</button>}</nav>{tab === 'openings' && context.status === 'draft' && permissions.manage && <OpeningBalances context={context} onFinished={load} />} {tab === 'movements' && permissions.move && (active ? <><DailyMovements context={context} cards canCreateCash={context.can_create_cash === true} key={context.session_scope} storageScope={context.session_scope} onScopeChanged={load} canManage={permissions.manage} source={source} onSaved={() => setVersion(v => v + 1)} /><MovementHistory key={`${context.session_scope}:${version}`} />{permissions.manage && <SupplierReturn />}</> : <p>تسجيل الحركات متاح بعد إنهاء الأرصدة الافتتاحية وأثناء تشغيل النظام.</p>)}{permissions.reports && <Reports key={`reports:${context.session_scope}`} context={context} source={source} refreshVersion={version} visible={tab === 'reports'} onRefresh={load} contextBusy={contextBusy}/>}{tab === 'salary-start' && context.can_manage_salary_start === true && source !== 'employee_app' && <SalaryStart key={`${context.session_scope}:${context.started_at}:${context.status}`} context={context}/>}{tab==='opening-stock'&&context.can_manage_inventory_opening === true&&<OpeningInventory key={context.session_scope} context={context}/>} {tab==='stock'&&permissions.reports&&<InventoryAvailability key={context.session_scope} context={context} onOpeningInventory={()=>setTab('opening-stock')}/ >}{tab==='inventory'&&permissions.move&&<InventoryPurchases key={context.session_scope} context={context} source={source}/>}</main>;
+  return <main className="op-page" dir="rtl"><header><span className="op-eyebrow">ميزان · التشغيل اليومي</span><h1>الأرصدة التشغيلية</h1><p>{context.status === 'draft' ? 'ابدأ بإدخال الأرصدة الافتتاحية' : active ? 'تُحمّل الأرصدة وتُحتسب أثناء فتح التقرير فقط، ويمكنك تحديثها عند الحاجة.' : 'النظام للقراءة والتدقيق فقط'}</p></header><nav aria-label="صفحات الأرصدة التشغيلية">{permissions.reports && <a href="/operational-balances/daily-movements">سجل الحركات المالية اليومية</a>}{source !== 'employee_app' && <a href="/inventory-v2">صفحة المخزون المستقلة</a>}{context.status === 'draft' && permissions.manage && <button aria-current={tab === 'openings' ? 'page' : undefined} onClick={() => setTab('openings')}>الأرصدة الافتتاحية</button>}{context.can_manage_inventory_opening === true && <button aria-current={tab === 'opening-stock' ? 'page' : undefined} onClick={() => setTab('opening-stock')}>المخزون الافتتاحي</button>}{context.can_manage_salary_start === true && source !== 'employee_app' && <button aria-current={tab === 'salary-start' ? 'page' : undefined} onClick={() => setTab('salary-start')}>بداية الرواتب</button>}{permissions.move && <button aria-current={tab === 'movements' ? 'page' : undefined} onClick={() => setTab('movements')}>الحركات المالية اليومية</button>}{permissions.reports && <button aria-current={tab === 'reports' ? 'page' : undefined} onClick={() => setTab('reports')}>الأرصدة والتقارير التشغيلية</button>}{permissions.move&&<button aria-current={tab==='inventory'?'page':undefined} onClick={()=>setTab('inventory')}>شراء المخزون</button>}{permissions.reports&&<button aria-current={tab==='stock'?'page':undefined} onClick={()=>setTab('stock')}>المخزون المتاح</button>}</nav>{tab === 'openings' && context.status === 'draft' && permissions.manage && <OpeningBalances context={context} onFinished={load} />} {tab === 'movements' && permissions.move && (active ? <><DailyMovements context={context} cards canCreateCash={context.can_create_cash === true} key={context.session_scope} storageScope={context.session_scope} onScopeChanged={load} canManage={permissions.manage} source={source} onSaved={() => setVersion(v => v + 1)} /><a className="op-button" href="/operational-balances/daily-movements">عرض سجل الحركات المالية اليومية</a>{permissions.manage && <SupplierReturn />}</> : <p>تسجيل الحركات متاح بعد إنهاء الأرصدة الافتتاحية وأثناء تشغيل النظام.</p>)}{permissions.reports && <Reports key={`reports:${context.session_scope}`} context={context} source={source} refreshVersion={version} visible={tab === 'reports'} onRefresh={load} contextBusy={contextBusy}/>}{tab === 'salary-start' && context.can_manage_salary_start === true && source !== 'employee_app' && <SalaryStart key={`${context.session_scope}:${context.started_at}:${context.status}`} context={context}/>}{tab==='opening-stock'&&context.can_manage_inventory_opening === true&&<OpeningInventory key={context.session_scope} context={context}/>} {tab==='stock'&&permissions.reports&&<InventoryAvailability key={context.session_scope} context={context} onOpeningInventory={()=>setTab('opening-stock')}/ >}{tab==='inventory'&&permissions.move&&<InventoryPurchases key={context.session_scope} context={context} source={source}/>}</main>;
 }
 
 

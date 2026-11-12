@@ -229,6 +229,8 @@ def test_complete_order_history_acquisition_needs_no_delivered_shipment_and_keep
 
 @pytest.mark.parametrize('change', [None, 'date', 'state', 'target'])
 def test_legacy_completed_history_enrichment_preserves_the_delivery_proof_without_accepting_conflicts(change):
+    from operational_completed_shipping_admission import initialize_admission
+    from test_operational_balance_delivery_cutover import active
     data, _, _, _ = lagging_order(proof='history')
     at = '2026-10-06T09:00:00+00:00'
     completed = history(at, to_status='completed', id='completion-1')
@@ -241,6 +243,25 @@ def test_legacy_completed_history_enrichment_preserves_the_delivery_proof_withou
     elif change == 'target':
         enriched['target_status'] = 'cancelled'
     data[COLLECTION].append(completed)
-    result = calculated(data)
+    prior = active()
+    initialize_admission(prior, START)
+    result = calculated(data, prior)
     assert fee_total(result) == (10 if change is None else 0)
     assert 'cod:100' not in result['engine']['obligations']
+    if change is None:
+        assert result['engine']['facts']['delivery_event:100']['delivered_at'] == DELIVERED
+        assert result['engine']['obligations']['shipping-completed:100']['completed_at'] == at
+        assert calculated(data, result) == result
+
+
+def test_newly_found_historical_completion_retains_delivery_proof_while_fee_waits_for_owner_review():
+    data, _, _, _ = lagging_order(proof='history')
+    completed = history('2026-10-06T09:00:00+00:00', to_status='completed', id='completion-1')
+    completed['native_status_transition'].insert(0, {'delivered': False, 'at': '2026-10-06T09:00:00+00:00'})
+    data[COLLECTION].append(completed)
+    result = calculated(data)
+    assert fee_total(result) == 0
+    assert result['engine']['facts']['delivery_event:100']['delivered_at'] == DELIVERED
+    assert any(issue['code'] == 'operational_shipping_completion_history_review_required'
+               for issue in result['engine']['issues'])
+    assert result['movements'] == [] and 'cod:100' not in result['engine']['obligations']

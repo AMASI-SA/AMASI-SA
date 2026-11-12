@@ -1,6 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {operationalApi as api, messageFor} from './api';
 import PaginatedReportTable from './PaginatedReportTable';
+import {visibleOperationalRead} from './visibleOperationalRead';
 
 const reasons = {
   missing: 'لا يوجد قيد مرتبط بدليل هذه القطعة',
@@ -42,19 +43,17 @@ function CorrectionPreview({invoiceId, asOf, revision, sessionScope}) {
   const [proposal, setProposal] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  async function load() {
-    setBusy(true);
-    setProposal(null);
-    setError('');
-    try {
-      const response = await api.receivingCorrectionPreview(invoiceId, asOf, revision);
-      if (!validProposal(response, invoiceId, asOf, revision, sessionScope)) throw new Error();
-      setProposal(response);
-    } catch {
-      setError('تعذر التحقق من مقترح هذه اللقطة. أعد فحص فواتير الاستلام.');
-    } finally {
-      setBusy(false);
-    }
+  const cleanup=useRef(null),lane=useRef({pending:null});
+  useEffect(()=>{setProposal(null);return()=>cleanup.current?.();},[invoiceId,asOf,revision,sessionScope]);
+  function load() {
+    if(busy)return;
+    cleanup.current?.();
+    cleanup.current=visibleOperationalRead(config=>api.receivingCorrectionPreview(invoiceId,asOf,revision,config),{
+      onStart:()=>{setBusy(true);setProposal(null);setError('');},
+      onData:response=>{if(!validProposal(response,invoiceId,asOf,revision,sessionScope))throw new Error();setProposal(response);},
+      onError:()=>setError('تعذر التحقق من مقترح هذه اللقطة. أعد فحص فواتير الاستلام.'),
+      onEnd:()=>setBusy(false),
+    },lane.current);
   }
   return <>
     <button type="button" disabled={busy} onClick={load}>معاينة التصحيح التاريخي</button>
@@ -80,19 +79,21 @@ function CorrectionPreview({invoiceId, asOf, revision, sessionScope}) {
 export default function ReceivingInvoiceCoverage({sessionScope}) {
   const [data, setData] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [all, setAll] = useState(false), [page, setPage] = useState(0);
-  const active = useRef(false), pending = useRef(false);
-  useEffect(() => {active.current = true; return () => {active.current = false;};}, []);
-  async function load() {
+  const pending=useRef(false),cleanup=useRef(null),lane=useRef({pending:null});
+  useEffect(()=>{setData(null);return()=>cleanup.current?.();},[sessionScope]);
+  function load() {
     if (pending.current) return;
-    pending.current = true; setBusy(true); setError(''); setData(null); setPage(0); setAll(false);
-    try {
-      const r = await api.receivingInvoiceCoverage();
+    cleanup.current?.();
+    cleanup.current=visibleOperationalRead(config=>api.receivingInvoiceCoverage(config),{
+      onStart:()=>{pending.current=true;setBusy(true);setError('');setData(null);setPage(0);setAll(false);},
+      onData:r=>{
       if (r.schema !== 'receiving_component_coverage_v1' || r.session_scope !== sessionScope ||
           r.read_only !== true || r.posting_allowed !== false || !Array.isArray(r.rows))
         throw new Error();
-      if (active.current) setData(r);
-    } catch(e) { if (active.current) setError(e.response ? messageFor(e) : 'تعذر التحقق من مطابقة فواتير الاستلام.'); }
-    finally {if (active.current) setBusy(false); pending.current = false;}
+      setData(r);},
+      onError:e=>setError(e.response?messageFor(e):'تعذر التحقق من مطابقة فواتير الاستلام.'),
+      onEnd:()=>{setBusy(false);pending.current=false;},
+    },lane.current);
   }
   const rows = (data?.rows || []).filter(r=>all || r.source_issue || r.extra_saved_count || r.differences.length);
   return <div aria-label="فحص فواتير استلام المورد">

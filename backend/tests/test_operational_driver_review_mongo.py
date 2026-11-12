@@ -82,6 +82,37 @@ def test_driver_approval_and_replay_require_intact_archived_history():
 
 
 @pytest.mark.parametrize('method', ['bank_transfer', 'card_terminal'])
+def test_packed_financial_snapshot_approval_and_replay_preserve_all_prior_money(method):
+    from operational_balance_archive import SNAPSHOT, compact_financial_snapshot
+    from operational_balance_store import read
+    async def scenario(db):
+        assignment, payload = await seed(db, method)
+        original = await read(db, 'owner')
+        original['engine']['facts'] = {'retained-proof': {'amount': '17.25', 'evidence': 'unchanged' * 10000}}
+        encoded = compact_financial_snapshot(original, 20_000)
+        await db[STATES].replace_one({'_id': 'owner', 'owner_id': 'owner'}, encoded)
+        result = await service.review_payment(db, owner='owner', actor='owner',
+            assignment_id=assignment, payload=payload, clock=NOW)
+        assert await service.review_payment(db, owner='owner', actor='owner',
+            assignment_id=assignment, payload=payload, clock=NOW) == result
+        saved = await read(db, 'owner')
+        head = await db[STATES].find_one({'_id': 'owner', 'owner_id': 'owner'})
+        assert SNAPSHOT in head
+        assert saved['engine']['facts'] == original['engine']['facts']
+        assert saved['engine']['obligations']['shipping:order-1'] == original['engine']['obligations']['shipping:order-1']
+        assert saved['openings'] == original['openings']
+        projection = report(saved)
+        assert projection['summary']['actual_liquidity'] == ('1200.00' if method == 'bank_transfer' else '1000.00')
+        assert len(saved.get(service.FACTS, {})) == 1
+        assert await db[EVENTS].count_documents({'kind': 'decision'}) == 1
+        if method == 'card_terminal':
+            assert saved['engine']['obligations'][result['obligation_id']]['confirmed'] == '200.00'
+        assert await db.general_ledger.count_documents({}) == 0
+        assert await db.mz2_shipping_native_events_v2.count_documents({}) == 0
+    run(scenario)
+
+
+@pytest.mark.parametrize('method', ['bank_transfer', 'card_terminal'])
 def test_real_concurrent_approval_is_exactly_once_and_preserves_old_order_fees(method):
     async def scenario(db):
         assignment, payload = await seed(db, method)

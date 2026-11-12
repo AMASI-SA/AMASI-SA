@@ -3,6 +3,7 @@ from calendar import monthrange
 from copy import deepcopy
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from operational_financial_activity_runtime import preparation_checkpoint
 
 
 def candidates(employee, first, today):
@@ -14,6 +15,7 @@ def candidates(employee, first, today):
     current, total, month = first, Decimal(0), None
     result, missing = {}, []
     while current <= today:
+        preparation_checkpoint()
         if month != (current.year, current.month):
             month, total = (current.year, current.month), Decimal(0)
         key = 'salary:' + str(employee['id']) + ':' + str(current)

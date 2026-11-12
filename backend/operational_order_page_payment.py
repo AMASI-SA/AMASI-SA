@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from operational_payment_evidence import _amount, _instant
 from operational_provider_history import late_payment_blocks
-from operational_provider_transaction_evidence import is_closed_tender_balance
+from operational_provider_transaction_evidence import is_closed_tender_balance, is_partial_tender_balance
 
 
 def corroborated_refund_basis(previous, payment, facts, order_id):
@@ -36,6 +36,8 @@ def observed_balance(page, payment, order, state, *, now, start):
     gross, paid = (_amount(page[k], currency) for k in ("gross", "paid"))
     if is_closed_tender_balance(page, currency):
         valid_amounts = _amount(payment["gross"], currency) == paid
+    elif is_partial_tender_balance(page, currency):
+        valid_amounts = _amount(payment["gross"], currency) == gross
     else:
         due = _amount(page["remaining"], currency)
         valid_amounts = gross == _amount(payment["gross"], currency) and paid + due == gross

@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useOptionalAuth } from "../context/AuthContext";
+import { canReadOperationalPage, visibleOperationalRead } from "./operational/visibleOperationalRead";
 import {
     Buildings,
     CheckCircle,
@@ -39,6 +41,8 @@ const EMPTY_FORM = {
     category_ids: [],
     service_ids: [],
 };
+const EMPTY_WORKSPACE = { suppliers: [], services: [], summary: {} };
+const EMPTY_FINANCIAL = { suppliers: [], invoices: [], timeline: [], summary: {} };
 
 function normalized(value) {
     return String(value || "").trim().toLowerCase();
@@ -264,53 +268,79 @@ export function SupplierEditor({ supplier, categories = [], services = [], busy,
 }
 
 export default function MezanSuppliersV2() {
+    const auth = useOptionalAuth();
+    const authBlocked = Boolean(auth?.loading || (auth && !auth.user?.id));
+    const identity = JSON.stringify([auth?.user?.id, auth?.user?.owner_id, auth?.user?.created_by,
+        auth?.user?.merchant_id, auth?.user?.tenant_id, auth?.user?.role, auth?.authStatus]);
     const [searchParams, setSearchParams] = useSearchParams();
     const requestedSupplierId = searchParams.get("supplier") || "";
-    const [data, setData] = useState({ suppliers: [], services: [], summary: {} });
-    const [financialData, setFinancialData] = useState({ suppliers: [], invoices: [], timeline: [], summary: {} });
-    const [operationalData, setOperationalData] = useState(null);
-    const [operationalError, setOperationalError] = useState("");
-    const loadSequence = useRef(0);
+    const [loadedData, setLoadedData] = useState(null);
+    const data = loadedData?.identity === identity ? loadedData.value : EMPTY_WORKSPACE;
+    const [financialResult, setFinancialResult] = useState(null);
+    const [financialIntent, setFinancialIntent] = useState(null);
+    const [administrativeRevision, setAdministrativeRevision] = useState(0);
+    const [financialRevision, setFinancialRevision] = useState(0);
+    const financialRequested = financialIntent === identity || Boolean(requestedSupplierId);
+    const financialKey = JSON.stringify([identity, financialRevision]);
+    const financial = financialResult?.key === financialKey ? financialResult.value : null;
+    const operationalData = financial?.operational || null;
+    const financialData = financial?.native || EMPTY_FINANCIAL;
+    const financialError = financial?.error || "";
+    const administrativeLane = useRef({ pending: null });
+    const financialLane = useRef({ pending: null });
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
+    const [financialLoading, setFinancialLoading] = useState(false);
     const [error, setError] = useState("");
-    const [financialError, setFinancialError] = useState("");
     const [query, setQuery] = useState("");
     const [status, setStatus] = useState("active");
     const [editorSupplier, setEditorSupplier] = useState(undefined);
     const [selectedSupplierId, setSelectedSupplierId] = useState(requestedSupplierId);
 
-    const load = useCallback(async ({ quiet = false } = {}) => {
-        const sequence = ++loadSequence.current;
-        if (!quiet) setLoading(true);
+    useEffect(() => {
         setError("");
-        setFinancialError("");
-        setOperationalError("");
-        const [workspaceResult, financialResult, operationalResult] = await Promise.allSettled([
-            loadMezanSuppliersWorkspace(),
-            loadMezanSupplierFinancials(),
-            loadOperationalSupplierAccounts(),
-        ]);
-        if (sequence !== loadSequence.current) return;
-        if (workspaceResult.status === "fulfilled") setData(workspaceResult.value);
-        else setError(workspaceResult.reason?.message || "تعذّر تحميل الموردين.");
-        if (financialResult.status === "fulfilled") setFinancialData(financialResult.value);
-        else {
-            setFinancialData({ suppliers: [], invoices: [], timeline: [], summary: {}, financial_status: "not_ready" });
-            setFinancialError(financialResult.reason?.message || "تعذّر تحميل الفواتير والمديونيات.");
-        }
-        if (operationalResult.status === "fulfilled") setOperationalData(operationalResult.value);
-        else {
-            setOperationalData({ active: false, status: "unavailable" });
-            setOperationalError(operationalResult.reason?.message || "تعذّر تحميل حسابات الموردين التشغيلية.");
-        }
-        if (!quiet) setLoading(false);
-    }, []);
+        setLoading(false);
+        if (authBlocked) return undefined;
+        return visibleOperationalRead(config => loadMezanSuppliersWorkspace({ ...config, timeout: 20000 }), {
+            onStart: () => setLoading(true),
+            onData: value => setLoadedData({ identity, value }),
+            onError: failure => setError(failure.message || "تعذّر تحميل الموردين."),
+            onEnd: () => setLoading(false),
+        }, administrativeLane.current);
+    }, [identity, authBlocked, administrativeRevision]);
 
-    useEffect(() => { load(); return () => { loadSequence.current += 1; }; }, [load]);
+    useEffect(() => {
+        setFinancialLoading(false);
+        if (!financialRequested || authBlocked) return undefined;
+        return visibleOperationalRead(async transport => {
+            const config = { ...transport, timeout: 20000 };
+            const operational = await loadOperationalSupplierAccounts(config);
+            if (config.signal.aborted || !canReadOperationalPage()) throw new DOMException("Page is not active", "AbortError");
+            const validActive = operational?.active === true && operational.status === "active"
+                && [operational.accounts, operational.invoices, operational.openings].every(Array.isArray)
+                && operational.summaries && typeof operational.summaries === "object";
+            const validInactive = operational?.active === false && ["draft", "frozen", "accounting_active"].includes(operational.status);
+            if (operational?.authority !== "operational_balance_report" || (!validActive && !validInactive)) {
+                throw new Error("تعذّر التحقق من مصدر حسابات الموردين؛ أعد طلب العرض.");
+            }
+            // Read the native ledger only after this request has established
+            // that the operational ledger is inactive. Errors never choose it.
+            const native = validActive ? null : await loadMezanSupplierFinancials({}, config);
+            if (!validActive && !["available", "not_ready"].includes(native?.financial_status)) {
+                throw new Error("تعذّر التحقق من حسابات الموردين؛ أعد طلب العرض.");
+            }
+            return { operational, native };
+        }, {
+            onStart: () => { setFinancialResult(null); setFinancialLoading(true); },
+            onData: value => setFinancialResult({ key: financialKey, value }),
+            onError: failure => setFinancialResult({ key: financialKey, value: { error:
+                failure.status === 403 ? "لا توجد صلاحية لعرض حسابات الموردين." : failure.message || "تعذّر تحميل حسابات الموردين." } }),
+            onEnd: () => setFinancialLoading(false),
+        }, financialLane.current);
+    }, [identity, authBlocked, financialRequested, financialKey]);
 
     const operationalActive = operationalData?.active === true;
-    const operationalUnavailable = operationalData?.status === "unavailable";
+    const nativeLoaded = operationalData?.active === false && financial?.native != null;
+    const nativeAvailable = nativeLoaded && financialData.financial_status === "available";
 
     const suppliers = useMemo(() => (data.suppliers || []).filter((supplier) => (
         (status === "all" || supplier.status === status)
@@ -328,16 +358,21 @@ export default function MezanSuppliersV2() {
     ), [financialData.timeline, selectedSupplierId]);
 
     useEffect(() => {
-        if (requestedSupplierId && financialBySupplier[requestedSupplierId]) {
-            setSelectedSupplierId(requestedSupplierId);
-        }
-    }, [financialBySupplier, requestedSupplierId]);
+        setSelectedSupplierId(requestedSupplierId);
+        if (requestedSupplierId) setFinancialIntent(identity);
+    }, [identity, requestedSupplierId]);
+
+    function requestFinancialAccounts() {
+        setFinancialIntent(identity);
+        setFinancialRevision(value => value + 1);
+    }
 
     function openFinancialDetail(supplierId) {
         const next = new URLSearchParams(searchParams);
         next.set("supplier", supplierId);
         setSelectedSupplierId(supplierId);
         setSearchParams(next, { replace: true });
+        if (!financialRequested || financialError) requestFinancialAccounts();
     }
 
     function closeFinancialDetail() {
@@ -347,13 +382,12 @@ export default function MezanSuppliersV2() {
         setSearchParams(next, { replace: true });
     }
 
-    async function saved() {
-        setSaving(true);
-        try {
-            await load({ quiet: true });
-        } finally {
-            setSaving(false);
-        }
+    function saved() {
+        setAdministrativeRevision(value => value + 1);
+    }
+
+    function financialSaved() {
+        setFinancialRevision(value => value + 1);
     }
 
     return (
@@ -365,7 +399,7 @@ export default function MezanSuppliersV2() {
                 </div>
             </header>
 
-            <div className="flex items-start gap-2 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-bold leading-6 text-sky-950"><Storefront size={22} className="mt-0.5 shrink-0" weight="duotone" /><div><div className="font-black">موردون وفواتير ومديونيات ميزان 2 فقط</div><div>{operationalActive ? "حساب المورد يعرض الرصيد التشغيلي الحالي، ويُسجّل السداد من الحركات التشغيلية. تظهر الافتتاحيات وفواتير الاستلام الجديدة بصورة منفصلة." : "هوية المورد من سجل ميزان 2 فقط. تظهر المديونية من العقد المالي المعتمد؛ الفواتير التاريخية لا تعيد إنشاء دين سُدد خارج النظام قبل تاريخ الانتقال."}</div></div></div>
+            <div className="flex items-start gap-2 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-bold leading-6 text-sky-950"><Storefront size={22} className="mt-0.5 shrink-0" weight="duotone" /><div><div className="font-black">موردون وفواتير ومديونيات ميزان 2 فقط</div><div>{operationalActive ? "حساب المورد يعرض الرصيد التشغيلي الحالي، ويُسجّل السداد من الحركات التشغيلية. تظهر الافتتاحيات وفواتير الاستلام الجديدة بصورة منفصلة." : nativeLoaded ? "هوية المورد من سجل ميزان 2 فقط. تظهر المديونية من العقد المالي المعتمد؛ الفواتير التاريخية لا تعيد إنشاء دين سُدد خارج النظام قبل تاريخ الانتقال." : "هوية المورد من سجل ميزان 2 فقط. اطلب عرض الحسابات للاطلاع على الأرصدة والفواتير المسجلة."}</div></div></div>
 
             <section className="grid gap-2 rounded-2xl border border-emerald-200 bg-white p-3 sm:grid-cols-3" data-testid="mezan-supplier-financial-flow">
                 <div className="rounded-xl bg-violet-50 p-3"><div className="text-xs font-black text-violet-700">1 · الاستلام</div><div className="mt-1 text-sm font-black text-slate-950">مسح المنتجات من المورد</div></div>
@@ -373,16 +407,20 @@ export default function MezanSuppliersV2() {
                 <div className="rounded-xl bg-emerald-50 p-3"><div className="text-xs font-black text-emerald-700">3 · حساب المورد</div><div className="mt-1 text-sm font-black text-slate-950">الرصيد الموثق والسداد والتخصيص</div></div>
             </section>
 
-            {operationalActive ? <OperationalSupplierSummary workspace={operationalData} /> : !operationalUnavailable && <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                <MoneySummaryCard value={financialData.summary?.outstanding_halalas} label="إجمالي ديون الموردين" tone="amber" Icon={Wallet} />
-                <MoneySummaryCard value={financialData.summary?.advance_halalas} label="الدفعات المقدمة للموردين" tone="violet" Icon={Receipt} />
-                <MoneySummaryCard value={financialData.summary?.paid_halalas} label="إجمالي ما سُدد للموردين" tone="emerald" Icon={CurrencyCircleDollar} />
-                <SummaryCard value={financialData.summary?.real_invoice_count} label="فواتير مالية مؤهلة" tone="slate" />
+            <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4" aria-label="عرض حسابات الموردين">
+                <p className="text-sm font-bold text-slate-600">{financialRequested ? "الحسابات حسب آخر قراءة طلبتها. اضغط التحديث لقراءة الحسابات مجددًا." : "يمكنك إدارة بيانات الموردين، وفتح حساب مورد أو عرض جميع الحسابات عند الحاجة."}</p>
+                <button type="button" disabled={financialLoading} onClick={requestFinancialAccounts} className="min-h-12 rounded-xl bg-emerald-800 px-5 text-sm font-black text-white disabled:opacity-50" data-testid="mezan-supplier-accounts-load">{financialLoading ? "جارٍ تحميل الحسابات…" : financialRequested ? "تحديث حسابات الموردين" : "عرض حسابات الموردين"}</button>
+            </section>
+
+            {operationalActive ? <OperationalSupplierSummary workspace={operationalData} /> : nativeLoaded && <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                <MoneySummaryCard value={nativeAvailable ? financialData.summary?.outstanding_halalas : null} label="إجمالي ديون الموردين" tone="amber" Icon={Wallet} />
+                <MoneySummaryCard value={nativeAvailable ? financialData.summary?.advance_halalas : null} label="الدفعات المقدمة للموردين" tone="violet" Icon={Receipt} />
+                <MoneySummaryCard value={nativeAvailable ? financialData.summary?.paid_halalas : null} label="إجمالي ما سُدد للموردين" tone="emerald" Icon={CurrencyCircleDollar} />
+                <SummaryCard value={nativeAvailable ? financialData.summary?.real_invoice_count : null} label="فواتير مالية مؤهلة" tone="slate" />
             </section>}
 
             {error && <div className="flex items-start gap-2 rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm font-black text-rose-950"><WarningCircle size={21} className="mt-0.5 shrink-0" />{error}</div>}
-            {financialError && !operationalActive && !operationalUnavailable && <div className="flex items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-black text-amber-950"><WarningCircle size={21} className="mt-0.5 shrink-0" />{financialError}</div>}
-            {operationalError && <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-black text-amber-950">{operationalError}</div>}
+            {financialError && <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-black text-amber-950">{financialError}</div>}
 
             {!loading && !(data.categories || []).length && (
                 <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-amber-950" data-testid="mezan-suppliers-no-categories"><div className="flex items-start gap-3"><Wrench size={25} className="mt-0.5 shrink-0" /><div><h2 className="font-black">أضف تصنيفات الموردين أولًا</h2><p className="mt-1 text-sm font-bold leading-6">أضف تصنيفات مثل ملابس أو مطليات من مكونات المنتجات، ثم اربط المورد بها. الخدمات اختيارية.</p><Link to="/components-v2" className="mt-3 inline-flex rounded-xl bg-amber-900 px-4 py-2.5 text-xs font-black text-white">فتح مكونات المنتجات</Link></div></div></section>
@@ -392,7 +430,7 @@ export default function MezanSuppliersV2() {
                 <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
                     <label className="relative"><MagnifyingGlass className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ابحث باسم المورد أو الخدمة أو رقم الجوال…" className="min-h-12 w-full rounded-xl border border-slate-200 pr-11 pl-3 text-sm font-bold outline-none focus:border-emerald-500" /></label>
                     <select value={status} onChange={(event) => setStatus(event.target.value)} className="min-h-12 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black"><option value="active">النشطون</option><option value="inactive">الموقوفون</option><option value="all">الكل</option></select>
-                    <button type="button" onClick={() => load()} disabled={loading} className="min-h-12 rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700">{loading ? <SpinnerGap className="ml-1 inline animate-spin" /> : null}تحديث</button>
+                    <button type="button" onClick={() => setAdministrativeRevision(value => value + 1)} disabled={loading} className="min-h-12 rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700">{loading ? <SpinnerGap className="ml-1 inline animate-spin" /> : null}تحديث بيانات الموردين</button>
                 </div>
 
                 {loading ? (
@@ -405,16 +443,15 @@ export default function MezanSuppliersV2() {
                             <article key={supplier.id} className="rounded-2xl border border-slate-200 p-4" data-testid={`mezan-supplier-row-${supplier.id}`}>
                                 <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-lg font-black text-slate-950">{supplier.company_name}</h2><span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${supplier.status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>{supplier.status === "active" ? "نشط" : "موقوف"}</span></div><div className="mt-1 text-xs font-bold text-slate-500">{supplier.contact_person || "بدون شخص تواصل"}{supplier.phone ? ` · ${supplier.phone}` : ""}</div></div><button type="button" onClick={() => setEditorSupplier(supplier)} disabled={!data?.permissions?.can_manage} className="shrink-0 rounded-xl border border-slate-200 p-2.5 text-emerald-800 disabled:opacity-40" aria-label={`تعديل ${supplier.company_name}`}><NotePencil size={20} /></button></div>
                                 <div className="mt-4 border-t border-slate-100 pt-3"><div className="mb-2 flex items-center gap-2 text-xs font-black text-slate-700"><Wrench className="text-violet-700" />الخدمات التي يقدمها ({supplier.service_count || 0})</div><div className="mb-3 flex flex-wrap gap-2">{(supplier.category_links || []).map((category) => <span key={category.category_id} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-800">{category.category_name}</span>)}{!supplier.category_ids?.length && <span className="text-xs font-bold text-amber-800">لم يُحدد التصنيف بعد — الربط السابق محفوظ</span>}</div><ServiceBadges links={supplier.service_links} /></div>
-                                {operationalActive || operationalUnavailable ? <OperationalSupplierCard
+                                {operationalActive ? <OperationalSupplierCard
                                     accounts={(operationalData?.accounts || []).filter(row => row.supplier_id === supplier.id)}
                                     invoiceCount={(operationalData?.invoices || []).filter(row => row.supplier_id === supplier.id).length}
-                                    unavailable={operationalUnavailable}
-                                /> : <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3">
-                                    <div className="rounded-xl bg-amber-50 p-2.5"><div className="text-[10px] font-black text-amber-700">الدين الحالي</div><div className="mt-1 text-sm font-black tabular-nums text-amber-950">{formatSupplierHalalas(financialBySupplier[supplier.id]?.financial?.outstanding_halalas)} ر.س</div></div>
-                                    <div className="rounded-xl bg-emerald-50 p-2.5"><div className="text-[10px] font-black text-emerald-700">فواتير حقيقية</div><div className="mt-1 text-lg font-black tabular-nums text-emerald-950">{financialBySupplier[supplier.id]?.financial?.real_invoice_count ?? "غير متاح"}</div></div>
-                                    <div className="rounded-xl bg-violet-50 p-2.5"><div className="text-[10px] font-black text-violet-700">دفعات مقدمة</div><div className="mt-1 text-lg font-black tabular-nums text-violet-950">{formatSupplierHalalas(financialBySupplier[supplier.id]?.financial?.advance_halalas)}</div></div>
+                                /> : nativeLoaded && <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3">
+                                    <div className="rounded-xl bg-amber-50 p-2.5"><div className="text-[10px] font-black text-amber-700">الدين الحالي</div><div className="mt-1 text-sm font-black tabular-nums text-amber-950">{formatSupplierHalalas(nativeAvailable ? financialBySupplier[supplier.id]?.financial?.outstanding_halalas : null)} ر.س</div></div>
+                                    <div className="rounded-xl bg-emerald-50 p-2.5"><div className="text-[10px] font-black text-emerald-700">فواتير حقيقية</div><div className="mt-1 text-lg font-black tabular-nums text-emerald-950">{(nativeAvailable ? financialBySupplier[supplier.id]?.financial?.real_invoice_count : null) ?? "غير متاح"}</div></div>
+                                    <div className="rounded-xl bg-violet-50 p-2.5"><div className="text-[10px] font-black text-violet-700">دفعات مقدمة</div><div className="mt-1 text-lg font-black tabular-nums text-violet-950">{formatSupplierHalalas(nativeAvailable ? financialBySupplier[supplier.id]?.financial?.advance_halalas : null)}</div></div>
                                 </div>}
-                                <button type="button" disabled={operationalUnavailable} onClick={() => openFinancialDetail(supplier.id)} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white disabled:opacity-50" data-testid={`mezan-supplier-financial-open-${supplier.id}`}><ClockCounterClockwise size={20} />{operationalActive ? "فتح الحساب التشغيلي والفواتير" : "فتح الحساب والفواتير"}</button>
+                                <button type="button" disabled={financialLoading} onClick={() => openFinancialDetail(supplier.id)} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white disabled:opacity-50" data-testid={`mezan-supplier-financial-open-${supplier.id}`}><ClockCounterClockwise size={20} />{operationalActive ? "فتح الحساب التشغيلي والفواتير" : "فتح الحساب والفواتير"}</button>
                             </article>
                         ))}
                     </div>
@@ -422,17 +459,17 @@ export default function MezanSuppliersV2() {
             </section>
 
             {editorSupplier !== undefined && (
-                <SupplierEditor supplier={editorSupplier} categories={data.categories || []} services={data.services || []} busy={saving} onClose={() => setEditorSupplier(undefined)} onSaved={saved} />
+                <SupplierEditor supplier={editorSupplier} categories={data.categories || []} services={data.services || []} busy={loading} onClose={() => setEditorSupplier(undefined)} onSaved={saved} />
             )}
             {selectedSupplier && operationalActive && <OperationalSupplierDetail supplier={selectedSupplier} workspace={operationalData} onClose={closeFinancialDetail} />}
-            {selectedSupplier && !operationalActive && !operationalUnavailable && (
+            {selectedSupplier && nativeLoaded && (
                 <SupplierFinancialDetail
                     key={selectedSupplier.id}
                     supplier={selectedSupplier}
                     invoices={selectedInvoices}
                     timeline={selectedTimeline}
                     workspace={financialData}
-                    onSaved={saved}
+                    onSaved={financialSaved}
                     onClose={closeFinancialDetail}
                 />
             )}

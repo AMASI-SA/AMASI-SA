@@ -132,6 +132,7 @@ const OperationalBalances = lazy(() => import("./pages/operational/OperationalBa
 const InventoryWorkspace = lazy(() => import("./pages/InventoryWorkspace"));
 const ProviderFeeSetup = lazy(() => import("./pages/operational/ProviderFeeSetup"));
 const OperationalFinancialPosition = lazy(() => import("./pages/operational/OperationalFinancialPosition"));
+const OperationalDailyFinancialMovements = lazy(() => import("./pages/operational/DailyFinancialMovements"));
 const OperationalCustomerReturns = lazy(() => import("./pages/operational/CustomerReturns"));
 const OperationalCustomerExchanges = lazy(() => import("./pages/operational/CustomerExchanges"));
 
@@ -152,6 +153,7 @@ function AppRoutes() {
             <Route path="/inventory-v2" element={<ProtectedRoute><Layout><InventoryWorkspace /></Layout></ProtectedRoute>} />
             <Route path="/operational-balances/provider-fees" element={<ProtectedRoute><Layout><ProviderFeeSetup /></Layout></ProtectedRoute>} />
             <Route path="/operational-balances/financial-position" element={<ProtectedRoute><Layout><OperationalFinancialPosition /></Layout></ProtectedRoute>} />
+            <Route path="/operational-balances/daily-movements" element={<ProtectedRoute><Layout><OperationalDailyFinancialMovements /></Layout></ProtectedRoute>} />
             <Route path="/operational-balances/customer-returns" element={<ProtectedRoute><Layout><OperationalCustomerReturns /></Layout></ProtectedRoute>} />
             <Route path="/operational-balances/customer-exchanges" element={<ProtectedRoute><Layout><OperationalCustomerExchanges /></Layout></ProtectedRoute>} />
             <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />

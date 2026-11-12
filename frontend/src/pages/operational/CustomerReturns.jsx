@@ -1,13 +1,17 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {operationalApi as api,requestId,messageFor} from './api';
 import {Field,Notice} from './OpeningBalances';
+import {visibleOperationalRead} from './visibleOperationalRead';
 import './operational.css';
 
 const localInput=value=>{const d=new Date(value);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);};
 const blank=()=>({order_number:'',items:[],status:'pending',amount:'',refund_source_type:'bank',refund_source_id:'',refund_reference:'',refunded_at:'',shipping_kind:'none',shipping_id:null,shipment_reference:'',shipment_completed:false,shipping_quote_hash:null,note:''});
 export default function CustomerReturns(){
  const [context,setContext]=useState(null),[error,setError]=useState('');
- useEffect(()=>{let alive=true;api.context().then(c=>{if(alive)setContext(c);}).catch(e=>alive&&setError(messageFor(e)));return()=>{alive=false;};},[]);
+ const contextLane=useRef({pending:null});
+ useEffect(()=>visibleOperationalRead(config=>api.context(config),{
+  onData:setContext,onError:e=>setError(messageFor(e)),
+ },contextLane.current),[]);
  if(error)return <main className="op-page" dir="rtl"><Notice error={error}/></main>;
  if(!context)return <main className="op-page" dir="rtl" role="status">جارٍ تحميل مرتجعات العملاء…</main>;
  return <ReturnsForm key={context.session_scope} context={context}/>;
@@ -21,13 +25,38 @@ function ReturnsForm({context}){
  const [order,setOrder]=useState(null),[cases,setCases]=useState([]),[accounts,setAccounts]=useState({}),[quote,setQuote]=useState(null);
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(false),[error,setError]=useState(restored.error||''),[message,setMessage]=useState('');
  const lock=useRef(false),searchVersion=useRef(0);
+ const readLane=useRef({pending:null}),quoteLane=useRef({pending:null}),orderLane=useRef({pending:null});
+ const [revision,setRevision]=useState(0),[orderRead,setOrderRead]=useState(null);
  const writable=context.status==='active'&&context.permissions?.move;
  const disabled=busy||!!pending||!!restored.error||!writable;
- useEffect(()=>{let alive=true;Promise.all([api.customerReturns(),...['bank','provider','courier','store_driver'].map(k=>api.entities(k))]).then(([r,...choices])=>{if(alive){setCases(r.items);setCasesLoaded(true);setAccounts(Object.fromEntries(['bank','provider','courier','store_driver'].map((k,i)=>[k,choices[i].items])));}}).catch(e=>alive&&setError(messageFor(e)));return()=>{alive=false;};},[]);
- useEffect(()=>{let alive=true;if(caseId)return;setQuote(null);if(form.shipping_kind==='none'||!form.shipping_id||pending)return;api.returnShippingQuote(form.shipping_kind,form.shipping_id,form.order_number).then(q=>{if(alive){setQuote(q);setForm(f=>({...f,shipping_quote_hash:q.quote_hash}));}}).catch(e=>alive&&setError(messageFor(e)));return()=>{alive=false;};},[form.shipping_kind,form.shipping_id,form.order_number,caseId,pending]);
+ useEffect(()=>visibleOperationalRead(async config=>{
+  const results=await Promise.allSettled([api.customerReturns(config),...['bank','provider','courier','store_driver'].map(k=>api.entities(k,config))]);
+  const failure=results.find(r=>r.status==='rejected');if(failure)throw failure.reason;
+  return results.map(r=>r.value);
+ },{
+  onStart:()=>setCasesLoaded(false),
+  onData:([r,...choices])=>{setCases(r.items);setCasesLoaded(true);setAccounts(Object.fromEntries(['bank','provider','courier','store_driver'].map((k,i)=>[k,choices[i].items])));},
+  onError:e=>setError(messageFor(e)),
+ },readLane.current),[revision]);
+ useEffect(()=>{if(caseId)return undefined;setQuote(null);if(form.shipping_kind==='none'||!form.shipping_id||pending)return undefined;
+  return visibleOperationalRead(config=>api.returnShippingQuote(form.shipping_kind,form.shipping_id,form.order_number,config),{
+   onData:q=>{setQuote(q);setForm(f=>({...f,shipping_quote_hash:q.quote_hash}));},onError:e=>setError(messageFor(e)),
+  },quoteLane.current);
+ },[form.shipping_kind,form.shipping_id,form.order_number,caseId,pending]);
+ useEffect(()=>{if(!orderRead)return undefined;
+  return visibleOperationalRead(config=>api.returnOrder(orderRead.number,config),{
+   onStart:()=>setLoading(true),
+   onData:o=>{if(orderRead.version!==searchVersion.current)return;setOrder(o);
+    const row=orderRead.row;
+    if(row){setCaseId(row.id);setQuote(row.shipping);setForm({...blank(),order_number:row.order_number,items:row.items,status:row.status,amount:row.amount||'',refund_source_type:row.refund_source_type||'bank',refund_source_id:row.refund_source_id||'',refund_reference:row.refund_reference||'',refunded_at:row.refunded_at?localInput(row.refunded_at):'',shipping_kind:row.shipping.kind,shipping_id:row.shipping.id||null,shipment_reference:row.shipping.reference||'',shipment_completed:row.shipping.status==='completed',note:row.note||''});}
+    else {setForm({...blank(),order_number:o.order_number,amount:(Number(o.total)-Number(o.refunded)).toFixed(2)});setCaseId(null);}},
+   onError:e=>{if(orderRead.version===searchVersion.current)setError(messageFor(e));},
+   onEnd:()=>{if(orderRead.version===searchVersion.current)setLoading(false);},
+  },orderLane.current);
+ },[orderRead]);
  const change=patch=>{if(disabled)return;setForm(f=>({...f,...patch}));setError('');setMessage('');};
- async function findOrder(){const v=++searchVersion.current;setLoading(true);setError('');setOrder(null);try{const o=await api.returnOrder(form.order_number);if(v===searchVersion.current){setOrder(o);setForm(f=>({...blank(),order_number:o.order_number,amount:(Number(o.total)-Number(o.refunded)).toFixed(2)}));setCaseId(null);}}catch(e){if(v===searchVersion.current)setError(messageFor(e));}finally{if(v===searchVersion.current)setLoading(false);}}
- async function openCase(row){if(disabled)return;const v=++searchVersion.current;setLoading(true);setError('');try{const o=await api.returnOrder(row.order_number);if(v!==searchVersion.current)return;setOrder(o);setCaseId(row.id);setQuote(row.shipping);setForm({...blank(),order_number:row.order_number,items:row.items,status:row.status,amount:row.amount||'',refund_source_type:row.refund_source_type||'bank',refund_source_id:row.refund_source_id||'',refund_reference:row.refund_reference||'',refunded_at:row.refunded_at?localInput(row.refunded_at):'',shipping_kind:row.shipping.kind,shipping_id:row.shipping.id||null,shipment_reference:row.shipping.reference||'',shipment_completed:row.shipping.status==='completed',note:row.note||''});}catch(e){setError(messageFor(e));}finally{setLoading(false);}}
+ function findOrder(){const version=++searchVersion.current;setLoading(true);setError('');setOrder(null);setOrderRead({number:form.order_number,version});}
+ function openCase(row){if(disabled)return;const version=++searchVersion.current;setLoading(true);setError('');setOrderRead({number:row.order_number,version,row});}
  async function save(){
   if(lock.current||!writable||restored.error)return;
   lock.current=true;setBusy(true);setError('');
@@ -42,8 +71,8 @@ function ReturnsForm({context}){
    }
    const fresh=await api.context();if(fresh.session_scope!==scope||!fresh.permissions?.move)throw Error('تغيرت الجلسة أو الصلاحية؛ احتفظنا بالعملية للتحقق.');
    await api.saveCustomerReturn(command.body,command.id);
-   localStorage.removeItem(key);setPending(null);setForm(blank());setOrder(null);setCaseId(null);setMessage('تم حفظ المرتجع');
-   setCases((await api.customerReturns()).items);
+   localStorage.removeItem(key);setPending(null);setForm(blank());setOrder(null);setOrderRead(null);setCaseId(null);setMessage('تم حفظ المرتجع');
+   setRevision(value=>value+1);
   }catch(e){
    if(e?.response?.data?.detail?.not_applied===true||[400,422].includes(e?.response?.status)){localStorage.removeItem(key);setPending(null);}
    setError(e?.response?messageFor(e):e.message||'تعذر تأكيد الحفظ؛ أعد المحاولة بالبيانات نفسها.');

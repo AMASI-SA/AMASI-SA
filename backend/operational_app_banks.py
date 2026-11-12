@@ -1,6 +1,6 @@
 """Owner-assigned MZ2 banks/cashboxes for native entry; no accounting writes."""
 from fastapi import HTTPException
-from mobile_app_permissions import find_mobile_app_access, OPERATIONAL_APP_WRITE
+from mobile_app_permissions import find_mobile_app_access, OPERATIONAL_APP_WRITE, OPERATIONAL_APP_READ
 from operational_balance_sources import entities
 
 
@@ -10,8 +10,24 @@ async def bank_choices(db, owner, kind="bank"):
 
 
 async def validate_assignment(db, owner, permissions, enabled, payload):
-    if not enabled or OPERATIONAL_APP_WRITE not in permissions:
+    if not enabled:
         return {"bank_ids": [], "default_bank_id": None}
+    read_scope = {}
+    if OPERATIONAL_APP_READ in permissions and isinstance(payload, dict):
+        for field, kind in (("read_bank_ids", "bank"), ("read_cash_ids", "cash")):
+            if field not in payload:
+                continue
+            ids = payload[field]
+            if (not isinstance(ids, list) or len(ids) > 100 or any(not isinstance(i, str) for i in ids)
+                    or len(set(ids)) != len(ids)):
+                raise HTTPException(422, {"code": "operational_read_account_assignment_invalid"})
+            valid = {r["id"] for r in await bank_choices(db, owner, kind)}
+            if not set(ids).issubset(valid):
+                raise HTTPException(422, {"code": "operational_read_account_not_mz2"})
+            read_scope[field] = ids
+    if OPERATIONAL_APP_WRITE not in permissions:
+        # Read-only account grants never become payment/settlement assignments.
+        return {"bank_ids": [], "default_bank_id": None, **read_scope}
     if not isinstance(payload, dict):
         raise HTTPException(422, {"code": "operational_banks_required"})
     ids = payload.get("bank_ids", [])
@@ -35,6 +51,7 @@ async def validate_assignment(db, owner, permissions, enabled, payload):
     result = {"bank_ids": ids, "default_bank_id": default if ids else None}
     if "cash_ids" in payload:
         result["cash_ids"] = cash_ids
+    result.update(read_scope)
     return result
 
 
@@ -49,6 +66,26 @@ async def assigned_banks(db, owner, actor):
     ids = [i for i in config.get("bank_ids", []) if i in valid]
     default = config.get("default_bank_id")
     return {"bank_ids": ids, "cash_ids": [r["id"] for r in cash if r["id"] in config.get("cash_ids", [])], "default_bank_id": default if default in ids else None}
+
+
+async def assigned_read_accounts(db, owner, actor):
+    """Explicit read grants plus existing write assignments, never all accounts.
+
+    The writer continues to use assigned_banks(), so read-only selections cannot
+    authorize a payment, transfer, settlement or customer refund.
+    """
+    if actor.get("role") == "owner" and actor.get("id") == owner:
+        return await assigned_banks(db, owner, actor)
+    access = await find_mobile_app_access(db, owner_user_id=owner, user_id=actor["id"])
+    config = (access or {}).get("operational_banks") or {}
+    result = {"bank_ids": [], "cash_ids": []}
+    for field, kind in (("bank_ids", "bank"), ("cash_ids", "cash")):
+        ids = config.get(field, [])
+        read_ids = config.get("read_" + field, [])
+        requested = (ids if isinstance(ids, list) else []) + (read_ids if isinstance(read_ids, list) else [])
+        valid = {r["id"] for r in await bank_choices(db, owner, kind)}
+        result[field] = sorted({identity for identity in requested if isinstance(identity, str) and identity in valid})
+    return result
 
 
 async def require_assigned_bank(db, owner, actor, payload):

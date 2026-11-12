@@ -11,6 +11,9 @@ from zoneinfo import ZoneInfo
 import calendar
 import hashlib
 import json
+from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
+from operational_demand_refresh import calculation_checkpoint
+from operational_financial_activity_runtime import prepare_in_thread
 from shipping_companies import normalize_shipping_company
 from operational_courier_tariffs import matches as matches_courier_key
 
@@ -868,12 +871,18 @@ def _verified_option_tokens(data, product_id, item, bindings, tokens):
 
 async def _load_option_cost_catalog(db, owner, data, raw_orders, start, now, bundles):
     """Read only needed owner/product identities; a bad catalogue is a local gap."""
+    calculation_checkpoint()
+    cpu_budget = CPUWorkBudget(PARSER_BUDGET_MS)
     from pymongo.errors import PyMongoError
     bindings = {}
     for binding in data['mezan_product_option_cost_bindings_v2']:
+        await cpu_budget.checkpoint()
+        calculation_checkpoint()
         bindings.setdefault(str(binding.get('salla_product_id')), []).append(binding)
     wanted = set()
     for raw in raw_orders:
+        await cpu_budget.checkpoint()
+        calculation_checkpoint()
         try:
             if not start < instant(raw.get('date') or raw.get('created_at') or raw.get('order_date')) <= now:
                 continue
@@ -881,6 +890,8 @@ async def _load_option_cost_catalog(db, owner, data, raw_orders, start, now, bun
             continue
         number = str(raw.get('reference_id') or raw.get('order_number') or '')
         for item in raw.get('items') or []:
+            await cpu_budget.checkpoint()
+            calculation_checkpoint()
             if not isinstance(item, dict):
                 continue
             native = item.get('id') or item.get('item_id') or item.get('order_item_id')
@@ -909,6 +920,8 @@ async def _load_option_cost_catalog(db, owner, data, raw_orders, start, now, bun
     seen, read_count = set(), 0
     # Each ID can have a string and numeric storage form; at most 250 query terms.
     for offset in range(0, len(wanted), 125):
+        await cpu_budget.checkpoint()
+        calculation_checkpoint()
         batch = wanted[offset:offset + 125]
         values = list(batch)
         values.extend(int(pid) for pid in batch if len(pid) <= 19 and pid.isascii() and pid.isdecimal()
@@ -928,6 +941,8 @@ async def _load_option_cost_catalog(db, owner, data, raw_orders, start, now, bun
             errors.update(batch)
             continue
         for record in records:
+            await cpu_budget.checkpoint()
+            calculation_checkpoint()
             pid = str(record.get('salla_product_id')) if isinstance(record, dict) else ''
             if pid not in batch:
                 errors.update(batch)
@@ -1199,16 +1214,23 @@ def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, co
 
 
 async def collect_sources(db, owner, started_at, as_of, baselines=None, operational_state=None, historical_fee_order=None):
+    calculation_checkpoint()
+    cpu_budget = CPUWorkBudget(PARSER_BUDGET_MS)
     start, now = instant(started_at), instant(as_of)
     if now < start:
         raise ValueError('operational_source_time_range_invalid')
-    out = {key: [] for key in ('orders', 'delivery_events', 'prepaid_shipping_events', 'supplier_receipts', 'supplier_returns', 'employees',
+    out = {key: [] for key in ('orders', 'delivery_events', 'prepaid_shipping_events', 'completed_shipping_events',
+                               'completed_shipping_candidates', 'supplier_receipts', 'supplier_returns', 'employees',
                                'ad_snapshots', 'recurring', 'fee_policies', 'issues')}
     out['delivery_event_coverage'] = {'version': 1, 'started_at': start.isoformat(), 'as_of': now.isoformat()}
     out['ad_balance_sar_basis'] = {}
     # No service with side effects is called: collection access is allowlisted.
     # The inventory catalogue is read on demand, not on each financial sync.
-    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - STATEMENT_COLLECTIONS - {TXN_COLLECTION, DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})}
+    from operational_read_runtime import load_collections
+    source_names = sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - STATEMENT_COLLECTIONS - {TXN_COLLECTION,
+        DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'expense_categories',
+        'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})
+    data = await load_collections(db, owner, source_names, reader=rows)
     fee_settings = await db['settings'].find({'user_id': owner}, {
         '_id': 0, 'user_id': 1, 'payment_methods': 1, 'updated_at': 1}).to_list(2)
     out['provider_fee_settings'] = {}
@@ -1230,6 +1252,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     data['mz2_ad_account_bindings_v2'], conflicts = funding_bindings(
         operational_state, owner, data['mz2_ad_account_bindings_v2'])
     for identity in conflicts:
+        await cpu_budget.checkpoint()
+        calculation_checkpoint()
         issue(out, 'operational_ad_funding_authority_conflict', identity)
     setup_rows = data['mz2_shipping_setup_v2']
     setup = setup_rows[0] if len(setup_rows) == 1 else {}
@@ -1239,10 +1263,15 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
         from operational_courier_tariffs import with_tariffs
         setup, tariff_conflicts = with_tariffs(setup, owner, operational_state)
         for party in tariff_conflicts:
+            await cpu_budget.checkpoint()
+            calculation_checkpoint()
             issue(out, 'operational_courier_tariff_authority_conflict', party, component='shipping_fee')
     prepaid_keys = {str(key).casefold() for rate in setup.get('contracts', [])
                     if rate.get('context') == 'order_completed' and rate.get('payment_mode') == 'prepaid'
                     for key in rate.get('keys', [])}
+    completion_keys = {str(key).casefold() for rate in setup.get('contracts', [])
+                       if rate.get('party_type') == 'courier' and rate.get('context') in {'delivery', 'order_completed'}
+                       for key in rate.get('keys', [])}
     data['_prepaid_orders'] = set()
     profiles = unique_index(data['mezan_product_cost_profiles_v2'], 'salla_product_id')
     suppliers = unique_index(data['mezan_suppliers_v2'], 'id')
@@ -1257,6 +1286,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
         and policy.get('user_id') in (None, owner)}
     plan_orders = []
     for raw in raw_orders:
+        await cpu_budget.checkpoint()
+        calculation_checkpoint()
         payment = raw.get('payment') if isinstance(raw.get('payment'), dict) else {}
         methods = [payment.get('method'), raw.get('payment_method')]
         if isinstance(raw.get('payment_methods'), list):
@@ -1268,12 +1299,14 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     from operational_delivery_evidence import conflicting_shipments
     shipment_conflicts = conflicting_shipments(data['unified_orders'], operational_state)
     delivery_history = await load_delivery_history(db, owner, data['unified_orders'], max_rows=MAX_ROWS,
-                                                   completion_keys=prepaid_keys)
+                                                   completion_keys=completion_keys)
     txn_by_order = await load_transaction_rows(db, owner, raw_orders, start, now, to_instant=instant, max_rows=MAX_ROWS)
     from operational_remaining_bundle_sources import load_remaining_bundles
     from operational_native_purchase_link_service import verified_saved_links
     native_matches = await verified_saved_links(db, owner, operational_state, as_of=as_of)
     for invoice_id, match in native_matches.items():
+        await cpu_budget.checkpoint()
+        calculation_checkpoint()
         if not match.get('matched'):
             out['issues'].append({'code': 'native_purchase_operational_link_changed', 'source_id': invoice_id,
                 'scope': 'received_products', 'reasons': match.get('issues'),
@@ -1284,10 +1317,14 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     from operational_customer_tender_coverage import finish_coverage, new_coverage, observe_nonprovider
     customer_tenders = out["customer_tender_coverage"] = new_coverage(start.isoformat(), now.isoformat())
     counted_order_ids, inspected_order_ids = set(), set()
+    from operational_completed_shipping_admission import build_review_index
+    completion_review_index = build_review_index(operational_state) if operational_state else None
     source_ids = Counter(str(r.get('id') or '') for r in raw_orders)
     source_numbers = Counter(str(r.get('reference_id') or r.get('order_number') or '') for r in raw_orders)
     bank_catalog = None
     for source in data['unified_orders']:
+        await cpu_budget.checkpoint()
+        calculation_checkpoint()
         raw = (source.get('raw_by_source') or {}).get('salla_direct')
         if not isinstance(raw, dict):
             issue(out, 'canonical_salla_source_missing', source.get('order_number'))
@@ -1310,6 +1347,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             if watermark.get('requires_authoritative_refresh'):
                 raise ValueError('canonical_salla_refresh_required')
             current_shipping = source.get('salla_shipping_current') or raw.get('salla_shipping_current') or {}
+            from operational_completed_shipping_admission import CompletionReviewRequired
+            from operational_completed_shipping_sources import completion_issue
             saved_prepaid = (operational_state or {}).get('engine', {}).get('facts', {}).get('prepaid_shipping:' + identity)
             if saved_prepaid or isinstance(current_shipping, dict) and any(
                     str(current_shipping.get(key) or '').casefold() in prepaid_keys for key in ('company_code', 'company_name')):
@@ -1317,15 +1356,36 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 from operational_prepaid_shipping import source_event
                 try:
                     prepaid, charge = source_event(data, setup, source, raw, operational_state, owner, start, now,
-                                                   delivery_history.get(order_number, ()), shipment_conflicts)
+                                                   delivery_history.get(order_number, ()), shipment_conflicts,
+                                                   review_index=completion_review_index)
                     if not prepaid:
                         data['_prepaid_orders'].discard(identity)
                     if charge:
                         out['prepaid_shipping_events'].append(charge)
+                except CompletionReviewRequired as exc:
+                    out['completed_shipping_candidates'].append(exc.candidate)
+                    completion_issue(out, str(exc), exc.candidate)
                 except (ValueError, TypeError, KeyError, InvalidOperation) as exc:
-                    code = str(exc) if str(exc).startswith('operational_prepaid_shipping_') else 'operational_prepaid_shipping_evidence_incomplete'
+                    code = str(exc) if str(exc).startswith(('operational_prepaid_shipping_', 'operational_shipping_completion_')) else 'operational_prepaid_shipping_evidence_incomplete'
                     issue(out, code, identity, component='prepaid_shipping',
                           required_action='راجع إثبات تنفيذ الطلب وتعرفة الشحن والصندوق المعتمد قبل احتساب الخصم.')
+                    courier_issue(out, code, raw, source, setup=setup, owner=owner)
+            if identity not in data['_prepaid_orders']:
+                from operational_completed_shipping import deferred_source_event
+                try:
+                    charge = deferred_source_event(data, setup, source, raw, operational_state, owner, start, now,
+                                                   delivery_history.get(order_number, ()), shipment_conflicts,
+                                                   review_index=completion_review_index)
+                    if charge:
+                        out['completed_shipping_events'].append(charge)
+                except CompletionReviewRequired as exc:
+                    out['completed_shipping_candidates'].append(exc.candidate)
+                    completion_issue(out, str(exc), exc.candidate)
+                except (ValueError, TypeError, KeyError, InvalidOperation) as exc:
+                    code = str(exc) if str(exc).startswith(('operational_shipping_completion_', 'operational_delivery_', 'operational_prepaid_shipping_')) else 'operational_shipping_completion_evidence_incomplete'
+                    issue(out, code, identity, component='shipping_fee',
+                          required_action='طابق هوية الشركة ووقت تم التنفيذ والتعرفة المعتمدة قبل احتساب أجرة الشحن.')
+                    courier_issue(out, code, raw, source, setup=setup, owner=owner)
             # Supplier approval and actual delivery each have their own cutoff.
             # Keep old orders out of the ordinary sales/estimate/payment stream.
             order_numbers[order_number] = identity
@@ -1379,7 +1439,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                                          delivery_event=event)
                 if hold_prior_courier_event(operational_state, event, order.get('carrier')):
                     courier_issue(out, 'courier_fee_historical_review_required', raw, source,
-                                 carrier=order.get('carrier'), event=event)
+                                 carrier=order.get('carrier'), event=event, setup=setup, owner=owner)
                 else:
                     out['delivery_events'].append(order)
                 continue
@@ -1393,6 +1453,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             if not order['currency']:
                 raise ValueError('order_currency_missing')
             for item in raw.get('items', []):
+                await cpu_budget.checkpoint()
+                calculation_checkpoint()
                 source_item_id = item.get('id') or item.get('item_id') or item.get('order_item_id')
                 if not source_item_id:
                     issue(out, 'order_item_stable_identity_missing', identity)
@@ -1406,6 +1468,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     if not bundle['complete']:
                         order['items_complete'] = False
                     for problem in bundle['issues']:
+                        await cpu_budget.checkpoint()
+                        calculation_checkpoint()
                         issue(out, problem['code'], problem['source_id'], scope=problem['scope'],
                               order_number=order_number, required_action=problem['required_action'])
                     continue
@@ -1426,6 +1490,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         issue(out, 'preparation_piece_coverage_ambiguous', item_id)
                         continue
                     for piece in matching:
+                        await cpu_budget.checkpoint()
+                        calculation_checkpoint()
                         supplier = piece.get('supplier_id')
                         if supplier and supplier not in suppliers and supplier_receipt_proven(piece, now):
                             order['items_complete'] = False
@@ -1482,11 +1548,13 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             if normalized_payment is not None:
                 order['payment'] = bind_statement_plan(normalized_payment, statement_plans, order_number)
             for payment_issue in payment_issues:
-                issue(out, payment_issue['code'], identity, order_number=order_number,
+                await cpu_budget.checkpoint()
+                calculation_checkpoint()
+                issue(out, payment_issue['code'], identity, order_number=order_number, currency=order['currency'],
                       scope='provider_payment',
                       message=DIAGNOSTICS.get(payment_issue['code'], 'بيانات الدفع تحتاج مطابقة؛ لا يعني ذلك أن المبلغ صفر'),
                       required_action='راجع إثبات التحصيل ومرجع العملية وتاريخها وخطة الدفع من المصدر المعتمد',
-                      **{key: value for key, value in payment_issue.items() if key != 'code'})
+                      **{key: value for key, value in payment_issue.items() if key not in {'code', 'currency'}})
             event = None
             allow_shipping = True
             current = source.get('salla_shipping_current') or raw.get('salla_shipping_current') or {}
@@ -1519,12 +1587,12 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         order['shipping_evidence_held'] = True
                         code = str(exc) if str(exc).startswith('operational_delivery_') else 'operational_delivery_evidence_invalid'
                         issue(out, code, identity, component='shipping_fee')
-                        courier_issue(out, code, raw, source)
+                        courier_issue(out, code, raw, source, setup=setup, owner=owner)
             if allow_shipping:
                 _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, cod, delivery_event=event)
                 if hold_prior_courier_event(operational_state, event, order.get('carrier')):
                     courier_issue(out, 'courier_fee_historical_review_required', raw, source,
-                                 carrier=order.get('carrier'), event=event)
+                                 carrier=order.get('carrier'), event=event, setup=setup, owner=owner)
                     # Hold only this courier payable. A current verified
                     # delivery can still establish the customer's COD custody.
                     carrier = order.get('carrier')
@@ -1539,13 +1607,15 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             issue(out, code, raw.get('id'))
             if code.startswith('operational_delivery_') and code not in {'operational_delivery_driver_assignment_required',
                     'operational_delivery_owner_mismatch','operational_delivery_order_identity_conflict'}:
-                courier_issue(out, code, raw, source)
+                courier_issue(out, code, raw, source, setup=setup, owner=owner)
     # An issued, approved MZ2 invoice is the sole confirmation authority.
     # Current piece state may have changed after invoicing and cannot revoke it.
     piece_index = unique_index(pieces, 'id')
     invoice_counts = Counter(r.get('id') for r in data['mezan_supplier_invoices_v2'])
     coverage = {}
     for invoice in data['mezan_supplier_invoices_v2']:
+        await cpu_budget.checkpoint()
+        calculation_checkpoint()
         if invoice.get('experiment_mode') or invoice.get('experiment_run_id') or not invoice.get('approved_at'):
             continue
         if invoice.get('status') not in {None, 'payable_posted'}:
@@ -1587,6 +1657,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             issue(out, 'supplier_invoice_tax_contract_incomplete', invoice.get('id'))
             continue
         for line in invoice.get('lines', []):
+            await cpu_budget.checkpoint()
+            calculation_checkpoint()
             ids = line.get('piece_ids') or []
             if line.get('product_price_authority') != 'mezan_v2' or not ids or len(ids) != len(set(ids)):
                 issue(out, 'supplier_receipt_component_contract_incomplete', invoice.get('id'))
@@ -1600,6 +1672,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     raise ValueError('supplier_invoice_product_total_conflict')
                 service_totals = {}
                 for service in line.get('services') or []:
+                    await cpu_budget.checkpoint()
+                    calculation_checkpoint()
                     service_id = service['service_id']
                     if not service_id or service_id in service_totals:
                         raise ValueError('supplier_invoice_service_identity_conflict')
@@ -1614,6 +1688,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 continue
             # Sort stable IDs so source line ordering cannot change penny allocation.
             for piece_id in sorted(ids):
+                await cpu_budget.checkpoint()
+                calculation_checkpoint()
                 piece = piece_index.get(piece_id, {})
                 order_id = order_numbers.get(str(piece.get('order_number')))
                 if not order_id:
@@ -1635,6 +1711,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     if order_item_id and unit is not None:
                         physical_key = (order_item_id, unit)
                     for component, item_id in components:
+                        await cpu_budget.checkpoint()
+                        calculation_checkpoint()
                         coverage.setdefault((order_id, physical_key, component), set()).add((invoice['id'], item_id))
                         if accepted < start:
                             continue
@@ -1654,40 +1732,65 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     ambiguous = {(order_id, item_id) for (order_id, _unit, _component), claims in coverage.items()
                  if len(claims) > 1 for _, item_id in claims} & current_components
     for key in sorted(ambiguous):
+        await cpu_budget.checkpoint()
+        calculation_checkpoint()
         issue(out, 'supplier_cross_invoice_component_coverage_ambiguous', ':'.join(key),
               scope='received_products',
               required_action='طابق سطر القطعة وخدمتها في الفواتير مع الافتتاح والسداد قبل اعتماد أي فرق.')
     if ambiguous:
         out['supplier_receipts'] = [r for r in out['supplier_receipts'] if (r['order_id'], r['item_id']) not in ambiguous]
     for document in data['mz2_provider_fee_policies_v2']:
+        await cpu_budget.checkpoint()
+        calculation_checkpoint()
         for policy in document.get('policies', []):
+            await cpu_budget.checkpoint()
+            calculation_checkpoint()
             if policy.get('user_id') not in (None, owner):
                 issue(out, 'provider_fee_owner_mismatch', policy.get('id'))
                 continue
             out['fee_policies'].append({k: v for k, v in policy.items() if k not in ('_id', 'user_id')})
-    _employees(data, out)
-    _advertising(data, out, start, now, baselines)
-    _recurring(data, out, start, now)
+    await prepare_in_thread(_employees, data, out)
+    await prepare_in_thread(_advertising, data, out, start, now, baselines)
+    await prepare_in_thread(_recurring, data, out, start, now)
     from operational_shipping_fee_review import hold_native_fee_overlaps
     await hold_native_fee_overlaps(db, owner, out, operational_state, max_rows=MAX_ROWS)
-    if out['prepaid_shipping_events']:
+    completion_candidates = (out['prepaid_shipping_events'] + out['completed_shipping_events']
+                             + out['completed_shipping_candidates'])
+    if completion_candidates:
         from operational_historical_shipping_fee import native_conflicts
-        overlaps = await native_conflicts(db, owner, out['prepaid_shipping_events'], max_rows=MAX_ROWS)
-        accepted = []
-        for charge in out['prepaid_shipping_events']:
+        overlaps = await native_conflicts(db, owner, completion_candidates, max_rows=MAX_ROWS)
+        out['completed_shipping_native_conflicts'] = overlaps
+        for charge in completion_candidates:
+            await cpu_budget.checkpoint()
+            calculation_checkpoint()
             if charge['order_number'] in overlaps:
-                issue(out, 'operational_prepaid_shipping_native_overlap', charge['order_id'], component='prepaid_shipping',
-                      required_action=overlaps[charge['order_number']])
-            else:
-                accepted.append(charge)
-        out['prepaid_shipping_events'] = accepted
+                completion_issue(out, ('operational_prepaid_shipping_native_overlap' if charge['schema'] == 'operational_prepaid_shipping_v1'
+                                      else 'operational_shipping_completion_native_overlap'), charge,
+                                 required_action=overlaps[charge['order_number']])
+        for key in ('prepaid_shipping_events', 'completed_shipping_events'):
+            await cpu_budget.checkpoint()
+            calculation_checkpoint()
+            out[key] = [charge for charge in out[key] if charge['order_number'] not in overlaps]
+    # A completed base charge has its own authority. Delivery can still earn
+    # its independent collection commission and establish COD custody.
+    managed = {str(charge['order_id']) for charge in completion_candidates
+               if charge.get('schema') == 'operational_completed_shipping_v1'}
+    managed.update(key.removeprefix('completed_shipping:') for key in
+                   (operational_state or {}).get('engine', {}).get('facts', {}) if key.startswith('completed_shipping:'))
+    for order in out['orders'] + out['delivery_events']:
+        await cpu_budget.checkpoint()
+        calculation_checkpoint()
+        if order['id'] in managed:
+            order['completed_shipping_base_managed'] = True
     finish_coverage(customer_tenders, counted_order_ids - inspected_order_ids)
     return out
 
 
 def _employees(data, out):
+    calculation_checkpoint()
     contracts = data['mezan_employee_salary_contracts_v2']
     for employee in data['mezan_employees_v2']:
+        calculation_checkpoint()
         if any(employee.get(k) for k in ('archived', 'deleted', 'is_archived', 'is_deleted')):
             continue
         identity = employee.get('id')
@@ -1721,7 +1824,9 @@ def _employees(data, out):
 
 
 def _advertising(data, out, start, now, baselines=None):
+    calculation_checkpoint()
     for binding in data['mz2_ad_account_bindings_v2']:
+        calculation_checkpoint()
         if not usable(binding) or not binding.get('confirmed_by') or not binding.get('confirmed_at'):
             continue
         platform = binding.get('platform')
@@ -1745,6 +1850,7 @@ def _advertising(data, out, start, now, baselines=None):
             if basis:
                 out['ad_balance_sar_basis'][str(binding['_id'])] = basis
         for row in data[collection]:
+            calculation_checkpoint()
             if row.get('ad_account_id') != account.get('external_account_id') or row.get('provider') != provider:
                 continue
             try:
@@ -1875,6 +1981,7 @@ async def start_baselines(db, owner, started_at, operational_state=None):
 
 def _recurring(data, out, start, now):
     """Keep daily identity stable; asset associations are context, not payees."""
+    calculation_checkpoint()
     expense_categories = {
         'rent': 'rent', 'subscription': 'subscriptions',
         'electricity': 'utilities', 'water': 'utilities',
@@ -1884,6 +1991,7 @@ def _recurring(data, out, start, now):
     }
     first, last = start.astimezone(ZoneInfo('Asia/Riyadh')).date(), now.astimezone(ZoneInfo('Asia/Riyadh')).date()
     for obligation in data['operating_recurring_obligations_v2']:
+        calculation_checkpoint()
         if obligation.get('status') not in {'active', 'stopped'}:
             continue
         identity = obligation.get('id')
@@ -1901,6 +2009,7 @@ def _recurring(data, out, start, now):
             months = {'monthly': 1, 'semiannual': 6, 'annual': 12, 'biennial': 24}.get(obligation.get('cycle'))
             invoices = [i for i in data['operating_recurring_invoices_v2'] if i.get('obligation_id') == identity]
             for ordinal in range(max(first, origin).toordinal(), last.toordinal() + 1):
+                calculation_checkpoint()
                 day = date.fromordinal(ordinal)
                 if obligation.get('stopped_at') and day >= date.fromisoformat(obligation['stopped_at'][:10]):
                     continue

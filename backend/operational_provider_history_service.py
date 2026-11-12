@@ -2,11 +2,13 @@
 from operational_balance_service import active_gate
 from operational_balance_store import RECEIPTS, audit, digest, fail, mutate, now, read, remember, replay
 from operational_provider_history import HISTORICAL, SETTLED, REVIEWS, preview_row
+from operational_financial_activity_runtime import checked_rows, preparation_checkpoint, prepare_in_thread
 
 
 def _candidates(state):
+    preparation_checkpoint()
     result, repeated = {}, set()
-    for issue in state.get("engine", {}).get("issues", []):
+    for issue in checked_rows(state.get("engine", {}).get("issues", [])):
         page = issue.get("order_page_balance_review")
         if issue.get("code") not in (HISTORICAL, SETTLED) or not page or not issue.get("history_proof_hash"):
             continue
@@ -16,7 +18,7 @@ def _candidates(state):
         if issue.get("source_id") != "provider:" + oid or oid in result:
             repeated.add(oid)
         result[oid] = (row, issue["code"])
-    return {k:v for k,v in result.items() if k not in repeated}
+    return {k:v for k,v in checked_rows(result.items()) if k not in repeated}
 
 
 async def candidates(db, owner, actor):
@@ -24,12 +26,18 @@ async def candidates(db, owner, actor):
         fail("provider_history_owner_required", "المطابقة متاحة للمالك فقط", 403)
     state = await read(db, owner)
     await active_gate(db, owner, state)
+    return await prepare_in_thread(_review_candidates, state, owner, actor)
+
+
+def _review_candidates(state, owner, actor):
+    preparation_checkpoint()
     rows = []
-    for oid, (row, code) in _candidates(state).items():
+    for oid, (row, code) in checked_rows(_candidates(state).items()):
         item = preview_row(state, row, code)
         old = state.get(REVIEWS, {}).get(digest(oid))
         item["awaiting_refresh"] = bool(old and old.get("preview_hash") == item["preview_hash"])
         rows.append(item)
+    preparation_checkpoint()
     return {"items": rows, "session_scope": digest([owner, actor]), "as_of":state.get("engine",{}).get("as_of")}
 
 

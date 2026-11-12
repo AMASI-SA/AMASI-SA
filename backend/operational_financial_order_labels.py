@@ -6,7 +6,10 @@ unchanged from the operational report supplied by the caller.
 """
 from collections import defaultdict
 from copy import deepcopy
+import asyncio
 import re
+
+from pymongo.errors import PyMongoError
 
 
 MAX_ROWS = 20_000
@@ -25,6 +28,7 @@ NOTES = {
     "stale": "غير متاح: يحتاج مصدر سلة لبعض الطلبات إلى تحديث موثق قبل عرض أرقامها.",
     "scope": "غير متاح: تعذر التحقق من نطاق مصدر أرقام الطلبات؛ لم تُستخدم بيانات من حساب آخر.",
     "limit": "غير متاح: تجاوز عدد سجلات الطلبات حد القراءة المحدد؛ لم تُعرض مطابقة جزئية كأنها مكتملة.",
+    "unavailable": "غير متاح: تعذرت قراءة أرقام الطلبات الآن؛ تبقى الأرصدة المحفوظة ظاهرة دون تغيير.",
 }
 
 
@@ -51,6 +55,10 @@ def _raw(row):
 
 
 def _mark(details, reason):
+    if isinstance(details, tuple):
+        for container in details:
+            _mark(container, reason)
+        return
     details["complete"] = False
     notes = details.setdefault("notes", [])
     if NOTES[reason] not in notes:
@@ -61,15 +69,39 @@ async def attach_order_numbers(db, owner, result):
     """Return a copied report with labels proven by one bounded read only."""
     enriched = deepcopy(result)
     targets = []
-    for currency in (enriched.get("currencies") or {}).values():
-        details = currency.get("deliveries") or {}
-        for row in details.get("rows") or []:
-            row["order_number"] = None
-            identity = _identity(row.get("order_id"))
-            if identity is None:
-                _mark(details, "identity")
-            else:
-                targets.append((details, row, identity))
+
+    def target(row, containers):
+        row['order_number'] = None
+        identity = _identity(row.get('order_id'))
+        if identity is None:
+            _mark(containers, 'identity')
+        else:
+            targets.append((containers, row, identity))
+
+    # The same canonical ID can occur in delivery details, a counterparty's
+    # exceptions, and an unassigned table. One identity read serves them all.
+    for section in [enriched, *(enriched.get('currencies') or {}).values()]:
+        details = section.get('deliveries') or {}
+        for row in details.get('rows') or []:
+            target(row, (details,))
+        for table in section.get('tables') or []:
+            for row in table.get('rows') or []:
+                for pending in row.get('pending_order_details') or []:
+                    target(pending, (table, row))
+            for pending in table.get('unassigned_order_details') or []:
+                target(pending, (table,))
+        for party in section.get('parties') or []:
+            for pending in party.get('pending_order_details') or []:
+                target(pending, (party,))
+        # The main balance report groups unresolved delivery identities by
+        # currency and family, without assigning them to a named counterparty.
+        unassigned = section.get('unassigned_order_details')
+        if isinstance(unassigned, dict):
+            for families in unassigned.values():
+                if isinstance(families, dict):
+                    for entries in families.values():
+                        for pending in entries or []:
+                            target(pending, (section,))
     if not targets:
         return enriched
 
@@ -86,13 +118,23 @@ async def attach_order_numbers(db, owner, result):
         if re.fullmatch(r"[1-9][0-9]{0,15}", identity) and int(identity) <= MAX_SAFE_INTEGER:
             variants.append(int(identity))
     query = {"user_id": owner, "raw_by_source.salla_direct.id": {"$in": variants}}
-    documents = await db["unified_orders"].find(query, PROJECTION).limit(MAX_ROWS + 1).to_list(length=MAX_ROWS + 1)
+    try:
+        documents = await asyncio.wait_for(db['unified_orders'].find(query, PROJECTION)
+            .limit(MAX_ROWS + 1).to_list(length=MAX_ROWS + 1), timeout=10)
+    except (PyMongoError, asyncio.TimeoutError):
+        for details, _, _ in targets:
+            _mark(details, 'unavailable')
+        return enriched
     if len(documents) > MAX_ROWS:
         for details, _, _ in targets:
             _mark(details, "limit")
         return enriched
     grouped = defaultdict(list)
     for document in documents:
+        if not isinstance(document, dict):
+            for details, _, _ in targets:
+                _mark(details, 'scope')
+            return enriched
         raw = _raw(document)
         identity = _identity(raw.get("id")) if isinstance(raw, dict) else None
         if document.get("user_id") != owner or identity not in identities:
