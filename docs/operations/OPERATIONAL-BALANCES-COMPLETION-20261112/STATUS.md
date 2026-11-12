@@ -17,6 +17,12 @@ through this task.
   verification-record commit changes this document only. This is not a
   published or reviewed v5 A/B release pair.
 - Worktree: /workspace/scratch/e00762959313/mezan-operational.
+- Authenticated remote checkpoint:
+  `3cd0b7ba93343032180f27f03ba3aa45991ce3e1`, with complete tree
+  `72c0a14d1a4b765e46ab31d0f0d14b71fd484c13`. This tree exactly matches the
+  integrated local checkpoint including the current Production updates. The
+  GitHub connector created a single-parent source commit above J, preserving
+  the release-intent ancestry contract. Earlier local SHAs remain provenance.
 - Reviewed Production integration base J:
   `88589786f4c30ed78a5c9d185fae6ce7786ca9da` (PR1895 merge). The 15 paths added
   or changed by PR1894/PR1895 do not overlap the 200 task paths. Their supplier
@@ -239,6 +245,16 @@ Real-browser acceptance, exact-source CI and the repository's v5 release gates
 remain pending. Source implementation, local
 review and selected regression verification are complete. Production code and
 financial data have not been changed by this task.
+
+The Operational Balance Web workflow now covers the non-prefix completed
+shipping, request lifetime, packed driver state and financial review groups;
+the employee frontend suite; an isolated canonical server-child boot/drain
+with no operational-balance job; and the six actual-component browser scenarios.
+It rejects missing or skipped cases. Browser execution uses sandboxed Chromium
+and retains exact source hashes plus desktop/mobile screenshots. The expanded
+main selection collected 3,590 cases; YAML, shell, embedded scripts and synthetic
+fixture generation passed local validation. These are preparation results, not
+claims that the newly added remote jobs have already passed.
 
 ## Continuation
 

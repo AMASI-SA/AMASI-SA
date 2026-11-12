@@ -35,7 +35,8 @@ async function check(name, operation) {
 (async()=>{
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const origin = 'http://127.0.0.1:' + server.address().port;
-  const browser = await chromium.launch({headless:true,executablePath:process.env.OPERATIONAL_UAT_CHROMIUM || '/usr/bin/chromium',args:['--no-sandbox']});
+  const browser = await chromium.launch({headless:true,chromiumSandbox:true,
+    ...(process.env.OPERATIONAL_UAT_CHROMIUM ? {executablePath:process.env.OPERATIONAL_UAT_CHROMIUM} : {})});
   try {
     const context = await browser.newContext({viewport:{width:1440,height:1080}});
     await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
