@@ -1,6 +1,6 @@
 # Financial read load — bounded first slice
 
-**Latest state: actual shared adapter passed with the reviewed identity and artifacts; own prepare/prepublish and publication are next.** This copy is a documentation-only continuation on `codex/financial-read-load-merged-evidence-20261112`. Never deploy the evidence branch. The immutable release source/intent and production merge are recorded below.
+**Latest state: publication is in progress after successful actual adapter, own prepare and prepublish. Live verification is pending.** This copy is a documentation-only continuation on `codex/financial-read-load-merged-evidence-20261112`. Never deploy the evidence branch. The immutable release source/intent and production merge are recorded below.
 
 ## Change contract
 
@@ -221,3 +221,10 @@ The actual shared `/app/frontend` `yarn build` completed exit 0 in 95.324 second
 Frontend package:1437files, treeSHA256 `1ca86d9ddfb73296262b56d439fd5748e76eaa18129af8ead5f11c6ebe399d9a`, isolated runtime artifact verified, JSON MIME contract. Backend package:1176files, treeSHA256 `b6aed7c34763c5b717a868fac1e920dfd5e1ce5f8bdcbca0222454cdf0fe250a`, isolated and health checks true, no sibling frontend or Git directory. Root asserted all these gates against the emitted result. Complete shared adapter log is `/tmp/mezan-pr1892-adapter-20261112.log`, 173304bytes, SHA256 `7234281f599ebe60e99896b2995c80b8e2993e3c88c61bcb2814aa3ed1416574`; compact results are recorded here and in release-checks.json for durable continuation.
 
 Emergent management UI is accessible and still shows previous publication100 `0cdea89`, Nov12 05:18AM Riyadh. No publication click or own lease yet. Next: own `prepare --actor codex-financial-read-load-20261112`, immediate `prepublish`, one publication, newer explicit success, official verify3/inactive and bounded live UI acceptance. The actual cloud snapshot handoff remains unproved until those deployed checks pass.
+
+
+## One authorized publication in progress — 2026-11-12 14:50:56 UTC
+
+Official `prepare --actor codex-financial-read-load-20261112` exited0 and recorded the own lease at `2026-11-12T14:49:29.023969+00:00`, exact deployment M/source A/runtime and protocol5. Official `prepublish` then exited0 with `ready_to_publish:true` and those same identities. Root clicked Republish then Publish changes exactly once; the management UI explicitly shows Publishing… and disabled publication controls. No success is inferred from submission.
+
+Preserve the shared source and this owned lease. Do not repeat publication. Next: observe a newer explicit successful deployment than publication100 `0cdea89`, run official `verify --url https://mezansalla.com` and require all3 matching probes plus inactive status, then bounded read-only report/manual-refresh acceptance. PR1892 has a verified persisted in-progress checkpoint. Actual deployment outcome remains pending.

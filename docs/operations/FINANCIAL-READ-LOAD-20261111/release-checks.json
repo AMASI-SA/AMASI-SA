@@ -185,7 +185,7 @@
   "deployment": {
     "published": false,
     "shared_app_changed": true,
-    "own_lease_acquired": false,
+    "own_lease_acquired": true,
     "actual_shared_adapter_run": true,
     "fresh_shared_guard_status_available": true,
     "blocker": null,
@@ -196,7 +196,7 @@
     "untracked_platform_files_preserved": 120,
     "platform_manifest_sha256": "ba36f9881479238f135d563c1e007e3ebed42a3bb665fe5a899564fe5f4a7170",
     "last_observed_live_release_id": "rg5-efde36a8ffed59bbfbfaa1521401fe29a3d59923a59102cd0e34305a38a0e33c",
-    "next": "own prepare/prepublish, one publication, official verify3/inactive, read-only UI acceptance",
+    "next": "await newer successful deployment, official verify3/inactive, bounded read-only UI acceptance",
     "actual_shared_adapter": {
       "returncode": 0,
       "seconds": 95.324,
@@ -227,7 +227,16 @@
       "ordinal": 100,
       "id": "0cdea89",
       "at": "2026-11-12 05:18 Asia/Riyadh"
-    }
+    },
+    "prepared_at": "2026-11-12T14:49:29.023969+00:00",
+    "actor": "codex-financial-read-load-20261112",
+    "prepare_exit_code": 0,
+    "prepublish_exit_code": 0,
+    "ready_to_publish": true,
+    "publication_started": true,
+    "publication_observed_in_progress_at": "2026-11-12T14:50:56Z",
+    "publication_click_count": 1,
+    "live_verification_pending": true
   },
   "continuity": {
     "evidence_branch": "codex/financial-read-load-merged-evidence-20261112",
