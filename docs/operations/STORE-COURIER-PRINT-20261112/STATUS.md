@@ -1,6 +1,35 @@
 # STORE-COURIER-PRINT-20261112
 
-## Current continuation: PR1890 publication IN PROGRESS
+## Current outcome: PR1890 verified; courier live acceptance FAIL / OPEN
+
+Production changed: **yes**. PR1890 deployment M
+`0af4a3da57072a4995a2ebd0ca76720d17a80ee6` completed with the newer green
+`Deployment finished Nov 12, 04:02 AM` (2026, Asia/Riyadh), version `d73f584`.
+The official guard returned `verified:true`, `checks:3`, matching source A
+`da0d2e2fb82a7848bcd398ca292ba93e1a880681` and the reviewed runtime/artifact;
+the following guard status was `active:false`. Exact identities and the
+completed Google acceptance are in [release evidence](../GOOGLE-COURIER-LIVE-ACCEPTANCE-20261112/RELEASE.md).
+
+**Both actual courier refresh trials still failed with the generic recovery
+message. Neither print preview opened; no physical printing success is
+claimed.** A pure replay using fresh provider data passed all five inspected
+stages, which does not establish live-route acceptance. The subsequent
+sanitized owner-DTO comparison confirmed matching names and the same Saudi
+phone identity: the saved buyer representation has nine subscriber digits,
+while the receiver representation has twelve digits including `966`. The
+current literal comparison rejects that saved recipient representation.
+
+The bounded follow-up has started on
+`codex/courier-recipient-identity-20261112`, based on M above; it is **not
+published**. Next: reproduce that identity-format mismatch with synthetic
+route evidence, review a minimal correction preserving recipient and race
+guards, then satisfy a new release's gates before another live trial. PR1890's
+source/intent pair remains immutable. No real order identifiers, names or
+phone values are retained here. This documentation-only branch must never be
+deployed; the historical sections below retain their original checkpoint
+evidence and are superseded by this current outcome.
+
+## Previous checkpoint: PR1890 publication in progress (historical)
 
 The reviewed courier native-format repairs and Google display follow-up
 merged in PR1890 as `0af4a3da57072a4995a2ebd0ca76720d17a80ee6`, with the

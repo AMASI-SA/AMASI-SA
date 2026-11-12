@@ -1,6 +1,30 @@
 # GOOGLE-DASHBOARD-SPEND-20261111
 
-## Current continuation: PR1890 publication IN PROGRESS
+## Current outcome: PR1890 verified; Google live acceptance PASS
+
+Production changed: **yes**. PR1890 deployment M
+`0af4a3da57072a4995a2ebd0ca76720d17a80ee6` completed with the newer green
+`Deployment finished Nov 12, 04:02 AM` (2026, Asia/Riyadh), version `d73f584`.
+The official guard returned `verified:true`, `checks:3`, matching source A
+`da0d2e2fb82a7848bcd398ca292ba93e1a880681` and the reviewed runtime/artifact;
+the following guard status was `active:false`. Exact runtime, boot and
+artifact identities are in [release evidence](../GOOGLE-COURIER-LIVE-ACCEPTANCE-20261112/RELEASE.md).
+
+**Actual November 11 UI acceptance PASS:** both the yellow platform-spend card
+and executive Google SPEND cell show the available **96.48 SAR** explicitly
+as incomplete. Financial totals and profit remain incomplete; missing account
+coverage has not become observed zero or complete spend. The acceptance used
+saved reads without a forced provider sync or advertising account change.
+
+Courier acceptance remains **FAIL / OPEN** after both actual refresh trials;
+no preview or physical printing success is claimed. A separate, unpublished
+recipient-identity follow-up starts from M on
+`codex/courier-recipient-identity-20261112`; see [the current task record](../GOOGLE-COURIER-LIVE-ACCEPTANCE-20261112/STATUS.md).
+PR1890's source/intent pair is immutable. This documentation-only branch must
+never be deployed. The following sections retain historical evidence; this
+outcome supersedes their earlier pending publication/acceptance statements.
+
+## Previous checkpoint: PR1890 publication in progress (historical)
 
 The reviewed Google display follow-up and courier repairs merged in PR1890 as
 `0af4a3da57072a4995a2ebd0ca76720d17a80ee6`, with the reviewed B tree. All 28

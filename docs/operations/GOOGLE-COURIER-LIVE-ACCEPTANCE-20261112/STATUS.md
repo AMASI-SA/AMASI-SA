@@ -1,6 +1,46 @@
 # Google and store-courier live acceptance follow-up
 
-## Current continuation: publication IN PROGRESS
+## Current outcome: deployment verified; Google PASS; courier acceptance OPEN
+
+Production changed: **yes**. The single authorized PR1890 publication finished
+with the newer green UI wording `Deployment finished Nov 12, 04:02 AM`
+(2026, Asia/Riyadh) and published version `d73f584`. This records the wording
+actually observed; the UI did not display the literal `Deployment Succeeded`.
+
+The official guard returned `verified:true`, `checks:3`, source A
+`da0d2e2fb82a7848bcd398ca292ba93e1a880681`, deployment M
+`0af4a3da57072a4995a2ebd0ca76720d17a80ee6`, and runtime
+`rg5-8c4fb8eb704af7c47020a751629bd3af71672fbf26ff02bdbde8b9d969f9ffcc`.
+The verified boot identity is `2026-11-12T01:02:06.982284+00:00`; the frontend
+artifact tree is
+`330125593ccc698dd5e6492dd1841c198042d9800a9cbe2ee9fbc9ae73ddc480`.
+The following official guard status was `active:false`.
+
+- **Google live acceptance PASS:** with November 11 selected, both the yellow
+  platform-spend card and executive Google SPEND cell show the available
+  **96.48 SAR** explicitly as incomplete. Financial totals and profit remain
+  incomplete. This acceptance used saved reads, with no forced provider sync
+  or advertising account change.
+- **Courier live acceptance FAIL / OPEN:** both affected actual refresh trials
+  still returned the generic recovery failure. Neither print preview opened;
+  no physical printing success is claimed. A pure replay of fresh provider
+  data passed all five inspected stages, which does not establish live-route
+  acceptance. The owner's sanitized DTO comparison then confirmed matching
+  names and the same Saudi phone identity, represented as nine subscriber
+  digits for the buyer and twelve digits including `966` for the receiver.
+  The current literal comparison rejects that saved recipient representation.
+
+The bounded recipient-identity follow-up has started on
+`codex/courier-recipient-identity-20261112`, based on production M above; it is
+**not published**. Its next safe step is a focused regression and reviewed
+identity-format correction before any new release. PR1890's source/intent pair
+remains immutable. This documentation-only branch is **never** a deployment
+candidate. No real order identifiers or customer data are retained here.
+
+The following sections preserve previous checkpoint evidence; this current
+outcome supersedes their pending publication and acceptance statements.
+
+## Previous checkpoint: publication in progress (historical)
 
 PR1890 is merged as M2 `0af4a3da57072a4995a2ebd0ca76720d17a80ee6`, with the
 reviewed B tree. All 28 applicable latest B workflows passed, and the actual

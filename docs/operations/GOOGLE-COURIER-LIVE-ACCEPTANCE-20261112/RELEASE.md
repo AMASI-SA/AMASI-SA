@@ -1,6 +1,44 @@
 # PR1890 release evidence: Google and store-courier live acceptance
 
-## State at this checkpoint
+## Current release outcome: verified; Google accepted; courier still open
+
+The owner observed the newer green `Deployment finished Nov 12, 04:02 AM`
+(2026, Asia/Riyadh), published version `d73f584`. This is the actual UI wording,
+not a claim that the literal `Deployment Succeeded` appeared. The official
+guard completed three probes with `verified:true`; its subsequent status was
+`active:false`.
+
+| Verified production field | Value |
+|---|---|
+| Source A | `da0d2e2fb82a7848bcd398ca292ba93e1a880681` |
+| Deployment M | `0af4a3da57072a4995a2ebd0ca76720d17a80ee6` |
+| Runtime release ID | `rg5-8c4fb8eb704af7c47020a751629bd3af71672fbf26ff02bdbde8b9d969f9ffcc` |
+| Boot identity | `2026-11-12T01:02:06.982284+00:00` |
+| Frontend artifact tree SHA256 | `330125593ccc698dd5e6492dd1841c198042d9800a9cbe2ee9fbc9ae73ddc480` |
+| Official verification | `checks:3`, `verified:true` |
+| Following guard status | `active:false` |
+
+**Actual Google acceptance PASS:** November 11 saved reads show available
+**96.48 SAR**, marked incomplete, in both the yellow card and executive Google
+SPEND cell. Financial totals and profit remain incomplete. No forced sync or
+advertising account change was performed.
+
+**Actual courier acceptance FAIL / OPEN:** both reported refresh trials still
+return the generic failure; no print preview or physical printing success is
+established. Fresh provider data passed a pure replay of all five inspected
+stages. Subsequent sanitized owner-DTO evidence identifies a remaining saved
+recipient comparison gap: matching names and the same Saudi phone identity
+use nine-digit buyer versus `966`-prefixed twelve-digit receiver formats, which
+the literal comparison rejects.
+
+The follow-up branch `codex/courier-recipient-identity-20261112` starts from M
+above and is **not published**. PR1890 source A/B remains immutable. This
+documentation-only branch must **never** be deployed. The sections below are
+preserved historical release checkpoints; their earlier pending/unverified
+wording is superseded by this outcome. No live order identifiers or customer
+data are included.
+
+## Previous checkpoint: publication in progress (historical)
 
 **Publication is IN PROGRESS. Reviewed source and intent are merged, all 28
 applicable latest B workflows and the actual shared adapter passed, and own
