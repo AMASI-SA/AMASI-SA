@@ -9,6 +9,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+import re
 import unicodedata
 
 from assembly_status_policy import canonical_status
@@ -179,7 +180,7 @@ async def _shipment_list(db, context, *, selected_path=None):
     from .amasi_shipping_compat import _get
     paths = [selected_path] if selected_path else [f"/orders/{context.identity}/shipments", "/shipments"]
     for path in paths:
-        params = {"per_page": 100, "page": 1}
+        params = {"per_page": 50, "page": 1}
         if path == "/shipments":
             params["order_id"] = context.identity
         response = await _get(db, context.owner, path, params=params)
@@ -284,6 +285,32 @@ def _history(rows, order, context, courier):
         _fail()
 
 
+def _same_saved_saudi_recipient(saved):
+    """Prove that saved buyer/receiver phones differ only in Saudi prefix form."""
+    from .recipient_enrichment import _candidate_containers, _first
+    customer = saved.get("customer")
+    if saved.get("source") == "buy_as_gift" or not isinstance(customer, dict):
+        return False
+    candidates = _candidate_containers(saved)
+    names = (
+        _first(customer.get("full_name"), customer.get("name"), customer.get("first_name")),
+        _first(*[_first(row.get("full_name"), row.get("name"), row.get("recipient_name")) for row in candidates]),
+    )
+    if any(not isinstance(value, str) or not value.strip() or len(value) > 300
+           or any(unicodedata.category(char) in {"Cc", "Cf"} for char in value) for value in names):
+        return False
+    if names[0].strip().casefold() != names[1].strip().casefold():
+        return False
+    phones = (
+        _first(customer.get("mobile"), customer.get("phone")),
+        _first(*[_first(row.get("mobile"), row.get("phone"), row.get("mobile_number")) for row in candidates]),
+    )
+    # Native phone fields may be positive integers; bool/float are not phones.
+    matches = [re.fullmatch(r"(?:\+966|00966|966|0)?(5[0-9]{8})", str(value))
+               if isinstance(value, str) or type(value) is int and value > 0 else None for value in phones]
+    return bool(all(matches) and matches[0].group(1) == matches[1].group(1))
+
+
 async def _destination(db, order, child, context, courier):
     from . import amasi_shipping_compat as compat
     from . import shipping_label_service as shipping
@@ -299,8 +326,11 @@ async def _destination(db, order, child, context, courier):
     if isinstance(saved.get("shipping"), dict):
         saved["shipping"] = {key: value for key, value in saved["shipping"].items() if key not in {"shipment", "shipments"}}
     saved_recipient = shipping.resolve_salla_recipient(saved) or {}
+    # Saved snapshots may encode the same Saudi phone with different prefixes.
+    # The fresh provider guard remains unchanged; only this proven saved mismatch
+    # is waived, without changing the shared recipient policy or stored payload.
     if (compat._separate(clean, recipient)
-            or compat._separate(saved, saved_recipient)
+            or (compat._separate(saved, saved_recipient) and not _same_saved_saudi_recipient(saved))
             or any(context.source.get(key) or clean.get(key) or saved.get(key) for key in ("is_gift", "gift", "gift_order"))
             or clean.get("source") == "buy_as_gift"):
         _fail("recipient_address_unavailable")
@@ -356,7 +386,7 @@ async def recover_document(db, order, baseline, context):
     first_order = deepcopy(order)
     path, child = await _shipment_list(db, context)
     courier = _child(child, context)
-    response = await compat._get(db, context.owner, f"/orders/{context.identity}/histories", params={"page": 1, "per_page": 100})
+    response = await compat._get(db, context.owner, f"/orders/{context.identity}/histories", params={"page": 1, "per_page": 50})
     _history(_complete_page(response), order, context, courier)
     document_order = await _destination(db, order, child, context, courier)
     store = await shipping._store_identity(db, context.owner)
