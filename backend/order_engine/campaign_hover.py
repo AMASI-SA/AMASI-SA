@@ -243,6 +243,8 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         )
         if provider != "snapchat" and not is_account_day_aligned:
             continue
+        if provider == "snapchat" and _text(account.get("timezone")) == "Asia/Riyadh" and row.get("date") != day:
+            continue
         if provider == "snapchat" and not is_account_day_aligned and row.get("date") not in snapchat_identity_dates:
             continue
         key = (cid, _text(account.get("id")))
