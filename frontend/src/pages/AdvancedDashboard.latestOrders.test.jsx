@@ -93,6 +93,7 @@ test("latest orders renders the saved English city names in Arabic", () => {
     const cities = [
         ["Al Khobar", "الخبر"], ["Taif", "الطائف"], ["Arar", "عرعر"],
         ["Riyadh", "الرياض"], ["Dammam", "الدمام"], ["Afif", "عفيف"], ["AL HAIR", "الحائر"],
+        ["Hail", "حائل"],
     ];
     const markup = renderToStaticMarkup(<MemoryRouter><LatestOrders orders={cities.map(([city], index) => ({
         order_number: `sample-city-${index}`, customer: { name: "عميل" },

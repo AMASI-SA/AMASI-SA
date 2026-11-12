@@ -21,6 +21,7 @@ const ARABIC_CITY_NAMES = new Map([
     ["dammam", "الدمام"],
     ["ad dammam", "الدمام"],
     ["afif", "عفيف"],
+    ["hail", "حائل"],
     ["al hair", "الحائر"],
     ["al haer", "الحائر"],
     ["al ha ir", "الحائر"],

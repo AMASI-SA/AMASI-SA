@@ -2,13 +2,16 @@
 
 ## Scope and current state
 
-- Task branch: `codex/dashboard-cost-spend-city-20261112`.
-- Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1893
-- Previous remote checkpoint: `794467bef9c5a115e734a6c15be438ac8293d834`.
+- Initial task branch: `codex/dashboard-cost-spend-city-20261112`.
+- Merged PR: https://github.com/AMASI-SA/AMASI-SA/pull/1893
+- Follow-up branch: `codex/dashboard-city-clarity-20261112`, based on the first release merge.
 - Initial reviewed production-branch base: `570867c02ff2486750e4a99d574c25a8fef6c428`.
-- Observed live source before this task: `361978f854cecf572a8f3d3f0074f41fd91fcfd0`. At 15:10 UTC, live health reported `d94930510a92e2c426617725d21b9659bb8a9b1c`: the financial-demand-only source already included in our production base. Its health identity checks passed. The production branch remains `570867c02ff2486750e4a99d574c25a8fef6c428`; no rebase or source replacement is needed.
-- State: locally verified source candidate; focused backend/frontend regressions and independent reviews passed. Governed build and live acceptance remain pending.
-- Production changed by this task: **no**. No merge, release intent, lease, publish, account selection or provider write has been performed.
+- Observed live source before this task: `361978f854cecf572a8f3d3f0074f41fd91fcfd0`. The separate financial release subsequently deployed `d94930510a92e2c426617725d21b9659bb8a9b1c`, already included in our reviewed base. Prior Google fixes were verified deployed by ancestry and live health.
+- First release source A: `491577016ec525f89df516d53386d605c1126627`; intent-only B: `b7c34d9cee0f5b888eddef7eca6147e28b97f62f`; tree-equivalent merge M: `06d0002fab257e1976dd2344865da4de77c158c3`.
+- First release ID: `rg5-a2a278b1079e2761f7bb619ce677f275c795cfa1a37d7d5fab3b9b59137aef07`.
+- First release published successfully at 2026-11-12 15:52 UTC; Emergent version `7a1e7c9`. The reviewed frontend entry `index-Ck3L9ue4.js` is observed in the live browser.
+- Production changes: reviewed code published; the live owner reporting policy was saved successfully with exactly one active Google account. No provider campaign, budget, credential, order or address mutation was performed.
+- The first release's three-round production verifier is running under this task's owned lease. Do not change the shared `/app` checkout, start another release rehearsal, or create another lease until verification closes it and status is inactive. Current follow-up edits are confined to the local source checkout.
 
 ## Confirmed mechanisms
 
@@ -16,7 +19,7 @@
 2. Two option bindings may represent one service only when an exact parent/value visibility condition, service identity, quantity and legacy field relationship prove that equivalence. Unrelated charges must remain separate.
 3. The platform spend card exposed a saved partial subtotal while the executive card gated its total on full financial availability. Independent card refresh state could also diverge even when both readers used the same endpoint.
 4. Recent orders displayed the raw English city value without a display translation.
-5. The owner clarified that only one Google account is active; inactive discovered accounts must not define required spend coverage. The live saved-spend response included three Google accounts in required coverage. The old readers could fall back from no selected accounts to all discovered accounts, and OAuth projection replaced account rows, losing saved selection. Three readers now share a durable owner-selected policy. Legacy records with no selection metadata retain compatibility; an explicitly empty, invalid or missing selection never expands to all accounts. The owner selection operation is implemented but has not been applied. Missing spend for a selected account must remain unknown.
+5. The owner clarified that only one Google account is active; inactive discovered accounts must not define required spend coverage. The live saved-spend response included three Google accounts in required coverage. The owner selector then confirmed that no reporting selection had been configured, invoking the old all-discovered fallback. OAuth projection also replaced account rows, losing saved selection. Three readers now share a durable owner-selected policy. Legacy records with no selection metadata retain compatibility; an explicitly empty, invalid or missing selection never expands to all accounts. The live owner selected the one active account and received successful transactional readback. Missing spend for a selected account must remain unknown.
 
 ## Implemented at this checkpoint
 
@@ -56,7 +59,7 @@ python -m pytest -q tests/test_google_reporting_account_selection.py \
   tests/test_google_ads_overview.py
 ```
 
-Result: **139 passed**, exit 0. Independent review separately reran the 37 new route/rediscovery cases successfully. Cases cover session ownership and fresh active-owner checks, exact expected scope, policy/account transaction CAS, no unsupported-transaction fallback, empty discovery, A disappears then returns, owner replaces A with B before A returns, concurrent metadata refresh, partial known spend and explicit missing-account repair. Existing reports remain intact. Transaction tests use a driver-boundary staging double; the live owner save/readback remains required to prove the actual server outcome.
+Result: **139 passed**, exit 0. Independent review separately reran the 37 new route/rediscovery cases successfully. Cases cover session ownership and fresh active-owner checks, exact expected scope, policy/account transaction CAS, no unsupported-transaction fallback, empty discovery, A disappears then returns, owner replaces A with B before A returns, concurrent metadata refresh, partial known spend and explicit missing-account repair. Existing reports remain intact. Transaction tests use a driver-boundary staging double; the later successful production owner save/readback established the real transaction path too.
 
 Pinned Node 22.23.2 / Yarn 1.22.22 frontend verification:
 
@@ -78,10 +81,23 @@ Google selector frontend verification: **6 suites / 44 tests passed**, including
 
 The earlier `d7b0ac2` checkpoint passed all **27 exact-head GitHub workflows**. The later `794467b` source reproduced twice and completed 53 workflows with 51 successful and two reviewed gate failures: the runtime query contract expected the old Google projection, and the Snapchat-only path guard was triggered by registering a Google route in shared router composition.
 
-The replacement source carries exactly the two saved-policy fields in the existing runtime read contract, with negative tests rejecting either missing field. It registers Google settings through the existing Google connection registrar, restoring the shared router file to the production base. The Snapchat allowlist and its checks are unchanged. Actual registrar tests prove one GET and one PUT registration and retain the owner contract. The combined actual-registrar and strict runtime-query-contract run passed **67 tests**, exit 0, with bytecode/cache writing disabled. The original projection mismatch was reproduced first. Full Mongo runtime adoption must pass on the replacement exact-head CI; final source/build/intent remain pending.
+The replacement source carries exactly the two saved-policy fields in the existing runtime read contract, with negative tests rejecting either missing field. It registers Google settings through the existing Google connection registrar, restoring the shared router file to the production base. The Snapchat allowlist and its checks are unchanged. Actual registrar tests prove one GET and one PUT registration and retain the owner contract. The combined actual-registrar and strict runtime-query-contract run passed **67 tests**, exit 0, with bytecode/cache writing disabled. The original projection mismatch was reproduced first. Exact-B CI completed: 37 successful runs, one expected skipped TikTok release-candidate run, and one superseded Snap run with a successful replacement; zero failed or pending runs. This includes full Mongo runtime adoption. Clean-clone and operator-host adapters passed before prepare/prepublish/publication.
 
-`git diff --check`: pass. Independent reviews closed the conditional deleted-value case, complete/provisional snapshot divergence, same-total provider/account financial-basis change, and executive-failure independence. Build and browser acceptance after deployment: pending.
+`git diff --check`: pass. Independent reviews closed the conditional deleted-value case, complete/provisional snapshot divergence, same-total provider/account financial-basis change, and executive-failure independence.
+
+## Production UI acceptance and bounded follow-up
+
+- The target product's report group is exactly two units: base 80, bag 11, unit 45.50, total 91, status complete. Both embroidery bindings are not required and add no charge. The order detail confirms the negative selection and its aggregate product cost is complete. No live customer payload is committed.
+- Both dashboard cards display the same current available spend with a provisional label. The existing manual executive refresh restored CPA and ROAS on the same provider/account basis. No provider synchronization was invoked.
+- The Google owner selector saved one of three discovered accounts and returned success. Both inactive accounts and their historical data remain present but excluded from reporting scope.
+- Known city aliases render in Arabic. A new live recent-order spelling, `Hail`, remained English; the bounded follow-up adds `hail -> حائل`. Unknown names remain unchanged; this is not a worldwide city catalog.
+- The resolved embroidery cell still used the old ambiguous phrase `غير محدد`. The follow-up labels only `not_required` as `غير مطلوب`. Genuine unresolved, missing cost, unavailable historical detail and included-in-base states remain distinct. There is no arithmetic or completeness change.
+- Follow-up verification: the existing LatestOrders city-rendering case passed with Hail included (1 passed, 55 intentionally excluded). The full existing SoldProducts suite passed (17 tests), covering distinct cost states, partial totals and printed details. Independent read-only review cleared all four source/test files.
+
+The user confirmed continuation after the merge/publish plan. These acceptance fixes remain within that authorized goal. No recurring checker, synchronization schedule or extra dashboard read was added.
 
 ## Next safe action
 
-The authorized Emergent operator database was read-only checked and proved to be development data: it has no target Google accounts or target order. No selection was applied there. Use the live owner selector after deployment to apply the requested single-account scope, preserving inactive accounts and history. The live saved-spend and executive provider bases were compared and matched for Snapchat, Meta, TikTok and both Snapchat bank-fee account bases; the Google coverage scope explains the remaining incompleteness. The unrelated financial release completed while this task was prepared. Its verification finished and the shared guard subsequently reported inactive; the shared checkout remains the reviewed base, with no tracked edits. Freeze source A, perform the governed A/B build, then create intent-only B. Do not publish before the separate release authorization required by `AGENTS.md`. Before release, re-read the latest production branch and shared Release Guard and preserve other work. The shared operator checkout was observed at the original base with no tracked changes and Release Guard inactive; untracked unrelated files are preserved.
+Finish the already-running first-release verifier and confirm the owned lease is closed. Before another rehearsal or `/app` change, re-read production branch and guard status and preserve unrelated files. Commit the bounded follow-up source, perform its governed A/B build, freeze a new intent-only commit, and run the exact-head gates/clean-clone adapter before normal merge and publication. Recheck the live cost label, Arabic city and retained single-account spend behavior. PR bodies carry post-freeze release identities and verification state so the frozen source is not edited. The repository-wide issue ledger is at its comment limit.
+
+The earlier operator-database diagnosis was read only and proved to be development data without the target accounts/order; no selection was applied there. The successful selection described above was performed solely through the production owner UI.
