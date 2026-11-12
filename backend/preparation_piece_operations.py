@@ -3020,6 +3020,8 @@ async def _assembly_search(
                 "user_id": user_id, "order_id": order_number,
             })
             if current_plan:
+                if current_plan.get("state") == "cancelled":
+                    raise HTTPException(409, detail={"code": "component_execution_blocked"})
                 await assert_component_execution(
                     db, user_id=user_id, order_number=order_number, plan=current_plan,
                 )
