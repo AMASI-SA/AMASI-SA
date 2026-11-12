@@ -874,6 +874,44 @@ has been merged or published at this documentation checkpoint.
   publication or live manual confirmation has occurred. The remaining live
   refresh timeout must still be accepted on a successful fresh calculation.
 
+### Complete-source CI corrections and browser acceptance
+
+- Remote source checkpoint `646a514ad0713bf14449015305ae024f661b3ddc`
+  exactly matches local `1920a3ba7b394036aafa46b771ed663c090428d9`, tree
+  `884dd4a8e6d87e5d60835197413a28de6027f927`. Production is still M3; this
+  source is not frozen as a release candidate because its complete CI exposed
+  two test-contract failures.
+- Operational Web run `43314486765` passed all **nine Chromium scenarios**
+  and the canonical-worker job. Root downloaded browser artifact `13986284804`,
+  verified archive SHA256
+  `61e843551a7c74a637c17d95516413ac41ef983c4addad5e4b1be37f3fe59500`,
+  checked nine PASS results and zero browser errors, and visually inspected
+  all four desktop/mobile/saved/applied screenshots. The Arabic per-order
+  confirmation control fits the modal on both viewports; successful application
+  removes one unresolved order and retains the existing proved deliveries.
+  These fixtures contain synthetic data only.
+- The Frontend CI job passed 717 cases and failed one API test because the
+  workflow intentionally uses `--resetMocks=false`: the preceding preview
+  call remained in the mock history. The correction clears that mock before
+  each test while retaining the exact single-POST assertions. Root reran the
+  six affected UI suites with the actual `--resetMocks=false` setting:
+  **113 passed, six suites, exit 0, 12.913 seconds** (local Node v24.22.1).
+  The pinned CI toolchain remains required on the corrected source.
+- The Backend CI job passed 3,766 cases and failed one stale permission-object
+  assertion. Stock run `43314486808` reported the same sole failure after
+  3,575 passing cases and seven passing subtests. The existing read-only route
+  test now expects the new confirmation grant for the actual active owner;
+  it also explicitly requires `false` for a delegated mobile actor and for
+  accounting-active mode. All **12 route cases passed in 3.66 seconds**,
+  exit 0. No application source or authorization was relaxed by either fix.
+- Readiness run `43314486913` passed its applicable source gates and produced
+  an intent candidate, but that candidate is superseded by these test changes.
+  Do not use its artifact for B. A fresh complete source checkpoint and CI
+  build are required, followed by intent-only B and both host rehearsals.
+- No new intent freeze, merge, operator build, publication or live financial
+  confirmation has occurred. The live fresh-refresh timeout and the operator
+  sign-in handoff remain open exactly as recorded above.
+
 ## Continuation
 
 Issue1006 is at its comment limit. PR1898 records the verified first publication;

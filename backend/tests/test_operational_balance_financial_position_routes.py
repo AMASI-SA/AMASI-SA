@@ -48,7 +48,7 @@ def test_read_is_owner_scoped_and_uses_same_snapshot_cutoff(monkeypatch):
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["authority"] == "operational_balance_report"
-    assert body["permissions"] == {"reports": True}
+    assert body["permissions"] == {"reports": True, "confirm_delivery_after_start": True}
     assert body["currencies"]["SAR"]["metrics"]["debts_payable"] == "9135.00"
     assert calls == [("owner", "owner", db.data[STATES][0]["engine"]["as_of"])]
     assert db.data == before
@@ -191,6 +191,7 @@ def test_mobile_read_grant_is_checked_for_real_actor(monkeypatch):
     actor = {"id": "owner", "role": "owner", "_session_client": "amasi_mobile", "_mobile_actor_id": "staff"}
     response = asyncio.run(get(db, actor))
     assert response.status_code == 200, response.text
+    assert response.json()["permissions"] == {"reports": True, "confirm_delivery_after_start": False}
     db.data["mezan_mobile_app_access_v1"][0]["permissions"] = []
     assert asyncio.run(get(db, actor)).status_code == 403
 
@@ -208,4 +209,5 @@ def test_native_accounting_activation_prevents_competing_current_balances(monkey
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "accounting_active"
     assert response.json()["currencies"] == {}
+    assert response.json()["permissions"] == {"reports": True, "confirm_delivery_after_start": False}
     assert calls == []

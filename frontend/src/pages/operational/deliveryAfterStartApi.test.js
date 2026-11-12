@@ -3,6 +3,8 @@ import { operationalApi } from "./api";
 
 jest.mock("../../lib/api", () => ({ post: jest.fn() }));
 
+beforeEach(() => http.post.mockClear());
+
 test("delivery preview forwards its cancellation signal and exact owner-scoped body", async () => {
     const controller = new AbortController();
     const body = { order_id: "old-order", order_number: "1001", party_type: "courier", party_id: "carrier",
