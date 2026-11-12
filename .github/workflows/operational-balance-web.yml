@@ -281,8 +281,6 @@ jobs:
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       PYTHON_DOTENV_DISABLED: '1'
-      OPERATIONAL_BALANCE_UAT_OUTPUT: ${{ runner.temp }}/operational-balances-browser
-      PLAYWRIGHT_MODULE: ${{ runner.temp }}/operational-playwright/node_modules/playwright
     steps:
       - uses: actions/checkout@v4
         with:
@@ -308,6 +306,8 @@ jobs:
       - name: Run the real report and pending-order dialog in sandboxed Chromium
         env:
           EXPECTED_SOURCE: ${{ github.event.pull_request.head.sha || github.sha }}
+          OPERATIONAL_BALANCE_UAT_OUTPUT: ${{ runner.temp }}/operational-balances-browser
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/operational-playwright/node_modules/playwright
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE"
