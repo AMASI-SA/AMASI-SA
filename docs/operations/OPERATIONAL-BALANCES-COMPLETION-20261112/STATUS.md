@@ -132,6 +132,12 @@ amend or append documentation to the frozen release pair.
     Orders created at/before the start still require evidence of post-start
     completion. Keep tariff/identity gaps individual and keep existing known
     delivery counts compatible with older snapshots.
+11. Subsequent explicit owner request: show a per-order confirmation button in
+    the unresolved-order dialog when the unresolved fact is whether delivery
+    happened after the start. The owner can attest that boundary without
+    providing an exact delivery timestamp. Preserve actor/time/source binding,
+    permissions, replay protection and all independent tariff, cash and opening
+    blockers. This development task must not click a live financial confirmation.
 
 ## Live observations before implementation
 
@@ -674,7 +680,13 @@ has been merged or published at this documentation checkpoint.
   route/deadline/privacy regressions and existing demand/bank gates passed
   **55 tests in 2.97 seconds**. An initial invocation named a nonexistent test
   path and ran zero tests; the corrected final invocation passed. This is a
-  WIP checkpoint pending delivery-rule integration and new exact-source CI.
+  WIP checkpoint; the automatic delivery rule is now integrated, while the new
+  manual confirmation and final exact-source CI remain pending. Root's combined
+  collector/index/rule/timing/demand/bank run passed **184 cases in 7.48 seconds**;
+  the two real-Mongo rule cases were deliberately excluded from this local
+  in-memory run and passed in the author's separate 516-case Mongo gate.
+  Independent review of the timing diff found the original read/auth/CAS order
+  unchanged and reran its five new tests successfully.
 - Latest documentation-only publication checkpoint:
   `8ae41338d1c8133f94fd324e9984a5ce2ef593e5` on the handoff branch. PR1901's body
   now records verified publication, real saved-page acceptance and remaining
@@ -685,7 +697,25 @@ has been merged or published at this documentation checkpoint.
   The implementation preserves unknown actual delivery time, separates COD,
   counts proved deliveries independently of fee completeness and avoids native
   history reads solely to fill a timestamp for a qualifying post-start order.
-  Focused verification and final local commit are still in progress.
+  Completed and independently reviewed at local immutable commit
+  `5185a01d9992b04dca87f6eaa02d3758d7645644`, tree
+  `56baae522240dbb4410683330e50f2322cac020a`, then integrated by root without
+  conflicts. Author verification: **516 backend cases** with isolated real
+  Mongo, **65 UI cases / 3 suites**, then **19 DomainDetails cases** after the
+  final label clarification. Independent review reran **51 cases**, excluding
+  the two Mongo cases covered by the author's gate, and found no outstanding
+  concrete defect on that exact commit. Existing contradictory timestamps,
+  future/newer negative status history and the first-observation boundary stay
+  explicit conflicts; older in-transit history remains allowed. Source/COD
+  holds preserve known rows instead of rebuilding a false zero.
+- The new manual boundary-attestation feature is a separate following change,
+  still in progress. Plan: one-order bounded visible preflight, owner-only
+  version-bound/idempotent confirmation and one visible reconciliation. If the
+  proof is saved but refresh fails, show that saved confirmation as awaiting
+  calculation rather than invite duplicate approval or claim fresh money.
+  Root owns the new synthetic Chromium scenario and CI gate; the delivery
+  implementer owns the proof/routes/service and the assigned UI contributor
+  owns the dialog/API integration. No live confirmation is authorized here.
 - Narrow piece-index branch/worktree:
   `codex/operational-refresh-stage-analysis-20261112` /
   `/workspace/scratch/e00762959313/mezan-operational-refresh-stage-analysis`.

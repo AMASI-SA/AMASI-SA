@@ -600,6 +600,25 @@ test("prepaid execution shows the cashbox and execution date without claiming de
     expect(row.cells[1].textContent).toContain("صندوق الخصم: صندوق سلة التجريبي");
 });
 
+test("post-start delivered status shows its basis and recording time without claiming a delivery date or cash", async () => {
+    const payload = fixture();
+    payload.as_of = "2026-11-02T12:00:00Z";
+    payload.currencies.SAR.deliveries.rows = [{ id: "status-delivery", order_id: "status-order", order_number: "D-101",
+        party_type: "store_driver", party_name: "مندوب التجربة", recognition_basis: "delivered_order_created_after_start",
+        recorded_at: "2026-11-01T07:00:00Z", delivered_at: null, collection_status: "not_confirmed",
+        shipping_confirmed: "10.00", shipping_settled: "0.00", shipping_outstanding: "10.00", driver_custody: null }];
+    operationalApi.financialPosition.mockResolvedValue(payload);
+    await render();
+    const row = host.querySelector('[data-testid="financial-delivery-row"]');
+    expect(row.cells[0].textContent).toContain("التسليم: غير متاح");
+    expect([...row.cells[0].querySelectorAll("small")].find(node => node.textContent.startsWith("وقت التسجيل:"))?.textContent)
+        .toContain("10:00");
+    expect(row.cells[1].textContent).toContain("طلب تم توصيله وأُنشئ بعد بدء التشغيل");
+    expect(row.cells[3].textContent).toBe("التحصيل غير مؤكد");
+    expect(row.cells[4].textContent).toBe("10.00");
+    expect(row.cells[8].textContent).toBe("غير متاح");
+});
+
 
 test.each(["confirmed", "courier_collection_unverified"])("courier %s renders booked debt apart from receipt on screen and Excel", async status => {
     const response = fixture();

@@ -116,7 +116,7 @@ def _add_order(target, identity, number, reason):
 def apply_table_coverage(tables, parties, obligations, issues, facts, *, currency, as_of):
     """Annotate a report already filtered by owner and currency, in linear passes."""
     by_id = {str(row["id"]): row for row in obligations}
-    contexts, counted = defaultdict(set), defaultdict(set)
+    contexts, counted, delivered = defaultdict(set), defaultdict(set), defaultdict(set)
     names = {(row["party_type"], str(row["party_id"])): row.get("name") for row in parties}
     for row in obligations:
         identity = order_identity(row)
@@ -131,6 +131,10 @@ def apply_table_coverage(tables, parties, obligations, issues, facts, *, currenc
                            and (fee_proof.get("currency") or fee_proof.get("fee_currency")) == currency)
             if row.get("kind") == "shipping" and (_positive(row.get("confirmed")) or proved_zero):
                 counted[context].add(identity)
+                if row.get("recognition_event") != "order_completed":
+                    # Older snapshots may have retained the confirmed delivery
+                    # fee before the richer event contract existed.
+                    delivered[context].add(identity)
     for key, fact in facts.items():
         if not isinstance(fact, dict):
             continue
@@ -138,7 +142,20 @@ def apply_table_coverage(tables, parties, obligations, issues, facts, *, currenc
         kind = fact.get("party_type")
         party = fact.get("party_id") or (fact.get("id") if key.startswith("shipping:") else None)
         if kind in {"courier", "store_driver"} and party:
-            contexts[identity].add((kind, str(party)))
+            context = (kind, str(party))
+            contexts[identity].add(context)
+            shipping = facts.get("shipping:" + identity) or {}
+            fee = facts.get("shipping_fee:" + identity) or {}
+            fee_currency = shipping.get("fee_currency") or fee.get("currency") or fact.get("currency")
+            event_proved = (key.startswith("delivery_event:")
+                            and (fact.get("schema") == "operational_delivery_event_v1" and bool(fact.get("delivered_at"))
+                                 or fact.get("schema") == "operational_delivery_status_v1"
+                                 and fact.get("recognition_basis") == "delivered_order_created_after_start"
+                                 and fact.get("delivered_at") is None and bool(fact.get("recorded_at"))))
+            legacy_proved = key == "shipping:" + identity and bool(fact.get("delivered_at"))
+            if (event_proved or legacy_proved) and (fee_currency == currency
+                    or fee_currency is None and context in names):
+                delivered[context].add(identity)
 
     pending, unassigned, relevant = defaultdict(dict), defaultdict(dict), defaultdict(list)
     party_warnings = set()
@@ -202,17 +219,25 @@ def apply_table_coverage(tables, parties, obligations, issues, facts, *, currenc
                    "receivable": None, "payable": None}
             rows.append(row)
             by_party[party] = row
+        for (party_kind, party), orders in delivered.items():
+            if party_kind == kind and party not in by_party:
+                row = {"id": f"{kind}:{party}:{currency}", "name": names.get((kind, party)) or party,
+                       "receivable": None, "payable": None}
+                rows.append(row)
+                by_party[party] = row
         all_pending = set()
         for party, row in by_party.items():
             context = (kind, party)
             details = sorted(pending[context].values(), key=lambda value: (str(value.get("order_number") or ""), value["order_id"]))
-            row.update(confirmed_orders=len(counted[context]), pending_orders=len(details), pending_order_details=details,
+            row.update(confirmed_orders=len(counted[context]), delivered_orders=len(delivered[context]),
+                       pending_orders=len(details), pending_order_details=details,
                        complete=bool(as_of) and not failed_snapshot and context not in party_warnings and not details and not unassigned[kind], balance_basis="recorded")
             all_pending.update(item["order_id"] for item in details)
         table["unassigned_order_details"] = sorted(unassigned[kind].values(), key=lambda value: value["order_id"])
-        table["columns"] += [{"key": "confirmed_orders", "label": "تواصيل محتسبة", "type": "count"},
+        table["columns"] += [{"key": "delivered_orders", "label": "تواصيل مثبتة", "type": "count"},
                               {"key": "pending_orders", "label": "طلبات غير مؤكدة", "type": "exceptions"}]
         table["totals"].update(confirmed_orders=len(set().union(*(counted[(kind, party)] for party in by_party))) if by_party else 0,
+                               delivered_orders=len(set().union(*(delivered[(kind, party)] for party in by_party))) if by_party else 0,
                                pending_orders=len(all_pending))
         table["notes"].append("الأرصدة الظاهرة هي المبالغ المحتسبة. الطلبات غير المؤكدة لا تلغي الأرصدة المثبتة؛ اضغط عددها لعرض رقم كل طلب وسبب المراجعة.")
         if unassigned[kind]:
@@ -227,6 +252,13 @@ def annotate_report_coverage(projection):
     currencies = {row["currency"] for row in parties}
     currencies.update(details.get("provider_balances", {}))
     currencies.update(issue["currency"] for issue in projection.get("issues", []) if issue.get("currency"))
+    for key, proof in details.get("facts", {}).items():
+        if (key.startswith("delivery_event:") and isinstance(proof, dict)
+                and proof.get("schema") == "operational_delivery_status_v1"):
+            shipping = details["facts"].get("shipping:" + str(proof.get("order_id"))) or {}
+            currency = shipping.get("fee_currency") or proof.get("currency")
+            if currency:
+                currencies.add(currency)
     projection["unassigned_order_details"] = {}
     for currency in currencies:
         scoped = [row for row in parties if row["currency"] == currency]
@@ -247,7 +279,7 @@ def annotate_report_coverage(projection):
                     row = {"party_type": kind, "party_id": identity, "name": covered["name"], "currency": currency,
                            "outstanding_receivable": None, "outstanding_payable": None}
                     parties.append(row)
-                for key in ("confirmed_orders", "pending_orders", "pending_order_details", "complete", "balance_basis"):
+                for key in ("confirmed_orders", "delivered_orders", "pending_orders", "pending_order_details", "complete", "balance_basis"):
                     row[key] = covered[key]
             projection["unassigned_order_details"].setdefault(currency, {})[kind] = table["unassigned_order_details"]
         providers = {row["provider"]: row for row in details.get("provider_balances", {}).get(currency, [])}

@@ -481,6 +481,16 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
         order = _shipping_order(row)
         if order and ((_number(row.get("confirmed")) or ZERO) > ZERO or facts.get("shipping:" + order)):
             shipping.setdefault((order, row.get("party_type"), row.get("party_id")), []).append(row)
+    for key, proof in facts.items():
+        preparation_checkpoint()
+        if (not key.startswith("delivery_event:") or not isinstance(proof, dict)
+                or proof.get("schema") != "operational_delivery_status_v1"):
+            continue
+        order = str(proof.get("order_id") or "")
+        frozen = facts.get("shipping:" + order) or {}
+        if (order and proof.get("party_type") in {"courier", "store_driver"} and proof.get("party_id")
+                and (frozen.get("fee_currency") or proof.get("currency")) == currency):
+            shipping.setdefault((order, proof["party_type"], proof["party_id"]), [])
     collections = {}
     for key, source in metrics.items():
         preparation_checkpoint()
@@ -590,6 +600,8 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
                      "completed_at": completed_at, "cash_account_id": cash_account_id,
                      "cash_account_name": names.get(("cash", cash_account_id)) if cash_account_id else None,
                      "delivered_at": frozen.get("delivered_at"), "payment_method": method,
+                     **({key: frozen.get(key) for key in ("recognition_basis", "recorded_at", "business_date_basis")}
+                        if frozen.get("recognition_basis") == "delivered_order_created_after_start" else {}),
                      "collection_destination": destination, "collection_status": status, **fees,
                      "courier_responsibility": courier_responsibility,
                      "collection_amount": None if party_type == "courier" else _money((source or {}).get("collection_amount")),

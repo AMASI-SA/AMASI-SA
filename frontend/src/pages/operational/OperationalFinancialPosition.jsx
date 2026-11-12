@@ -119,9 +119,11 @@ function DeliveryDetails({ delivery, filters, onFiltersChange, currency }) {
         </tr></thead><tbody>{pageRows.map(row => <tr key={row.id} data-testid="financial-delivery-row">
             <td><strong>{deliveryOrderLabel(row)}</strong>
                 {row.recognition_event === "order_completed" && <small>تم التنفيذ: {row.completed_at ? formatRiyadhDateTime(row.completed_at) : UNAVAILABLE}</small>}
-                <small>التسليم: {row.delivered_at ? formatRiyadhDateTime(row.delivered_at) : UNAVAILABLE}</small></td>
+                <small>التسليم: {row.delivered_at ? formatRiyadhDateTime(row.delivered_at) : UNAVAILABLE}</small>
+                {row.recognition_basis === "delivered_order_created_after_start" && <small>وقت التسجيل: {row.recorded_at ? formatRiyadhDateTime(row.recorded_at) : UNAVAILABLE}</small>}</td>
             <td><strong>{positionText(row.party_name)}</strong><small>{PARTY_LABELS[row.party_type] || UNAVAILABLE}</small>
-                {row.recognition_event === "order_completed" && <><small>{shippingRecognitionLabel(row)}</small>{row.payment_mode === "prepaid" && <small>صندوق الخصم: {positionText(row.cash_account_name)}</small>}</>}</td>
+                {(row.recognition_event === "order_completed" || row.recognition_basis === "delivered_order_created_after_start") && <small>{shippingRecognitionLabel(row)}</small>}
+                {row.recognition_event === "order_completed" && row.payment_mode === "prepaid" && <small>صندوق الخصم: {positionText(row.cash_account_name)}</small>}</td>
             <td><strong>{paymentLabel(row.payment_method)}</strong><small>{destinationLabel(row.collection_destination)}</small>{row.destination_name && <small>{row.destination_name}</small>}</td>
             <td><CollectionStatus value={row.collection_status} /></td>
             {DELIVERY_MONEY_COLUMNS.map(column => <td key={column.key}><Money value={row[column.key]} role={column.role} /></td>)}

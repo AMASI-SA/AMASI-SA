@@ -2,8 +2,9 @@
 
 The event is independent of the customer's order age and later payment state.
 It carries no price, sale, customer payment, bank effect, or opening allocation.
-Only an explicit delivery timestamp can cross the opening boundary: a source
-update clock or delivered label cannot supply a missing event time.
+An older order needs an explicit delivery timestamp to cross the opening
+boundary. A delivered order created after opening is independently eligible;
+its first observation is a recording time, never an invented delivery time.
 """
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -19,6 +20,8 @@ DELIVERED = {"delivered", "تم التوصيل"}
 INACTIVE = {"cancelled", "canceled", "void", "deleted", "archived", "superseded", "returned",
             "ملغي", "ملغى", "تم الإلغاء", "تم الالغاء", "مسترجع", "مرتجع", "تم الاسترجاع", "محذوف", "مؤرشف"}
 RETURNS = {"return", "return_shipment", "reverse"}
+STATUS_SCHEMA = "operational_delivery_status_v1"
+STATUS_BASIS = "delivered_order_created_after_start"
 
 
 def _fail(reason):
@@ -67,6 +70,34 @@ def _instant(value):
         if str(error).startswith("operational_delivery_"):
             raise
         _fail("timestamp_invalid")
+
+
+def created_after_start_delivery(raw, started_at, as_of):
+    """The owner's eligibility rule; no customer-payment or tariff assertion."""
+    status = raw.get("status")
+    if isinstance(status, dict):
+        status = status.get("customized") or status
+    return (_status(status) in DELIVERED
+            and _instant(started_at) < _instant(raw.get("date") or raw.get("created_at") or raw.get("order_date"))
+            <= _instant(as_of))
+
+
+def status_delivery(event):
+    return isinstance(event, dict) and event.get("schema") == STATUS_SCHEMA
+
+
+def _recorded_delivery(base, end, frozen_event, **identity):
+    """Freeze the first observed status proof without assigning an event date."""
+    recorded = _instant(frozen_event["recorded_at"]) if status_delivery(frozen_event) else end
+    if not _instant(base["order_created_at"]) <= recorded <= end:
+        _fail("confirmed_evidence_changed")
+    return {**base, **identity, "schema": STATUS_SCHEMA, "recognition_basis": STATUS_BASIS,
+            "delivered_at": None, "recorded_at": recorded.isoformat()}
+
+
+def _check_recorded_time(at, frozen_event):
+    if status_delivery(frozen_event) and at > _instant(frozen_event['recorded_at']):
+        _fail('confirmed_evidence_changed')
 
 
 def delivery_time_matches(frozen, delivered_at, *, order_id, native_driver_earning=None):
@@ -271,6 +302,22 @@ def _order_waybill(raw, current, shipment, waybill, created_through):
         _fail('order_waybill_unproven')
 
 
+def _check_known_shipment_times(raw, shipment, created, start, end, frozen_event):
+    """An optional clock may be absent, but an impossible present date conflicts."""
+    _, selected, _ = _shipment_rows(raw, shipment)
+    times = set()
+    for row in selected:
+        for key in ('delivered_at', 'actual_delivered_at'):
+            if row.get(key) is not None:
+                at = _window(row[key], created, start, end)
+                _check_recorded_time(at, frozen_event)
+                if row.get('created_at') is not None and _instant(row['created_at']) > at:
+                    _fail('timestamp_before_shipment')
+                times.add(at)
+    if len(times) > 1:
+        _fail('timestamp_ambiguous')
+
+
 def _shipment_time(raw, current, shipment, waybill, *, include_nested=True, order_transition=None):
     candidates, selected, nested = _shipment_rows(raw, shipment, include_nested=include_nested)
     timestamps = []
@@ -324,7 +371,7 @@ def _shipment_time(raw, current, shipment, waybill, *, include_nested=True, orde
 
 def delivery_requires_cod_proof(raw, event):
     """Nested and order-level delivery proofs alone do not establish collected cash."""
-    if event.get("timestamp_source") == "order_status_transition":
+    if status_delivery(event) or event.get("timestamp_source") == "order_status_transition":
         return True
     try:
         _shipment_time(raw, {}, event["shipment_id"], event["waybill"], include_nested=False)
@@ -380,8 +427,9 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
                            frozen_event=None, frozen_shipping=None, recorded_fee=False):
     """Return a proved post-start event, None outside scope, or an exact issue.
 
-    The caller retains normal order eligibility independently and quotes the
-    existing shipping contract at ``delivered_at``. This resolver never decides
+    The caller retains normal order eligibility independently and quotes a
+    proved shipping contract. An undated post-opening status has its own
+    schema and recording time. This resolver never decides
     a fee, collection approval, refund, or how a pooled opening should settle.
     """
     if not _text(owner) or not isinstance(source, dict) or source.get("user_id") != owner:
@@ -411,13 +459,29 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
     assignment = _driver_assignment(assignments, owner, order_id, number)
     base = {"schema": "operational_delivery_event_v1", "order_id": order_id, "order_number": number,
             "order_created_at": created.isoformat()}
+    status_eligible = created_after_start_delivery(raw, start, end)
+    if status_eligible and any(_status(value) not in DELIVERED for value in (
+            raw.get('status_slug'), source.get('order_status'), source.get('order_status_slug')) if value is not None):
+        _fail('order_shipment_status_conflict')
     if assignment is not None:
-        if _status(assignment.get("status")) not in DELIVERED:
+        if _status(assignment.get("status")) not in DELIVERED and not status_eligible:
             return None
+        assignment_id = _text(assignment["id"])
+        if status_eligible and (assignment.get("delivered_at") in (None, "") or status_delivery(frozen_event)):
+            from operational_courier_transitions import order_delivery_time
+            order_at = order_delivery_time(raw, source, history, end, allow_undated=True,
+                undated_before=frozen_event.get('recorded_at') if status_delivery(frozen_event) else None)
+            if order_at is not None:
+                _window(order_at, created, start, end)
+                _check_recorded_time(order_at, frozen_event)
+            if assignment.get("delivered_at") not in (None, ""):
+                _check_recorded_time(_window(assignment["delivered_at"], created, start, end), frozen_event)
+            return _recorded_delivery(base, end, frozen_event, id="store-delivery:" + assignment_id,
+                party_type="store_driver", party_id=_text(assignment["driver_id"]),
+                currency=_currency(raw, assignment), assignment_id=assignment_id)
         delivered = _window(assignment.get("delivered_at"), created, start, end)
         if delivered is None:
             return None
-        assignment_id = _text(assignment["id"])
         return {**base, "id": "store-delivery:" + assignment_id, "delivered_at": delivered.isoformat(),
                 "party_type": "store_driver", "party_id": _text(assignment["driver_id"]),
                 "currency": _currency(raw, assignment), "assignment_id": assignment_id}
@@ -441,7 +505,8 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
     # Existing confirmed amounts keep their original native evidence. New fees
     # use the order's actual delivered transition, never a label timestamp or a
     # generic order update. The waybill supplies courier identity only.
-    legacy = recorded_fee and (frozen_event is None or frozen_event.get("timestamp_source") != "order_status_transition")
+    legacy = (recorded_fee and not status_delivery(frozen_event)
+              and (frozen_event is None or frozen_event.get("timestamp_source") != "order_status_transition"))
     if legacy:
         # A grandfathered fee does not grandfather new cash evidence when the
         # current carrier's state no longer satisfies the native COD contract.
@@ -449,7 +514,21 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
         at, from_order = _shipment_time(evidence_raw, current, shipment, waybill,
             order_transition=lambda: order_delivery_time(raw, source, history, end, provenance=provenance))
     else:
-        at = order_delivery_time(raw, source, history, end, provenance=provenance)
+        at = order_delivery_time(raw, source, history, end, provenance=provenance, allow_undated=status_eligible,
+            undated_before=frozen_event.get('recorded_at') if status_delivery(frozen_event) else None)
+        if status_eligible and (at is None or status_delivery(frozen_event)):
+            if at is not None:
+                _window(at, created, start, end)
+                _check_recorded_time(at, frozen_event)
+            # The unique current waybill still establishes the executor. The
+            # observation boundary only checks that its label already exists.
+            _order_waybill(evidence_raw, current, shipment, waybill, end)
+            _check_known_shipment_times(evidence_raw, shipment, created, start, end, frozen_event)
+            party, carrier_key = _courier(setup, owner, current)
+            identity = sha256(json.dumps([order_id, shipment], ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+            return _recorded_delivery(base, end, frozen_event, id="courier-delivery:" + identity,
+                party_type="courier", party_id=party, currency=_currency(raw), shipment_id=shipment,
+                waybill=waybill, source_carrier_key=carrier_key)
         _order_waybill(evidence_raw, current, shipment, waybill, at)
         from_order = True
         # Preserve the separate pre-existing native delivery/COD contract when

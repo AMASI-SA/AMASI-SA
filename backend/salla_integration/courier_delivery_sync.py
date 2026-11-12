@@ -6,7 +6,8 @@ from operational_courier_transitions import (
     CARRIER_HISTORY, ORDER_HISTORY, WEBHOOK_PROOF, _state, carrier_activity_transition, native_status_transition,
     order_delivery_time,
 )
-from operational_delivery_evidence import DELIVERED, _inactive, _instant, _order_waybill, _shipment_time, _status, _text
+from operational_delivery_evidence import (DELIVERED, _inactive, _instant, _order_waybill, _shipment_time,
+                                           _status, _text, created_after_start_delivery)
 from operational_balance_store import check_authorization
 from salla_shipping import CURRENT_SHIPPING, SHIPPING_FIELDS, accept_shipping, extract_shipping, same_carrier, shipping_root_fields
 from .service import call_salla
@@ -148,7 +149,13 @@ def verified_order_delivery(source, histories, owner, now):
 
 async def acquire_missing(db, owner, issues, *, started_at, limit=4):
     """Refresh identified post-opening delivery gaps, without financial/workflow hooks."""
-    targets = {str(row["source_id"]) for row in issues if row.get("code") in ISSUE_CODES and row.get("source_id")}
+    target_codes = {}
+    for row in issues:
+        if row.get('code') in ISSUE_CODES and row.get('source_id'):
+            target_codes.setdefault(str(row['source_id']), set()).add(row['code'])
+    targets = set(target_codes)
+    date_only = {identity for identity, codes in target_codes.items()
+                 if codes == {'operational_delivery_timestamp_missing'}}
     completed_targets = {str(row['source_id']) for row in issues
                          if row.get('code') == 'operational_prepaid_shipping_completion_timestamp_missing' and row.get('source_id')}
     if not targets:
@@ -187,6 +194,17 @@ async def acquire_missing(db, owner, issues, *, started_at, limit=4):
                     or any(source[key] != value for key, value in shipping_root_fields(current).items() if key in source)
                     or current.get("superseded_shipment_ids")):
                 continue
+            if identity in date_only and created_after_start_delivery(raw, start, now):
+                # A saved issue from the earlier contract does not justify
+                # downloading an order history just to date an already eligible
+                # new delivery. A different missing proof still uses its own
+                # acquisition path. Keep the exact existing waybill binding.
+                try:
+                    _order_waybill(raw, current, current['shipment_id'], current['tracking_number'], now)
+                except ValueError:
+                    pass  # Current native shipment evidence is still needed.
+                else:
+                    continue
             if completed:
                 from operational_completed_capture import recover_completed_capture
                 async def load_shipments():

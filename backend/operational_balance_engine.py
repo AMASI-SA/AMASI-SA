@@ -13,7 +13,7 @@ from hashlib import sha256
 import json
 from zoneinfo import ZoneInfo
 
-from operational_delivery_evidence import delivery_time_matches
+from operational_delivery_evidence import STATUS_BASIS, delivery_time_matches, status_delivery
 
 
 RIYADH = timezone(timedelta(hours=3))
@@ -48,6 +48,19 @@ def instant(value):
 
 def day(value):
     return date.fromisoformat(str(value)[:10])
+
+
+def shipping_day(frozen):
+    if frozen.get("recognition_basis") == STATUS_BASIS:
+        return instant(frozen["recorded_at"]).astimezone(RIYADH).date()
+    return day(frozen["delivered_at"])
+
+
+def shipping_recording(frozen):
+    if frozen.get("recognition_basis") != STATUS_BASIS:
+        return {}
+    return {"recognition_basis": STATUS_BASIS, "recorded_at": frozen["recorded_at"],
+            "business_date_basis": "recognition_recorded_at", "delivered_at": None}
 
 
 def fingerprint(value):
@@ -358,14 +371,20 @@ def reconcile(state, sources, as_of):
             if delivery_only or order.get("delivery_event"):
                 event = order.get("delivery_event") or {}
                 carrier = order.get("carrier") or {}
-                delivered = instant(event.get("delivered_at"))
-                if (not oid or event.get("schema") != "operational_delivery_event_v1"
+                undated = status_delivery(event)
+                delivered = None if undated else instant(event.get("delivered_at"))
+                recorded = instant(event.get("recorded_at")) if undated else None
+                valid_time = ((not delivery_only and event.get("recognition_basis") == STATUS_BASIS
+                               and event.get("delivered_at") is None and order.get("delivered_at") is None
+                               and start < created <= recorded <= now) if undated else
+                              (start <= delivered <= now and created <= delivered
+                               and not (created > start if delivery_only else created < start)
+                               and instant(order.get("delivered_at")) == delivered))
+                if (not oid or (not undated and event.get("schema") != "operational_delivery_event_v1")
                         or not event.get("id") or str(event.get("order_id")) != oid
                         or event.get("order_number") != order.get("order_number")
                         or instant(event.get("order_created_at")) != created
-                        or not (start <= delivered <= now and created <= delivered)
-                        or (created > start if delivery_only else created < start)
-                        or instant(order.get("delivered_at")) != delivered
+                        or not valid_time
                         or order.get("status") not in DELIVERED
                         or not isinstance(order.get("currency"), str) or not order["currency"]
                         or event.get("currency") != order["currency"]
@@ -377,8 +396,11 @@ def reconcile(state, sources, as_of):
                 frozen_delivery = facts.get("shipping:" + oid)
                 if frozen_delivery and (frozen_delivery.get("id") != event["party_id"]
                         or frozen_delivery.get("party_type") != event["party_type"]
-                        or not delivery_time_matches(frozen_delivery, delivered, order_id=oid,
-                                                     native_driver_earning=order.get("native_driver_earning"))):
+                        or (not (frozen_delivery.get("recognition_basis") == STATUS_BASIS
+                                 and frozen_delivery.get("delivered_at") is None
+                                 and instant(frozen_delivery.get("recorded_at")) == recorded) if undated else
+                            not delivery_time_matches(frozen_delivery, delivered, order_id=oid,
+                                                      native_driver_earning=order.get("native_driver_earning")))):
                     raise ValueError("operational_delivery_confirmed_evidence_changed")
                 # Separate provenance preserves the payload of existing shipping
                 # facts and the obligation IDs used by recorded settlements.
@@ -458,22 +480,29 @@ def reconcile(state, sources, as_of):
                 fee_currency = None
                 issue(str(error), service_key)
             if frozen is None and carrier and order.get("status") in DELIVERED:
+                event = order.get("delivery_event") or {}
+                recording = ({"recognition_basis": STATUS_BASIS, "recorded_at": event["recorded_at"],
+                              "business_date_basis": "recognition_recorded_at"} if status_delivery(event) else {})
                 frozen = fact(service_key, {"id": carrier["id"], "cost": amount(money(carrier["cost"])) if carrier.get("cost") is not None and fee_currency else None,
                                            "party_type": carrier.get("party_type", carrier.get("kind", "courier")),
                                            "delivered_at": order.get("delivered_at", updated.isoformat()),
+                                           **recording,
                                            "cod_amount": amount(money(order.get("cod_amount", "0"))),
                                            "cod_evidence": deepcopy(order.get("cod") or ({"evidence_complete": False} if order.get("cod_required") else {})),
                                            "component_mode": bool(carrier.get("fee_components")),
-                                           **({"fee_currency": fee_currency} if carrier.get("cost") is not None and fee_currency else {})})
+                                           **({"fee_currency": fee_currency} if fee_currency and
+                                              (carrier.get("cost") is not None or recording and carrier.get("currency")) else {})})
             cod_fact = facts.get("cod_collection:" + oid)
             cod_evidence = deepcopy(order.get("cod") or {})
+            delivery_held = order.get('shipping_evidence_held') is True
             if frozen:
                 original_evidence = frozen.get("cod_evidence", {})
                 # Delivery freezes the executor, not an absent cash collection.
                 candidate = original_evidence if original_evidence.get("evidence_complete", True) else cod_evidence
                 candidate_amount = frozen["cod_amount"] if candidate is original_evidence else order.get("cod_amount", "0")
                 executor_matches = carrier and carrier["id"] == frozen["id"]
-                if cod_fact is None and (candidate or not order.get("cod_required")) and candidate.get("evidence_complete", True) and (candidate is original_evidence or executor_matches):
+                if (not delivery_held and cod_fact is None and (candidate or not order.get("cod_required"))
+                        and candidate.get("evidence_complete", True) and (candidate is original_evidence or executor_matches)):
                     cod_fact = fact("cod_collection:" + oid, {"amount": amount(money(candidate_amount)),
                         "evidence": deepcopy(candidate), "party_id": frozen["id"]})
                 if cod_fact:
@@ -497,7 +526,7 @@ def reconcile(state, sources, as_of):
                             "custody_amount": cod_evidence.get("custody_amount"),
                             "collection_amount": cod_evidence.get("collection_amount"),
                             "payment_method": cod_evidence.get("payment_method"), "evidence_ids": cod_evidence.get("evidence_ids", [])}
-            if cod_evidence:
+            if cod_evidence and not delivery_held:
                 engine["cod_reports"]["cod:" + oid] = {**cod_metadata, "order_id": oid, "currency": currency,
                     "party_id": frozen["id"] if frozen else (carrier or {}).get("id"),
                     "confirmed_custody": amount(confirmed_cod)}
@@ -519,8 +548,12 @@ def reconcile(state, sources, as_of):
                 if order.get("native_driver_earning"):
                     earning = order["native_driver_earning"]
                     if (earning["party_id"] != frozen["id"] or frozen["party_type"] != "store_driver"
-                            or not delivery_time_matches(frozen, earning["delivered_at"], order_id=oid,
-                                                         native_driver_earning=earning)):
+                            or (not (earning.get("recognition_basis") == frozen.get("recognition_basis") == STATUS_BASIS
+                                     and earning.get("delivered_at") is frozen.get("delivered_at") is None
+                                     and earning.get("recorded_at") == frozen.get("recorded_at"))
+                                if status_delivery(order.get("delivery_event")) else
+                                not delivery_time_matches(frozen, earning["delivered_at"], order_id=oid,
+                                                          native_driver_earning=earning))):
                         raise ValueError("driver_fee_saved_conflict")
                     fact("native_driver_earning:" + oid, {k: v for k, v in earning.items() if k != "party_name"})
                 # Identity/COD can be proven while the fee contract is incomplete.
@@ -548,18 +581,20 @@ def reconcile(state, sources, as_of):
                             component_fact = fact(component_key, {"cost": amount(money(component["amount"])), "currency": fee_currency})
                         if component_fact is not None:
                             put(component_key, "shipping", frozen["id"], frozen["party_type"], fee_currency,
-                                confirmed=money(component_fact["cost"]), business_date=day(frozen["delivered_at"]), fee_component=component["id"])
+                                confirmed=money(component_fact["cost"]), business_date=shipping_day(frozen),
+                                fee_component=component["id"], **shipping_recording(frozen))
                         elif component_key in obligations:
                             obligations[component_key] = {**obligations[component_key], "expected": "0.00"}
                 elif fee is not None:
                     put(service_key, "shipping", frozen["id"], frozen["party_type"], fee_currency,
-                        confirmed=money(fee["cost"]), business_date=day(frozen["delivered_at"]))
+                        confirmed=money(fee["cost"]), business_date=shipping_day(frozen), **shipping_recording(frozen))
                 elif service_key in obligations:
                     obligations[service_key] = {**obligations[service_key], "expected": "0.00"}
             if frozen:
-                if confirmed_cod or cod_evidence or "cod:" + oid in obligations:
+                if not delivery_held and (confirmed_cod or cod_evidence or "cod:" + oid in obligations):
                     put("cod:" + oid, "cod", frozen["id"], frozen["party_type"], currency,
-                        confirmed=confirmed_cod, direction="receivable", business_date=day(frozen["delivered_at"]), **cod_metadata)
+                        confirmed=confirmed_cod, direction="receivable", business_date=shipping_day(frozen),
+                        **cod_metadata, **shipping_recording(frozen))
             elif carrier:
                 if fee_currency and carrier.get("fee_components"):
                     if service_key in obligations:
