@@ -1,5 +1,20 @@
 # STORE-COURIER-PRINT-20261112
 
+## Current follow-up after verified PR1890
+
+PR1890 published as `d73f584` and passed three official matching probes;
+the following guard status is inactive. Both actual courier trials still
+failed, with no preview or physical-printing success claimed. Saved owner DTOs
+prove an equivalent Saudi phone represented differently for buyer and receiver,
+which the current literal comparison rejects. The bounded next source change
+and its acceptance criteria are tracked in
+[COURIER-RECIPIENT-IDENTITY-20261112](../COURIER-RECIPIENT-IDENTITY-20261112/STATUS.md).
+The previous source/intent pair is immutable; this follow-up is not published.
+Prior complete release evidence is saved on documentation-only branch
+`codex/google-courier-live-evidence-20261112` at
+`10975ab0a6b53d6cd4e0558d4f2ba2221aa4aa5e`, never a deployment branch.
+The sections below retain historical checkpoints.
+
 ## Current continuation after live acceptance
 
 PR1887 is deployed and verified by three official probes; its lease is inactive.

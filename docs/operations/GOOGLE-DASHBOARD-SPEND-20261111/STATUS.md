@@ -1,5 +1,19 @@
 # GOOGLE-DASHBOARD-SPEND-20261111
 
+## Current outcome after verified PR1890
+
+PR1890 published as `d73f584`, passed three official matching probes, and
+closed its lease. Actual November 11 UI acceptance passed: both the yellow
+Google card and executive Google SPEND cell display the known **96.48 SAR**
+explicitly as incomplete. Financial totals/profit remain incomplete, and no
+forced sync or account configuration change was used. Full prior-release
+evidence is recoverable on documentation-only branch
+`codex/google-courier-live-evidence-20261112` at
+`10975ab0a6b53d6cd4e0558d4f2ba2221aa4aa5e`; never deploy that branch.
+The remaining courier issue is tracked in
+[COURIER-RECIPIENT-IDENTITY-20261112](../COURIER-RECIPIENT-IDENTITY-20261112/STATUS.md).
+The sections below retain historical checkpoints.
+
 ## Current continuation after live acceptance
 
 PR1887 is deployed and verified by three official probes; its lease is inactive.
