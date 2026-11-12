@@ -2,8 +2,9 @@
 
 ## Current state
 
-CORRECTIVE RELEASE MERGED; PUBLICATION SUBMITTED; FINAL VERIFICATION AND LIVE
-ACCEPTANCE OPEN.
+CORRECTIVE RELEASE MERGED, PUBLISHED AND OFFICIALLY VERIFIED; SAVED-TABLE AND
+MODAL ACCEPTANCE PASSED; FRESH-REFRESH TIMEOUT REMAINS OPEN. OWNER'S NEW DELIVERY
+RULE AND A MEASURED SOURCE-CONVERSION OPTIMIZATION ARE BEING IMPLEMENTED ABOVE M3.
 The owner explicitly authorized public upload, merge and publication after the
 public destination was identified. PR1898 reached production and passed the
 official three-probe release verifier, and that first lease closed. Its first
@@ -14,17 +15,26 @@ PR1901 now preserves that merge and the verified operational fixes in exact
 source A3, intent-only B3 and normal merge M3 below. All required B3 gates and
 all three exact-M3 workflows passed. The official operator build,
 prepare/prepublish passed, and one **Publish changes** submission was clicked
-at approximately 19:55 UTC on 2026-11-12. The last observed UI was publishing;
-a new finished deployment/version, the official final three-probe verification
-and corrective live financial-page/modal acceptance are **not complete** at
-this checkpoint.
+at approximately 19:55 UTC on 2026-11-12. Emergent subsequently displayed a new
+green **Deployment finished**, November 12 at 11:05 PM Asia/Riyadh, version
+`275e412`. The official verifier returned **verified:true, checks:3**, exact
+A3/M3/runtime/artifact identity and 582 canonical/cache-busted Frontend requests
+per probe. The lease closed. A fresh visible financial-page request still hit
+`408 operational_refresh_timeout`; its new recovery displayed 21 saved tables
+with the dated warning, preserved known balances and working paginated order
+dialogs. This is successful saved-state recovery, **not** a successful fresh
+calculation. Follow-up implementation remains in progress.
 
 Preview-service correction: a prior start command reported both services
 started, but this did not establish sustained frontend health. Before this
 corrective publication the legacy preview frontend was **FATAL** because its
 old launcher referenced a missing Node binary. Preview backend was running and
-was stopped by this task for the governed build. Only backend needs restoration
-after the corrective lease closes; do not claim the legacy frontend was restored.
+was stopped by this task for the governed build. After the lease closed, root
+restored backend and directly observed RUNNING with tracked source clean. The
+legacy frontend was not changed or restored. The operator workspace later
+suspended; reopening its IDE now reaches a sign-in form. The restored backend
+status is an observation before that suspension, not proof of current service
+state in the resumed workspace.
 
 - Repository: [AMASI-SA/AMASI-SA](https://github.com/AMASI-SA/AMASI-SA).
 - Release PR: [1898](https://github.com/AMASI-SA/AMASI-SA/pull/1898), normally
@@ -43,8 +53,9 @@ after the corrective lease closes; do not claim the legacy frontend was restored
   `codex/operational-balances-published-handoff-20261112`, based on exact M3.
 - Handoff worktree:
   `/workspace/scratch/e00762959313/mezan-operational-published-handoff`.
-  This documentation checkpoint preserves the publication-in-progress state;
-  root owns the final evidence update on the same handoff branch.
+  The prior remote documentation checkpoint is
+  `e5bd5cad5f0777ad4550922f89d905359ce2da38`; this follow-up records verified
+  publication and the remaining live failure without editing frozen A3/B3/M3.
 - Root owns final integration, operator rehearsal, lease, publication and live
   acceptance. Other contributors have no publication or lease action.
 
@@ -114,6 +125,13 @@ amend or append documentation to the frozen release pair.
    balance worker, scheduled refresh, hidden-page loading or polling. Calculate
    only for a visible page request; cancel reads/calculation when it leaves.
    Keep one refresh per owner across processes and preserve completed snapshots.
+10. New explicit owner rule: when the current order state is delivered and its
+    creation is strictly after the operational start, recognize the carrier or
+    driver delivery without requiring an actual delivery timestamp. Preserve
+    unknown delivered_at, separate recording/recognition basis and COD evidence.
+    Orders created at/before the start still require evidence of post-start
+    completion. Keep tariff/identity gaps individual and keep existing known
+    delivery counts compatible with older snapshots.
 
 ## Live observations before implementation
 
@@ -595,7 +613,7 @@ Final exact-M3 count: **3 success, 0 pending, 0 failed, 0 skipped**. CodeQL
 completed at `2026-11-12T19:54:19Z`. B3's results were not substituted for this
 merge-specific evidence.
 
-## Corrective publication — SUBMITTED, FINAL VERIFICATION PENDING
+## Corrective publication — OFFICIALLY VERIFIED, LIVE REFRESH STILL OPEN
 
 Root owns the operator/build/lease/publication evidence below. This handoff
 records those operations without changing the frozen source or intent.
@@ -606,53 +624,100 @@ records those operations without changing the frozen source or intent.
 - Preview backend was running and was stopped by this task for the build.
   The legacy preview frontend was already **FATAL**, with an old launcher
   referencing a missing Node binary; it was not a healthy service stopped by
-  this task. Restore **backend only** after corrective lease closure.
+  this task. After corrective lease closure, backend alone was restored.
 - The official governed operator build passed in **74.43 seconds**, bound to
   exact source A3, deployment M3 and the runtime identity in the final table.
 - Official prepare actor: `operational-balances-1901-20261112`.
 - Official prepare succeeded at `2026-11-12T19:54:39.613387+00:00` for exact
   A3/M3/runtime. Official prepublish returned **`ready_to_publish:true`**.
 - One **Publish changes** click was submitted at approximately **19:55 UTC**
-  on 2026-11-12. The last observed platform UI was **publishing**.
-- A newer green finished deployment and platform version have **not** been
-  recorded for this corrective publication at this checkpoint.
-- Official three-probe live verification, corrective lease closure, live
-  financial-page/modal acceptance and backend restoration are **pending**.
-  No corrective `verified:true` or final business acceptance is claimed.
+  on 2026-11-12. Emergent subsequently displayed green **Deployment finished**,
+  November 12, **11:05 PM Asia/Riyadh**, platform version **275e412**. No repeat
+  publication was submitted while this build was running.
+- Official `verify --url https://mezansalla.com` completed with
+  **verified:true, checks:3**, exact A3/M3/runtime/artifact identity above,
+  backend boot `2026-11-12T20:04:58.384183+00:00`, and **582** checked canonical
+  and cache-busted Frontend requests in each probe. Official status then
+  reported **active:false**.
+- Root independently read the verifier result, obtained fresh idle status,
+  restored the task-stopped preview backend, observed **RUNNING**, and asserted
+  tracked source remained clean. Legacy preview frontend stayed untouched.
+- A fresh signed-in, visible financial-position load again reached the refresh
+  deadline. The corrected fallback displayed **21 tables**, the last saved
+  calculation time and the explicit refresh-failure warning. Known carrier and
+  driver balances, delivery counts and distinct unresolved-order counts were
+  retained. No real financial amounts, customer data or order identifiers are
+  recorded in this public handoff.
+- Actual driver and carrier dialogs showed order numbers and specific reasons.
+  The carrier dialog paginated correctly across ten rows then five rows;
+  Escape dismissed each dialog. This validates the real saved-report UI.
+- The displayed saved calculation was still **01:07 Asia/Riyadh on November 12**.
+  Fresh refresh and current forecast/profit completeness are **not accepted**.
+  The follow-up must produce a successful new visible calculation before the
+  overall operational-balance task can be marked complete.
 
 Production changed through the overall task: **YES**, established by the
-verified first publication above. The corrective submission's completion and
-runtime identity remain unverified until the official live probes succeed.
+verified initial and corrective publications above. No new follow-up source
+has been merged or published at this documentation checkpoint.
+
+### Follow-up work above verified M3
+
+- Delivery-rule branch/worktree:
+  `codex/operational-delivered-created-after-start-20261112` /
+  `/workspace/scratch/e00762959313/mezan-operational-delivery-start-rule`.
+  The implementation preserves unknown actual delivery time, separates COD,
+  counts proved deliveries independently of fee completeness and avoids native
+  history reads solely to fill a timestamp for a qualifying post-start order.
+  Focused verification and final local commit are still in progress.
+- Narrow piece-index branch/worktree:
+  `codex/operational-refresh-stage-analysis-20261112` /
+  `/workspace/scratch/e00762959313/mezan-operational-refresh-stage-analysis`.
+  A repeated item-by-piece scan in the actual source collector is replaced by
+  one request-owned, cancellable and joined index build. On identical synthetic
+  20,000-order/20,000-piece inputs, exact M3 took 22.897864 seconds and the
+  candidate took 2.295125 seconds, with the same 20,000 known-cost results and
+  354 source reads. This is local performance evidence, **not** proof that it
+  is the sole cause of the live 85-second refresh timeout. Existing fresh
+  authorization, bank claims, deadlines and final CAS remain unchanged.
+- Root owns integration, new source/intent freeze, exact-head CI and the next
+  governed publication. Do not modify the frozen A3/B3/M3 release.
+- The operator IDE was suspended after the completed restoration observation.
+  A normal Code -> Open in VS Code action reopened its code-server sign-in page.
+  No credential has been read, copied or entered by this task. If sign-in still
+  blocks the final operator stage after code/CI are reviewable, use the secure
+  browser authentication flow. Do not use paid Emergent agent chat or Copilot.
+- A read-only diagnostics command was pasted before the suspension but no
+  execution/result was observed. Do not claim the diagnostics token exists or
+  that runtime phase profiling succeeded. No token value was exposed.
 
 ## Continuation
 
 Issue1006 is at its comment limit. PR1898 records the verified first publication;
 PR1899 records the preserved A2/B2 verification and the reason it was superseded;
-PR1901 records the final A3/B3/M3 corrective release. This documentation-only
-handoff checkpoints the publication-in-progress state remotely. Root owns its
-final update after the remaining evidence is available.
+PR1901 records the verified A3/B3/M3 corrective release. Its comment6835728773
+records the completed official verification, live recovery acceptance and
+remaining timeout. This documentation-only handoff preserves that state and
+the newly authorized delivery rule. Root owns the next integrated checkpoint.
 No unrelated draft PR, including the campaign's separate intent draft, is merged
 or changed by this task. No financial approval, payout or advertising operation
 was performed.
 
 Next safe actions, owned by root:
 
-1. Wait for a **new green finished deployment and platform version** after the
-   corrective Publish changes submission. Record the exact displayed label and
-   version; do not repeat the publication merely because it is still running.
-2. Run the official verifier from the operator checkout:
-   `python scripts/production_release_guard.py verify --url https://mezansalla.com`.
-   Require all three probes to bind exact A3, M3, the final runtime release ID
-   and frontend artifact digest above. Record `verified:true`, `checks:3` and
-   the resulting `active:false`; do not close a lease manually or infer success
-   from CI or the first publication.
-3. Repeat authenticated **visible** financial-position and pending-order modal
-   acceptance. Verify the saved dated tables remain available after a recoverable
-   refresh timeout, known amounts/unique pending counts and all modal rows/reasons
-   display correctly, and leaving the page does not continue source work/polling.
-   Record any unresolved live failure separately from successful release probes.
-4. After the corrective lease has closed, obtain a fresh official idle status
-   and restore **preview backend only**. Do not start the pre-existing FATAL
-   legacy frontend as part of this task's restoration. Update PR1901 and this
-   handoff with the actual final deployment, probe, live acceptance and backend
-   status evidence. Do not invent completion while any of those remain pending.
+1. Finish and independently review the two bounded follow-up implementations.
+   Integrate above a fresh Production ref, preserving unrelated changes and
+   using M3 as the last officially verified source base J.
+2. Run integrated calculation, historical-boundary, delivery count/export and
+   cancellation checks. Keep all new work request-owned and visible-page only.
+   Preserve known saved counts and balances when individual evidence is missing.
+3. Preserve a remote task checkpoint and Draft PR, then freeze new source A and
+   intent-only B using the repository's governed build. Require exact-B gates
+   and both host clean-clone rehearsals before normal merge.
+4. Recover operator sign-in if needed; inspect fresh guard/head/clean status and
+   service state before any /app change. Continue the already authorized normal
+   merge/publication protocol with one prepare/prepublish/publish and official
+   three-probe verification. Never reuse the closed M3 lease.
+5. Accept a fresh visible calculation on the live site, actual delivery-rule and
+   modal behavior, and no hidden/background work. If the refresh still times out,
+   obtain current bounded runtime evidence and finish the defect instead of
+   substituting the old saved snapshot for fresh acceptance.
