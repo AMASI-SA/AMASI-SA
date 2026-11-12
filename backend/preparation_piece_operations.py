@@ -2161,13 +2161,8 @@ def assembly_piece_blocker(piece: dict[str, Any]) -> str | None:
     return None
 
 
-def _reviewed_received_physical_piece(piece: dict[str, Any] | None) -> bool:
-    """Only completed supplier/employee custody permits physical Ready in review.
-
-    This is used by both the search projection and the Ready transaction.
-    No free-text client status, optional receipt setting or direct-assembly
-    shortcut can fabricate the two completed custody events.
-    """
+def _verified_supplier_employee_custody(piece: dict[str, Any] | None) -> bool:
+    """Require actual supplier and employee receipt events, not UI stage alone."""
     if (not piece or piece.get("virtual_kind") or piece.get("experiment_archived_at")
             or piece.get("active_hold_id")):
         return False
@@ -2178,8 +2173,15 @@ def _reviewed_received_physical_piece(piece: dict[str, Any] | None) -> bool:
         and _text(piece.get("preparation_receipt_status")) == "received"
         and piece.get("preparation_received_at")
         and _text(piece.get("preparation_received_by"))
-        and assembly_piece_blocker(piece) is None
         and not _preparation_incomplete_services(piece)
+    )
+
+
+def _reviewed_received_physical_piece(piece: dict[str, Any] | None) -> bool:
+    """Shared search/write exception; completed pieces are handled as retries."""
+    return bool(
+        _verified_supplier_employee_custody(piece)
+        and assembly_piece_blocker(piece) is None
     )
 
 
@@ -2682,6 +2684,60 @@ def _source_addition_assembly_coverage_complete(
     return not required or _local_assembly_coverage_complete({"lines": required}, pieces)
 
 
+def _historical_reviewed_source_units_covered(
+    order: Any, pieces: list[dict[str, Any]], reserved_units: set,
+) -> bool:
+    """Only all current order units can complete the historical reviewed path.
+
+    A missing supplier file, direct unit, extra/stale plan unit, duplicate card,
+    or incomplete custody must never produce the shipment when the first
+    supplier Ready promoted a historical reviewed workflow to in_progress.
+    """
+    items = list(getattr(order, "items", None) or [])
+    if not items or not pieces:
+        return False
+    expected: set[tuple[str, int]] = set()
+    for item in items:
+        line_id = _text(getattr(item, "order_item_id", None))
+        try:
+            quantity = float(getattr(item, "quantity", 0) or 0)
+        except (ValueError, TypeError, OverflowError):
+            return False
+        if (not line_id or not quantity.is_integer()
+                or quantity <= 0 or quantity > 10000):
+            return False
+        for unit_index in range(1, int(quantity) + 1):
+            identity = (line_id, unit_index)
+            if identity in expected:
+                return False
+            expected.add(identity)
+    if expected != reserved_units:
+        return False
+
+    fulfilled: set[tuple[str, int]] = set()
+    for piece in pieces:
+        if _text(piece.get("assembly_status")) != "ready":
+            return False
+        if piece.get("virtual_kind") == "operational":
+            continue  # Still required above, but has no source-unit identity.
+        if piece.get("virtual_kind") == "direct_assembly":
+            pass
+        elif not piece.get("virtual_kind"):
+            if not _verified_supplier_employee_custody(piece):
+                return False
+        else:
+            return False
+        try:
+            unit_index = int(piece.get("unit_index") or 0)
+        except (ValueError, TypeError, OverflowError):
+            return False
+        identity = (_text(piece.get("order_item_id")), unit_index)
+        if unit_index <= 0 or identity in fulfilled:
+            return False
+        fulfilled.add(identity)
+    return bool(expected) and fulfilled == expected
+
+
 async def _assembly_progress(
     db: Any,
     *,
@@ -2724,6 +2780,36 @@ async def _assembly_progress(
         total_count and total_count == ready_count
         and _text(workflow.get("stage")) in {"ready_to_ship", "completed"}
     )
+    historical_reviewed_completion = False
+    if (not completed and total_count and total_count == ready_count
+            and workflow.get("completion_mode") is None
+            and workflow.get("assembly_reviewed_physical_started") is True
+            and _text(workflow.get("stage")) == "in_progress"):
+        # The initial physical Ready moved this historical workflow out of
+        # reviewed. Require complete current-source coverage before shipping;
+        # a partial assignment must not look like a complete order.
+        plan, evidence, reserved_units = await _historical_assembly_context(
+            db, user_id=user_id, workflow=workflow,
+        )
+        if plan and evidence and evidence.ready_in_progress:
+            current_source = eligible_order or await _current_assembly_order(
+                db, user_id=user_id, order_number=order_number,
+            )
+            if (current_source is not None
+                    and _assembly_in_progress(current_source)
+                    and shipping_address_is_complete(getattr(current_source, "shipping", None))
+                    and _historical_reviewed_source_units_covered(current_source, pieces, reserved_units)
+                    and _source_addition_assembly_coverage_complete(current_source, workflow, pieces)):
+                from fulfillment_v2_routes import assert_component_execution
+                await assert_component_execution(
+                    db, user_id=user_id, order_number=order_number, plan=plan,
+                )
+                await enforce_stage_instructions(
+                    db, user_id=user_id, order_number=order_number,
+                    stage="assembly_labeling", actor_id=actor_id, order_wide=True,
+                )
+                completed = True
+                historical_reviewed_completion = True
     local_decision = None
     current_order = eligible_order
     expanded_review = workflow.get("source_additions_reviewed") is True
@@ -2793,6 +2879,11 @@ async def _assembly_progress(
         "assembly_updated_at": now,
         "updated_at": now,
     }
+    if historical_reviewed_completion:
+        workflow_patch.update({
+            "ready_to_ship_at": now,
+            "ready_to_ship_source": "historical_reviewed_assembly",
+        })
     if local_decision is not None:
         workflow_patch["fulfillment_decision"] = local_decision
         if completed and workflow.get("stage") == "in_progress":
@@ -3748,6 +3839,7 @@ async def _mark_assembly_piece_ready_in_transaction(
             {
                 "$set": {
                     "stage": "in_progress", "in_progress_at": now,
+                    "assembly_reviewed_physical_started": True,
                     "updated_at": now, "updated_by": actor_id,
                 },
                 "$inc": {"revision": 1},
