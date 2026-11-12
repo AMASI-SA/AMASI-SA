@@ -2,9 +2,11 @@
 
 ## Current state
 
-PR1902 IS NORMALLY MERGED AT M4; ALL EXACT-A4 AND EXACT-B4 APPLICABLE GATES
-PASSED, INCLUDING BOTH CLEAN-CLONE HOST REHEARSALS. THE NEW RELEASE IS NOT YET
-PUBLISHED. OPERATOR SIGN-IN AND FRESH LIVE BALANCE ACCEPTANCE REMAIN OPEN.
+PR1902 IS NORMALLY MERGED AT M4; ALL A4/B4/M4 GATES PASSED. OPERATOR SIGN-IN
+RECOVERED, /APP FAST-FORWARDED TO EXACT M4 AND GOVERNED BUILD PASSED. THE NEW
+RELEASE IS NOT YET PUBLISHED: AUTO-REVIEW REJECTED READING EMERGENT'S /CHAT
+MANAGEMENT INTERFACE. MANAGE-PUBLISHING ACCESS CLARIFICATION AND FRESH LIVE
+BALANCE ACCEPTANCE REMAIN OPEN.
 
 The owner authorized upload, merge and publication. Root merged PR1902 after
 the independently reviewed implementation, complete source gates, unchanged
@@ -44,32 +46,60 @@ is outside the frozen release pair; do not deploy its branch as the release.
   job131529575897 and Host24.19.0 job131529575935. Root and the independent
   reviewer confirmed exact source/deployment/runtime/artifact identities.
   Its manual redeploy job correctly skips on a PR event; it is push-only.
-- The three newly triggered M4 push workflows are pending at this checkpoint:
-  readiness43318400310, Security43318400356 and CodeQL43318400313. Require
-  their successful terminal state before the final publication step.
+- All three M4 push workflows passed: readiness43318400310,
+  Security43318400356 and CodeQL43318400313. Independent closure was
+  22:27:24 UTC Nov12 (01:27:24 Asia/Riyadh Nov13); root subsequently rechecked
+  the all-event listing and fresh Production ref. Both merged-head clean-clone
+  jobs passed: Host20.20.2 job131536634296 and Host24.19.0 job131536634207.
+  All seven Readiness jobs, including the push-only handoff, passed.
 - Root's implementation worktree remains at local tree-equivalent source
   `de38e838bf4a4f93b85e63bc0762684dcd79818a`. Clean source validation is at
   `/workspace/scratch/e00762959313/mezan-operational-A4-source-validation`;
   exact B4 is at `/workspace/scratch/e00762959313/mezan-operational-B4-intent`.
   This handoff branch is `codex/operational-delivery-release-handoff-20261113`,
   worktree `/workspace/scratch/e00762959313/mezan-operational-delivery-release-handoff`.
-- No new operator build, lease, publish, official production verification or
-  live financial confirmation has occurred. The latest verified live release
-  remains M3/version275e412. Its fresh visible calculation still timed out;
-  the new source optimizations are not yet accepted on live data.
-- The operator IDE still shows its ordinary password sign-in page following
-  workspace suspension. No credential was read, copied or entered. Secure
-  browser authentication is the next access step; no renewed permission to
-  merge or publish is needed. Do not use paid Emergent chat or Copilot.
+- The secure browser-auth request timed out without a confirmed result. After
+  the owner's further instruction to continue, root first checked a fresh
+  canonical operator page. It showed the workspace asleep. The visible wake
+  link and subsequent Code Server reload restored the existing signed-in
+  workspace. No credential value was read, copied or entered by the model;
+  no additional credential request was needed after positive workspace proof.
+- Before any `/app` change, root observed the official guard inactive, exact
+  prior M3, a clean tracked worktree and120 unrelated untracked files. Preview
+  backend was RUNNING pid605; the legacy preview frontend was already FATAL.
+  Root stopped only backend, verified remote M4 and fast-forwarded exactly M4.
+  The full tree matched B4 and all120 untracked paths remained unchanged.
+  No runtime bytecode files needed relocation in this build.
+- The actual governed operator build completed with **exit0 in92.769seconds**:
+  `PYTHONDONTWRITEBYTECODE=1 REACT_APP_BACKEND_URL=https://mezansalla.com yarn --cwd frontend build`.
+  No bootstrap/CI bypass variables were used. The generated Backend identity
+  exactly equals the reviewed intent, with A4/runtime/artifact values above.
+  Tracked source stayed clean and all120 unrelated files remained preserved.
+  Evidence: `/tmp/mezan-operational-1902-build.log`, `-build-result.json`,
+  `-prebuild-state.json` and `-readiness.json` under the same prefix.
+- A fresh inactive-guard check preceded restoration of the task-stopped
+  preview backend. `supervisorctl` directly reported RUNNING pid7007. The
+  pre-existing frontend FATAL state was not changed. No new prepare/prepublish
+  lease, publish, official live verification or live financial confirmation
+  occurred. The latest verified live release remains M3/version275e412.
+  Its previous408 is not closed by the new local build.
+- Automatic approval review rejected **read-only accessibility inspection of
+  `https://app.emergent.sh/chat`**, stating that it targets an interface
+  prohibited by the retained restriction against Emergent chat, whereas the
+  authorized workflow is management UI/Code Server. Root stopped that route
+  and completed the permitted operator work above. No alternate tool, hidden
+  request or indirect publication was used to bypass the rejection. The next
+  user-facing clarification is specifically permission to use **Manage
+  Publishing inside that Emergent interface**. Existing authorization to
+  publish persists; paid agent chat and Copilot remain excluded.
 
-Next safe actions: finish exact-M4 push gates; recover the existing operator
-session through secure browser authentication; inspect a fresh inactive guard,
-tracked state, unrelated files and actual preview-service health before any
-`/app` change. Fast-forward the reviewed production checkout to exact M4,
-run the governed adapter rehearsal, then prepare/prepublish and one publication
-under a new task-owned lease. Require explicit new deployment success and the
-official three-probe verifier, then confirm guard inactive and restore only
-services stopped by this task. Finally accept a successful fresh visible
+Next safe actions: resolve the specific Manage Publishing access rejection;
+then inspect a fresh inactive guard, remote/local M4, tracked state and build
+proof before preparing a new task-owned lease. The operator rehearsal already
+passed; repeat it only if its governed artifacts/source no longer validate.
+Run prepublish immediately before one publication, require explicit new
+deployment success and the official three-probe verifier, then confirm guard
+inactive and restore only services stopped by this task. Finally accept a successful fresh visible
 balance calculation and the new delivery/modal behavior without clicking a
 live order-confirmation button. If the live refresh still times out, use the
 fixed-name timing records to diagnose and complete that remaining defect.
