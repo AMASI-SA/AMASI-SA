@@ -2,6 +2,80 @@
 
 ## Current state
 
+PR1902 IS NORMALLY MERGED AT M4; ALL EXACT-A4 AND EXACT-B4 APPLICABLE GATES
+PASSED, INCLUDING BOTH CLEAN-CLONE HOST REHEARSALS. THE NEW RELEASE IS NOT YET
+PUBLISHED. OPERATOR SIGN-IN AND FRESH LIVE BALANCE ACCEPTANCE REMAIN OPEN.
+
+The owner authorized upload, merge and publication. Root merged PR1902 after
+the independently reviewed implementation, complete source gates, unchanged
+candidate-intent validation, intent-only B4 gates and a fresh Production ref
+check. GitHub confirms M4 has exactly M3 then B4 as its parents and its entire
+tree equals B4. No source was added after A4. This documentation-only handoff
+is outside the frozen release pair; do not deploy its branch as the release.
+
+| Identity | Exact value |
+|---|---|
+| PR | `https://github.com/AMASI-SA/AMASI-SA/pull/1902` |
+| Previous verified base J / M3 | `2c875b5f16b0d58e46effdd7acd28a91041b62fb` |
+| Source A4 | `1f8f1d673854f594086a6e87dec6c98633da0061` |
+| A4 tree | `9fa2dee41a7799f1d6d1d843a9dfee053a9ff605` |
+| Intent-only B4 | `f42ed3f5d1aee5722a46e5cb7b798fe653c0a783` |
+| Normal merge M4 | `b64121c265d8d6e158df0d9fb88debc52c95317d` |
+| B4 / M4 tree | `6747da0e7355a1c1bd2cbd406759a3876b357eb3` |
+| Runtime release ID | `rg5-380f5ea8b7afe39ebfc3ab2b3c28a4431d9ec77f61519ab4414bf80b7bda3e35` |
+| Frontend artifact tree SHA256 | `e4f01cbf70cb34088b9b46f1ccd473d791d428af90dce905e4c3e3f33f0f8b25` |
+| Intent Git blob | `92d0cd9f8869bf91b0378d1ac6ce0bdefaf006a2` |
+| Intent SHA256 | `3973ea6676e1cc19365e3d72f8ec8673ebaf2363fc45521d5701f83748e63fd8` |
+
+- Candidate artifact13987219022 from source readiness43316177872 contains the
+  unchanged 1,295,990-byte intent. Its ZIP SHA256 is
+  `b0a807394cb460171c0fa5c58715eae88f9442b0a8f57be7b531345f878feceb`.
+  Official candidate validation passed on clean exact A4; official tracked
+  intent and Git provenance validation passed on exact remote B4, exit 0.
+  Node22.23.2/Yarn1.22.22/Vite8.2.4 and public origin are unchanged.
+- All 12 exact-A4 workflows passed. On B4, all 12 applicable workflows passed;
+  the thirteenth TikTok candidate workflow is intentionally skipped by its
+  exact branch-specific condition. Independent closure:22:16:25 UTC Nov12.
+  Backend3767, shipping16+18subtests, Frontend718/51suites, Stock3576+7subtests,
+  browser9/9 and canonical-worker exclusion passed. JUnit confirms all77 new
+  cases ran with no skip/failure/error:44 pure,20 Mongo/HTTP,4 lifetime and9
+  bounded acquisition. No additional application finding remains.
+- B4 readiness43317421146 passed both clean-clone rehearsals: Host20.20.2
+  job131529575897 and Host24.19.0 job131529575935. Root and the independent
+  reviewer confirmed exact source/deployment/runtime/artifact identities.
+  Its manual redeploy job correctly skips on a PR event; it is push-only.
+- The three newly triggered M4 push workflows are pending at this checkpoint:
+  readiness43318400310, Security43318400356 and CodeQL43318400313. Require
+  their successful terminal state before the final publication step.
+- Root's implementation worktree remains at local tree-equivalent source
+  `de38e838bf4a4f93b85e63bc0762684dcd79818a`. Clean source validation is at
+  `/workspace/scratch/e00762959313/mezan-operational-A4-source-validation`;
+  exact B4 is at `/workspace/scratch/e00762959313/mezan-operational-B4-intent`.
+  This handoff branch is `codex/operational-delivery-release-handoff-20261113`,
+  worktree `/workspace/scratch/e00762959313/mezan-operational-delivery-release-handoff`.
+- No new operator build, lease, publish, official production verification or
+  live financial confirmation has occurred. The latest verified live release
+  remains M3/version275e412. Its fresh visible calculation still timed out;
+  the new source optimizations are not yet accepted on live data.
+- The operator IDE still shows its ordinary password sign-in page following
+  workspace suspension. No credential was read, copied or entered. Secure
+  browser authentication is the next access step; no renewed permission to
+  merge or publish is needed. Do not use paid Emergent chat or Copilot.
+
+Next safe actions: finish exact-M4 push gates; recover the existing operator
+session through secure browser authentication; inspect a fresh inactive guard,
+tracked state, unrelated files and actual preview-service health before any
+`/app` change. Fast-forward the reviewed production checkout to exact M4,
+run the governed adapter rehearsal, then prepare/prepublish and one publication
+under a new task-owned lease. Require explicit new deployment success and the
+official three-probe verifier, then confirm guard inactive and restore only
+services stopped by this task. Finally accept a successful fresh visible
+balance calculation and the new delivery/modal behavior without clicking a
+live order-confirmation button. If the live refresh still times out, use the
+fixed-name timing records to diagnose and complete that remaining defect.
+
+## Previous M3 publication and live acceptance history
+
 CORRECTIVE RELEASE MERGED, PUBLISHED AND OFFICIALLY VERIFIED; SAVED-TABLE AND
 MODAL ACCEPTANCE PASSED; FRESH-REFRESH TIMEOUT REMAINS OPEN. OWNER'S NEW DELIVERY
 RULE, MANUAL DELIVERY CONFIRMATION AND MEASURED SOURCE-CONVERSION OPTIMIZATION
