@@ -488,11 +488,26 @@ def install_product_field_cost_support() -> None:
                     )
                 live_price = deepcopy(price_cache[price_key])
                 live_services = list(live_price.pop("live_invoice_services", []) or [])
+                # Keep session refresh compatible with the original supplier
+                # module used by baseline/profile tests; only the public scan
+                # response uses the new scan-specific helper. Both paths filter
+                # completed physical services and de-duplicate exact IDs.
+                completed_ids = {
+                    _text(service.get("service_id"))
+                    for service in row.get("services") or []
+                    if isinstance(service, dict)
+                    and supplier_module._service_is_complete(service)
+                }
                 merged_services: list[dict[str, Any]] = []
                 seen: set[str] = set()
                 for service in [*live_services, *existing_services]:
                     service_id = _text(service.get("service_id"))
-                    if not service_id or service_id in seen:
+                    if (
+                        not service_id
+                        or service_id in seen
+                        or service_id in completed_ids
+                        or supplier_module._service_is_complete(service)
+                    ):
                         continue
                     seen.add(service_id)
                     merged_services.append(service)
