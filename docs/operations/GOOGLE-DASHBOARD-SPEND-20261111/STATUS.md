@@ -5,20 +5,79 @@
 - Repository: `AMASI-SA/AMASI-SA`
 - Current source branch: `codex/google-dashboard-spend-r2-20261112`
 - Reviewed production baseline: `245a0beccbdbc2585a3ec2214e808eeef3734b57`
-- State: Google R2 source and exact-source runtime CI passed. The user added
-  the store-courier print/completion repair to the same authorized publication;
-  the combined source is now implemented and independently reviewed. Fresh
-  exact-source CI and a new release A/B pair remain required.
-- Current draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1887
+- State: the combined Google/courier source and reviewed A/B release pair passed
+  their required gates. PR1887 is merged; the actual shared adapter and this
+  task's own prepare/prepublish succeeded. The single publication is now
+  **deployed and verified** by three official probes, with its lease inactive.
+  Google display acceptance remains **OPEN** for the partial-account gap below.
+- Merged PR: https://github.com/AMASI-SA/AMASI-SA/pull/1887
 - Superseded candidate PR: https://github.com/AMASI-SA/AMASI-SA/pull/1886
 - Remote regression checkpoint: `924e480258c8052741c5d9999e531739238287e0`.
 - Reviewed source checkpoint before the final rounding compatibility fix:
   `cc21d961e111fdf83b2427399e571f9d1e12f715`.
-- Production changed by this task: **no**.
+- Production changed: **yes**. The live source/runtime/deployment identities match
+  the reviewed release, `verified:true`, `checks:3`; subsequent status is
+  `active:false`. This does not establish full Google live acceptance.
 - No campaign, budget, bid, provider configuration, scheduler, sync, backfill, or business-data writes.
 - No change to the completed bundle study or the separately released dashboard-card cadence task.
 
-## R2 continuation: publication remains authorized
+## Current release evidence and continuation
+
+- Final source A: `b01341f95f1a1caf3a8741de09f52cb52f6536d9`.
+- Reviewed intent-only B: `b237fca03fb22e627ab5451b2c14c0f1a17f42b5`.
+- Deployment merge: `803e87f72d9661f9b961587bbc0cededfd1f3c90`; its tree equals B,
+  `ac5225a4cb70b150ee8383305fb5b5da3c3a8a25`.
+- Reviewed runtime:
+  `rg5-e71b3c05b2a27483d7bea11daf03c82f7b80f67e4b9282b5ceb02664a9c95710`.
+- Exact-B CI: 25 successful workflow runs, no failures or pending runs; one
+  unrelated branch-only TikTok workflow skip. Runtime gate `43119023502`
+  passed 164/164/164 identities, JSON/read-contract audits and zero skipped
+  tests. Balance and Stock acceptance also passed on B itself.
+- Local and CI reviewed intents are byte-identical; the source/candidate
+  reviews and two-clean-build proof passed. The actual shared adapter completed
+  exit0/93.16s after reversible quarantine of two ignored bytecode cache files.
+  All 120 untracked platform files were preserved.
+- Own prepare/prepublish succeeded, and the final Publish changes control was
+  clicked once. The green UI displayed exactly `Deployment finished Nov 12, 02:53 AM`
+  (Riyadh), current version `0ef7c77`. Official verification passed
+  three probes against the identities above; boot time was
+  `2026-11-11T23:53:25.260197+00:00`. Subsequent status is `active:false`.
+
+Full identity, artifact, CI and handoff evidence is in
+[the combined release record](../STORE-COURIER-PRINT-20261112/RELEASE.md).
+These documentation updates are isolated on
+`codex/google-courier-release-evidence-20261112`, based on the deployment merge.
+That documentation-only branch must never be deployed. Root owns its final
+checkpoint and the shared ledger update. Any follow-up runtime changes require
+a separate reviewed release; do not republish this unchanged pair as a remedy.
+
+## Post-publication Google acceptance: OPEN
+
+For the explicit November 11 range, the live saved response retains
+`known_total_sar:96.48` but returns `total_sar:null`, `account_count:3`, and only
+`google_native_account_day_missing`. Native hourly data remains available.
+Saved sync evidence reports three accounts attempted, one complete, two rows
+saved and two errors: `google_ads_needs_reauth` and
+`google_ads_manager_account_requires_client_selection`. The working account is
+SAR/Asia-Riyadh. No missing account may be silently treated as zero or removed
+from the expected scope just because it has no fact rows.
+
+The current yellow card shows `لا بيانات`; the executive Google spend cell
+shows `—`. The known positive subtotal is retained by the backend but not shown
+by the existing Snapchat-only frontend partial-data path. The bounded follow-up
+is display-only: preserve Google quality/known fields in the normalizer and pass
+matching-period platform evidence into the executive spend cell. Show the known
+positive amount as incomplete without changing full spend, profit, ROAS/CPA,
+account selection, or backend monetary contracts. Default known zero must not
+become an observed partial zero. No refresh/sync or reauthorization was invoked.
+Live display acceptance remains open; complete portfolio coverage also requires
+the separately proven access/client-selection gaps to be resolved.
+
+The earlier checkpoint notes below are retained as history. Their then-pending
+CI/build/merge statements are superseded by this section and the release record;
+they do not authorize a second publication attempt.
+
+## Historical R2 continuation: publication remains authorized
 
 ### Exact Google checkpoint CI and expanded publication scope
 
@@ -243,17 +302,18 @@ Root owns this status file, public-route financial acceptance tests, Git
 checkpoints, and PR. The backend implementation agent owns the shared Google
 reader, its two consumers, and its focused tests; reviewers are read-only.
 
-Next: checkpoint this reviewed R2 source, inspect exact-head CI including all
-164 immutable runtime cases and affected regressions, then rebuild a fresh A/B
-pair and complete the already authorized
-protocol-v5 publication. Do not deploy the superseded pair, bypass a failed gate,
-or clear another task's release lease.
+The reviewed R2 source, final A/B pair and exact-B gates are now complete as
+recorded above, and the release is verified with its lease inactive. Next: finish
+the isolated frontend display follow-up, verify its negative financial/range
+controls, and repeat the November 11 live acceptance after a fresh governed release.
+Do not deploy the superseded pair or this documentation branch, bypass a failed
+gate, clear another task's lease, or blindly repeat the completed publication.
 
 Issue #1006 is the shared continuation ledger and has reached GitHub's comment
 limit. The task PR will pin the exact checkpoint SHA; any ledger-body update
 must preserve concurrent tasks and be based on a fresh read.
 
-## Combined courier release follow-up
+## Historical combined checkpoints before final A
 
 Combined source `cf37d3dad789d123612c8c21b7768235abe561f2` passed all 22 workflows,
 including exact Mongo runtime run43110863290 (164/164/164 identities, full saved
