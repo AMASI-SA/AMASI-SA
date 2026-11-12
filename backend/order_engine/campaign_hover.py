@@ -310,6 +310,33 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
             else:
                 metric["sales"] += sales
 
+    # Resolve FX for all foreign-currency campaign facts in one bounded read.
+    # Never execute one database query per campaign while loading the order page.
+    fx_keys = {
+        (_text(d["account"].get("id")), d["date"])
+        for d in qualified.values()
+        if _amount(d["spend_row"].get("spend_sar")) is None
+        and _text(d["spend_row"].get("currency_native") or
+                  d["account"].get("currency_native")).upper() not in {"", "SAR"}
+        and _amount(d["spend_row"].get("spend_native")) is not None
+    }
+    fx_rows = []
+    if fx_keys:
+        try:
+            fx_rows = await db.ads_v2_spend_daily.find(
+                {"user_id": user_id,
+                 "account_id": {"$in": sorted({k[0] for k in fx_keys})},
+                 "date": {"$in": sorted({k[1] for k in fx_keys})}},
+                {"_id": 0, "account_id": 1, "date": 1,
+                 "fx_rate_to_sar": 1, "currency_native": 1},
+            ).max_time_ms(1200).limit(251).to_list(251)
+        except Exception:
+            fx_rows = []
+    fx_lookup = (
+        {(_text(row.get("account_id")), _text(row.get("date"))): row for row in fx_rows}
+        if len(fx_rows) <= 250 else {}
+    )
+
     result = {}
     for cid in campaign_ids:
         entries = by_campaign[cid]
@@ -335,10 +362,7 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         if spend_sar is None and currency == "SAR":
             spend_sar = amount
         if spend_sar is None and currency != "SAR" and amount is not None:
-            daily = await db.ads_v2_spend_daily.find_one(
-                {"user_id": user_id, "account_id": account["id"], "date": detail["date"]},
-                {"_id": 0, "fx_rate_to_sar": 1, "currency_native": 1},
-            )
+            daily = fx_lookup.get((_text(account.get("id")), detail["date"]))
             fx = _amount((daily or {}).get("fx_rate_to_sar"))
             if fx is not None and fx > 0 and _text((daily or {}).get("currency_native")).upper() == currency:
                 spend_sar = amount * fx
