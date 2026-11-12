@@ -11,6 +11,8 @@ on:
       - "backend/product_v2_recent_sync_routes.py"
       - "backend/tests/test_dashboard_card_snapshots.py"
       - "backend/tests/test_google_dashboard_spend.py"
+      - "backend/tests/test_google_reporting_account_selection.py"
+      - "scripts/set_google_reporting_accounts.py"
       - "backend/tests/test_dashboard_google_financial_source.py"
       - "backend/tests/test_dashboard_snapshot_cache.py"
       - "backend/tests/test_product_v2_recent_sync_cadence.py"
@@ -19,6 +21,7 @@ on:
       - "frontend/src/hooks/useDashboardCardSnapshot*"
       - "frontend/src/services/dashboardCardSnapshot*"
       - "frontend/src/services/mezanProductsV2*"
+      - "frontend/src/lib/orderCityLabel*"
       - ".github/workflows/dashboard-card-cadence.yml"
   workflow_dispatch:
 
@@ -63,6 +66,7 @@ jobs:
           backend/tests/test_dashboard_snapshot_cache.py
           backend/tests/test_dashboard_card_snapshots.py
           backend/tests/test_google_dashboard_spend.py
+          backend/tests/test_google_reporting_account_selection.py
           backend/tests/test_dashboard_google_financial_source.py
           backend/tests/test_product_v2_recent_sync_cadence.py
           backend/tests/test_product_v2_recent_sync_contract.py
@@ -106,6 +110,7 @@ jobs:
           src/services/dashboardCardSnapshot.test.js
           src/pages/AdvancedDashboard.cardRefresh.test.jsx
           src/pages/AdvancedDashboard.latestOrders.test.jsx
+          src/lib/orderCityLabel.test.js
           src/pages/AdvancedDashboard.cartFreeze.test.jsx
           src/pages/AdvancedDashboard.mobile.test.jsx
           src/pages/AdvancedDashboard.campaignJobs.test.jsx
