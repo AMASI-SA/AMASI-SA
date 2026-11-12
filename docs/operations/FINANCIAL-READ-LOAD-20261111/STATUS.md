@@ -1,6 +1,6 @@
 # Financial read load — bounded first slice
 
-**Latest state: PR #1892 is merged; authenticated shared source is fast-forwarded and the actual adapter is next. Live publication has not started.** This copy is a documentation-only continuation on `codex/financial-read-load-merged-evidence-20261112`. Never deploy the evidence branch. The immutable release source/intent and production merge are recorded below.
+**Latest state: actual shared adapter passed with the reviewed identity and artifacts; own prepare/prepublish and publication are next.** This copy is a documentation-only continuation on `codex/financial-read-load-merged-evidence-20261112`. Never deploy the evidence branch. The immutable release source/intent and production merge are recorded below.
 
 ## Change contract
 
@@ -212,3 +212,12 @@ Actual shared preflight ran the official guard and found `active:false`, product
 Root fetched and asserted the exact remote M, rechecked inactive guard, and fast-forwarded `/app` normally. The resulting tree equals reviewed B `654da296269fb22348e87e0629de47ab942ad18a`; tracked/staged source remains clean. Content/mode hashes prove all 120 platform files were preserved exactly; manifest SHA256 `ba36f9881479238f135d563c1e007e3ebed42a3bb665fe5a899564fe5f4a7170`. No reset, lease or publication was performed. A partial UI command-entry attempt was cleared before submission; only the complete inspected preflight command ran.
 
 Root owns this serialized release handoff. Next: run the actual configured `yarn build` adapter in `/app/frontend` using the exact reviewed public origin and bytecode disabled, preserve sanitized evidence, then own prepare/prepublish, one authorized publication, newer explicit deployment success, official verify3/inactive and bounded read-only UI acceptance. No accounting/provider writes, preparation changes or paid Emergent chat. This evidence branch remains documentation only and must never be deployed. Issue #1006's previously recorded persistence limitation still applies; PR1892 plus this branch carry the verified checkpoint.
+
+
+## Actual configured adapter passed — 2026-11-12 14:48:55 UTC
+
+The actual shared `/app/frontend` `yarn build` completed exit 0 in 95.324 seconds with the reviewed public client origin and bytecode suppression. Final adapter JSON reports `built:true`, protocol5, exact A `d94930510a92e2c426617725d21b9659bb8a9b1c`, runtime `rg5-ea9d6b2941dd1934ea45e052004b374e9fdd1458d7f8f8f72723a8c50a9f61fa`, and artifact `d06c6e7a4345c85566c6eab9017d8e949e49d2d714a2c2a7374c3001ce7eee31`. Retained proof SHA256 exactly matches reviewed `947f9a5c81e106ed8b2c2d49be4718e688978d91680abd5ae95eb80a779b72e1`; tracked source remains clean.
+
+Frontend package:1437files, treeSHA256 `1ca86d9ddfb73296262b56d439fd5748e76eaa18129af8ead5f11c6ebe399d9a`, isolated runtime artifact verified, JSON MIME contract. Backend package:1176files, treeSHA256 `b6aed7c34763c5b717a868fac1e920dfd5e1ce5f8bdcbca0222454cdf0fe250a`, isolated and health checks true, no sibling frontend or Git directory. Root asserted all these gates against the emitted result. Complete shared adapter log is `/tmp/mezan-pr1892-adapter-20261112.log`, 173304bytes, SHA256 `7234281f599ebe60e99896b2995c80b8e2993e3c88c61bcb2814aa3ed1416574`; compact results are recorded here and in release-checks.json for durable continuation.
+
+Emergent management UI is accessible and still shows previous publication100 `0cdea89`, Nov12 05:18AM Riyadh. No publication click or own lease yet. Next: own `prepare --actor codex-financial-read-load-20261112`, immediate `prepublish`, one publication, newer explicit success, official verify3/inactive and bounded live UI acceptance. The actual cloud snapshot handoff remains unproved until those deployed checks pass.

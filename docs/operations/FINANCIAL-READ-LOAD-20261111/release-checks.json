@@ -186,7 +186,7 @@
     "published": false,
     "shared_app_changed": true,
     "own_lease_acquired": false,
-    "actual_shared_adapter_run": false,
+    "actual_shared_adapter_run": true,
     "fresh_shared_guard_status_available": true,
     "blocker": null,
     "authenticated_at_checkpoint": "2026-11-12 14:43:48 UTC",
@@ -196,7 +196,38 @@
     "untracked_platform_files_preserved": 120,
     "platform_manifest_sha256": "ba36f9881479238f135d563c1e007e3ebed42a3bb665fe5a899564fe5f4a7170",
     "last_observed_live_release_id": "rg5-efde36a8ffed59bbfbfaa1521401fe29a3d59923a59102cd0e34305a38a0e33c",
-    "next": "actual configured shared adapter, own prepare/prepublish, one publication, official verify3/inactive"
+    "next": "own prepare/prepublish, one publication, official verify3/inactive, read-only UI acceptance",
+    "actual_shared_adapter": {
+      "returncode": 0,
+      "seconds": 95.324,
+      "source_git_sha": "d94930510a92e2c426617725d21b9659bb8a9b1c",
+      "runtime_release_id": "rg5-ea9d6b2941dd1934ea45e052004b374e9fdd1458d7f8f8f72723a8c50a9f61fa",
+      "artifact_sha256": "d06c6e7a4345c85566c6eab9017d8e949e49d2d714a2c2a7374c3001ce7eee31",
+      "proof_sha256": "947f9a5c81e106ed8b2c2d49be4718e688978d91680abd5ae95eb80a779b72e1",
+      "built": true,
+      "protocol_version": 5,
+      "log_bytes": 173304,
+      "log_sha256": "7234281f599ebe60e99896b2995c80b8e2993e3c88c61bcb2814aa3ed1416574",
+      "frontend": {
+        "file_count": 1437,
+        "package_tree_sha256": "1ca86d9ddfb73296262b56d439fd5748e76eaa18129af8ead5f11c6ebe399d9a",
+        "isolated_runtime_artifact_verified": true,
+        "content_type_contract": "application/json"
+      },
+      "backend": {
+        "file_count": 1176,
+        "package_tree_sha256": "b6aed7c34763c5b717a868fac1e920dfd5e1ce5f8bdcbca0222454cdf0fe250a",
+        "isolated_verified": true,
+        "health_verified": true,
+        "sibling_frontend_present": false,
+        "git_directory_present": false
+      }
+    },
+    "last_visible_publication": {
+      "ordinal": 100,
+      "id": "0cdea89",
+      "at": "2026-11-12 05:18 Asia/Riyadh"
+    }
   },
   "continuity": {
     "evidence_branch": "codex/financial-read-load-merged-evidence-20261112",
