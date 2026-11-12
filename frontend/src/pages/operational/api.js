@@ -2,6 +2,8 @@ import api from '../../lib/api';
 const base = '/operational-balances';
 const data = promise => promise.then(response => response.data);
 export const operationalApi = {
+  previewDeliveryAfterStart: (body, config = {}) => data(api.post(`${base}/delivery-after-start/preview`, body, {timeout: 30000, ...config})),
+  confirmDeliveryAfterStart: body => data(api.post(`${base}/delivery-after-start/confirm`, body)),
   customerWalletContext: (config = {}) => data(api.get(`${base}/customer-wallet/context`, config)),
   saveCustomerWalletSnapshot: body => data(api.post(`${base}/customer-wallet/snapshot`, body)),
   receivingInvoiceCoverage: (config = {}) => data(api.get(`${base}/supplier-invoice-review`, {...config, params: {...config.params, receiving_only: true}})),

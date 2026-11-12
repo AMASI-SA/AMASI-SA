@@ -409,6 +409,8 @@ def make_operational_balance_router(db, current_user):
                 permission = "move"
         elif request.method == "POST" and path == "/refresh":
             permission = "reports"
+        elif request.method == "POST" and path in {"/delivery-after-start/preview", "/delivery-after-start/confirm"}:
+            permission = "bank_manage"
         elif request.method == "POST" and path in {"/movements", "/inventory-purchases", "/supplier-adjustments"}:
             permission = "move"
         elif request.method == "POST" and (path in {"/customer-returns", "/customer-exchanges"}
@@ -1258,7 +1260,9 @@ def make_operational_balance_router(db, current_user):
                 fail("operational_actor_scope_changed", "تغير نطاق الجلسة؛ أعد فتح الصفحة", 409)
             if state["status"] == "active":
                 await accounting_inactive(db, owner)
-            result.update(session_scope=digest([owner, actor["id"]]), permissions={"reports": True})
+            result.update(session_scope=digest([owner, actor["id"]]), permissions={"reports": True,
+                "confirm_delivery_after_start": state['status'] == 'active' and latest_actor.get('role') == 'owner'
+                                                and latest_actor['id'] == owner})
             return result
         return await run_visible_report_read(request, read_page)
 
@@ -1292,6 +1296,8 @@ def make_operational_balance_router(db, current_user):
     attach_financial_activity_routes(router, db, current_user, scope)
     from operational_completed_shipping_routes import attach_completed_shipping_routes
     attach_completed_shipping_routes(router, db, current_user, scope, guarded)
+    from operational_delivery_confirmation_routes import attach_delivery_confirmation_routes
+    attach_delivery_confirmation_routes(router, db, current_user, scope, guarded)
     from operational_demand_refresh_routes import attach_demand_refresh_routes
     attach_demand_refresh_routes(router, db, current_user, scope)
     return router

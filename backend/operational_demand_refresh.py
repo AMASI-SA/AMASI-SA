@@ -6,9 +6,11 @@ commit starts, its exact result is observed before releasing the lease.
 Ordinary operational writers never enter this context and retain their gates.
 """
 import asyncio
+from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 import logging
+import time
 from threading import Event
 from uuid import uuid4
 
@@ -124,6 +126,31 @@ class DemandRefreshContext:
 
 def demand_context():
     return _CURRENT.get()
+
+
+@contextmanager
+def refresh_stage(stage):
+    """One timing record per awaited phase, only inside a visible refresh.
+
+    Call sites pass fixed stage names, never owner/order data or exception text.
+    This observes the existing request; it starts no task or additional read.
+    """
+    if _CURRENT.get() is None:
+        yield
+        return
+    started = time.monotonic()
+    outcome = "complete"
+    try:
+        yield
+    except asyncio.CancelledError:
+        outcome = "cancelled"
+        raise
+    except BaseException:
+        outcome = "failed"
+        raise
+    finally:
+        _LOG.info("operational_refresh_stage stage=%s duration_ms=%.3f outcome=%s",
+                  stage, (time.monotonic() - started) * 1000, outcome)
 
 
 async def checkpoint():

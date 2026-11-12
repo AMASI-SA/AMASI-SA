@@ -338,9 +338,18 @@ def test_no_carrier_confirmation_from_order_updated_or_workflow_timestamp(old):
         r['created_at']='2026-10-06T01:00:00+00:00'
     r['shipments'][0].pop('delivered_at'); r['shipping'].pop('delivered_at')
     state=calculated(d)
-    assert fee_total(state)==0 and 'shipping:100' not in state['engine']['facts']
-    table=next(t for t in build_financial_position(state)['currencies']['SAR']['tables'] if t['id']=='courier_fee_review')
-    assert table['rows'][0]['samples']=='10'
+    if old:
+        assert fee_total(state)==0 and 'shipping:100' not in state['engine']['facts']
+        table=next(t for t in build_financial_position(state)['currencies']['SAR']['tables'] if t['id']=='courier_fee_review')
+        assert table['rows'][0]['samples']=='10'
+    else:
+        # Creation after opening plus delivered status is now sufficient. The
+        # update/workflow clock still cannot become an actual delivery time.
+        assert fee_total(state) == 10
+        proof = state['engine']['facts']['delivery_event:100']
+        assert proof['recognition_basis'] == 'delivered_order_created_after_start'
+        assert proof['delivered_at'] is state['engine']['facts']['shipping:100']['delivered_at'] is None
+        assert 'cod_collection:100' not in state['engine']['facts']
 
 
 def test_previously_unlinked_poststart_courier_fee_accrues_once_after_previous_calculation():

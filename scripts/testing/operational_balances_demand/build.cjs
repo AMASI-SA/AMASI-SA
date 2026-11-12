@@ -18,8 +18,10 @@ if (!out || !path.isAbsolute(out) || out.startsWith(root + path.sep)) throw Erro
     build:{outDir:path.join(out,'dist'),emptyOutDir:false},
     define:{'process.env.NODE_ENV':'"production"','process.env.REACT_APP_BACKEND_URL':'""'}});
   const files = ['backend/operational_financial_position_core.py', 'backend/operational_balance_completeness.py',
+    'backend/operational_delivery_confirmation.py',
     'frontend/src/pages/operational/OperationalFinancialPosition.jsx', 'frontend/src/pages/operational/PendingOrdersDialog.jsx',
-    'frontend/src/pages/operational/visibleOperationalRead.js', 'frontend/src/pages/operational/financialPosition.css'];
+    'frontend/src/pages/operational/api.js', 'frontend/src/pages/operational/visibleOperationalRead.js',
+    'frontend/src/pages/operational/financialPosition.css'];
   fs.writeFileSync(path.join(out,'source-manifest.json'), JSON.stringify(Object.fromEntries(files.map(file =>
     [file,crypto.createHash('sha256').update(fs.readFileSync(path.join(root,file))).digest('hex')])), null, 2));
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -1,6 +1,6 @@
 """COD source -> reducer -> real local Mongo movement/report parity regressions."""
 import pytest
-from test_operational_balance_integration import run, started, movement, NOW
+from test_operational_balance_integration import run, started, movement, START, NOW
 from test_operational_balance_source_fixes import shipping_data
 from operational_balance_service import refresh, report, create_movement
 from operational_balance_store import read
@@ -25,6 +25,10 @@ def test_cod_native_remaining_or_cash_custody_settles_once_without_double_bank(m
         await started(db)
         await native_order(db, method)
         before = report(await refresh(db,'owner',clock=NOW))
+        if method:
+            # The legacy collection contract does not invent the canonical
+            # order identity required by the newer delivery-status proof.
+            assert 'delivery_event:100' not in before['details']['facts']
         key, cod = next(iter(before['details']['cod_reports'].items()))
         assert (cod['gross'],cod['collected'],cod['customer_outstanding'],cod['confirmed_custody'],cod['settled'],cod['outstanding']) == ('300','300' if method else '100','0' if method else '200','200.00','0.00','200.00')
         assert before['summary']['actual_liquidity']=='1000.00'
@@ -47,6 +51,7 @@ def test_driver_non_cash_proof_creates_no_driver_custody_or_implicit_bank_cash(m
         await started(db)
         await native_order(db,method)
         result=report(await refresh(db,'owner',clock=NOW))
+        assert 'delivery_event:100' not in result['details']['facts']
         cod=next(iter(result['details']['cod_reports'].values()))
         assert cod['payment_method']==method
         assert (cod['custody_amount'],cod['confirmed_custody'],cod['settled'],cod['outstanding'])==('0','0.00','0.00','0.00')
@@ -127,3 +132,85 @@ def test_customer_non_cash_confirmation_updates_proof_without_driver_or_bank_eff
         assert confirmed['summary']['actual_liquidity']=='1000.00'
         assert report(await refresh(db,'owner',clock=NOW))==confirmed
     run(scenario)
+
+
+@pytest.mark.parametrize('fault', ['ambiguous', 'foreign', 'wrong_order_id', 'reused_assignment_id'])
+def test_legacy_driver_compatibility_never_admits_an_ambiguous_or_foreign_assignment(fault):
+    async def scenario(db):
+        await started(db)
+        await native_order(db, 'cash')
+        if fault in {'ambiguous', 'reused_assignment_id'}:
+            await db.store_delivery_assignments.insert_one({
+                'user_id': 'owner', 'id': 'other-assignment' if fault == 'ambiguous' else 'assignment',
+                'order_number': '10' if fault == 'ambiguous' else 'another-order',
+                'driver_id': 'other-driver', 'status': 'delivered'})
+        elif fault == 'foreign':
+            await db.store_delivery_assignments.update_one({'user_id': 'owner'}, {'$set': {'user_id': 'other'}})
+        else:
+            await db.store_delivery_assignments.update_one({'user_id': 'owner'}, {'$set': {'order_id': 'another-order'}})
+        state = await refresh(db, 'owner', clock=NOW)
+        assert 'delivery_event:100' not in state['engine']['facts']
+        assert 'cod_collection:100' not in state['engine']['facts']
+        assert state['engine']['cod_reports'] == {}
+        assert not any(r['kind'] in {'shipping', 'cod'} and r['confirmed'] != '0.00'
+                       for r in state['engine']['obligations'].values())
+        assert any(i['code'].startswith('operational_delivery_') for i in state['engine']['issues'])
+        assert state['movements'] == []
+        assert (await db.store_delivery_collections.find_one({'user_id': 'owner'}))['amount'] == '200'
+        assert await db.general_ledger.count_documents({}) == 0
+    run(scenario)
+
+
+@pytest.mark.parametrize('method', ['cash', 'bank_transfer', 'card_terminal'])
+def test_held_delivery_evidence_preserves_the_established_independent_collection(method):
+    async def scenario(db):
+        await started(db)
+        await native_order(db, method)
+        first = await refresh(db, 'owner', clock=NOW)
+        assert first['engine']['facts']['cod_collection:100']['amount'] == ('200.00' if method == 'cash' else '0.00')
+        # A later canonical assignment introduces contradictory delivery proof.
+        # It cannot erase or rewrite the already verified collection contract.
+        await db.store_delivery_assignments.update_one({'user_id': 'owner'}, {
+            '$set': {'order_id': '100', 'active': True}})
+        await db.unified_orders.update_one({'user_id': 'owner'}, {'$set': {
+            'raw_by_source.salla_direct.status_changed_at': START,
+            'raw_by_source.salla_direct.paid_amount': '200'}})
+        held = await refresh(db, 'owner', clock=NOW)
+        assert any(i['code'] == 'operational_delivery_timestamp_before_order' for i in held['engine']['issues'])
+        assert held['engine']['facts']['cod_collection:100'] == first['engine']['facts']['cod_collection:100']
+        assert held['engine']['cod_reports'] == first['engine']['cod_reports']
+        assert held['engine']['obligations']['cod:100'] == first['engine']['obligations']['cod:100']
+        assert held['movements'] == first['movements'] == []
+        assert report(held)['summary']['actual_liquidity'] == '1000.00'
+    run(scenario)
+
+
+def test_recorded_status_delivery_cannot_downgrade_to_the_legacy_assignment_contract():
+    from test_operational_balance_delivery_start_rule import calculate, undated
+    data = undated('contract_driver')
+    first = calculate(data)
+    assert first['engine']['facts']['delivery_event:100']['delivered_at'] is None
+    data['store_delivery_assignments'][0].pop('order_id')
+    held = calculate(data, first)
+    assert any(i['code'] == 'operational_delivery_assignment_order_conflict' for i in held['engine']['issues'])
+    assert held['engine']['facts'] == first['engine']['facts']
+    assert held['engine']['obligations'] == first['engine']['obligations']
+    assert held['engine']['cod_reports'] == first['engine']['cod_reports']
+
+
+def test_unreconciled_owner_delivery_proof_cannot_downgrade_to_a_legacy_assignment():
+    from test_operational_balance_delivery_start_rule import calculate, undated
+    from test_operational_balance_delivery_cutover import active
+    data = undated('contract_driver')
+    data['store_delivery_assignments'][0].pop('order_id')
+    prior = active()
+    # Even an incomplete saved proof must force strict revalidation. Its
+    # presence cannot silently enable the older assignment-only contract.
+    prior['engine'] = {'facts': {'owner_delivery_after_start:100': {
+        'schema': 'operational_owner_delivery_confirmation_v1', 'order_id': '100'}}}
+    held = calculate(data, prior)
+    assert any(i['code'].startswith('operational_delivery_') for i in held['engine']['issues'])
+    assert held['engine']['facts'] == prior['engine']['facts']
+    assert not any(r['kind'] in {'shipping', 'cod'} and r['confirmed'] != '0.00'
+                   for r in held['engine']['obligations'].values())
+    assert held['engine']['cod_reports'] == {} and held['movements'] == []

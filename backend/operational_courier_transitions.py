@@ -169,7 +169,7 @@ def verified_webhook_transition(body, raw, current, owner):
             "shipment_id": shipment, "waybill": waybill, "at": at.isoformat()}
 
 
-def order_delivery_time(raw, source, history, end, *, provenance=None):
+def order_delivery_time(raw, source, history, end, *, provenance=None, allow_undated=False, undated_before=None):
     """Require agreement of authoritative order status, explicit dates and history."""
     order_id, number = _text(raw.get("id")), _text(raw.get("reference_id") or raw.get("order_number"))
     if any(source.get(k) is not None and _text(source[k]) != value
@@ -240,12 +240,30 @@ def order_delivery_time(raw, source, history, end, *, provenance=None):
         # unfinished activity timeline. A later non-delivered observation is
         # still contradictory; an earlier dispatch cannot demand delivery proof.
         other_times.update(_instant(row.get('at')) for row in activities if row.get('delivered') is not True)
+    elif activities and allow_undated and not any(row.get('delivered') is True for row in activities):
+        other_times.update(_instant(row.get('at')) for row in activities)
     elif activities:
         transition = carrier_activity_transition(activities, current, order_id)
         times.add(_instant(transition["at"]))
         if provenance is not None:
             provenance.update(transition)
     if not times:
+        if allow_undated:
+            # A new delivered order can be eligible without an event date.
+            # Only this absence is optional; identity, status, source version
+            # and any contradictory history above remain required.
+            created = _instant(raw.get('date') or raw.get('created_at') or raw.get('order_date'))
+            if version is not None and not created <= _instant(version) <= end:
+                _fail('canonical_source_stale')
+            boundary = min(_instant(version) if version is not None else end,
+                           _instant(undated_before) if undated_before is not None else end)
+            if any(at > end for at in other_times):
+                _fail('event_in_future')
+            if any(at < created for at in other_times):
+                _fail('timestamp_before_order')
+            if other_times and max(other_times) >= boundary:
+                _fail('timestamp_ambiguous')
+            return None
         _fail("timestamp_missing")
     if len(times) != 1 or other_times and max(other_times) >= min(times):
         _fail("timestamp_ambiguous")
@@ -270,9 +288,10 @@ def carrier_history_snapshot(raw, current):
     return {**raw, "shipping": {}, "shipment": None, "shipments": [shipment]}
 
 
-async def load_delivery_history(db, owner, sources, *, max_rows, completion_keys=()):
+async def load_delivery_history(db, owner, sources, *, max_rows, completion_keys=(), status_order_numbers=()):
     """Read only typed transition observations for delivered, identified orders."""
     numbers = set()
+    status_order_numbers = set(status_order_numbers)
     for source in sources:
         raw = (source.get("raw_by_source") or {}).get("salla_direct") or {}
         if not isinstance(raw, dict):
@@ -280,13 +299,14 @@ async def load_delivery_history(db, owner, sources, *, max_rows, completion_keys
         current = source.get("salla_shipping_current") or raw.get("salla_shipping_current")
         status = raw.get("status")
         effective = status.get("customized") or status if isinstance(status, dict) else status
+        number = _text(raw.get("reference_id") or raw.get("order_number"))
+        undated_status = number in status_order_numbers and _state(effective) is True
         completion = isinstance(current, dict) and any(
             str(current.get(key) or '').casefold() in completion_keys for key in ('company_code', 'company_name'))
-        if (not isinstance(current, dict)
+        if not undated_status and (not isinstance(current, dict)
                 or not completion and _state(effective) is not True and _status(current.get("status")) not in DELIVERED):
             continue
-        number = _text(raw.get("reference_id") or raw.get("order_number"))
-        if number and _text(raw.get("id")) and (completion or (
+        if number and _text(raw.get("id")) and (undated_status or completion or (
                 _text(current.get("shipment_id")) and _text(current.get("tracking_number")))):
             numbers.add(number)
     projection = {"_id": 0, **{k: 1 for k in ("user_id", "order_number", "provider_order_id", "source", "event_type",

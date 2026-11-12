@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import {
     buildFinancialPositionWorkbook, collectionLabel, currencyCodes, deliveryOrderLabel, deliveryPartyKey,
-    destinationLabel, filterDeliveries, formatPositionCount, formatPositionMoney,
+    destinationLabel, filterDeliveries, formatPositionCount, formatPositionMoney, shippingRecognitionLabel,
 } from "./financialPositionPresentation";
 
 function report() {
@@ -96,6 +96,60 @@ test("prepaid shipping export preserves completion separately from the unproven 
     expect(order[header.indexOf("أساس احتساب أجرة الشحن")]).toBe("مدفوع مقدمًا عند تم التنفيذ");
     expect(order[header.indexOf("صندوق خصم الأجرة")]).toBe("صندوق سلة التجريبي");
     expect(order[header.indexOf("المتبقي من الأجرة")]).toBe("0.00");
+});
+
+test("post-start delivered status identifies recognition without supplying a delivery date", () => {
+    const recognized = { recognition_basis: "delivered_order_created_after_start", delivered_at: null,
+        recorded_at: "2026-11-01T07:00:00Z" };
+    expect(shippingRecognitionLabel(recognized)).toBe("طلب تم توصيله وأُنشئ بعد بدء التشغيل");
+    expect(shippingRecognitionLabel({ ...recognized, recognition_basis: "owner_confirmed_after_start" }))
+        .toBe("تأكيد المالك بالتوصيل بعد بدء التشغيل");
+    expect(shippingRecognitionLabel({ delivered_at: "2026-11-01T06:00:00Z" })).toBe("عند تم التوصيل");
+    expect(shippingRecognitionLabel({ ...recognized, recognition_basis: "unknown" })).toBe("غير متاح");
+    expect(shippingRecognitionLabel({ ...recognized, recognition_event: "order_completed", payment_mode: "deferred" }))
+        .toBe("أجرة مستحقة عند تم التنفيذ");
+});
+
+test.each([
+    ["delivered_order_created_after_start", "طلب تم توصيله وأُنشئ بعد بدء التشغيل"],
+    ["owner_confirmed_after_start", "تأكيد المالك بالتوصيل بعد بدء التشغيل"],
+])("%s export keeps first recording time, unknown delivery time and pending money distinct", (basis, label) => {
+    const payload = report();
+    payload.as_of = "2026-11-02T12:00:00Z";
+    const data = payload.currencies.SAR;
+    data.tables.push({ id: "drivers", title: "مناديب المتجر", complete: false, columns: [
+        { key: "name", label: "المندوب", type: "text" },
+        { key: "delivered_orders", label: "تواصيل مثبتة", type: "count" },
+        { key: "confirmed_orders", label: "تواصيل محتسبة", type: "count" },
+        { key: "payable", label: "علينا", type: "money" },
+        { key: "pending_orders", label: "طلبات غير مؤكدة", type: "exceptions" },
+    ], rows: [{ id: "driver", name: "مندوب تجريبي", delivered_orders: 3, confirmed_orders: 1,
+        payable: "10.00", pending_orders: 2 }] });
+    data.deliveries.rows = [{ id: "status-delivery", order_id: "status-order", order_number: "D-101",
+        party_id: "driver", party_type: "store_driver", party_name: "مندوب تجريبي",
+        recognition_basis: basis, recorded_at: "2026-11-01T07:00:00Z", delivered_at: null,
+        shipping_confirmed: "10.00", shipping_settled: "0.00", shipping_outstanding: "10.00",
+        collection_status: "not_confirmed", driver_custody: null, store_collection: null }];
+    const before = JSON.stringify(payload);
+    const workbook = buildFinancialPositionWorkbook(payload, "SAR");
+    const rows = workbook.getWorksheet("تفاصيل الطلبات").getSheetValues().filter(Boolean);
+    const header = rows.find(values => values[1] === "رقم الطلب");
+    const order = rows.find(values => values[1] === "D-101");
+    expect(order[header.indexOf("تاريخ التسليم — الرياض")]).toBe("غير متاح");
+    expect(order[header.indexOf("وقت التسجيل — الرياض")]).toContain("10:00");
+    expect(order[header.indexOf("أساس احتساب أجرة الشحن")]).toBe(label);
+    expect(order[header.indexOf("أجرة الشحن المؤكدة")]).toBe("10.00");
+    expect(order[header.indexOf("حالة التحصيل")]).toBe("التحصيل غير مؤكد");
+    expect(order[header.indexOf("عهدة المندوب")]).toBe("غير متاح");
+    expect(order[header.indexOf("تحصيل المتجر")]).toBe("غير متاح");
+    const driverRows = workbook.worksheets.find(sheet => sheet.name.includes("مناديب المتجر")).getSheetValues().filter(Boolean);
+    const driverHeader = driverRows.find(values => values[1] === "المندوب");
+    const driver = driverRows.find(values => values[1] === "مندوب تجريبي");
+    expect(driver[driverHeader.indexOf("تواصيل مثبتة")]).toBe("3");
+    expect(driver[driverHeader.indexOf("تواصيل محتسبة")]).toBe("1");
+    expect(driver[driverHeader.indexOf("طلبات غير مؤكدة")]).toBe("2");
+    expect(driver[driverHeader.indexOf("علينا")]).toBe("10.00");
+    expect(JSON.stringify(payload)).toBe(before);
 });
 
 test("export refuses inactive, unauthorized, foreign-currency and invalid contracts", () => {

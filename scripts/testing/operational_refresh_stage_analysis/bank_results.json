@@ -1,0 +1,90 @@
+{
+  "synthetic_only": true,
+  "stage": "bank",
+  "python": "3.12.14",
+  "source_sha": "2c875b5f16b0d58e46effdd7acd28a91041b62fb",
+  "source_hashes": {
+    "backend/operational_balance_sources.py": "c9625555c0d9a3e34d805c7b11e6a63e40fe008c89dfadc4301b63e75b23a9df",
+    "backend/operational_financial_activity.py": "ce4b1fe4737cf941df1b4df49bc4361ea8bffd83e6508f54bc7f7229a06fe0d9"
+  },
+  "measurements": [
+    {
+      "saved_movements": 500,
+      "new_movements": 100,
+      "elapsed_seconds": 0.194917,
+      "instrumented": false,
+      "measured_movement_visits": null,
+      "expected_movement_visits": 55050,
+      "first_after_balance": "10501.00",
+      "last_after_balance": "10600.00",
+      "all_sequential_balances_exact": true
+    },
+    {
+      "saved_movements": 2000,
+      "new_movements": 100,
+      "elapsed_seconds": 0.8086,
+      "instrumented": false,
+      "measured_movement_visits": null,
+      "expected_movement_visits": 205050,
+      "first_after_balance": "12001.00",
+      "last_after_balance": "12100.00",
+      "all_sequential_balances_exact": true
+    },
+    {
+      "saved_movements": 2000,
+      "new_movements": 500,
+      "elapsed_seconds": 3.805844,
+      "instrumented": false,
+      "measured_movement_visits": null,
+      "expected_movement_visits": 1125250,
+      "first_after_balance": "12001.00",
+      "last_after_balance": "12500.00",
+      "all_sequential_balances_exact": true
+    },
+    {
+      "saved_movements": 5000,
+      "new_movements": 500,
+      "elapsed_seconds": 8.234589,
+      "instrumented": false,
+      "measured_movement_visits": null,
+      "expected_movement_visits": 2625250,
+      "first_after_balance": "15001.00",
+      "last_after_balance": "15500.00",
+      "all_sequential_balances_exact": true
+    },
+    {
+      "saved_movements": 5000,
+      "new_movements": 1000,
+      "elapsed_seconds": 17.821704,
+      "instrumented": false,
+      "measured_movement_visits": null,
+      "expected_movement_visits": 5500500,
+      "first_after_balance": "15001.00",
+      "last_after_balance": "16000.00",
+      "all_sequential_balances_exact": true
+    }
+  ],
+  "operation_count": {
+    "saved_movements": 1000,
+    "new_movements": 200,
+    "elapsed_seconds": 0.778914,
+    "instrumented": true,
+    "measured_movement_visits": 220100,
+    "expected_movement_visits": 220100,
+    "first_after_balance": "11001.00",
+    "last_after_balance": "11200.00",
+    "all_sequential_balances_exact": true
+  },
+  "cancellation": {
+    "saved_movements": 20000,
+    "status": 499,
+    "audit_projections_completed_after_disconnect_queued": 1,
+    "single_projection_ms": 66.862,
+    "heartbeat_delay_ms": 67.217,
+    "disconnect_to_return_ms": 67.436,
+    "retained_claim_intents": 1,
+    "financial_state_unchanged": true,
+    "pending_tasks": 0,
+    "lease_released": true
+  }
+}

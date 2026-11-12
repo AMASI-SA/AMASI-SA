@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.requests import Request
 
 from operational_balance_store import STATES, digest, fail
-from operational_demand_refresh import run_visible_refresh
+from operational_demand_refresh import refresh_stage, run_visible_refresh
 
 
 class VisibleRefreshInput(BaseModel):
@@ -61,8 +61,10 @@ def attach_demand_refresh_routes(router, db, current_user, scope):
 
         async def update():
             from operational_visible_evidence import acquire_visible_evidence
-            await acquire_visible_evidence(db, owner)
-            state = await refresh(db, owner)
+            with refresh_stage("native_evidence"):
+                await acquire_visible_evidence(db, owner)
+            with refresh_stage("aggregate"):
+                state = await refresh(db, owner)
             return {"status": "refreshed", "as_of": state.get("engine", {}).get("as_of"),
                     "revision": state.get("revision"), "session_scope": session_scope}
 

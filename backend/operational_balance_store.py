@@ -70,7 +70,7 @@ async def mutate(db, owner, operation):
     Callers revalidate source identity/permissions on every retry. No process
     mutex and no last-write-wins fallback; concurrent workers use the revision.
     """
-    from operational_demand_refresh import demand_context, run_calculation
+    from operational_demand_refresh import demand_context, refresh_stage, run_calculation
 
     async def prepare_change(function, *args):
         # Only a visible refresh owns cancellable calculation here. Explicit
@@ -81,16 +81,19 @@ async def mutate(db, owner, operation):
 
     for _ in range(12):
         await check_authorization()
-        stored = await _raw_state(db, owner)
-        before = await logical_state(db, owner, stored)
-        after = await prepare_change(deepcopy, before)
+        with refresh_stage("snapshot_load"):
+            stored = await _raw_state(db, owner)
+            before = await logical_state(db, owner, stored)
+            after = await prepare_change(deepcopy, before)
         result = await operation(after)
         await check_authorization()
-        if await prepare_change(lambda: after == before):
-            return result
+        with refresh_stage("snapshot_compare"):
+            if await prepare_change(lambda: after == before):
+                return result
         after["revision"] = before["revision"] + 1
         try:
-            packed, pages = await prepare_change(prepare, owner, stored, before, after, MAX_STATE_BYTES)
+            with refresh_stage("snapshot_pack"):
+                packed, pages = await prepare_change(prepare, owner, stored, before, after, MAX_STATE_BYTES)
         except ArchiveError:
             fail("operational_audit_archive_invalid", "تعذر التحقق من اكتمال سجل التدقيق التشغيلي", 503)
         except CapacityError:
@@ -116,8 +119,9 @@ async def mutate(db, owner, operation):
         # Demand refresh admits this write only while connected, then observes
         # its atomic result even if the page leaves. Other writers are unchanged.
         from operational_demand_refresh import run_commit
-        if await run_commit(commit):
-            return result
+        with refresh_stage("snapshot_commit"):
+            if await run_commit(commit):
+                return result
     fail("operational_concurrent_change", "تغيرت البيانات بالتزامن؛ أعد المحاولة")
 
 

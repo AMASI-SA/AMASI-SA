@@ -92,6 +92,8 @@ export function deliveryOrderLabel(row) {
 
 export function shippingRecognitionLabel(row) {
     if (row?.recognition_event === "order_completed") return row.payment_mode === "deferred" ? "أجرة مستحقة عند تم التنفيذ" : "مدفوع مقدمًا عند تم التنفيذ";
+    if (row?.recognition_basis === "owner_confirmed_after_start") return "تأكيد المالك بالتوصيل بعد بدء التشغيل";
+    if (row?.recognition_basis === "delivered_order_created_after_start") return "طلب تم توصيله وأُنشئ بعد بدء التشغيل";
     return row?.delivered_at ? "عند تم التوصيل" : UNAVAILABLE;
 }
 
@@ -221,13 +223,14 @@ export function buildFinancialPositionWorkbook(report, currency, filters = {}) {
         ["حالة البيانات", data.deliveries?.complete === true ? "مكتملة" : "غير مكتملة"],
         ...readableMessages([DELIVERY_SCOPE_NOTE, ...(data.deliveries?.notes || [])]).map(note => [note]),
         [],
-        ["رقم الطلب", "معرف الطلب", "جهة التنفيذ", "نوع المنفذ", "تاريخ التسليم — الرياض", "طريقة الدفع", "جهة التحصيل", "حالة التحصيل",
+        ["رقم الطلب", "معرف الطلب", "جهة التنفيذ", "نوع المنفذ", "تاريخ التسليم — الرياض", "وقت التسجيل — الرياض", "طريقة الدفع", "جهة التحصيل", "حالة التحصيل",
             "أساس احتساب أجرة الشحن", "تاريخ التنفيذ — الرياض", "صندوق خصم الأجرة", ...DELIVERY_MONEY_COLUMNS.map(column => column.label)],
         ...orderRows.map(row => [positionText(row.order_number), positionText(row.order_id), positionText(row.party_name), PARTY_LABELS[row.party_type] || UNAVAILABLE,
-            row.delivered_at ? formatRiyadhDateTime(row.delivered_at) : UNAVAILABLE, paymentLabel(row.payment_method),
+            row.delivered_at ? formatRiyadhDateTime(row.delivered_at) : UNAVAILABLE,
+            row.recorded_at ? formatRiyadhDateTime(row.recorded_at) : UNAVAILABLE, paymentLabel(row.payment_method),
             [destinationLabel(row.collection_destination), row.destination_name].filter(Boolean).join(" · "), collectionLabel(row.collection_status),
             shippingRecognitionLabel(row), row.completed_at ? formatRiyadhDateTime(row.completed_at) : UNAVAILABLE, positionText(row.cash_account_name),
             ...DELIVERY_MONEY_COLUMNS.map(column => exportValue(row[column.key], "money"))]),
-    ], [24, 38, 32, 24, 26, 24, 52, 32, 34, 26, 32, ...DELIVERY_MONEY_COLUMNS.map(() => 26)]);
+    ], [24, 38, 32, 24, 26, 26, 24, 52, 32, 34, 26, 32, ...DELIVERY_MONEY_COLUMNS.map(() => 26)]);
     return workbook;
 }

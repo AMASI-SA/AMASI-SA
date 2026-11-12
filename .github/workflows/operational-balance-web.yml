@@ -120,6 +120,13 @@ jobs:
               ('test_operational_read_runtime', 10),
               ('test_operational_financial_review_groups', 1),
               ('test_operational_driver_review_packed_state', 3),
+              ('test_operational_balance_delivery_start_rule', 53),
+              ('test_operational_balance_piece_index', 13),
+              ('test_operational_balance_refresh_stage_timing', 5),
+              ('test_operational_balance_delivery_confirmation', 44),
+              ('test_operational_balance_delivery_confirmation_integration', 20),
+              ('test_operational_balance_delivery_confirmation_lifetime', 4),
+              ('test_operational_balance_delivery_confirmation_acquisition', 9),
           ):
               found = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == suite]
               assert len(found) >= minimum, suite + ' demand-only/completeness coverage missing'
@@ -321,11 +328,12 @@ jobs:
           const path = require('node:path');
           const out = process.env.OPERATIONAL_BALANCE_UAT_OUTPUT;
           const evidence = JSON.parse(fs.readFileSync(path.join(out, 'browser-evidence.json')));
-          if (evidence.synthetic_only !== true || evidence.results.length !== 6 ||
+          if (evidence.synthetic_only !== true || evidence.results.length !== 9 ||
               evidence.results.some(result => result.status !== 'PASS') || evidence.errors.length) {
-            throw Error('All six browser acceptance scenarios must execute and pass');
+            throw Error('All nine browser acceptance scenarios must execute and pass');
           }
-          for (const file of ['source-manifest.json', 'pending-orders-desktop.png', 'pending-orders-mobile.png']) {
+          for (const file of ['source-manifest.json', 'pending-orders-desktop.png', 'pending-orders-mobile.png',
+                              'manual-confirmation-desktop.png', 'manual-confirmation-pending.png']) {
             if (!fs.statSync(path.join(out, file)).size) throw Error('Missing browser evidence: ' + file);
           }
           JS
@@ -340,4 +348,6 @@ jobs:
             ${{ runner.temp }}/operational-balances-browser/browser-evidence.json
             ${{ runner.temp }}/operational-balances-browser/pending-orders-desktop.png
             ${{ runner.temp }}/operational-balances-browser/pending-orders-mobile.png
+            ${{ runner.temp }}/operational-balances-browser/manual-confirmation-desktop.png
+            ${{ runner.temp }}/operational-balances-browser/manual-confirmation-pending.png
           if-no-files-found: error

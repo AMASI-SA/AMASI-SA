@@ -89,7 +89,7 @@ test('advertising keeps latest daily snapshot and groups month by account and cu
 test('shipping counts distinct service orders including zero-cost delivered service without counting COD',async()=>{
  const shipped={id:'shipping:one',kind:'shipping',party_type:'store_driver',party_id:'driver',currency:'SAR',confirmed:'0.00'};
  await render({parties:[{party_type:'store_driver',party_id:'driver',currency:'SAR',name:'مندوب'}],obligations:[shipped,shipped,{...shipped,id:'shipping:two',confirmed:'20.00'},{...shipped,id:'shipping:three',confirmed:'0.00',expected:'20.00'},{...shipped,id:'cod:one',kind:'cod',confirmed:'300.00'}],details:{facts:{'shipping:one':{delivered_at:'2026-10-05T10:00:00Z'}}}});
- const text=section('الشحن ومناديب المتجر').textContent;expect(text).toContain('عدد الطلبات: 3');expect(text).toContain('التوصيلات المؤكدة: 2');expect(text).toContain('أجرة التوصيل المؤكدة: 20.00');
+ const text=section('الشحن ومناديب المتجر').textContent;expect(text).toContain('طلبات في كشف الأجور: 3');expect(text).toContain('تواصيل مثبتة: 2');expect(text).toContain('أجرة التوصيل المؤكدة: 20.00');
 });
 test('prepaid shipping at completion shows paid cost without declaring the order delivered',async()=>{
  const party={party_type:'courier',party_id:'aramex',currency:'SAR',name:'أرامكس',settled:'34.50',outstanding_payable:'0.00',outstanding_receivable:'0.00'};
@@ -97,22 +97,22 @@ test('prepaid shipping at completion shows paid cost without declaring the order
  const report={parties:[party],obligations:[paid],details:{facts:{'shipping-prepaid:one':{completed_at:paid.completed_at}}}};
  await render(report);
  let text=section('الشحن ومناديب المتجر').textContent;
- expect(text).toContain('عدد الطلبات: 1');
- expect(text).toContain('التوصيلات المؤكدة: 0');
+ expect(text).toContain('طلبات في كشف الأجور: 1');
+ expect(text).toContain('تواصيل مثبتة: 0');
  expect(text).toContain('أجرة الشحن المؤكدة: 34.50');
  expect(text).toContain('المدفوع مقدمًا عند «تم التنفيذ»: 34.50 SAR');
  expect(text).toContain('المتبقي: 0.00');
  await render({...report,details:{facts:{...report.details.facts,'shipping:one':{id:'aramex',party_type:'courier',delivered_at:'2026-11-06T10:00:00Z'}}}});
  text=section('الشحن ومناديب المتجر').textContent;
- expect(text).toContain('عدد الطلبات: 1');
- expect(text).toContain('التوصيلات المؤكدة: 1');
+ expect(text).toContain('طلبات في كشف الأجور: 1');
+ expect(text).toContain('تواصيل مثبتة: 1');
  expect(text).toContain('المدفوع مقدمًا عند «تم التنفيذ»: 34.50 SAR');
 });
 test('prepaid delivery proof belongs to the actual carrier and missing payment stays unknown',async()=>{
  const party={party_type:'courier',party_id:'aramex',currency:'SAR',name:'أرامكس'};
  await render({parties:[party],obligations:[{...party,id:'shipping-prepaid:one',kind:'shipping',order_id:'one',payment_mode:'prepaid',recognition_event:'order_completed',confirmed:'34.50'}],details:{facts:{'shipping:one':{id:'another-courier',party_type:'courier',delivered_at:'2026-11-06T10:00:00Z'}}}});
  const text=section('الشحن ومناديب المتجر').textContent;
- expect(text).toContain('التوصيلات المؤكدة: 0');
+ expect(text).toContain('تواصيل مثبتة: 0');
  expect(text).toContain('المدفوع مقدمًا عند «تم التنفيذ»: غير مكتمل SAR');
 });
 test('shipping fee components count once per order while preserving their total cost',async()=>{
@@ -122,9 +122,52 @@ test('shipping fee components count once per order while preserving their total 
   {...party,id:'shipping:one:cod_commission',kind:'shipping',fee_component:'cod_commission',confirmed:'5.00'},
  ],details:{facts:{'shipping:one':{id:'courier',party_type:'courier',delivered_at:'2026-11-05T10:00:00Z'}}}});
  const text=section('الشحن ومناديب المتجر').textContent;
- expect(text).toContain('عدد الطلبات: 1');
- expect(text).toContain('التوصيلات المؤكدة: 1');
+ expect(text).toContain('طلبات في كشف الأجور: 1');
+ expect(text).toContain('تواصيل مثبتة: 1');
  expect(text).toContain('أجرة التوصيل المؤكدة: 25.00');
+});
+test.each(['store_driver', 'courier'])('shipping uses the recorded delivered count for %s without recalculating money', async party_type => {
+ const party={party_type,party_id:'carrier',currency:'SAR',name:'جهة التوصيل',delivered_orders:3,confirmed_orders:1,
+   pending_orders:2,settled:'5.00',outstanding_payable:'20.00',outstanding_receivable:'40.00'};
+ const report={parties:[party],obligations:[
+  {...party,id:'shipping:one:base_shipping',kind:'shipping',fee_component:'base_shipping',confirmed:'20.00'},
+  {...party,id:'shipping:one:cod_commission',kind:'shipping',fee_component:'cod_commission',confirmed:'5.00'},
+ ],details:{facts:{'shipping:one':{id:'carrier',party_type,delivered_at:'2026-11-05T10:00:00Z'}}}};
+ const before=JSON.stringify(report);
+ await render(report);
+ let text=section('الشحن ومناديب المتجر').textContent;
+ expect(text).toContain('تواصيل مثبتة: 3');
+ expect(text).toContain('أجرة التوصيل المؤكدة: 25.00');
+ expect(text).toContain('المسدد: 5.00');
+ expect(text).toContain('المتبقي: 20.00');
+ expect(text).toContain('التحصيل المستحق لنا: 40.00');
+ expect(JSON.stringify(report)).toBe(before);
+ await render({...report,parties:[{...party,delivered_orders:0}]});
+ text=section('الشحن ومناديب المتجر').textContent;
+ expect(text).toContain('تواصيل مثبتة: 0');
+});
+test('delivery count fallback deduplicates status evidence and excludes another executor or estimates', async () => {
+ const party={party_type:'store_driver',party_id:'driver',currency:'SAR',name:'مندوب'};
+ const fee={...party,kind:'shipping',confirmed:'0.00'};
+ await render({parties:[party],obligations:[
+  {...fee,id:'shipping:one:base_shipping',fee_component:'base_shipping'},
+  {...fee,id:'shipping:one:cod_commission',fee_component:'cod_commission'},
+  {...fee,id:'shipping:two'}, {...fee,id:'shipping:three'},
+  {...fee,id:'shipping:estimate',expected:'20.00'}, {...fee,id:'cod:one',kind:'cod',confirmed:'300.00'},
+ ],details:{facts:{
+  'shipping:one':{id:'driver',party_type:'store_driver',recognition_basis:'delivered_order_created_after_start',
+    recorded_at:'2026-11-06T10:00:00Z',delivered_at:null},
+  'delivery_event:one':{id:'assignment-one',schema:'operational_delivery_status_v1',order_id:'one',party_id:'driver',
+    party_type:'store_driver',recognition_basis:'delivered_order_created_after_start',recorded_at:'2026-11-06T10:00:00Z',delivered_at:null},
+  'delivery_event:two':{id:'assignment-two',schema:'operational_delivery_status_v1',order_id:'two',party_id:'driver',
+    party_type:'store_driver',recognition_basis:'delivered_order_created_after_start',recorded_at:'2026-11-06T10:00:00Z',delivered_at:null},
+  'shipping:three':{id:'other-driver',party_type:'store_driver',recognition_basis:'delivered_order_created_after_start',
+    recorded_at:'2026-11-06T10:00:00Z',delivered_at:null},
+ }}});
+ const text=section('الشحن ومناديب المتجر').textContent;
+ expect(text).toContain('تواصيل مثبتة: 2');
+ expect(text).toContain('أجرة التوصيل المؤكدة: 0.00');
+ expect(text).toContain('التحصيل المستحق لنا: غير مكتمل');
 });
 test('supplier covered invoices and accepted returns use evidence once and show payment remaining',async()=>{
  await render({parties:[{party_type:'supplier',party_id:'s',currency:'SAR',name:'مورد',settled:'50.00',outstanding_payable:'40.00',outstanding_receivable:'0.00'}],obligations:[{id:'s1',kind:'supplier',party_id:'s',party_type:'supplier',currency:'SAR',evidence_ids:['receipt:r1']},{id:'s2',kind:'supplier',party_id:'s',party_type:'supplier',currency:'SAR',evidence_ids:['receipt:r1']}],details:{facts:{'receipt:r1':{amount:'100.00'},'return:a':{receipt_id:'receipt:r1',amount:'10.00'},'return:other':{receipt_id:'receipt:other',amount:'999.00'}}}});

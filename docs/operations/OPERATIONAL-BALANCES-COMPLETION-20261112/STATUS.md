@@ -2,20 +2,46 @@
 
 ## Current state
 
-CORE RELEASE MERGED, PUBLISHED AND VERIFIED; LIVE ACCEPTANCE FOLLOW-UP OPEN.
+CORRECTIVE RELEASE MERGED, PUBLISHED AND OFFICIALLY VERIFIED; SAVED-TABLE AND
+MODAL ACCEPTANCE PASSED; FRESH-REFRESH TIMEOUT REMAINS OPEN. OWNER'S NEW DELIVERY
+RULE, MANUAL DELIVERY CONFIRMATION AND MEASURED SOURCE-CONVERSION OPTIMIZATION
+ARE IMPLEMENTED ABOVE M3; INDEPENDENT REVIEW IS CLOSED AND FINAL COMBINED CI IS PENDING.
 The owner explicitly authorized public upload, merge and publication after the
 public destination was identified. PR1898 reached production and passed the
-official three-probe release verifier. The matching lease is closed and preview
-backend/frontend services were restored. The first authenticated live financial
-report load exposed a timeout recovery gap and redundant bank-refresh work.
-Corrective PR1899 completed all source and intent gates, but pre-merge checking
-found an additional source-only Production merge. A new current-production
-branch preserves that merge and all verified operational fixes. No corrective
-publication is claimed yet.
+official three-probe release verifier, and that first lease closed. Its first
+authenticated live financial report load exposed a timeout recovery gap and
+redundant bank-refresh work. Corrective PR1899 completed its source and intent
+gates, then was superseded to preserve an additional Production source merge.
+PR1901 now preserves that merge and the verified operational fixes in exact
+source A3, intent-only B3 and normal merge M3 below. All required B3 gates and
+all three exact-M3 workflows passed. The official operator build,
+prepare/prepublish passed, and one **Publish changes** submission was clicked
+at approximately 19:55 UTC on 2026-11-12. Emergent subsequently displayed a new
+green **Deployment finished**, November 12 at 11:05 PM Asia/Riyadh, version
+`275e412`. The official verifier returned **verified:true, checks:3**, exact
+A3/M3/runtime/artifact identity and 582 canonical/cache-busted Frontend requests
+per probe. The lease closed. A fresh visible financial-page request still hit
+`408 operational_refresh_timeout`; its new recovery displayed 21 saved tables
+with the dated warning, preserved known balances and working paginated order
+dialogs. This is successful saved-state recovery, **not** a successful fresh
+calculation. Follow-up implementation remains in progress.
+
+Preview-service correction: a prior start command reported both services
+started, but this did not establish sustained frontend health. Before this
+corrective publication the legacy preview frontend was **FATAL** because its
+old launcher referenced a missing Node binary. Preview backend was running and
+was stopped by this task for the governed build. After the lease closed, root
+restored backend and directly observed RUNNING with tracked source clean. The
+legacy frontend was not changed or restored. The operator workspace later
+suspended; reopening its IDE now reaches a sign-in form. The restored backend
+status is an observation before that suspension, not proof of current service
+state in the resumed workspace.
 
 - Repository: [AMASI-SA/AMASI-SA](https://github.com/AMASI-SA/AMASI-SA).
 - Release PR: [1898](https://github.com/AMASI-SA/AMASI-SA/pull/1898), normally
   merged into `hotfix/prod-snap-meta-final` without squash or rebase.
+- Final corrective PR: [1901](https://github.com/AMASI-SA/AMASI-SA/pull/1901),
+  normally merged at M3 without squash or rebase.
 - Frozen release branch: `codex/operational-balances-completion-20261112`.
 - Corrective task branch:
   `codex/operational-balances-current-production-20261112`, based on staged
@@ -24,10 +50,17 @@ publication is claimed yet.
 - Implementation worktree: `/workspace/scratch/e00762959313/mezan-operational`.
 - Corrective integration worktree:
   `/workspace/scratch/e00762959313/mezan-operational-current-production`.
+- Documentation-only handoff branch:
+  `codex/operational-balances-published-handoff-20261112`, based on exact M3.
+- Handoff worktree:
+  `/workspace/scratch/e00762959313/mezan-operational-published-handoff`.
+  The prior remote documentation checkpoint is
+  `e5bd5cad5f0777ad4550922f89d905359ce2da38`; this follow-up records verified
+  publication and the remaining live failure without editing frozen A3/B3/M3.
 - Root owns final integration, operator rehearsal, lease, publication and live
   acceptance. Other contributors have no publication or lease action.
 
-### Immutable release identities
+### Initial release immutable identities — PR1898 history
 
 | Identity | Exact value |
 |---|---|
@@ -93,6 +126,19 @@ amend or append documentation to the frozen release pair.
    balance worker, scheduled refresh, hidden-page loading or polling. Calculate
    only for a visible page request; cancel reads/calculation when it leaves.
    Keep one refresh per owner across processes and preserve completed snapshots.
+10. New explicit owner rule: when the current order state is delivered and its
+    creation is strictly after the operational start, recognize the carrier or
+    driver delivery without requiring an actual delivery timestamp. Preserve
+    unknown delivered_at, separate recording/recognition basis and COD evidence.
+    Orders created at/before the start still require evidence of post-start
+    completion. Keep tariff/identity gaps individual and keep existing known
+    delivery counts compatible with older snapshots.
+11. Subsequent explicit owner request: show a per-order confirmation button in
+    the unresolved-order dialog when the unresolved fact is whether delivery
+    happened after the start. The owner can attest that boundary without
+    providing an exact delivery timestamp. Preserve actor/time/source binding,
+    permissions, replay protection and all independent tariff, cash and opening
+    blockers. This development task must not click a live financial confirmation.
 
 ## Live observations before implementation
 
@@ -371,7 +417,7 @@ frozen source/intent pair.
 
 **Production changed through this task: YES.** One Republish → Publish changes
 submission was made after a successful official operator rehearsal and
-prepare/prepublish. The current platform UI shows the newer green
+prepare/prepublish. At that first publication the platform UI showed the newer green
 **Deployment finished — Nov 12, 09:40 PM**, and published platform version
 `7112316`. This is the exact current UI label; the platform version is separate
 from the Git deployment SHA M.
@@ -400,12 +446,17 @@ from the Git deployment SHA M.
   All three probes passed the full Backend/source/identity/hash contract.
 - The official final guard reported **`active:false`**. Under another fresh
   idle check, `supervisorctl start backend frontend` returned both **started**.
-  No lease remains for this publication.
+  This is the observed start-command response, not proof that the frontend
+  remained healthy. A later prepublication check found the legacy frontend
+  **FATAL** with an old launcher referencing a missing Node binary. Backend was
+  running before this task stopped it for the corrective build. The first
+  publication lease closed; corrective lease closure and backend-only
+  restoration remain separate pending steps below.
 - UI runtime logs exposed healthy new backend starts and zero displayed error
   logs. They did not expose the complete Cloud Build argv/cwd/package transcript;
   those platform internals are not asserted from the operator rehearsal.
 
-## Corrective live acceptance — OPEN (PR1899)
+## Corrective acceptance investigation — PR1899 history
 
 The first visible load of `/operational-balances/financial-position` returned
 `408 operational_refresh_timeout` after the governed refresh deadline. The UI
@@ -414,7 +465,7 @@ confirmed that the refresh helper omitted this exact recoverable408, so the
 component never issued its saved-report GET. This observation does not establish
 that the saved GET itself timed out.
 
-Corrective draft: [PR1899](https://github.com/AMASI-SA/AMASI-SA/pull/1899).
+Superseded corrective draft: [PR1899](https://github.com/AMASI-SA/AMASI-SA/pull/1899).
 Remote branch: `codex/operational-balances-timeout-fallback-20261112`.
 Remote recoverable checkpoint: `c0811f99944b7138094da52e108356db2f72bf1c`, tree
 `44d02410a6c958c6669c55bf4c013d15373db416`, parent M.
@@ -461,8 +512,9 @@ its regression-file SHA256 is
 `6e1beb4de59409d210775d833cfea78b28c23fc269fed7ad3111aac85b0b6718`.
 Root verified these hashes survived the frontend integration unchanged.
 
-No frozen source/intent pair, merge or publication for the corrective release
-is declared complete by these local checkpoints. Original A/B/M and its frozen branch remain
+At those local checkpoints, a corrective source/intent pair, merge and
+publication were not yet complete. The later A2/B2 and final A3/B3/M3 evidence
+is recorded separately below. Original A/B/M and its frozen branch remain
 unchanged. No manual financial approval, payout or advertising operation was
 performed for the release or acceptance.
 
@@ -483,45 +535,410 @@ performed for the release or acceptance.
   B2 has one parentA2 and changes only the intent. No squash/rebase occurred.
 - B2 was not merged or published. Its frozen branch and PR1899 remain recoverable.
 
-## Current Production integration — OPEN
+## Current Production integration — MERGED (PR1901)
 
 The final pre-merge ref read found Production at
 `8379ca2560381bd3c626586d17aa63eb47e2a16c` (PR1897 campaign hover source merge),
 not at the previously verified deployment M. Its six source paths have **zero
 intersection** with the seven operational corrective paths. The merge retains
 M's exact old intent blob `e01eac8b75feb9a2f8d54ac490b509ae4c1f89be`.
-The authenticated platform still displayed published version7112316 when last
-observed; no corrective task publication has occurred.
+At that pre-merge checkpoint the authenticated platform still displayed
+published version `7112316`, and no corrective publication had been submitted.
+The later corrective submission is recorded below without claiming it finished.
 
-The current-production branch starts at8379 and applies the two corrective
-source commits without their frozen B2 intent. All six campaign-hover files
-remain exactly as merged in8379. The operational application/test files remain
-exactly as tested in A2; this status record records the new integration.
-The trusted prior reviewed deployment J remains
+The current-production branch started at 8379 and applied the corrective
+source changes without their frozen B2 intent. All six campaign-hover files
+remain exactly as merged in 8379. The operational application/test files remain
+exactly as tested in A2. The trusted prior reviewed deployment J3 remains
 `54b6fcf56fbe329a0fba7200b130eeca8ce5983c`.
 
 The existing automatic PR candidate-base resolver deliberately rejects staged
-non-documentation changes. Use the repository's documented local governed A/B
-source build and explicit trusted J to freeze the new intent, then require the
-new B's normal CI and clean-clone adapter rehearsals. Its reviewed-intent path
-already permits the staged Production8379 predecessor when8379 is an ancestor
-of the new source. Do not alter release guards/workflows or forge CI markers.
+non-documentation changes. Root used the repository's documented local governed
+A/B source build and explicit trusted J3 to freeze the new intent, then required
+the new B3 gates. The reviewed-intent path permits the staged Production 8379
+predecessor because it is an ancestor of A3. Release guards/workflows were not
+changed, and no CI markers were forged.
+
+### Final immutable identities — A3/B3/M3
+
+| Identity | Exact value |
+|---|---|
+| Trusted prior reviewed deployment J3 | `54b6fcf56fbe329a0fba7200b130eeca8ce5983c` |
+| Preserved staged Production predecessor | `8379ca2560381bd3c626586d17aa63eb47e2a16c` |
+| Source A3 | `549c6c733e8f93f5c632f6473263f3eb37f01767` |
+| Source A3 tree | `6e0c9d87543ca3d4311a374bf231a6dfb619a146` |
+| Intent-only B3 | `854dc1b6920228300346e5ec91396562eb765235` |
+| Normal merge M3, PR1901 | `2c875b5f16b0d58e46effdd7acd28a91041b62fb` |
+| Reviewed B3 and M3 tree | `706980488f7d42f75d40bd789922b6ea7be69ac0` |
+| Runtime release ID | `rg5-e5641d97ab8215c663458630c2af0dcd839b3aed89a05fcdc66be465b036c60e` |
+| Frontend artifact tree SHA256 | `e47bec1b5e0170d843cce0f37e08668566a38513eefe84b9fa1098964250d4fe` |
+| Tracked intent Git blob | `de17bc5e98c0161c3d1233506ba94e037ef189b1` |
+| Tracked intent SHA256 | `9c54d20f9c633d107e7b7323207170d1563435f098685774080a00b7de015d0c` |
+| Tracked intent bytes | `1,291,050` |
+
+B3 has exactly one parent, A3, and changes only the tracked release intent.
+M3 has exactly two ordered parents: staged Production
+`8379ca2560381bd3c626586d17aa63eb47e2a16c` and B3. Its entire tree equals B3.
+The handoff worktree verified these merge parents/tree from the fetched exact
+M3 object. No source or intent in the frozen pairs was rewritten for this
+documentation draft.
+
+### Final B3 gates
+
+The pre-merge B3 gate completed **11 successful workflows plus one expected
+TikTok branch-specific skip**, with no failed or pending required workflow.
+The skip does not omit operational acceptance cases. The exact-B3
+[Operational Balance Web run 43292182652](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43292182652)
+passed the full affected gates recorded by root:
+
+| Gate | Observed result |
+|---|---|
+| Operational backend and affected compatibility suites | **3,610 passed** |
+| Canonical server-child boot/drain on isolated Mongo | **4 passed** |
+| Shared shipping summary and calculator compatibility | **16 passed, 18 subtests passed** |
+| Operational/supplier/employee frontend | **669 passed, 50 suites passed** |
+| Sandboxed Chromium actual-component acceptance | **6 of 6 passed** |
+
+Exact-B3 [Mezan Release Readiness run 43292182835](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43292182835)
+also succeeded. The synthetic tests and CI browser scenarios remain distinct
+from the pending authenticated live acceptance of the corrective publication.
+
+### Final merge-M3 CI — independently verified
+
+The all-event GitHub query restricted to exact M3 at
+**2026-11-12 19:54:39 UTC** returned `total_count=3` and all three records.
+Each had the exact M3 head SHA, event `push`, attempt 1 and
+`status:completed`, `conclusion:success`:
+
+| Workflow | Successful run |
+|---|---|
+| Mezan Release Readiness | [43293557946](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43293557946) |
+| Security Gate | [43293558027](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43293558027) |
+| CodeQL | [43293557903](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43293557903) |
+
+Final exact-M3 count: **3 success, 0 pending, 0 failed, 0 skipped**. CodeQL
+completed at `2026-11-12T19:54:19Z`. B3's results were not substituted for this
+merge-specific evidence.
+
+## Corrective publication — OFFICIALLY VERIFIED, LIVE REFRESH STILL OPEN
+
+Root owns the operator/build/lease/publication evidence below. This handoff
+records those operations without changing the frozen source or intent.
+
+- The operator's tracked source was clean; **120 unrelated untracked paths**
+  were preserved. **Two generated Backend bytecode files** were backed up
+  outside governed source before the build. No tracked source was discarded.
+- Preview backend was running and was stopped by this task for the build.
+  The legacy preview frontend was already **FATAL**, with an old launcher
+  referencing a missing Node binary; it was not a healthy service stopped by
+  this task. After corrective lease closure, backend alone was restored.
+- The official governed operator build passed in **74.43 seconds**, bound to
+  exact source A3, deployment M3 and the runtime identity in the final table.
+- Official prepare actor: `operational-balances-1901-20261112`.
+- Official prepare succeeded at `2026-11-12T19:54:39.613387+00:00` for exact
+  A3/M3/runtime. Official prepublish returned **`ready_to_publish:true`**.
+- One **Publish changes** click was submitted at approximately **19:55 UTC**
+  on 2026-11-12. Emergent subsequently displayed green **Deployment finished**,
+  November 12, **11:05 PM Asia/Riyadh**, platform version **275e412**. No repeat
+  publication was submitted while this build was running.
+- Official `verify --url https://mezansalla.com` completed with
+  **verified:true, checks:3**, exact A3/M3/runtime/artifact identity above,
+  backend boot `2026-11-12T20:04:58.384183+00:00`, and **582** checked canonical
+  and cache-busted Frontend requests in each probe. Official status then
+  reported **active:false**.
+- Root independently read the verifier result, obtained fresh idle status,
+  restored the task-stopped preview backend, observed **RUNNING**, and asserted
+  tracked source remained clean. Legacy preview frontend stayed untouched.
+- A fresh signed-in, visible financial-position load again reached the refresh
+  deadline. The corrected fallback displayed **21 tables**, the last saved
+  calculation time and the explicit refresh-failure warning. Known carrier and
+  driver balances, delivery counts and distinct unresolved-order counts were
+  retained. No real financial amounts, customer data or order identifiers are
+  recorded in this public handoff.
+- Actual driver and carrier dialogs showed order numbers and specific reasons.
+  The carrier dialog paginated correctly across ten rows then five rows;
+  Escape dismissed each dialog. This validates the real saved-report UI.
+- The displayed saved calculation was still **01:07 Asia/Riyadh on November 12**.
+  Fresh refresh and current forecast/profit completeness are **not accepted**.
+  The follow-up must produce a successful new visible calculation before the
+  overall operational-balance task can be marked complete.
+
+Production changed through the overall task: **YES**, established by the
+verified initial and corrective publications above. No new follow-up source
+has been merged or published at this documentation checkpoint.
+
+### Follow-up work above verified M3
+
+- Follow-up Draft PR: [1902](https://github.com/AMASI-SA/AMASI-SA/pull/1902).
+  Remote WIP checkpoints `82bf5f1bbe2f961e9635bcabea8c7bf197ae1c97` and
+  `e6499740721e0f981ce2e5f61a5d67809368429e` are recoverable. The first passed
+  its complete operational gates (3,628 Backend cases, four canonical-worker
+  cases, 669 Frontend cases in 50 suites, and six Chromium scenarios). The
+  second includes the automatic delivery rule but **is not release ready**:
+  exact-head runs 43308794842 and 43308794827 failed the same eight legacy
+  driver-COD report cases and one prepaid totals assertion. Their passing
+  counts were 3,672 and 3,481 respectively; all ten other exact-head workflows
+  succeeded. The isolated regression lane found an order-number-only legacy
+  assignment no longer reaches the native collection adapter. A narrow
+  compatibility correction must retain strict new delivery-proof identity
+  checks and all established COD amounts. The added `delivered_orders` totals
+  field also requires the existing prepaid contract to be checked. These
+  failures supersede any inference of release readiness from focused tests.
+  At that WIP checkpoint the manual confirmation was still separate work in progress. Root's
+  latest Production ref read remains exact M3. No follow-up release has been
+  merged or published.
+- The nine compatibility failures were subsequently fixed at isolated local
+  commit `988f4abda7df5727f7b203999c6a9b999cef4baf` and root-integrated as
+  `a7fd7f5`. The collector preserves the established native collection adapter
+  only for a single owner-scoped legacy assignment with a unique assignment
+  identity; it does not fabricate the canonical order identity needed by the
+  new delivery proof. Held-evidence COD guards remain unchanged. All **76
+  affected cases passed on disposable real Mongo**, including the prior nine
+  failures, ambiguous/foreign/wrong-order/reused-assignment rejection and
+  preservation of established cash, bank-transfer and card collection evidence.
+  The prepaid totals assertion now includes the legitimate zero delivery count.
+  Exact-head WIP3 `aae9888523347b70f03bb6dc6cf164eef4eb4059` subsequently passed
+  all 12 workflows. Root independently read Operational Balance Web run
+  43311259458 logs: **3,688 Backend cases**, **16 shipping cases and 18
+  subtests**, **675 Frontend cases / 50 suites**, and **six Chromium scenarios**
+  passed. These gates cover the legacy correction; they precede the manual
+  feature and the final strict-proof downgrade guard. Fresh combined CI remains
+  required for the later integrated source.
+- Root integration branch/worktree:
+  `codex/operational-delivery-refresh-completion-20261112` /
+  `/workspace/scratch/e00762959313/mezan-operational-delivery-refresh-completion`.
+  The piece index was integrated from local commit
+  `2c74cb0eeb90d70d19a82ad063eac6d07ce2d9f9` after review; its 78 focused cases
+  passed. Root added fixed-name, duration/outcome-only timing records around
+  existing native acquisition, source collection, calculation, profit, claims,
+  catalogs and snapshot phases. They emit only within a visible refresh, add no
+  task or read, and omit identities, amounts and exception details. The actual
+  route/deadline/privacy regressions and existing demand/bank gates passed
+  **55 tests in 2.97 seconds**. An initial invocation named a nonexistent test
+  path and ran zero tests; the corrected final invocation passed. This is a
+  WIP checkpoint; the automatic delivery rule was integrated at that point,
+  while the manual confirmation and final exact-source CI were pending. Root's combined
+  collector/index/rule/timing/demand/bank run passed **184 cases in 7.48 seconds**;
+  the two real-Mongo rule cases were deliberately excluded from this local
+  in-memory run and passed in the author's separate 516-case Mongo gate.
+  Independent review of the timing diff found the original read/auth/CAS order
+  unchanged and reran its five new tests successfully.
+- Latest documentation-only publication checkpoint:
+  `8ae41338d1c8133f94fd324e9984a5ce2ef593e5` on the handoff branch. PR1901's body
+  now records verified publication, real saved-page acceptance and remaining
+  timeout; it no longer describes that publication as pending.
+- Delivery-rule branch/worktree:
+  `codex/operational-delivered-created-after-start-20261112` /
+  `/workspace/scratch/e00762959313/mezan-operational-delivery-start-rule`.
+  The implementation preserves unknown actual delivery time, separates COD,
+  counts proved deliveries independently of fee completeness and avoids native
+  history reads solely to fill a timestamp for a qualifying post-start order.
+  Completed and independently reviewed at local immutable commit
+  `5185a01d9992b04dca87f6eaa02d3758d7645644`, tree
+  `56baae522240dbb4410683330e50f2322cac020a`, then integrated by root without
+  conflicts. Author verification: **516 backend cases** with isolated real
+  Mongo, **65 UI cases / 3 suites**, then **19 DomainDetails cases** after the
+  final label clarification. Independent review reran **51 cases**, excluding
+  the two Mongo cases covered by the author's gate, and found no outstanding
+  concrete defect on that exact commit. Existing contradictory timestamps,
+  future/newer negative status history and the first-observation boundary stay
+  explicit conflicts; older in-transit history remains allowed. Source/COD
+  holds preserve known rows instead of rebuilding a false zero.
+- The manual boundary-attestation feature was implemented as the following
+  separate change: one-order bounded visible preflight, owner-only
+  version-bound/idempotent confirmation and one visible reconciliation. If the
+  proof is saved but refresh fails, show that saved confirmation as awaiting
+  calculation rather than invite duplicate approval or claim fresh money.
+  Root owns the new synthetic Chromium scenario and CI gate; the delivery
+  implementer owns the proof/routes/service and the assigned UI contributor
+  owns the dialog/API integration. No live confirmation is authorized here.
+- Narrow piece-index branch/worktree:
+  `codex/operational-refresh-stage-analysis-20261112` /
+  `/workspace/scratch/e00762959313/mezan-operational-refresh-stage-analysis`.
+  A repeated item-by-piece scan in the actual source collector is replaced by
+  one request-owned, cancellable and joined index build. On identical synthetic
+  20,000-order/20,000-piece inputs, exact M3 took 22.897864 seconds and the
+  candidate took 2.295125 seconds, with the same 20,000 known-cost results and
+  354 source reads. This is local performance evidence, **not** proof that it
+  is the sole cause of the live 85-second refresh timeout. Existing fresh
+  authorization, bank claims, deadlines and final CAS remain unchanged.
+- Root owns integration, new source/intent freeze, exact-head CI and the next
+  governed publication. Do not modify the frozen A3/B3/M3 release.
+- The operator IDE was suspended after the completed restoration observation.
+  A normal Code -> Open in VS Code action reopened its code-server sign-in page.
+  No credential has been read, copied or entered by this task. If sign-in still
+  blocks the final operator stage after code/CI are reviewable, use the secure
+  browser authentication flow. Do not use paid Emergent agent chat or Copilot.
+- A read-only diagnostics command was pasted before the suspension but no
+  execution/result was observed. Do not claim the diagnostics token exists or
+  that runtime phase profiling succeeded. No token value was exposed.
+
+### Integrated manual confirmation — source complete, final gates pending
+
+- Manual feature author commit:
+  `e508a3a0df4bb062176c5dd3e9a2157e811018dd`, tree
+  `f82593beb9d17c8c8f3d4ce1fff480ecb4dd1d73`, parent
+  `5185a01d9992b04dca87f6eaa02d3758d7645644`.
+- Strict-proof compatibility follow-up:
+  `82ee786d1f54dabf44f73e3d07c36ab727674097`, on top of the earlier legacy fix.
+  An existing canonical delivery fact or owner confirmation, including an
+  invalid one, prevents fallback to the old order-number-only contract. Two
+  actual-collector downgrade regressions passed independently.
+- Root integrated both changes without conflicts at
+  `7e2f67513d755abedd1ed18031fd2454158f0843`, tree
+  `21324bf7c481e1d70c00644f54f9b3fd4bac0ccf`. The piece index, fixed-name
+  timing records, prior Production changes, both strict exclusions and old
+  release intent are preserved. This is an application integration identity;
+  the following harness/status commit has its own immutable identity.
+- A date-uncertain order has the owner-only button
+  **تأكيد التوصيل بعد بداية التشغيل** in its existing modal. One click performs
+  a bounded consistent local preflight and an idempotent version-bound save.
+  The server rechecks the actual actor, session, order, executor, start boundary
+  and contradictory evidence. No actual delivery timestamp is invented.
+- Confirmation saves a sealed owner attestation and audit record; it does not
+  itself write a fee, collection, opening balance or payout. The ordinary next
+  visible reconciliation may recognize the shipping-only effect of an old
+  order, subject to unchanged tariff, payout, prepaid and COD checks.
+- Saved proof remains distinct from applied money. A failed refresh retains
+  dated known amounts and a pending-confirmation indicator. Successful display
+  requires matching applied proof in the report, including after the order
+  leaves the pending list. A missing canonical order remains reviewable.
+- A saved courier attestation suppresses native delivery-history acquisition
+  only after fresh local proof validation and only for the date-only gap.
+  The existing four-order and 25-second budgets remain. Other gaps or changed
+  evidence retain the established path. No scheduler or detached task is added.
+- Author verification: **311 Backend cases passed**, including **62 new**
+  cases (33 pure, 16 real Mongo/HTTP, four cancellation/lifetime, nine bounded
+  acquisition); **113 Frontend cases / six suites passed**.
+- Independent review then reproduced a source-downgrade defect: cancellation
+  plus loss of canonical assignment identity could bypass both resolver entry
+  conditions after a proof was saved. The narrow author follow-up
+  `a86f25dc60bab28cc44eaf5793632de1acc988f0` forces both conditions to honor raw
+  presence of either saved proof key. Nine actual-collector regressions were
+  red before the correction and passed afterward, including malformed proof
+  values and retention of already booked fees. Root resolved the one condition
+  conflict by preserving the full legacy predicate and adding the strict-proof
+  admission at both levels, integrated at
+  `bed93dacb4836d004c5c5eff9f82af78b3959a05`, tree
+  `fb31279b1ce25ce23297a00e44bae6f32ef03e95`. The new manual coverage is now
+  **71 cases**: 42 pure, 16 Mongo/HTTP, four lifetime and nine acquisition.
+  The author's focused follow-up passed 93 cases with two Mongo refresh cases
+  excluded from that pure invocation. Root's final combined Mongo gate then
+  passed **309 cases in 28.70 seconds**, including those real refresh cases and
+  all 71 new manual cases, with zero skipped or deselected cases. The disposable
+  Mongo replica was terminated by the runner. Final independent verification
+  was pending at that checkpoint; its closure is recorded below.
+- The last independent finding was a preflight/collector identity mismatch:
+  an assignment ID duplicated on another order of the same owner could pass
+  the scoped preview but never be applied by the full collector. Author commit
+  `a62930ab0a606d6d71818ce94ccfa2fb14df46e0` adds one bounded owner/selected-ID
+  read in the same snapshot, counts documents without collapsing duplicates,
+  and rechecks the selected row. Root integrated it without conflicts at
+  `3b95e34305bfcaeb09226040fcc43b1ed06f88b1`, tree
+  `d5c19424ebcb59babd2170ca10c3fea4bdd44fca`. The reader SHA256 is
+  `34ec2c317d44824d6dd2d7954dda6225fe1151ecd23b89cbff2504d4656a7ba3`.
+  Six actual-reader/real-Mongo HTTP cases cover a duplicate before and after
+  preview and the foreign-owner control. Root's final unified manual gate
+  passed **77 cases in 17.63 seconds**, with no skipped or deselected cases:
+  44 pure, 20 integration, four lifetime and nine acquisition. The fixture
+  terminated its own Mongo process afterward.
+- Independent review is **closed with no remaining finding** on exact
+  `3b95e34305bfcaeb09226040fcc43b1ed06f88b1`. The reviewer separately ran
+  71 cases on bed93 in 15.27 seconds and the final six new cases on 3b95 in
+  3.96 seconds, using an independent checkout and disposable Mongo. Those are
+  two distinct runs; root's 77-case result above is the unified final run.
+  Auth/session, source binding, replay, packed state, request cancellation,
+  saved-versus-applied proof and bounded native acquisition are covered.
+- Root's actual combined 16-suite gate on the integrated application passed
+  **300 cases in 27.62 seconds**, using a task-owned disposable local Mongo
+  replica that was terminated afterward. The command included all four new
+  confirmation suites, COD, prepaid, automatic delivery, piece index, source
+  compatibility/lifetime, phase timing, demand refresh/routes, bank plan and
+  financial-position projection. No case was deselected or skipped. The two
+  Pydantic warnings are pre-existing.
+- Root's synthetic browser fixture now uses the actual sealed-proof factory
+  and report projection for saved and applied states. It verified known money
+  remains unchanged while proof is pending, then grows by exactly one priced
+  delivery while unresolved orders fall from seven to six. Actual delivery
+  time remains null. An initial fixture-only timezone representation mismatch
+  was corrected to use the proof factory's normalized recording time; no
+  application validation was relaxed.
+- The browser gate is extended from six to nine required scenarios, including
+  single confirmation/single visible follow-up, saved-proof refresh failure,
+  and hiding during preflight with zero confirmation or automatic retry.
+  The workflow explicitly requires all new Backend suites and both additional
+  screenshots. JavaScript syntax and diff whitespace checks pass. The nine
+  browser scenarios and final combined exact-head CI have not run at this
+  local checkpoint. Independent application review is closed as recorded above.
+- No new source/intent pair is frozen and no follow-up merge, operator build,
+  publication or live manual confirmation has occurred. The remaining live
+  refresh timeout must still be accepted on a successful fresh calculation.
+
+### Complete-source CI corrections and browser acceptance
+
+- Remote source checkpoint `646a514ad0713bf14449015305ae024f661b3ddc`
+  exactly matches local `1920a3ba7b394036aafa46b771ed663c090428d9`, tree
+  `884dd4a8e6d87e5d60835197413a28de6027f927`. Production is still M3; this
+  source is not frozen as a release candidate because its complete CI exposed
+  two test-contract failures.
+- Operational Web run `43314486765` passed all **nine Chromium scenarios**
+  and the canonical-worker job. Root downloaded browser artifact `13986284804`,
+  verified archive SHA256
+  `61e843551a7c74a637c17d95516413ac41ef983c4addad5e4b1be37f3fe59500`,
+  checked nine PASS results and zero browser errors, and visually inspected
+  all four desktop/mobile/saved/applied screenshots. The Arabic per-order
+  confirmation control fits the modal on both viewports; successful application
+  removes one unresolved order and retains the existing proved deliveries.
+  These fixtures contain synthetic data only.
+- The Frontend CI job passed 717 cases and failed one API test because the
+  workflow intentionally uses `--resetMocks=false`: the preceding preview
+  call remained in the mock history. The correction clears that mock before
+  each test while retaining the exact single-POST assertions. Root reran the
+  six affected UI suites with the actual `--resetMocks=false` setting:
+  **113 passed, six suites, exit 0, 12.913 seconds** (local Node v24.22.1).
+  The pinned CI toolchain remains required on the corrected source.
+- The Backend CI job passed 3,766 cases and failed one stale permission-object
+  assertion. Stock run `43314486808` reported the same sole failure after
+  3,575 passing cases and seven passing subtests. The existing read-only route
+  test now expects the new confirmation grant for the actual active owner;
+  it also explicitly requires `false` for a delegated mobile actor and for
+  accounting-active mode. All **12 route cases passed in 3.66 seconds**,
+  exit 0. No application source or authorization was relaxed by either fix.
+- Readiness run `43314486913` passed its applicable source gates and produced
+  an intent candidate, but that candidate is superseded by these test changes.
+  Do not use its artifact for B. A fresh complete source checkpoint and CI
+  build are required, followed by intent-only B and both host rehearsals.
+- No new intent freeze, merge, operator build, publication or live financial
+  confirmation has occurred. The live fresh-refresh timeout and the operator
+  sign-in handoff remain open exactly as recorded above.
 
 ## Continuation
 
 Issue1006 is at its comment limit. PR1898 records the verified first publication;
-PR1899 records the preserved A2/B2 verification and the reason it was superseded.
-The new current-production task branch will carry the new source/intent pair.
+PR1899 records the preserved A2/B2 verification and the reason it was superseded;
+PR1901 records the verified A3/B3/M3 corrective release. Its comment6835728773
+records the completed official verification, live recovery acceptance and
+remaining timeout. This documentation-only handoff preserves that state and
+the newly authorized delivery rule. Root owns the next integrated checkpoint.
 No unrelated draft PR, including the campaign's separate intent draft, is merged
 or changed by this task. No financial approval, payout or advertising operation
 was performed.
 
-Next safe action: checkpoint this integrated source above8379 remotely; perform
-the official pinned local A/B build with the reviewed public client origin;
-freeze an intent-only child using trusted J; require all applicable new-B gates
-and both host clean-clone rehearsals; recheck the current Production ref; normal
-merge with exact reviewed tree; fresh shared guard idle check; operator rehearsal,
-prepare/prepublish, one corrective publication and official three-probe verify.
-Repeat authenticated live financial-report/dialog acceptance and restore preview
-services under a fresh idle check. Do not claim completion from CI or the first
-published release alone.
+Next safe actions, owned by root:
+
+1. Run the new exact-head CI/browser gates on the independently reviewed
+   integrated application. Check a fresh Production ref, preserving
+   unrelated changes and using M3 as the last officially verified base J.
+2. Resolve only concrete gate or review failures; retain the combined Mongo
+   evidence, positive applied-proof contract and visible-page ownership.
+3. Preserve the complete remote task checkpoint and Draft PR, then freeze new source A and
+   intent-only B using the repository's governed build. Require exact-B gates
+   and both host clean-clone rehearsals before normal merge.
+4. Recover operator sign-in if needed; inspect fresh guard/head/clean status and
+   service state before any /app change. Continue the already authorized normal
+   merge/publication protocol with one prepare/prepublish/publish and official
+   three-probe verification. Never reuse the closed M3 lease.
+5. Accept a fresh visible calculation on the live site, actual delivery-rule and
+   modal behavior, and no hidden/background work. If the refresh still times out,
+   obtain current bounded runtime evidence and finish the defect instead of
+   substituting the old saved snapshot for fresh acceptance.

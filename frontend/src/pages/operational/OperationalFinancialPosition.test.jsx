@@ -3,10 +3,11 @@ import { createRoot } from "react-dom/client";
 import { useReactToPrint } from "react-to-print";
 import { useOptionalAuth } from "../../context/AuthContext";
 import XLSX from "../../lib/safeSpreadsheet";
-import { operationalApi } from "./api";
+import { operationalApi, requestId } from "./api";
 import OperationalFinancialPosition from "./OperationalFinancialPosition";
 
-jest.mock("./api", () => ({ operationalApi: { financialPosition: jest.fn(), refreshBalances: jest.fn() } }));
+jest.mock("./api", () => ({ operationalApi: { financialPosition: jest.fn(), refreshBalances: jest.fn(),
+    previewDeliveryAfterStart: jest.fn(), confirmDeliveryAfterStart: jest.fn() }, requestId: jest.fn() }));
 jest.mock("../../context/AuthContext", () => ({ useOptionalAuth: jest.fn() }));
 jest.mock("react-to-print", () => ({ useReactToPrint: jest.fn() }));
 global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -75,11 +76,170 @@ beforeEach(() => {
     useOptionalAuth.mockReturnValue({ user: { id: "test-user", owner_id: "test-owner" }, loading: false, authStatus: "authenticated" });
     operationalApi.financialPosition.mockResolvedValue(fixture());
     operationalApi.refreshBalances.mockResolvedValue({status: 'refreshed'});
+    requestId.mockReturnValue("delivery-confirmation-request");
     print = jest.fn(); useReactToPrint.mockReturnValue(print);
     jest.spyOn(XLSX, "writeFile").mockResolvedValue(undefined);
 });
 
 afterEach(() => { act(() => root.unmount()); host.remove(); jest.restoreAllMocks(); });
+
+function confirmationFixture() {
+    const payload = fixture();
+    payload.permissions.confirm_delivery_after_start = true;
+    const table = payload.currencies.SAR.tables.find(item => item.id === "drivers");
+    table.columns = [...table.columns, { key: "pending_orders", type: "exceptions", label: "طلبات غير مؤكدة" }];
+    table.rows[0].pending_orders = 1;
+    table.rows[0].pending_order_details = [{ order_id: "old-order", order_number: "1001",
+        reasons: [{ code: "operational_delivery_timestamp_missing", message: "تاريخ التسليم يحتاج مطابقة" }],
+        delivery_after_start_confirmation: { can_confirm: true, state: "available", party_type: "store_driver", party_id: "driver-one" } }];
+    return payload;
+}
+
+const deliveryConfirmButton = () => document.querySelector('button[aria-label="تأكيد التوصيل بعد بداية التشغيل"]');
+const openPendingDelivery = async () => act(async () => host.querySelector('[data-testid="financial-table-drivers"] .ofp-pending-orders').click());
+const mockDeliveryConfirmation = payload => {
+    operationalApi.previewDeliveryAfterStart.mockResolvedValue({ can_confirm: true, confirmation_state: "available", preview_hash: "a".repeat(64),
+        session_scope: payload.session_scope, period_start: payload.started_at, issues: [], recorded_confirmation: null });
+    operationalApi.confirmDeliveryAfterStart.mockResolvedValue({ ok: true, pending_reconciliation: true, session_scope: payload.session_scope,
+        order_id: "old-order", order_number: "1001", recorded_confirmation: { id: "proof-one", confirmed_at: "2026-11-01T10:00:00Z", state: "pending_reconciliation" } });
+};
+
+test("standalone report permission supports one manual delivery confirmation and one visible refresh", async () => {
+    const payload = confirmationFixture();
+    useOptionalAuth.mockReturnValue(undefined);
+    operationalApi.financialPosition.mockResolvedValue(payload);
+    mockDeliveryConfirmation(payload);
+    await render(); await openPendingDelivery();
+    expect(deliveryConfirmButton()).not.toBeNull();
+    const confirm = deliveryConfirmButton();
+    await act(async () => { confirm.click(); confirm.click(); });
+    expect(operationalApi.confirmDeliveryAfterStart).toHaveBeenCalledTimes(1);
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(2);
+    expect(operationalApi.financialPosition).toHaveBeenCalledTimes(2);
+    expect(host.textContent).toContain("تم حفظ التأكيد؛ بانتظار تحديث الأرصدة");
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await openPendingDelivery();
+    expect(deliveryConfirmButton()).toBeNull();
+    expect(document.querySelector('[role="dialog"]').textContent).toContain("تم حفظ التأكيد");
+    expect(host.textContent).toContain("678.90");
+    expect(operationalApi.previewDeliveryAfterStart).toHaveBeenCalledTimes(1);
+});
+
+test("a failed refresh keeps the saved confirmation and old balances without another confirmation request", async () => {
+    const payload = confirmationFixture();
+    useOptionalAuth.mockReturnValue(undefined);
+    operationalApi.financialPosition.mockResolvedValue(payload);
+    mockDeliveryConfirmation(payload);
+    await render();
+    operationalApi.refreshBalances.mockRejectedValueOnce({ response: { status: 408, data: { detail: { code: "operational_refresh_timeout" } } } });
+    await openPendingDelivery(); await act(async () => deliveryConfirmButton().click());
+    expect(host.textContent).toContain("تم حفظ التأكيد؛ بانتظار تحديث الأرصدة");
+    expect(host.textContent).toContain("تُعرض آخر أرصدة محفوظة بتاريخها");
+    expect(host.textContent).toContain("678.90");
+    await openPendingDelivery();
+    expect(deliveryConfirmButton()).toBeNull();
+    await act(async () => { window.dispatchEvent(new Event("focus")); window.dispatchEvent(new Event("online")); });
+    expect(operationalApi.confirmDeliveryAfterStart).toHaveBeenCalledTimes(1);
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(2);
+    expect(operationalApi.financialPosition).toHaveBeenCalledTimes(2);
+});
+
+test("hiding during the saved-confirmation refresh stops that follow-up without resuming it on return", async () => {
+    const payload = confirmationFixture();
+    const visibility = jest.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    useOptionalAuth.mockReturnValue(undefined);
+    operationalApi.financialPosition.mockResolvedValue(payload);
+    mockDeliveryConfirmation(payload);
+    await render();
+    let resolve;
+    operationalApi.refreshBalances.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    await openPendingDelivery(); await act(async () => deliveryConfirmButton().click());
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(2);
+    const signal = operationalApi.refreshBalances.mock.calls[1][0].signal;
+    await act(async () => {
+        visibility.mockReturnValue("hidden"); document.dispatchEvent(new Event("visibilitychange"));
+        visibility.mockReturnValue("visible"); document.dispatchEvent(new Event("visibilitychange"));
+        window.dispatchEvent(new Event("online"));
+        resolve({ status: "refreshed" });
+    });
+    expect(signal.aborted).toBe(true);
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(2);
+    expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
+    expect(operationalApi.confirmDeliveryAfterStart).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain("تم حفظ التأكيد؛ بانتظار تحديث الأرصدة");
+    expect(button("تحديث التقرير").disabled).toBe(false);
+});
+
+test("report permission controls the confirmation action independently of an owner role", async () => {
+    const payload = confirmationFixture();
+    payload.permissions.confirm_delivery_after_start = false;
+    operationalApi.financialPosition.mockResolvedValue(payload);
+    await render(); await openPendingDelivery();
+    expect(deliveryConfirmButton()).toBeNull();
+    expect(operationalApi.previewDeliveryAfterStart).not.toHaveBeenCalled();
+});
+
+function appliedDeliveryFixture() {
+    const payload = confirmationFixture();
+    payload.as_of = "2026-11-01T11:00:00Z";
+    const driver = payload.currencies.SAR.tables.find(table => table.id === "drivers").rows[0];
+    driver.pending_orders = 0; driver.pending_order_details = [];
+    payload.currencies.SAR.deliveries.rows = [{ id: "delivery:old-order", order_id: "old-order", order_number: "1001",
+        party_type: "store_driver", party_id: "driver-one", party_name: "مندوب التجربة", delivered_at: null,
+        recognition_basis: "owner_confirmed_after_start", recorded_at: "2026-11-01T10:00:00Z",
+        shipping_confirmed: "20.00", collection_status: "not_confirmed", driver_custody: null,
+        delivery_after_start_confirmation: { can_confirm: false, state: "applied", party_type: "store_driver", party_id: "driver-one",
+            confirmation_id: "proof-one", confirmed_at: "2026-11-01T10:00:00Z" } }];
+    return payload;
+}
+
+test("a resolved order uses matching applied delivery proof to finish the saved confirmation notice", async () => {
+    const initial = confirmationFixture(), applied = appliedDeliveryFixture();
+    useOptionalAuth.mockReturnValue(undefined);
+    operationalApi.financialPosition.mockResolvedValueOnce(initial).mockResolvedValue(applied);
+    mockDeliveryConfirmation(initial);
+    await render(); await openPendingDelivery(); await act(async () => deliveryConfirmButton().click());
+    expect(host.textContent).toContain("تم حفظ التأكيد وتطبيقه في التقرير");
+    expect(host.textContent).not.toContain("بانتظار تحديث الأرصدة");
+    expect(host.querySelector('[data-testid="financial-table-drivers"] .ofp-pending-orders')).toBeNull();
+    expect(host.querySelector('[data-testid="financial-delivery-row"]').textContent).toContain("تأكيد المالك بالتوصيل بعد بدء التشغيل");
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(2);
+    expect(operationalApi.confirmDeliveryAfterStart).toHaveBeenCalledTimes(1);
+});
+
+test.each(["missing", "id", "time", "party", "order", "basis"])("%s applied proof cannot infer success from removal of a pending row or a newer report", async change => {
+    const initial = confirmationFixture(), applied = appliedDeliveryFixture();
+    const row = applied.currencies.SAR.deliveries.rows[0];
+    if (change === "missing") delete row.delivery_after_start_confirmation;
+    if (change === "id") row.delivery_after_start_confirmation.confirmation_id = "other-proof";
+    if (change === "time") row.recorded_at = "2026-11-01T10:01:00Z";
+    if (change === "party") row.party_id = "other-driver";
+    if (change === "order") row.order_id = "other-order";
+    if (change === "basis") row.recognition_basis = "delivered_order_created_after_start";
+    useOptionalAuth.mockReturnValue(undefined);
+    operationalApi.financialPosition.mockResolvedValueOnce(initial).mockResolvedValue(applied);
+    mockDeliveryConfirmation(initial);
+    await render(); await openPendingDelivery(); await act(async () => deliveryConfirmButton().click());
+    expect(host.textContent).toContain("تم حفظ التأكيد؛ بانتظار تحديث الأرصدة");
+    expect(host.textContent).not.toContain("تم حفظ التأكيد وتطبيقه في التقرير");
+    expect(operationalApi.confirmDeliveryAfterStart).toHaveBeenCalledTimes(1);
+});
+
+test("saved confirmation presentation is bound to its operational period even when the actor session is unchanged", async () => {
+    const initial = confirmationFixture();
+    useOptionalAuth.mockReturnValue(undefined);
+    operationalApi.financialPosition.mockResolvedValue(initial);
+    mockDeliveryConfirmation(initial);
+    await render(); await openPendingDelivery(); await act(async () => deliveryConfirmButton().click());
+    const nextPeriod = confirmationFixture();
+    nextPeriod.started_at = "2026-11-02T21:00:00Z";
+    operationalApi.financialPosition.mockResolvedValue(nextPeriod);
+    await click("تحديث التقرير");
+    expect(host.textContent).not.toContain("تم حفظ التأكيد");
+    await openPendingDelivery();
+    expect(deliveryConfirmButton()).not.toBeNull();
+    expect(operationalApi.confirmDeliveryAfterStart).toHaveBeenCalledTimes(1);
+});
 
 test("a failed source refresh shows the saved balances and dated warning without retries", async () => {
     operationalApi.refreshBalances.mockRejectedValueOnce({response: {status: 409, data: {detail: {
@@ -598,6 +758,28 @@ test("prepaid execution shows the cashbox and execution date without claiming de
     expect(row.cells[0].textContent).toContain("التسليم: غير متاح");
     expect(row.cells[1].textContent).toContain("مدفوع مقدمًا عند تم التنفيذ");
     expect(row.cells[1].textContent).toContain("صندوق الخصم: صندوق سلة التجريبي");
+});
+
+test.each([
+    ["delivered_order_created_after_start", "طلب تم توصيله وأُنشئ بعد بدء التشغيل"],
+    ["owner_confirmed_after_start", "تأكيد المالك بالتوصيل بعد بدء التشغيل"],
+])("%s shows its basis and recording time without claiming a delivery date or cash", async (basis, label) => {
+    const payload = fixture();
+    payload.as_of = "2026-11-02T12:00:00Z";
+    payload.currencies.SAR.deliveries.rows = [{ id: "status-delivery", order_id: "status-order", order_number: "D-101",
+        party_type: "store_driver", party_name: "مندوب التجربة", recognition_basis: basis,
+        recorded_at: "2026-11-01T07:00:00Z", delivered_at: null, collection_status: "not_confirmed",
+        shipping_confirmed: "10.00", shipping_settled: "0.00", shipping_outstanding: "10.00", driver_custody: null }];
+    operationalApi.financialPosition.mockResolvedValue(payload);
+    await render();
+    const row = host.querySelector('[data-testid="financial-delivery-row"]');
+    expect(row.cells[0].textContent).toContain("التسليم: غير متاح");
+    expect([...row.cells[0].querySelectorAll("small")].find(node => node.textContent.startsWith("وقت التسجيل:"))?.textContent)
+        .toContain("10:00");
+    expect(row.cells[1].textContent).toContain(label);
+    expect(row.cells[3].textContent).toBe("التحصيل غير مؤكد");
+    expect(row.cells[4].textContent).toBe("10.00");
+    expect(row.cells[8].textContent).toBe("غير متاح");
 });
 
 

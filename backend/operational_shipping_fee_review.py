@@ -8,7 +8,8 @@ support the base delivery cost. Any applicable delivery policy must agree.
 from collections import Counter, defaultdict
 from decimal import Decimal, InvalidOperation
 
-from operational_delivery_evidence import _instant, _text, delivery_time_matches
+from operational_delivery_evidence import STATUS_BASIS, _instant, _text, delivery_time_matches, status_delivery
+from operational_delivery_confirmation import BASIS as OWNER_DELIVERY_BASIS
 
 NATIVE = "store_delivery_operational"
 PENDING = "pending_mz2_driver_balance_link"
@@ -125,7 +126,7 @@ class DriverEarnings:
         claims = self.assignments_by_order.get(order["id"], set()) | self.assignments_by_number.get(order["order_number"], set())
         return bool(claims) if assignment_id is None else bool(claims - {assignment_id})
 
-    def check(self, a, order, quote, matching_rates, *, ambiguous_setup=False):
+    def check(self, a, order, quote, matching_rates, *, ambiguous_setup=False, delivery_event=None):
         """None for original contract-only producers. No collection method input."""
         earning_rows = self.by_assignment.get(a.get("id"), [])
         if not self.has_other_assignment(order, a.get('id')) and not earning_rows and not (a.get("financial_source") == NATIVE or a.get("delivery_fee_snapshot") is not None):
@@ -135,8 +136,10 @@ class DriverEarnings:
         info = dict(order_id=oid, order_number=num, party_id=a.get("driver_id"),
                     party_name=a.get("driver_name_snapshot") or a.get("driver_id"),
                     assignment_id=a.get("id"), currency="SAR", delivered_at=None, candidate_amount=None)
+        undated = status_delivery(delivery_event)
         try:
-            if (a.get("user_id") != self.owner or a.get("active") is not True or a.get("status") != "delivered"
+            if (a.get("user_id") != self.owner or a.get("active") is not True
+                or (a.get("status") not in {"assigned", "out_for_delivery", "delivered"} if undated else a.get("status") != "delivered")
                 or not _text(a.get("id")) or not _text(a.get("driver_id"))
                 or a.get("financial_source") != NATIVE or a.get("financial_handoff_status") != PENDING
                 or a.get("accounting_status") != "operational_only"
@@ -154,14 +157,28 @@ class DriverEarnings:
                 or e.get("accounting_operation_id") or order.get("currency") != "SAR"
                 or any(row.get("currency", "SAR") != "SAR" for row in [a, e])):
                 raise ValueError("driver_fee_evidence_conflict")
-            delivered = _instant(a.get("delivered_at"))
-            if (not self.start <= delivered <= self.as_of or delivered < _instant(order["created_at"])
-                or _instant(e.get("earned_at")) != delivered):
-                raise ValueError("driver_fee_evidence_conflict")
+            earned = _instant(e.get("earned_at"))
+            if undated:
+                created, recorded = _instant(order["created_at"]), _instant(delivery_event.get("recorded_at"))
+                basis = delivery_event.get('recognition_basis')
+                eligible = (self.start < created <= earned <= self.as_of if basis == STATUS_BASIS else
+                            max(self.start, created) <= earned <= recorded <= self.as_of if basis == OWNER_DELIVERY_BASIS else False)
+                if (not eligible
+                        or delivery_event.get("delivered_at") is not None
+                        or not created <= recorded <= self.as_of):
+                    raise ValueError("driver_fee_evidence_conflict")
+                delivered = None
+                info.update(recognition_basis=basis, recorded_at=recorded.isoformat(), earned_at=earned.isoformat())
+            else:
+                delivered = _instant(a.get("delivered_at"))
+                if (not self.start <= delivered <= self.as_of or delivered < _instant(order["created_at"])
+                        or earned != delivered):
+                    raise ValueError("driver_fee_evidence_conflict")
             n = amount(e.get("amount"))
             if n != amount(a.get("delivery_fee_snapshot")):
                 raise ValueError("driver_fee_amount_conflict")
-            info.update(earning_id=e["id"], candidate_amount=format(n, ".2f"), delivered_at=delivered.isoformat())
+            info.update(earning_id=e["id"], candidate_amount=format(n, ".2f"),
+                        delivered_at=delivered.isoformat() if delivered is not None else None)
             prior = self.state.get("obligations", {})
             previous = [prior[k] for k in (key, key + ":base_shipping") if k in prior and amount(prior[k].get("confirmed")) > 0]
             if (len(previous) > 1 or any(r.get("party_type") != "store_driver" or r.get("party_id") != a["driver_id"]
@@ -171,9 +188,12 @@ class DriverEarnings:
             saved_facts = self.state.get("facts", {})
             frozen = saved_facts.get(key)
             if frozen and (frozen.get("party_type") != "store_driver" or frozen.get("id") != a["driver_id"]
-                        or not delivery_time_matches(frozen, delivered, order_id=oid, native_driver_earning=info)):
+                        or (not (frozen.get("recognition_basis") == info.get('recognition_basis')
+                                 and frozen.get("delivered_at") is None
+                                 and frozen.get("recorded_at") == info["recorded_at"]) if undated else
+                            not delivery_time_matches(frozen, delivered, order_id=oid, native_driver_earning=info))):
                 raise ValueError("driver_fee_saved_conflict")
-            if frozen and _instant(frozen["delivered_at"]) != delivered:
+            if frozen and not undated and _instant(frozen["delivered_at"]) != delivered:
                 saved_prices = ((saved_facts.get(key + ":base_shipping"), n),
                                 (saved_facts.get("shipping_fee:" + oid), quote.get("cost") if quote else n))
                 if any(saved is not None and (expected is None or amount(saved.get("cost")) != amount(expected))
@@ -189,7 +209,11 @@ class DriverEarnings:
                 if len(base) != 1 or not base[0].get("complete") or amount(base[0].get("amount")) != n:
                     raise ValueError("driver_fee_amount_conflict")
             last_payout = self.latest_closed_payout.get(a["driver_id"])
-            if a["driver_id"] in self.payout_drivers or (last_payout and delivered <= last_payout):
+            # Native earned_at is the source earning's own clock. A later
+            # operational recording time cannot prove an earlier payout did
+            # not already include this fee.
+            payout_boundary = earned if undated else delivered
+            if a["driver_id"] in self.payout_drivers or (last_payout and payout_boundary <= last_payout):
                 raise ValueError("driver_fee_payout_review_required")
             from operational_historical_shipping_fee import saved_for
             if saved_for(self.aggregate, num):

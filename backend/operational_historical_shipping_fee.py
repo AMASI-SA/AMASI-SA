@@ -19,6 +19,11 @@ def saved_for(state, number):
 def register_candidate(out, review_numbers, event, *, rate=None, quote=None, earning=None):
     if not event or event["order_number"] not in review_numbers:
         return
+    from operational_delivery_evidence import status_delivery
+    if status_delivery(event):
+        # This old approval contract requires an actual delivery date. The
+        # new-order status rule must never populate it with a recording clock.
+        return
     parts = [p for p in (quote or {}).get("fee_components", []) if p.get("id") == "base_shipping"]
     if earning:
         n, currency = amount(earning["candidate_amount"]), earning.get("currency")
