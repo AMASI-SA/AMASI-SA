@@ -14,6 +14,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from .google_ads_reporting import GOOGLE_ADS_DAILY_COLLECTION, GOOGLE_ADS_REPORTING_SOURCE_MODE
+from .google_account_selection import google_reporting_scope
 
 
 MAX_ACCOUNTS = 50
@@ -109,7 +110,7 @@ async def load_google_dashboard_spend(
     integrations, accounts, native_rows, legacy_rows = await asyncio.gather(
         db["mezan_integrations_v2"].find(
             {"user_id": user_id, "provider": "google_ads"},
-            {"_id": 0, "connection_status": 1},
+            {"_id": 0, "connection_status": 1, "account_selection_configured": 1, "selected_account_ids": 1},
         ).to_list(length=2),
         db["mezan_integration_accounts_v2"].find(
             {"user_id": user_id, "provider": "google_ads", "connection_status": "connected",
@@ -128,7 +129,8 @@ async def load_google_dashboard_spend(
             {"_id": 0, "date": 1, "google_ads": 1},
         ).to_list(length=MAX_ROWS + 1),
     )
-    selected = [account for account in accounts if account.get("mezan_selected") is True] or accounts
+    selection = google_reporting_scope(accounts, integrations[0] if len(integrations) == 1 else None)
+    selected = selection["accounts"]
     by_account = {
         google_account_id(account.get("ad_account_id") or account.get("external_account_id")): account
         for account in selected
@@ -140,6 +142,8 @@ async def load_google_dashboard_spend(
     native_by_day, legacy_by_day = defaultdict(list), defaultdict(list)
     for row in native_rows:
         account_id = google_account_id(row.get("ad_account_id"))
+        if selection["configured"] and account_id not in by_account:
+            continue
         if by_account and account_id and account_id not in by_account:
             continue
         if row.get("date") in dates:
@@ -147,13 +151,15 @@ async def load_google_dashboard_spend(
     for row in legacy_rows:
         if row.get("date") in dates and "google_ads" in row:
             legacy_by_day[row["date"]].append(row)
-    expected = bool(accounts or native_by_day or any(
+    expected = bool(selection["configured"] or accounts or native_by_day or any(
         row.get("connection_status") in {"connected", "active", "healthy", "data_available",
                                          "needs_reauth", "expired", "error"}
         for row in integrations
     ))
     today = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("Asia/Riyadh")).date()
     daily, sources, reasons, observed = {}, {}, set(), []
+    if selection["reason"]:
+        reasons.add(selection["reason"])
     known_total = 0
     coverage_complete = scope_complete
     amount_complete = scope_complete
@@ -162,6 +168,10 @@ async def load_google_dashboard_spend(
         if not scope_complete:
             daily[day], sources[day] = None, "unknown"
             reasons.add("google_spend_scope_incomplete")
+            continue
+        if selection["configured"] and not selected:
+            daily[day], sources[day] = None, "selection_incomplete"
+            coverage_complete = amount_complete = False
             continue
         if rows:
             seen, amounts, proven = set(), [], True
@@ -192,7 +202,7 @@ async def load_google_dashboard_spend(
                 proven = proven and certified
                 if reason:
                     reasons.add(reason)
-            if seen != set(by_account):
+            if seen != set(by_account) or not selection["complete"]:
                 invalid = True
                 reasons.add("google_native_account_day_missing")
             if invalid:
@@ -214,6 +224,10 @@ async def load_google_dashboard_spend(
                 reasons.add("google_current_day_observation")
             continue
 
+        if not selection["complete"]:
+            daily[day], sources[day] = None, "selection_incomplete"
+            coverage_complete = amount_complete = False
+            continue
         manual = legacy_by_day[day]
         if len(manual) > 1:
             daily[day], sources[day] = None, "legacy_incomplete"

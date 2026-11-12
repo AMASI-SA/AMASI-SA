@@ -167,7 +167,7 @@ async def test_dry_run_is_default_reports_previous_missing_selection_and_reads_n
         {"account_id": value, "mezan_selected_present": False, "mezan_selected": None} for value in IDS
     ]
     assert await snapshot(db.raw) == before and db.transactions == db.update_attempts == 0
-    assert {name for name, *_ in db.reads} == {"users", selection.ACCOUNTS}
+    assert {name for name, *_ in db.reads} == {"users", selection.ACCOUNTS, selection.INTEGRATIONS}
     assert all("opaque_payload" not in (projection or {}) for _, _, projection, _ in db.reads)
     assert "PRIVATE_CREDENTIAL_SENTINEL" not in json.dumps(result)
 
@@ -190,8 +190,12 @@ async def test_apply_sets_exact_subset_preserves_owner_isolation_and_every_other
             assert {key: value for key, value in updated.items() if key not in selection.SELECTION_FIELDS} == row
         else:
             assert updated == row
-    for name in before.keys() - {selection.ACCOUNTS}:
+    for name in before.keys() - {selection.ACCOUNTS, selection.INTEGRATIONS}:
         assert before[name] == after[name]
+    parent = after[selection.INTEGRATIONS][0]
+    assert {key: value for key, value in parent.items() if key not in selection.POLICY_FIELDS} == before[selection.INTEGRATIONS][0]
+    assert parent["account_selection_configured"] is True
+    assert parent["selected_account_ids"] == [IDS[0]]
     audit = after[selection.AUDIT]
     assert len(audit) == 1 and audit[0]["run_id"] == result["audit_run_id"]
     assert audit[0]["summary"]["selected_account_ids"] == [IDS[0]]
@@ -210,7 +214,7 @@ async def test_repeat_is_idempotent_and_does_not_touch_selection_times_or_duplic
     result = await run(db, apply=True)
     assert result["status"] == "unchanged" and result["changed"] is False
     assert result["accounts_to_change"] == [] and "audit_run_id" not in result
-    assert await snapshot(db.raw) == before and db.update_attempts == 3
+    assert await snapshot(db.raw) == before and db.update_attempts == 4
 
 
 @pytest.mark.asyncio

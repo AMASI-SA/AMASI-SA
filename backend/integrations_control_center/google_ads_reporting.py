@@ -14,6 +14,7 @@ from typing import Any, Callable
 
 import httpx
 
+from .google_account_selection import google_reporting_scope
 from .ad_daily_close_proof import StreamRows, close_proof, google_evidence
 
 from .ads_platform_hourly import (
@@ -478,8 +479,21 @@ async def _accounts(db: Any, user_id: str) -> list[dict[str, Any]]:
         },
     )
     rows = await _to_list(cursor, MAX_GOOGLE_ADS_ACCOUNTS + 1)
-    selected = [row for row in rows if row.get("mezan_selected") is True]
-    source = selected or rows
+    policies = await _to_list(db["mezan_integrations_v2"].find(
+        {"user_id": user_id, "provider": GOOGLE_ADS_PROVIDER_ID},
+        {"_id": 0, "account_selection_configured": 1, "selected_account_ids": 1},
+    ), 2)
+    if len(rows) > MAX_GOOGLE_ADS_ACCOUNTS or len(policies) > 1:
+        raise GoogleAdsReportingError(
+            "google_ads_account_limit_exceeded", "Google reporting account scope is not bounded.", status_code=409,
+        )
+    scope = google_reporting_scope(rows, policies[0] if policies else None)
+    if not scope["complete"]:
+        raise GoogleAdsReportingError(
+            scope["reason"] or "google_reporting_selection_invalid",
+            "Select available Google reporting accounts before syncing.", status_code=409,
+        )
+    source = scope["accounts"]
     output: list[dict[str, Any]] = []
     for row in source:
         account_id = str(

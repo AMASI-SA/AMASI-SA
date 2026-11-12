@@ -10,6 +10,7 @@ import ProviderMark from "./ProviderMark";
 import SnapchatAccountScope from "./SnapchatAccountScope";
 import MetaReportingControl from "./MetaReportingControl";
 import TikTokReportingSyncControl from "./TikTokReportingSyncControl";
+import GoogleAccountSelectionControl from "./GoogleAccountSelectionControl";
 
 const STATUS = {
     connected: ["متصل", "border-emerald-200 bg-emerald-50 text-emerald-700"],
@@ -242,7 +243,11 @@ export default function AdvertisingAccountCard({
                 </div>
             )}
 
-            {hasProviderTools && (
+            {integration.provider === "google_ads" ? (
+                <div className="mt-4" data-testid="advertising-account-tools-google_ads">
+                    <GoogleAccountSelectionControl />
+                </div>
+            ) : hasProviderTools && (
                 <details
                     className="group mt-4 rounded-xl border border-slate-200 bg-slate-50"
                     data-testid={`advertising-account-tools-${integration.provider}`}

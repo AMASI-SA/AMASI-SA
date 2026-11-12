@@ -12,6 +12,7 @@ import SnapchatAccountScope from "./SnapchatAccountScope";
 import MetaReportingControl from "./MetaReportingControl";
 import MetaManagementReadiness from "./MetaManagementReadiness";
 import TikTokReportingSyncControl from "./TikTokReportingSyncControl";
+import GoogleAccountSelectionControl from "./GoogleAccountSelectionControl";
 import { CONNECTION_PROVENANCE_LABELS } from "../../services/integrationsV2";
 
 const STATUS = {
@@ -477,6 +478,12 @@ export default function IntegrationCard({
             {showTikTokReporting && (
                 <div className="mt-4" data-testid="tiktok-reporting-control-host">
                     <TikTokReportingSyncControl integration={integration} />
+                </div>
+            )}
+
+            {integration.provider === "google_ads" && (
+                <div className="my-4" data-testid="google-account-selection-control-host">
+                    <GoogleAccountSelectionControl />
                 </div>
             )}
 

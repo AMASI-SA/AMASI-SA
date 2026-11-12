@@ -430,13 +430,29 @@ async def test_truncated_scope_cannot_be_reported_as_complete(db, monkeypatch, b
 
 
 @pytest.mark.asyncio
-async def test_writer_fallback_to_all_connected_accounts_when_none_is_selected(db):
+async def test_legacy_fallback_to_all_connected_accounts_only_without_selection_metadata(db):
     await connected_google(db, selected=False)
     await connected_google(db, account="second-account", selected=False)
+    await db.mezan_integration_accounts_v2.update_many(
+        {"user_id": OWNER, "provider": "google_ads"}, {"$unset": {"mezan_selected": ""}},
+    )
     await db[COLLECTION].insert_many([native_fact(), native_fact(20, account="second-account")])
     result = await read_google(db)
     assert result["total_sar"] == 116.48
     assert result["quality"]["account_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_explicit_empty_selection_does_not_fall_back_to_native_or_manual_spend(db):
+    await connected_google(db, selected=False)
+    await connected_google(db, account="second-account", selected=False)
+    await db[COLLECTION].insert_many([native_fact(), native_fact(20, account="second-account")])
+    await db.daily_costs.insert_one({"user_id": OWNER, "date": DAY, "google_ads": 777})
+    result = await read_google(db)
+    assert result["total_sar"] is None and result["daily_sar"][DAY] is None
+    assert result["quality"]["account_count"] == 0
+    assert result["quality"]["amount_available"] is False
+    assert "google_reporting_selection_required" in result["quality"]["reason_codes"]
 
 
 @pytest.mark.asyncio
