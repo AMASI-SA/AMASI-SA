@@ -14,6 +14,7 @@ from salla_integration.order_commerce_enrichment import enrich_single_order_comm
 from web_page_access import ORDERS_PAGE, delegated_page_owner
 from .address_diagnostic import build_order_address_diagnostic
 from .campaign_enrichment import enrich_order_campaigns
+from .campaign_hover import install_campaign_hover_route
 from .city_enrichment import enrich_order_cities
 from .commerce_diagnostic import build_order_commerce_diagnostic
 from .customer_history import get_customer_history
@@ -102,6 +103,8 @@ def make_order_engine_router(
     customer_history_salla_request: Optional[Callable] = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/orders-v2", tags=["order-engine"])
+    # Fixed path must precede the dynamic /{order_number} route.
+    install_campaign_hover_route(router, db, current_user)
 
     def repository() -> OrderRepository:
         return repository_factory(db)
