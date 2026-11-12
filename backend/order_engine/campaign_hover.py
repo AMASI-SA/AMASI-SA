@@ -264,6 +264,30 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
 
     qualified = {cid: entries[0] for cid, entries in by_campaign.items()
                  if len(entries) == 1 and not truncated_spend}
+    # Commerce outcomes are sourced from Salla independently of ad spend.
+    # A campaign without spend can still be counted if exactly one account
+    # exists for the Salla-attributed provider. Multiple same-provider accounts
+    # require an explicit account ID; never guess.
+    account_by_provider = {}
+    for account, provider, start, day in accounts:
+        account_by_provider.setdefault(provider, []).append((account, start, day))
+    commerce_candidates = {}
+    for cid in campaign_ids:
+        if cid in qualified or len(by_campaign[cid]) > 1:
+            continue
+        options = []
+        for provider, candidates in account_by_provider.items():
+            if len(candidates) == 1:
+                account, start, day = candidates[0]
+                options.append({
+                    "account": account, "provider": provider, "start": start,
+                    "date": day, "spend_row": {
+                        "spend_sar": None, "fetched_at": None,
+                        "dimension_keys": {},
+                    }, "spend_alignment": "campaign_spend_not_available",
+                })
+        if options:
+            commerce_candidates[cid] = options
     # Surface useful source coverage reasons without claiming unavailable
     # Snap account-day spend is zero. In particular, Riyadh-day native facts
     # cannot represent the local-day spend for an American Snap account.
@@ -283,7 +307,11 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
             unavailable_reason[cid] = "account_timezone_unavailable"
         else:
             unavailable_reason[cid] = "campaign_spend_not_available"
-    min_start = min((v["start"] for v in qualified.values()), default=now)
+    # Spend-independent Salla candidates are included in the bounded scan.
+    candidate_starts = [v["start"] for v in qualified.values()]
+    candidate_starts.extend(option["start"] for options in commerce_candidates.values()
+                            for option in options)
+    min_start = min(candidate_starts, default=now)
     # Bound by indexed order_date plus campaign identifiers to avoid a full-day
     # hydration of unrelated Salla orders. No write or provider API call.
     scan_start = (min_start - timedelta(days=1)).date().isoformat()
@@ -291,7 +319,7 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         {"user_id": user_id, "raw_by_source.salla_direct": {"$type": "object"},
          "order_date": {"$gte": scan_start},
          "$or": [
-             {"campaign_id": {"$in": list(qualified)}},
+             {"campaign_id": {"$in": campaign_ids}},
              {"utm_campaign": {"$in": list(qualified)}},
              {"raw_by_source.salla_direct.campaign_id": {"$in": list(qualified)}},
              {"raw_by_source.salla_direct.utm_campaign": {"$in": list(qualified)}},
@@ -303,7 +331,7 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
          "raw_by_source.salla_direct": 1},
     ).max_time_ms(1500).limit(MAX_SALLA_ROWS + 1)
     try:
-        rows = await cursor.to_list(MAX_SALLA_ROWS + 1) if qualified else []
+        rows = await cursor.to_list(MAX_SALLA_ROWS + 1) if candidate_starts else []
     except Exception:
         # A slow or unavailable database read must not block the order list.
         # Fail closed: never present a partial scan as a complete zero.
@@ -314,7 +342,7 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
     truncated_orders = len(rows) > MAX_SALLA_ROWS
     totals = {cid: {"orders": 0, "pieces": 0.0, "sales": 0.0,
                     "pieces_complete": True, "sales_complete": True}
-              for cid in qualified}
+              for cid in campaign_ids}
     seen_orders = set()
     for row in rows[:MAX_SALLA_ROWS]:
         order_no = _text(row.get("order_number"))
@@ -335,8 +363,18 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         status_text = _text(row.get("order_status") or raw.get("status")).lower()
         if any(x in status_text for x in ("cancel", "refund", "ملغ", "مسترج", "محذوف", "deleted")):
             continue
-        for cid, detail in qualified.items():
-            if cid not in cid_candidates or provider != detail["provider"] or event_time < detail["start"]:
+        for cid in cid_candidates.intersection(totals):
+            detail = qualified.get(cid)
+            if detail is None:
+                options = [candidate for candidate in commerce_candidates.get(cid, [])
+                           if candidate["provider"] == provider]
+                if len(options) != 1:
+                    continue
+                detail = options[0]
+                # A Salla-proven provider and unique account can establish the
+                # account-local reporting period without any spend entry.
+                qualified[cid] = detail
+            if provider != detail["provider"] or event_time < detail["start"]:
                 continue
             metric = totals[cid]
             metric["orders"] += 1
