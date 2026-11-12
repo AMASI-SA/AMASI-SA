@@ -254,6 +254,54 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({
             "piece_id": "piece-1", "event_type": "assembly_piece_marked_ready",
         }), 1)
+        # Last completed unit may close the historical review recovery, but
+        # only after exact plan/source-unit coverage and all receipt proofs.
+        await self.db[pieces.PIECES].update_one(
+            {"user_id": "owner", "piece_id": "piece-2"},
+            {"$set": {
+                "supplier_dispatch_status": "received",
+                "received_at": now,
+                "preparation_receipt_status": "received",
+                "preparation_received_at": now,
+                "preparation_received_by": "synthetic-receiver",
+            }},
+        )
+        last = await self.mark_piece("piece-2")
+        self.assertEqual(last.status_code, 200, last.text)
+        self.assertTrue(last.json()["progress"]["order_completed"])
+        self.assertEqual(last.json()["progress"]["stage"], "completed")
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 1)
+        self.assertEqual(await self.on_hand(), after_stock - (before_stock - after_stock))
+        replay = await self.mark_piece("piece-2")
+        self.assertEqual(replay.status_code, 200, replay.text)
+        self.assertTrue(replay.json()["idempotent"])
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 1)
+
+    async def test_reviewed_historical_missing_source_unit_cannot_create_shipment(self):
+        response, _ = await self.accept()
+        self.assertEqual(response.status_code, 200, response.text)
+        # The source and stock plan require two units; only one card exists.
+        await self.seed_physical(quantity=1)
+        await self.db[fulfillment.WORKFLOWS].update_one(
+            {"user_id": "owner", "order_number": "order-1"},
+            {"$set": {"stage": "reviewed"}},
+        )
+        now = datetime.now(timezone.utc)
+        await self.db[pieces.PIECES].update_one(
+            {"user_id": "owner", "piece_id": "piece-1"},
+            {"$set": {
+                "supplier_dispatch_status": "received",
+                "received_at": now,
+                "preparation_receipt_status": "received",
+                "preparation_received_at": now,
+                "preparation_received_by": "synthetic-receiver",
+            }},
+        )
+        ready = await self.mark_piece("piece-1")
+        self.assertEqual(ready.status_code, 200, ready.text)
+        self.assertFalse(ready.json()["progress"]["order_completed"])
+        self.assertEqual(ready.json()["progress"]["stage"], "in_progress")
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
 
     async def test_physical_completion_rolls_back_stock_and_ready_state_on_event_failure(self):
         response, _ = await self.accept()
