@@ -2,7 +2,7 @@
 
 These tests do not access live Mongo or advertising APIs.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -239,7 +239,7 @@ def test_new_york_and_riyadh_account_midnight_with_daylight_saving():
         ny_start, ny_date = _window(at, "America/New_York")
         riyadh_start, riyadh_date = _window(at, "Asia/Riyadh")
         assert ny_start.isoformat() == expected_new_york_start
-        assert riyadh_start.isoformat() == (at.date() - __import__("datetime").timedelta(days=1)).isoformat() + "T21:00:00+00:00"
+        assert riyadh_start.isoformat() == (at.date() - timedelta(days=1)).isoformat() + "T21:00:00+00:00"
         assert ny_date == at.date().isoformat()
         assert riyadh_date == at.date().isoformat()
         assert ny_start != riyadh_start
