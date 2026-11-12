@@ -513,7 +513,7 @@ def _bank_credit_actions(orders, recorded):
 async def refresh(db, owner, *, clock=None):
     from operational_balance_sources import collect_sources
     from operational_balance_engine import reconcile
-    from operational_demand_refresh import calculation_checkpoint, checkpoint, run_calculation
+    from operational_demand_refresh import calculation_checkpoint, checkpoint, refresh_stage, run_calculation
     from operational_profit_sources import load_profit_snapshot
     stamp = clock or now()
 
@@ -527,8 +527,9 @@ async def refresh(db, owner, *, clock=None):
         await checkpoint()
         try:
             from operational_balance_inventory import assert_no_source_collision
-            await assert_no_source_collision(db, owner, state)
-            sources = await collect_sources(db, owner, state["started_at"], stamp, baselines=state.get("source_baselines"), operational_state=state)
+            with refresh_stage("source_collection"):
+                await assert_no_source_collision(db, owner, state)
+                sources = await collect_sources(db, owner, state["started_at"], stamp, baselines=state.get("source_baselines"), operational_state=state)
             await checkpoint()
         except ValueError as exc:
             from operational_read_runtime import SourceReadError
@@ -543,38 +544,42 @@ async def refresh(db, owner, *, clock=None):
         # Pure calculation returns an independent state and performs no I/O.
         # The visible request owns calculation and cancellation. Authorization
         # and the final atomic save remain on the original event loop.
-        result = await run_calculation(reconcile, state, sources, stamp)
+        with refresh_stage("reconciliation"):
+            result = await run_calculation(reconcile, state, sources, stamp)
         await checkpoint()
-        result["engine"]["profit_snapshot"] = await load_profit_snapshot(db, owner, result, as_of=stamp)
+        with refresh_stage("profit_snapshot"):
+            result["engine"]["profit_snapshot"] = await load_profit_snapshot(db, owner, result, as_of=stamp)
         await checkpoint()
-        bank_actions = await run_calculation(_bank_credit_actions, sources.get("orders", []), result["movements"])
-        for action, order, payload in bank_actions:
-            calculation_checkpoint()
-            if action == "conflict":
-                result["engine"]["issues"].append({"code": "operational_order_bank_credit_conflict", "source_id": order["id"]})
-                continue
-            # Preparation cannot authorize a financial intent. Every new
-            # claim retains fresh request/lease admission and store arbitration.
-            await checkpoint()
-            credit = order["bank_credit"]
-            operation = await claim_movement(db, owner, 'operational_order_worker', payload)
-            item = {**payload, 'id': operation, 'party_type': 'bank', 'party_id': credit['bank_id'],
-                    'bank_kind': 'bank', 'bank_name': credit['bank_name'], 'name': credit['bank_name'],
-                    'direction': 'incoming', 'kind': 'collection', 'allocations': [], 'actual_fee_amount': '0.00',
-                    'actor_id': 'operational_order_worker', 'source': 'mezan2', 'occurred_at': stamp,
-                    'receipt_id': None, 'reference': 'طلب ' + order['order_number'], 'automatic_order_bank': True}
-            result['movements'].append(item)
-            audit(result, 'operational_order_worker', 'order_bank_credited', None, item,
-                  'احتساب تحويل بنكي من طلب جديد مؤهل', 'mz2', stamp)
+        with refresh_stage("bank_claims"):
+            bank_actions = await run_calculation(_bank_credit_actions, sources.get("orders", []), result["movements"])
+            for action, order, payload in bank_actions:
+                calculation_checkpoint()
+                if action == "conflict":
+                    result["engine"]["issues"].append({"code": "operational_order_bank_credit_conflict", "source_id": order["id"]})
+                    continue
+                # Preparation cannot authorize a financial intent. Every new
+                # claim retains fresh request/lease admission and store arbitration.
+                await checkpoint()
+                credit = order["bank_credit"]
+                operation = await claim_movement(db, owner, 'operational_order_worker', payload)
+                item = {**payload, 'id': operation, 'party_type': 'bank', 'party_id': credit['bank_id'],
+                        'bank_kind': 'bank', 'bank_name': credit['bank_name'], 'name': credit['bank_name'],
+                        'direction': 'incoming', 'kind': 'collection', 'allocations': [], 'actual_fee_amount': '0.00',
+                        'actor_id': 'operational_order_worker', 'source': 'mezan2', 'occurred_at': stamp,
+                        'receipt_id': None, 'reference': 'طلب ' + order['order_number'], 'automatic_order_bank': True}
+                result['movements'].append(item)
+                audit(result, 'operational_order_worker', 'order_bank_credited', None, item,
+                      'احتساب تحويل بنكي من طلب جديد مؤهل', 'mz2', stamp)
         from operational_balance_sources import entities
         names = {}
-        for kind in {r["party_type"] for r in result["engine"].get("obligations", {}).values()}:
-            await checkpoint()
-            try:
-                options = {"operational_state": state} if kind == "ad_account" and state.get("ad_funding") else {}
-                names[kind] = {r["id"]: r["name"] for r in await entities(db, owner, kind, **options)}
-            except ValueError:
-                names[kind] = {}
+        with refresh_stage("party_catalogs"):
+            for kind in {r["party_type"] for r in result["engine"].get("obligations", {}).values()}:
+                await checkpoint()
+                try:
+                    options = {"operational_state": state} if kind == "ad_account" and state.get("ad_funding") else {}
+                    names[kind] = {r["id"]: r["name"] for r in await entities(db, owner, kind, **options)}
+                except ValueError:
+                    names[kind] = {}
         for obligation in result["engine"].get("obligations", {}).values():
             kind, identity = obligation["party_type"], obligation["party_id"]
             if kind == "supplier" and not identity:

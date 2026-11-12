@@ -14,6 +14,7 @@ import json
 from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
 from operational_demand_refresh import calculation_checkpoint
 from operational_financial_activity_runtime import prepare_in_thread
+from operational_piece_index import index_preparation_pieces
 from shipping_companies import normalize_shipping_company
 from operational_courier_tariffs import matches as matches_courier_key
 
@@ -1276,6 +1277,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     profiles = unique_index(data['mezan_product_cost_profiles_v2'], 'salla_product_id')
     suppliers = unique_index(data['mezan_suppliers_v2'], 'id')
     pieces = [r for r in data['mezan_preparation_pieces_v1'] if not r.get('experiment_mode') and not r.get('experiment_run_id')]
+    pieces_by_order_item = await prepare_in_thread(index_preparation_pieces, pieces, physical_order_item_id)
     order_numbers = {}
     raw_orders = [(r.get('raw_by_source') or {}).get('salla_direct') for r in data['unified_orders']]
     raw_orders = [r for r in raw_orders if isinstance(r, dict)]
@@ -1481,8 +1483,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     order['items_complete'] = False
                     issue(out, str(exc) if str(exc) == 'mz2_product_cost_currency_requires_review' else 'mz2_product_cost_incomplete', item_id)
                     continue
-                matching = [p for p in pieces if str(p.get('order_number')) == order_number
-                            and physical_order_item_id(p) == item_id]
+                matching = pieces_by_order_item.get((order_number, item_id), [])
                 if matching:
                     units = {physical_unit_index(piece) for piece in matching}
                     if quantity != len(matching) or units != set(range(1, len(matching) + 1)):

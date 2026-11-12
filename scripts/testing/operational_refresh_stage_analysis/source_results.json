@@ -1,0 +1,95 @@
+{
+  "synthetic_only": true,
+  "stage": "sources",
+  "python": "3.12.14",
+  "source_sha": "2c875b5f16b0d58e46effdd7acd28a91041b62fb",
+  "source_hashes": {
+    "backend/operational_balance_sources.py": "c9625555c0d9a3e34d805c7b11e6a63e40fe008c89dfadc4301b63e75b23a9df",
+    "backend/operational_financial_activity.py": "ce4b1fe4737cf941df1b4df49bc4361ea8bffd83e6508f54bc7f7229a06fe0d9"
+  },
+  "measurements": [
+    {
+      "orders": 500,
+      "pieces": 0,
+      "elapsed_seconds": 0.051703,
+      "instrumented": false,
+      "measured_matching_visits": null,
+      "expected_matching_visits": 0,
+      "in_memory_source_reads": 42,
+      "unchanged_inputs": true,
+      "known_cost_per_order": "20",
+      "output_orders": 500
+    },
+    {
+      "orders": 500,
+      "pieces": 5000,
+      "elapsed_seconds": 0.175202,
+      "instrumented": false,
+      "measured_matching_visits": null,
+      "expected_matching_visits": 2500000,
+      "in_memory_source_reads": 42,
+      "unchanged_inputs": true,
+      "known_cost_per_order": "20",
+      "output_orders": 500
+    },
+    {
+      "orders": 1000,
+      "pieces": 10000,
+      "elapsed_seconds": 0.554121,
+      "instrumented": false,
+      "measured_matching_visits": null,
+      "expected_matching_visits": 10000000,
+      "in_memory_source_reads": 50,
+      "unchanged_inputs": true,
+      "known_cost_per_order": "20",
+      "output_orders": 1000
+    },
+    {
+      "orders": 2000,
+      "pieces": 20000,
+      "elapsed_seconds": 2.512664,
+      "instrumented": false,
+      "measured_matching_visits": null,
+      "expected_matching_visits": 40000000,
+      "in_memory_source_reads": 66,
+      "unchanged_inputs": true,
+      "known_cost_per_order": "20",
+      "output_orders": 2000
+    },
+    {
+      "orders": 5000,
+      "pieces": 20000,
+      "elapsed_seconds": 5.229732,
+      "instrumented": false,
+      "measured_matching_visits": null,
+      "expected_matching_visits": 100000000,
+      "in_memory_source_reads": 114,
+      "unchanged_inputs": true,
+      "known_cost_per_order": "20",
+      "output_orders": 5000
+    }
+  ],
+  "operation_count": {
+    "orders": 500,
+    "pieces": 2000,
+    "elapsed_seconds": 5.681653,
+    "instrumented": true,
+    "measured_matching_visits": 1000000,
+    "expected_matching_visits": 1000000,
+    "in_memory_source_reads": 42,
+    "unchanged_inputs": true,
+    "known_cost_per_order": "20",
+    "output_orders": 500
+  },
+  "cancellation": {
+    "instrumentation": "one callback per item; plain piece dictionaries",
+    "status": 499,
+    "cost_calls_before_join": 1,
+    "all_possible_items": 200,
+    "pieces_per_matching_scan": 20000,
+    "disconnect_to_return_ms": 17.031,
+    "heartbeat_delay_ms": 16.845,
+    "pending_tasks": 0,
+    "lease_released": true
+  }
+}
