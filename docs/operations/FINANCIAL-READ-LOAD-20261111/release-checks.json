@@ -195,8 +195,8 @@
     "tracked_clean": true,
     "untracked_platform_files_preserved": 120,
     "platform_manifest_sha256": "ba36f9881479238f135d563c1e007e3ebed42a3bb665fe5a899564fe5f4a7170",
-    "last_observed_live_release_id": "rg5-efde36a8ffed59bbfbfaa1521401fe29a3d59923a59102cd0e34305a38a0e33c",
-    "next": "await existing official verifier final JSON and status active:false; no duplicate publication",
+    "last_observed_live_release_id": "rg5-ea9d6b2941dd1934ea45e052004b374e9fdd1458d7f8f8f72723a8c50a9f61fa",
+    "next": "No further action for this completed release. Never deploy this evidence branch or repeat publication; begin any new issue from current production.",
     "actual_shared_adapter": {
       "returncode": 0,
       "seconds": 95.324,
@@ -224,9 +224,10 @@
       }
     },
     "last_visible_publication": {
-      "ordinal": 100,
-      "id": "0cdea89",
-      "at": "2026-11-12 05:18 Asia/Riyadh"
+      "id": "a7ebd58",
+      "at": "2026-11-12 18:03 Asia/Riyadh",
+      "ui_text": "Deployment finished Nov 12, 06:03 PM",
+      "ordinal_observation": "UI still labels latest as 100th publish; no inferred 101st ordinal"
     },
     "prepared_at": "2026-11-12T14:49:29.023969+00:00",
     "actor": "codex-financial-read-load-20261112",
@@ -236,7 +237,7 @@
     "publication_started": true,
     "publication_observed_in_progress_at": "2026-11-12T14:50:56Z",
     "publication_click_count": 1,
-    "live_verification_pending": true,
+    "live_verification_pending": false,
     "publication_ui_complete": true,
     "publication_id": "a7ebd58",
     "publication_ui_text": "Deployment finished Nov 12, 06:03 PM",
@@ -258,12 +259,42 @@
       "path": "deployment-a7ebd58.jpg",
       "bytes": 96927,
       "sha256": "7b903111a99b69e502766b9919f72175e4889da290ecbd42ecc2159ad0821fec"
-    }
+    },
+    "previous_observed_live_release_id": "rg5-efde36a8ffed59bbfbfaa1521401fe29a3d59923a59102cd0e34305a38a0e33c",
+    "official_verification": {
+      "command": "PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py verify --url https://mezansalla.com",
+      "returncode": 0,
+      "verified": true,
+      "source_git_sha": "d94930510a92e2c426617725d21b9659bb8a9b1c",
+      "source_base_git_sha": "e0f00c6ec47536aaaa28ac3fa580f3d6abc02c96",
+      "git_sha": "d94930510a92e2c426617725d21b9659bb8a9b1c",
+      "deployment_git_sha": "570867c02ff2486750e4a99d574c25a8fef6c428",
+      "release_id": "rg5-ea9d6b2941dd1934ea45e052004b374e9fdd1458d7f8f8f72723a8c50a9f61fa",
+      "protocol_version": 5,
+      "url": "https://mezansalla.com",
+      "checks": 3,
+      "boot_started_at": "2026-11-12T15:02:47.237933+00:00",
+      "frontend_artifact_tree_sha256": "d06c6e7a4345c85566c6eab9017d8e949e49d2d714a2c2a7374c3001ce7eee31",
+      "final_guard_status": {
+        "active": false
+      },
+      "result_observed_at": "2026-11-12 15:19:55 UTC",
+      "observation": "Actual shared code-server Terminal1 returned VERIFY_EXIT 0, official final JSON and FINAL_GUARD_STATUS active:false; no duplicate verification command."
+    },
+    "final_guard_active": false,
+    "own_lease_closed": true,
+    "serial_handoff": "complete and released",
+    "release_complete": true,
+    "completed_at_observation": "2026-11-12 15:19:55 UTC",
+    "cloud_build_transcript_observed": false,
+    "cloud_evidence_limitation": "Actual shared adapter results and deployed official checks are verified. Complete Cloud Build argv/snapshot timing transcript was unavailable; no claim of observing those internals."
   },
   "continuity": {
     "evidence_branch": "codex/financial-read-load-merged-evidence-20261112",
     "deploy_evidence_branch": false,
     "issue_1006_comment": "Rejected: GitHub maximum 2500 comments.",
-    "issue_1006_body_update": "Tool accepted replacement, but independent readback remained the old body; persistence unconfirmed. PR1892 and this branch are verified continuation records."
+    "issue_1006_body_update": "Tool accepted replacement, but independent readback remained the old body; persistence unconfirmed. PR1892 and this branch are verified continuation records.",
+    "final_result": "Published a7ebd58; official verifier exit0 verified:true checks:3 exact identities; final guard active:false; both manual report refreshes passed.",
+    "previous_evidence_commit": "5248291ca4fcf86cc7a0fdea4dc7f8573a913819"
   }
 }

@@ -1,6 +1,6 @@
 # Financial read load — bounded first slice
 
-**Latest state: Emergent publication a7ebd58 completed; both manual report refreshes passed live UI acceptance. The already-running official three-probe verifier is pending.** This copy is a documentation-only continuation on `codex/financial-read-load-merged-evidence-20261112`. Never deploy the evidence branch. The immutable release source/intent and production merge are recorded below.
+**Latest state: completed and published as Emergent a7ebd58. Official production verification exited 0 with verified:true/checks:3 and exact reviewed identities; subsequent guard status is active:false. Both manual report refreshes passed live acceptance.** This copy is a documentation-only continuation on `codex/financial-read-load-merged-evidence-20261112`. Never deploy the evidence branch. The immutable release source/intent and production merge are recorded below.
 
 ## Change contract
 
@@ -11,7 +11,7 @@
 - Observable first slice: remove redundant incoming-COD history scans and stop fetching the closed audit panel. The user's subsequent explicit direction on 2026-11-12 (Asia/Riyadh) supersedes the original retained cadence: reports load on opening or explicit refresh, with no periodic context/report polling.
 - Invariants: identical monetary outputs, input immutability, validation/authorization/idempotency preserved; no source sync, new periodic jobs, changed shipping eligibility, historical processing, financial writes or restored full-report-per-event capture.
 - Preserve existing `asyncio.to_thread(reconcile, ...)`, dashboard/Snapchat releases #1883/#1884, preparation creation exclusion and concurrent Google/Android work.
-- **User explicitly authorized merge and publication.** Both `050bd14e` and the subsequent source `dc764d7a` passed all 11 exact-head workflows. A fresh source/build/intent is being prepared above production `e0f00c6e` to preserve the later Google/store-courier releases. This financial task has not changed deployed Production, acquired a lease or published.
+- **User explicitly authorized merge and publication.** The preserved source A `d94930510a92e2c426617725d21b9659bb8a9b1c`, intent-only B `6c8ee358ab6c3c5915a9418f4018eff812c753f4`, and normal production merge M `570867c02ff2486750e4a99d574c25a8fef6c428` have now completed all required release gates, actual publication, official verification and bounded live UI acceptance. Earlier milestones below are historical.
 
 ## Verified mechanisms, not incident attribution
 
@@ -190,7 +190,7 @@ After the merge, a fresh browser observation still showed the separate code-serv
 
 Issue #1006 continuity limitation: adding a comment returned GitHub's 2,500-comment limit. A compact body update returned success with the requested content, but fresh wrapper and direct API readback retained the previous body and timestamp. Its persistence is **unconfirmed**; no foreign history was trimmed or overwritten to force a result. This documentation branch and the refreshed, re-read PR #1892 are the verified continuation records. The earlier STATUS phrase that a new ledger checkpoint records the continuation must be read with this later limitation.
 
-### Next safe actions
+### Historical next actions at the merge checkpoint
 
 1. Restore the separate terminal login through the supported secure flow after the user requests retry. Re-read current production, PR #1892 and the available continuation records. If a newer release exists, preserve it and determine whether this merged financial source is already deployed; do not replace newer production with this old merge.
 2. Before changing shared source or rehearsing there, run `cd /app` and `PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py status`. Continue only with fresh `active:false`; never clear another owner's lease. Inspect tracked/staged source and preserve all unrelated platform files.
@@ -198,7 +198,7 @@ Issue #1006 continuity limitation: adding a comment returned GitHub's 2,500-comm
 4. Only after actual adapter success, prepare this task's own lease, run prepublish immediately before one authorized publication, observe a newer explicit successful deployment, then run the official `verify --url https://mezansalla.com`. Require all three probes and subsequent `active:false`.
 5. Perform bounded read-only live report/manual-refresh acceptance. Keep financial reprocessing, historical repair, preparation creation and provider mutations outside this release. Record live latency only if actually measured; no production improvement percentage has been established.
 
-## Resume
+## Historical resume instructions before publication
 
 Read the latest Issue #1006 entry and this STATUS; fetch current production and the exact release continuation checkpoint before further changes. Root owns Git/integration and publication. Implementation/review agents are complete; further review is read-only. Preserve the old PR #1888 checkpoint and all frozen release pairs. Complete the authorized release through the current v5 gates; do not revive the historical finance bundle from the old base.
 
@@ -239,3 +239,26 @@ Root started the official `verify --url https://mezansalla.com` once, with bytec
 Bounded signed-in live UI acceptance: `/operational-balances` rendered the report and both Arabic refresh buttons. Root clicked تحديثالأرصدة once, observed busy/disabled state, and subsequently observed the report rendered, button re-enabled and no error. Root then clicked تحديثالمشتريات once; it independently disabled and re-enabled without an error. No financial entry, recalculation, source synchronization or provider write was triggered. Switching between browser tabs can hold queued demand while hidden, so these observations are not a latency measurement. The displayed report timestamp is the engine's as_of rather than fetch completion; unchanged source data freshness is not claimed as repaired.
 
 The broader accounting data/completeness boundaries remain as documented. Next: wait for this existing verifier's final result; require verified:true/checks:3 with exact identities and inactive guard, then persist the final closure. No additional publication is needed unless a concrete failure is diagnosed through the normal protocol.
+
+
+## Final production closure — 2026-11-12 15:19:55 UTC
+
+**This bounded financial read-load release is complete. Production changed: yes.** Emergent publication `a7ebd58` is the newer green published row; its observed event is `Deployment finished Nov 12, 06:03 PM` in Asia/Riyadh. The observed wording is preserved exactly; no unobserved literal UI label is asserted. Screenshot `deployment-a7ebd58.jpg` remains attached to this documentation branch.
+
+The single already-running official command `PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py verify --url https://mezansalla.com` completed with **VERIFY_EXIT 0**, **verified:true** and **checks:3**. Its final actual shared-terminal JSON records:
+
+- Protocol: 5.
+- Source A / git SHA: `d94930510a92e2c426617725d21b9659bb8a9b1c`.
+- Source base J: `e0f00c6ec47536aaaa28ac3fa580f3d6abc02c96`.
+- Deployment M: `570867c02ff2486750e4a99d574c25a8fef6c428`.
+- Runtime release: `rg5-ea9d6b2941dd1934ea45e052004b374e9fdd1458d7f8f8f72723a8c50a9f61fa`.
+- Frontend artifact tree SHA256: `d06c6e7a4345c85566c6eab9017d8e949e49d2d714a2c2a7374c3001ce7eee31`.
+- Runtime boot started at: `2026-11-12T15:02:47.237933+00:00`.
+
+The wrapper then ran the official status command successfully and printed **FINAL_GUARD_STATUS {"active": false}**. The matching task-owned lease is closed. Root's serial deployment handoff is complete and released. No duplicate publication or verifier was launched. A fresh remote read at this closure still points production to exact M; PR1892 is merged. The 11 applicable exact-B workflows, actual shared configured adapter, and two bounded live manual refreshes are recorded above and remain passed; no redundant test suite was rerun.
+
+The signed-in report rendered and both `تحديث الأرصدة` and `تحديث المشتريات` completed with buttons re-enabled and no visible error. This acceptance used read-only report requests: no financial entry, reconciliation/backfill, historical correction, source synchronization, preparation action or advertising/provider write. Report timestamps remain engine `as_of`, not fetch-completion timestamps. No live whole-platform speedup percentage or accounting source-data freshness repair is claimed.
+
+Evidence boundary: the actual shared adapter's sanitized results and log digest are preserved, and the deployed protocol checks now pass. The management UI did not expose a complete Cloud Build transcript; historic cloud argv, snapshot order and package-copy timing remain unobserved. Shared-adapter evidence is not relabeled as a cloud transcript. This limitation does not justify repeating the successful publication.
+
+Continuity: Issue1006's 2,500-comment limit and unconfirmed body-update persistence remain recorded. This remotely recoverable documentation-only branch plus the verified PR1892 final update are the continuation records. **Never deploy this evidence branch, refreeze the reviewed pair, or repeat this completed publication.** The remaining broader accounting completeness, prepared-snapshot/lightweight-context and server-pagination work remains outside this completed slice and must retain the user's low-load requirements. Next safe action for this release: none; if a concrete new issue is reported, begin with the current production state and preserve subsequent work.
