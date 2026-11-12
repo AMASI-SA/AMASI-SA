@@ -3687,7 +3687,10 @@ async def _mark_assembly_piece_ready_in_transaction(
         {
             "user_id": user_id,
             "order_number": order_number,
-            "stage": {"$in": ["reviewed", "in_progress", "ready_to_ship", "completed"]},
+            "$or": [
+                {"stage": {"$in": ["reviewed", "ready_to_ship", "completed"]}},
+                {"stage": "in_progress"},
+            ],
         },
         {"_id": 0},
     )
