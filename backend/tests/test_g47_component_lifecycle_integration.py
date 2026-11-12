@@ -230,6 +230,7 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
                 "preparation_received_by": "synthetic-receiver",
             }},
         )
+        self.context["permissions"].add("fulfillment.ready.read")
         preview = await self.client.get(
             "/preparation-work-v1/assembly/search?q=order-1"
         )

@@ -2185,6 +2185,29 @@ def _reviewed_received_physical_piece(piece: dict[str, Any] | None) -> bool:
     )
 
 
+async def _assert_reviewed_physical_snapshot_current(
+    db: Any, *, user_id: str, order_number: str,
+) -> None:
+    """Fence the exceptional reviewed Ready against a newer Salla source.
+
+    Generation/plan acceptance alone is insufficient: the source watermark may
+    have advanced without the stock lifecycle being reconciled. Both the
+    approved component snapshot revision and the current canonical revision
+    must be identical; neither may fall back to caller-provided DTO values.
+    """
+    from fulfillment_v2_routes import COMPONENT_LIFECYCLES
+    lifecycle = await db[COMPONENT_LIFECYCLES].find_one({
+        "user_id": user_id, "order_number": order_number,
+    }) or {}
+    source = await db["unified_orders"].find_one({
+        "user_id": user_id, "order_number": order_number,
+    }) or {}
+    approved_revision = lifecycle.get("snapshot_revision")
+    current_revision = (source.get("g47_salla_snapshot") or {}).get("revision")
+    if approved_revision != current_revision:
+        raise HTTPException(409, detail={"code": "component_source_snapshot_stale"})
+
+
 def assembly_direct_preparation_receipt_eligible(piece: dict[str, Any]) -> bool:
     """Permit direct, confirmed custody handoff only for supplier-completed pieces.
 
@@ -2533,6 +2556,11 @@ async def _ensure_assembly_order_eligible(
     if not is_known_review_mode(mode):
         raise HTTPException(409, detail={"code": "review_completion_mode_unknown"})
     number = _text(workflow.get("order_number"))
+    reviewed_physical = (
+        workflow.get("stage") == "reviewed"
+        and not allow_reviewed_virtual
+        and _reviewed_received_physical_piece(piece)
+    )
     plan, evidence, units = await _historical_assembly_context(db, user_id=user_id, workflow=workflow)
     status_allowed = (
         evidence is not None and evidence.ready_in_progress is True
@@ -2555,6 +2583,10 @@ async def _ensure_assembly_order_eligible(
         await assert_component_execution(db, user_id=user_id, order_number=number, plan=plan)
         if not (piece and _historical_piece_matches(piece, user_id=user_id, number=number, units=units)):
             raise HTTPException(409, detail={"code": "assembly_order_not_ready"})
+        if reviewed_physical:
+            await _assert_reviewed_physical_snapshot_current(
+                db, user_id=user_id, order_number=number,
+            )
         await require_canonical_status()
         return False
     proven = await load_local_review_workflows(
@@ -2580,6 +2612,10 @@ async def _ensure_assembly_order_eligible(
         await assert_component_execution(db, user_id=user_id, order_number=number, plan=plan)
     elif not await allow_legacy_component_execution(db, user_id=user_id, order_number=number):
         raise HTTPException(409, detail={"code": "component_reservation_missing"})
+    if reviewed_physical:
+        await _assert_reviewed_physical_snapshot_current(
+            db, user_id=user_id, order_number=number,
+        )
     await require_canonical_status()
     return True
 
@@ -3090,6 +3126,11 @@ async def _assembly_search(
         from fulfillment_v2_routes import assert_component_execution
         try:
             await assert_component_execution(db, user_id=user_id, order_number=order_number, plan=plan)
+            if (workflow.get("stage") == "reviewed"
+                    and any(_reviewed_received_physical_piece(row) for row in pieces)):
+                await _assert_reviewed_physical_snapshot_current(
+                    db, user_id=user_id, order_number=order_number,
+                )
         except HTTPException as exc:
             component_blocker = (exc.detail or {}).get("code", "component_execution_blocked")
     status_allowed = (
@@ -3122,6 +3163,10 @@ async def _assembly_search(
                 db, user_id=user_id, order_number=order_number,
             ):
                 reviewed_physical_component_blocker = "component_reservation_missing"
+            if not reviewed_physical_component_blocker:
+                await _assert_reviewed_physical_snapshot_current(
+                    db, user_id=user_id, order_number=order_number,
+                )
         except HTTPException as exc:
             detail = exc.detail
             reviewed_physical_component_blocker = (
