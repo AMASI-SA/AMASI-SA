@@ -1,5 +1,19 @@
 # Google and store-courier live acceptance follow-up
 
+## Current release checkpoint: adapter passed, publication pending
+
+PR1890 source A `da0d2e2fb82a7848bcd398ca292ba93e1a880681` and intent-only B
+`205a040ca557618d5f6f445d7c54592eaf7cec36` merged as
+`0af4a3da57072a4995a2ebd0ca76720d17a80ee6`, with the exact B tree. All28
+applicable latest B workflows passed, including both Node20/24 adapter
+rehearsals; the unrelated TikTok branch-only skip is qualified in
+[RELEASE.md](RELEASE.md). The actual shared adapter subsequently passed in
+65.79seconds, with exact runtime/source/artifact and isolated package proofs.
+All120 unrelated platform files were preserved, and the official guard was
+inactive. Publication and real courier/Google acceptance remain open. This
+record is maintained on the documentation-only evidence branch, never used
+as the deployment input; the immutable source checkpoint below is historical.
+
 ## Scope and current state
 
 - Repository: `AMASI-SA/AMASI-SA`.
