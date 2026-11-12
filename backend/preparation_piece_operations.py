@@ -2161,6 +2161,28 @@ def assembly_piece_blocker(piece: dict[str, Any]) -> str | None:
     return None
 
 
+def _reviewed_received_physical_piece(piece: dict[str, Any] | None) -> bool:
+    """Only completed supplier/employee custody permits physical Ready in review.
+
+    This is used by both the search projection and the Ready transaction.
+    No free-text client status, optional receipt setting or direct-assembly
+    shortcut can fabricate the two completed custody events.
+    """
+    if (not piece or piece.get("virtual_kind") or piece.get("experiment_archived_at")
+            or piece.get("active_hold_id")):
+        return False
+    return bool(
+        _text(piece.get("status")) == PIECE_STATUS_READY_FOR_ASSEMBLY
+        and _text(piece.get("supplier_dispatch_status")) == "received"
+        and piece.get("received_at")
+        and _text(piece.get("preparation_receipt_status")) == "received"
+        and piece.get("preparation_received_at")
+        and _text(piece.get("preparation_received_by"))
+        and assembly_piece_blocker(piece) is None
+        and not _preparation_incomplete_services(piece)
+    )
+
+
 def assembly_direct_preparation_receipt_eligible(piece: dict[str, Any]) -> bool:
     """Permit direct, confirmed custody handoff only for supplier-completed pieces.
 
@@ -2535,7 +2557,10 @@ async def _ensure_assembly_order_eligible(
         db, user_id=user_id, order_numbers=[number], workflows=[workflow],
     ) if mode == LOCAL_COMPLETION_MODE else {}
     if not assembly_execution_allowed(
-        current_order, workflow, approved_workflow=proven.get(number), virtual=allow_reviewed_virtual,
+        current_order, workflow, approved_workflow=proven.get(number),
+        virtual=allow_reviewed_virtual,
+        received_physical=(not allow_reviewed_virtual
+                           and _reviewed_received_physical_piece(piece)),
     ):
         code = "local_review_assembly_not_eligible" if mode == LOCAL_COMPLETION_MODE else "assembly_order_not_ready"
         raise HTTPException(409, detail={"code": code})
@@ -2982,17 +3007,50 @@ async def _assembly_search(
     canonical = await source_status(db, user_id, order_number)
     status_allowed = status_allowed and canonical == "in_progress"
     preparation_shortcut_enabled = await is_optional(db, user_id, FIELD_PREPARATION)
+    # A reviewed physical piece is exceptional: it may start only if the
+    # current component/source reservation is still executable. Search must
+    # agree with the Ready transaction, without modifying any state.
+    reviewed_physical_component_blocker = None
+    if (local_contract and workflow.get("stage") == "reviewed"
+            and any(_reviewed_received_physical_piece(piece) for piece in pieces)):
+        from stock_component_consumption_service import PLANS
+        from fulfillment_v2_routes import assert_component_execution, allow_legacy_component_execution
+        try:
+            current_plan = await db[PLANS].find_one({
+                "user_id": user_id, "order_id": order_number,
+            })
+            if current_plan:
+                await assert_component_execution(
+                    db, user_id=user_id, order_number=order_number, plan=current_plan,
+                )
+            elif not await allow_legacy_component_execution(
+                db, user_id=user_id, order_number=order_number,
+            ):
+                reviewed_physical_component_blocker = "component_reservation_missing"
+        except HTTPException as exc:
+            detail = exc.detail
+            reviewed_physical_component_blocker = (
+                detail.get("code", "component_execution_blocked")
+                if isinstance(detail, dict) else "component_execution_blocked"
+            )
     for row, piece in zip(rows, pieces):
         virtual = bool(row["is_direct_assembly"] or row["is_operational_item"])
+        received_physical = (
+            local_contract and workflow.get("stage") == "reviewed"
+            and not virtual and _reviewed_received_physical_piece(piece)
+        )
         row_eligible = (
             historical_assembly_allowed(evidence, workflow, virtual=virtual, current_order=current_order)
             and _historical_piece_matches(piece, user_id=user_id, number=order_number, units=units)
             and not component_blocker
         ) if plan else assembly_execution_allowed(
             current_order, workflow, approved_workflow=proven.get(order_number),
-            virtual=virtual,
+            virtual=virtual, received_physical=received_physical,
         )
-        row_eligible = row_eligible and status_allowed
+        row_eligible = (
+            row_eligible and status_allowed
+            and not (received_physical and reviewed_physical_component_blocker)
+        )
         # Optional receipt removes only the employee custody prerequisite. It
         # does not manufacture a receipt or bypass supplier/service/hold checks.
         row["preparation_receipt_optional"] = preparation_shortcut_enabled
@@ -3005,7 +3063,11 @@ async def _assembly_search(
             row["assembly_blocker_code"] = None
         if not row_eligible:
             row["can_mark_ready"] = False
-            row["assembly_blocker_code"] = component_blocker or "assembly_order_not_ready"
+            row["assembly_blocker_code"] = (
+                component_blocker
+                or (reviewed_physical_component_blocker if received_physical else None)
+                or "assembly_order_not_ready"
+            )
         elif (local_contract or workflow.get("source_additions_reviewed") is True) and row["assembly_ready"] and workflow.get("stage") in {"in_progress", "ready_to_ship"}:
             # An address correction may need a readiness retry after all pieces
             # were already assembled. The write path verifies consumed units.
@@ -3618,10 +3680,7 @@ async def _mark_assembly_piece_ready_in_transaction(
         {
             "user_id": user_id,
             "order_number": order_number,
-            "$or": [
-                {"stage": {"$in": ["ready_to_ship", "completed"]}},
-                {"stage": "in_progress"},
-            ],
+            "stage": {"$in": ["reviewed", "in_progress", "ready_to_ship", "completed"]},
         },
         {"_id": 0},
     )
@@ -3630,7 +3689,7 @@ async def _mark_assembly_piece_ready_in_transaction(
         user_id=user_id,
         order_number=order_number,
     )
-    await _ensure_assembly_order_eligible(
+    local_contract = await _ensure_assembly_order_eligible(
         db, user_id=user_id, workflow=workflow or {}, current_order=current_order, piece=piece,
     )
     now = _now()
@@ -3666,6 +3725,25 @@ async def _mark_assembly_piece_ready_in_transaction(
         actor_id=actor_id,
     )
     await _consume_piece_components(db, user_id=user_id, piece=piece, actor_id=actor_id)
+    if local_contract and workflow.get("stage") == "reviewed":
+        # Same operational_owner transaction as unit consumption and Ready.
+        # The revision fence refuses concurrent review/source transitions.
+        changed = await db[WORKFLOWS].update_one(
+            {
+                "user_id": user_id, "order_number": order_number,
+                "revision": int(workflow.get("revision") or 0),
+                "stage": "reviewed",
+            },
+            {
+                "$set": {
+                    "stage": "in_progress", "in_progress_at": now,
+                    "updated_at": now, "updated_by": actor_id,
+                },
+                "$inc": {"revision": 1},
+            },
+        )
+        if not changed.matched_count:
+            raise HTTPException(409, detail={"code": "assembly_piece_ready_conflict"})
     result = await db[PIECES].update_one(
         {
             "user_id": user_id,

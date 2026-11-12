@@ -279,6 +279,7 @@ def _historical_stage_allowed(workflow: dict, in_progress: bool, *, virtual: boo
 def assembly_execution_allowed(
     order: Any, workflow: dict[str, Any], *,
     approved_workflow: dict[str, Any] | None = None, virtual: bool = False,
+    received_physical: bool = False,
 ) -> bool:
     """Shared search/physical/virtual decision; callers retain piece guards.
 
@@ -293,7 +294,10 @@ def assembly_execution_allowed(
     stage = _text(workflow.get("stage"))
     if mode == LOCAL_COMPLETION_MODE:
         stages = {"in_progress", "ready_to_ship", "completed"}
-        if virtual:
+        if virtual or received_physical:
+            # A physical Ready request must carry independently proved supplier
+            # and employee receipt; the caller is responsible for that proof.
+            # Virtual review-stage execution keeps its existing semantics.
             stages.add("reviewed")
         return local_review_stage_eligible(order, approved_workflow, stages)
     in_progress = _normalized(getattr(order, "status", None)) == "in progress"
