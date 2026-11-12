@@ -35,7 +35,9 @@ test.each([[false, false], [true, false], [false, true]])(
     for (const section of sections) {
       const selector = '[data-testid="' + section + '"]';
       expect(root.querySelector(selector)).not.toBeNull();
-      expect(css).toContain('[data-testid="advanced-profit-summary"] > .dashboard-panel-content > ' + selector);
+      const target = '[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > ' + selector;
+      expect(css).toContain(target);
+      expect(root.querySelector(target)).toBe(root.querySelector(selector));
     }
     expect(Boolean(root.querySelector('[data-testid="advanced-profit-ads-incomplete-hint"]'))).toBe(pending);
     expect(Boolean(root.querySelector('[data-testid="advanced-profit-no-activity-hint"]'))).toBe(noActivity);

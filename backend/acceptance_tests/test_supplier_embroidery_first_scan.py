@@ -1,4 +1,5 @@
 """Real isolated-Mongo regression for customer-selected supplier embroidery."""
+from datetime import datetime, timezone
 import pytest
 import supplier_receiving_routes as r
 from test_supplier_product_selection import env, seed, installed_live_cost_support
@@ -50,8 +51,48 @@ async def test_embroidery_first_scan_replay_recovery_session_and_refresh(
             assert services[0]["reference_unit_price_halalas"] == 1000
             assert services[0]["required_quantity"] == 1
         assert row["reference_product_unit_price_halalas"] == 3500
+    if not completed:
+        saved_session = await db[r.SESSIONS].find_one({"id": "session-1"})
+        requested_services = ([
+            r.SupplierReceivingInvoiceServiceRequest(
+                service_id="service-1", unit_price_halalas=1000,
+            ),
+        ] if expected else [])
+        draft = r.build_supplier_receiving_invoice(
+            session=saved_session,
+            scans=[first.json()["scans"][0]],
+            saved_at=datetime.now(timezone.utc),
+            requested_lines=[r.SupplierReceivingInvoiceLineRequest(
+                piece_ids=[piece["piece_id"]],
+                product_unit_price_halalas=3500,
+                services=requested_services,
+            )],
+        )
+        assert draft["total_halalas"] == (4500 if expected else 3500)
     assert await db[r.RECEIVING_EVENTS].count_documents(
         {"event_type": "supplier_piece_scanned", "session_id": "session-1"}) == 1
     assert await db[r.PIECES].count_documents(
         {"supplier_receiving_session_id": "session-1"}) == 1
     assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 0
+
+
+def test_live_invoice_service_deduplicates_without_suppressing_other_eligible_items():
+    live = [
+        {"service_id": "embroidery", "customer_selected": True,
+         "reference_unit_price_halalas": 1000, "required_quantity": 1},
+        {"service_id": "unselected", "customer_selected": False,
+         "reference_unit_price_halalas": 9900},
+    ]
+    existing = [
+        {"service_id": "embroidery", "supplier_invoice_required": True,
+         "reference_unit_price_halalas": 500},
+        {"service_id": "other", "supplier_invoice_required": True,
+         "reference_unit_price_halalas": 250},
+    ]
+    merged = r._merge_supplier_selected_invoice_services(existing, live, [])
+    assert [row["service_id"] for row in merged] == ["embroidery", "other"]
+    assert [row["reference_unit_price_halalas"] for row in merged] == [1000, 250]
+    completed = [{"service_id": "embroidery", "status": "completed",
+                  "required_quantity": 1, "completed_quantity": 1}]
+    assert [row["service_id"] for row in
+            r._merge_supplier_selected_invoice_services(existing, live, completed)] == ["other"]
