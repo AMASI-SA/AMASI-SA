@@ -188,3 +188,41 @@ def test_connected_account_timezone_is_authoritative_over_legacy():
     # native timezone is never replaced by a Riyadh assumption for USD accounts.
     assert _window(datetime(2026, 11, 12, 5, 0, tzinfo=timezone.utc),
                    "America/Los_Angeles")[1] == "2026-11-11"
+
+
+@pytest.mark.asyncio
+async def test_salla_campaign_sales_units_without_any_ad_spend_record():
+    from zoneinfo import ZoneInfo
+    from order_engine.campaign_hover import read_campaign_hover
+    local = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Riyadh"))
+    at = local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).isoformat()
+    db = _DB({
+        "ads_v2_accounts": [{
+            "id": "account-1", "provider": "snapchat",
+            "external_account_id": "snap-account-1",
+            "timezone": "Asia/Riyadh", "currency_native": "SAR",
+        }],
+        "mezan_integration_accounts_v2": [], "ads_v2_spend_raw": [],
+        "mezan_snapchat_performance_daily_v2": [],
+        "mezan_meta_campaign_performance_daily_v2": [],
+        "unified_orders": [{
+            "order_number": "valid-salla-1", "order_date": at,
+            "order_status": "processing",
+            "raw_by_source": {"salla_direct": {
+                "date": {"date": at},
+                "utm_source": "snapchat", "utm_campaign": "campaign-without-spend",
+                "amounts": {"total": {"amount": 319.5, "currency": "SAR"}},
+                "items": [{"id": "a", "quantity": 2, "type": "product"},
+                          {"id": "b", "quantity": 1, "type": "product"}],
+            }},
+        }],
+    })
+    data = await read_campaign_hover(db, "owner", ["campaign-without-spend"])
+    row = data["campaigns"]["campaign-without-spend"]
+    assert row["orders"] == 1
+    assert row["pieces"] == 3
+    assert row["sales_sar"] == 319.5
+    assert row["spend_sar"] is None
+    assert row["cpa_sar"] is None
+    assert row["roas"] is None
+    assert row["status"] == "partial"
