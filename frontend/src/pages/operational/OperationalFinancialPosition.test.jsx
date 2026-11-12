@@ -92,6 +92,69 @@ test("a failed source refresh shows the saved balances and dated warning without
     expect(host.querySelector('[data-testid="financial-position-content"]')).not.toBeNull();
 });
 
+test("first-load refresh deadline shows one dated saved report without retry or background reads", async () => {
+    jest.useFakeTimers();
+    const visibility = jest.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    const message = "انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة";
+    operationalApi.refreshBalances.mockRejectedValueOnce({response: {status: 408, data: {detail: {
+        code: "operational_refresh_timeout", message}}}});
+    try {
+        await render();
+        expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(1);
+        expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
+        const refreshSignal = operationalApi.refreshBalances.mock.calls[0][0].signal;
+        expect(operationalApi.financialPosition.mock.calls[0][0].signal).toBe(refreshSignal);
+        expect(refreshSignal.aborted).toBe(false);
+        const content = host.querySelector('[data-testid="financial-position-content"]');
+        expect(content).not.toBeNull();
+        expect(content.querySelector(".ofp-scope-bar").textContent).toContain("آخر احتساب: 01/11/2026, 12:00");
+        expect(content.textContent).toContain("678.90");
+        expect(content.querySelector('[data-testid="financial-table-drivers"] tbody tr').textContent).toContain("120.00");
+        expect(visibleOrders()).toHaveLength(3);
+        expect(host.querySelector('[role="alert"]').textContent).toContain(message);
+        expect(host.querySelector('[role="alert"]').textContent).toContain("تُعرض آخر أرصدة محفوظة بتاريخها");
+        expect(button("تصدير Excel").disabled).toBe(false);
+        await act(async () => {
+            jest.advanceTimersByTime(120000);
+            visibility.mockReturnValue("hidden"); document.dispatchEvent(new Event("visibilitychange"));
+            visibility.mockReturnValue("visible"); document.dispatchEvent(new Event("visibilitychange"));
+            window.dispatchEvent(new Event("focus")); window.dispatchEvent(new Event("online"));
+        });
+        expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(1);
+        expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
+        expect(content.textContent).toContain("678.90");
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+test("a refresh deadline arriving after the page is hidden does not read a saved report", async () => {
+    const visibility = jest.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    let reject;
+    operationalApi.refreshBalances.mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
+    await render();
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(1);
+    await act(async () => {
+        visibility.mockReturnValue("hidden"); document.dispatchEvent(new Event("visibilitychange"));
+        reject({response: {status: 408, data: {detail: {code: "operational_refresh_timeout"}}}});
+    });
+    expect(operationalApi.refreshBalances.mock.calls[0][0].signal.aborted).toBe(true);
+    expect(operationalApi.financialPosition).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-testid="financial-position-content"]')).toBeNull();
+});
+
+test("saved report permissions remain required after a refresh deadline", async () => {
+    operationalApi.refreshBalances.mockRejectedValueOnce({response: {status: 408, data: {detail: {
+        code: "operational_refresh_timeout"}}}});
+    operationalApi.financialPosition.mockRejectedValueOnce({response: {status: 403}});
+    await render();
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(1);
+    expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('[data-testid="financial-position-content"]')).toBeNull();
+    expect(host.textContent).toContain("ليست لديك صلاحية عرض التقرير المالي التشغيلي.");
+    expect(host.textContent).not.toContain("678.90");
+});
+
 test("refresh authorization failure never reads or displays a saved report", async () => {
     operationalApi.refreshBalances.mockRejectedValueOnce({response: {status: 403}});
     await render();

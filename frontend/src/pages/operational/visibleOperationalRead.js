@@ -67,7 +67,8 @@ export async function refreshVisibleSnapshot(api, config) {
         if (status === 409 && detail?.code === "operational_refresh_in_progress") return {refresh_warning: "يوجد تحديث جارٍ من صفحة أخرى؛ تظهر آخر لقطة محفوظة بتاريخها دون تكرار الاحتساب."};
         const sourceFailure = ["operational_capacity_requires_archive", "operational_source_setup_incomplete", "operational_refresh_failed",
             "operational_source_read_timeout", "operational_source_read_invalid", "operational_refresh_lease_lost"].includes(detail?.code);
-        if (sourceFailure || status >= 500 || ["ECONNABORTED", "ETIMEDOUT", "ERR_NETWORK"].includes(error?.code)) {
+        const refreshTimedOut = status === 408 && detail?.code === "operational_refresh_timeout";
+        if (refreshTimedOut || sourceFailure || status >= 500 || ["ECONNABORTED", "ETIMEDOUT", "ERR_NETWORK"].includes(error?.code)) {
             return {refresh_warning: "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. " + (detail?.message || "أعد التحديث عند الحاجة من الصفحة.")};
         }
         throw error;
