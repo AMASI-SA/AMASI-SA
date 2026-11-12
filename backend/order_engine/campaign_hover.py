@@ -122,10 +122,10 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
     ).limit(251).to_list(251)
     if len(integrated) > 250:
         integrated = []  # Never assume truncated account coverage.
-    known_external = {
+    indexed_accounts = {
         (_text(row.get("provider")).lower().replace("_ads", ""),
-         _text(row.get("external_account_id")).removeprefix("act_"))
-        for row in account_rows
+         _text(row.get("external_account_id")).removeprefix("act_")): row
+        for row in account_rows if row.get("external_account_id")
     }
     for row in integrated:
         provider = _text(row.get("provider")).lower().replace("_ads", "")
@@ -133,14 +133,22 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         if not external:
             continue
         key = (provider, external.removeprefix("act_"))
-        if key in known_external:
+        existing = indexed_accounts.get(key)
+        if existing is not None:
+            # Connected ad-account metadata is authoritative for timezone.
+            # Never silently use an outdated/missing legacy timezone.
+            if row.get("timezone"):
+                existing["timezone"] = row["timezone"]
+            if row.get("currency"):
+                existing["currency_native"] = row["currency"]
             continue
-        account_rows.append({
+        account = {
             "id": external, "external_account_id": external,
             "provider": provider, "timezone": row.get("timezone"),
             "currency_native": row.get("currency"),
-        })
-        known_external.add(key)
+        }
+        account_rows.append(account)
+        indexed_accounts[key] = account
 
     accounts = []
     for account in account_rows:
@@ -241,6 +249,25 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
 
     qualified = {cid: entries[0] for cid, entries in by_campaign.items()
                  if len(entries) == 1 and not truncated_spend}
+    # Surface useful source coverage reasons without claiming unavailable
+    # Snap account-day spend is zero. In particular, Riyadh-day native facts
+    # cannot represent the local-day spend for an American Snap account.
+    unavailable_reason = {}
+    for cid in campaign_ids:
+        if cid in qualified:
+            continue
+        if truncated_spend:
+            unavailable_reason[cid] = "spend_source_truncated"
+        elif len(by_campaign[cid]) > 1:
+            unavailable_reason[cid] = "ambiguous_account"
+        elif any(provider == "snapchat"
+                 and _text(row.get("campaign_id") or row.get("external_id")) == cid
+                 for provider, row in native_spends):
+            unavailable_reason[cid] = "snapchat_account_day_not_aligned"
+        elif not accounts:
+            unavailable_reason[cid] = "account_timezone_unavailable"
+        else:
+            unavailable_reason[cid] = "campaign_spend_not_available"
     min_start = min((v["start"] for v in qualified.values()), default=now)
     # Bound by indexed order_date plus campaign identifiers to avoid a full-day
     # hydration of unrelated Salla orders. No write or provider API call.
@@ -346,7 +373,7 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
                   "roas": None, "timezone": None, "date": None,
                   "updated_at": None, "status": "unavailable"}
         if not detail:
-            record["status"] = "ambiguous_account" if len(entries) > 1 else "spend_or_timezone_unavailable"
+            record["status"] = unavailable_reason[cid]
             result[cid] = record
             continue
         account = detail["account"]
