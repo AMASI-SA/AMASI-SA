@@ -3595,8 +3595,51 @@ def _scan_request_event_shape(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+
+def _merge_supplier_selected_invoice_services(
+    existing_services: Any,
+    live_services: Any,
+    piece_services: Any,
+) -> list[dict[str, Any]]:
+    """One authoritative public list for scan, recovery and session refresh.
+
+    Live product links are admitted only when the customer's selection matched.
+    Services already completed on the physical piece remain excluded. Prefer
+    the current selected-service price and quantity over older saved snapshots,
+    retaining other previously eligible invoice services by exact service ID.
+    """
+    completed_ids = {
+        _text(row.get("service_id"))
+        for row in (piece_services if isinstance(piece_services, list) else [])
+        if isinstance(row, dict) and _service_is_complete(row)
+    }
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for candidates, live_selected_only in (
+        (live_services, True),
+        (existing_services, False),
+    ):
+        if not isinstance(candidates, list):
+            continue
+        for raw in candidates:
+            if not isinstance(raw, dict):
+                continue
+            service_id = _text(raw.get("service_id"))
+            if (
+                not service_id
+                or service_id in seen
+                or service_id in completed_ids
+                or _service_is_complete(raw)
+                or (live_selected_only and raw.get("customer_selected") is not True)
+            ):
+                continue
+            merged.append(dict(raw))
+            seen.add(service_id)
+    return merged
+
+
 def _scan_request_public_event(row: dict[str, Any]) -> dict[str, Any]:
-    return {
+    public = {
         key: value
         for key, value in row.items()
         if key not in {
@@ -3606,6 +3649,13 @@ def _scan_request_public_event(row: dict[str, Any]) -> dict[str, Any]:
             "previous_piece_present_fields",
         }
     }
+    if row.get("event_type") == "supplier_piece_scanned":
+        public["invoice_services"] = _merge_supplier_selected_invoice_services(
+            row.get("invoice_services"),
+            row.get("live_invoice_services"),
+            row.get("services"),
+        )
+    return public
 
 
 def _draft_receipt_provenance(event: dict[str, Any], *, scope: str) -> dict[str, Any]:
@@ -5462,15 +5512,7 @@ def make_supplier_receiving_router(
                 {"user_id": context["merchant_id"], "id": session_id, "scan_lock_token": lock_token},
                 {"$unset": {"scan_lock_token": "", "scan_lock_started_at": "", "scan_lock_expires_at": ""}},
             )
-        public_events = [{
-            key: value
-            for key, value in event.items()
-            if key not in {
-                "user_id",
-                "previous_piece_state",
-                "previous_piece_present_fields",
-            }
-        } for event in events]
+        public_events = [_scan_request_public_event(event) for event in events]
         return {
             "ok": True,
             "client_request_id": client_request_id or None,

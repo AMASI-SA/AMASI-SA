@@ -488,15 +488,9 @@ def install_product_field_cost_support() -> None:
                     )
                 live_price = deepcopy(price_cache[price_key])
                 live_services = list(live_price.pop("live_invoice_services", []) or [])
-                merged_services: list[dict[str, Any]] = []
-                seen: set[str] = set()
-                for service in [*live_services, *existing_services]:
-                    service_id = _text(service.get("service_id"))
-                    if not service_id or service_id in seen:
-                        continue
-                    seen.add(service_id)
-                    merged_services.append(service)
-                row["invoice_services"] = merged_services
+                row["invoice_services"] = supplier_module._merge_supplier_selected_invoice_services(
+                    existing_services, live_services, row.get("services"),
+                )
                 if row.get("product_charge_eligible") is not False:
                     row.update(live_price)
                 row["supplier_invoice_live_draft"] = True
