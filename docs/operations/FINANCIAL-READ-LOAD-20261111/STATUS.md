@@ -1,5 +1,7 @@
 # Financial read load — bounded first slice
 
+**Latest state: PR #1892 is merged; Emergent publication has not started.** This copy is a documentation-only continuation on `codex/financial-read-load-merged-evidence-20261112`. Never deploy the evidence branch. The immutable release source/intent and production merge are recorded below.
+
 ## Change contract
 
 - Task: `FINANCIAL-READ-LOAD-20261111`.
@@ -163,6 +165,38 @@ Independent read-only release review approved this source-transition strategy. I
 The main Emergent account is signed in, but a fresh code-server tab still shows its separate password login. The secure authentication request was interrupted; no credentials were inspected or retried, no shared source changed, and no financial lease was acquired. Complete all available source, build, intent, review and CI gates before resuming that authenticated publication boundary. User authorization for merge/publication persists; authentication is a separate access requirement.
 
 Next: verify exact source parity and unchanged inherited intent, run this new source's governed reproducible build and exact-head CI, independently compare the local and CI candidate, freeze intent-only B, complete exact-B checks, and perform the authorized normal merge. Shared adapter/prepare/prepublish/publication require authenticated terminal access and fresh inactive guard. No deployed-financial success is claimed until the intended release passes the official three probes and final inactive check.
+
+## Merge complete; authenticated publication pending — 2026-11-12
+
+The user-authorized ordinary merge of PR #1892 completed as **`570867c02ff2486750e4a99d574c25a8fef6c428`**. A fresh GitHub production-ref read points to that merge. Independent Git commit metadata proves parents `e0f00c6ec47536aaaa28ac3fa580f3d6abc02c96` and reviewed B `6c8ee358ab6c3c5915a9418f4018eff812c753f4`; the merge tree is exactly B's `654da296269fb22348e87e0629de47ab942ad18a`. No squash/rebase or source edit followed intent freezing.
+
+Immutable source A is `d94930510a92e2c426617725d21b9659bb8a9b1c`, based directly on J `e0f00c6ec47536aaaa28ac3fa580f3d6abc02c96`. Runtime identity is `rg5-ea9d6b2941dd1934ea45e052004b374e9fdd1458d7f8f8f72723a8c50a9f61fa`. The official source-transition check and B load/ancestry validation passed locally. Direct Git transport subsequently returned 503 upstream timeouts during the final ref/post-merge fetch; the GitHub connector verified the actual ref, parents, tree and merged PR. No local execution of the M-specific official verifier is claimed from the failed fetch.
+
+### Final release evidence
+
+- Local pinned governed two-clean-build: exit 0, 23.10 seconds. Retained build verification and candidate freeze: exit 0. Frontend artifact `d06c6e7a4345c85566c6eab9017d8e949e49d2d714a2c2a7374c3001ce7eee31`; reproducibility proof `947f9a5c81e106ed8b2c2d49be4718e688978d91680abd5ae95eb80a779b72e1`.
+- Exact-A Readiness `43167586398` succeeded. Downloaded candidate artifact `13920432691` was checked against its ZIP digest. Its 1,269,267-byte JSON is byte-identical to local: SHA256 `d75bc3e4202a1c297125c3fd080759161b98523fa76f8b857655828b1d593c63`.
+- Independent complete Git-manifest review passed: Frontend 1,150 files, Backend 1,175 files with one modified, release-control 274 files with only the benchmark added. Exact Node 22.23.2, Yarn 1.22.22, Vite 8.2.4 and public client origin match. The source-A missing ignored `backend/release_identity.json` diagnostic was traced to import-time boot identity reading; candidate validation passed and actual identity materialization remains an adapter step.
+- **All 11 applicable exact-B workflows passed.** The twelfth, TikTok Creator Release Candidate, was skipped by its unrelated branch-only condition. No failed or pending required gate remained at merge.
+- Exact-B Readiness `43168080364`: both Node 20 job `131014847222` and Node 24 job `131014846833` completed clean-clone/no-Git adapter, artifact/proof/identity/package-boundary and runtime JSON-route checks. All critical steps ran successfully. This is CI rehearsal evidence, not an actual shared `/app` build.
+- Exact-B Balance backend: **3,161 passed**, then shipping **16 passed plus 18 subtests**. Frontend: **488 passed across 41 suites**, including the new 22-case read-load suite. Completeness gates rejected skips/pending/todo cases and passed. Root and independent reviewer both inspected the completed job evidence.
+- Exact-B Stock: **3,070 passed plus 7 subtests**. G47: **327 passed plus 127 subtests**, then cost acceptance **436 passed**. These suites overlap other gates; do not sum them as unique cases. Full run/job/artifact identities are retained in `release-checks.json`.
+
+### Actual publication boundary
+
+**GitHub production branch changed: yes. Live site changed by this financial task: no.** No shared `/app` source update, actual shared adapter run, own lease, prepare/prepublish or Republish/Publish changes action occurred. No financial/provider/business mutation was performed.
+
+After the merge, a fresh browser observation still showed the separate code-server password login. The main Emergent account being signed in does not authenticate that terminal. The earlier secure request was interrupted/cancelled, so no automatic credential retry was made. Keep the terminal page available and resume secure authentication only when the user asks to retry. Publication authorization itself already exists.
+
+Issue #1006 continuity limitation: adding a comment returned GitHub's 2,500-comment limit. A compact body update returned success with the requested content, but fresh wrapper and direct API readback retained the previous body and timestamp. Its persistence is **unconfirmed**; no foreign history was trimmed or overwritten to force a result. This documentation branch and the refreshed, re-read PR #1892 are the verified continuation records. The earlier STATUS phrase that a new ledger checkpoint records the continuation must be read with this later limitation.
+
+### Next safe actions
+
+1. Restore the separate terminal login through the supported secure flow after the user requests retry. Re-read current production, PR #1892 and the available continuation records. If a newer release exists, preserve it and determine whether this merged financial source is already deployed; do not replace newer production with this old merge.
+2. Before changing shared source or rehearsing there, run `cd /app` and `PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py status`. Continue only with fresh `active:false`; never clear another owner's lease. Inspect tracked/staged source and preserve all unrelated platform files.
+3. If production remains M above, fetch/verify and fast-forward shared source normally. Verify the merged intent ancestry, then run the configured `REACT_APP_BACKEND_URL=https://mezansalla.com PYTHONDONTWRITEBYTECODE=1 yarn build` in `/app/frontend`. Require exact reviewed source/runtime/artifact/proof and package checks.
+4. Only after actual adapter success, prepare this task's own lease, run prepublish immediately before one authorized publication, observe a newer explicit successful deployment, then run the official `verify --url https://mezansalla.com`. Require all three probes and subsequent `active:false`.
+5. Perform bounded read-only live report/manual-refresh acceptance. Keep financial reprocessing, historical repair, preparation creation and provider mutations outside this release. Record live latency only if actually measured; no production improvement percentage has been established.
 
 ## Resume
 

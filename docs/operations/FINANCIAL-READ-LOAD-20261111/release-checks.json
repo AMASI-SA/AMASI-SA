@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "task": "FINANCIAL-READ-LOAD-20261111",
+  "date": "2026-11-12",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pr": 1892,
+  "source_git_sha": "d94930510a92e2c426617725d21b9659bb8a9b1c",
+  "source_base_git_sha": "e0f00c6ec47536aaaa28ac3fa580f3d6abc02c96",
+  "intent_git_sha": "6c8ee358ab6c3c5915a9418f4018eff812c753f4",
+  "merge_git_sha": "570867c02ff2486750e4a99d574c25a8fef6c428",
+  "merge_and_intent_tree": "654da296269fb22348e87e0629de47ab942ad18a",
+  "runtime_release_id": "rg5-ea9d6b2941dd1934ea45e052004b374e9fdd1458d7f8f8f72723a8c50a9f61fa",
+  "intent_sha256": "d75bc3e4202a1c297125c3fd080759161b98523fa76f8b857655828b1d593c63",
+  "frontend_artifact_sha256": "d06c6e7a4345c85566c6eab9017d8e949e49d2d714a2c2a7374c3001ce7eee31",
+  "reproducibility_proof_sha256": "947f9a5c81e106ed8b2c2d49be4718e688978d91680abd5ae95eb80a779b72e1",
+  "local_build": {
+    "exit_code": 0,
+    "elapsed_seconds": 23.1,
+    "pinned_node": "22.23.2",
+    "pinned_yarn": "1.22.22",
+    "vite": "8.2.4",
+    "clean_build_passes": 2
+  },
+  "candidate": {
+    "readiness_run": 43167586398,
+    "artifact_id": 13920432691,
+    "zip_bytes": 367378,
+    "zip_sha256": "7e1a28aacc45d4ad148e69d412eaba57aa50d67b3e4c1cc85215b79934236a46",
+    "intent_bytes": 1269267,
+    "local_ci_byte_identical": true,
+    "independent_review": "PASS"
+  },
+  "source_manifests": {
+    "frontend_files": 1150,
+    "backend_files": 1175,
+    "backend_modified": 1,
+    "release_control_files": 274,
+    "release_control_added": 1,
+    "release_control_modified": 0
+  },
+  "exact_b_workflows": [
+    {
+      "id": 43168080281,
+      "name": "Snapchat Direct Active Publication",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43168080363,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43168080487,
+      "name": "TikTok Creator Release Candidate",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 43168080594,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43168080320,
+      "name": "Mobile Order Tracking",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43168080367,
+      "name": "MZ2 Employee Salary and Password",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43168080365,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43168080364,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43168080273,
+      "name": "Operational Stock Eligibility",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43168080317,
+      "name": "G47 Focused Integration",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43168080460,
+      "name": "Operational Balance Web",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43168080464,
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "expected_skip": {
+    "workflow": "TikTok Creator Release Candidate",
+    "condition": "head_ref == codex/tiktok-content-ci-20261011"
+  },
+  "exact_b_readiness": {
+    "run_id": 43168080364,
+    "node20_job_id": 131014847222,
+    "node24_job_id": 131014846833,
+    "critical_steps_all_passed": true,
+    "evidence_artifacts": [
+      13920972388,
+      13921450667
+    ],
+    "generated_output_artifacts": [
+      13921121733,
+      13920997142
+    ]
+  },
+  "test_gate_results": [
+    {
+      "name": "Operational Balance Backend",
+      "job_id": 131014546044,
+      "passed": 3161,
+      "skipped": 0,
+      "elapsed_seconds": 187.28,
+      "additional_shipping_passed": 16,
+      "additional_shipping_subtests": 18
+    },
+    {
+      "name": "Operational Balance Frontend",
+      "job_id": 131014545672,
+      "passed": 488,
+      "suites": 41,
+      "pending": 0,
+      "elapsed_seconds": 21.837,
+      "new_read_load_suite_included": true
+    },
+    {
+      "name": "Operational Stock Eligibility",
+      "job_id": 131014696401,
+      "passed": 3070,
+      "subtests": 7,
+      "elapsed_seconds": 218.45
+    },
+    {
+      "name": "G47 acceptance",
+      "job_id": 131014545352,
+      "passed": 327,
+      "subtests": 127,
+      "elapsed_seconds": 227.55
+    },
+    {
+      "name": "G47 cost acceptance",
+      "job_id": 131014545352,
+      "passed": 436,
+      "elapsed_seconds": 35.83
+    }
+  ],
+  "test_count_note": "Suites overlap; do not add these counts as unique tests.",
+  "merge_verification": {
+    "method": "GitHub merge API plus independent current-ref and Git-commit metadata reads",
+    "merged": true,
+    "normal_merge": true,
+    "parents": [
+      "e0f00c6ec47536aaaa28ac3fa580f3d6abc02c96",
+      "6c8ee358ab6c3c5915a9418f4018eff812c753f4"
+    ],
+    "tree_equals_reviewed_b": true,
+    "local_postmerge_fetch": "503 upstream timeout; no local M verification claimed"
+  },
+  "deployment": {
+    "published": false,
+    "shared_app_changed": false,
+    "own_lease_acquired": false,
+    "actual_shared_adapter_run": false,
+    "fresh_shared_guard_status_available": false,
+    "blocker": "Separate code-server password login remains visible after interrupted secure authentication. No automatic retry after cancellation."
+  },
+  "continuity": {
+    "evidence_branch": "codex/financial-read-load-merged-evidence-20261112",
+    "deploy_evidence_branch": false,
+    "issue_1006_comment": "Rejected: GitHub maximum 2500 comments.",
+    "issue_1006_body_update": "Tool accepted replacement, but independent readback remained the old body; persistence unconfirmed. PR1892 and this branch are verified continuation records."
+  }
+}
