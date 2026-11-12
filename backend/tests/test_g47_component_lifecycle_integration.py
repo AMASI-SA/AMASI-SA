@@ -269,14 +269,35 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         )
         last = await self.mark_piece("piece-2")
         self.assertEqual(last.status_code, 200, last.text)
-        self.assertTrue(last.json()["progress"]["order_completed"])
-        self.assertEqual(last.json()["progress"]["stage"], "completed")
-        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 1)
+        # This legacy fixture intentionally has NO authoritative Salla item
+        # list in unified_orders; even two ready pieces must not fabricate a
+        # complete source order or create a shipment.
+        self.assertFalse(last.json()["progress"]["order_completed"])
+        self.assertEqual(last.json()["progress"]["stage"], "in_progress")
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
         self.assertEqual(await self.on_hand(), after_stock - (before_stock - after_stock))
+        rows = await self.db[pieces.PIECES].find({
+            "user_id": "owner", "order_number": "order-1",
+        }).to_list(None)
+        plan = await self.db[PLANS].find_one({
+            "user_id": "owner", "order_id": "order-1",
+        })
+        units = await self.db[UNITS].find({
+            "user_id": "owner", "plan_id": plan["_id"],
+        }).to_list(None)
+        identities = {
+            (unit["order_line_id"], unit["unit_index"]) for unit in units
+        }
+        # Exact current-source coverage succeeds when independent canonical
+        # order and component unit proofs exist; it is intentionally not
+        # inferred from the thin legacy fixture in the HTTP route above.
+        self.assertTrue(pieces._historical_reviewed_source_units_covered(
+            self.order(status="in_progress"), rows, identities,
+        ))
         replay = await self.mark_piece("piece-2")
         self.assertEqual(replay.status_code, 200, replay.text)
         self.assertTrue(replay.json()["idempotent"])
-        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 1)
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
 
     async def test_reviewed_historical_missing_source_unit_cannot_create_shipment(self):
         response, _ = await self.accept()
