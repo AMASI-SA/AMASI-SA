@@ -19,6 +19,28 @@ from .google_oauth_security import (
 )
 
 
+async def _persist_google_ads_accounts(db, *, user_id, docs, now_iso, complete_discovery):
+    """Refresh metadata without overwriting a concurrent owner reporting choice."""
+    for doc in docs:
+        fields = {key: value for key, value in doc.items() if key != "created_at"
+                  and not (key in {"currency", "timezone"} and value is None)}
+        await db.mezan_integration_accounts_v2.update_one(
+            {"user_id": user_id, "provider": "google_ads", "external_account_id": doc["external_account_id"]},
+            {"$set": fields, "$setOnInsert": {
+                "created_at": now_iso, "mezan_selected": False,
+                "selection_status": "discovered", "selected_at": None,
+            }}, upsert=True,
+        )
+    if complete_discovery:
+        # Retain vanished account records and their history. The parent policy
+        # remains authoritative if an old selected account later reappears.
+        await db.mezan_integration_accounts_v2.update_many(
+            {"user_id": user_id, "provider": "google_ads", "connection_provenance": "api_connection",
+             "connection_status": "connected", "external_account_id": {"$nin": [doc["external_account_id"] for doc in docs]}},
+            {"$set": {"connection_status": "disconnected", "last_observed_at": now_iso}},
+        )
+
+
 async def _persist_google_projection(
     db: Any,
     *,
@@ -113,11 +135,12 @@ async def _persist_google_projection(
             },
             upsert=True,
         )
-        await db.mezan_integration_accounts_v2.delete_many(
-            {"user_id": user_id, "provider": provider}
-        )
+        if provider != "google_ads":
+            await db.mezan_integration_accounts_v2.delete_many(
+                {"user_id": user_id, "provider": provider}
+            )
+        docs = []
         if provider_accounts:
-            docs = []
             for account in provider_accounts[:200]:
                 external_id = str(account.get("external_account_id") or "").strip()
                 if not external_id:
@@ -151,8 +174,13 @@ async def _persist_google_projection(
                         "created_at": now_iso,
                     }
                 )
-            if docs:
+            if docs and provider != "google_ads":
                 await db.mezan_integration_accounts_v2.insert_many(docs)
+        if provider == "google_ads":
+            await _persist_google_ads_accounts(
+                db, user_id=user_id, docs=docs, now_iso=now_iso,
+                complete_discovery=(not scope_granted or not provider_error) and len(provider_accounts) <= 200,
+            )
         health_score = 100 if provider_accounts else 75 if scope_granted else None
         health_status = "healthy" if provider_accounts else "degraded" if scope_granted else "not_available"
         await db.mezan_integration_health_v2.insert_one(

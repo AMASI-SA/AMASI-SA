@@ -93,13 +93,13 @@ const incompleteGoogleEvidence = {
     reason_codes: ["google_native_account_day_missing"],
 };
 
-function googlePartialTable(evidence = incompleteGoogleEvidence, spend = null) {
+function googlePartialTable(evidence = incompleteGoogleEvidence, spend = null, tableProps = {}) {
     const payload = { providers: { google: { spend_sar: spend, salla_sales_sar: 1196.98,
         salla_orders: 5, actual_roas: null, platform_cost_per_order_sar: null } },
         total: { spend_sar: null, salla_sales_sar: 1196.98, salla_orders: 5, actual_roas: null } };
     const before = buildAdsExecutiveMetricRows(payload);
     const host = document.createElement("div");
-    host.innerHTML = renderToStaticMarkup(<AdsExecutiveBreakdownTable data={payload} googleSpendEvidence={evidence} />);
+    host.innerHTML = renderToStaticMarkup(<AdsExecutiveBreakdownTable data={payload} googleSpendEvidence={evidence} {...tableProps} />);
     expect(buildAdsExecutiveMetricRows(payload)).toEqual(before);
     const table = host.querySelector('[data-testid="ads-executive-breakdown-table"]');
     const column = Array.from(table.querySelectorAll("thead th")).findIndex((cell) => cell.textContent === "Google Ads");
@@ -115,6 +115,22 @@ test("Google known evidence changes only the spend display, not total, commerce,
     expect(payload.total.spend_sar).toBeNull();
     expect(payload.providers.google.actual_roas).toBeNull();
     expect(payload.providers.google.platform_cost_per_order_sar).toBeNull();
+});
+
+test("available portfolio total annotates only the spend total without inventing final metrics", () => {
+    const { payload, rows } = googlePartialTable(incompleteGoogleEvidence, null, {
+        fromDate: "2026-08-05", toDate: "2026-08-05",
+        platformSpendEvidence: {
+            date_from: "2026-08-05", date_to: "2026-08-05", total_sar: null,
+            known_total_sar: 1405.65,
+            spend_quality: { status: "incomplete", amount_available: false },
+        },
+    });
+    expect(rows.map((row) => row.lastElementChild.textContent)).toEqual([
+        "المتاح 1,405.65 ر.س · غير مكتمل", "1,196.98", "5", "—", "—",
+    ]);
+    expect(payload.total.spend_sar).toBeNull();
+    expect(payload.total.actual_roas).toBeNull();
 });
 
 test.each([0, "0", false, true, null, "", " ", -1, NaN, Infinity, {}, []])(

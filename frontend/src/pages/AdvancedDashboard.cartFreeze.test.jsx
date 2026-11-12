@@ -12,7 +12,9 @@ jest.mock("../lib/dashboardLiveRefresh", () => ({
 }));
 jest.mock("react-router-dom", () => ({ Link: ({ children }) => <span>{children}</span> }));
 jest.mock("../hooks/useOrders", () => ({ useOrders: () => ({ orders: [], hasMore: false }) }));
-jest.mock("../services/dashboardAdsSpend", () => ({ getDashboardAdsSpend: async () => null }));
+jest.mock("../services/dashboardAdsSpend", () => ({
+    ...jest.requireActual("../services/dashboardAdsSpend"), getDashboardAdsSpend: async () => null,
+}));
 jest.mock("../components/DashboardAdsSpendCard", () => () => null);
 jest.mock("../components/LatestSoldProductsCard", () => () => null);
 jest.mock("../components/AdvancedFilters", () => ({

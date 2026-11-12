@@ -28,6 +28,71 @@ export function googleKnownIncompleteAmount(evidence) {
         && known !== null && known > 0 ? known : null;
 }
 
+// Both dashboard cards display this saved subtotal. It never supplies a full
+// expense, profit, CPA or ROAS, and must belong to the selected period.
+export function dashboardSpendPeriodMatches(snapshot, { fromDate, toDate } = {}) {
+    const from = safeDate(fromDate);
+    const to = safeDate(toDate || fromDate);
+    return Boolean(from && to && snapshot?.date_from === from && snapshot?.date_to === to);
+}
+
+export function dashboardAvailableAmount(snapshot, range) {
+    const quality = snapshot?.spend_quality;
+    const amount = knownAmount(snapshot?.total_sar);
+    return dashboardSpendPeriodMatches(snapshot, range) && amount !== null
+        && ["complete", "provisional"].includes(quality?.status)
+        && (quality?.amount_available === true || quality?.amount_complete === true) ? amount : null;
+}
+
+// Compare the saved financial reader's provider and account basis. A display
+// snapshot attached by the page loader is not evidence of recalculated fees.
+export function dashboardCanonicalSpendMatches(data, snapshot) {
+    const total = knownAmount(snapshot?.total_sar);
+    if (total === null || knownAmount(data?.totals?.total_ads_cost) !== total) return false;
+    const ads = data?.ads_v2 || {};
+    for (const provider of DASHBOARD_ADS_PROVIDERS) {
+        const current = knownAmount(snapshot?.provider_totals_sar?.[provider]);
+        const canonical = knownAmount(ads.breakdown?.[provider === "google" ? "google_transitional" : provider])
+            ?? knownAmount(ads.executive_breakdown?.providers?.[provider]?.spend_sar)
+            ?? knownAmount(ads.providers?.[provider]?.spend);
+        if (canonical !== null && (current === null ? canonical > 0 : canonical !== current)) return false;
+    }
+    if (ads.spend_quality?.status && snapshot?.spend_quality?.status
+        && ads.spend_quality.status !== snapshot.spend_quality.status) return false;
+    const displayedAccounts = snapshot?.providers?.snapchat?.accounts;
+    const feeAccounts = ads.bank_commissions?.accounts;
+    if (Array.isArray(displayedAccounts) && Array.isArray(feeAccounts)) {
+        const canonical = new Map(feeAccounts.filter((row) => row.provider === "snapchat_ads")
+            .map((row) => [row.external_account_id, row]));
+        for (const row of displayedAccounts) {
+            const amount = knownAmount(row.total_sar);
+            const basis = canonical.get(row.account_id);
+            if (amount === null || (!basis && amount > 0)) return false;
+            if (basis && (knownAmount(basis.spend_sar) !== amount
+                || knownAmount(basis.spend_native) !== knownAmount(row.total_native)
+                || basis.native_currency !== row.currency)) return false;
+            canonical.delete(row.account_id);
+        }
+        if ([...canonical.values()].some((row) => knownAmount(row.spend_sar) > 0)) return false;
+    }
+    return true;
+}
+
+export function dashboardKnownIncompleteAmount(snapshot, { fromDate, toDate } = {}) {
+    const quality = snapshot?.spend_quality;
+    const known = knownAmount(snapshot?.known_total_sar);
+    if (!dashboardSpendPeriodMatches(snapshot, { fromDate, toDate })
+        || snapshot?.total_sar !== null || quality?.status !== "incomplete"
+        || quality?.amount_available !== false || known === null) return null;
+    // A default zero with no observed provider amount is still unknown.
+    const observedZero = DASHBOARD_ADS_PROVIDERS.some((provider) =>
+        knownAmount(snapshot?.provider_totals_sar?.[provider]) === 0)
+        || (Number.isSafeInteger(snapshot?.providers?.snapchat?.known_account_count)
+            && snapshot.providers.snapchat.known_account_count > 0
+            && knownAmount(snapshot.providers.snapchat.known_total_sar) === 0);
+    return known > 0 || observedZero ? known : null;
+}
+
 function accountCount(value) {
     return Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
@@ -200,7 +265,7 @@ export function normalizeDashboardAdsSpend(payload = {}) {
     const totals = Object.fromEntries(
         DASHBOARD_ADS_PROVIDERS.map((provider) => [
             provider,
-            nonnegative(value?.provider_totals_sar?.[provider]),
+            knownAmount(value?.provider_totals_sar?.[provider]),
         ]),
     );
     return {
@@ -212,7 +277,7 @@ export function normalizeDashboardAdsSpend(payload = {}) {
         hourly_spend: hourly,
         providers,
         provider_totals_sar: totals,
-        total_sar: nonnegative(value.total_sar),
+        total_sar: knownAmount(value.total_sar),
         known_total_sar: knownAmount(value.known_total_sar),
         spend_quality: value.spend_quality && typeof value.spend_quality === "object"
             && !Array.isArray(value.spend_quality) ? {

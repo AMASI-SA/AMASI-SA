@@ -1,5 +1,6 @@
 import DashboardTableScroll from "./DashboardTableScroll";
-import { googleKnownIncompleteAmount } from "../services/dashboardAdsSpend";
+import { dashboardAvailableAmount, dashboardKnownIncompleteAmount, dashboardSpendPeriodMatches,
+    googleKnownIncompleteAmount } from "../services/dashboardAdsSpend";
 const PROVIDERS = [
     { key: "snapchat", label: "Snapchat" },
     { key: "tiktok", label: "TikTok" },
@@ -156,12 +157,38 @@ function SnapchatAccountExpenses({ accounts }) {
     </div>;
 }
 
-export default function AdsExecutiveBreakdownTable({ data, snapchatAccounts, googleSpendEvidence }) {
+export default function AdsExecutiveBreakdownTable({ data, snapchatAccounts, googleSpendEvidence,
+    platformSpendEvidence, fromDate, toDate, financialMetricsPending = false }) {
     const rows = buildAdsExecutiveMetricRows(data);
-    const knownGoogle = googleSpendEvidence ? googleKnownIncompleteAmount(googleSpendEvidence) : null;
+    const snapshot = dashboardSpendPeriodMatches(platformSpendEvidence, { fromDate, toDate })
+        ? platformSpendEvidence : null;
+    const googleEvidence = snapshot?.providers?.google || googleSpendEvidence;
+    const knownGoogle = googleEvidence ? googleKnownIncompleteAmount(googleEvidence) : null;
+    const fullTotal = dashboardAvailableAmount(snapshot, { fromDate, toDate });
+    const knownTotal = dashboardKnownIncompleteAmount(platformSpendEvidence, { fromDate, toDate });
+    const hasSpendSnapshot = fullTotal !== null || snapshot?.spend_quality?.status === "incomplete"
+        && snapshot?.spend_quality?.amount_available === false;
     const coverage = data?.coverage || {};
     const splitSnapchat = snapchatAccounts !== undefined;
     const providers = splitSnapchat ? PROVIDERS.filter(({ key }) => key !== "snapchat") : PROVIDERS;
+    const derivedMetric = (row) => ["cost_per_order", "roas"].includes(row.key);
+    const providerValue = (row, key) => {
+        if (financialMetricsPending && derivedMetric(row)) return "—";
+        if (row.key !== "spend") return formatValue(row.values[key], row.format);
+        const amount = hasSpendSnapshot ? accountAmount(snapshot?.provider_totals_sar?.[key]) : row.values[key];
+        if (key === "google" && amount === null && knownGoogle !== null
+            && (hasSpendSnapshot || data?.providers?.google?.spend_sar === null)) {
+            return `المتاح ${fmtSar(knownGoogle)} ر.س · غير مكتمل`;
+        }
+        return formatValue(amount, row.format);
+    };
+    const totalValue = (row) => {
+        if (financialMetricsPending && derivedMetric(row)) return "—";
+        if (row.key !== "spend") return formatValue(row.total, row.format);
+        if (fullTotal !== null) return `${fmtSar(fullTotal)}${snapshot.spend_quality.status === "provisional" ? " · أولي" : ""}`;
+        if (knownTotal !== null) return `المتاح ${fmtSar(knownTotal)} ر.س · غير مكتمل`;
+        return formatValue(hasSpendSnapshot ? null : row.total, row.format);
+    };
 
     return (
         <div dir="rtl" data-testid="ads-executive-breakdown-content">
@@ -218,14 +245,12 @@ export default function AdsExecutiveBreakdownTable({ data, snapchatAccounts, goo
                                         key={key}
                                         className="p-2 text-center font-mono font-bold text-slate-700"
                                     >
-                                        {row.key === "spend" && key === "google"
-                                            && data?.providers?.google?.spend_sar === null && knownGoogle !== null
-                                            ? `المتاح ${fmtSar(knownGoogle)} ر.س · غير مكتمل`
-                                            : formatValue(row.values[key], row.format)}
+                                        {providerValue(row, key)}
                                     </td>
                                 ))}
-                                <td className="p-2 text-center font-mono font-extrabold text-emerald-800">
-                                    {formatValue(row.total, row.format)}
+                                <td className="p-2 text-center font-mono font-extrabold text-emerald-800"
+                                    data-testid={row.key === "spend" ? "ads-executive-spend-total" : undefined}>
+                                    {totalValue(row)}
                                 </td>
                             </tr>
                         ))}

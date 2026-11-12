@@ -89,6 +89,21 @@ test("latest orders mirrors Orders V2 and keeps each order's original currency",
     expect(markup).not.toContain("187.33 ر.س");
 });
 
+test("latest orders renders the saved English city names in Arabic", () => {
+    const cities = [
+        ["Al Khobar", "الخبر"], ["Taif", "الطائف"], ["Arar", "عرعر"],
+        ["Riyadh", "الرياض"], ["Dammam", "الدمام"], ["Afif", "عفيف"], ["AL HAIR", "الحائر"],
+    ];
+    const markup = renderToStaticMarkup(<MemoryRouter><LatestOrders orders={cities.map(([city], index) => ({
+        order_number: `sample-city-${index}`, customer: { name: "عميل" },
+        shipping: { address: { city } }, totals: { total: 50 },
+    }))} /></MemoryRouter>);
+    cities.forEach(([english, arabic]) => {
+        expect(markup).toContain(arabic);
+        expect(markup).not.toContain(`>${english}<`);
+    });
+});
+
 test("summary strip includes current month order and sales cards", () => {
     const markup = renderToStaticMarkup(
         <MemoryRouter>
@@ -879,6 +894,90 @@ function googlePartialProfitPayload() {
     };
     return payload;
 }
+
+function availablePortfolioProfitPayload() {
+    const payload = googlePartialProfitPayload();
+    Object.assign(payload.dashboard_platform_spend, {
+        timezone: "Asia/Riyadh",
+        total_sar: null,
+        known_total_sar: 1405.65,
+        provider_totals_sar: { snapchat: 1144.55, meta: 222.22, tiktok: 33.33, google: null },
+        spend_quality: { status: "incomplete", amount_available: false, amount_complete: false },
+    });
+    payload.dashboard_platform_spend.providers.google.known_total_sar = 5.55;
+    return payload;
+}
+
+test("profit shows the available portfolio total without filling final spend or dependent metrics", () => {
+    const payload = availablePortfolioProfitPayload();
+    const before = JSON.parse(JSON.stringify(payload));
+    inspectAccountProfit(payload, (container) => {
+        const row = container.querySelector('[data-testid="advanced-profit-row-ads"]');
+        expect(row.textContent).toContain("إجمالي المتاح من الإعلانات");
+        expect(row.textContent).toContain("1,405.65");
+        expect(row.textContent).toContain("غير مكتمل");
+        expect(container.textContent).toContain("تكلفة الطلب والعائد بانتظار اكتمال الصرف");
+        const spendTotal = container.querySelector('[data-testid="ads-executive-spend-total"]');
+        expect(spendTotal.textContent).toBe("المتاح 1,405.65 ر.س · غير مكتمل");
+        expect(container.querySelector('[data-testid="advanced-profit-net-margin"]')).toBeNull();
+        expect(payload.totals.total_ads_cost).toBeNull();
+        expect(payload.totals.net_profit).toBeNull();
+        expect(payload.totals.avg_cost_per_order).toBeNull();
+        expect(payload.totals.overall_roas).toBeNull();
+        expect(payload).toEqual(before);
+    });
+});
+
+test.each(["from", "to", "missing-from", "missing-to", "missing-selection"])(
+    "available portfolio total is withheld for %s period mismatch", (fault) => {
+        const payload = availablePortfolioProfitPayload();
+        if (fault === "from") payload.dashboard_platform_spend.date_from = "2026-10-25";
+        if (fault === "to") payload.dashboard_platform_spend.date_to = "2026-10-27";
+        if (fault === "missing-from") delete payload.dashboard_platform_spend.date_from;
+        if (fault === "missing-to") delete payload.dashboard_platform_spend.date_to;
+        inspectAccountProfit(payload, (container, root) => {
+            if (fault === "missing-selection") act(() => root.render(<ProfitCard data={payload} />));
+            expect(container.textContent).not.toContain("1,405.65");
+            expect(container.querySelector('[data-testid="advanced-profit-row-ads"]').textContent).toContain("غير مكتمل");
+            expect(payload.totals.total_ads_cost).toBeNull();
+        });
+    },
+);
+
+test("confirmed executive zero wins over stale available portfolio metadata", () => {
+    const payload = availablePortfolioProfitPayload();
+    Object.assign(payload.totals, { total_ads_cost: 0, ads_spend_data_complete: true });
+    payload.ads_v2.spend_quality = { status: "complete", amount_complete: true };
+    payload.ads_v2.executive_breakdown.total.spend_sar = 0;
+    inspectAccountProfit(payload, (container) => {
+        const row = container.querySelector('[data-testid="advanced-profit-row-ads"]');
+        expect(row.textContent).toContain("0.00");
+        expect(row.textContent).not.toContain("غير مكتمل");
+        expect(container.textContent).not.toContain("1,405.65");
+    });
+});
+
+test("a newer shared incomplete snapshot hides stale canonical total and derived financial figures", () => {
+    const payload = availablePortfolioProfitPayload();
+    Object.assign(payload.totals, { total_ads_cost: 50, ads_spend_data_complete: true,
+        avg_cost_per_order: 998.12, overall_roas: 997.12, net_profit: 996.12 });
+    payload.ads_v2.spend_quality = { status: "complete", amount_complete: true };
+    Object.assign(payload.ads_v2.executive_breakdown.total, { spend_sar: 50, actual_roas: 997.12 });
+    inspectAccountProfit(payload, (container, root) => {
+        act(() => root.render(<ProfitCard data={payload} fromDate="2026-10-26" toDate="2026-10-26"
+            platformSpend={payload.dashboard_platform_spend} />));
+        const row = container.querySelector('[data-testid="advanced-profit-row-ads"]');
+        expect(row.textContent).toContain("1,405.65");
+        expect(row.textContent).toContain("غير مكتمل");
+        expect(container.querySelector('[data-testid="ads-executive-spend-total"]').textContent)
+            .toContain("1,405.65");
+        for (const stale of ["998.12", "997.12", "996.12"]) expect(container.textContent).not.toContain(stale);
+        expect(payload.totals.total_ads_cost).toBe(50);
+        expect(payload.totals.avg_cost_per_order).toBe(998.12);
+        expect(payload.totals.overall_roas).toBe(997.12);
+        expect(payload.totals.net_profit).toBe(996.12);
+    });
+});
 
 test("profit passes same-period Google evidence only for partial spend display", () => {
     const payload = googlePartialProfitPayload();

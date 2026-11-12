@@ -11,6 +11,7 @@ import math
 from .service import AdsManagerService
 from integrations_control_center.google_ads_reporting import GOOGLE_ADS_DAILY_COLLECTION, GOOGLE_ADS_REPORTING_SOURCE_MODE
 from integrations_control_center.google_ads_workspace import FACTS, FACTSETS
+from integrations_control_center.google_account_selection import google_reporting_scope, MAX_ACCOUNTS
 
 
 def amount(value):
@@ -28,18 +29,22 @@ async def augment_google_overview(db, user_id, result, *, provider="all", campai
         return result
     start, end = result["range"]["date_from"], result["range"]["date_to"]
     requested_days = (datetime.fromisoformat(end) - datetime.fromisoformat(start)).days + 1
-    accounts = await db.mezan_integration_accounts_v2.find({"user_id": user_id, "provider": "google_ads", "connection_status": "connected", "connection_provenance": "api_connection"}, {"_id": 0, "ad_account_id": 1, "external_account_id": 1, "mezan_selected": 1}).to_list(length=101)
-    selected = [row for row in accounts if row.get("mezan_selected") is True] or accounts
-    ids = {str(row.get("ad_account_id") or row.get("external_account_id") or "") for row in selected}
-    connection = await db.mezan_integrations_v2.find_one({"user_id": user_id, "provider": "google_ads", "connection_provenance": "api_connection"}, {"_id": 0, "connection_status": 1, "last_sync_at": 1}) or {}
+    accounts = await db.mezan_integration_accounts_v2.find({"user_id": user_id, "provider": "google_ads", "connection_status": "connected", "connection_provenance": "api_connection"}, {"_id": 0, "ad_account_id": 1, "external_account_id": 1, "mezan_selected": 1}).to_list(length=MAX_ACCOUNTS + 1)
+    connections = await db.mezan_integrations_v2.find({"user_id": user_id, "provider": "google_ads"}, {"_id": 0, "connection_status": 1, "last_sync_at": 1, "account_selection_configured": 1, "selected_account_ids": 1}).to_list(length=2)
+    connection = connections[0] if len(connections) == 1 else {}
+    selection = google_reporting_scope(accounts, connection)
+    ids = {str(row.get("ad_account_id") or row.get("external_account_id") or "").replace("-", "").strip() for row in selection["accounts"]}
     rows = await db[GOOGLE_ADS_DAILY_COLLECTION].find({"user_id": user_id, "provider": "google_ads", "ad_account_id": {"$in": sorted(ids)}, "date": {"$gte": start, "$lte": end}, "source_mode": GOOGLE_ADS_REPORTING_SOURCE_MODE}, {"_id": 0}).to_list(length=10001)
     aligned = []
     for row in rows[:10000]:
+        if str(row.get("ad_account_id")) not in ids:
+            continue
         proof = row.get("source_close_proof") or {}
         if row.get("account_timezone") == "Asia/Riyadh" and proof.get("complete") is True and proof.get("account_id") == str(row.get("ad_account_id")) and proof.get("business_date") == row.get("date") and amount(row.get("spend_sar")) is not None:
             aligned.append(row)
     pairs = {(row["ad_account_id"], row["date"]) for row in aligned}
-    complete = bool(ids) and len(accounts) <= 100 and len(rows) <= 10000 and len(pairs) == len(aligned) == len(ids) * requested_days
+    complete = (selection["complete"] and bool(ids) and len(accounts) <= MAX_ACCOUNTS and len(connections) <= 1
+                and len(rows) <= 10000 and len(pairs) == len(aligned) == len(ids) * requested_days)
     daily = {}
     for row in aligned:
         daily[row["date"]] = daily.get(row["date"], 0) + amount(row["spend_sar"])
@@ -47,7 +52,7 @@ async def augment_google_overview(db, user_id, result, *, provider="all", campai
     latest = max((str(row.get("updated_at") or row.get("observed_at") or "") for row in rows), default=None)
     cutoff = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
     sets = await db[FACTSETS].find({"user_id": user_id, "account_id": {"$in": sorted(ids)}, "date_from": start, "date_to": end, "complete": True, "observed_at": {"$gte": cutoff}}, {"_id": 0}).to_list(length=101)
-    facts = [row for snapshot in sets[:100] for row in snapshot.get("campaigns", []) if row.get("account_id") == snapshot.get("account_id") and row.get("source") == "google_ads_api"]
+    facts = [row for snapshot in sets[:100] for row in snapshot.get("campaigns", []) if snapshot.get("account_id") in ids and row.get("account_id") == snapshot.get("account_id") and row.get("source") == "google_ads_api"]
     campaigns = []
     for row in facts[:2000]:
         native = row.get("metrics") or {}
