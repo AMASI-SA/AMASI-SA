@@ -215,7 +215,7 @@ def _child(row, context):
     if not isinstance(meta, dict) or type(meta.get("app_id")) not in (int, str) or meta["app_id"] not in (0, "0"):
         _fail()
     for key in ("company_name", "shipping_company_name", "external_company_name"):
-        if row.get(key) is not None and normalize_shipping_carrier(_text(row[key])) != normalize_shipping_carrier(name):
+        if row.get(key) not in (None, "") and normalize_shipping_carrier(_text(row[key])) != normalize_shipping_carrier(name):
             _fail()
     return name
 
