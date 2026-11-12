@@ -1059,7 +1059,7 @@ def append_components(order, base_id, product_cost, services, quantity, supplier
                                'cost': str(cost), 'quantity': str(quantity), 'component': 'service'})
 
 
-def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, cod, *, delivery_event=None):
+def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, cod, *, delivery_event=None, started_at=None):
     """Attach existing delivery money rules without importing old sale effects."""
     from operational_delivery_evidence import status_delivery
     identity, order_number = order['id'], order['order_number']
@@ -1161,6 +1161,8 @@ def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, co
             order.pop('carrier', None)
         when = created if undated else instant(delivery_event['delivered_at']) if delivery_event else instant(
             shipping.get('delivered_at') or raw.get('updated_at') or raw.get('date_updated') or created)
+        if undated and delivery_event.get('recognition_basis') == 'owner_confirmed_after_start':
+            when = max(created, instant(started_at))
         if not undated and len(assignments) == 1 and assignments[0].get('status') == 'delivered' and assignments[0].get('delivered_at'):
             when = instant(assignments[0]['delivered_at'])
         rates = [r for r in setup.get('contracts', []) if r.get('status') == 'approved'
@@ -1173,7 +1175,7 @@ def _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, co
             overlapping = [r for r in setup.get('contracts', []) if r.get('status') == 'approved'
                            and r.get('party_type') == party_kind and r.get('party_id') == party_id
                            and r.get('context') == 'delivery' and instant(r['effective_from']) <= through
-                           and (not r.get('effective_to') or created < instant(r['effective_to']))]
+                           and (not r.get('effective_to') or when < instant(r['effective_to']))]
             # The fee is certain only if one approved tariff covers every
             # possible delivery instant. A recording time must not pick a new
             # price for an undated historical service.
@@ -1326,6 +1328,11 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     statement_plans = await load_statement_plans(db, owner, providers=plan_providers,
         max_rows=MAX_ROWS, order_numbers=plan_orders) if plan_orders else {}
     from operational_delivery_evidence import conflicting_shipments, created_after_start_delivery, status_delivery
+    from operational_delivery_confirmation import PREFIX as DELIVERY_CONFIRMATION_PREFIX, date_gap_identity
+    confirmation_facts = (operational_state or {}).get('engine', {}).get('facts', {})
+    manual_driver_numbers = {str(record.get('order_number')) for key, record in confirmation_facts.items()
+                            if key.startswith(DELIVERY_CONFIRMATION_PREFIX) and isinstance(record, dict)
+                            and record.get('party_type') == 'store_driver'}
     shipment_conflicts = conflicting_shipments(data['unified_orders'], operational_state)
     undated_drivers = {str(a.get('order_number')) for a in data['store_delivery_assignments']
                        if a.get('active') is True and a.get('delivered_at') in (None, '')
@@ -1333,6 +1340,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     undated_drivers.update(str(event.get('order_number'))
         for key, event in (operational_state or {}).get('engine', {}).get('facts', {}).items()
         if key.startswith('delivery_event:') and status_delivery(event) and event.get('party_type') == 'store_driver')
+    undated_drivers.update(manual_driver_numbers)
     status_order_numbers = set()
     for raw in (raw_orders if undated_drivers else ()):
         await cpu_budget.checkpoint()
@@ -1341,7 +1349,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
         if number_key not in undated_drivers:
             continue
         try:
-            if created_after_start_delivery(raw, start, now):
+            if created_after_start_delivery(raw, start, now) or number_key in manual_driver_numbers:
                 status_order_numbers.add(number_key)
         except (ValueError, TypeError):
             pass  # The ordinary order parser retains its exact source issue.
@@ -1444,7 +1452,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     shipment_conflicts=shipment_conflicts,
                     frozen_event=(operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity),
                     frozen_shipping=(operational_state or {}).get('engine', {}).get('facts', {}).get('shipping:' + identity),
-                    recorded_fee=recorded_courier_fee(operational_state, identity))
+                    recorded_fee=recorded_courier_fee(operational_state, identity),
+                    owner_confirmation=confirmation_facts.get(DELIVERY_CONFIRMATION_PREFIX + identity))
                 if event is None:
                     continue
                 # Native drivers retain their SAR-only contract. A courier's
@@ -1453,7 +1462,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     raise ValueError('operational_delivery_currency_unsupported')
                 order = {'id': identity, 'order_number': order_number, 'created_at': created.isoformat(),
                     'updated_at': max(instant(raw.get('updated_at') or raw.get('date_updated') or created),
-                                      instant(event['delivered_at'])).isoformat(),
+                                      instant(event.get('delivered_at') or event.get('recorded_at'))).isoformat(),
                     'delivered_at': event['delivered_at'], 'status': 'delivered',
                     'currency': event['currency'], 'delivery_event': event}
                 payment = raw.get('payment') if isinstance(raw.get('payment'), dict) else {}
@@ -1483,10 +1492,16 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         cod = order['cod_required'] = True
                         issue(out, 'operational_delivery_payment_method_incomplete', identity)
                 _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, cod,
-                                         delivery_event=event)
+                                         delivery_event=event, started_at=started_at)
                 if hold_prior_courier_event(operational_state, event, order.get('carrier')):
                     courier_issue(out, 'courier_fee_historical_review_required', raw, source,
                                  carrier=order.get('carrier'), event=event, setup=setup, owner=owner)
+                    if event.get('recognition_basis') == 'owner_confirmed_after_start':
+                        carrier = order.get('carrier')
+                        if carrier:
+                            carrier.update(cost=None, fee_complete=False, fee_recognition_held=True)
+                            carrier.pop('fee_components', None)
+                        out['delivery_events'].append(order)
                 else:
                     out['delivery_events'].append(order)
                 continue
@@ -1607,7 +1622,12 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             from operational_delivery_evidence import (DELIVERED, _status, _text, created_after_start_delivery,
                                                         recorded_courier_fee, resolve_delivery_event)
             native_driver = data['_driver_fee_review'].requires_delivery_proof(order)
-            if native_driver or status in DELIVERED or (isinstance(current, dict) and _status(current.get('status')) in DELIVERED):
+            # Saved evidence must be revalidated even when a later source status
+            # or assignment loses the fields that originally admitted delivery.
+            # Test presence, so malformed saved proofs cannot restore a fallback.
+            saved_delivery_proof = ('delivery_event:' + identity in confirmation_facts
+                                    or DELIVERY_CONFIRMATION_PREFIX + identity in confirmation_facts)
+            if saved_delivery_proof or native_driver or status in DELIVERED or (isinstance(current, dict) and _status(current.get('status')) in DELIVERED):
                 # Legacy drivers have a separate native collection contract. External
                 # couriers must prove this exact current waybill and delivery instant.
                 assigned = [a for a in data['store_delivery_assignments']
@@ -1620,9 +1640,11 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 legacy_driver = (not native_driver and len(assigned) == 1
                     and assigned[0].get('user_id') == owner
                     and assigned[0].get('order_id') in (None, '')
+                    and 'delivery_event:' + identity not in (operational_state or {}).get('engine', {}).get('facts', {})
+                    and 'owner_delivery_after_start:' + identity not in (operational_state or {}).get('engine', {}).get('facts', {})
                     and _text(assigned[0].get('id')) and _text(assigned[0].get('driver_id'))
                     and data['_driver_fee_review'].assignment_ids[assigned[0]['id']] == 1)
-                if native_driver or not assigned or (created_after_start_delivery(raw, started_at, as_of) and not legacy_driver):
+                if saved_delivery_proof or native_driver or not assigned or (created_after_start_delivery(raw, started_at, as_of) and not legacy_driver):
                     try:
                         if not native_driver and status not in DELIVERED:
                             raise ValueError('operational_delivery_order_shipment_status_conflict')
@@ -1631,7 +1653,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                             history=delivery_history.get(order_number, ()), shipment_conflicts=shipment_conflicts,
                             frozen_event=(operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity),
                             frozen_shipping=(operational_state or {}).get('engine', {}).get('facts', {}).get('shipping:' + identity),
-                            recorded_fee=recorded_courier_fee(operational_state, identity))
+                            recorded_fee=recorded_courier_fee(operational_state, identity),
+                            owner_confirmation=confirmation_facts.get(DELIVERY_CONFIRMATION_PREFIX + identity))
                         if event is None:
                             raise ValueError('operational_delivery_timestamp_missing')
                         saved = (operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity)
@@ -1644,8 +1667,11 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         code = str(exc) if str(exc).startswith('operational_delivery_') else 'operational_delivery_evidence_invalid'
                         issue(out, code, identity, component='shipping_fee')
                         courier_issue(out, code, raw, source, setup=setup, owner=owner)
+                        date_gap_identity(out, code, raw, data['store_delivery_assignments'], owner,
+                            record=confirmation_facts.get(DELIVERY_CONFIRMATION_PREFIX + identity), started_at=started_at)
             if allow_shipping:
-                _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, cod, delivery_event=event)
+                _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, cod,
+                                         delivery_event=event, started_at=started_at)
                 if hold_prior_courier_event(operational_state, event, order.get('carrier')):
                     courier_issue(out, 'courier_fee_historical_review_required', raw, source,
                                  carrier=order.get('carrier'), event=event, setup=setup, owner=owner)
@@ -1664,6 +1690,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             if code.startswith('operational_delivery_') and code not in {'operational_delivery_driver_assignment_required',
                     'operational_delivery_owner_mismatch','operational_delivery_order_identity_conflict'}:
                 courier_issue(out, code, raw, source, setup=setup, owner=owner)
+                date_gap_identity(out, code, raw, data['store_delivery_assignments'], owner,
+                    record=confirmation_facts.get(DELIVERY_CONFIRMATION_PREFIX + str(raw.get('id'))), started_at=started_at)
     # An issued, approved MZ2 invoice is the sole confirmation authority.
     # Current piece state may have changed after invoicing and cannot revoke it.
     piece_index = unique_index(pieces, 'id')
@@ -1838,6 +1866,27 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
         calculation_checkpoint()
         if order['id'] in managed:
             order['completed_shipping_base_managed'] = True
+    # A persisted owner proof must stay reviewable even when its canonical order
+    # disappears from a later successful read. No fee/count is inferred here.
+    delivered_now = {str(order['id']) for order in out['orders'] + out['delivery_events'] if order.get('delivery_event')}
+    delivery_gaps = {str(row.get('order_id') or row.get('source_id')) for row in out['issues']
+                     if str(row.get('code', '')).startswith('operational_delivery_')}
+    from operational_delivery_confirmation import validate_record
+    for key, record in confirmation_facts.items():
+        if not key.startswith(DELIVERY_CONFIRMATION_PREFIX):
+            continue
+        await cpu_budget.checkpoint()
+        calculation_checkpoint()
+        oid = key.removeprefix(DELIVERY_CONFIRMATION_PREFIX)
+        if oid in delivered_now or oid in delivery_gaps:
+            continue
+        try:
+            validate_record(record, owner=owner, started_at=started_at, order_id=oid)
+        except (ValueError, TypeError, KeyError):
+            issue(out, 'operational_delivery_confirmation_invalid', oid, component='shipping_fee')
+            continue
+        issue(out, 'operational_delivery_confirmation_source_unavailable', oid, component='shipping_fee',
+              order_id=oid, order_number=record['order_number'], party_type=record['party_type'], party_id=record['party_id'])
     finish_coverage(customer_tenders, counted_order_ids - inspected_order_ids)
     return out
 

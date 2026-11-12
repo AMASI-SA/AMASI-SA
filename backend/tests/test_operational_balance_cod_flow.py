@@ -183,3 +183,34 @@ def test_held_delivery_evidence_preserves_the_established_independent_collection
         assert held['movements'] == first['movements'] == []
         assert report(held)['summary']['actual_liquidity'] == '1000.00'
     run(scenario)
+
+
+def test_recorded_status_delivery_cannot_downgrade_to_the_legacy_assignment_contract():
+    from test_operational_balance_delivery_start_rule import calculate, undated
+    data = undated('contract_driver')
+    first = calculate(data)
+    assert first['engine']['facts']['delivery_event:100']['delivered_at'] is None
+    data['store_delivery_assignments'][0].pop('order_id')
+    held = calculate(data, first)
+    assert any(i['code'] == 'operational_delivery_assignment_order_conflict' for i in held['engine']['issues'])
+    assert held['engine']['facts'] == first['engine']['facts']
+    assert held['engine']['obligations'] == first['engine']['obligations']
+    assert held['engine']['cod_reports'] == first['engine']['cod_reports']
+
+
+def test_unreconciled_owner_delivery_proof_cannot_downgrade_to_a_legacy_assignment():
+    from test_operational_balance_delivery_start_rule import calculate, undated
+    from test_operational_balance_delivery_cutover import active
+    data = undated('contract_driver')
+    data['store_delivery_assignments'][0].pop('order_id')
+    prior = active()
+    # Even an incomplete saved proof must force strict revalidation. Its
+    # presence cannot silently enable the older assignment-only contract.
+    prior['engine'] = {'facts': {'owner_delivery_after_start:100': {
+        'schema': 'operational_owner_delivery_confirmation_v1', 'order_id': '100'}}}
+    held = calculate(data, prior)
+    assert any(i['code'].startswith('operational_delivery_') for i in held['engine']['issues'])
+    assert held['engine']['facts'] == prior['engine']['facts']
+    assert not any(r['kind'] in {'shipping', 'cod'} and r['confirmed'] != '0.00'
+                   for r in held['engine']['obligations'].values())
+    assert held['engine']['cod_reports'] == {} and held['movements'] == []

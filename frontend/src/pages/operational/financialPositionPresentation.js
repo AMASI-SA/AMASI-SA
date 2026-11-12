@@ -92,6 +92,7 @@ export function deliveryOrderLabel(row) {
 
 export function shippingRecognitionLabel(row) {
     if (row?.recognition_event === "order_completed") return row.payment_mode === "deferred" ? "أجرة مستحقة عند تم التنفيذ" : "مدفوع مقدمًا عند تم التنفيذ";
+    if (row?.recognition_basis === "owner_confirmed_after_start") return "تأكيد المالك بالتوصيل بعد بدء التشغيل";
     if (row?.recognition_basis === "delivered_order_created_after_start") return "طلب تم توصيله وأُنشئ بعد بدء التشغيل";
     return row?.delivered_at ? "عند تم التوصيل" : UNAVAILABLE;
 }

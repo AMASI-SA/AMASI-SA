@@ -9,6 +9,7 @@ from collections import Counter, defaultdict
 from decimal import Decimal, InvalidOperation
 
 from operational_delivery_evidence import STATUS_BASIS, _instant, _text, delivery_time_matches, status_delivery
+from operational_delivery_confirmation import BASIS as OWNER_DELIVERY_BASIS
 
 NATIVE = "store_delivery_operational"
 PENDING = "pending_mz2_driver_balance_link"
@@ -159,13 +160,15 @@ class DriverEarnings:
             earned = _instant(e.get("earned_at"))
             if undated:
                 created, recorded = _instant(order["created_at"]), _instant(delivery_event.get("recorded_at"))
-                if (delivery_event.get("recognition_basis") != STATUS_BASIS
+                basis = delivery_event.get('recognition_basis')
+                eligible = (self.start < created <= earned <= self.as_of if basis == STATUS_BASIS else
+                            max(self.start, created) <= earned <= recorded <= self.as_of if basis == OWNER_DELIVERY_BASIS else False)
+                if (not eligible
                         or delivery_event.get("delivered_at") is not None
-                        or not self.start < created <= earned <= self.as_of
                         or not created <= recorded <= self.as_of):
                     raise ValueError("driver_fee_evidence_conflict")
                 delivered = None
-                info.update(recognition_basis=STATUS_BASIS, recorded_at=recorded.isoformat(), earned_at=earned.isoformat())
+                info.update(recognition_basis=basis, recorded_at=recorded.isoformat(), earned_at=earned.isoformat())
             else:
                 delivered = _instant(a.get("delivered_at"))
                 if (not self.start <= delivered <= self.as_of or delivered < _instant(order["created_at"])
@@ -185,7 +188,7 @@ class DriverEarnings:
             saved_facts = self.state.get("facts", {})
             frozen = saved_facts.get(key)
             if frozen and (frozen.get("party_type") != "store_driver" or frozen.get("id") != a["driver_id"]
-                        or (not (frozen.get("recognition_basis") == STATUS_BASIS
+                        or (not (frozen.get("recognition_basis") == info.get('recognition_basis')
                                  and frozen.get("delivered_at") is None
                                  and frozen.get("recorded_at") == info["recorded_at"]) if undated else
                             not delivery_time_matches(frozen, delivered, order_id=oid, native_driver_earning=info))):

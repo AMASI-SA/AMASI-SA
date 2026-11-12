@@ -17,6 +17,7 @@ from operational_profit_projection import project_profit, valid_snapshot
 from operational_forecast_projection import cod_forecast_coverage, project_forecast
 from operational_provider_report_coverage import provider_evidence_coverage
 from operational_balance_completeness import GLOBAL_FAILURES, apply_table_coverage, annotate_report_coverage
+from operational_delivery_confirmation import applied_metadata as applied_delivery_confirmation
 
 
 ZERO = Decimal("0")
@@ -484,7 +485,7 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
     for key, proof in facts.items():
         preparation_checkpoint()
         if (not key.startswith("delivery_event:") or not isinstance(proof, dict)
-                or proof.get("schema") != "operational_delivery_status_v1"):
+                or proof.get("schema") not in {"operational_delivery_status_v1", "operational_owner_delivery_event_v1"}):
             continue
         order = str(proof.get("order_id") or "")
         frozen = facts.get("shipping:" + order) or {}
@@ -590,9 +591,13 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
         identity = "delivery:" + order
         if order_contexts[order] > 1:
             identity += ":" + str(party_type) + ":" + str(party_id)
+        confirmation = applied_delivery_confirmation(facts, order, party_type, party_id)
+        delivery_event = facts.get('delivery_event:' + order) or {}
+        delivery_number = (delivery_event.get('order_number')
+                           if (delivery_event.get('party_type'), delivery_event.get('party_id')) == (party_type, party_id) else None)
         rows.append({"id": identity, "order_id": order, "complete": not incomplete_reasons,
                      "incomplete_reasons": sorted(incomplete_reasons),
-                     "order_number": (completed or prepaid or {}).get("order_number"),
+                     "order_number": (completed or prepaid or {}).get("order_number") or delivery_number,
                      "party_id": party_id, "party_type": party_type,
                      "party_name": names.get((party_type, party_id), party_id),
                      "payment_mode": "prepaid" if prepaid else "deferred" if completed else None,
@@ -601,7 +606,8 @@ def _deliveries(obligations, details, currency, names, source_issues, *, coverag
                      "cash_account_name": names.get(("cash", cash_account_id)) if cash_account_id else None,
                      "delivered_at": frozen.get("delivered_at"), "payment_method": method,
                      **({key: frozen.get(key) for key in ("recognition_basis", "recorded_at", "business_date_basis")}
-                        if frozen.get("recognition_basis") == "delivered_order_created_after_start" else {}),
+                        if frozen.get("recognition_basis") in {"delivered_order_created_after_start", "owner_confirmed_after_start"} else {}),
+                     **({'delivery_after_start_confirmation': confirmation} if confirmation else {}),
                      "collection_destination": destination, "collection_status": status, **fees,
                      "courier_responsibility": courier_responsibility,
                      "collection_amount": None if party_type == "courier" else _money((source or {}).get("collection_amount")),

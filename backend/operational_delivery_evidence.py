@@ -83,7 +83,8 @@ def created_after_start_delivery(raw, started_at, as_of):
 
 
 def status_delivery(event):
-    return isinstance(event, dict) and event.get("schema") == STATUS_SCHEMA
+    from operational_delivery_confirmation import EVENT_SCHEMA
+    return isinstance(event, dict) and event.get("schema") in {STATUS_SCHEMA, EVENT_SCHEMA}
 
 
 def _recorded_delivery(base, end, frozen_event, **identity):
@@ -424,7 +425,7 @@ def recorded_courier_fee(state, order_id):
 
 
 def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at, as_of, history=(), shipment_conflicts=(),
-                           frozen_event=None, frozen_shipping=None, recorded_fee=False):
+                           frozen_event=None, frozen_shipping=None, recorded_fee=False, owner_confirmation=None):
     """Return a proved post-start event, None outside scope, or an exact issue.
 
     The caller retains normal order eligibility independently and quotes a
@@ -432,6 +433,10 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
     schema and recording time. This resolver never decides
     a fee, collection approval, refund, or how a pooled opening should settle.
     """
+    if owner_confirmation is not None:
+        from operational_delivery_confirmation import confirmed_event
+        return confirmed_event(owner_confirmation, raw, source=source, owner=owner, assignments=assignments,
+            setup=setup, started_at=started_at, as_of=as_of, history=history, shipment_conflicts=shipment_conflicts)
     if not _text(owner) or not isinstance(source, dict) or source.get("user_id") != owner:
         _fail("owner_mismatch")
     if not isinstance(raw, dict):

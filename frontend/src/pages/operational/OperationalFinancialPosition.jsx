@@ -19,7 +19,7 @@ import PaginatedReportTable from "./PaginatedReportTable";
 import CustomerWalletBalance from "./CustomerWalletBalance";
 import PendingOrdersDialog from "./PendingOrdersDialog";
 import CompletedShippingFeeReview from "./CompletedShippingFeeReview";
-import { visibleOperationalRead, refreshVisibleSnapshot } from "./visibleOperationalRead";
+import { canReadOperationalPage, visibleOperationalRead, refreshVisibleSnapshot } from "./visibleOperationalRead";
 
 const emptyFilters = () => ({ order: "", party: "", payment: "" });
 const inactiveMessages = {
@@ -27,6 +27,41 @@ const inactiveMessages = {
     frozen: "التشغيل مجمّد حاليًا؛ التقرير الحالي غير متاح.",
     accounting_active: "بدأ النظام المحاسبي؛ التقرير التشغيلي الحالي غير متاح ضمن هذه المرحلة.",
 };
+
+// A saved confirmation authorizes one visible follow-up. Leaving the page
+// consumes it; returning later must not start another refresh automatically.
+function readConfirmationOnce(read, { onData, onError, onPaused }, lane) {
+    const controller = new AbortController();
+    let alive = true, done = false;
+    const pause = () => {
+        if (!alive || done) return;
+        done = true; controller.abort(); onPaused();
+    };
+    const activity = () => { if (!canReadOperationalPage()) pause(); };
+    document.addEventListener("visibilitychange", activity);
+    window.addEventListener("offline", activity);
+    const run = async () => {
+        if (lane.pending) { try { await lane.pending; } catch { /* The previous read owns its error. */ } }
+        if (!alive || done) return;
+        if (!canReadOperationalPage()) { pause(); return; }
+        const operation = read({ signal: controller.signal });
+        lane.pending = operation;
+        try {
+            const result = await operation;
+            if (alive && !done && !controller.signal.aborted && canReadOperationalPage()) { done = true; onData(result); }
+        } catch (error) {
+            if (alive && !done && !controller.signal.aborted) { done = true; onError(error); }
+        } finally {
+            if (lane.pending === operation) lane.pending = null;
+        }
+    };
+    run();
+    return () => {
+        alive = false; done = true; controller.abort();
+        document.removeEventListener("visibilitychange", activity);
+        window.removeEventListener("offline", activity);
+    };
+}
 
 function Money({ value, role = "neutral" }) {
     const text = formatPositionMoney(value);
@@ -50,7 +85,7 @@ function DataCell({ value, column }) {
     return positionText(value);
 }
 
-function ReportTable({ table, printing }) {
+function ReportTable({ table, printing, confirmationControl }) {
     const columns = table.columns || [];
     const hideInPrint = table.kind === "review" || ["provider_collections_expected", "cod_expected", "shipping_expected"].includes(table.id);
     return <article className={`ofp-table-card${["providers", "ads_currency_conversion", "customer_wallets"].includes(table.id) ? " ofp-table-wide" : ""}${table.kind === "forecast" ? " ofp-table-forecast" : ""}${hideInPrint ? " ofp-no-print" : ""}`} data-testid={`financial-table-${table.id}`}>
@@ -59,7 +94,7 @@ function ReportTable({ table, printing }) {
             <thead><tr>{columns.map(column => <th scope="col" key={column.key}>{column.label}</th>)}</tr></thead>
             <tbody>{rows.map((row, index) => <tr key={row.id || index}>{columns.map(column =>
                 <td key={column.key} className={column.type === "text" ? "ofp-label-cell" : "ofp-value-cell"}>{column.type === "exceptions" && !printing
-                    ? <PendingOrdersDialog count={row[column.key]} details={row.pending_order_details} name={row.name || table.title} />
+                    ? <PendingOrdersDialog count={row[column.key]} details={row.pending_order_details} name={row.name || table.title} confirmationControl={confirmationControl} />
                     : <DataCell value={row[column.key]} column={column} />}</td>)}</tr>)}
                 {!table.rows?.length && <tr><td className="ofp-empty-cell" colSpan={Math.max(columns.length, 1)}>{table.complete === true ? "لا توجد أرصدة مسجلة لهذا القسم." : "لم تتوفر بيانات مكتملة لهذا القسم."}</td></tr>}
             </tbody>
@@ -67,7 +102,7 @@ function ReportTable({ table, printing }) {
                 {index === 0 && column.type === "text" ? "الإجمالي" : <DataCell value={table.totals[column.key]} column={column} />}
             </td>)}</tr></tfoot>}
         </table></div>}</PaginatedReportTable>
-        {table.unassigned_order_details?.length > 0 && <div className="ofp-no-print"><PendingOrdersDialog count={table.unassigned_order_details.length} details={table.unassigned_order_details} name="طلبات لم تثبت جهة توصيلها" /></div>}
+        {table.unassigned_order_details?.length > 0 && <div className="ofp-no-print"><PendingOrdersDialog count={table.unassigned_order_details.length} details={table.unassigned_order_details} name="طلبات لم تثبت جهة توصيلها" confirmationControl={confirmationControl} /></div>}
         <Notes items={table.notes} />
     </article>;
 }
@@ -120,9 +155,9 @@ function DeliveryDetails({ delivery, filters, onFiltersChange, currency }) {
             <td><strong>{deliveryOrderLabel(row)}</strong>
                 {row.recognition_event === "order_completed" && <small>تم التنفيذ: {row.completed_at ? formatRiyadhDateTime(row.completed_at) : UNAVAILABLE}</small>}
                 <small>التسليم: {row.delivered_at ? formatRiyadhDateTime(row.delivered_at) : UNAVAILABLE}</small>
-                {row.recognition_basis === "delivered_order_created_after_start" && <small>وقت التسجيل: {row.recorded_at ? formatRiyadhDateTime(row.recorded_at) : UNAVAILABLE}</small>}</td>
+                {["delivered_order_created_after_start", "owner_confirmed_after_start"].includes(row.recognition_basis) && <small>وقت التسجيل: {row.recorded_at ? formatRiyadhDateTime(row.recorded_at) : UNAVAILABLE}</small>}</td>
             <td><strong>{positionText(row.party_name)}</strong><small>{PARTY_LABELS[row.party_type] || UNAVAILABLE}</small>
-                {(row.recognition_event === "order_completed" || row.recognition_basis === "delivered_order_created_after_start") && <small>{shippingRecognitionLabel(row)}</small>}
+                {(row.recognition_event === "order_completed" || ["delivered_order_created_after_start", "owner_confirmed_after_start"].includes(row.recognition_basis)) && <small>{shippingRecognitionLabel(row)}</small>}
                 {row.recognition_event === "order_completed" && row.payment_mode === "prepaid" && <small>صندوق الخصم: {positionText(row.cash_account_name)}</small>}</td>
             <td><strong>{paymentLabel(row.payment_method)}</strong><small>{destinationLabel(row.collection_destination)}</small>{row.destination_name && <small>{row.destination_name}</small>}</td>
             <td><CollectionStatus value={row.collection_status} /></td>
@@ -158,10 +193,14 @@ export default function OperationalFinancialPosition() {
     const [exporting, setExporting] = useState(false);
     const [exportError, setExportError] = useState("");
     const [printing, setPrinting] = useState(false);
+    const [deliveryConfirmations, setDeliveryConfirmations] = useState(null);
     const printRef = useRef(null);
     const readLane = useRef({});
+    const latestReport = useRef(null), confirmedDeliveries = useRef(null), confirmationRefresh = useRef(null);
 
     useEffect(() => {
+        const followUp = confirmationRefresh.current;
+        confirmationRefresh.current = null;
         setState({ scope, phase: "loading", report: null, error: "" });
         setExportError("");
         if (authLoading) return;
@@ -169,10 +208,18 @@ export default function OperationalFinancialPosition() {
             setState({ scope, phase: "denied", report: null, error: "يلزم تسجيل الدخول لعرض التقرير المالي التشغيلي." });
             return;
         }
-        return visibleOperationalRead(async config => {
+        const read = async config => {
             const update = await refreshVisibleSnapshot(operationalApi, config);
-            return {...await operationalApi.financialPosition(config), ...(update?.refresh_warning ? {refresh_warning: update.refresh_warning} : {})};
-        }, {
+            const report = await operationalApi.financialPosition(config);
+            if (followUp?.scope === scope && (report?.session_scope !== followUp.sessionScope
+                || Date.parse(report?.started_at) !== Date.parse(followUp.periodStart))) {
+                const error = new Error("تغيرت جلسة التشغيل؛ حدّث التقرير من الجلسة الحالية.");
+                error.response = { status: 409, data: { detail: { message: error.message } } };
+                throw error;
+            }
+            return {...report, ...(update?.refresh_warning ? {refresh_warning: update.refresh_warning} : {})};
+        };
+        const callbacks = {
             onData: report => {
                 if (report?.permissions?.reports !== true) {
                     setState({ scope, phase: "denied", report: null, error: "ليست لديك صلاحية عرض التقرير المالي التشغيلي." });
@@ -190,13 +237,19 @@ export default function OperationalFinancialPosition() {
                     : status === 401 ? "انتهت الجلسة؛ سجّل الدخول لعرض التقرير."
                         : error?.response?.data?.detail?.message || "تعذر تحميل التقرير الحالي. أعد المحاولة لتحديث البيانات." });
             },
-        }, readLane.current);
+        };
+        if (followUp?.scope === scope) return readConfirmationOnce(read, { ...callbacks, onPaused: () => {
+            setState({ scope, phase: "error", report: null,
+                error: "توقف تحديث الأرصدة عند مغادرة الصفحة أو انقطاع الاتصال؛ حدّث التقرير عند الحاجة." });
+        } }, readLane.current);
+        return visibleOperationalRead(read, callbacks, readLane.current);
     }, [scope, authLoading, authMissing, revision]);
 
     useEffect(() => { setFilters(emptyFilters()); setCurrency(""); setPrinting(false); }, [scope]);
 
     // Hide the old scope synchronously, before the replacement request's effect.
     const report = state.scope === scope && state.phase === "ready" ? state.report : null;
+    latestReport.current = { scope, report };
     const codes = useMemo(() => currencyCodes(report), [report]);
     const activeCurrency = codes.includes(currency) ? currency : codes.includes("SAR") ? "SAR" : codes[0] || "";
     const data = report?.status === "active" ? report.currencies[activeCurrency] : null;
@@ -217,6 +270,52 @@ export default function OperationalFinancialPosition() {
         setState({ scope, phase: "loading", report: null, error: "" });
         setRevision(value => value + 1);
     };
+    const deliverySaved = (record, { refreshAllowed } = {}) => {
+        const latest = latestReport.current;
+        if (latest.scope !== scope || latest.report?.permissions?.confirm_delivery_after_start !== true
+            || latest.report?.session_scope !== record.session_scope) return;
+        const key = JSON.stringify([record.order_id, record.order_number, record.party_type, record.party_id]);
+        const previous = confirmedDeliveries.current;
+        const records = previous?.scope === scope && previous.sessionScope === record.session_scope
+            && previous.periodStart === latest.report.started_at ? previous.records : {};
+        if (records[key]?.id === record.id) return;
+        const saved = { scope, sessionScope: record.session_scope, periodStart: latest.report.started_at,
+            records: { ...records, [key]: record }, latest: record };
+        confirmedDeliveries.current = saved;
+        setDeliveryConfirmations(saved);
+        if (refreshAllowed && canReadOperationalPage()) {
+            confirmationRefresh.current = { scope, sessionScope: record.session_scope, periodStart: latest.report.started_at };
+            refresh();
+        }
+    };
+    const confirmationControl = { allowed: report?.permissions?.confirm_delivery_after_start === true,
+        sessionScope: report?.session_scope, periodStart: report?.started_at, onSaved: deliverySaved,
+        recordedConfirmations: deliveryConfirmations?.scope === scope && deliveryConfirmations.sessionScope === report?.session_scope
+            && deliveryConfirmations.periodStart === report?.started_at
+            ? deliveryConfirmations.records : {} };
+    const confirmationNotice = useMemo(() => {
+        const saved = deliveryConfirmations;
+        if (!saved || saved.scope !== scope || state.phase === "denied"
+            || (report && (saved.sessionScope !== report.session_scope || saved.periodStart !== report.started_at))) return "";
+        let status = saved.latest.state;
+        const matches = (row, proof) => row.order_id === saved.latest.order_id && row.order_number === saved.latest.order_number
+            && proof?.state === "applied" && proof.can_confirm === false && proof.confirmation_id === saved.latest.id
+            && proof.party_type === saved.latest.party_type && proof.party_id === saved.latest.party_id
+            && Date.parse(proof.confirmed_at) === Date.parse(saved.latest.confirmed_at);
+        for (const currency of Object.values(report?.currencies || {})) {
+            if ((currency.deliveries?.rows || []).some(row => row.recognition_basis === "owner_confirmed_after_start"
+                && row.party_type === saved.latest.party_type && row.party_id === saved.latest.party_id
+                && Date.parse(row.recorded_at) === Date.parse(saved.latest.confirmed_at)
+                && matches(row, row.delivery_after_start_confirmation))) status = "applied";
+            for (const table of currency.tables || []) {
+                for (const row of [...(table.rows || []), { pending_order_details: table.unassigned_order_details || [] }]) {
+                    if ((row.pending_order_details || []).some(item => matches(item, item.delivery_after_start_confirmation))) status = "applied";
+                }
+            }
+        }
+        if (status === "applied") return "تم حفظ التأكيد وتطبيقه في التقرير.";
+        return "تم حفظ التأكيد؛ بانتظار تحديث الأرصدة";
+    }, [deliveryConfirmations, report, scope, state.phase]);
     const exportReport = async () => {
         if (!data || exporting) return;
         setExporting(true); setExportError("");
@@ -242,6 +341,7 @@ export default function OperationalFinancialPosition() {
         {report && report.status !== "active" && <div className="ofp-page-notice" role="status"><Info size={24} aria-hidden="true" /><p>{inactiveMessages[report.status] || "التقرير التشغيلي الحالي غير متاح في هذه المرحلة."}</p></div>}
         {report?.status === "active" && !data && <div className="ofp-page-notice" role="status">لا توجد بيانات عملة جاهزة للعرض حتى آخر احتساب.</div>}
         {report?.refresh_warning && <p role="alert" className="ofp-warning">{report.refresh_warning}</p>}
+        {confirmationNotice && <p role="status" className="ofp-warning ofp-no-print">{confirmationNotice}</p>}
         {data && user?.role === "owner" && <ProviderHistoryReview key={"history" + scope + report.session_scope} sessionScope={report.session_scope} />}
         {data && user?.role === "owner" && <NativePurchaseReview key={scope + report.session_scope} sessionScope={report.session_scope} onRefresh={refresh} />}
         {data && user?.role === "owner" && <CustomerWalletBalance key={"wallet" + scope + report.session_scope} sessionScope={report.session_scope} onSaved={refresh} />}
@@ -262,12 +362,12 @@ export default function OperationalFinancialPosition() {
 
             <section className="ofp-section" aria-labelledby="ofp-actual-heading">
                 <SectionHeading id="ofp-actual-heading" number="01" title="الأرصدة الفعلية والحسابات"><span className="ofp-positive">لنا: مستحق للمنشأة</span><span className="ofp-negative">علينا: مستحق للغير</span></SectionHeading>
-                <div className="ofp-table-grid">{tables.filter(table => table.section === "actual").map(table => <ReportTable key={`${activeCurrency}:${table.id}`} table={table} printing={printing} />)}</div>
+                <div className="ofp-table-grid">{tables.filter(table => table.section === "actual").map(table => <ReportTable key={`${activeCurrency}:${table.id}`} table={table} printing={printing} confirmationControl={confirmationControl} />)}</div>
             </section>
 
             <section className="ofp-section" aria-labelledby="ofp-fulfillment-heading">
                 <SectionHeading id="ofp-fulfillment-heading" number="02" title="الشحن والتحصيل والمبالغ المتوقعة"><span>أزرق: أرصدة فعلية</span><span className="ofp-forecast-label">أصفر: مبالغ تقديرية</span></SectionHeading>
-                <div className="ofp-table-grid">{tables.filter(table => table.section === "fulfillment" || table.section === "forecast").map(table => <ReportTable key={`${activeCurrency}:${table.id}`} table={table} printing={printing} />)}</div>
+                <div className="ofp-table-grid">{tables.filter(table => table.section === "fulfillment" || table.section === "forecast").map(table => <ReportTable key={`${activeCurrency}:${table.id}`} table={table} printing={printing} confirmationControl={confirmationControl} />)}</div>
                 <DeliveryDetails key={activeCurrency} delivery={data.deliveries} filters={filters} onFiltersChange={setFilters} currency={activeCurrency} />
             </section>
 

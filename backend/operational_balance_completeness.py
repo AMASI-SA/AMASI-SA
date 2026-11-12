@@ -6,6 +6,8 @@ are distinct order IDs, not issue rows or fee components.
 """
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
+from operational_delivery_evidence import status_delivery
+from operational_delivery_confirmation import annotate_pending
 
 
 TABLE_KINDS = {
@@ -149,8 +151,8 @@ def apply_table_coverage(tables, parties, obligations, issues, facts, *, currenc
             fee_currency = shipping.get("fee_currency") or fee.get("currency") or fact.get("currency")
             event_proved = (key.startswith("delivery_event:")
                             and (fact.get("schema") == "operational_delivery_event_v1" and bool(fact.get("delivered_at"))
-                                 or fact.get("schema") == "operational_delivery_status_v1"
-                                 and fact.get("recognition_basis") == "delivered_order_created_after_start"
+                                 or status_delivery(fact)
+                                 and fact.get("recognition_basis") in {"delivered_order_created_after_start", "owner_confirmed_after_start"}
                                  and fact.get("delivered_at") is None and bool(fact.get("recorded_at"))))
             legacy_proved = key == "shipping:" + identity and bool(fact.get("delivered_at"))
             if (event_proved or legacy_proved) and (fee_currency == currency
@@ -229,6 +231,7 @@ def apply_table_coverage(tables, parties, obligations, issues, facts, *, currenc
         for party, row in by_party.items():
             context = (kind, party)
             details = sorted(pending[context].values(), key=lambda value: (str(value.get("order_number") or ""), value["order_id"]))
+            annotate_pending(details, party_type=kind, party_id=party, facts=facts)
             row.update(confirmed_orders=len(counted[context]), delivered_orders=len(delivered[context]),
                        pending_orders=len(details), pending_order_details=details,
                        complete=bool(as_of) and not failed_snapshot and context not in party_warnings and not details and not unassigned[kind], balance_basis="recorded")
@@ -254,7 +257,7 @@ def annotate_report_coverage(projection):
     currencies.update(issue["currency"] for issue in projection.get("issues", []) if issue.get("currency"))
     for key, proof in details.get("facts", {}).items():
         if (key.startswith("delivery_event:") and isinstance(proof, dict)
-                and proof.get("schema") == "operational_delivery_status_v1"):
+                and status_delivery(proof)):
             shipping = details["facts"].get("shipping:" + str(proof.get("order_id"))) or {}
             currency = shipping.get("fee_currency") or proof.get("currency")
             if currency:

@@ -14,6 +14,7 @@ import json
 from zoneinfo import ZoneInfo
 
 from operational_delivery_evidence import STATUS_BASIS, delivery_time_matches, status_delivery
+from operational_delivery_confirmation import BASIS as OWNER_DELIVERY_BASIS, EVENT_SCHEMA as OWNER_DELIVERY_SCHEMA, validate_event as validate_owner_delivery
 
 
 RIYADH = timezone(timedelta(hours=3))
@@ -51,15 +52,15 @@ def day(value):
 
 
 def shipping_day(frozen):
-    if frozen.get("recognition_basis") == STATUS_BASIS:
+    if frozen.get("recognition_basis") in {STATUS_BASIS, OWNER_DELIVERY_BASIS}:
         return instant(frozen["recorded_at"]).astimezone(RIYADH).date()
     return day(frozen["delivered_at"])
 
 
 def shipping_recording(frozen):
-    if frozen.get("recognition_basis") != STATUS_BASIS:
+    if frozen.get("recognition_basis") not in {STATUS_BASIS, OWNER_DELIVERY_BASIS}:
         return {}
-    return {"recognition_basis": STATUS_BASIS, "recorded_at": frozen["recorded_at"],
+    return {"recognition_basis": frozen["recognition_basis"], "recorded_at": frozen["recorded_at"],
             "business_date_basis": "recognition_recorded_at", "delivered_at": None}
 
 
@@ -374,7 +375,14 @@ def reconcile(state, sources, as_of):
                 undated = status_delivery(event)
                 delivered = None if undated else instant(event.get("delivered_at"))
                 recorded = instant(event.get("recorded_at")) if undated else None
-                valid_time = ((not delivery_only and event.get("recognition_basis") == STATUS_BASIS
+                manual = event.get('schema') == OWNER_DELIVERY_SCHEMA
+                if manual:
+                    validate_owner_delivery(result, event)
+                valid_time = ((event.get('recognition_basis') == OWNER_DELIVERY_BASIS
+                               and event.get('delivered_at') is None and order.get('delivered_at') is None
+                               and max(start, created) <= recorded <= now
+                               and delivery_only == (created <= start)) if manual else
+                              (not delivery_only and event.get("recognition_basis") == STATUS_BASIS
                                and event.get("delivered_at") is None and order.get("delivered_at") is None
                                and start < created <= recorded <= now) if undated else
                               (start <= delivered <= now and created <= delivered
@@ -396,7 +404,7 @@ def reconcile(state, sources, as_of):
                 frozen_delivery = facts.get("shipping:" + oid)
                 if frozen_delivery and (frozen_delivery.get("id") != event["party_id"]
                         or frozen_delivery.get("party_type") != event["party_type"]
-                        or (not (frozen_delivery.get("recognition_basis") == STATUS_BASIS
+                        or (not (frozen_delivery.get("recognition_basis") == event.get('recognition_basis')
                                  and frozen_delivery.get("delivered_at") is None
                                  and instant(frozen_delivery.get("recorded_at")) == recorded) if undated else
                             not delivery_time_matches(frozen_delivery, delivered, order_id=oid,
@@ -481,7 +489,7 @@ def reconcile(state, sources, as_of):
                 issue(str(error), service_key)
             if frozen is None and carrier and order.get("status") in DELIVERED:
                 event = order.get("delivery_event") or {}
-                recording = ({"recognition_basis": STATUS_BASIS, "recorded_at": event["recorded_at"],
+                recording = ({"recognition_basis": event['recognition_basis'], "recorded_at": event["recorded_at"],
                               "business_date_basis": "recognition_recorded_at"} if status_delivery(event) else {})
                 frozen = fact(service_key, {"id": carrier["id"], "cost": amount(money(carrier["cost"])) if carrier.get("cost") is not None and fee_currency else None,
                                            "party_type": carrier.get("party_type", carrier.get("kind", "courier")),
@@ -534,7 +542,8 @@ def reconcile(state, sources, as_of):
             # prior payouts or a native fee hold recognition, retire only its
             # mutable estimates. Leaving a zero foreign row would still block
             # a later review of the contract-currency payable under that ID.
-            held_courier = (not delivery_only and (carrier or {}).get("fee_recognition_held") is True
+            held_courier = ((not delivery_only or (order.get('delivery_event') or {}).get('schema') == OWNER_DELIVERY_SCHEMA)
+                            and (carrier or {}).get("fee_recognition_held") is True
                             and (order.get("delivery_event") or {}).get("party_type") == "courier")
             if frozen and held_courier:
                 aggregate_priced = frozen.get("cost") is not None or "shipping_fee:" + oid in facts
@@ -548,7 +557,7 @@ def reconcile(state, sources, as_of):
                 if order.get("native_driver_earning"):
                     earning = order["native_driver_earning"]
                     if (earning["party_id"] != frozen["id"] or frozen["party_type"] != "store_driver"
-                            or (not (earning.get("recognition_basis") == frozen.get("recognition_basis") == STATUS_BASIS
+                            or (not (earning.get("recognition_basis") == frozen.get("recognition_basis") == order['delivery_event']['recognition_basis']
                                      and earning.get("delivered_at") is frozen.get("delivered_at") is None
                                      and earning.get("recorded_at") == frozen.get("recorded_at"))
                                 if status_delivery(order.get("delivery_event")) else

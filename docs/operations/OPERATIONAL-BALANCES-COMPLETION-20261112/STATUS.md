@@ -4,7 +4,8 @@
 
 CORRECTIVE RELEASE MERGED, PUBLISHED AND OFFICIALLY VERIFIED; SAVED-TABLE AND
 MODAL ACCEPTANCE PASSED; FRESH-REFRESH TIMEOUT REMAINS OPEN. OWNER'S NEW DELIVERY
-RULE AND A MEASURED SOURCE-CONVERSION OPTIMIZATION ARE BEING IMPLEMENTED ABOVE M3.
+RULE, MANUAL DELIVERY CONFIRMATION AND MEASURED SOURCE-CONVERSION OPTIMIZATION
+ARE IMPLEMENTED ABOVE M3; INDEPENDENT REVIEW IS CLOSED AND FINAL COMBINED CI IS PENDING.
 The owner explicitly authorized public upload, merge and publication after the
 public destination was identified. PR1898 reached production and passed the
 official three-probe release verifier, and that first lease closed. Its first
@@ -683,7 +684,7 @@ has been merged or published at this documentation checkpoint.
   checks and all established COD amounts. The added `delivered_orders` totals
   field also requires the existing prepaid contract to be checked. These
   failures supersede any inference of release readiness from focused tests.
-  The new manual confirmation is still separate work in progress. Root's
+  At that WIP checkpoint the manual confirmation was still separate work in progress. Root's
   latest Production ref read remains exact M3. No follow-up release has been
   merged or published.
 - The nine compatibility failures were subsequently fixed at isolated local
@@ -696,7 +697,13 @@ has been merged or published at this documentation checkpoint.
   failures, ambiguous/foreign/wrong-order/reused-assignment rejection and
   preservation of established cash, bank-transfer and card collection evidence.
   The prepaid totals assertion now includes the legitimate zero delivery count.
-  Fresh combined CI is still required after the manual feature is integrated.
+  Exact-head WIP3 `aae9888523347b70f03bb6dc6cf164eef4eb4059` subsequently passed
+  all 12 workflows. Root independently read Operational Balance Web run
+  43311259458 logs: **3,688 Backend cases**, **16 shipping cases and 18
+  subtests**, **675 Frontend cases / 50 suites**, and **six Chromium scenarios**
+  passed. These gates cover the legacy correction; they precede the manual
+  feature and the final strict-proof downgrade guard. Fresh combined CI remains
+  required for the later integrated source.
 - Root integration branch/worktree:
   `codex/operational-delivery-refresh-completion-20261112` /
   `/workspace/scratch/e00762959313/mezan-operational-delivery-refresh-completion`.
@@ -709,8 +716,8 @@ has been merged or published at this documentation checkpoint.
   route/deadline/privacy regressions and existing demand/bank gates passed
   **55 tests in 2.97 seconds**. An initial invocation named a nonexistent test
   path and ran zero tests; the corrected final invocation passed. This is a
-  WIP checkpoint; the automatic delivery rule is now integrated, while the new
-  manual confirmation and final exact-source CI remain pending. Root's combined
+  WIP checkpoint; the automatic delivery rule was integrated at that point,
+  while the manual confirmation and final exact-source CI were pending. Root's combined
   collector/index/rule/timing/demand/bank run passed **184 cases in 7.48 seconds**;
   the two real-Mongo rule cases were deliberately excluded from this local
   in-memory run and passed in the author's separate 516-case Mongo gate.
@@ -737,8 +744,8 @@ has been merged or published at this documentation checkpoint.
   future/newer negative status history and the first-observation boundary stay
   explicit conflicts; older in-transit history remains allowed. Source/COD
   holds preserve known rows instead of rebuilding a false zero.
-- The new manual boundary-attestation feature is a separate following change,
-  still in progress. Plan: one-order bounded visible preflight, owner-only
+- The manual boundary-attestation feature was implemented as the following
+  separate change: one-order bounded visible preflight, owner-only
   version-bound/idempotent confirmation and one visible reconciliation. If the
   proof is saved but refresh fails, show that saved confirmation as awaiting
   calculation rather than invite duplicate approval or claim fresh money.
@@ -766,6 +773,107 @@ has been merged or published at this documentation checkpoint.
   execution/result was observed. Do not claim the diagnostics token exists or
   that runtime phase profiling succeeded. No token value was exposed.
 
+### Integrated manual confirmation — source complete, final gates pending
+
+- Manual feature author commit:
+  `e508a3a0df4bb062176c5dd3e9a2157e811018dd`, tree
+  `f82593beb9d17c8c8f3d4ce1fff480ecb4dd1d73`, parent
+  `5185a01d9992b04dca87f6eaa02d3758d7645644`.
+- Strict-proof compatibility follow-up:
+  `82ee786d1f54dabf44f73e3d07c36ab727674097`, on top of the earlier legacy fix.
+  An existing canonical delivery fact or owner confirmation, including an
+  invalid one, prevents fallback to the old order-number-only contract. Two
+  actual-collector downgrade regressions passed independently.
+- Root integrated both changes without conflicts at
+  `7e2f67513d755abedd1ed18031fd2454158f0843`, tree
+  `21324bf7c481e1d70c00644f54f9b3fd4bac0ccf`. The piece index, fixed-name
+  timing records, prior Production changes, both strict exclusions and old
+  release intent are preserved. This is an application integration identity;
+  the following harness/status commit has its own immutable identity.
+- A date-uncertain order has the owner-only button
+  **تأكيد التوصيل بعد بداية التشغيل** in its existing modal. One click performs
+  a bounded consistent local preflight and an idempotent version-bound save.
+  The server rechecks the actual actor, session, order, executor, start boundary
+  and contradictory evidence. No actual delivery timestamp is invented.
+- Confirmation saves a sealed owner attestation and audit record; it does not
+  itself write a fee, collection, opening balance or payout. The ordinary next
+  visible reconciliation may recognize the shipping-only effect of an old
+  order, subject to unchanged tariff, payout, prepaid and COD checks.
+- Saved proof remains distinct from applied money. A failed refresh retains
+  dated known amounts and a pending-confirmation indicator. Successful display
+  requires matching applied proof in the report, including after the order
+  leaves the pending list. A missing canonical order remains reviewable.
+- A saved courier attestation suppresses native delivery-history acquisition
+  only after fresh local proof validation and only for the date-only gap.
+  The existing four-order and 25-second budgets remain. Other gaps or changed
+  evidence retain the established path. No scheduler or detached task is added.
+- Author verification: **311 Backend cases passed**, including **62 new**
+  cases (33 pure, 16 real Mongo/HTTP, four cancellation/lifetime, nine bounded
+  acquisition); **113 Frontend cases / six suites passed**.
+- Independent review then reproduced a source-downgrade defect: cancellation
+  plus loss of canonical assignment identity could bypass both resolver entry
+  conditions after a proof was saved. The narrow author follow-up
+  `a86f25dc60bab28cc44eaf5793632de1acc988f0` forces both conditions to honor raw
+  presence of either saved proof key. Nine actual-collector regressions were
+  red before the correction and passed afterward, including malformed proof
+  values and retention of already booked fees. Root resolved the one condition
+  conflict by preserving the full legacy predicate and adding the strict-proof
+  admission at both levels, integrated at
+  `bed93dacb4836d004c5c5eff9f82af78b3959a05`, tree
+  `fb31279b1ce25ce23297a00e44bae6f32ef03e95`. The new manual coverage is now
+  **71 cases**: 42 pure, 16 Mongo/HTTP, four lifetime and nine acquisition.
+  The author's focused follow-up passed 93 cases with two Mongo refresh cases
+  excluded from that pure invocation. Root's final combined Mongo gate then
+  passed **309 cases in 28.70 seconds**, including those real refresh cases and
+  all 71 new manual cases, with zero skipped or deselected cases. The disposable
+  Mongo replica was terminated by the runner. Final independent verification
+  was pending at that checkpoint; its closure is recorded below.
+- The last independent finding was a preflight/collector identity mismatch:
+  an assignment ID duplicated on another order of the same owner could pass
+  the scoped preview but never be applied by the full collector. Author commit
+  `a62930ab0a606d6d71818ce94ccfa2fb14df46e0` adds one bounded owner/selected-ID
+  read in the same snapshot, counts documents without collapsing duplicates,
+  and rechecks the selected row. Root integrated it without conflicts at
+  `3b95e34305bfcaeb09226040fcc43b1ed06f88b1`, tree
+  `d5c19424ebcb59babd2170ca10c3fea4bdd44fca`. The reader SHA256 is
+  `34ec2c317d44824d6dd2d7954dda6225fe1151ecd23b89cbff2504d4656a7ba3`.
+  Six actual-reader/real-Mongo HTTP cases cover a duplicate before and after
+  preview and the foreign-owner control. Root's final unified manual gate
+  passed **77 cases in 17.63 seconds**, with no skipped or deselected cases:
+  44 pure, 20 integration, four lifetime and nine acquisition. The fixture
+  terminated its own Mongo process afterward.
+- Independent review is **closed with no remaining finding** on exact
+  `3b95e34305bfcaeb09226040fcc43b1ed06f88b1`. The reviewer separately ran
+  71 cases on bed93 in 15.27 seconds and the final six new cases on 3b95 in
+  3.96 seconds, using an independent checkout and disposable Mongo. Those are
+  two distinct runs; root's 77-case result above is the unified final run.
+  Auth/session, source binding, replay, packed state, request cancellation,
+  saved-versus-applied proof and bounded native acquisition are covered.
+- Root's actual combined 16-suite gate on the integrated application passed
+  **300 cases in 27.62 seconds**, using a task-owned disposable local Mongo
+  replica that was terminated afterward. The command included all four new
+  confirmation suites, COD, prepaid, automatic delivery, piece index, source
+  compatibility/lifetime, phase timing, demand refresh/routes, bank plan and
+  financial-position projection. No case was deselected or skipped. The two
+  Pydantic warnings are pre-existing.
+- Root's synthetic browser fixture now uses the actual sealed-proof factory
+  and report projection for saved and applied states. It verified known money
+  remains unchanged while proof is pending, then grows by exactly one priced
+  delivery while unresolved orders fall from seven to six. Actual delivery
+  time remains null. An initial fixture-only timezone representation mismatch
+  was corrected to use the proof factory's normalized recording time; no
+  application validation was relaxed.
+- The browser gate is extended from six to nine required scenarios, including
+  single confirmation/single visible follow-up, saved-proof refresh failure,
+  and hiding during preflight with zero confirmation or automatic retry.
+  The workflow explicitly requires all new Backend suites and both additional
+  screenshots. JavaScript syntax and diff whitespace checks pass. The nine
+  browser scenarios and final combined exact-head CI have not run at this
+  local checkpoint. Independent application review is closed as recorded above.
+- No new source/intent pair is frozen and no follow-up merge, operator build,
+  publication or live manual confirmation has occurred. The remaining live
+  refresh timeout must still be accepted on a successful fresh calculation.
+
 ## Continuation
 
 Issue1006 is at its comment limit. PR1898 records the verified first publication;
@@ -780,13 +888,12 @@ was performed.
 
 Next safe actions, owned by root:
 
-1. Finish and independently review the two bounded follow-up implementations.
-   Integrate above a fresh Production ref, preserving unrelated changes and
-   using M3 as the last officially verified source base J.
-2. Run integrated calculation, historical-boundary, delivery count/export and
-   cancellation checks. Keep all new work request-owned and visible-page only.
-   Preserve known saved counts and balances when individual evidence is missing.
-3. Preserve a remote task checkpoint and Draft PR, then freeze new source A and
+1. Run the new exact-head CI/browser gates on the independently reviewed
+   integrated application. Check a fresh Production ref, preserving
+   unrelated changes and using M3 as the last officially verified base J.
+2. Resolve only concrete gate or review failures; retain the combined Mongo
+   evidence, positive applied-proof contract and visible-page ownership.
+3. Preserve the complete remote task checkpoint and Draft PR, then freeze new source A and
    intent-only B using the repository's governed build. Require exact-B gates
    and both host clean-clone rehearsals before normal merge.
 4. Recover operator sign-in if needed; inspect fresh guard/head/clean status and
