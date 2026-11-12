@@ -2,10 +2,23 @@
 
 ## State at this checkpoint
 
-**Reviewed source and intent are merged, and the actual shared adapter passed;
-publication and live acceptance are not complete in this record.** This document records the independently
-verified CI evidence and the release owner's latest shared-workspace handoff
-on 2026-11-12. It supplements the source checkpoint in [STATUS.md](STATUS.md).
+**Publication is IN PROGRESS. Reviewed source and intent are merged, all 28
+applicable latest B workflows and the actual shared adapter passed, and own
+prepare/prepublish succeeded. Runtime verification and live acceptance remain
+OPEN.** This document records the independently verified CI evidence and the
+release owner's shared-workspace and publication updates on 2026-11-12. It
+supplements the source checkpoint in [STATUS.md](STATUS.md).
+
+The release owner reported successful prepare/prepublish for actor
+`codex-google-courier-acceptance-20261112`, source A
+`da0d2e2fb82a7848bcd398ca292ba93e1a880681`, deployment M2
+`0af4a3da57072a4995a2ebd0ca76720d17a80ee6` and runtime
+`rg5-8c4fb8eb704af7c47020a751629bd3af71672fbf26ff02bdbde8b9d969f9ffcc`,
+with `ready_to_publish:true`. At approximately 2026-11-12 00:53:58 UTC,
+Publish changes was clicked once. The UI displayed `Publishing...` with the
+action disabled; the previous published version was `0ef7c77`.
+No newer deployment completion, three-probe verify or live acceptance success
+is established by this in-progress state.
 
 Repository: [AMASI-SA/AMASI-SA](https://github.com/AMASI-SA/AMASI-SA).
 Source task branch: codex/google-courier-live-acceptance-20261112.
@@ -280,7 +293,9 @@ Yarn reported `Done in 65.79s.` and the conditional success command printed
 the exact A and runtime identity above. The final adapter JSON reported
 `built:true`, protocol5, and the expected frontend artifact tree. The owner's
 execution log is /tmp/mezan-pr1890-adapter-20261112.log. The following official
-status was inactive. No lease or publication has started at this checkpoint.
+status was inactive. No lease or publication had started at that pre-prepare
+checkpoint; the subsequent successful prepare/prepublish and single publish
+action are recorded in the current continuation above.
 
 The sanitized actual environment was Linux aarch64, host Node24.19.0,
 Yarn1.22.22 and Python3.11.18, with cwd /app/frontend and Git present.
@@ -304,8 +319,9 @@ independent CI writer's checkpoint.
 | PR1890 merge and official Git contract | Complete; M2 tree equals reviewed B |
 | Shared /app fast-forward | Complete at M2/tree B; all 120 platform files preserved |
 | Actual shared adapter rehearsal against the tracked intent | Passed in65.79s; exact source/runtime/artifact and isolated package proofs |
-| Own prepare/prepublish and follow-up publication | Not yet complete |
-| New live runtime identity / official three-probe verify | Not yet complete |
+| Own prepare/prepublish | Passed for the recorded actor and A/M2/runtime; ready_to_publish:true |
+| Follow-up publication | IN PROGRESS after one click at approximately 2026-11-12 00:53:58 UTC; UI Publishing... |
+| New live runtime identity / official three-probe verify | OPEN; no newer completion or verify result recorded |
 | Inactive status after the new verify | Pending |
 | Both affected courier previews after the follow-up | Open; no success claimed |
 | Same-period Google known-partial display acceptance | Open; no success claimed |
@@ -316,15 +332,15 @@ record described in STATUS.md. No new Production runtime change is established
 by this document. Financial PR1889 and unrelated Android/platform work remain
 outside this release's source scope.
 
-The next safe steps belong to the release owner: use the official
-prepare/prepublish/publication/three-probe
-verification flow under the existing user authorization. After identity and
-inactive-status checks, repeat the authorized courier previews and the
+The next safe steps belong to the release owner: wait for the publication
+already started, without repeating the publish action, then run the official
+three-probe verification. After exact identity and inactive-status checks,
+repeat the authorized courier previews and the
 November 11 Google comparison. Keep any incomplete Google account coverage
 explicit; do not convert it into an observed zero or a complete profit.
 
-Later evidence must append the actual adapter result, exact newer publishing
-UI wording, official verification/lease closure and separate live acceptance
+Later evidence must append the exact newer publishing UI wording, official
+verification/lease closure and separate live acceptance
 outcomes before claiming completion. This documentation-only branch must
 never replace M2 as the deployment input.
 

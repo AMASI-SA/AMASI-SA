@@ -1,6 +1,28 @@
 # Google and store-courier live acceptance follow-up
 
-## Current release checkpoint: adapter passed, publication pending
+## Current continuation: publication IN PROGRESS
+
+PR1890 is merged as M2 `0af4a3da57072a4995a2ebd0ca76720d17a80ee6`, with the
+reviewed B tree. All 28 applicable latest B workflows passed, and the actual
+shared adapter passed in 65.79 seconds with exact source/runtime/artifact and
+package proofs. The release owner's prepare and prepublish succeeded for
+actor `codex-google-courier-acceptance-20261112`, source A
+`da0d2e2fb82a7848bcd398ca292ba93e1a880681` and M2, with
+`ready_to_publish:true`.
+
+At approximately 2026-11-12 00:53:58 UTC, the owner clicked Publish changes
+once. The UI then displayed `Publishing...` with the action disabled; the
+previous published version was `0ef7c77`. Publication is IN PROGRESS.
+No newer deployment completion or official three-probe runtime verification
+is recorded yet. Courier preview and same-period Google display acceptance
+remain OPEN, with no physical printing success claimed.
+
+Exact identities and evidence are in [RELEASE.md](RELEASE.md). This
+documentation-only branch is never a deployment candidate. Source A, B and
+the historical records below are unchanged; the owner will append the actual
+publication, verification, lease-closure and acceptance outcomes.
+
+## Previous checkpoint: adapter passed, publication pending (historical)
 
 PR1890 source A `da0d2e2fb82a7848bcd398ca292ba93e1a880681` and intent-only B
 `205a040ca557618d5f6f445d7c54592eaf7cec36` merged as

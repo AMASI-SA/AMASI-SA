@@ -1,6 +1,23 @@
 # GOOGLE-DASHBOARD-SPEND-20261111
 
-## Current continuation after live acceptance
+## Current continuation: PR1890 publication IN PROGRESS
+
+The reviewed Google display follow-up and courier repairs merged in PR1890 as
+`0af4a3da57072a4995a2ebd0ca76720d17a80ee6`, with the reviewed B tree. All 28
+applicable latest B workflows passed, the shared adapter passed in 65.79
+seconds, and own prepare/prepublish returned `ready_to_publish:true`.
+The owner clicked Publish changes once at approximately
+2026-11-12 00:53:58 UTC; the UI showed `Publishing...` with the action disabled.
+The previous published version was `0ef7c77`.
+
+Runtime verification and live acceptance remain OPEN. The same-period Google
+known-partial display has not yet been accepted on the new runtime; incomplete
+account coverage must remain explicit. Follow [the current task record](../GOOGLE-COURIER-LIVE-ACCEPTANCE-20261112/STATUS.md)
+and [release evidence](../GOOGLE-COURIER-LIVE-ACCEPTANCE-20261112/RELEASE.md).
+This documentation-only branch is never a deployment candidate. The source
+A/B pair and the historical evidence below remain unchanged.
+
+## Previous continuation after live acceptance (historical)
 
 PR1887 is deployed and verified by three official probes; its lease is inactive.
 The live same-period trial exposed partial Google data hidden by the UI.
