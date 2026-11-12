@@ -451,10 +451,69 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
     return result
 
 
+def _bank_credit_actions(orders, recorded):
+    """Prepare bank claims without I/O or changes to recorded money.
+
+    Positions preserve the original OR match: a movement found by both keys is
+    one hit, while two equal entries remain a conflict. Prospective new rows
+    are indexed immediately so later candidates see the same batch history.
+    """
+    from operational_demand_refresh import calculation_checkpoint
+
+    candidates = []
+    for order in orders:
+        calculation_checkpoint()
+        credit = order.get("bank_credit")
+        if credit:
+            candidates.append((order, credit))
+    if not candidates:
+        return []
+
+    by_request, by_order = {}, {}
+    rows = list(recorded)
+
+    def add_position(lookup, key, position):
+        # A legacy list/dict cannot match a normalized candidate identity.
+        # Ignore only that key; the same row's other identity may still match.
+        try:
+            hash(key)
+        except TypeError:
+            return
+        lookup.setdefault(key, set()).add(position)
+
+    def index(movement, position):
+        add_position(by_request, movement.get("request_id"), position)
+        if movement.get("direction") == "incoming":
+            add_position(by_order, movement.get("order_number"), position)
+
+    for position, movement in enumerate(rows):
+        calculation_checkpoint()
+        index(movement, position)
+
+    actions = []
+    for order, credit in candidates:
+        calculation_checkpoint()
+        identity = "order-bank:" + str(order["id"])
+        hits = by_request.get(identity, set()) | by_order.get(order["order_number"], set())
+        if hits:
+            existing = rows[next(iter(hits))]
+            if (len(hits) != 1 or existing.get("bank_id") != credit["bank_id"]
+                    or Decimal(existing["amount"]) != Decimal(credit["amount"])):
+                actions.append(("conflict", order, None))
+            continue
+        payload = {"request_id": identity, "order_number": order["order_number"], "order_id": order["id"],
+                   "bank_id": credit["bank_id"], "amount": fmt(credit["amount"]), "currency": order["currency"]}
+        actions.append(("claim", order, payload))
+        prospective = {**payload, "direction": "incoming"}
+        index(prospective, len(rows))
+        rows.append(prospective)
+    return actions
+
+
 async def refresh(db, owner, *, clock=None):
     from operational_balance_sources import collect_sources
     from operational_balance_engine import reconcile
-    from operational_demand_refresh import checkpoint, run_calculation
+    from operational_demand_refresh import calculation_checkpoint, checkpoint, run_calculation
     from operational_profit_sources import load_profit_snapshot
     stamp = clock or now()
 
@@ -488,20 +547,16 @@ async def refresh(db, owner, *, clock=None):
         await checkpoint()
         result["engine"]["profit_snapshot"] = await load_profit_snapshot(db, owner, result, as_of=stamp)
         await checkpoint()
-        for order in sources.get('orders', []):
-            credit = order.get('bank_credit')
-            if not credit:
+        bank_actions = await run_calculation(_bank_credit_actions, sources.get("orders", []), result["movements"])
+        for action, order, payload in bank_actions:
+            calculation_checkpoint()
+            if action == "conflict":
+                result["engine"]["issues"].append({"code": "operational_order_bank_credit_conflict", "source_id": order["id"]})
                 continue
+            # Preparation cannot authorize a financial intent. Every new
+            # claim retains fresh request/lease admission and store arbitration.
             await checkpoint()
-            identity = 'order-bank:' + str(order['id'])
-            existing = [m for m in result['movements'] if m.get('request_id') == identity or
-                        (m.get('order_number') == order['order_number'] and m.get('direction') == 'incoming')]
-            if existing:
-                if len(existing) != 1 or existing[0].get('bank_id') != credit['bank_id'] or Decimal(existing[0]['amount']) != Decimal(credit['amount']):
-                    result['engine']['issues'].append({'code': 'operational_order_bank_credit_conflict', 'source_id': order['id']})
-                continue
-            payload = {'request_id': identity, 'order_number': order['order_number'], 'order_id': order['id'],
-                       'bank_id': credit['bank_id'], 'amount': fmt(credit['amount']), 'currency': order['currency']}
+            credit = order["bank_credit"]
             operation = await claim_movement(db, owner, 'operational_order_worker', payload)
             item = {**payload, 'id': operation, 'party_type': 'bank', 'party_id': credit['bank_id'],
                     'bank_kind': 'bank', 'bank_name': credit['bank_name'], 'name': credit['bank_name'],
