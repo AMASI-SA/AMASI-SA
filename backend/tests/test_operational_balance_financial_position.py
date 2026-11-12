@@ -120,7 +120,7 @@ def test_missing_cost_and_profit_evidence_is_unavailable_never_zero():
         assert table(result, key)["totals"]["amount"] is None
     profit = result["currencies"]["SAR"]["profit_rows"]
     assert profit and all(row["amount"] is None for row in profit)
-    assert all(row["reason"].startswith("غير متاح:") for row in profit)
+    assert all(row["reason"] and row["complete"] is False for row in profit)
 
 
 def source_order(identity="order-one", **extra):
@@ -151,7 +151,7 @@ def test_provider_net_cash_and_actual_fees_are_not_subtracted_twice():
     result = build_financial_position(state)
     assert result["currencies"]["SAR"]["metrics"]["liquidity"] == "1035.00"
     assert table(result, "providers")["totals"] == {"name": "الإجمالي", "orders": 1, "gross": "100.00",
-                                                     "fees": "11.00", "refunded": "0.00", "net": "54.00"}
+                                                     "fees": "11.00", "refunded": "0.00", "net": "54.00", "pending_orders": 0}
     assert table(result, "provider_collections_expected")["totals"]["amount"] == "0.00"
     assert result["currencies"]["SAR"]["metrics"]["monetary_position"] == "1089.00"
     assert state == before
@@ -159,11 +159,12 @@ def test_provider_net_cash_and_actual_fees_are_not_subtracted_twice():
 
 def test_uncaptured_provider_forecast_is_net_after_one_fee_deduction():
     result = build_financial_position(provider_state(captured="0.00"))
-    assert table(result, "providers")["totals"]["net"] == "0.00"
+    # An uncaptured obligation alone proves no current paid balance.
+    assert table(result, "providers")["totals"]["net"] is None
     # The engine's expected obligation is net 90. Gross 100 minus a single 10
     # future fee is 90; using expected 90 and deducting 10 again would be 80.
     assert table(result, "provider_collections_expected")["rows"][0]["amount"] == "90.00"
-    assert table(result, "providers")["rows"][0]["fees"] == "0.00"
+    assert table(result, "providers")["rows"][0]["fees"] is None
     assert table(result, "provider_collections_expected")["complete"] is False
 
 

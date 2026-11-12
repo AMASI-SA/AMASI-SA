@@ -39,13 +39,19 @@ def test_one_merchant_comparison_is_nonposting_and_replayable():
             old, new = (result[k]['SAR'] for k in ('saved','proposed'))
             assert old['providers']['parties']['tamara']['receivable'] == '250.00'
             provider = new['providers']['parties']['tamara']
-            assert provider['known_net'] == '273.00'
+            # Proved paid gross remains visible; its unknown commission is not
+            # silently treated as zero when calculating a known net balance.
+            assert provider['known_net'] == '250.00'
             assert provider['gross'] == '23.00' and provider['orders'] == 1
-            assert provider['receivable'] is None and provider['fees'] is None
+            assert provider['net'] is None and provider['receivable'] is None and provider['payable'] is None
+            assert provider['fees'] is None
             assert not provider['complete']
             assert old['cod_expected']['known_subtotal'] is None
-            assert new['cod_expected']['known_subtotal'] == '77.00'
-            assert new['cod_expected']['reported_total'] is None
+            # The independent COD source has complete identity, amount and
+            # period coverage. Missing platform fees do not invalidate it.
+            assert new['cod_expected'] == {
+                'complete': True, 'known_subtotal': '77.00', 'reported_total': '77.00',
+                'orders_with_amount': 1, 'rows_without_amount': 0}
             assert 'provider_fees_expected' not in new
             for private in ('PRIVATE-', 'Secret customer', 'Private account', 'secret@example'):
                 assert private not in json.dumps(result)
@@ -160,10 +166,16 @@ def test_aggregate_provider_estimate_and_actual_settlement_fee_are_distinct():
             s = reconcile(state(),{'orders':[o],'fee_policies':await list_fee_policies(db,'shop')},T1)
             s['movements'] = [{**payout('45.00','provider:1001'), 'id':'synthetic','bank_id':'bank',
                                'bank_name':'private-bank','bank_kind':'bank','name':'private-label'}]
+            unstamped = cli['summary']('shop', s, None)['SAR']['providers']['parties']['tamara']
+            assert unstamped['known_net'] == '53.10' and unstamped['net'] is None
+            # The service stamps a completed reconciliation. The pure reducer
+            # alone cannot certify the saved snapshot's coverage timestamp.
+            s['engine']['as_of'] = T1
             result = cli['summary']('shop',s,None)['SAR']
             assert result['actual_fees_on_recorded_provider_settlements'] == {
                 'tamara': {'known_subtotal':'2.00','settlements_without_fee_amount':0}}
             provider = result['providers']['parties']['tamara']
+            assert provider['complete'] is True
             assert provider['fees'] == '3.90'
             assert provider['settled'] == '43.00' and provider['net'] == '53.10'
             assert 'provider_fees_expected' not in result

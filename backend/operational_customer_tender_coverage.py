@@ -97,11 +97,14 @@ def _record_sar(summary, order, methods, valued, due_sar):
         if row is None:
             name = NAMES.get(method) or PLATFORMS.get(method, method)
             row = {"method":method, "name":name, "orders":0, "incomplete_orders":0, "known_paid":"0.00",
-                   "paid":None, "known_remaining":"0.00", "unknown_remaining_orders":0, "remaining":None}
+                   "paid":None, "known_remaining":"0.00", "unknown_remaining_orders":0, "remaining":None,
+                   "paid_order_ids":[]}
             sar["by_method"].append(row)
         row["orders"] += 1
         if valued and method in valued["shares"]:
             row["known_paid"] = format(Decimal(row["known_paid"]) + Decimal(valued["shares"][method]), ".2f")
+            if Decimal(valued["shares"][method]) > 0:
+                row.setdefault("paid_order_ids", []).append(str(order["id"]))
         else:
             row["incomplete_orders"] += 1
         row["paid"] = None if row["incomplete_orders"] else row["known_paid"]
@@ -122,6 +125,9 @@ def finish_coverage(summary, uninspected=()):
     if room > 0:
         sar["missing_order_ids"].extend(sorted(uninspected)[:room])
     sar["by_method"].sort(key=lambda row: row["method"])
+    for row in sar["by_method"]:
+        row["paid_order_ids"] = sorted(set(row.get("paid_order_ids", [])))
+        row["paid_orders"] = len(row["paid_order_ids"])
     pending = sar["proof_lookups"]
     if len(pending) > 128:
         pending.sort(key=lambda r: r["order_id"])

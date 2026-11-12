@@ -4,6 +4,8 @@ from decimal import Decimal
 
 from operational_balance_store import digest
 from operational_shipping_fee_review import amount
+from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
+from operational_financial_activity_runtime import checked_rows, preparation_checkpoint
 
 APPROVALS = "historical_shipping_fee_approvals"
 NATIVE_EVENTS = "mz2_shipping_accounting_events"
@@ -43,16 +45,20 @@ def register_candidate(out, review_numbers, event, *, rate=None, quote=None, ear
 
 def review(state, candidate):
     """Validate source-specific blockers and expose relevant openings and payments."""
+    preparation_checkpoint()
     if not candidate:
         return [], [], ["لا توجد أجرة تاريخية مؤهلة لهذا الطلب. طابق التسليم والتعرفة والمدفوعات أولًا."]
     def same_party(row):
         return all(row.get(k) == candidate[k] for k in ("party_id", "party_type", "currency"))
     openings = [{k: r.get(k) for k in ("id", "name", "amount", "currency", "direction")}
-                for r in state.get("openings", {}).values() if same_party(r)]
+                for r in checked_rows(state.get("openings", {}).values()) if same_party(r)]
     keys = {"shipping:" + candidate["order_id"], candidate["obligation_id"]}
     engine = state.get("engine", {})
     facts, obs = engine.get("facts", {}), engine.get("obligations", {})
     issues = []
+    from operational_completed_shipping_admission import recorded_base_fee
+    if recorded_base_fee(state, candidate['order_id']):
+        issues.append("توجد أجرة أساسية مثبتة لهذا الطلب؛ لا تُعتمد مرة ثانية من مسار التسليم التاريخي.")
     for key in keys:
         r = obs.get(key)
         if r and (not same_party(r) or r.get("kind") != "shipping" or r.get("direction") != "payable"
@@ -67,19 +73,19 @@ def review(state, candidate):
                     or frozen.get("delivered_at") != candidate["delivered_at"] or frozen.get("cost") is not None)
             or any(k in facts for k in (candidate["obligation_id"], "shipping_fee:" + candidate["order_id"]))):
         issues.append("توجد أجرة محفوظة أو يختلف مستفيد التسليم أو تاريخه عن الدليل.")
-    payable_ids = {k for k, row in obs.items() if same_party(row) and row.get("direction") == "payable"}
+    payable_ids = {k for k, row in checked_rows(obs.items()) if same_party(row) and row.get("direction") == "payable"}
     payable_ids.update(r["id"] for r in openings if r["direction"] == "for_party")
     payouts = []
-    for m in state.get("movements", []):
+    for m in checked_rows(state.get("movements", [])):
         allocations = m.get("allocations") or []
-        if any(a.get("obligation_id") in keys for a in allocations):
+        if any(a.get("obligation_id") in keys for a in checked_rows(allocations)):
             issues.append("يوجد سداد مخصص لأجرة هذا الطلب.")
         if not same_party(m) or m.get("direction") != "outgoing":
             continue
         payouts.append({k: m.get(k) for k in ("id", "amount", "currency", "kind", "allocations")})
         if (m.get("kind") != "payment" or not allocations
-                or sum((amount(a["amount"]) for a in allocations), Decimal(0)) != amount(m["amount"])
-                or any(a["obligation_id"] not in payable_ids for a in allocations)):
+                or sum((amount(a["amount"]) for a in checked_rows(allocations)), Decimal(0)) != amount(m["amount"])
+                or any(a["obligation_id"] not in payable_ids for a in checked_rows(allocations))):
             issues.append("يوجد دفع غير مخصص بالكامل لهذه الجهة. طابقه أولًا.")
     return sorted(openings, key=lambda r: str(r["id"])), sorted(payouts, key=lambda r: str(r["id"])), list(dict.fromkeys(issues))
 
@@ -87,6 +93,7 @@ def review(state, candidate):
 async def native_conflicts(db, owner, candidates, *, max_rows):
     """Existing fee postings and pooled payable offsets block a historical claim."""
     conflicts = {}
+    budget = CPUWorkBudget(PARSER_BUDGET_MS)
     for offset in range(0, len(candidates), 250):
         batch = candidates[offset:offset + 250]
         numbers, parties, waybills, assignments = defaultdict(set), defaultdict(set), defaultdict(set), defaultdict(set)
@@ -114,6 +121,8 @@ async def native_conflicts(db, owner, candidates, *, max_rows):
             conflicts.update({n: "تجاوزت التسويات حد المعاينة؛ يلزم حصرها قبل الاعتماد." for n in numbers})
             continue
         for event in events:
+            preparation_checkpoint()
+            await budget.checkpoint()
             if event.get("user_id") != owner:
                 raise ValueError("operational_source_owner_mismatch")
             f = event["facts"]
@@ -135,6 +144,8 @@ async def native_conflicts(db, owner, candidates, *, max_rows):
             conflicts.update({n: "يلزم حصر جميع قيود الشحن الأصلية قبل الاعتماد." for n in numbers})
             continue
         for event in v2:
+            preparation_checkpoint()
+            await budget.checkpoint()
             if event.get("user_id") != owner:
                 raise ValueError("operational_source_owner_mismatch")
             if event["kind"] == "fee":

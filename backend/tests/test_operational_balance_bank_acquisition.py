@@ -11,6 +11,7 @@ from operational_balance_worker import tick
 from salla_integration import bank_payment_sync
 from test_operational_balance_bank_orders import native_accounts, native_bank_order
 from test_operational_balance_integration import NOW, run, started
+from test_operational_balance_visible_evidence import visible_refresh
 
 
 def pair(number="992001"):
@@ -84,7 +85,7 @@ def test_bounded_concurrent_acquisition_writes_bank_identity_and_retry_metadata_
     run(scenario)
 
 
-def test_worker_completes_seven_missing_native_banks_then_credits_twenty_one_once(monkeypatch):
+def test_visible_refresh_completes_seven_missing_native_banks_then_credits_twenty_one_once(monkeypatch):
     details, calls = {}, []
     provider(monkeypatch, details, calls)
 
@@ -103,8 +104,10 @@ def test_worker_completes_seven_missing_native_banks_then_credits_twenty_one_onc
         assert len(first["movements"]) == 14
         assert len(first["engine"]["order_versions"]) == 21
         assert sum(i["code"] == "operational_order_bank_binding_incomplete" for i in first["engine"]["issues"]) == 7
+        await tick(db)
+        assert await read(db, "owner") == first and calls == []
         for _ in range(3):
-            await tick(db)
+            await visible_refresh(db)
         current = await read(db, "owner")
         assert len(calls) == len(set(calls)) == 7
         credits = [row for row in current["movements"] if row.get("automatic_order_bank")]
@@ -115,6 +118,8 @@ def test_worker_completes_seven_missing_native_banks_then_credits_twenty_one_onc
         assert current["engine"]["order_versions"] == first["engine"]["order_versions"]
         assert report(current)["summary"]["actual_liquidity"] == "3100.00"
         await tick(db)
+        assert (await read(db, "owner"))["movements"] == current["movements"]
+        await visible_refresh(db)
         assert (await read(db, "owner"))["movements"] == current["movements"]
         assert len(calls) == 7
     run(scenario)

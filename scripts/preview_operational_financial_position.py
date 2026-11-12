@@ -62,10 +62,14 @@ def summary(owner, state, exposure):
         providers = tables['providers']
         parties = {}
         for row in providers['rows']:
-            net = None if row['net'] is None else Decimal(row['net'])
+            # The visible table aliases net to its known subtotal. The preview
+            # keeps a full receivable/payable unknown until coverage is complete,
+            # and reports that preserved subtotal separately as known_net.
+            net = None if row['complete'] is not True or row['net'] is None else Decimal(row['net'])
             parties[party_label(owner, row['provider'])] = {
-                **{key: row[key] for key in ('orders', 'gross', 'fees', 'refunded', 'net',
+                **{key: row[key] for key in ('orders', 'gross', 'fees', 'refunded',
                                             'opening', 'settled', 'known_net', 'complete')},
+                'net': None if net is None else format(net, '.2f'),
                 'receivable': None if net is None else format(max(net, Decimal(0)), '.2f'),
                 'payable': None if net is None else format(max(-net, Decimal(0)), '.2f'),
             }

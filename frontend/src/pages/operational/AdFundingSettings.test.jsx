@@ -40,3 +40,21 @@ test('save failure retains input and retry request identity',async()=>{
   await act(async()=>host.querySelector('button').click());
   expect(api.saveAdFundingSettings.mock.calls[0][0]).toEqual(api.saveAdFundingSettings.mock.calls[1][0]);
 });
+
+const visibility = async value => act(async () => {
+ Object.defineProperty(document,'visibilityState',{configurable:true,value});document.dispatchEvent(new Event('visibilitychange'));
+});
+beforeEach(()=>Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'}));
+afterEach(()=>Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'}));
+test('configuration never loads on a hidden mount or repeats a completed read on focus',async()=>{
+ await visibility('hidden');await act(async()=>root.render(<AdFundingSettings onSaved={()=>{}} onClose={()=>{}}/>));
+ expect(api.adFundingSettings).not.toHaveBeenCalled();await visibility('visible');expect(api.adFundingSettings).toHaveBeenCalledTimes(1);
+ expect(api.adFundingSettings.mock.calls[0][0].signal).toBeInstanceOf(AbortSignal);
+ await visibility('hidden');await visibility('visible');expect(api.adFundingSettings).toHaveBeenCalledTimes(1);
+});
+test('configuration read is aborted and joined when its panel closes',async()=>{
+ let resolve;api.adFundingSettings.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));
+ await act(async()=>root.render(<AdFundingSettings onSaved={()=>{}} onClose={()=>{}}/>));const signal=api.adFundingSettings.mock.calls[0][0].signal;
+ await act(async()=>root.render(<div/>));expect(signal.aborted).toBe(true);await act(async()=>resolve({items:[]}));
+ await visibility('hidden');await visibility('visible');expect(api.adFundingSettings).toHaveBeenCalledTimes(1);
+});

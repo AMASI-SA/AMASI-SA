@@ -200,7 +200,7 @@ class DriverEarnings:
             return info, code
 
 
-def courier_issue(out, code, raw, source, *, carrier=None, event=None):
+def courier_issue(out, code, raw, source, *, carrier=None, event=None, setup=None, owner=None):
     """Expose source identity for investigation, never infer the delivery date or debt."""
     current = source.get("salla_shipping_current") or raw.get("salla_shipping_current") or {}
     if not isinstance(current, dict):
@@ -208,11 +208,25 @@ def courier_issue(out, code, raw, source, *, carrier=None, event=None):
     shipping = raw.get("shipping") if isinstance(raw.get("shipping"), dict) else {}
     name = current.get("company_name") or current.get("company_code") or shipping.get("company_code")
     oid, number = _text(raw.get("id")), _text(raw.get("reference_id") or raw.get("order_number"))
-    if not (name and oid and number):
+    if not (oid and number):
         return
-    info = {"party_name":str(name), "order_number":number, "order_id":oid,
+    party = (event or {}).get('party_id') if (event or {}).get('party_type') == 'courier' else None
+    if party is None and setup is not None and owner:
+        from operational_delivery_evidence import _courier
+        try:
+            party, _ = _courier(setup, owner, current)
+        except (ValueError, KeyError, TypeError):
+            pass
+    info = {"party_name":str(name or party or 'شركة شحن غير مطابقة'), "order_number":number, "order_id":oid,
+            "party_type":"courier" if party else None, "party_id":party,
             "delivered_at":(event or {}).get("delivered_at"), "candidate_amount":(carrier or {}).get("cost"),
             "currency":(carrier or {}).get("currency")}
+    if party and not info['currency']:
+        currencies = {rate.get('currency') for rate in (setup or {}).get('contracts', [])
+                      if rate.get('party_type') == 'courier' and rate.get('party_id') == party
+                      and rate.get('status') == 'approved'}
+        if len(currencies) == 1 and None not in currencies:
+            info['currency'] = next(iter(currencies))
     actions = {
         "operational_delivery_timestamp_missing":"طابق تاريخ تسليم البوليصة الحالية أو حدّث سجل حركة الطلب من سلة لإثبات وقت انتقاله إلى تم التوصيل.",
         "operational_delivery_order_waybill_unproven":"حركة التسليم بتاريخ الطلب تتطلب بوليصة واحدة مطابقة؛ طابق تاريخ البوليصة الفعلية عند الاستبدال أو تعدد الشحنات.",
@@ -223,6 +237,9 @@ def courier_issue(out, code, raw, source, *, carrier=None, event=None):
         "operational_delivery_courier_identity_ambiguous":"يلزم ربط شركة الشحنة بهوية تشغيلية معتمدة واحدة.",
         "courier_fee_historical_review_required":"ترتبط الأجرة بسداد سابق أو مطابقة محفوظة؛ راجع التخصيصات قبل اعتمادها.",
         "shipping_identity_or_rate_incomplete":"يلزم مطابقة الشركة وعقد توصيل معتمد وساري بتاريخ التسليم.",
+        "operational_shipping_completion_timestamp_missing":"طابق وقت انتقال الطلب إلى تم التنفيذ من الدليل المعتمد؛ وقت تحديث الطلب العام لا يكفي.",
+        "operational_prepaid_shipping_completion_timestamp_missing":"طابق وقت انتقال الطلب إلى تم التنفيذ من الدليل المعتمد؛ وقت تحديث الطلب العام لا يكفي.",
+        "operational_shipping_completion_history_review_required":"راجع الأرصدة الافتتاحية والسدادات ثم اعتمد أجرة هذا الطلب من مراجعة أجور تم التنفيذ.",
     }
     msg = actions.get(code, "راجع هوية الشحنة الحالية وتاريخ التسليم وعقد الشركة قبل الاعتماد.")
     entry = {"code":code,"source_id":oid,"status":"incomplete","component":"shipping_fee",
@@ -310,7 +327,7 @@ async def hold_native_fee_overlaps(db, owner, out, state, *, max_rows):
         else:
             code, field = "courier_fee_native_overlap", "courier_fee_review"
         if info is None:
-            info = {k: event[k] for k in ("order_id", "order_number", "party_id", "delivered_at")}
+            info = {k: event[k] for k in ("order_id", "order_number", "party_type", "party_id", "delivered_at")}
             info.update(currency=carrier.get("currency"), party_name=event.get("source_carrier_key") or event["party_id"],
                         candidate_amount=carrier.get("cost"))
         out["issues"].append({"code": code, "source_id": order["id"], "status": "incomplete",

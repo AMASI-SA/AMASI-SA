@@ -3,6 +3,7 @@ from starlette.requests import Request as HttpRequest
 from mobile_app_permissions import mobile_app_access_for_user, OPERATIONAL_APP_WRITE, OPERATIONAL_APP_READ
 from hashlib import sha256
 from decimal import Decimal
+import asyncio
 import re
 from typing import Annotated, Literal
 from datetime import date
@@ -12,6 +13,9 @@ from uuid import uuid5, NAMESPACE_URL
 from fastapi import APIRouter, Depends, File, UploadFile, Response, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import DuplicateKeyError
+
+from operational_visible_report_read import run_visible_report_read
+from operational_financial_activity_runtime import checked_rows, prepare_in_thread
 
 from operational_balance_store import RECEIPTS, AUTHORIZATION_GUARD, check_authorization, audit, digest, fail, mutate, now, read
 from operational_balance_service import (entity, save_opening, create_movement, report, refresh, freeze, supplier_return)
@@ -397,12 +401,14 @@ def make_operational_balance_router(db, current_user):
                 permission = "reports"
             elif re.fullmatch(r"/(inventory-purchases|supplier-adjustments)/entry/[^/]+/.+", path):
                 permission = "move"
-            elif path in {"/reports", "/cost-exposure", "/suppliers", "/supplier-invoice-review", "/financial-position", "/movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
+            elif path in {"/reports", "/cost-exposure", "/suppliers", "/supplier-invoice-review", "/financial-position", "/movements", "/daily-financial-movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
                 permission = "reports"
             elif path in {"/customer-returns", "/customer-exchanges"}:
                 permission = "reports"
             elif re.fullmatch(r"/customer-(returns|exchanges)/(order|entry)/[^/]+", path) or re.fullmatch(r"/customer-returns/shipping-quote/(courier|store_driver)/[^/]+", path):
                 permission = "move"
+        elif request.method == "POST" and path == "/refresh":
+            permission = "reports"
         elif request.method == "POST" and path in {"/movements", "/inventory-purchases", "/supplier-adjustments"}:
             permission = "move"
         elif request.method == "POST" and (path in {"/customer-returns", "/customer-exchanges"}
@@ -455,10 +461,13 @@ def make_operational_balance_router(db, current_user):
     move_guard = guarded("move")
 
     @router.get('/courier-tariffs')
-    async def courier_tariffs(user=Depends(current_user)):
-        _, owner, _ = await scope(db, user, 'courier_tariff_manage')
-        from operational_courier_tariffs import catalog
-        return await catalog(db, owner)
+    async def courier_tariffs(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            _, owner, _ = await scope(db, user, 'courier_tariff_manage')
+            from operational_courier_tariffs import catalog
+            return await catalog(db, owner)
+
+        return await run_visible_report_read(request, read_page)
 
     @router.post('/courier-tariffs')
     async def approve_courier_tariff(payload: CourierTariffApproval, user=Depends(guarded('courier_tariff_manage'))):
@@ -467,10 +476,13 @@ def make_operational_balance_router(db, current_user):
         return await approve(db, owner, actor['id'], payload.model_dump())
 
     @router.get('/ad-account-selection')
-    async def ad_selection(user=Depends(current_user)):
-        _, owner, _ = await scope(db, user, 'ad_selection_manage')
-        from operational_ad_selection import catalog
-        return await catalog(db, owner)
+    async def ad_selection(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            _, owner, _ = await scope(db, user, 'ad_selection_manage')
+            from operational_ad_selection import catalog
+            return await catalog(db, owner)
+
+        return await run_visible_report_read(request, read_page)
 
     @router.post('/ad-account-selection')
     async def save_ad_selection(payload: AdCatalogSelection, user=Depends(guarded('ad_selection_manage'))):
@@ -479,10 +491,13 @@ def make_operational_balance_router(db, current_user):
         return await save(db, owner, actor['id'], payload.model_dump())
 
     @router.get('/ad-funding-settings')
-    async def ad_funding_settings(user=Depends(current_user)):
-        _, owner, _ = await scope(db, user, 'ad_selection_manage')
-        from operational_ad_funding import catalog
-        return await catalog(db, owner)
+    async def ad_funding_settings(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            _, owner, _ = await scope(db, user, 'ad_selection_manage')
+            from operational_ad_funding import catalog
+            return await catalog(db, owner)
+
+        return await run_visible_report_read(request, read_page)
 
     @router.post('/ad-funding-settings')
     async def save_ad_funding_settings(payload: AdFundingSettings, user=Depends(guarded('ad_selection_manage'))):
@@ -491,10 +506,13 @@ def make_operational_balance_router(db, current_user):
         return await save(db, owner, actor['id'], payload.model_dump())
 
     @router.get('/customer-wallet/context')
-    async def customer_wallet_context(user=Depends(current_user)):
-        actor, owner, _ = await scope(db, user, 'manage')
-        from operational_customer_wallet import context
-        return await context(db, owner, actor['id'])
+    async def customer_wallet_context(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            actor, owner, _ = await scope(db, user, 'manage')
+            from operational_customer_wallet import context
+            return await context(db, owner, actor['id'])
+
+        return await run_visible_report_read(request, read_page)
 
     @router.post('/customer-wallet/snapshot')
     async def customer_wallet_snapshot(payload: CustomerWalletSnapshot, user=Depends(manage_guard)):
@@ -504,10 +522,13 @@ def make_operational_balance_router(db, current_user):
         return {**result, 'session_scope': digest([owner, actor['id']])}
 
     @router.get('/supplier-adjustments/entry/{supplier_id}/{invoice_number:path}')
-    async def supplier_adjustment_entry(supplier_id:str, invoice_number:str, user=Depends(current_user)):
-        _,owner,_=await scope(db,user,"move")
-        from operational_supplier_adjustments import lookup
-        return lookup(await read(db,owner),supplier_id,invoice_number)
+    async def supplier_adjustment_entry(request: HttpRequest, supplier_id:str, invoice_number:str, user=Depends(current_user)):
+        async def read_page():
+            _,owner,_=await scope(db,user,"move")
+            from operational_supplier_adjustments import lookup
+            return await prepare_in_thread(lookup, await read(db,owner), supplier_id, invoice_number)
+
+        return await run_visible_report_read(request, read_page)
 
     @router.post('/supplier-adjustments')
     async def supplier_adjustment_create(payload:SupplierAdjustment,user=Depends(move_guard)):
@@ -516,11 +537,14 @@ def make_operational_balance_router(db, current_user):
         return await save_adjustment(db,owner,actor['id'],payload.model_dump(),source='employee_app' if user.get('_session_client')=='amasi_mobile' else 'mezan2')
 
     @router.get('/inventory-catalog')
-    async def inventory_catalog(configured: bool = False, user=Depends(current_user)):
-        _, owner, _ = await scope(db, user, 'view')
-        from operational_balance_inventory import catalog
-        from operational_purchase_metadata import products, locations
-        return {'items':await catalog(db,owner,components_only=configured), 'products':await products(db,owner), 'locations':await locations(db,owner)}
+    async def inventory_catalog(request: HttpRequest, configured: bool = False, user=Depends(current_user)):
+        async def read_page():
+            _, owner, _ = await scope(db, user, 'view')
+            from operational_balance_inventory import catalog
+            from operational_purchase_metadata import products, locations
+            return {'items':await catalog(db,owner,components_only=configured), 'products':await products(db,owner), 'locations':await locations(db,owner)}
+
+        return await run_visible_report_read(request, read_page)
 
     @router.get('/standalone-inventory/context')
     async def standalone_inventory_context(user=Depends(current_user)):
@@ -543,14 +567,20 @@ def make_operational_balance_router(db, current_user):
         return await save(db, user, payload.model_dump())
 
     @router.get('/inventory-opening/context')
-    async def inventory_opening_context(user=Depends(current_user)):
-        from operational_opening_inventory import context
-        return await context(db, user)
+    async def inventory_opening_context(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            from operational_opening_inventory import context
+            return await context(db, user)
+
+        return await run_visible_report_read(request, read_page)
 
     @router.post('/inventory-opening/preview')
-    async def inventory_opening_preview(payload: StockOpeningRequest, user=Depends(current_user)):
-        from operational_opening_inventory import preview
-        return await preview(db, user, payload.model_dump())
+    async def inventory_opening_preview(request: HttpRequest, payload: StockOpeningRequest, user=Depends(current_user)):
+        async def read_page():
+            from operational_opening_inventory import preview
+            return await preview(db, user, payload.model_dump())
+
+        return await run_visible_report_read(request, read_page)
 
     @router.post('/inventory-opening/approve')
     async def inventory_opening_approve(payload: StockOpeningApproval, user=Depends(current_user)):
@@ -558,39 +588,51 @@ def make_operational_balance_router(db, current_user):
         return await approve(db, user, payload.model_dump())
 
     @router.get('/inventory')
-    async def inventory_availability(user=Depends(current_user)):
-        from operational_inventory_projection import projection
-        from web_page_access import INVENTORY_PAGE, delegated_page_owner
+    async def inventory_availability(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            from operational_inventory_projection import projection
+            from web_page_access import INVENTORY_PAGE, delegated_page_owner
 
-        delegated_owner = await delegated_page_owner(db, user, INVENTORY_PAGE)
-        if delegated_owner is None:
-            _, owner, _ = await scope(db, user, 'reports')
-            return await projection(db, owner)
-        result = await projection(db, delegated_owner)
-        cost_fields = {'unit_cost', 'inventory_value', 'cost_basis', 'operational_unit_cost',
-                       'operational_inventory_value', 'operational_currency'}
-        return {
-            **result,
-            'items': [{key: value for key, value in row.items() if key not in cost_fields}
-                      for row in result['items']],
-        }
+            delegated_owner = await delegated_page_owner(db, user, INVENTORY_PAGE)
+            if delegated_owner is None:
+                _, owner, _ = await scope(db, user, 'reports')
+                return await projection(db, owner)
+            result = await projection(db, delegated_owner)
+            cost_fields = {'unit_cost', 'inventory_value', 'cost_basis', 'operational_unit_cost',
+                           'operational_inventory_value', 'operational_currency'}
+            def redact_costs():
+                return {**result, 'items': [
+                    {key: value for key, value in row.items() if key not in cost_fields}
+                    for row in checked_rows(result['items'])]}
+            return await prepare_in_thread(redact_costs)
+
+        return await run_visible_report_read(request, read_page)
 
     @router.get('/inventory-purchases')
-    async def inventory_purchases(user=Depends(current_user)):
-        _, owner, _ = await scope(db,user,'reports')
-        from operational_balance_inventory import inventory_view
-        return inventory_view(await read(db,owner))
+    async def inventory_purchases(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            _, owner, _ = await scope(db,user,'reports')
+            from operational_balance_inventory import inventory_view
+            return await prepare_in_thread(inventory_view, await read(db,owner))
+
+        return await run_visible_report_read(request, read_page)
 
     @router.get('/inventory-purchases/entry/{supplier_id}/{invoice_number:path}')
-    async def inventory_entry(supplier_id:str, invoice_number:str, user=Depends(current_user)):
-        _, owner, _ = await scope(db,user,'move')
-        from operational_balance_inventory import purchase_view
-        state=await read(db,owner)
-        from operational_invoice_numbers import references
-        invoices=[p for p in state.get('inventory_purchases',[]) if p['supplier_id']==supplier_id and invoice_number.strip() in references(p)]
-        if len(invoices)!=1:
-            fail('inventory_invoice_missing','فاتورة الشراء غير موجودة',404)
-        return purchase_view(state,invoices[0])
+    async def inventory_entry(request: HttpRequest, supplier_id:str, invoice_number:str, user=Depends(current_user)):
+        async def read_page():
+            _, owner, _ = await scope(db,user,'move')
+            from operational_balance_inventory import purchase_view
+            state=await read(db,owner)
+            from operational_invoice_numbers import references
+            def invoice_view():
+                invoices=[p for p in checked_rows(state.get('inventory_purchases',[]))
+                          if p['supplier_id']==supplier_id and invoice_number.strip() in references(p)]
+                if len(invoices)!=1:
+                    fail('inventory_invoice_missing','فاتورة الشراء غير موجودة',404)
+                return purchase_view(state,invoices[0])
+            return await prepare_in_thread(invoice_view)
+
+        return await run_visible_report_read(request, read_page)
 
     @router.post('/inventory-purchases')
     async def inventory_create(payload:InventoryPurchase,user=Depends(move_guard)):
@@ -617,20 +659,26 @@ def make_operational_balance_router(db, current_user):
         return case
 
     @router.get("/customer-returns/entry/{order_number}")
-    async def return_entry(order_number:str,user=Depends(current_user)):
-        _,owner,_=await scope(db,user,"move")
-        from operational_customer_returns import order_view
-        order=await order_view(db,owner,order_number)
-        cases=(await read(db,owner)).get("customer_returns",[])
-        return {"order":order,"items":[entry_case(c,"returns") for c in cases if c["order_number"]==order_number and (c["status"]=="pending" or (c.get("shipping",{}).get("kind")!="none" and c.get("shipping",{}).get("status")!="completed"))]}
+    async def return_entry(request: HttpRequest, order_number:str,user=Depends(current_user)):
+        async def read_page():
+            _,owner,_=await scope(db,user,"move")
+            from operational_customer_returns import order_view
+            order=await order_view(db,owner,order_number)
+            cases=(await read(db,owner)).get("customer_returns",[])
+            return {"order":order,"items":[entry_case(c,"returns") for c in cases if c["order_number"]==order_number and (c["status"]=="pending" or (c.get("shipping",{}).get("kind")!="none" and c.get("shipping",{}).get("status")!="completed"))]}
+
+        return await run_visible_report_read(request, read_page)
 
     @router.get("/customer-exchanges/entry/{order_number}")
-    async def exchange_entry(order_number:str,user=Depends(current_user)):
-        _,owner,_=await scope(db,user,"move")
-        from operational_balance_exchanges import exchange_order
-        order=await exchange_order(db,owner,order_number)
-        cases=(await read(db,owner)).get("customer_exchanges",[])
-        return {"order":order,"items":[entry_case(c,"exchanges") for c in cases if c["order_number"]==order_number]}
+    async def exchange_entry(request: HttpRequest, order_number:str,user=Depends(current_user)):
+        async def read_page():
+            _,owner,_=await scope(db,user,"move")
+            from operational_balance_exchanges import exchange_order
+            order=await exchange_order(db,owner,order_number)
+            cases=(await read(db,owner)).get("customer_exchanges",[])
+            return {"order":order,"items":[entry_case(c,"exchanges") for c in cases if c["order_number"]==order_number]}
+
+        return await run_visible_report_read(request, read_page)
     async def entity_guard(request: HttpRequest, user=Depends(current_user)):
         from contextlib import asynccontextmanager
         kind = request.url.path.rstrip("/").split("/")[-1]
@@ -643,71 +691,78 @@ def make_operational_balance_router(db, current_user):
             yield checked
 
     @router.get("/context")
-    async def context(user=Depends(current_user)):
-        actor, owner, source = await scope(db, user, "view")
-        state = await read(db, owner)
-        permissions = {}
-        for key in ("view", "move", "manage", "reports"):
-            try:
-                await scope(db, user, key)
-                permissions[key] = True
-            except Exception as exc:
-                from fastapi import HTTPException
-                if not isinstance(exc, HTTPException):
-                    raise
-                permissions[key] = False
-        from operational_app_banks import assigned_banks
-        banks = await assigned_banks(db, owner, actor) if source == "employee_app" else None
-        return {"status": state["status"], "started_at": state["started_at"],
-                "operational_banks": banks,
-                "can_create_cash": actor.get("role") == "owner",
-                "can_create_external_person": actor.get("role") == "owner",
-                "can_select_ad_accounts": actor.get("role") == "owner" and source != "employee_app",
-                "can_configure_ad_funding": actor.get("role") == "owner" and source != "employee_app",
-                "can_manage_inventory_opening": actor.get("role") == "owner" and source != "employee_app",
-                "can_manage_salary_start": actor.get("role") == "owner" and source != "employee_app" and state["status"] == "active",
-                "can_create_owner_withdrawal": actor.get("role") == "owner",
-                "session_scope": digest([owner, actor["id"]]),
-                "opening_count": len(state["openings"]), "permissions": permissions,
-                "issues": state.get("engine", {}).get("issues", []) if permissions["reports"] else []}
+    async def context(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            actor, owner, source = await scope(db, user, "view")
+            state = await read(db, owner)
+            permissions = {}
+            for key in ("view", "move", "manage", "reports"):
+                try:
+                    await scope(db, user, key)
+                    permissions[key] = True
+                except Exception as exc:
+                    from fastapi import HTTPException
+                    if not isinstance(exc, HTTPException):
+                        raise
+                    permissions[key] = False
+            from operational_app_banks import assigned_banks
+            banks = await assigned_banks(db, owner, actor) if source == "employee_app" else None
+            return {"status": state["status"], "started_at": state["started_at"],
+                    "operational_banks": banks,
+                    "can_create_cash": actor.get("role") == "owner",
+                    "can_create_external_person": actor.get("role") == "owner",
+                    "can_select_ad_accounts": actor.get("role") == "owner" and source != "employee_app",
+                    "can_configure_ad_funding": actor.get("role") == "owner" and source != "employee_app",
+                    "can_manage_inventory_opening": actor.get("role") == "owner" and source != "employee_app",
+                    "can_manage_salary_start": actor.get("role") == "owner" and source != "employee_app" and state["status"] == "active",
+                    "can_create_owner_withdrawal": actor.get("role") == "owner",
+                    "session_scope": digest([owner, actor["id"]]),
+                    "opening_count": len(state["openings"]), "permissions": permissions,
+                    "issues": state.get("engine", {}).get("issues", []) if permissions["reports"] else []}
+
+        return await run_visible_report_read(request, read_page)
 
     @router.get("/entities/{kind}")
-    async def entities_route(kind: PartyType, user=Depends(current_user)):
-        actor, owner, source = await scope(db, user, "view")
-        from operational_balance_sources import entities
-        try:
-            operational_state = await read(db, owner) if kind == 'ad_account' else None
-            funding_options = {'operational_state': operational_state} if operational_state and operational_state.get('ad_funding') else {}
-            rows = await entities(db, owner, kind, include_unready=source != "employee_app", **funding_options)
-            if kind == 'ad_account':
-                from operational_ad_selection import catalog
-                selected = {r['id'] for r in (await catalog(db, owner))['items'] if r['selected']}
-                rows = [r for r in rows if r.get('integration_account_id') in selected]
-            if source == "employee_app" and kind == "employee_custody":
-                from operational_app_banks import assigned_custody
-                own = await assigned_custody(db, owner, actor)
-                rows = [r for r in rows if r["id"] in own]
-            if source == "employee_app" and kind in {"bank", "cash"}:
-                from operational_app_banks import assigned_banks
-                allowed = await assigned_banks(db, owner, actor)
-                rows = [r for r in rows if r["id"] in allowed["bank_ids" if kind == "bank" else "cash_ids"]]
-            if kind in {"supplier", "employee_custody"}:
-                # Only entry-card balances; no history, audit, or report exposure.
-                balances = {(r["party_type"], r["party_id"], r["currency"]): r
-                            for r in report(await read(db, owner))["parties"]}
-                fields = ("custody_remaining",) if kind == "employee_custody" else ("outstanding_payable", "outstanding_receivable")
-                rows = [{**r, **{field: balances.get((kind, r["id"], r["currency"]), {}).get(field, "0.00")
-                                for field in fields}} for r in rows]
-                if kind == "supplier":
-                    rows = [{**r, "available_to_pay": format(max(Decimal(r["outstanding_payable"]) - Decimal(r["outstanding_receivable"]), Decimal(0)), ".2f")} for r in rows]
-            return {"items": rows}
-        except ValueError as exc:
-            if str(exc) not in {"operational_source_rejected", "operational_source_scope_too_large",
-                                "operational_source_owner_mismatch", "shipping_setup_ambiguous",
-                                "operational_entity_kind_invalid", "operational_entity_identity_ambiguous",
-                                "operational_expense_identity_ambiguous", "operational_ad_funding_invalid"}:
-                raise
-            fail("operational_entity_setup_incomplete", "إعداد الجهات غير مكتمل أو متعارض؛ يلزم مراجعة المصدر", 409)
+    async def entities_route(request: HttpRequest, kind: PartyType, user=Depends(current_user)):
+        async def read_page():
+            actor, owner, source = await scope(db, user, "view")
+            from operational_balance_sources import entities
+            try:
+                operational_state = await read(db, owner) if kind == 'ad_account' else None
+                funding_options = {'operational_state': operational_state} if operational_state and operational_state.get('ad_funding') else {}
+                rows = await entities(db, owner, kind, include_unready=source != "employee_app", **funding_options)
+                if kind == 'ad_account':
+                    from operational_ad_selection import catalog
+                    selected = {r['id'] for r in (await catalog(db, owner))['items'] if r['selected']}
+                    rows = [r for r in rows if r.get('integration_account_id') in selected]
+                if source == "employee_app" and kind == "employee_custody":
+                    from operational_app_banks import assigned_custody
+                    own = await assigned_custody(db, owner, actor)
+                    rows = [r for r in rows if r["id"] in own]
+                if source == "employee_app" and kind in {"bank", "cash"}:
+                    from operational_app_banks import assigned_banks
+                    allowed = await assigned_banks(db, owner, actor)
+                    rows = [r for r in rows if r["id"] in allowed["bank_ids" if kind == "bank" else "cash_ids"]]
+                if kind in {"supplier", "employee_custody"}:
+                    # Only entry-card balances; no history, audit, or report exposure.
+                    projection = await prepare_in_thread(report, await read(db, owner))
+                    balances = {(r["party_type"], r["party_id"], r["currency"]): r
+                                for r in checked_rows(projection["parties"])}
+                    fields = ("custody_remaining",) if kind == "employee_custody" else ("outstanding_payable", "outstanding_receivable")
+                    rows = [{**r, **{field: balances.get((kind, r["id"], r["currency"]), {}).get(field, "0.00")
+                                    for field in fields}} for r in rows]
+                    if kind == "supplier":
+                        rows = [{**r, "available_to_pay": format(max(Decimal(r["outstanding_payable"]) - Decimal(r["outstanding_receivable"]), Decimal(0)), ".2f")} for r in rows]
+                return {"items": rows}
+            except ValueError as exc:
+                if str(exc) not in {"operational_source_rejected", "operational_source_scope_too_large",
+                                    "operational_source_owner_mismatch", "shipping_setup_ambiguous",
+                                    "operational_entity_kind_invalid", "operational_entity_identity_ambiguous",
+                                    "operational_expense_identity_ambiguous", "operational_ad_funding_invalid"}:
+                    raise
+                fail("operational_entity_setup_incomplete", "إعداد الجهات غير مكتمل أو متعارض؛ يلزم مراجعة المصدر", 409)
+
+        return await run_visible_report_read(request, read_page)
 
     @router.post("/entities/{kind}")
     async def add_entity(kind: Literal["bank", "cash", "external_person", "operating_expense", "owner_withdrawal"], payload: AddEntity, user=Depends(entity_guard)):
@@ -761,16 +816,22 @@ def make_operational_balance_router(db, current_user):
         return {"id": ("operational-bank:" + identity) if kind == "bank" else identity, "name": existing["name"], "currency": existing["currency"], "kind": kind}
 
     @router.get("/salary-start/context")
-    async def salary_start_context(user=Depends(current_user)):
-        actor, owner, _ = await scope(db, user, "manage")
-        from operational_salary_start import read_context
-        return await read_context(db, owner, actor["id"])
+    async def salary_start_context(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            actor, owner, _ = await scope(db, user, "manage")
+            from operational_salary_start import read_context
+            return await read_context(db, owner, actor["id"])
+
+        return await run_visible_report_read(request, read_page)
 
     @router.post("/salary-start/preview")
-    async def salary_start_preview(payload: SalaryStartPreview, user=Depends(current_user)):
-        actor, owner, _ = await scope(db, user, "manage")
-        from operational_salary_start import preview
-        return await preview(db, owner, actor["id"], payload.first_day)
+    async def salary_start_preview(request: HttpRequest, payload: SalaryStartPreview, user=Depends(current_user)):
+        async def read_page():
+            actor, owner, _ = await scope(db, user, "manage")
+            from operational_salary_start import preview
+            return await preview(db, owner, actor["id"], payload.first_day)
+
+        return await run_visible_report_read(request, read_page)
 
     @router.post("/salary-start/approve")
     async def salary_start_approve(payload: SalaryStartApproval, user=Depends(manage_guard)):
@@ -848,28 +909,50 @@ def make_operational_balance_router(db, current_user):
         return result
 
     @router.get("/movements")
-    async def movements(user=Depends(current_user)):
-        actor, owner, source = await scope(db, user, "view")
-        state = await read(db, owner)
-        items = state["movements"]
-        return {"items": list(reversed(items))}
+    async def movements(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            actor, owner, source = await scope(db, user, "reports")
+            from operational_financial_activity import account_scope, scoped_legacy_movements, require_browser_activity_permission
+            if source != "employee_app":
+                require_browser_activity_permission(actor, "accounting.movements.view")
+            allowed = await account_scope(db, owner, actor)
+            state = await read(db, owner)
+            latest_actor, latest_owner, latest_source = await scope(db, user, "reports")
+            if latest_owner != owner or latest_actor["id"] != actor["id"]:
+                fail("operational_actor_scope_changed", "تغير نطاق الجلسة؛ أعد فتح الصفحة", 409)
+            if latest_source != "employee_app":
+                require_browser_activity_permission(latest_actor, "accounting.movements.view")
+            allowed = await account_scope(db, owner, latest_actor)
+            items = await prepare_in_thread(scoped_legacy_movements, state, allowed)
+            return {"items": list(reversed(items))}
+
+        return await run_visible_report_read(request, read_page)
 
     @router.get("/customer-returns/order/{order_number}")
-    async def return_order(order_number: str, user=Depends(current_user)):
-        _, owner, _ = await scope(db, user, "view")
-        from operational_customer_returns import order_view
-        return await order_view(db, owner, order_number)
+    async def return_order(request: HttpRequest, order_number: str, user=Depends(current_user)):
+        async def read_page():
+            _, owner, _ = await scope(db, user, "view")
+            from operational_customer_returns import order_view
+            return await order_view(db, owner, order_number)
+
+        return await run_visible_report_read(request, read_page)
 
     @router.get("/customer-exchanges/order/{order_number}")
-    async def exchange_order_view(order_number: str, user=Depends(current_user)):
-        _, owner, _ = await scope(db, user, "view")
-        from operational_balance_exchanges import exchange_order
-        return await exchange_order(db, owner, order_number)
+    async def exchange_order_view(request: HttpRequest, order_number: str, user=Depends(current_user)):
+        async def read_page():
+            _, owner, _ = await scope(db, user, "view")
+            from operational_balance_exchanges import exchange_order
+            return await exchange_order(db, owner, order_number)
+
+        return await run_visible_report_read(request, read_page)
 
     @router.get("/customer-exchanges")
-    async def exchange_list(user=Depends(current_user)):
-        _, owner, _ = await scope(db, user, "view")
-        return {"items": list(reversed((await read(db, owner)).get("customer_exchanges", [])))}
+    async def exchange_list(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            _, owner, _ = await scope(db, user, "view")
+            return {"items": list(reversed((await read(db, owner)).get("customer_exchanges", [])))}
+
+        return await run_visible_report_read(request, read_page)
 
     @router.post("/customer-exchanges")
     async def exchange_create(payload: ExchangeCreate, user=Depends(move_guard)):
@@ -884,16 +967,22 @@ def make_operational_balance_router(db, current_user):
         return await case_response(await save_exchange(db, owner, actor["id"], payload.model_dump(), case_id=case_id),"exchanges",user)
 
     @router.get("/customer-returns")
-    async def customer_returns(user=Depends(current_user)):
-        _, owner, _ = await scope(db, user, "view")
-        return {"items": list(reversed((await read(db, owner)).get("customer_returns", [])))}
+    async def customer_returns(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            _, owner, _ = await scope(db, user, "view")
+            return {"items": list(reversed((await read(db, owner)).get("customer_returns", [])))}
+
+        return await run_visible_report_read(request, read_page)
 
     @router.get("/customer-returns/shipping-quote/{kind}/{identity}")
-    async def return_shipping_quote(kind: Literal["courier", "store_driver"], identity: str, order_number: str, user=Depends(current_user)):
-        _, owner, _ = await scope(db, user, "view")
-        from operational_customer_returns import shipping_quote
-        quote = await shipping_quote(db, owner, kind, identity, now(), order_number)
-        return {**quote, "quote_hash": digest(quote)}
+    async def return_shipping_quote(request: HttpRequest, kind: Literal["courier", "store_driver"], identity: str, order_number: str, user=Depends(current_user)):
+        async def read_page():
+            _, owner, _ = await scope(db, user, "view")
+            from operational_customer_returns import shipping_quote
+            quote = await shipping_quote(db, owner, kind, identity, now(), order_number)
+            return {**quote, "quote_hash": digest(quote)}
+
+        return await run_visible_report_read(request, read_page)
 
     @router.post("/customer-returns")
     async def create_customer_return(payload: CustomerReturn, user=Depends(move_guard)):
@@ -908,78 +997,128 @@ def make_operational_balance_router(db, current_user):
         return await case_response(await save_case(db, owner, actor["id"], payload.model_dump(), case_id=case_id),"returns",user)
 
     @router.get("/obligations")
-    async def allocation_choices(party_type: PartyType, party_id: str, user=Depends(current_user)):
-        actor, owner, source = await scope(db, user, "view")
-        if source == "employee_app" and actor.get("role") != "owner" and party_type == "employee":
-            await scope(db, user, "reports")
-        result = report(await read(db, owner))
-        fields = ("id", "kind", "party_type", "party_id", "currency", "direction", "outstanding", "expected",
-                  "available_to_pay", "pending_confirmation", "label", "business_date")
-        items = []
-        for obligation in result["obligations"]:
-            if obligation.get("party_type") == party_type and obligation.get("party_id") == party_id:
-                safe = {key: obligation[key] for key in fields if key in obligation}
-                safe["label"] = obligation.get("label") or "مستحق تشغيلي"
-                items.append(safe)
-        return {"items": items}
+    async def allocation_choices(request: HttpRequest, party_type: PartyType, party_id: str, user=Depends(current_user)):
+        async def choice_scope():
+            actor, owner, source = await scope(db, user, "view")
+            if source == "employee_app" and actor.get("role") != "owner" and party_type == "employee":
+                await scope(db, user, "reports")
+            return actor["id"], owner
+
+        def choices(state):
+            from operational_financial_activity_runtime import preparation_checkpoint
+            result = report(state)
+            fields = ("id", "kind", "party_type", "party_id", "currency", "direction", "outstanding", "expected",
+                      "available_to_pay", "pending_confirmation", "label", "business_date")
+            items = []
+            for obligation in result["obligations"]:
+                preparation_checkpoint()
+                if obligation.get("party_type") == party_type and obligation.get("party_id") == party_id:
+                    safe = {key: obligation[key] for key in fields if key in obligation}
+                    safe["label"] = obligation.get("label") or "مستحق تشغيلي"
+                    items.append(safe)
+            return {"items": items}
+
+        async def read_page():
+            actor, owner = await choice_scope()
+            result = await prepare_in_thread(choices, await read(db, owner))
+            if await choice_scope() != (actor, owner):
+                fail("operational_actor_scope_changed", "تغير نطاق الجلسة؛ أعد فتح الصفحة", 409)
+            return result
+
+        return await run_visible_report_read(request, read_page)
 
     @router.get("/accounts/{kind}/{identity}")
-    async def account_read(kind: Literal["bank", "cash"], identity: str, currency: str = "SAR", user=Depends(current_user)):
-        actor, owner, source = await scope(db, user, "reports")
-        account = await entity(db, owner, kind, identity, currency)
-        # reports_read retains tenant reporting scope. Account assignments constrain
-        # writes, not reports-only users (who deliberately have no write assignments).
-        from operational_balance_service import account_statement
-        return account_statement(await read(db, owner), account)
+    async def account_read(request: HttpRequest, kind: Literal["bank", "cash"], identity: str, currency: str = "SAR", user=Depends(current_user)):
+        async def read_page():
+            actor, owner, source = await scope(db, user, "reports")
+            account = await entity(db, owner, kind, identity, currency)
+            # reports_read retains tenant reporting scope. Account assignments constrain
+            # writes, not reports-only users (who deliberately have no write assignments).
+            from operational_balance_service import account_statement
+            return await prepare_in_thread(account_statement, await read(db, owner), account)
+
+        return await run_visible_report_read(request, read_page)
 
     @router.get("/reports")
-    async def reports(user=Depends(current_user)):
-        _, owner, _ = await scope(db, user, "reports")
-        return report(await read(db, owner), provider_balances_sar=True, provider_balances_net=True, ad_balances_sar=True)
+    async def reports(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            actor, owner, _ = await scope(db, user, "reports")
+            from operational_balance_completeness import annotate_report_coverage
+            from operational_financial_order_labels import attach_order_numbers
+            state = await read(db, owner)
+            result = await prepare_in_thread(lambda: annotate_report_coverage(report(
+                state, provider_balances_sar=True, provider_balances_net=True, ad_balances_sar=True)))
+            result = await attach_order_numbers(db, owner, result)
+            latest_actor, latest_owner, _ = await scope(db, user, "reports")
+            if (latest_owner, latest_actor["id"]) != (owner, actor["id"]):
+                fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
+            result["session_scope"] = digest([owner, actor["id"]])
+            return result
+        return await run_visible_report_read(request, read_page)
 
     @router.get("/cost-exposure")
-    async def cost_exposure(user=Depends(current_user)):
-        _, owner, _ = await scope(db, user, "reports")
-        from operational_open_cost_exposure import project
-        return await project(db, owner, await read(db, owner))
+    async def cost_exposure(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            actor, owner, _ = await scope(db, user, "reports")
+            from operational_open_cost_exposure import project
+            result = await project(db, owner, await read(db, owner))
+            latest_actor, latest_owner, _ = await scope(db, user, "reports")
+            if (latest_owner, latest_actor["id"]) != (owner, actor["id"]):
+                fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
+            return result
+        return await run_visible_report_read(request, read_page)
 
     @router.get("/suppliers")
-    async def supplier_accounts(user=Depends(current_user)):
-        actor, owner, _ = await scope(db, user, "reports")
-        from fulfillment_v2_routes import _actor_context, _require_permission
-        from operational_balance_service import accounting_inactive
-        from operational_supplier_workspace import supplier_workspace
-        supplier_context = await _actor_context(db, actor)
-        _require_permission(supplier_context, "suppliers.read")
-        if supplier_context["merchant_id"] != owner:
-            fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
-        state = await read(db, owner)
-        if state["status"] == "active":
-            try:
-                await accounting_inactive(db, owner)
-            except HTTPException as exc:
-                if not isinstance(exc.detail, dict) or exc.detail.get("code") != "operational_accounting_active":
-                    raise
-                # Do not present two current balance authorities while the
-                # background worker is finishing the operational freeze.
-                state = {**state, "status": "accounting_active"}
-        result = supplier_workspace(state)
-        can_record = False
-        if result["active"]:
-            try:
-                await scope(db, user, "move")
-                can_record = True
-            except HTTPException:
-                pass
-        result.update(session_scope=digest([owner, actor["id"]]),
-                      permissions={"record_movements": can_record})
-        return result
+    async def supplier_accounts(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            actor, owner, _ = await scope(db, user, "reports")
+            from fulfillment_v2_routes import _actor_context, _require_permission
+            from operational_balance_service import accounting_inactive
+            from operational_supplier_workspace import supplier_workspace
+            supplier_context = await _actor_context(db, actor)
+            _require_permission(supplier_context, "suppliers.read")
+            if supplier_context["merchant_id"] != owner:
+                fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
+            state = await read(db, owner)
+            if state["status"] == "active":
+                try:
+                    await accounting_inactive(db, owner)
+                except HTTPException as exc:
+                    if not isinstance(exc.detail, dict) or exc.detail.get("code") != "operational_accounting_active":
+                        raise
+                    # The saved operational snapshot is not the active
+                    # accounting authority.
+                    state = {**state, "status": "accounting_active"}
+            result = await prepare_in_thread(supplier_workspace, state)
+            can_record = False
+            if result["active"]:
+                try:
+                    await scope(db, user, "move")
+                    can_record = True
+                except HTTPException:
+                    pass
+            result.update(session_scope=digest([owner, actor["id"]]),
+                          permissions={"record_movements": can_record})
+            fresh_actor, fresh_owner, _ = await scope(db, user, "reports")
+            fresh_context = await _actor_context(db, fresh_actor)
+            _require_permission(fresh_context, "suppliers.read")
+            if (fresh_owner, fresh_actor["id"], fresh_context["merchant_id"]) != (owner, actor["id"], owner):
+                fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
+            return result
+        return await run_visible_report_read(request, read_page)
 
     @router.post("/historical-shipping-fees/preview")
-    async def historical_shipping_preview(payload: HistoricalShippingPreview, user=Depends(current_user)):
-        actor, owner, _ = await scope(db, user, "bank_manage")
-        from operational_historical_shipping_service import preview
-        return await preview(db, owner, actor["id"], payload.order_number)
+    async def historical_shipping_preview(request: HttpRequest, payload: HistoricalShippingPreview, user=Depends(current_user)):
+        async def read_page():
+            actor, owner, _ = await scope(db, user, "bank_manage")
+            from operational_historical_shipping_service import preview
+            result = await preview(db, owner, actor["id"], payload.order_number)
+            latest_actor, latest_owner, _ = await scope(db, user, "bank_manage")
+            if (latest_owner, latest_actor["id"]) != (owner, actor["id"]):
+                fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد فتح الصفحة", 403)
+            return result
+
+        return await run_visible_report_read(request, read_page)
 
     @router.post("/historical-shipping-fees/approve")
     async def historical_shipping_approve(payload: HistoricalShippingApproval, user=Depends(guarded("bank_manage"))):
@@ -989,10 +1128,17 @@ def make_operational_balance_router(db, current_user):
 
 
     @router.get('/provider-history-reviews')
-    async def provider_history_candidates(user=Depends(current_user)):
-        actor, owner, _ = await scope(db, user, 'bank_manage')
-        from operational_provider_history_service import candidates
-        return await candidates(db, owner, actor['id'])
+    async def provider_history_candidates(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            actor, owner, _ = await scope(db, user, 'bank_manage')
+            from operational_provider_history_service import candidates
+            result = await candidates(db, owner, actor['id'])
+            latest_actor, latest_owner, _ = await scope(db, user, 'bank_manage')
+            if (latest_owner, latest_actor['id']) != (owner, actor['id']):
+                fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد فتح الصفحة", 403)
+            return result
+
+        return await run_visible_report_read(request, read_page)
 
     @router.post('/provider-history-reviews/approve')
     async def provider_history_approve(payload: ProviderHistoryApproval, user=Depends(guarded('bank_manage'))):
@@ -1001,16 +1147,20 @@ def make_operational_balance_router(db, current_user):
         return await approve(db, owner, actor['id'], payload.model_dump())
 
     @router.get('/native-purchase-links/{invoice_id}/candidates')
-    async def native_purchase_candidates(invoice_id: str, user=Depends(current_user)):
-        actor, owner, _ = await scope(db, user, 'bank_manage')
-        from operational_native_purchase_link_service import candidates
-        return await candidates(db, owner, actor['id'], invoice_id)
+    async def native_purchase_candidates(request: HttpRequest, invoice_id: str, user=Depends(current_user)):
+        async def read_page():
+            actor, owner, _ = await scope(db, user, 'bank_manage')
+            from operational_native_purchase_link_service import candidates
+            return await candidates(db, owner, actor['id'], invoice_id)
+        return await run_visible_report_read(request, read_page)
 
     @router.post('/native-purchase-links/preview')
-    async def native_purchase_preview(payload: NativePurchaseSelection, user=Depends(current_user)):
-        actor, owner, _ = await scope(db, user, 'bank_manage')
-        from operational_native_purchase_link_service import preview
-        return await preview(db, owner, actor['id'], payload.model_dump())
+    async def native_purchase_preview(request: HttpRequest, payload: NativePurchaseSelection, user=Depends(current_user)):
+        async def read_page():
+            actor, owner, _ = await scope(db, user, 'bank_manage')
+            from operational_native_purchase_link_service import preview
+            return await preview(db, owner, actor['id'], payload.model_dump())
+        return await run_visible_report_read(request, read_page)
 
     @router.post('/native-purchase-links/approve')
     async def native_purchase_approve(payload: NativePurchaseApproval, user=Depends(guarded('bank_manage'))):
@@ -1042,68 +1192,84 @@ def make_operational_balance_router(db, current_user):
         return result
 
     @router.get("/supplier-invoice-review")
-    async def supplier_invoice_review(user=Depends(current_user), receiving_only: bool = False):
-        return await read_supplier_review(user, **({"receiving_only": True} if receiving_only else {}))
+    async def supplier_invoice_review(request: HttpRequest, user=Depends(current_user), receiving_only: bool = False):
+        async def read_page():
+            return await read_supplier_review(user, **({"receiving_only": True} if receiving_only else {}))
+        return await run_visible_report_read(request, read_page)
 
     @router.get("/supplier-invoice-review/receiving/{invoice_id}/correction-preview")
-    async def receiving_correction_preview(invoice_id: str, expected_as_of: str, expected_revision: int,
+    async def receiving_correction_preview(request: HttpRequest, invoice_id: str, expected_as_of: str, expected_revision: int,
                                           user=Depends(current_user)):
-        return await read_supplier_review(user, owner_only=True, invoice_id=invoice_id,
-                                          expected_as_of=expected_as_of, expected_revision=expected_revision)
+        async def read_page():
+            return await read_supplier_review(user, owner_only=True, invoice_id=invoice_id,
+                                              expected_as_of=expected_as_of, expected_revision=expected_revision)
+        return await run_visible_report_read(request, read_page)
 
     @router.get("/financial-position")
-    async def financial_position(user=Depends(current_user)):
-        actor, owner, _ = await scope(db, user, "reports")
-        from operational_balance_service import accounting_inactive
-        from operational_financial_position import build_financial_position
-        from operational_financial_order_labels import attach_order_numbers
+    async def financial_position(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            actor, owner, _ = await scope(db, user, "reports")
+            from operational_balance_service import accounting_inactive
+            from operational_financial_position import build_financial_position
+            from operational_financial_order_labels import attach_order_numbers
 
-        state = await read(db, owner)
-        if state["status"] == "active":
-            try:
-                await accounting_inactive(db, owner)
-            except HTTPException as exc:
-                if not isinstance(exc.detail, dict) or exc.detail.get("code") != "operational_accounting_active":
-                    raise
-                state = {**state, "status": "accounting_active"}
-        cost_exposure = None
-        if state["status"] == "active" and state.get("engine", {}).get("as_of"):
-            # The separately released cost-stage reader is an explicit optional
-            # dependency. Missing coverage is visible in the report; never
-            # substitute another balance authority or refresh/write on this GET.
-            try:
-                from operational_open_cost_exposure import project as cost_project
-            except ModuleNotFoundError as exc:
-                if exc.name != "operational_open_cost_exposure":
-                    raise
-            else:
+            state = await read(db, owner)
+            if state["status"] == "active":
                 try:
-                    cost_exposure = await cost_project(db, owner, state, as_of=state["engine"]["as_of"])
-                except ValueError as exc:
-                    # The optional bounded reader can reject its source scope.
-                    # Preserve the verified balance snapshot while explicitly
-                    # withholding estimates; unexpected errors still propagate.
-                    code = str(exc)
-                    if code not in {"operational_source_rejected", "operational_source_scope_too_large",
-                                    "operational_source_owner_mismatch"}:
+                    await accounting_inactive(db, owner)
+                except HTTPException as exc:
+                    if not isinstance(exc.detail, dict) or exc.detail.get("code") != "operational_accounting_active":
                         raise
-                    cost_exposure = {
-                        "status": "preview", "as_of": state["engine"]["as_of"],
-                        "engine_as_of": state["engine"]["as_of"], "started_at": state["started_at"],
-                        "currencies": {}, "groups": [], "complete": False,
-                        "issues": [{"code": code, "count": 1, "message":
-                            "غير متاح: تعذر التحقق من مصادر تكاليف الطلبات المفتوحة؛ الأرصدة الحالية من آخر احتساب محفوظ."}],
-                    }
-        result = build_financial_position(state, cost_exposure=cost_exposure, generated_at=now())
-        result = await attach_order_numbers(db, owner, result)
-        result.update(session_scope=digest([owner, actor["id"]]), permissions={"reports": True})
-        return result
+                    state = {**state, "status": "accounting_active"}
+            cost_exposure = None
+            if state["status"] == "active" and state.get("engine", {}).get("as_of"):
+                # The separately released cost-stage reader is an explicit optional
+                # dependency. Missing coverage is visible in the report; never
+                # substitute another balance authority or refresh/write on this GET.
+                try:
+                    from operational_open_cost_exposure import project as cost_project
+                except ModuleNotFoundError as exc:
+                    if exc.name != "operational_open_cost_exposure":
+                        raise
+                else:
+                    try:
+                        cost_exposure = await cost_project(db, owner, state, as_of=state["engine"]["as_of"])
+                    except ValueError as exc:
+                        # The optional bounded reader can reject its source scope.
+                        # Preserve the verified balance snapshot while explicitly
+                        # withholding estimates; unexpected errors still propagate.
+                        code = str(exc)
+                        if code not in {"operational_source_rejected", "operational_source_scope_too_large",
+                                        "operational_source_owner_mismatch", "operational_source_read_timeout",
+                                        "operational_source_read_invalid"}:
+                            raise
+                        cost_exposure = {
+                            "status": "preview", "as_of": state["engine"]["as_of"],
+                            "engine_as_of": state["engine"]["as_of"], "started_at": state["started_at"],
+                            "currencies": {}, "groups": [], "complete": False,
+                            "issues": [{"code": code, "count": 1, "source_collection": getattr(exc, "collection", None), "message":
+                                "غير متاح: تعذر التحقق من مصادر تكاليف الطلبات المفتوحة؛ الأرصدة الحالية من آخر احتساب محفوظ."}],
+                        }
+            import asyncio
+            result = await prepare_in_thread(build_financial_position, state, cost_exposure=cost_exposure, generated_at=now())
+            result = await attach_order_numbers(db, owner, result)
+            latest_actor, latest_owner, _ = await scope(db, user, "reports")
+            if latest_owner != owner or latest_actor["id"] != actor["id"]:
+                fail("operational_actor_scope_changed", "تغير نطاق الجلسة؛ أعد فتح الصفحة", 409)
+            if state["status"] == "active":
+                await accounting_inactive(db, owner)
+            result.update(session_scope=digest([owner, actor["id"]]), permissions={"reports": True})
+            return result
+        return await run_visible_report_read(request, read_page)
 
     @router.get("/audit")
-    async def audit_route(user=Depends(current_user)):
-        _, owner, _ = await scope(db, user, "reports")
-        state = await read(db, owner)
-        return {"items": list(reversed(state["audit"] + state.get("engine", {}).get("audit", [])))}
+    async def audit_route(request: HttpRequest, user=Depends(current_user)):
+        async def read_page():
+            _, owner, _ = await scope(db, user, "reports")
+            state = await read(db, owner)
+            return {"items": list(reversed(state["audit"] + state.get("engine", {}).get("audit", [])))}
+
+        return await run_visible_report_read(request, read_page)
 
     @router.post("/freeze")
     async def freeze_route(payload: Freeze, user=Depends(manage_guard)):
@@ -1122,4 +1288,10 @@ def make_operational_balance_router(db, current_user):
         actor, owner, _ = await scope(db, user, "manage")
         return await supplier_return(db, owner, actor["id"], payload.model_dump())
 
+    from operational_financial_activity_routes import attach_financial_activity_routes
+    attach_financial_activity_routes(router, db, current_user, scope)
+    from operational_completed_shipping_routes import attach_completed_shipping_routes
+    attach_completed_shipping_routes(router, db, current_user, scope, guarded)
+    from operational_demand_refresh_routes import attach_demand_refresh_routes
+    attach_demand_refresh_routes(router, db, current_user, scope)
     return router

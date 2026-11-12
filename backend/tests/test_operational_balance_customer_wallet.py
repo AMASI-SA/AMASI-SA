@@ -266,6 +266,25 @@ def test_missing_closing_and_invalid_saved_evidence_are_unavailable(setup):
     assert result["debt_totals"]["payable"] is None and result["metrics"]["monetary_position"] is None
 
 
+def test_absent_wallet_statement_preserves_known_money_without_inventing_a_zero_or_order_currency_ledger(setup):
+    state, _ = setup
+    add_opening(state, "bank", "bank", "100.00")
+    observed_wallet_use(state)
+    coverage = state["engine"]["customer_tender_coverage"]
+    coverage["by_currency"]["USD"] = coverage["by_currency"].pop("SAR")
+    source = service.report(state)
+    assert source["details"]["customer_wallet_balances"] == {}
+    assert not any(row["party_type"] == "customer_wallet" for row in source["parties"])
+    result = build_financial_position(state)["currencies"]["SAR"]
+    assert result["debt_totals"]["payable"] is None
+    assert result["known_debt_totals"]["payable"] == "0.00"
+    assert result["metrics"]["liquidity"] == result["metrics"]["known_monetary_position"] == "100.00"
+    assert result["metrics"]["monetary_position"] is None
+    payable = next(row for row in result["current_rows"] if row["id"] == "debts_payable")
+    assert payable["amount"] is None and payable["known_subtotal"] == "0.00"
+    assert "كشف سلة موثق" in payable["reason"]
+
+
 def test_currencies_are_separate_and_snapshot_kind_is_never_a_money_writer(setup):
     state, db = setup
     save(db)

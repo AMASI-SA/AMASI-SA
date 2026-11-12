@@ -55,17 +55,18 @@ function supplierError(error, fallback) {
     return result;
 }
 
-export async function loadMezanSuppliersWorkspace() {
+export async function loadMezanSuppliersWorkspace(config) {
     try {
-        return (await api.get("/suppliers-v2/workspace")).data;
+        return (await api.get("/suppliers-v2/workspace", config)).data;
     } catch (error) {
         throw supplierError(error, "تعذّر تحميل موردي ميزان 2.");
     }
 }
 
-export async function loadMezanSupplierFinancials({ supplierId = null } = {}) {
+export async function loadMezanSupplierFinancials({ supplierId = null } = {}, config = {}) {
     try {
         return (await api.get("/suppliers-v2/payment-workspace", {
+            ...config,
             params: supplierId ? { supplier_id: supplierId } : {},
         })).data;
     } catch (error) {
@@ -73,9 +74,9 @@ export async function loadMezanSupplierFinancials({ supplierId = null } = {}) {
     }
 }
 
-export async function loadOperationalSupplierAccounts() {
+export async function loadOperationalSupplierAccounts(config) {
     try {
-        return (await api.get("/operational-balances/suppliers")).data;
+        return (await api.get("/operational-balances/suppliers", config)).data;
     } catch (error) {
         throw supplierError(error, "تعذّر تحميل حسابات الموردين التشغيلية.");
     }

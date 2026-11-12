@@ -1,6 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {operationalApi as api, messageFor, requestId} from './api';
 import {Notice} from './OpeningBalances';
+import {visibleOperationalRead} from './visibleOperationalRead';
 
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const day = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -37,7 +38,7 @@ export default function SalaryStart({context}) {
   const allowed = context.can_manage_salary_start === true && context.status === 'active' && hash(context.session_scope);
   const currentKey = scopeKey(context);
   const liveKey = useRef(currentKey); liveKey.current = currentKey;
-  const generation = useRef(0), lock = useRef(false), pending = useRef(null);
+  const generation = useRef(0), lock = useRef(false), pending = useRef(null), readLane = useRef({}), previewRead = useRef(null);
   const [settings, setSettings] = useState(null), [preview, setPreview] = useState(null);
   const [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState(false), [uncertain, setUncertain] = useState(false);
@@ -50,12 +51,16 @@ export default function SalaryStart({context}) {
     lock.current = false; pending.current = null;
     setSettings(null); setPreview(null); setConfirmed(false); setError(''); setUncertain(false); setSaved(false);
     setBusy(allowed);
-    if (allowed) api.salaryStartContext().then(data => {
+    const cancelRead = allowed ? visibleOperationalRead(async config => {
+      const data = await api.salaryStartContext(config);
       if (!validContext(data, context)) throw invalid();
-      if (fresh()) setSettings({...data, scopeKey: key});
-    }).catch(e => {if (fresh()) setError(e.response ? messageFor(e) : e.message);})
-      .finally(() => {if (fresh()) setBusy(false);});
-    return () => {alive = false; generation.current += 1;};
+      return data;
+    }, {
+      onData: data => {if (fresh()) setSettings({...data, scopeKey: key});},
+      onError: e => {if (fresh()) setError(e.response ? messageFor(e) : e.message);},
+      onEnd: () => {if (fresh()) setBusy(false);},
+    }, readLane.current) : null;
+    return () => {alive = false; cancelRead?.(); previewRead.current?.(); previewRead.current = null; generation.current += 1;};
   // Reload only for a changed actor, cutoff, permission/phase or an explicit reload.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentKey, allowed, revision]);
@@ -63,16 +68,20 @@ export default function SalaryStart({context}) {
   const ready = allowed && settings?.scopeKey === currentKey;
   const fresh = (token, key) => token === generation.current && key === liveKey.current;
   const reload = () => {if (!lock.current) setRevision(v => v + 1);};
-  async function loadPreview() {
+  function loadPreview() {
     if (!ready || settings.approved || saved || lock.current || pending.current) return;
     lock.current = true; setBusy(true); setError(''); setPreview(null); setConfirmed(false);
     const token = generation.current, key = currentKey;
-    try {
-      const data = await api.previewSalaryStart({first_day: settings.first_day});
+    previewRead.current?.();
+    previewRead.current = visibleOperationalRead(async config => {
+      const data = await api.previewSalaryStart({first_day: settings.first_day}, config);
       if (!validPreview(data, settings)) throw invalid();
-      if (fresh(token, key)) setPreview(data);
-    } catch (e) {if (fresh(token, key)) setError(e.response ? messageFor(e) : e.message);}
-    finally {if (fresh(token, key)) {lock.current = false; setBusy(false);}}
+      return data;
+    }, {
+      onData: data => {if (fresh(token, key)) setPreview(data);},
+      onError: e => {if (fresh(token, key)) setError(e.response ? messageFor(e) : e.message);},
+      onEnd: () => {if (fresh(token, key)) {lock.current = false; setBusy(false);}},
+    }, readLane.current);
   }
   async function approve() {
     if (!ready || settings.approved || saved || lock.current || !preview?.can_approve || (!confirmed && !pending.current)) return;

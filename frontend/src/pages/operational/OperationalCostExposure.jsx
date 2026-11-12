@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { operationalApi as api, messageFor } from './api';
 import PaginatedReportTable from './PaginatedReportTable';
+import {visibleOperationalRead} from './visibleOperationalRead';
 
 const periods = {prestart: 'طلبات سابقة لبدء التشغيل', poststart: 'طلبات بعد بدء التشغيل'};
 const stages = {
@@ -32,14 +33,11 @@ export default function OperationalCostExposure({enabled = true, scopeKey = 'def
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     if (!enabled) return;
-    let live = true;
     setState({loading: true, data: null, error: '', scopeKey});
-    Promise.resolve().then(() => api.costExposure()).then(data => {
-      if (live) setState({loading: false, data, error: '', scopeKey});
-    }).catch(error => {
-      if (live) setState({loading: false, data: null, error: messageFor(error), scopeKey});
+    return visibleOperationalRead(config => api.costExposure(config), {
+      onData: data => setState({loading: false, data, error: '', scopeKey}),
+      onError: error => setState({loading: false, data: null, error: messageFor(error), scopeKey}),
     });
-    return () => { live = false; };
   }, [enabled, scopeKey, revision]);
   if (!enabled) return null;
   const current = state.scopeKey === scopeKey ? state : {loading: true, data: null, error: ''};

@@ -121,6 +121,7 @@ export default function MezanV2NavigationShell(props) {
                 const items = [
                     { to: "/operational-balances", label: "الأرصدة والحركات التشغيلية" },
                     { to: "/operational-balances/financial-position", label: "المركز المالي التشغيلي" },
+                    { to: "/operational-balances/daily-movements", label: "سجل الحركات المالية اليومية" },
                     { to: "/operational-balances/customer-returns", label: "مرتجعات العملاء" },
                     { to: "/operational-balances/customer-exchanges", label: "الاستبدال التشغيلي" },
                 ];

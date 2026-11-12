@@ -3,6 +3,9 @@
 Historical estimates never become opening balances, invoices, bank movements or
 payables. Current amounts come from the reconciled operational engine only.
 """
+from operational_financial_activity_runtime import preparation_checkpoint, prepare_in_thread
+from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
+import asyncio
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
@@ -14,6 +17,7 @@ from operational_open_customer_cod import open_customer_cod
 from operational_courier_tariffs import matches as matches_courier_key, with_tariffs
 from operational_product_cost_policy import unreceived_eligible
 from operational_remaining_bundle_sources import load_remaining_bundles
+from operational_read_runtime import SourceReadError, SnapshotReadCache, load_collections, source_read_budget
 
 from operational_balance_sources import (
     append_components, cod_facts, cost_components, instant, number, rows,
@@ -34,6 +38,8 @@ READS = ("unified_orders", "mezan_product_cost_profiles_v2", "mezan_products_v2"
     "mezan_cost_resources_v2", "mezan_preparation_pieces_v1", "mezan_supplier_invoices_v2",
     "mezan_suppliers_v2", "store_drivers", "store_delivery_assignments", "mz2_shipping_setup_v2")
 POOL_NAME = "منتجات لم تُستلم من المورد"
+_READ_CACHE = SnapshotReadCache(ttl=20, max_entries=32)
+READ_TIMEOUT = 45
 
 
 def _fmt(value):
@@ -61,14 +67,18 @@ def _name(record, fallback):
 def _claims(invoice):
     claims = []
     for line in invoice.get("lines") or []:
+        preparation_checkpoint()
         if not isinstance(line, dict):
             continue
         for pid in line.get("piece_ids") or []:
+            preparation_checkpoint()
             if line.get("product_charge_eligible") is not False:
                 claims.append(str(pid))
             for service in line.get("services") or []:
+                preparation_checkpoint()
                 if isinstance(service, dict) and service.get("service_id"):
                     claims.append(str(pid) + ":service:" + str(service["service_id"]))
+    preparation_checkpoint()
     return claims
 
 
@@ -78,6 +88,7 @@ def _coverage(data, suppliers, started, stamp, issues):
         if not r.get("experiment_mode") and not r.get("experiment_run_id") and r.get("approved_at")]
     counts = Counter(str(r.get("id") or "") for r in invoices)
     for invoice in invoices:
+        preparation_checkpoint()
         claims = _claims(invoice)
         try:
             approved = instant(invoice["approved_at"])
@@ -90,6 +101,7 @@ def _coverage(data, suppliers, started, stamp, issues):
             if not claims or len(claims) != len(set(claims)):
                 raise ValueError("supplier_invoice_component_incomplete")
             for line in invoice.get("lines") or []:
+                preparation_checkpoint()
                 ids = line.get("piece_ids") or []
                 if line.get("product_price_authority") != "mezan_v2" or not ids:
                     raise ValueError("supplier_invoice_component_incomplete")
@@ -105,14 +117,35 @@ def _coverage(data, suppliers, started, stamp, issues):
             issues[code if code.startswith("supplier_invoice_") else "supplier_invoice_date_invalid"] += 1
             continue
         for component in claims:
+            preparation_checkpoint()
             covered[component].add(str(invoice["id"]))
             if approved >= started:
                 poststart.add(component)
+    preparation_checkpoint()
     return covered, poststart, uncertain
 
 
 async def project(db, owner, state, *, as_of=None):
+    """Reuse identical saved-snapshot estimates briefly; never refresh finance."""
+    async def load():
+        with source_read_budget(READ_TIMEOUT):
+            try:
+                # The entire projection is read-only, including its later
+                # bundle/catalog reads. This timeout never encloses a CAS.
+                return await asyncio.wait_for(_project(db, owner, state, as_of=as_of), READ_TIMEOUT)
+            except asyncio.TimeoutError:
+                raise SourceReadError('operational_source_read_timeout', 'open_cost_exposure') from None
+    return await _READ_CACHE.get(db, owner, state, as_of, load)
+
+
+async def _project(db, owner, state, *, as_of=None):
     """Owner-scoped, bounded reads. No source writes or financial side effects."""
+    preparation_checkpoint()
+    cpu_budget = CPUWorkBudget(PARSER_BUDGET_MS)
+    async def cpu_checkpoint():
+        preparation_checkpoint()
+        await cpu_budget.checkpoint()
+        preparation_checkpoint()
     if state.get("status") not in {"active", "frozen"} or not state.get("started_at"):
         return {"status": "not_started", "groups": [], "currencies": {}, "issues": []}
     if state.get("status") == "frozen":
@@ -122,7 +155,7 @@ async def project(db, owner, state, *, as_of=None):
     stamp = instant(as_of or datetime.now(timezone.utc))
     if stamp < started:
         raise ValueError("operational_work_forecast_time_invalid")
-    data = {name: await rows(db, owner, name) for name in READS}
+    data = await load_collections(db, owner, READS, reader=rows)
     issues = Counter()
     declared_scopes = {}
     values = defaultdict(lambda: {"amount": ZERO, "units": 0, "orders": set()})
@@ -154,15 +187,18 @@ async def project(db, owner, state, *, as_of=None):
     piece_index = unique_index(pieces, "id")
     pieces_by_item = defaultdict(list)
     for piece in pieces:
+        await cpu_checkpoint()
         pieces_by_item[(str(piece.get("order_number")), str(piece.get("order_item_id")))].append(piece)
-    coverage, approved_after_start, uncertain = _coverage(data, suppliers, started, stamp, issues)
+    coverage, approved_after_start, uncertain = await prepare_in_thread(_coverage, data, suppliers, started, stamp, issues)
     assignments = defaultdict(list)
     for entry in data["store_delivery_assignments"]:
+        await cpu_checkpoint()
         if entry.get("status") in {"assigned", "out_for_delivery", "delivered"}:
             assignments[str(entry.get("order_number"))].append(entry)
 
     raw_orders = []
     for record in data["unified_orders"]:
+        await cpu_checkpoint()
         source = record.get("raw_by_source")
         raw = source.get("salla_direct") if isinstance(source, dict) else None
         if not isinstance(raw, dict):
@@ -176,6 +212,7 @@ async def project(db, owner, state, *, as_of=None):
     current_stages, current_statuses = {}, {}
     identified_orders = set()
     for record, raw in raw_orders:
+        await cpu_checkpoint()
         oid = str(raw.get("id") or "")
         num = str(raw.get("reference_id") or raw.get("order_number") or "")
         try:
@@ -212,6 +249,7 @@ async def project(db, owner, state, *, as_of=None):
         line_ids = Counter(str(i.get("id") or i.get("item_id") or i.get("order_item_id") or "")
                            for i in items if isinstance(i, dict))
         for item in items:
+            await cpu_checkpoint()
             if not isinstance(item, dict):
                 issues["historical_items_incomplete"] += 1
                 continue
@@ -223,8 +261,10 @@ async def project(db, owner, state, *, as_of=None):
             bundle = bundle_costs.get((num, stable))
             if bundle is not None:
                 for problem in bundle["issues"]:
+                    await cpu_checkpoint()
                     issues[problem["code"]] += 1
                 for component in bundle["items"]:
+                    await cpu_checkpoint()
                     component_id = component["id"]
                     if component_id in uncertain or len(coverage[component_id]) > 1:
                         issues["historical_supplier_component_ambiguous"] += 1
@@ -288,6 +328,7 @@ async def project(db, owner, state, *, as_of=None):
                     if len(matched) != qty or len({p.get("unit_index") for p in matched}) != len(matched):
                         raise ValueError("historical_piece_coverage_incomplete")
                     for piece in matched:
+                        await cpu_checkpoint()
                         pid = str(piece.get("id") or "")
                         if not pid or piece_counts[pid] != 1:
                             raise ValueError("historical_piece_identity_ambiguous")
@@ -303,6 +344,7 @@ async def project(db, owner, state, *, as_of=None):
                 continue
             included = False
             for component, piece in projected:
+                await cpu_checkpoint()
                 key = str(component.get("id") or "")
                 if not key or key in uncertain or len(coverage[key]) > 1:
                     issues["historical_supplier_component_ambiguous"] += 1
@@ -421,6 +463,7 @@ async def project(db, owner, state, *, as_of=None):
         issues["current_cost_snapshot_time_incomplete"] += 1
         engine_at = None
     for source_issue in engine.get("issues") or []:
+        await cpu_checkpoint()
         code = source_issue if isinstance(source_issue, str) else (source_issue.get("code") if isinstance(source_issue, dict) else None)
         shipping_component = isinstance(source_issue, dict) and source_issue.get("component") in {"shipping_fee", "carrier_identity", "driver_custody"}
         if code and (shipping_component or re.search(r"supplier|invoice|shipping|carrier|canonical|product_cost|preparation|bundle|cost_snapshot|order_cost_authority", code)):
@@ -429,6 +472,7 @@ async def project(db, owner, state, *, as_of=None):
             if shipping_component:
                 declared_scopes[current_code] = {"shipping_expected"}
     for obligation in (engine.get("obligations") or {}).values() if engine_at else []:
+        await cpu_checkpoint()
         if obligation.get("superseded") or obligation.get("derived_credit"):
             continue
         kind = obligation.get("kind")
@@ -487,6 +531,7 @@ async def project(db, owner, state, *, as_of=None):
               "unreceived": "products_unreceived", "not_delivered": "shipping_expected"}
     table_orders = defaultdict(lambda: defaultdict(set))
     for (_, _, stage, _, _, currency), group in values.items():
+        await cpu_checkpoint()
         if stage in stages:
             table_orders[currency][stages[stage]].update(group["orders"])
     counts = {currency: {table: len(ids) if ids <= identified_orders else None for table, ids in tables.items()}
@@ -496,14 +541,31 @@ async def project(db, owner, state, *, as_of=None):
         "amount": _fmt(v["amount"]), "units": v["units"], "orders": len(v["orders"])}
         for (period, kind, stage, party, name, currency), v in values.items()]
     groups.sort(key=lambda r: (r["period"], r["kind"], r["stage"], r["party_name"], r["party_id"]))
+    customer_cod, prestart_cod = {}, {"by_currency": {}}
+    if engine_at == stamp:
+        customer_cod = await open_customer_cod(db, owner, raw_orders, data, state,
+            started, stamp, ids, nums, include_coverage=True, coverage_index=True)
+        prestart_cod = await prepare_in_thread(prestart_open_cod, raw_orders, data, state, started,
+            stamp, ids, nums, OPEN, coverage_index=True)
+        # The two readers deliberately reject each other's source shapes.
+        # Only the same validated order identity accepted by either reader (or
+        # an exact saved courier claim) clears that rejection. Unknown orders
+        # stay withheld once, rather than disappearing between the cohorts.
+        covered = {tuple(key) for source in (customer_cod, prestart_cod)
+                   for key in source.pop("_covered_order_keys")}
+        withheld = set()
+        for source in (customer_cod, prestart_cod):
+            await cpu_checkpoint()
+            missing = {tuple(key) for key in source.pop("_withheld_order_keys")} - covered - withheld
+            source["withheld_candidates"] = len(missing)
+            withheld.update(missing)
+    preparation_checkpoint()
     return {"status": "preview", "as_of": stamp.isoformat(),
         "engine_as_of": engine_at.isoformat() if engine_at else None, "started_at": started.isoformat(),
         "currencies": {c: {k: _fmt(v) for k, v in sorted(details.items())} for c, details in sorted(currencies.items())},
         "distinct_order_counts": counts,
-        "open_customer_cod": {"by_currency": await open_customer_cod(db, owner, raw_orders, data, state,
-            started, stamp, ids, nums)} if engine_at == stamp else {},
-        "prestart_open_cod": prestart_open_cod(raw_orders, data, state, started,
-            stamp, ids, nums, OPEN) if engine_at == stamp else {"by_currency":{}},
+        "open_customer_cod": customer_cod,
+        "prestart_open_cod": prestart_cod,
         "bucket_completeness": cost_completeness(issues, declared_scopes),
         "groups": groups, "issues": [{"code": c, "count": n} for c, n in sorted(issues.items())],
         "complete": not any(c != "historical_current_catalog_estimate_used" for c in issues),

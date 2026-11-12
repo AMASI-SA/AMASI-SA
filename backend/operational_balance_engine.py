@@ -98,13 +98,20 @@ def reconcile(state, sources, as_of):
     See source adapter for normalized shapes. Missing evidence becomes an issue,
     never a zero. Previously confirmed facts survive cancellation and stale input.
     """
+    from operational_demand_refresh import calculation_checkpoint
+    calculation_checkpoint()
     result = deepcopy(state)
+    calculation_checkpoint()
     if state.get("status") not in {"active", "ACTIVE"} or not state.get("started_at"):
         return result
     now, start = instant(as_of), instant(state["started_at"])
     if now < start:
         raise ValueError("as_of_before_start")
     engine = result.setdefault("engine", {})
+    # Save the activation boundary only as part of the aggregate reconciliation.
+    # Read-only previews can never admit earlier newly eligible completion fees.
+    from operational_completed_shipping_admission import initialize_admission
+    initialize_admission(result, as_of)
     obligations = engine.setdefault("obligations", {})
     facts = engine.setdefault("facts", {})
     versions = engine.setdefault("order_versions", {})
@@ -134,6 +141,7 @@ def reconcile(state, sources, as_of):
             supplier_keys.setdefault(key.split(':', 2)[1], set()).add(key)
 
     for key in obligations:
+        calculation_checkpoint()
         index_supplier_key(key)
 
     def index_shipping_key(key):
@@ -143,6 +151,7 @@ def reconcile(state, sources, as_of):
 
     for mapping in (obligations, facts):
         for key in mapping:
+            calculation_checkpoint()
             index_shipping_key(key)
 
     def fact(key, payload):
@@ -169,6 +178,7 @@ def reconcile(state, sources, as_of):
 
     shipping_allocations = {}
     for movement in result.get("movements", []):
+        calculation_checkpoint()
         for allocation in movement.get("allocations", []):
             key = allocation.get("obligation_id", "")
             if key.startswith("shipping:"):
@@ -240,6 +250,7 @@ def reconcile(state, sources, as_of):
     order_currencies = {str(order.get("id")): order.get("currency") for order in sources.get("orders", [])}
     receipt_metadata = {}
     for receipt in sources.get("supplier_receipts", []):
+        calculation_checkpoint()
         rid = "receipt:" + str(receipt.get("id") or "")
         try:
             oid, iid = str(receipt.get("order_id") or ""), str(receipt.get("item_id") or "")
@@ -281,6 +292,7 @@ def reconcile(state, sources, as_of):
             issue(str(error), rid)
 
     for rid, receipt in list(facts.items()):
+        calculation_checkpoint()
         if not rid.startswith("receipt:"):
             continue
         key = "supplier:" + receipt["order_id"] + ":" + receipt["item_id"] + ":" + rid
@@ -325,12 +337,18 @@ def reconcile(state, sources, as_of):
     # of scanning the complete financial history for each physical item.
     receipts_by_item = {}
     for key, value in facts.items():
+        calculation_checkpoint()
         if key.startswith('receipt:'):
             receipts_by_item.setdefault((value['order_id'], value['item_id']), {})[key] = value
     reference_owners = split_reference_owners(facts)
+    # Recognize the base before projecting a later delivery. That delivery owns
+    # COD and its commission; it must not create a second base-shipping fact.
+    from operational_completed_shipping import apply_deferred_events
+    apply_deferred_events(result, sources.get('completed_shipping_events', []), start, now, issue)
     order_inputs = [(order, False) for order in sources.get("orders", [])]
     order_inputs.extend((order, True) for order in sources.get("delivery_events", []))
     for order, delivery_only in order_inputs:
+        calculation_checkpoint()
         oid = str(order.get("id", ""))
         # Order processing replaces touched entries. The four maps can therefore
         # roll back independently without copying every previously booked order.
@@ -410,6 +428,22 @@ def reconcile(state, sources, as_of):
             carrier = order.get("carrier")
             service_key = "shipping:" + oid
             frozen = facts.get(service_key)
+            completed_fee = facts.get('completed_shipping:' + oid)
+            base_managed = bool(completed_fee or order.get('completed_shipping_base_managed'))
+            if base_managed and carrier:
+                if completed_fee and (carrier.get('id') != completed_fee.get('party_id')
+                        or carrier.get('party_type', carrier.get('kind')) != completed_fee.get('party_type')):
+                    raise ValueError('operational_shipping_completion_delivery_party_changed')
+                # Keep independent COD components exactly as quoted. An opaque
+                # aggregate cannot be separated safely and is never charged.
+                parts = [deepcopy(part) for part in carrier.get('fee_components', [])
+                         if part.get('id') != 'base_shipping']
+                carrier = {**carrier, 'fee_components': parts, 'cost': None}
+                for key in (service_key, service_key + ':base_shipping'):
+                    row = obligations.get(key)
+                    if (row and money(row.get('confirmed', '0')) == ZERO and key not in shipping_allocations
+                            and not (key != service_key and key in facts)):
+                        obligations[key] = {**row, 'expected': '0.00'}
             try:
                 fee_currency = shipping_currency(oid, carrier, frozen, currency)
                 if carrier and carrier.get("fee_components"):
@@ -494,7 +528,7 @@ def reconcile(state, sources, as_of):
                 fee = facts.get("shipping_fee:" + oid)
                 if fee is None and frozen.get("cost") is not None:
                     fee = {"cost": frozen["cost"]}
-                if fee is None and carrier and carrier["id"] == frozen["id"] and carrier.get("cost") is not None:
+                if not base_managed and fee is None and carrier and carrier["id"] == frozen["id"] and carrier.get("cost") is not None:
                     fee = fact("shipping_fee:" + oid, {"cost": amount(money(carrier["cost"])), "currency": fee_currency})
                 components = carrier.get("fee_components", []) if carrier and carrier["id"] == frozen["id"] else []
                 # Preserve an already confirmed aggregate from older snapshots;
@@ -503,7 +537,7 @@ def reconcile(state, sources, as_of):
                     components = []
                 if components and not facts.get("shipping_components:" + oid):
                     fact("shipping_components:" + oid, {"enabled": True})
-                component_mode = frozen.get("component_mode") or bool(facts.get("shipping_components:" + oid))
+                component_mode = base_managed or frozen.get("component_mode") or bool(facts.get("shipping_components:" + oid))
                 if component_mode:
                     if service_key in obligations:
                         obligations[service_key] = {**obligations[service_key], "expected": "0.00"}
@@ -535,7 +569,7 @@ def reconcile(state, sources, as_of):
                         put(component_key, "shipping", carrier["id"], carrier.get("party_type", carrier.get("kind", "courier")), fee_currency,
                             expected=ZERO if cancelled or not component.get("complete") else money(component["amount"]),
                             business_date=created.date(), fee_component=component["id"])
-                elif fee_currency and carrier.get("cost") is not None:
+                elif fee_currency and not base_managed and carrier.get("cost") is not None:
                     put(service_key, "shipping", carrier["id"], carrier.get("party_type", carrier.get("kind", "courier")), fee_currency,
                         expected=ZERO if cancelled else money(carrier["cost"]), business_date=created.date())
                 elif fee_currency and service_key in obligations:
@@ -681,8 +715,10 @@ def reconcile(state, sources, as_of):
                     if page and str(error) in {"provider_historical_capture_review_required", "provider_settled_capture_review_required"}:
                         balance_review = {k: page[k] for k in
                                           ("order_id", "order_number", "provider", "currency", "gross", "paid", "remaining")}
-                        if page.get("source") == "canonical_salla_closed_tender":
-                            balance_review.update(source=page["source"], transaction_reference=page["transaction_reference"])
+                        if page.get("source") in {"canonical_salla_closed_tender", "canonical_salla_partial_tender"}:
+                            balance_review["source"] = page["source"]
+                            if page.get("transaction_reference"):
+                                balance_review["transaction_reference"] = page["transaction_reference"]
                         issues.append({"code": str(error), "source_id": provider_key, "provider": payment["provider"],
                                        "history_proof_hash": proof_hash(order, payment), "history_created_at": order["created_at"],
                                        "order_page_balance_review": balance_review})
@@ -710,6 +746,7 @@ def reconcile(state, sources, as_of):
     # another cutoff. Other operational sources can still reconcile.
     current_salary = {}
     for employee in (sources.get("employees", []) if first_salary_day is not None else []):
+        calculation_checkpoint()
         eid = str(employee.get("id", ""))
         try:
             projected, missing = salary_candidates(employee, first_salary_day, today)
@@ -720,6 +757,7 @@ def reconcile(state, sources, as_of):
             issue(str(error), eid)
     conflicts = {} if first_salary_day is not None else deepcopy(engine.get("salary_conflicts", {}))
     for key, previous in (engine["salary_days"].items() if first_salary_day is not None else []):
+        calculation_checkpoint()
         proposed = current_salary.get(key)
         previous_currency = previous.get("currency", obligations.get(key, {}).get("currency"))
         if (proposed is None or previous.get("amount") != proposed["amount"]
@@ -730,6 +768,7 @@ def reconcile(state, sources, as_of):
             issue("salary_source_changed", key)
     previous_conflicts = engine.get("salary_conflicts", {})
     for key, conflict in conflicts.items():
+        calculation_checkpoint()
         if previous_conflicts.get(key) != conflict:
             event = {"action": "salary_source_changed", "obligation_id": key,
                      "before": previous_conflicts.get(key), "after": deepcopy(conflict),
@@ -739,6 +778,7 @@ def reconcile(state, sources, as_of):
     if conflicts or "salary_conflicts" in engine:
         engine["salary_conflicts"] = conflicts
     for key, candidate in current_salary.items():
+        calculation_checkpoint()
         if key not in engine["salary_days"]:
             engine["salary_days"][key] = candidate
             eid, business_day = key[len("salary:"):].rsplit(":", 1)
@@ -746,6 +786,7 @@ def reconcile(state, sources, as_of):
                 confirmed=Decimal(candidate["amount"]), business_date=business_day)
 
     for snapshot in sorted(sources.get("ad_snapshots", sources.get("advertising", [])), key=lambda r: str(r.get("observed_at", ""))):
+        calculation_checkpoint()
         key = "advertising:" + str(snapshot.get("account_id")) + ":" + str(snapshot.get("date"))
         try:
             observed = instant(snapshot["observed_at"])
@@ -819,6 +860,7 @@ def reconcile(state, sources, as_of):
             issue(str(error), key)
 
     for recurring in sources.get("recurring", sources.get("recurring_obligations", [])):
+        calculation_checkpoint()
         key = "recurring:" + str(recurring.get("id"))
         try:
             raw_due = recurring["due_at"]
@@ -857,6 +899,7 @@ def reconcile(state, sources, as_of):
     reconcile_credits(result)
     before = state.get("engine", {}).get("obligations", {})
     for key, row in obligations.items():
+        calculation_checkpoint()
         if before.get(key) != row:
             event = {"action": "operational_reconciled", "obligation_id": key,
                      "actor_id": "operational_worker", "source": "mz2",
@@ -864,4 +907,5 @@ def reconcile(state, sources, as_of):
                      "before": before.get(key), "after": deepcopy(row), "at": now.isoformat()}
             event["id"] = fingerprint({**event, "sequence": len(engine["audit"])})
             engine["audit"].append(event)
+    calculation_checkpoint()
     return result

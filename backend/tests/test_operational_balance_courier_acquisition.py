@@ -215,11 +215,12 @@ def native_provider(monkeypatch, snapshots, calls, *, during_read=None):
     monkeypatch.setattr(sync, "call_salla", get)
 
 
-def test_worker_recovers_seven_deliveries_with_one_fee_each_and_preserves_financial_state(monkeypatch):
+def test_visible_refresh_recovers_seven_deliveries_with_one_fee_each_and_preserves_financial_state(monkeypatch):
     from operational_balance_service import refresh
     from operational_balance_store import read
     from operational_balance_worker import tick
     from test_operational_balance_integration import run, started
+    from test_operational_balance_visible_evidence import visible_refresh
 
     snapshots, calls = {}, []
     native_provider(monkeypatch, snapshots, calls)
@@ -245,8 +246,10 @@ def test_worker_recovers_seven_deliveries_with_one_fee_each_and_preserves_financ
         first = await refresh(db, "owner", clock=NOW)
         assert fee_total(first) == 0
         assert sum(row["code"] in sync.ISSUE_CODES for row in first["engine"]["issues"]) == 7
+        await tick(db)
+        assert await read(db, "owner") == first and calls == []
         for _ in range(3):
-            await tick(db)
+            await visible_refresh(db)
         current = await read(db, "owner")
         assert fee_total(current) == 70
         assert len(calls) == 14 and len(set(calls)) == 14
@@ -261,6 +264,7 @@ def test_worker_recovers_seven_deliveries_with_one_fee_each_and_preserves_financ
         for name, record in preserved.items():
             assert await db[name].find_one({"user_id": "owner"}, {"_id": 0}) == record
         await tick(db)
+        await visible_refresh(db)
         replayed = await read(db, "owner")
         assert replayed["engine"]["obligations"] == current["engine"]["obligations"]
         assert replayed["movements"] == current["movements"]

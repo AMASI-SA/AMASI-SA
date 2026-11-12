@@ -3,7 +3,8 @@ from decimal import Decimal
 
 from operational_balance_store import digest
 from operational_payment_evidence import _amount, _instant
-from operational_provider_transaction_evidence import is_closed_tender_balance
+from operational_provider_transaction_evidence import is_closed_tender_balance, is_partial_tender_balance
+from operational_financial_activity_runtime import checked_rows, preparation_checkpoint
 
 HISTORICAL = "provider_historical_capture_review_required"
 SETTLED = "provider_settled_capture_review_required"
@@ -28,6 +29,7 @@ def proof_hash(order, payment):
 
 def _context(state, row, *, obligation_key=None, through=None):
     """Check attributable provider money and the full allocation of incoming payouts."""
+    preparation_checkpoint()
     owner, oid, number, party, ccy = (row[k] for k in ("owner_id", "order_id", "order_number", "provider", "currency"))
     key = obligation_key or "provider:" + oid
     scope = (party, ccy)
@@ -39,7 +41,7 @@ def _context(state, row, *, obligation_key=None, through=None):
         fresh = through is not None and (not engine.get("as_of") or created > _instant(engine["as_of"]))
 
         if (not owner or owner != state.get("owner_id") or not oid or not number or party not in {"salla","tabby","tamara","emkan"}
-                or paid <= 0 or (not is_closed_tender_balance(row, ccy)
+                or paid <= 0 or (not (is_closed_tender_balance(row, ccy) or is_partial_tender_balance(row, ccy))
                     and paid + _amount(row["remaining"], ccy) != _amount(row["gross"], ccy))
                 or not _instant(state["started_at"]) < created <= _instant(through or engine["as_of"])):
             issues.append("order")
@@ -50,23 +52,23 @@ def _context(state, row, *, obligation_key=None, through=None):
         if any(isinstance(f, dict) and f.get("order_id") == oid and (
                 name.startswith(("capture:", "refund:")) or
                 (name.startswith("provider_order_balance:") and _amount(f["paid"], ccy) > 0))
-               for name, f in engine.get("facts", {}).items()):
+               for name, f in checked_rows(engine.get("facts", {}).items())):
             issues.append("claim")
         if any(r.get("order_id") == oid or r.get("order_number") == number
-               for group in ("customer_returns","customer_exchanges") for r in state.get(group, [])):
+               for group in ("customer_returns","customer_exchanges") for r in checked_rows(state.get(group, []))):
             issues.append("return")
         cod = engine.get("facts", {}).get("cod_collection:" + oid)
         if ((cod is not None and (_amount(cod["amount"], ccy) > 0 or cod.get("evidence"))) or
                 _amount(engine.get("obligations", {}).get("cod:" + oid, {}).get("confirmed", 0), ccy) > 0):
             issues.append("claim")
         movements = []
-        for movement in state.get("movements", []):
+        for movement in checked_rows(state.get("movements", [])):
             other_split_provider = (obligation_key and movement.get("party_type") == "provider"
                                     and movement.get("party_id") not in (party, "", None))
             same_number = number in (movement.get("order_number"), movement.get("original_order_number"))
             if ((same_number and not other_split_provider) or (movement.get("order_id") == oid and not other_split_provider)
                     or movement.get("request_id") == "order-bank:" + oid
-                    or any(a.get("obligation_id") in (key, "credit:" + key) for a in movement.get("allocations", []))):
+                    or any(a.get("obligation_id") in (key, "credit:" + key) for a in checked_rows(movement.get("allocations", [])))):
                 issues.append("target")
             # A recorded payout predating a new order could not settle that order.
             # Explicit order/obligation links above still require reconciliation.
@@ -77,36 +79,36 @@ def _context(state, row, *, obligation_key=None, through=None):
             if (movement.get("party_type") == "provider" and movement.get("party_id") in (None, "", party)
                     and movement.get("currency") in (None, "", ccy) and (not movement.get("party_id") or not movement.get("currency"))):
                 issues.append("movement")
-        openings = [o for o in state.get("openings", {}).values()
+        openings = [o for o in checked_rows(state.get("openings", {}).values())
                     if o.get("party_type") == "provider" and (o.get("party_id"), o.get("currency")) == scope]
         if (len(openings) > 1 or any(not o.get("id") or o.get("direction") not in ("for_us", "for_party")
                                      or _amount(o.get("amount"),ccy) < 0 for o in openings)
                 or any(o.get("party_type") == "provider" and o.get("party_id") in (None, "", party)
                        and o.get("currency") in (None, "", ccy) and (not o.get("currency") or not o.get("party_id"))
-                       for o in state.get("openings",{}).values())):
+                       for o in checked_rows(state.get("openings",{}).values()))):
             issues.append("opening")
-        for m in movements:
+        for m in checked_rows(movements):
             allocations = m.get("allocations") or []
-            ids = [a["obligation_id"] for a in allocations]
+            ids = [a["obligation_id"] for a in checked_rows(allocations)]
             gross = _amount(m["amount"], ccy) + _amount(m.get("actual_fee_amount", "0"), ccy)
             opening_ids = {o["id"] for o in openings}
-            if not ids or sum((_amount(a["amount"], ccy) for a in allocations), Decimal(0)) != gross:
+            if not ids or sum((_amount(a["amount"], ccy) for a in checked_rows(allocations)), Decimal(0)) != gross:
                 issues.append("pooled")
                 break
             if (len(ids) != len(set(ids)) or m.get("direction") != "incoming" or m.get("kind") not in {"settlement", "collection"}
                     or (m.get("kind") == "collection" and _amount(m.get("actual_fee_amount", "0"), ccy) != 0)
                     or any((not k.startswith("provider:") and k not in opening_ids) or k == key for k in ids) or m.get("order_number") == number
-                    or any(_amount(a["amount"], ccy) <= 0 for a in allocations)):
+                    or any(_amount(a["amount"], ccy) <= 0 for a in checked_rows(allocations))):
                 issues.append("movement")
                 break
-            for other in ids:
+            for other in checked_rows(ids):
                 # The owner's opening is the balance at started_at. A complete
                 # allocation to that opening cannot also cover a uniquely
                 # evidenced order created strictly after that boundary.
                 if other in opening_ids:
                     opening = next(o for o in openings if o["id"] == other)
-                    used = sum((_amount(a["amount"], ccy) for movement in movements
-                                for a in movement.get("allocations", []) if a.get("obligation_id") == other), Decimal(0))
+                    used = sum((_amount(a["amount"], ccy) for movement in checked_rows(movements)
+                                for a in checked_rows(movement.get("allocations", [])) if a.get("obligation_id") == other), Decimal(0))
                     if opening["direction"] != "for_us" or used > _amount(opening["amount"], ccy):
                         issues.append("movement")
                     continue
@@ -123,19 +125,21 @@ def make_review_row(order, payment):
     page = payment.get("order_page_balance") or {}
     fields = ("owner_id", "order_id", "order_number", "provider", "currency", "gross", "paid", "remaining")
     closed_tender = is_closed_tender_balance(page, payment.get("currency"))
-    if ((page.get("source") != "canonical_salla_order_page" and not closed_tender)
-            or not all(page.get(k) or (k == "remaining" and closed_tender) for k in fields)
+    partial_tender = is_partial_tender_balance(page, payment.get("currency"))
+    if ((page.get("source") != "canonical_salla_order_page" and not closed_tender and not partial_tender)
+            or not all(page.get(k) or (k == "remaining" and (closed_tender or partial_tender)) for k in fields)
             or (page["provider"], page["currency"]) != (payment.get("provider"), payment.get("currency"))
             or _amount(page["paid"] if closed_tender else page["gross"], page["currency"]) != _amount(payment["gross"], page["currency"])
             or order.get("bank_credit") or payment.get("refunds") or payment.get("cancellations")
             or _amount(payment.get("cancelled", 0), page["currency"]) != 0
             or (str(order["id"]), order["order_number"]) != (page["order_id"], page["order_number"])):
         return None
-    provenance = {k: page[k] for k in ("source", "transaction_reference")} if closed_tender else {}
+    provenance = {k: page[k] for k in ("source", "transaction_reference") if k in page} if closed_tender or partial_tender else {}
     return {**{k: page[k] for k in fields}, **provenance, "created_at": order["created_at"]}
 
 
 def preview_row(state, row, code):
+    preparation_checkpoint()
     blocks, openings, movements = _context(state, row)
     if code != HISTORICAL:
         blocks.append("settled")

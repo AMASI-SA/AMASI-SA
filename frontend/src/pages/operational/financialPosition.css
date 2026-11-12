@@ -1,4 +1,4 @@
-.ofp-page, .ofp-report {
+.ofp-page, .ofp-report, .ofp-order-review {
     --ofp-ink: #173458;
     --ofp-line: #9aaec1;
     --ofp-blue: #e1f0fc;
@@ -187,3 +187,16 @@
     .ofp-final-metrics strong { font-size: 24px; }
     .ofp-report-footer { font-size: 9px; }
 }
+/* The review dialog lives in a portal outside the report's scroll container. */
+.ofp-order-review::backdrop { background: rgb(15 23 42 / 55%); }
+.ofp-order-review { box-sizing: border-box; position: fixed; inset: 50% auto auto 50%; margin: 0; transform: translate(-50%, -50%); z-index: 91; width: min(760px, calc(100vw - 28px)); max-height: 86vh; overflow: auto; background: #fff; color: #182a35; border: 1px solid #cbd5e1; border-radius: 16px; padding: 24px; box-shadow: 0 24px 90px #0004; }
+.ofp-order-review *, .ofp-order-review *::before, .ofp-order-review *::after { box-sizing: border-box; }
+.ofp-review-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.ofp-review-header h2 { font-size: 20px; font-weight: 700; }
+.ofp-review-search { display: grid; gap: 6px; margin: 16px 0; }
+.ofp-review-search input { border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; }
+.ofp-order-review table { width: 100%; border-collapse: collapse; }
+.ofp-order-review th, .ofp-order-review td { padding: 12px; text-align: right; vertical-align: top; border-bottom: 1px solid #e2e8f0; }
+.ofp-order-review p + p { margin-top: 5px; }
+.ofp-pending-orders { color: #8a4b07; border: 1px solid #edc985; background: #fff8e8; padding: 6px 10px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+.ofp-pending-orders:focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }

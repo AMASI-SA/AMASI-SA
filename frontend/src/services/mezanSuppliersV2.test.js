@@ -1,12 +1,26 @@
 import api from "../lib/api";
-import { allocateMezanSupplierPayment, loadMezanSupplierFinancials, loadOperationalSupplierAccounts, recordMezanSupplierPayment } from "./mezanSuppliersV2";
+import { allocateMezanSupplierPayment, loadMezanSupplierFinancials, loadMezanSuppliersWorkspace, loadOperationalSupplierAccounts, recordMezanSupplierPayment } from "./mezanSuppliersV2";
 
 jest.mock("../lib/api", () => ({ get: jest.fn(), post: jest.fn() }));
+beforeEach(() => { jest.clearAllMocks(); });
 
 test("operational supplier workspace is a read of the report projection", async () => {
     api.get.mockResolvedValueOnce({ data: { active: true, authority: "operational_balance_report" } });
     expect(await loadOperationalSupplierAccounts()).toEqual({ active: true, authority: "operational_balance_report" });
-    expect(api.get).toHaveBeenCalledWith("/operational-balances/suppliers");
+    expect(api.get).toHaveBeenCalledWith("/operational-balances/suppliers", undefined);
+    expect(api.post).not.toHaveBeenCalled();
+});
+
+test('supplier readers pass the visible request signal and bounded timeout without changing endpoints', async () => {
+    const signal = new AbortController().signal;
+    const config = { signal, timeout: 20000 };
+    api.get.mockResolvedValue({ data: {} });
+    await loadMezanSuppliersWorkspace(config);
+    expect(api.get).toHaveBeenLastCalledWith('/suppliers-v2/workspace', config);
+    await loadOperationalSupplierAccounts(config);
+    expect(api.get).toHaveBeenLastCalledWith('/operational-balances/suppliers', config);
+    await loadMezanSupplierFinancials({ supplierId: 'supplier-v2' }, config);
+    expect(api.get).toHaveBeenLastCalledWith('/suppliers-v2/payment-workspace', { ...config, params: { supplier_id: 'supplier-v2' } });
     expect(api.post).not.toHaveBeenCalled();
 });
 

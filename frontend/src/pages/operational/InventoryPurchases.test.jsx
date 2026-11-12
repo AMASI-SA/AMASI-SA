@@ -26,7 +26,7 @@ test('invalid fractional quantity blocks POST and preserves form',async()=>{awai
 test('loading prevents save and rapid click has one request',async()=>{let done;api.saveInventoryPurchase.mockImplementation(()=>new Promise(resolve=>{done=resolve;}));await render();await fill();await act(async()=>{const button=[...host.querySelectorAll('button')].find(b=>b.textContent==='حفظ الشراء');button.click();button.click();});expect(api.saveInventoryPurchase).toHaveBeenCalledTimes(1);expect(host.querySelector('fieldset').disabled).toBe(true);await act(async()=>done(invoice));});
 test('definitive rejected payload permits correction; no permission renders no entry or report',async()=>{api.saveInventoryPurchase.mockRejectedValue({response:{status:422}});await render();await fill();await click('حفظ الشراء');expect(host.querySelector('fieldset').disabled).toBe(false);expect(localStorage.length).toBe(0);await render({...context,permissions:{}});expect(host.textContent).toContain('لا تتوفر صلاحية');expect(host.textContent).not.toContain('INV1');});
 
-test('write-only known invoice lookup permits allocated later payment without list/read access',async()=>{await render({...context,permissions:{move:true,reports:false}},'payment');await input('مورد الفاتورة للسداد','supplier');await input('رقم الفاتورة للسداد','INV1');await click('عرض الفاتورة للسداد');expect(api.inventoryPurchaseEntry).toHaveBeenCalledWith('supplier','INV1');await click('سداد الفاتورة INV1');await input('مصدر السداد','employee_custody:employee_custody');await input('مبلغ السداد','5');await click('حفظ السداد');expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({source_account_type:'employee_custody',bank_id:'employee_custody',allocations:[{obligation_id:'debt',amount:'5'}]}));expect(api.inventoryPurchases).not.toHaveBeenCalled();});
+test('write-only known invoice lookup permits allocated later payment without list/read access',async()=>{await render({...context,permissions:{move:true,reports:false}},'payment');await input('مورد الفاتورة للسداد','supplier');await input('رقم الفاتورة للسداد','INV1');await click('عرض الفاتورة للسداد');expect(api.inventoryPurchaseEntry).toHaveBeenCalledWith('supplier','INV1',{signal:expect.any(AbortSignal)});await click('سداد الفاتورة INV1');await input('مصدر السداد','employee_custody:employee_custody');await input('مبلغ السداد','5');await click('حفظ السداد');expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({source_account_type:'employee_custody',bank_id:'employee_custody',allocations:[{obligation_id:'debt',amount:'5'}]}));expect(api.inventoryPurchases).not.toHaveBeenCalled();});
 test('component identity remains distinct and exact quantity goes to receipt',async()=>{api.inventoryCatalog.mockResolvedValue({items:[{...product,kind:'component'}]});await render();await click('مكوّن');await fill();await click('حفظ الشراء');expect(api.saveInventoryPurchase.mock.calls[0][0].lines[0]).toEqual(expect.objectContaining({kind:'component',quantity:3}));});
 test('storage failure prevents financial request',async()=>{await render();await fill();const storage=jest.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw Error('storage unavailable');});await click('حفظ الشراء');expect(api.saveInventoryPurchase).not.toHaveBeenCalled();storage.mockRestore();});
 
@@ -72,11 +72,13 @@ test('manual purchase report refresh waits for its pending read and shows the ne
   expect(host.textContent).toContain('INV1');
   expect([...host.querySelectorAll('button')].find(button=>button.textContent==='تحديث المشتريات').disabled).toBe(false);
 });
-test.each(['purchase','payment'])('%s retains focus refresh for financial entry data',async mode=>{
+test.each(['purchase','payment'])('%s reloads entry data only by explicit refresh, not focus',async mode=>{
   await render(context,mode);
   const firstReads=api.entities.mock.calls.length;
   expect(firstReads).toBeGreaterThan(0);
   await act(async()=>window.dispatchEvent(new Event('focus')));
+  expect(api.entities.mock.calls.length).toBe(firstReads);
+  await click('تحديث بيانات المشتريات');
   expect(api.entities.mock.calls.length).toBe(firstReads*2);
 });
 test('type toggle and search filter the selection cards without losing selected lines',async()=>{

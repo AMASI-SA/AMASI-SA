@@ -2,14 +2,16 @@
 from collections import Counter, defaultdict
 from decimal import Decimal
 
-from assembly_status_policy import status_values
+from assembly_status_policy import canonical_status, status_values
 from operational_balance_sources import MAX_ROWS, instant
 from operational_delivery_evidence import _inactive, _text
 from operational_payment_evidence import _amount
-from operational_prestart_cod_forecast import COD
+from operational_prestart_cod_forecast import COD, closed_cod_order
 from order_currency import SUPPORTED_ORDER_CURRENCIES
 from salla_payment_collection import order_page_source_current, provider_order_page_balance
 from salla_shipping import SHIPMENT_FIELDS
+from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
+from operational_financial_activity_runtime import preparation_checkpoint
 
 BEFORE_DISPATCH = {
     "under_review", "waiting_review", "waiting_for_review", "pending_review", "in_progress",
@@ -17,10 +19,32 @@ BEFORE_DISPATCH = {
     "انتظار_المراجعة", "تم_المراجعة", "تمت_المراجعة", "جاري_التنفيذ",
 }
 WITH_DRIVER = BEFORE_DISPATCH | {"out_for_delivery", "delivering", "جاري_التوصيل"}
+WITH_COURIER = WITH_DRIVER | {"completed", "shipping", "shipped", "تم_الشحن"}
 LABELS = {"unassigned": "طلبات مفتوحة قبل إسناد التوصيل", "assigned": "طلبات مفتوحة مسندة لمندوب"}
 PAID = {"paid", "captured", "completed", "مدفوع", "تم الدفع"}
 TERMINAL_PAY = {"refunded", "partially_refunded", "voided", "cancelled",
                 "canceled", "reversed", "failed", "مسترجع"}
+
+
+def _cod_candidate(source, raw, oid, num, linked_ids, linked_numbers, booked, obligations):
+    """Exclude other established cohorts; uncertain open COD remains a coverage gap."""
+    payment = raw.get("payment") or {}
+    methods = set()
+    for value in (raw.get("payment_method"), payment.get("method")):
+        if value:
+            values = [value.get(k) for k in ("code", "slug") if value.get(k)] if isinstance(value, dict) else [value]
+            methods.update(str(item).strip().lower() for item in values)
+    if methods and not methods.intersection(COD):
+        return False
+    # A waybill only routes the order to another possible source. It does not
+    # prove that source actually covered the remaining customer amount.
+    if num in linked_numbers or oid in linked_ids:
+        return False
+    if any(prefix + oid in obligations for prefix in ("credit:cod:", "provider:", "credit:provider:")):
+        return False
+    return not any(prefix + oid in booked for prefix in ("cod:", "credit:cod:", "shipping:",
+        "delivery_event:", "cod_collection:", "cod_customer_confirmation:", "native_driver_earning:",
+        "provider:", "credit:provider:", "provider_order_balance:", "provider_split:"))
 
 
 def _page_due(raw):
@@ -103,7 +127,8 @@ async def _recorded_deliveries(db, owner):
     return records
 
 
-async def open_customer_cod(db, owner, raw_orders, data, state, started, stamp, ids, numbers):
+async def open_customer_cod(db, owner, raw_orders, data, state, started, stamp, ids, numbers, *,
+                            include_coverage=False, coverage_index=False):
     recorded = await _recorded_deliveries(db, owner)
     linked = [*recorded, *state.get("movements", []), *state.get("customer_returns", []),
               *(state.get("driver_payment_review_facts") or {}).values()]
@@ -126,23 +151,52 @@ async def open_customer_cod(db, owner, raw_orders, data, state, started, stamp, 
     outer_ids = Counter(_text(s.get("salla_order_id") or s.get("order_id")) for s in data["unified_orders"])
     totals = defaultdict(lambda: defaultdict(lambda: [0, Decimal(0)]))
     replaced = defaultdict(list)
-    for source, raw in raw_orders:
+    candidates, resolved = set(), set()
+    budget = CPUWorkBudget(PARSER_BUDGET_MS)
+    for index, (source, raw) in enumerate(raw_orders):
+        preparation_checkpoint()
+        await budget.checkpoint()
+        identity, potential = ("row", str(index), ""), True
         try:
             oid, num = _text(raw.get("id")), _text(raw.get("reference_id") or raw.get("order_number"))
+            identity = ("order", oid, num) if oid or num else ("row", str(index), "")
+            potential = _cod_candidate(source, raw, oid, num, linked_ids, linked_numbers, booked, obs)
+            if potential:
+                candidates.add(identity)
             if (not oid or not num or ids[oid] != 1 or numbers[num] != 1 or outer_numbers[num] != 1
                     or _text(source.get("order_number")) != num or outer_ids[oid] > 1
-                    or source.get("order_id") is not None and str(source["order_id"]) != oid
-                    or not order_page_source_current(source, raw) or not _without_waybill(source, raw)
-                    or num in linked_numbers or oid in linked_ids or any(prefix + oid in obs for prefix in
-                        ("credit:cod:", "provider:", "credit:provider:"))
-                    or any(prefix + oid in booked for prefix in ("cod:", "credit:cod:", "shipping:",
-                        "delivery_event:", "cod_collection:", "cod_customer_confirmation:", "native_driver_earning:",
-                        "provider:", "credit:provider:", "provider_order_balance:", "provider_split:"))):
+                    or any(source.get(key) is not None and str(source[key]) != oid for key in ("order_id", "salla_order_id"))
+                    or raw.get("order_number") is not None and str(raw["order_number"]) != num):
                 continue
             created = instant(raw.get("date") or raw.get("created_at") or raw.get("order_date"))
             version = instant(raw.get("updated_at") or raw.get("date_updated") or created)
             saved_version = engine.get("order_versions", {}).get(oid)
             if not created <= version <= stamp or (saved_version and instant(saved_version) > version):
+                continue
+            if closed_cod_order(source, raw, stamp):
+                resolved.add(identity)
+                continue
+            if not order_page_source_current(source, raw):
+                continue
+            # The saved courier forecast is a third, already-rendered cohort.
+            # Only an exact positive customer due/claim match proves coverage;
+            # an empty or zero legacy obligation cannot establish a zero due.
+            prior = obs.get("cod:" + oid) or {}
+            if (prior.get("id") == "cod:" + oid and prior.get("kind") == "cod" and prior.get("direction") == "receivable"
+                    and prior.get("party_type") == "courier" and not prior.get("incomplete")
+                    and not prior.get("superseded") and not prior.get("derived_credit")
+                    and canonical_status(source) in WITH_COURIER):
+                due_proof = _page_due(raw)
+                if (due_proof and prior.get("currency") == due_proof[0] and due_proof[1] > 0
+                        and _amount(prior.get("confirmed"), due_proof[0]) == 0
+                        and _amount(prior.get("expected"), due_proof[0]) == due_proof[1]):
+                    resolved.add(identity)
+            if (not _without_waybill(source, raw)
+                    or num in linked_numbers or oid in linked_ids or any(prefix + oid in obs for prefix in
+                        ("credit:cod:", "provider:", "credit:provider:"))
+                    or any(prefix + oid in booked for prefix in ("cod:", "credit:cod:", "shipping:",
+                        "delivery_event:", "cod_collection:", "cod_customer_confirmation:", "native_driver_earning:",
+                        "provider:", "credit:provider:", "provider_order_balance:", "provider_split:"))):
                 continue
             old = created <= started
             if old and (version <= started or not (source.get("g47_salla_snapshot") or {}).get("source_updated_at")):
@@ -186,9 +240,20 @@ async def open_customer_cod(db, owner, raw_orders, data, state, started, stamp, 
                 key = ("prestart_" if old else "current_") + ("assigned" if rows else "unassigned")
                 totals[currency][key][0] += 1
                 totals[currency][key][1] += due
+            resolved.add(identity)
         except (ValueError, KeyError, TypeError, AttributeError, OverflowError):
+            # A malformed candidate cannot silently prove a complete zero.
+            if potential:
+                candidates.add(identity)
             continue
-    return {ccy: {"rows": [{"id": key, "name": LABELS[key.split("_")[1]] + (
+    by_currency = {ccy: {"rows": [{"id": key, "name": LABELS[key.split("_")[1]] + (
                     " من قبل بداية التشغيل" if key.startswith("prestart_") else " منذ بداية التشغيل"),
                 "orders": count, "amount": format(value, ".2f")} for key, (count, value) in sorted(totals[ccy].items())],
             "replaced": sorted(replaced[ccy])} for ccy in totals.keys() | replaced.keys()}
+    preparation_checkpoint()
+    if not include_coverage:
+        return by_currency
+    result = {"by_currency": by_currency, "withheld_candidates": len(candidates - resolved)}
+    if coverage_index:
+        result.update(_covered_order_keys=sorted(resolved), _withheld_order_keys=sorted(candidates - resolved))
+    return result

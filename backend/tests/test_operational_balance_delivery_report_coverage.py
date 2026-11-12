@@ -34,7 +34,7 @@ def test_reader_support_and_noncash_posting_are_separate():
     result = delivery_coverage_diagnostics(state, projection)
     assert result["event_reader_supported"] is True
     assert dependency(result, "operational_delivery_coverage")["status"] == "ready"
-    assert dependency(result, "operational_driver_noncash_posting")["status"] == "incomplete"
+    assert dependency(result, "operational_driver_noncash_posting")["status"] == "ready"
     assert "للطلبات القديمة والجديدة" in result["event_note"]
 
 
@@ -45,6 +45,42 @@ def test_presentation_never_changes_financial_facts_or_balances():
     assert first == delivery_coverage_diagnostics(state, projection)
     assert (state, projection) == original
     assert not any(key in first for key in ("amount", "balance", "cash_effects", "movements", "openings"))
+
+
+@pytest.mark.parametrize('method', ['bank_transfer', 'card_terminal'])
+def test_noncash_bridge_reports_validated_saved_effect_without_private_ids(method):
+    from test_operational_balance_driver_review_report import recorded
+    state, projection = snapshot()
+    saved, _ = recorded(method)
+    state.update({key: value for key, value in saved.items() if key != 'engine'})
+    state['engine'].update(saved['engine'])
+    state['engine']['facts'] = {'shipping:order': {'party_type': 'store_driver', 'id': 'driver',
+                                                 'cod_evidence': {'payment_method': method}}}
+    before = deepcopy(state)
+    result = dependency(delivery_coverage_diagnostics(state, projection), 'operational_driver_noncash_posting')
+    assert result['status'] == 'ready'
+    assert result['confirmed_review_count'] == 1 and result['pending_order_count'] == 0
+    assert state == before
+    assert not any(value in str(result) for value in ('destination', 'receipt_hash', 'review_revision'))
+
+
+@pytest.mark.parametrize('case', ['no_approval', 'missing_effect', 'amount_conflict'])
+def test_noncash_collection_keeps_exact_missing_or_invalid_link_visible(case):
+    from test_operational_balance_driver_review_report import recorded
+    state, projection = snapshot()
+    saved, _ = recorded('bank_transfer')
+    state.update({key: value for key, value in saved.items() if key != 'engine'})
+    state['engine'].update(saved['engine'])
+    state['engine']['facts'] = {'shipping:order': {'party_type': 'store_driver', 'id': 'driver',
+        'cod_evidence': {'payment_method': 'bank_transfer', 'collection_confirmed': True}}}
+    if case == 'no_approval':
+        state.pop('driver_payment_review_facts')
+    elif case == 'missing_effect':
+        state['movements'] = []
+    else:
+        state['movements'][0]['amount'] = '200.01'
+    result = dependency(delivery_coverage_diagnostics(state, projection), 'operational_driver_noncash_posting')
+    assert result['status'] == 'incomplete' and result['pending_order_count'] == 1
 
 
 def test_equivalent_explicit_utc_offset_is_accepted():

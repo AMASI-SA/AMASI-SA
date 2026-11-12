@@ -6,6 +6,7 @@ import SupplierAdjustments from './SupplierAdjustments';
 import AddOperationalEntity from './AddOperationalEntity';
 import ExternalOperationControls, {externalOperations, ExternalBalanceReceipt} from './ExternalOperationControls';
 import {readPendingMovement,savePendingMovement,clearPendingMovement} from './pendingMovementStorage';
+import {visibleOperationalRead} from './visibleOperationalRead';
 
 // Only a recurring estimate may become payable as part of its explicit payment.
 // Decimal cents avoid a rounding discrepancy between the displayed availability
@@ -35,26 +36,33 @@ export default function DailyMovements({context,source='mezan2',canManage=false,
   const [externalResult,setExternalResult]=useState(null);
   const [stage,setStage]=useState(recovery.payload?'entry':'home'),[choices,setChoices]=useState([]),[choicesLoading,setChoicesLoading]=useState(false);
   const [entryMode,setEntryMode]=useState("normal");
+  const choicesLane=useRef({}),accountsLane=useRef({}),obligationsLane=useRef({});
   const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
   useEffect(()=>{
-    let alive=true;
-    if(!cards||!form.party_type)return;
-    setChoices([]);setChoicesLoading(true);
-    api.entities(form.party_type).then(r=>{if(alive)setChoices(r.items||[]);}).catch(e=>{if(alive)setError(messageFor(e));}).finally(()=>{if(alive)setChoicesLoading(false);});
-    return()=>{alive=false;};
-  },[cards,form.party_type,entityVersion]);
+    setChoices([]);
+    if(!cards||!form.party_type){setChoicesLoading(false);return;}
+    return visibleOperationalRead(config=>api.entities(form.party_type,config),{
+      onStart:()=>setChoicesLoading(true),onData:r=>setChoices(r.items||[]),
+      onError:e=>setError(messageFor(e)),onEnd:()=>setChoicesLoading(false),
+    },choicesLane.current);
+  },[cards,form.party_type,entityVersion,context?.session_scope]);
   const pending=useRef(null),lock=useRef(false);
   useEffect(()=>{
-    let alive=true;
-    Promise.all(['bank','cash','employee_custody'].map(kind=>api.entities(kind).then(r=>r.items.map(item=>({...item,kind}))))).then(rows=>{if(alive)setAccounts(rows.flat());}).catch(e=>{if(alive)setError(messageFor(e));});
-    return()=>{alive=false;};
-  },[]);
+    setAccounts([]);
+    return visibleOperationalRead(async config=>{
+      const results=await Promise.allSettled(['bank','cash','employee_custody'].map(kind=>api.entities(kind,config).then(r=>r.items.map(item=>({...item,kind})))));
+      const failed=results.find(result=>result.status==='rejected');
+      if(failed)throw failed.reason;
+      return results.flatMap(result=>result.value);
+    },{onData:setAccounts,onError:e=>setError(messageFor(e))},accountsLane.current);
+  },[context?.session_scope]);
   useEffect(()=>{
-    let alive=true;setObligations([]);
+    setObligations([]);
     if(!form.party_type||!form.party_id||(form.kind!=='settlement'&&form.party_type!=='operating_expense'))return;
-    api.obligations(form.party_type,form.party_id).then(r=>{if(alive)setObligations(r.items||[]);}).catch(e=>{if(alive)setError(messageFor(e));});
-    return()=>{alive=false;};
-  },[form.party_type,form.party_id,form.kind]);
+    return visibleOperationalRead(config=>api.obligations(form.party_type,form.party_id,config),{
+      onData:r=>setObligations(r.items||[]),onError:e=>setError(messageFor(e)),
+    },obligationsLane.current);
+  },[form.party_type,form.party_id,form.kind,context?.session_scope]);
   const change=patch=>{if(pendingPayload||recovery.error)return;setForm(f=>({...f,...patch}));pending.current=null;setError('');setMessage('');setExternalResult(null);};
   const expenseOrWithdrawal=['operating_expense','owner_withdrawal'].includes(form.party_type);
   const custody=form.party_type==='employee_custody';

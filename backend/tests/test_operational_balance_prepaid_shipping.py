@@ -233,10 +233,9 @@ def test_existing_shipping_payment_or_confirmed_charge_holds_new_prepaid_debit_f
     assert any(row['code'] == 'operational_prepaid_shipping_existing_charge_review_required' for row in result['engine']['issues'])
 
 
-def test_worker_refresh_cas_records_completed_charge_without_opening_a_report(monkeypatch):
+def test_idle_worker_never_posts_and_explicit_refresh_cas_records_completed_charge_once():
     from operational_balance_worker import tick
     from operational_balance_service import refresh
-    import operational_balance_worker as worker
     async def scenario():
         db = AsyncMongoMockClient()['synthetic_prepaid_worker']
         data, state = fixture()
@@ -245,14 +244,14 @@ def test_worker_refresh_cas_records_completed_charge_without_opening_a_report(mo
                 await db[collection].insert_many(deepcopy(rows))
         seeded = {**initial('owner'), **state, 'revision': 1}
         await db[STATES].insert_one(seeded)
-        async def fixed_refresh(db, owner):
-            return await refresh(db, owner, clock=NOW)
-        monkeypatch.setattr(worker, 'refresh', fixed_refresh)
         await asyncio.gather(tick(db), tick(db))
+        assert (await read(db, 'owner'))['movements'] == []
+        await refresh(db, 'owner', clock=NOW)
         saved = await read(db, 'owner')
         assert len(saved['movements']) == 1 and saved['movements'][0]['amount'] == '34.50'
         assert saved['engine']['obligations']['shipping-prepaid:100']['confirmed'] == '34.50'
         await tick(db)
+        await refresh(db, 'owner', clock=NOW)
         assert (await read(db, 'owner'))['movements'] == saved['movements']
     asyncio.run(scenario())
 
@@ -328,6 +327,10 @@ def test_later_delivery_preserves_completed_webhook_and_does_not_pay_shipping_tw
 
 def test_later_deferred_period_does_not_inherit_an_expired_prepaid_mode():
     data, state = fixture(current='delivered', at=NOW)
+    # This completion happened after the explicitly saved activation boundary;
+    # it exercises new deferred work, not implicit historical admission.
+    state['engine']['completed_shipping_admission'] = {'version': 1, 'owner_id': 'owner',
+        'started_at': START, 'activated_at': START}
     data[COLLECTION] = [history('2026-10-06T11:00:00+00:00', to_status='completed')]
     later = {**state['courier_tariffs'][0], 'version_id': 'deferred-period', 'payment_mode': 'deferred',
              'effective_from': '2026-10-06T10:00:00+00:00'}
@@ -335,7 +338,8 @@ def test_later_deferred_period_does_not_inherit_an_expired_prepaid_mode():
     state['courier_tariffs'].append(later)
     result = calculate(data, state)
     assert result['movements'] == []
-    assert result['engine']['obligations']['shipping:100:base_shipping']['confirmed'] == '34.50'
+    assert result['engine']['obligations']['shipping-completed:100']['confirmed'] == '34.50'
+    assert result['engine']['obligations']['shipping-completed:100']['completed_at'] == '2026-10-06T11:00:00+00:00'
     assert 'shipping-prepaid:100' not in result['engine']['obligations']
 
 

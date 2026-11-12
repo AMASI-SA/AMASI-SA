@@ -2,11 +2,16 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { createMezanSupplier, loadMezanSupplierFinancials, loadMezanSuppliersWorkspace, loadOperationalSupplierAccounts } from "../services/mezanSuppliersV2";
 import { renderToStaticMarkup } from "react-dom/server";
+import { useOptionalAuth } from "../context/AuthContext";
+
+let mockSupplierQuery = '';
 
 jest.mock("react-router-dom", () => ({
     Link: ({ to, children }) => <a href={to}>{children}</a>,
-    useSearchParams: () => [new URLSearchParams(), jest.fn()],
+    useSearchParams: () => [new URLSearchParams(mockSupplierQuery), jest.fn()],
 }));
+
+jest.mock("../context/AuthContext", () => ({ useOptionalAuth: jest.fn() }));
 
 jest.mock("../services/mezanSuppliersV2", () => ({
     createMezanSupplier: jest.fn(),
@@ -36,9 +41,16 @@ const pickerServices = [
 ];
 
 beforeEach(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    mockSupplierQuery = '';
+    useOptionalAuth.mockReturnValue({ user: { id: 'owner', role: 'owner' } });
+    loadMezanSuppliersWorkspace.mockReset();
+    loadMezanSupplierFinancials.mockReset();
     loadOperationalSupplierAccounts.mockReset();
-    loadOperationalSupplierAccounts.mockResolvedValue({ status: "draft", active: false });
+    loadOperationalSupplierAccounts.mockResolvedValue({ status: "draft", active: false, authority: 'operational_balance_report' });
 });
+
+afterEach(() => { delete document.visibilityState; });
 
 async function withEditor(test) {
     global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -109,8 +121,9 @@ test("Mezan 2 supplier page states the independent governed supplier contract", 
     expect(markup).toContain("2 · الفاتورة");
     expect(markup).toContain("3 · حساب المورد");
     expect(markup).toContain("هوية المورد من سجل ميزان 2 فقط");
-    expect(markup).toContain("الفواتير التاريخية لا تعيد إنشاء دين");
-    expect(markup).toContain("إجمالي ديون الموردين");
+    expect(markup).toContain("اطلب عرض الحسابات");
+    expect(markup).toContain("عرض حسابات الموردين");
+    expect(markup).not.toContain("إجمالي ديون الموردين");
     expect(markup).toContain('data-testid="mezan-supplier-add-button"');
 });
 
@@ -201,7 +214,7 @@ test("supplier financial detail separates eligible balances from historical invo
 });
 
 
-test("financial reload failure clears stale balances and blocks an existing payment form", async () => {
+test("financial reload failure clears stale balances and removes unverified payment controls", async () => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
     const supplier = { id: "supplier-v2", company_name: "مورد ميزان", status: "active" };
     loadMezanSuppliersWorkspace.mockResolvedValue({ suppliers: [supplier], services: [], summary: {} });
@@ -220,11 +233,11 @@ test("financial reload failure clears stale balances and blocks an existing paym
         await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === "دفع مبلغ للمورد").click());
         expect(container.querySelector('form button[type="submit"]').disabled).toBe(false);
         expect(container.textContent).toContain("1,000.00");
-        await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === "تحديث").click());
+        await act(async () => container.querySelector('[data-testid="mezan-supplier-accounts-load"]').click());
         expect(container.textContent).toContain("فشل تحديث الحساب المالي");
         expect(container.textContent).not.toContain("1,000.00");
-        expect(container.querySelector('form button[type="submit"]').disabled).toBe(true);
-        expect(container.querySelector('[data-testid="mezan-supplier-financial-detail"]')).not.toBeNull();
+        expect(container.querySelector('form button[type="submit"]')).toBeNull();
+        expect(container.querySelector('[data-testid="mezan-supplier-financial-detail"]')).toBeNull();
     } finally {
         await act(async () => root.unmount());
         container.remove();
@@ -244,26 +257,50 @@ const operationalWorkspace = () => ({
 async function withOperationalPage(test) {
     global.IS_REACT_ACT_ENVIRONMENT = true;
     const supplier = { id: "supplier-v2", company_name: "مورد تجريبي", status: "active" };
-    loadMezanSuppliersWorkspace.mockResolvedValue({ suppliers: [supplier], categories: pickerCategories, services: [], summary: {} });
+    loadMezanSuppliersWorkspace.mockResolvedValue({ suppliers: [supplier], categories: pickerCategories, services: [], summary: {}, permissions: { can_manage: true } });
     loadMezanSupplierFinancials.mockResolvedValue({ financial_status: "not_ready", payment_available: false, summary: {} });
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
     try {
         await act(async () => root.render(<MezanSuppliersV2 />));
-        await test(container);
+        await test(container, root);
     } finally {
         await act(async () => root.unmount());
         container.remove();
     }
 }
 
+test('initial supplier browsing loads administrative data without calculating any financial workspace', async () => {
+    await withOperationalPage(async container => {
+        expect(container.textContent).toContain('مورد تجريبي');
+        expect(loadMezanSuppliersWorkspace).toHaveBeenCalledTimes(1);
+        expect(loadOperationalSupplierAccounts).not.toHaveBeenCalled();
+        expect(loadMezanSupplierFinancials).not.toHaveBeenCalled();
+        expect(container.textContent).toContain('عرض حسابات الموردين');
+        expect(container.textContent).not.toContain('إجمالي ديون الموردين');
+        expect(container.querySelector('[data-testid="operational-supplier-card"]')).toBeNull();
+    });
+});
+
+test('an unknown operational authority cannot start a native financial fallback', async () => {
+    loadOperationalSupplierAccounts.mockRejectedValue(Object.assign(new Error('لا توجد صلاحية للحسابات'), { status: 403 }));
+    await withOperationalPage(async container => {
+        await act(async () => container.querySelector('[data-testid="mezan-supplier-financial-open-supplier-v2"]').click());
+        expect(loadMezanSupplierFinancials).not.toHaveBeenCalled();
+        expect(container.querySelector('[data-testid="mezan-supplier-financial-detail"]')).toBeNull();
+        expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    });
+});
+
 test("active operational supplier invoices appear even when native GL is not ready", async () => {
     loadOperationalSupplierAccounts.mockResolvedValue(operationalWorkspace());
     await withOperationalPage(async container => {
+        await act(async () => container.querySelector('[data-testid="mezan-supplier-accounts-load"]').click());
         expect(container.querySelector('[data-testid="operational-supplier-summary"]')).not.toBeNull();
         expect(container.textContent).toContain("135.00");
         expect(container.textContent).not.toContain("إجمالي ديون الموردين");
+        expect(loadMezanSupplierFinancials).not.toHaveBeenCalled();
         await act(async () => container.querySelector('[data-testid="mezan-supplier-financial-open-supplier-v2"]').click());
         const detail = container.querySelector('[data-testid="operational-supplier-detail"]');
         expect(detail.textContent).toContain("TEST-SI-001");
@@ -282,11 +319,181 @@ test("operational failure clears stale amounts and does not enable native paymen
     await withOperationalPage(async container => {
         await act(async () => container.querySelector('[data-testid="mezan-supplier-financial-open-supplier-v2"]').click());
         expect(container.textContent).toContain("135.00");
-        await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === "تحديث").click());
+        await act(async () => container.querySelector('[data-testid="mezan-supplier-accounts-load"]').click());
         expect(container.textContent).not.toContain("135.00");
         expect(container.textContent).not.toContain("TEST-SI-001");
         expect(container.querySelector('[data-testid="operational-supplier-detail"]')).toBeNull();
         expect(container.querySelector('[data-testid="mezan-supplier-financial-detail"]')).toBeNull();
-        expect(container.querySelector('[data-testid="mezan-supplier-financial-open-supplier-v2"]').disabled).toBe(true);
+        expect(loadMezanSupplierFinancials).not.toHaveBeenCalled();
+        expect(container.querySelector('[role="alert"]').textContent).toContain('تعذّر تحديث الحساب التشغيلي');
+    });
+});
+
+test('administrative refresh never recalculates already opened supplier accounts', async () => {
+    loadOperationalSupplierAccounts.mockResolvedValue(operationalWorkspace());
+    await withOperationalPage(async container => {
+        await act(async () => container.querySelector('[data-testid="mezan-supplier-accounts-load"]').click());
+        expect(loadOperationalSupplierAccounts).toHaveBeenCalledTimes(1);
+        await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === 'تحديث بيانات الموردين').click());
+        expect(loadMezanSuppliersWorkspace).toHaveBeenCalledTimes(2);
+        expect(loadOperationalSupplierAccounts).toHaveBeenCalledTimes(1);
+        expect(loadMezanSupplierFinancials).not.toHaveBeenCalled();
+    });
+});
+
+test('saving administrative supplier details does not reload the financial accounts', async () => {
+    loadOperationalSupplierAccounts.mockResolvedValue(operationalWorkspace());
+    await withOperationalPage(async container => {
+        await act(async () => container.querySelector('[data-testid="mezan-supplier-accounts-load"]').click());
+        await act(async () => container.querySelector('[aria-label="تعديل مورد تجريبي"]').click());
+        await act(async () => [...container.querySelectorAll('label')].find(label => label.textContent === 'ملابس').querySelector('input').click());
+        await act(async () => container.querySelector('[data-testid="mezan-supplier-editor"]').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+        expect(loadMezanSuppliersWorkspace).toHaveBeenCalledTimes(2);
+        expect(loadOperationalSupplierAccounts).toHaveBeenCalledTimes(1);
+        expect(loadMezanSupplierFinancials).not.toHaveBeenCalled();
+    });
+});
+
+test.each(['draft', 'frozen', 'accounting_active'])('native accounts wait for a verified inactive operational source: %s', async status => {
+    let resolve;
+    loadOperationalSupplierAccounts.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    await withOperationalPage(async container => {
+        loadMezanSupplierFinancials.mockResolvedValue({ financial_status: 'available', suppliers: [], invoices: [], timeline: [], summary: { outstanding_halalas: 8800 } });
+        await act(async () => container.querySelector('[data-testid="mezan-supplier-accounts-load"]').click());
+        expect(loadMezanSupplierFinancials).not.toHaveBeenCalled();
+        expect(container.textContent).not.toContain('إجمالي ديون الموردين');
+        await act(async () => resolve({ active: false, status, authority: 'operational_balance_report' }));
+        expect(loadMezanSupplierFinancials).toHaveBeenCalledTimes(1);
+        const transport = loadOperationalSupplierAccounts.mock.calls[0][0];
+        expect(transport).toEqual(expect.objectContaining({ signal: expect.any(AbortSignal), timeout: 20000 }));
+        expect(loadMezanSupplierFinancials).toHaveBeenCalledWith({}, transport);
+        expect(container.textContent).toContain('88.00');
+    });
+});
+
+test.each([
+    null, {}, { active: false, status: 'active', authority: 'operational_balance_report' },
+    { active: false, status: 'draft', authority: 'unknown' },
+    { active: true, status: 'active', authority: 'operational_balance_report' },
+])('an invalid source response never certifies native accounts: %j', async response => {
+    loadOperationalSupplierAccounts.mockResolvedValue(response);
+    await withOperationalPage(async container => {
+        await act(async () => container.querySelector('[data-testid="mezan-supplier-accounts-load"]').click());
+        expect(loadMezanSupplierFinancials).not.toHaveBeenCalled();
+        expect(container.querySelector('[role="alert"]')).not.toBeNull();
+        expect(container.textContent).not.toContain('إجمالي ديون الموردين');
+    });
+});
+
+test('a direct supplier link is explicit account intent and opens the selected account', async () => {
+    mockSupplierQuery = 'supplier=supplier-v2';
+    loadOperationalSupplierAccounts.mockResolvedValue(operationalWorkspace());
+    await withOperationalPage(async (container, root) => {
+        expect(loadOperationalSupplierAccounts).toHaveBeenCalledTimes(1);
+        expect(loadMezanSupplierFinancials).not.toHaveBeenCalled();
+        expect(container.querySelector('[data-testid="operational-supplier-detail"]')).not.toBeNull();
+        mockSupplierQuery = '';
+        await act(async () => root.render(<MezanSuppliersV2 />));
+        expect(container.querySelector('[data-testid="operational-supplier-detail"]')).toBeNull();
+        expect(container.querySelector('[data-testid="mezan-supplier-accounts-load"]').textContent).toBe('تحديث حسابات الموردين');
+        expect(loadOperationalSupplierAccounts).toHaveBeenCalledTimes(1);
+    });
+});
+
+test('a hidden direct link starts neither administrative nor financial reads until visible', async () => {
+    mockSupplierQuery = 'supplier=supplier-v2';
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    loadOperationalSupplierAccounts.mockResolvedValue(operationalWorkspace());
+    await withOperationalPage(async container => {
+        expect(loadMezanSuppliersWorkspace).not.toHaveBeenCalled();
+        expect(loadOperationalSupplierAccounts).not.toHaveBeenCalled();
+        expect(loadMezanSupplierFinancials).not.toHaveBeenCalled();
+        await act(async () => {
+            Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+        expect(loadMezanSuppliersWorkspace).toHaveBeenCalledTimes(1);
+        expect(loadOperationalSupplierAccounts).toHaveBeenCalledTimes(1);
+        expect(container.querySelector('[data-testid="operational-supplier-detail"]')).not.toBeNull();
+    });
+});
+
+test('hiding aborts a requested source read and its late inactive result cannot start native loading', async () => {
+    let resolve;
+    loadOperationalSupplierAccounts.mockImplementationOnce(() => new Promise(done => { resolve = done; }))
+        .mockResolvedValue(operationalWorkspace());
+    await withOperationalPage(async container => {
+        await act(async () => container.querySelector('[data-testid="mezan-supplier-accounts-load"]').click());
+        const transport = loadOperationalSupplierAccounts.mock.calls[0][0];
+        await act(async () => {
+            Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+        expect(transport.signal.aborted).toBe(true);
+        await act(async () => resolve({ active: false, status: 'draft', authority: 'operational_balance_report' }));
+        expect(loadMezanSupplierFinancials).not.toHaveBeenCalled();
+        expect(container.querySelector('[data-testid="operational-supplier-summary"]')).toBeNull();
+        await act(async () => {
+            Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+        expect(loadOperationalSupplierAccounts).toHaveBeenCalledTimes(2);
+        expect(container.textContent).toContain('135.00');
+    });
+});
+
+test('unmount aborts the selected native read without touching any payment writer', async () => {
+    await withOperationalPage(async (container, root) => {
+        loadMezanSupplierFinancials.mockImplementationOnce(() => new Promise(() => {}));
+        await act(async () => container.querySelector('[data-testid="mezan-supplier-accounts-load"]').click());
+        const transport = loadMezanSupplierFinancials.mock.calls[0][1];
+        expect(transport.signal.aborted).toBe(false);
+        await act(async () => root.render(null));
+        expect(transport.signal.aborted).toBe(true);
+    });
+});
+
+test('completed account reads do not poll on visibility or focus changes', async () => {
+    loadOperationalSupplierAccounts.mockResolvedValue(operationalWorkspace());
+    await withOperationalPage(async container => {
+        await act(async () => container.querySelector('[data-testid="mezan-supplier-accounts-load"]').click());
+        for (const state of ['hidden', 'visible']) {
+            await act(async () => {
+                Object.defineProperty(document, 'visibilityState', { configurable: true, value: state });
+                document.dispatchEvent(new Event('visibilitychange'));
+                window.dispatchEvent(new Event('focus'));
+            });
+        }
+        expect(loadOperationalSupplierAccounts).toHaveBeenCalledTimes(1);
+        expect(loadMezanSuppliersWorkspace).toHaveBeenCalledTimes(1);
+        expect(loadMezanSupplierFinancials).not.toHaveBeenCalled();
+    });
+});
+
+test('switching users cancels old account intent and discards late financial amounts', async () => {
+    let resolve;
+    loadOperationalSupplierAccounts.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    await withOperationalPage(async (container, root) => {
+        await act(async () => container.querySelector('[data-testid="mezan-supplier-accounts-load"]').click());
+        const transport = loadOperationalSupplierAccounts.mock.calls[0][0];
+        useOptionalAuth.mockReturnValue({ user: { id: 'other', role: 'owner' } });
+        await act(async () => root.render(<MezanSuppliersV2 />));
+        expect(transport.signal.aborted).toBe(true);
+        await act(async () => resolve(operationalWorkspace()));
+        expect(container.textContent).not.toContain('135.00');
+        expect(container.querySelector('[data-testid="mezan-supplier-accounts-load"]').textContent).toBe('عرض حسابات الموردين');
+        expect(loadOperationalSupplierAccounts).toHaveBeenCalledTimes(1);
+        expect(loadMezanSupplierFinancials).not.toHaveBeenCalled();
+    });
+});
+
+test('native accounts without a ready ledger never display default zero balances', async () => {
+    await withOperationalPage(async container => {
+        loadMezanSupplierFinancials.mockResolvedValue({ financial_status: 'not_ready',
+            suppliers: [{ id: 'supplier-v2', financial: { outstanding_halalas: 0, advance_halalas: 0, real_invoice_count: 0 } }],
+            summary: { outstanding_halalas: 0, paid_halalas: 0, advance_halalas: 0, real_invoice_count: 0 } });
+        await act(async () => container.querySelector('[data-testid="mezan-supplier-accounts-load"]').click());
+        expect(container.textContent).toContain('غير متاح');
+        expect(container.textContent).not.toContain('0.00');
     });
 });

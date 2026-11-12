@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation, localcontext
 from operational_balance_store import digest, now, fail
 from fulfillment_v2_routes import _inventory_eligibility, _load_inventory_evidence
 from pymongo.read_concern import ReadConcern
+from operational_financial_activity_runtime import prepare_in_thread, preparation_checkpoint, checked_rows
 
 SOURCES=frozenset({'warehouse_locations','warehouse_locations_warehouses','mezan_products_v2','mezan_cost_resources_v2','mezan_inventory_reservations_v2','mezan_component_consumption_units_v1','mz2_inventory_cost_states'})
 LIMIT=20000
@@ -33,7 +34,7 @@ def identity(item,products,resources):
         if not resource or not resource.get('name') or resource.get('kind')=='service' or resource.get('track_inventory') is not True:return None
         return resource,'component',None,resource['id'],None
     keys={str(item.get(k)) for k in ('mezan_product_id','product_id') if item.get(k)}
-    matches=[p for k,p in products.items() if k in keys]
+    matches=[p for k,p in checked_rows(products.items()) if k in keys]
     if len(matches)!=1:return None
     product=matches[0]
     if not product.get('name'):return None
@@ -67,19 +68,31 @@ async def projection(db,owner):
 
 async def _projection(db,owner):
     data={name:await records(db,owner,name) for name in sorted(SOURCES)}
+    products, resources, warehouses, locations, warnings = await prepare_in_thread(_metadata, data)
+    evidence=await _load_inventory_evidence(db,owner,list(locations.values()))
+    return await prepare_in_thread(_project_rows, owner, data, products, resources,
+                                   warehouses, locations, evidence, warnings)
+
+
+def _metadata(data):
+    preparation_checkpoint()
     warnings=[]
     def unique(rows,key):
-        counts=Counter(r.get(key) for r in rows if r.get(key))
+        counts=Counter(r.get(key) for r in checked_rows(rows) if r.get(key))
         if any(n>1 for n in counts.values()):warnings.append('هوية مكررة في مصدر ميزان 2؛ استبعدت البيانات غير المحسومة')
-        return {r[key]:r for r in rows if r.get(key) and counts[r[key]]==1}
+        return {r[key]:r for r in checked_rows(rows) if r.get(key) and counts[r[key]]==1}
     products=unique(data['mezan_products_v2'],'mezan_product_id');resources=unique(data['mezan_cost_resources_v2'],'id')
     warehouses=unique(data['warehouse_locations_warehouses'],'id');locations=unique(data['warehouse_locations'],'id')
-    evidence=await _load_inventory_evidence(db,owner,list(locations.values()))
+    return products, resources, warehouses, locations, warnings
+
+
+def _project_rows(owner, data, products, resources, warehouses, locations, evidence, warnings):
+    preparation_checkpoint()
     result=[];internal=[]
-    for location in locations.values():
+    for location in checked_rows(locations.values()):
         occupancy=location.get('occupancy') or {};items=occupancy.get('items') or []
         if not isinstance(items,list):warnings.append('بيانات الموقع غير مكتملة');continue
-        for index,item in enumerate(items):
+        for index,item in checked_rows(enumerate(items)):
             if not isinstance(item,dict):warnings.append('بند مخزون غير صالح');continue
             resolved=identity(item,products,resources);q=number(item.get('quantity'))
             if not resolved or q is None:
@@ -103,7 +116,7 @@ async def _projection(db,owner):
             from operational_opening_inventory import projected_evidence
             record.update(projected_evidence(location, item, witnesses))
             matches=[]
-            for cost in data['mz2_inventory_cost_states']:
+            for cost in checked_rows(data['mz2_inventory_cost_states']):
                 ci=cost.get('inventory_identity') or {}
                 match=(kind=='component' and ci.get('item_type')=='stock_component' and ci.get('resource_id')==resource_id) or (kind=='product' and ci.get('item_type')=='product' and ci.get('product_id')==product_id and (ci.get('variant_id') or None)==variant)
                 if match and cost.get('authoritative') is True and cost.get('cost_policy_version')==POLICY:matches.append(cost)
@@ -117,36 +130,37 @@ async def _projection(db,owner):
             if not lot:record['availability_issues'].append('هوية دفعة المخزون غير مثبتة؛ لا يمكن تأكيد الإتاحة')
             result.append(record);internal.append({'record':record,'key':row_key,'lot':lot,'blocked':blocked or unknown,'quantity':q,'reserved':Decimal(0),'ambiguous':not bool(lot)})
     duplicate_keys=Counter(r['key'] for r in internal)
-    for row in internal:
+    for row in checked_rows(internal):
         if duplicate_keys[row['key']]>1:row['ambiguous']=True
     seen_allocations=set()
     def apply(allocation,component=False,unit_id=None):
+        preparation_checkpoint()
         if not isinstance(allocation,dict):
-            for row in internal:row['ambiguous']=True
+            for row in checked_rows(internal):row['ambiguous']=True
             return
         if component:
-            candidates=[r for r in internal if r['record']['kind']=='component' and r['record']['location_id']==allocation.get('location_id') and r['lot']==allocation.get('lot_id') and r['record']['resource_id']==allocation.get('resource_id')]
+            candidates=[r for r in checked_rows(internal) if r['record']['kind']=='component' and r['record']['location_id']==allocation.get('location_id') and r['lot']==allocation.get('lot_id') and r['record']['resource_id']==allocation.get('resource_id')]
             allocation_id=(unit_id,allocation.get('id'))
         else:
-            candidates=[r for r in internal if r['record']['kind']=='product' and r['key']==allocation.get('inventory_row_key')]
+            candidates=[r for r in checked_rows(internal) if r['record']['kind']=='product' and r['key']==allocation.get('inventory_row_key')]
             allocation_id=(unit_id,allocation.get('inventory_row_key'))
             if len(candidates)==1 and allocation.get('location_id') and allocation['location_id']!=candidates[0]['record']['location_id']:candidates=[]
         q=number(allocation.get('quantity'))
         if len(candidates)!=1 or q is None or q<=0 or allocation_id in seen_allocations:
-            affected=candidates or [r for r in internal if (r['record']['kind']=='component')==component]
+            affected=candidates or [r for r in checked_rows(internal) if (r['record']['kind']=='component')==component]
             for row in affected:row['ambiguous']=True
             warnings.append('حجز غير محسوم؛ لم يتم افتراض كمية متاحة')
         else:candidates[0]['reserved']+=q
         seen_allocations.add(allocation_id)
-    for reservation in data['mezan_inventory_reservations_v2']:
+    for reservation in checked_rows(data['mezan_inventory_reservations_v2']):
         if reservation.get('status')=='active':
             allocations=reservation.get('allocations')
             if not isinstance(allocations,list):apply(None);continue
             for allocation in allocations:apply(allocation,unit_id=reservation.get('id') or reservation.get('order_number'))
-    for unit in data['mezan_component_consumption_units_v1']:
+    for unit in checked_rows(data['mezan_component_consumption_units_v1']):
         if unit.get('state')=='reserved':
             for allocation in unit.get('allocations') or []:apply(allocation,True,str(unit.get('_id') or unit.get('id') or unit.get('order_line_id') or ''))
-    for row in internal:
+    for row in checked_rows(internal):
         record=row['record']
         if row['reserved']>row['quantity']:row['ambiguous']=True
         if row['ambiguous']:

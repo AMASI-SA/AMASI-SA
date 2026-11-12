@@ -158,7 +158,7 @@ def _driver_assignment(assignments, owner, order_id, number):
     return assignment
 
 
-def _current_shipping(raw, source, *, require_delivered=True):
+def _current_shipping(raw, source, *, require_delivered=True, require_label=True):
     current = source.get("salla_shipping_current")
     nested = raw.get("salla_shipping_current")
     if current is None:
@@ -170,7 +170,7 @@ def _current_shipping(raw, source, *, require_delivered=True):
                 "shipment_id", "tracking_number", "company_code", "company_name", "status")):
             _fail("current_shipment_conflict")
     shipment, waybill = _text(current.get("shipment_id")), _text(current.get("tracking_number"))
-    if not shipment or not waybill:
+    if require_label and (not shipment or not waybill):
         _fail("shipment_identity_missing")
     superseded = current.get("superseded_shipment_ids") or []
     if not isinstance(superseded, list):
@@ -338,8 +338,9 @@ def conflicting_shipments(sources, state):
     seen = defaultdict(set)
 
     def bind(oid, shipment, waybill):
-        if oid and shipment and waybill:
+        if oid and shipment:
             seen[("shipment", shipment)].add(oid)
+        if oid and waybill:
             seen[("waybill", waybill)].add(oid)
 
     for source in sources:
@@ -350,12 +351,13 @@ def conflicting_shipments(sources, state):
         if isinstance(current, dict):
             bind(_text(raw.get("id")), _text(current.get("shipment_id")), _text(current.get("tracking_number")))
     for k, event in (state or {}).get("engine", {}).get("facts", {}).items():
-        if k.startswith("delivery_event:") and event.get("party_type") == "courier":
+        if k.startswith(("delivery_event:", "prepaid_shipping:", "completed_shipping:")) and event.get("party_type") == "courier":
             bind(_text(event.get("order_id")), _text(event.get("shipment_id")), _text(event.get("waybill")))
-    for saved in (state or {}).get("historical_shipping_fee_approvals", {}).values():
-        p = saved["candidate"]
-        if p.get("party_type") == "courier":
-            bind(_text(p.get("order_id")), _text(p.get("shipment_id")), _text(p.get("waybill")))
+    for approvals in ("historical_shipping_fee_approvals", "completed_shipping_fee_approvals"):
+        for saved in (state or {}).get(approvals, {}).values():
+            p = saved["candidate"]
+            if p.get("party_type") == "courier":
+                bind(_text(p.get("order_id")), _text(p.get("shipment_id")), _text(p.get("waybill")))
     return {key for key, orders in seen.items() if len(orders) > 1}
 
 

@@ -45,7 +45,7 @@ test('loading reads only context and never previews or approves automatically', 
 
 test('cutover preview and explicit opening confirmation precede approval', async () => {
   await render(); await showPreview();
-  expect(api.previewSalaryStart).toHaveBeenCalledWith({first_day: '2026-11-15'});
+  expect(api.previewSalaryStart).toHaveBeenCalledWith({first_day: '2026-11-15'}, expect.objectContaining({signal: expect.any(AbortSignal)}));
   expect(host.textContent).toContain('100.00'); expect(button('اعتماد بداية الرواتب من يوم القطع').disabled).toBe(true);
   await confirm(); expect(api.approveSalaryStart).not.toHaveBeenCalled();
   await checkbox(); await confirm();
@@ -165,4 +165,33 @@ test('employee-app surface cannot expose owner payroll setup', async () => {
   api.context.mockResolvedValue({...owner(), permissions: {}});
   await act(async () => root.render(<OperationalBalances source="employee_app"/>));
   expect(button('بداية الرواتب')).toBeUndefined(); expect(api.salaryStartContext).not.toHaveBeenCalled();
+});
+
+const visibility = async value => act(async () => {
+  Object.defineProperty(document, 'visibilityState', {configurable: true, value});
+  document.dispatchEvent(new Event('visibilitychange'));
+});
+beforeEach(() => Object.defineProperty(document, 'visibilityState', {configurable: true, value: 'visible'}));
+afterEach(() => Object.defineProperty(document, 'visibilityState', {configurable: true, value: 'visible'}));
+
+test('salary preview aborts hidden work and joins it before a visible retry', async () => {
+  const wait = deferred(); api.previewSalaryStart.mockReturnValueOnce(wait.promise);
+  await render(); await showPreview();
+  const signal = api.previewSalaryStart.mock.calls[0][1].signal;
+  await visibility('hidden'); expect(signal.aborted).toBe(true);
+  await visibility('visible'); expect(api.previewSalaryStart).toHaveBeenCalledTimes(1);
+  await act(async () => wait.resolve(preview()));
+  expect(api.previewSalaryStart).toHaveBeenCalledTimes(2); expect(host.textContent).toContain('100.00');
+  await visibility('hidden'); await visibility('visible');
+  expect(api.previewSalaryStart).toHaveBeenCalledTimes(2);
+});
+
+test('salary approval remains durable while a visible read is separately cancellable', async () => {
+  const wait = deferred(); api.approveSalaryStart.mockReturnValueOnce(wait.promise);
+  await render(); await showPreview(); await checkbox(); await confirm();
+  expect(api.approveSalaryStart.mock.calls[0]).toHaveLength(1);
+  await visibility('hidden');
+  await act(async () => wait.resolve({ok: true, first_day: '2026-11-15', bank_money_changed: false}));
+  expect(api.approveSalaryStart).toHaveBeenCalledTimes(1); expect(host.textContent).toContain('تم اعتماد البداية');
+  expect(api.salaryStartContext).toHaveBeenCalledTimes(1);
 });

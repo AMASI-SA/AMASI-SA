@@ -56,16 +56,17 @@ async def test_refresh_calculation_does_not_block_unrelated_heartbeat(monkeypatc
     import operational_balance_inventory as inventory
     import operational_balance_engine as engine
     import operational_customer_returns as returns
+    import operational_profit_sources as profit
 
     released = threading.Event()
-    state = initial()
+    state = {**initial(), "owner_id": "owner"}
 
     async def mutate(db, owner, apply):
         return await apply(state)
 
     def slow_calculation(*args):
         assert released.wait(2), 'financial calculation blocked the heartbeat loop'
-        return {'engine': {'obligations': {}}, 'movements': []}
+        return {**state, 'engine': {'obligations': {}}, 'movements': []}
 
     async def heartbeat():
         await asyncio.sleep(.01)
@@ -77,10 +78,15 @@ async def test_refresh_calculation_does_not_block_unrelated_heartbeat(monkeypatc
     monkeypatch.setattr(inventory, 'assert_no_source_collision', AsyncMock())
     monkeypatch.setattr(returns, 'attach_returns', lambda *_: None)
     monkeypatch.setattr(engine, 'reconcile', slow_calculation)
+    # This test isolates event-loop responsiveness, not the separate profit
+    # source adapter; its owner-validation tests use real snapshot identities.
+    profit_read = AsyncMock(return_value={'source': 'cpu_responsiveness_test'})
+    monkeypatch.setattr(profit, 'load_profit_snapshot', profit_read)
     beat = asyncio.create_task(heartbeat())
     try:
         result = await service.refresh(object(), 'owner', clock=NOW)
         assert result['engine']['as_of'] == NOW
+        profit_read.assert_awaited_once()
     finally:
         released.set()
         await beat

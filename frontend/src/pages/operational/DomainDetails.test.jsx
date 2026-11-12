@@ -21,7 +21,7 @@ test('one provider table keeps missing fees and net unavailable alongside custom
   const paymentSection = section('تفاصيل منصات الدفع');
   expect(paymentSection.querySelectorAll('table')).toHaveLength(1);
   expect([...paymentSection.querySelectorAll('tbody tr')].map(row => [row.querySelector('strong').textContent, ...[...row.cells].slice(1).map(cell => cell.textContent)])).toEqual([
-    ['تمارا', '2', '178.45', 'غير متاح', '0.00', 'غير متاح'], ['سلة', '1', '24.10', 'غير متاح', '0.00', 'غير متاح'],
+    ['تمارا', '2', '178.45', 'غير متاح', '0.00', 'غير متاح', 'غير متاح'], ['سلة', '1', '24.10', 'غير متاح', '0.00', 'غير متاح', 'غير متاح'],
   ]);
   expect(paymentSection.textContent).toContain('رصيد البداية 10.00');
   expect(paymentSection.textContent).toContain('بيانات غير مكتملة');
@@ -133,12 +133,12 @@ test('supplier covered invoices and accepted returns use evidence once and show 
 test('provider totals use the server net and one row instead of repeating claim fee details',async()=>{
  await render({obligations:[{id:'provider:o',party_type:'provider',party_id:'tabby',currency:'SAR'}],parties:[{party_type:'provider',party_id:'tabby',currency:'SAR',name:'تابي'}],details:{
    provider_reports:{'provider:o':{gross:'100.00',estimated_fees:'5.00',actual_fees:'4.00',settled:'86.00'}},
-   provider_balances:{SAR:[{provider:'tabby',name:'تابي',orders:1,gross:'100.00',fees:'4.00',refunded:'10.00',net:'0.00',opening:'0.00',settled:'86.00',complete:true}]}
+   provider_balances:{SAR:[{provider:'tabby',name:'تابي',orders:1,paid_orders:1,pending_orders:0,gross:'100.00',fees:'4.00',refunded:'10.00',net:'0.00',opening:'0.00',settled:'86.00',complete:true}]}
  }});
  const panel=section('تفاصيل منصات الدفع');
  expect(panel.querySelectorAll('tbody tr')).toHaveLength(1);
- expect(panel.querySelectorAll('thead th')).toHaveLength(6);
- expect([...panel.querySelector('tbody tr').cells].slice(1).map(cell=>cell.textContent)).toEqual(['1','100.00','4.00','10.00','0.00']);
+ expect(panel.querySelectorAll('thead th')).toHaveLength(7);
+ expect([...panel.querySelector('tbody tr').cells].slice(1).map(cell=>cell.textContent)).toEqual(['1','100.00','4.00','10.00','0.00','0']);
  expect(panel.textContent).toContain('المحول للبنك 86.00');
  expect(panel.textContent).not.toContain('5.00');
  expect(panel.textContent).not.toContain('provider:o');

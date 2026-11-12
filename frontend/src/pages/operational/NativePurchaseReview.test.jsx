@@ -25,12 +25,13 @@ function preview(extra={}){return {session_scope:SCOPE,read_only:true,invoice_id
 function approval(body){return {ok:true,invoice_id:'invoice1',request_id:body.request_id,supplier_difference_sar:'55.00',
   actual_bank_transfer_executed:false,native_ledger_changed:false};}
 beforeEach(()=>{global.IS_REACT_ACT_ENVIRONMENT=true;host=document.createElement('div');document.body.appendChild(host);root=createRoot(host);
+  Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});
   jest.resetAllMocks();sessionStorage.clear();requestId.mockReturnValue('one-intent');
   api.supplierInvoiceReview.mockResolvedValue({session_scope:SCOPE,read_only:true,native_purchase_review:[{invoice_id:'invoice1',source_declared_gross_sar:'80.00',supplier_id:'supplier1'}]});
   api.nativePurchaseCandidates.mockResolvedValue(candidate());api.previewNativePurchaseLink.mockResolvedValue(preview());
   api.approveNativePurchaseLink.mockImplementation(body=>Promise.resolve(approval(body)));
 });
-afterEach(async()=>{await act(async()=>root.unmount());host.remove();});
+afterEach(async()=>{await act(async()=>root.unmount());host.remove();delete document.visibilityState;});
 async function choose(){await render();await click('مطابقة فواتير الشراء والسداد');await set('فاتورة الشراء للمطابقة','invoice1');}
 async function newPreview(){await choose();await set('طريقة ربط مستحق الفاتورة','new');await set('سداد pay1','__new__');
   await set('مرجع مراجعة المطابقة','invoice + bank proof');await click('معاينة الفرق قبل الاعتماد');}
@@ -50,7 +51,7 @@ test('existing debt and payment are deliberately chosen and zero differences sta
   api.previewNativePurchaseLink.mockResolvedValue(preview({before:{supplier_outstanding_sar:'55.00',banks:{bank1:'975.00'}},after:{supplier_outstanding_sar:'55.00',banks:{bank1:'975.00'}},supplier_difference_sar:'0.00',bank_differences_sar:{bank1:'0.00'},unrecorded_money_confirmation_required:false}));
   await choose();await set('طريقة ربط مستحق الفاتورة','existing');
   await act(async()=>host.querySelector('input[type="checkbox"]').click());await set('سداد pay1','old-payment');await set('مرجع مراجعة المطابقة','exact saved documents');await click('معاينة الفرق قبل الاعتماد');
-  expect(api.previewNativePurchaseLink).toHaveBeenCalledWith(expect.objectContaining({existing_obligation_ids:['old-obligation'],payment_links:[{payment_operation_id:'pay1',movement_id:'old-payment'}]}));
+  expect(api.previewNativePurchaseLink).toHaveBeenCalledWith(expect.objectContaining({existing_obligation_ids:['old-obligation'],payment_links:[{payment_operation_id:'pay1',movement_id:'old-payment'}]}),expect.objectContaining({signal:expect.any(AbortSignal)}));
   expect(input('تأكيد المبالغ غير المسجلة')).toBeNull();await check('تأكيد هويات المطابقة');await click('اعتماد الفرق التشغيلي المعروض');expect(api.approveNativePurchaseLink).toHaveBeenCalledTimes(1);
 });
 
@@ -122,4 +123,36 @@ test('mismatched success acknowledgement retains the request for safe replay',as
 test('empty list is explicit and does not display zero obligations as matched',async()=>{
   api.supplierInvoiceReview.mockResolvedValue({session_scope:SCOPE,read_only:true,native_purchase_review:[]});await render();await click('مطابقة فواتير الشراء والسداد');
   expect(host.textContent).toContain('لا توجد فواتير شراء');expect(api.approveNativePurchaseLink).not.toHaveBeenCalled();
+});
+
+const visibility=async value=>act(async()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value});document.dispatchEvent(new Event('visibilitychange'));});
+test('a hidden review starts no financial read and a completed read is not repeated on focus',async()=>{
+  await visibility('hidden');await render();
+  expect(api.supplierInvoiceReview).not.toHaveBeenCalled();
+  await click('مطابقة فواتير الشراء والسداد');expect(api.supplierInvoiceReview).not.toHaveBeenCalled();
+  await visibility('visible');expect(api.supplierInvoiceReview).toHaveBeenCalledTimes(1);
+  await visibility('hidden');await visibility('visible');await act(async()=>window.dispatchEvent(new Event('focus')));
+  expect(api.supplierInvoiceReview).toHaveBeenCalledTimes(1);
+});
+test('hiding an invoice candidate read aborts it and ignores its late result',async()=>{
+  let resolve;api.nativePurchaseCandidates.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));
+  await choose();const config=api.nativePurchaseCandidates.mock.calls[0][1];
+  await visibility('hidden');expect(config.signal.aborted).toBe(true);
+  await act(async()=>resolve(candidate()));expect(input('طريقة ربط مستحق الفاتورة')).toBeNull();
+  await visibility('visible');expect(api.nativePurchaseCandidates).toHaveBeenCalledTimes(2);
+  expect(input('طريقة ربط مستحق الفاتورة')).not.toBeNull();
+});
+test('unmount cancels a pending read-only money preview without approving it',async()=>{
+  let resolve;api.previewNativePurchaseLink.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));
+  await newPreview();const config=api.previewNativePurchaseLink.mock.calls[0][1];
+  await act(async()=>root.render(null));expect(config.signal.aborted).toBe(true);
+  await act(async()=>resolve(preview()));expect(api.approveNativePurchaseLink).not.toHaveBeenCalled();
+});
+test('hiding during explicit approval observes its acknowledgement without retrying or refreshing',async()=>{
+  let resolve;api.approveNativePurchaseLink.mockImplementationOnce(body=>new Promise(done=>{resolve=()=>done(approval(body));}));
+  await approveNew();expect(api.approveNativePurchaseLink.mock.calls[0]).toHaveLength(1);
+  await visibility('hidden');await act(async()=>resolve());
+  expect(sessionStorage.getItem(storageKey)).toBeNull();expect(api.approveNativePurchaseLink).toHaveBeenCalledTimes(1);
+  expect(api.supplierInvoiceReview).toHaveBeenCalledTimes(1);
+  await visibility('visible');expect(api.previewNativePurchaseLink).toHaveBeenCalledTimes(1);
 });

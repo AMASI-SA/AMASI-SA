@@ -16,6 +16,7 @@ from operational_balance_sources import entities, rows
 from operational_native_purchase_review import load_native_purchase_reviews
 from operational_native_purchase_link import build_link_plan, validate_saved_link, LINKS
 from operational_supplier_invoice_preview import SnapshotReads, native_purchase_inventory
+from operational_financial_activity_runtime import checked_rows, preparation_checkpoint, prepare_in_thread
 
 
 async def _owner(db, owner, actor):
@@ -46,7 +47,7 @@ async def _read_context(db, owner, selection, stamp):
                     fail('native_link_supplier_unavailable', 'هوية المورد غير مكتملة في المحاسبة التشغيلية')
                 banks = await entities(scoped, owner, 'bank')
                 preparation = await rows(scoped, owner, 'mezan_supplier_invoices_v2')
-                inventory = native_purchase_inventory(state, preparation, invoices, owner=owner, as_of=stamp)
+                inventory = await prepare_in_thread(native_purchase_inventory, state, preparation, invoices, owner=owner, as_of=stamp)
                 collisions = inventory[0]['possible_existing_documents']
                 return state, inv, proof, suppliers[0], banks, collisions
     except PyMongoError:
@@ -60,12 +61,13 @@ async def preview(db, owner, actor, selection, *, clock=None):
     stamp = clock or now()
     context = await _read_context(db, owner, selection, stamp)
     state, inv, source, supplier, banks, collisions = context
-    result, _ = build_link_plan(state, inv, source, selection, supplier=supplier,
-                               banks=banks, as_of=stamp, collisions=collisions)
+    result, _ = await prepare_in_thread(build_link_plan, state, inv, source, selection, supplier=supplier,
+                                       banks=banks, as_of=stamp, collisions=collisions)
+    saved_match = await prepare_in_thread(validate_saved_link, state, inv, source)
     result.update(session_scope=digest([owner, actor]), snapshot_consistent=True,
         source_issues=source.get('issues', []) if not source.get('source_verified') else [],
         possible_existing_documents=collisions,
-        saved_match=validate_saved_link(state, inv, source))
+        saved_match=saved_match)
     await _owner(db, owner, actor)
     await active_gate(db, owner, state)
     return result
@@ -77,20 +79,26 @@ async def candidates(db, owner, actor, invoice_id, *, clock=None):
     stamp = clock or now()
     selection = {'invoice_id': invoice_id}
     state, inv, source, supplier, banks, collisions = await _read_context(db, owner, selection, stamp)
-    obligations = [deepcopy(row) for row in state.get('engine', {}).get('obligations', {}).values()
+    result = await prepare_in_thread(_candidate_result, state, invoice_id, source, supplier, collisions, owner=owner, actor=actor)
+    await _owner(db, owner, actor)
+    await active_gate(db, owner, state)
+    return result
+
+
+def _candidate_result(state, invoice_id, source, supplier, collisions, *, owner, actor):
+    preparation_checkpoint()
+    obligations = [deepcopy(row) for row in checked_rows(state.get('engine', {}).get('obligations', {}).values())
         if row.get('party_type') == 'supplier' and row.get('party_id') == supplier['id'] and row.get('currency') == 'SAR']
-    moves = [deepcopy(m) for m in state['movements'] if m.get('party_type') == 'supplier'
+    moves = [deepcopy(m) for m in checked_rows(state['movements']) if m.get('party_type') == 'supplier'
         and m.get('party_id') == supplier['id'] and m.get('direction') == 'outgoing' and m.get('currency') == 'SAR']
     allowed_obligation = ('id', 'invoice_id', 'invoice_number', 'confirmed', 'expected', 'business_date', 'label')
     allowed_movement = ('id', 'amount', 'bank_id', 'bank_name', 'occurred_at', 'reference', 'allocations')
     result = dict(invoice_id=invoice_id, supplier_name=supplier.get('name', supplier['id']), source=source,
-        existing_obligations=[{k: o.get(k) for k in allowed_obligation} for o in obligations],
-        existing_movements=[{k: m.get(k) for k in allowed_movement} for m in moves],
+        existing_obligations=[{k: o.get(k) for k in allowed_obligation} for o in checked_rows(obligations)],
+        existing_movements=[{k: m.get(k) for k in allowed_movement} for m in checked_rows(moves)],
         saved_link=deepcopy((state.get(LINKS) or {}).get(invoice_id)),
         possible_existing_documents=collisions, snapshot_consistent=True, read_only=True,
         posting_allowed=False, session_scope=digest([owner, actor]))
-    await _owner(db, owner, actor)
-    await active_gate(db, owner, state)
     return result
 
 

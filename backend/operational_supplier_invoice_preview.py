@@ -16,6 +16,7 @@ from operational_balance_engine import reconcile
 from operational_balance_sources import ALLOWED_COLLECTIONS, collect_sources, instant, rows
 from operational_balance_store import AUDIT_PAGES, STATES, digest, fail, read
 from operational_supplier_reconciliation import compare_supplier_invoices
+from operational_financial_activity_runtime import checked_rows, preparation_checkpoint, prepare_in_thread
 
 READS = ALLOWED_COLLECTIONS | {STATES, AUDIT_PAGES, 'mz2_atomic_owners'}
 NATIVE_LIMIT = 20000
@@ -74,17 +75,20 @@ def supplier_proposal(current, receipts, as_of):
     Preserve every other fact, opening, movement, return and salary/provider row.
     This result must never be persisted; only the comparator receives it.
     """
+    preparation_checkpoint()
     isolated = deepcopy(current)
     old_engine = current.get('engine', {})
     isolated['engine'] = {
-        'obligations': {k: deepcopy(v) for k, v in old_engine.get('obligations', {}).items() if v.get('kind') == 'supplier'},
-        'facts': {k: deepcopy(v) for k, v in old_engine.get('facts', {}).items() if k.startswith(('receipt:', 'return:'))},
+        'obligations': {k: deepcopy(v) for k, v in checked_rows(old_engine.get('obligations', {}).items()) if v.get('kind') == 'supplier'},
+        'facts': {k: deepcopy(v) for k, v in checked_rows(old_engine.get('facts', {}).items()) if k.startswith(('receipt:', 'return:'))},
     }
     projected = reconcile(isolated, {'supplier_receipts': receipts}, as_of)['engine']
+    preparation_checkpoint()
     proposed = deepcopy(current)
+    preparation_checkpoint()
     engine = proposed.setdefault('engine', {})
     engine.setdefault('facts', {}).update(projected.get('facts', {}))
-    for key, row in projected.get('obligations', {}).items():
+    for key, row in checked_rows(projected.get('obligations', {}).items()):
         if row.get('kind') == 'supplier':
             engine.setdefault('obligations', {})[key] = row
     engine['as_of'] = as_of
@@ -101,25 +105,26 @@ def native_purchase_inventory(state, preparation, native, *, owner, as_of):
     Source-declared amounts/GL references are NOT verified ledger balances.
     Native purchase proof, settlement and opening matching remain explicit gates.
     """
+    preparation_checkpoint()
     if not isinstance(native, list) or len(native) > NATIVE_LIMIT:
         raise ValueError('supplier_preview_native_scope_incomplete')
-    counts = Counter(r.get('id') for r in native if isinstance(r, dict))
+    counts = Counter(r.get('id') for r in checked_rows(native) if isinstance(r, dict))
     references = {}
     def add(supplier, reference, kind, identity):
         ref = _reference(reference)
         if supplier and ref:
             references.setdefault((supplier, ref), set()).add((kind, str(identity)))
-    for invoice in preparation:
+    for invoice in checked_rows(preparation):
         add(invoice.get('supplier_id'), invoice.get('invoice_number'), 'preparation_invoice', invoice.get('id'))
-    for invoice in state.get('inventory_purchases', []):
+    for invoice in checked_rows(state.get('inventory_purchases', [])):
         # New operational sequence numbers must NOT stand in for the vendor's reference.
         ref = invoice.get('supplier_invoice_number') if 'supplier_invoice_number' in invoice else invoice.get('invoice_number')
         add(invoice.get('supplier_id'), ref, 'operational_purchase', invoice.get('id'))
-    for case in state.get('customer_exchanges', []):
-        for invoice in case.get('purchases', []):
+    for case in checked_rows(state.get('customer_exchanges', [])):
+        for invoice in checked_rows(case.get('purchases', [])):
             add(invoice.get('supplier_id'), invoice.get('invoice_number'), 'exchange_purchase', invoice.get('id'))
     out = []
-    for invoice in native:
+    for invoice in checked_rows(native):
         if not isinstance(invoice, dict) or invoice.get('user_id') != owner:
             raise ValueError('supplier_preview_native_owner_mismatch')
         iid, supplier = invoice.get('id'), invoice.get('supplier_counterparty_id') or invoice.get('supplier_id')
@@ -167,19 +172,8 @@ async def _preview(scoped, owner, as_of):
     stamp = instant(as_of).isoformat()
     sources = await collect_sources(scoped, owner, state['started_at'], stamp, operational_state=state)
     invoices = await rows(scoped, owner, 'mezan_supplier_invoices_v2')
-    proposal, reducer_issues = supplier_proposal(state, sources.get('supplier_receipts', []), stamp)
-    result = compare_supplier_invoices(state, proposal, invoices, owner_id=owner, as_of=stamp)
-    # Keep source diagnostics, including the original reference and scope. Missing
-    # receipt evidence is not made complete by a perfectly balanced arithmetic sum.
-    source_issues = sources.get('issues', [])
-    blocking = [p for p in source_issues + reducer_issues
-                if str(p.get('source_id', '')).startswith(('receipt:', 'supplier:'))
-                or str(p.get('code', '')).startswith(('supplier_', 'preparation_'))]
-    for problem in blocking:
-        if problem not in result['issues']:
-            result['issues'].append(deepcopy(problem))
-    if blocking:
-        result['arithmetic_complete'], result['totals'] = False, None
+    proposal, reducer_issues = await prepare_in_thread(supplier_proposal, state, sources.get('supplier_receipts', []), stamp)
+    result = await prepare_in_thread(compare_supplier_invoices, state, proposal, invoices, owner_id=owner, as_of=stamp)
     native = await scoped['purchase_invoices'].find({'user_id': owner, 'state': 'approved'}, {
         '_id': 0, 'user_id': 1, 'id': 1, 'invoice_number': 1, 'state': 1, 'schema_version': 1,
         'supplier_counterparty_id': 1, 'supplier_entity_id': 1, 'supplier_account_id': 1, 'supplier_id': 1,
@@ -187,13 +181,32 @@ async def _preview(scoped, owner, as_of):
         'subtotal': 1, 'tax_amount': 1, 'tax_treatment': 1, 'lines': 1,
         'inventory_account_id': 1, 'input_vat_account_id': 1, 'tax_evidence_ref': 1, 'tax_evidence_verified': 1,
     }).to_list(length=NATIVE_LIMIT + 1)
-    candidates = native_purchase_inventory(state, invoices, native, owner=owner, as_of=stamp)
+    candidates = await prepare_in_thread(native_purchase_inventory, state, invoices, native, owner=owner, as_of=stamp)
     from operational_native_purchase_review import load_native_purchase_reviews
     native_proof = await load_native_purchase_reviews(scoped.db, owner, native,
         session=scoped.session, started_at=state['started_at'], as_of=stamp)
+    return await prepare_in_thread(_complete_preview, state, sources, result, reducer_issues,
+        native, candidates, native_proof, invoices, owner=owner, stamp=stamp)
+
+
+def _complete_preview(state, sources, result, reducer_issues, native, candidates, native_proof,
+                      invoices, *, owner, stamp):
+    """Finish exact source matching and its manifest in the reader's CPU scope."""
+    preparation_checkpoint()
+    # Keep source diagnostics, including the original reference and scope. Missing
+    # receipt evidence is not made complete by a perfectly balanced arithmetic sum.
+    source_issues = sources.get('issues', [])
+    blocking = [p for p in checked_rows(source_issues + reducer_issues)
+                if str(p.get('source_id', '')).startswith(('receipt:', 'supplier:'))
+                or str(p.get('code', '')).startswith(('supplier_', 'preparation_'))]
+    for problem in checked_rows(blocking):
+        if problem not in result['issues']:
+            result['issues'].append(deepcopy(problem))
+    if blocking:
+        result['arithmetic_complete'], result['totals'] = False, None
     from operational_native_purchase_link import validate_saved_link
-    native_by_id = {row['id']: row for row in native}
-    for candidate in candidates:
+    native_by_id = {row['id']: row for row in checked_rows(native)}
+    for candidate in checked_rows(candidates):
         candidate['native_ledger_review'] = native_proof.get(candidate['invoice_id'])
         match = validate_saved_link(state, native_by_id[candidate['invoice_id']], candidate['native_ledger_review'] or {})
         candidate['operational_link_review'] = match
@@ -213,7 +226,8 @@ async def _preview(scoped, owner, as_of):
         scope='approved_preparation_invoices; native_purchases_separate_unverified',
         review_manifest_sha256=digest({'owner': owner, 'state': state, 'receipts': sources.get('supplier_receipts', []),
                                       'invoices': invoices, 'native': native, 'native_proof': native_proof, 'as_of': stamp}))
-    for row in result['rows']:
+    preparation_checkpoint()
+    for row in checked_rows(result['rows']):
         row['required_action'] = ACTION if row.get('difference') != '0.00' or row.get('issues') else 'لا تعِد تسجيل الفاتورة؛ راجع السداد عند الحاجة'
     return result
 
@@ -222,10 +236,16 @@ async def _receiving_only(scoped, owner, observed_at):
     """Two tenant reads plus the accounting-mode guard inside a snapshot, no order scan or ledger."""
     from operational_balance_service import accounting_inactive
     from operational_receiving_coverage import compare_receiving
+    from operational_balance_archive import SNAPSHOT, ArchiveError, unpack_financial_snapshot
     await accounting_inactive(scoped, owner)
     state = await scoped[STATES].find_one({"_id": owner, "owner_id": owner},
         {"_id": 0, "owner_id": 1, "status": 1, "started_at": 1, "revision": 1,
-         "engine.as_of": 1, "engine.obligations": 1, "engine.facts": 1})
+         "engine.as_of": 1, "engine.obligations": 1, "engine.facts": 1, SNAPSHOT: 1})
+    if state:
+        try:
+            state = await prepare_in_thread(unpack_financial_snapshot, state, selected={"obligations", "facts"})
+        except ArchiveError:
+            fail("operational_audit_archive_invalid", "تعذر التحقق من لقطة الأرصدة المحفوظة", 503)
     if not state or state.get("status") != "active" or not state.get("engine", {}).get("as_of"):
         fail("supplier_review_no_saved_snapshot", "لا توجد لقطة تشغيلية نشطة يمكن مطابقتها.")
     fields = ("id user_id supplier_id invoice_number approved_at currency status experiment_mode experiment_run_id "
@@ -239,7 +259,7 @@ async def _receiving_only(scoped, owner, observed_at):
         {"user_id": owner, "status": {"$in": [None, "payable_posted"]}, "approved_at": {"$ne": None},
          "experiment_mode": {"$ne": True}},
         {"_id": 0, **dict.fromkeys(fields, 1)}).to_list(length=NATIVE_LIMIT + 1)
-    result = compare_receiving(state, invoices, owner=owner, observed_at=observed_at)
+    result = await prepare_in_thread(compare_receiving, state, invoices, owner=owner, observed_at=observed_at)
     result.update(snapshot_consistent=True, state_revision=state.get("revision"))
     return result
 
@@ -260,7 +280,7 @@ async def _correction_preview(scoped, owner, observed_at, invoice_id, expected_a
         fail("supplier_review_stale_snapshot", "تغيرت اللقطة التشغيلية؛ أعد فحص فواتير الاستلام.")
     invoices = await scoped["mezan_supplier_invoices_v2"].find(
         {"user_id": owner, "id": _id(invoice_id)}, {"_id": 0}).to_list(length=2)
-    comparison = compare_receiving(state, invoices, owner=owner, observed_at=observed_at)
+    comparison = await prepare_in_thread(compare_receiving, state, invoices, owner=owner, observed_at=observed_at)
     if len(invoices) != 1 or len(comparison["rows"]) != 1:
         fail("supplier_review_invoice_unavailable", "لم توجد هذه الفاتورة ضمن فترة اللقطة.", 404)
     row = comparison["rows"][0]

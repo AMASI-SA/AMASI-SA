@@ -1,14 +1,24 @@
-import React,{useState,useRef} from 'react';
+import React,{useState,useRef,useEffect} from 'react';
 import {operationalApi as api,requestId,messageFor} from './api';
 import {Field,Notice} from './OpeningBalances';
+import {visibleOperationalRead} from './visibleOperationalRead';
 import {inventoryIdentity, inventoryVariant} from './inventoryIdentity';
 const today=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);};
 export default function SupplierAdjustments({context,supplierId,kind='discount'}){
  const scope=context.session_scope,key=`mezan.operational.supplier-adjustment.v1:${scope}`;
  const [recovery]=useState(()=>{try{const c=JSON.parse(localStorage.getItem(key)||'null');if(c&&(!c.body?.request_id||c.body.expected_session_scope!==scope||!c.invoice_number||!['discount','return'].includes(c.body.kind)))throw Error();return {command:c};}catch{return {error:'تعذر قراءة العملية المحفوظة؛ لا يمكن الإرسال قبل استعادة التخزين.'};}});
  const [pending,setPending]=useState(recovery.command),[invoice,setInvoice]=useState(null),[number,setNumber]=useState(''),[amount,setAmount]=useState(''),[quantities,setQuantities]=useState({}),[reference,setReference]=useState(''),[day,setDay]=useState(today),[accepted,setAccepted]=useState(false),[note,setNote]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(recovery.error||''),[message,setMessage]=useState('');
+ const lookupRead=useRef(null),readLane=useRef({});
+ useEffect(()=>()=>{lookupRead.current?.();lookupRead.current=null;},[scope,supplierId]);
  const lock=useRef(false),writable=context.status==='active'&&context.permissions?.move===true,disabled=busy||!!pending||!!recovery.error||!writable;
- async function lookup(){if(disabled||!number.trim())return;setBusy(true);setError('');setInvoice(null);setQuantities({});try{setInvoice(await api.supplierAdjustmentEntry(supplierId,number.trim()));}catch(e){setError(messageFor(e));}finally{setBusy(false);}}
+ function lookup(){
+  if(disabled||!number.trim())return;
+  const selectedNumber=number.trim();setBusy(true);setError('');setInvoice(null);setQuantities({});
+  lookupRead.current?.();
+  lookupRead.current=visibleOperationalRead(config=>api.supplierAdjustmentEntry(supplierId,selectedNumber,config),{
+   onData:setInvoice,onError:e=>setError(messageFor(e)),onEnd:()=>setBusy(false),
+  },readLane.current);
+ }
  async function save(){if(lock.current||!writable||recovery.error)return;lock.current=true;setBusy(true);setError('');setMessage('');try{
   let command=pending;
   if(!command){

@@ -18,6 +18,7 @@ jest.mock('./api', () => ({
     finish: jest.fn(),
     addEntity: jest.fn(),
     reports: jest.fn(),
+    refreshBalances: jest.fn(),
     costExposure: jest.fn(),
     obligations: jest.fn(),
     receipt: jest.fn(),
@@ -79,6 +80,7 @@ beforeEach(() => {
     summary: {},
     issues: []
   });
+  api.refreshBalances.mockResolvedValue({status:'refreshed'});
   api.costExposure.mockResolvedValue({status:'preview',currencies:{},groups:[],issues:[]});
   api.movement.mockResolvedValue({});
   api.movements.mockResolvedValue({items:[]});
@@ -257,7 +259,7 @@ test('mobile daily permission never fetches private reports or renders supplier 
  expect(host.textContent).not.toContain('مرتجع مقبول من المورد');
  expect(api.reports).not.toHaveBeenCalled();expect(api.audit).not.toHaveBeenCalled();
  await click('حركات أخرى');await input(host.querySelectorAll('select')[0],'supplier');await input(host.querySelectorAll('select')[1],'supplier1');await input(host.querySelectorAll('select')[3],'settlement');
- expect(api.obligations).toHaveBeenCalledWith('supplier','supplier1');expect(api.reports).not.toHaveBeenCalled();
+ expect(api.obligations).toHaveBeenCalledWith('supplier','supplier1',{signal:expect.any(AbortSignal)});expect(api.reports).not.toHaveBeenCalled();
 });
 test('report reads once while visible and stops on unmount',async()=>{
  jest.useFakeTimers();
@@ -314,7 +316,7 @@ test('recurring estimate is explicitly allocatable while other estimates stay ex
 test('native recurring expense category exposes explicit settlement instead of silently paying as advance',async()=>{
  api.obligations.mockResolvedValue({items:[{id:'native-rent:day',kind:'recurring',party_type:'operating_expense',party_id:'operating_expense1',currency:'SAR',direction:'payable',outstanding:'0.00',expected:'100.00',available_to_pay:'100.00',pending_confirmation:true,label:'إيجار الفرع'}]});
  await render(<DailyMovements/>);await input(host.querySelectorAll('select')[0],'operating_expense');await input(host.querySelectorAll('select')[1],'operating_expense1');
- expect(api.obligations).toHaveBeenCalledWith('operating_expense','operating_expense1');expect(host.textContent).toContain('تسوية التزام دوري');
+ expect(api.obligations).toHaveBeenCalledWith('operating_expense','operating_expense1',{signal:expect.any(AbortSignal)});expect(host.textContent).toContain('تسوية التزام دوري');
  await input(host.querySelectorAll('select')[2],'bank:bank1');await input(host.querySelectorAll('select')[3],'settlement');await input(host.querySelectorAll('input')[0],'40.00');await input(host.querySelectorAll('input')[1],'40.00');await click('حفظ الحركة');
  expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({kind:'settlement',party_type:'operating_expense',source_account_type:'bank',amount:'40.00',allocations:[{obligation_id:'native-rent:day',amount:'40.00'}]}));
 });
@@ -407,11 +409,12 @@ test('scope change after lost response never replays old intent under new owner'
  await click('إعادة محاولة الحركة');expect(api.movement).toHaveBeenCalledTimes(1);expect(JSON.parse(localStorage.getItem(pendingMovementKey('test-owner:test-actor'))).payload).toEqual(first);expect(host.querySelector('fieldset').disabled).toBe(true);
 });
 
-test('successful Web save rereads persisted history through the existing API',async()=>{
- api.movements.mockResolvedValueOnce({items:[]}).mockResolvedValue({items:[{id:'saved-operation',name:'المورد المحفوظ',amount:'50.00',currency:'SAR',direction:'outgoing',source:'mezan2',reference:'WEB-SAVED'}]});
- await render(<OperationalBalances/>);await click('حركات أخرى');await fillMovement();await click('حفظ الحركة');
- expect(api.movement).toHaveBeenCalledTimes(1);expect(api.movements).toHaveBeenCalledTimes(2);
- expect(host.textContent).toContain('WEB-SAVED');expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
+test('successful Web save keeps history unloaded and exposes the separate daily movements page',async()=>{
+ await render(<OperationalBalances/>);expect(api.movements).not.toHaveBeenCalled();
+ await click('حركات أخرى');expect(api.movements).not.toHaveBeenCalled();
+ await fillMovement();await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenCalledTimes(1);expect(api.movements).not.toHaveBeenCalled();
+ expect([...host.querySelectorAll('a')].find(link=>link.textContent==='عرض سجل الحركات المالية اليومية')?.getAttribute('href')).toBe('/operational-balances/daily-movements');
 });
 
 test('manual operational movement has no receipt upload requirement',async()=>{

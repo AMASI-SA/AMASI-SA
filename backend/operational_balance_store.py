@@ -20,7 +20,7 @@ RECEIPTS = "operational_balance_receipts_v1"
 OPERATION_CLAIMS = "operational_balance_operation_claims_v1"
 MAX_STATE_BYTES = 12 * 1024 * 1024
 
-# Set only by authenticated mutation routes; background reconciliation has no actor.
+# Set only by authenticated mutation routes, including visible-page refresh.
 AUTHORIZATION_GUARD = ContextVar("operational_authorization_guard", default=None)
 
 
@@ -70,34 +70,53 @@ async def mutate(db, owner, operation):
     Callers revalidate source identity/permissions on every retry. No process
     mutex and no last-write-wins fallback; concurrent workers use the revision.
     """
+    from operational_demand_refresh import demand_context, run_calculation
+
+    async def prepare_change(function, *args):
+        # Only a visible refresh owns cancellable calculation here. Explicit
+        # financial writers retain their existing admission and commit rules.
+        if demand_context() is not None:
+            return await run_calculation(function, *args)
+        return function(*args)
+
     for _ in range(12):
         await check_authorization()
         stored = await _raw_state(db, owner)
         before = await logical_state(db, owner, stored)
-        after = deepcopy(before)
+        after = await prepare_change(deepcopy, before)
         result = await operation(after)
         await check_authorization()
-        if after == before:
+        if await prepare_change(lambda: after == before):
             return result
         after["revision"] = before["revision"] + 1
         try:
-            packed, pages = prepare(owner, stored, before, after, MAX_STATE_BYTES)
-            await stage_pages(db, pages)
+            packed, pages = await prepare_change(prepare, owner, stored, before, after, MAX_STATE_BYTES)
         except ArchiveError:
             fail("operational_audit_archive_invalid", "تعذر التحقق من اكتمال سجل التدقيق التشغيلي", 503)
         except CapacityError:
             fail("operational_capacity_requires_archive", "بلغ السجل حد السعة؛ يلزم أرشفة معتمدة دون حذف التاريخ")
-        # Recheck after every source read and immediately before the CAS write.
-        await check_authorization()
-        if before["revision"] == 0:
+
+        async def commit():
             try:
-                await db[STATES].insert_one(packed)
-                return result
-            except DuplicateKeyError:
-                continue
-        changed = await db[STATES].replace_one(
-            {"_id": owner, "owner_id": owner, "revision": before["revision"]}, packed)
-        if changed.matched_count == 1:
+                await stage_pages(db, pages)
+            except ArchiveError:
+                fail("operational_audit_archive_invalid", "تعذر التحقق من اكتمال سجل التدقيق التشغيلي", 503)
+            # Recheck source identity/permissions immediately before the CAS.
+            await check_authorization()
+            if before["revision"] == 0:
+                try:
+                    await db[STATES].insert_one(packed)
+                    return True
+                except DuplicateKeyError:
+                    return False
+            changed = await db[STATES].replace_one(
+                {"_id": owner, "owner_id": owner, "revision": before["revision"]}, packed)
+            return changed.matched_count == 1
+
+        # Demand refresh admits this write only while connected, then observes
+        # its atomic result even if the page leaves. Other writers are unchanged.
+        from operational_demand_refresh import run_commit
+        if await run_commit(commit):
             return result
     fail("operational_concurrent_change", "تغيرت البيانات بالتزامن؛ أعد المحاولة")
 
@@ -125,6 +144,8 @@ def audit(state, actor, action, before, after, reason, source, at=None):
     event = {"id": digest([state["owner_id"], len(state["audit"]), action, stamp]),
              "actor_id": actor, "at": stamp, "action": action, "before": deepcopy(before),
              "after": deepcopy(after), "reason": reason, "source": source}
+    from operational_financial_activity import capture_after_balances
+    capture_after_balances(state, event)
     state["audit"].append(event)
 
 

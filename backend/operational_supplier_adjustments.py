@@ -8,18 +8,19 @@ from operational_balance_store import mutate, fail, digest, now, claim_movement,
 from operational_balance_service import active_gate, entity, money, fmt
 from operational_balance_sources import instant
 from operational_inventory_identity import line_identity, variant_fields, compatible_payload
+from operational_financial_activity_runtime import preparation_checkpoint, checked_rows
 
 
 def invoices(state):
-    for invoice in state.get('inventory_purchases', []):
+    for invoice in checked_rows(state.get('inventory_purchases', [])):
         yield 'inventory', invoice
-    for case in state.get('customer_exchanges', []):
+    for case in checked_rows(state.get('customer_exchanges', [])):
         for invoice in case['purchases']:
             yield 'exchange', invoice
 
 
 def credits(state, invoice_id):
-    return sum((Decimal(a['gross']) for a in state.get('supplier_adjustments', []) if a['invoice_id']==invoice_id), Decimal(0))
+    return sum((Decimal(a['gross']) for a in checked_rows(state.get('supplier_adjustments', [])) if a['invoice_id']==invoice_id), Decimal(0))
 
 
 def adjusted_gross(state, invoice):
@@ -27,20 +28,21 @@ def adjusted_gross(state, invoice):
 
 
 def invoice_view(state, kind, invoice):
+    preparation_checkpoint()
     result=deepcopy(invoice)
     result['invoice_kind']=kind
     result['invoice_id']=invoice['id']
     result['obligation_id']=invoice.get('obligation_id') or 'exchange-purchase:'+invoice['id']
-    adjustments=[a for a in state.get('supplier_adjustments', []) if a['invoice_id']==invoice['id']]
+    adjustments=[a for a in checked_rows(state.get('supplier_adjustments', [])) if a['invoice_id']==invoice['id']]
     # A replacement invoice records order-item identity; display the matching
     # immutable case snapshot, never a catalogue guess or Legacy lookup.
     parent_items=[]
     if kind=='exchange':
-        parents=[case for case in state.get('customer_exchanges', [])
+        parents=[case for case in checked_rows(state.get('customer_exchanges', []))
                  if any(p['id']==invoice['id'] for p in case['purchases'])]
         if len(parents)==1:
             parent_items=parents[0]['items']
-    for line in result['lines']:
+    for line in checked_rows(result['lines']):
         line['kind']=line.get('kind','product')
         if kind=='exchange':
             snapshots=[item for item in parent_items if item['id']==line['item_id']]
@@ -54,7 +56,7 @@ def invoice_view(state, kind, invoice):
         line['remaining_quantity']=line['quantity']-line['returned_quantity']
         for key in ('net','tax','gross'):
             line['remaining_'+key]=fmt(Decimal(line[key])-sum((Decimal(l[key]) for l in used),Decimal(0)))
-    paid=sum((Decimal(a['amount']) for m in state['movements'] for a in m.get('allocations',[]) if a['obligation_id']==result['obligation_id']),Decimal(0))
+    paid=sum((Decimal(a['amount']) for m in checked_rows(state['movements']) for a in m.get('allocations',[]) if a['obligation_id']==result['obligation_id']),Decimal(0))
     balance=Decimal(adjusted_gross(state,invoice))-paid
     result.update(adjustments=deepcopy(adjustments), adjusted_gross=adjusted_gross(state,invoice), settled=fmt(paid), outstanding=fmt(max(balance,Decimal(0))), credit=fmt(max(-balance,Decimal(0))))
     return result

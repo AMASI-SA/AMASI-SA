@@ -99,3 +99,30 @@ test('add another row starts fresh while preserving the original customization',
   expect(input('الاسم — 1').value).toBe('فاطمة');
   await change('حالة المنتج — 1','raw');expect(input('الاسم — 1').disabled).toBe(true);expect(input('الاسم — 1').value).toBe('');
 });
+
+const visibility = async value => act(async () => {
+  Object.defineProperty(document, 'visibilityState', {configurable: true, value});
+  document.dispatchEvent(new Event('visibilitychange'));
+});
+beforeEach(() => Object.defineProperty(document, 'visibilityState', {configurable: true, value: 'visible'}));
+afterEach(() => Object.defineProperty(document, 'visibilityState', {configurable: true, value: 'visible'}));
+
+test('closing opening-inventory cancels its preview and cannot restart it on focus', async () => {
+  let resolve; api.previewInventoryOpening.mockImplementationOnce(() => new Promise(done => {resolve = done;}));
+  await render(); await fill(); await click('معاينة المخزون الافتتاحي');
+  const signal = api.previewInventoryOpening.mock.calls[0][1].signal;
+  await visibility('hidden'); expect(signal.aborted).toBe(true);
+  await act(async () => root.render(<div/>));
+  await act(async () => resolve({lines: [], preview_hash: 'late', financial_effect: 'none', writer_disabled: false}));
+  await visibility('visible');
+  expect(api.previewInventoryOpening).toHaveBeenCalledTimes(1); expect(api.approveInventoryOpening).not.toHaveBeenCalled();
+});
+
+test('opening approval has no read signal and finishes without hidden catalog reload', async () => {
+  let resolve; api.approveInventoryOpening.mockImplementationOnce(() => new Promise(done => {resolve = done;}));
+  await render(); await fill(); await click('معاينة المخزون الافتتاحي');
+  await act(async () => host.querySelector('[type=checkbox]').click()); await click('اعتماد المخزون الافتتاحي');
+  expect(api.approveInventoryOpening.mock.calls[0]).toHaveLength(1);
+  await visibility('hidden'); await act(async () => resolve({status: 'approved'}));
+  expect(host.textContent).toContain('تم اعتماد المخزون'); expect(api.inventoryOpeningContext).toHaveBeenCalledTimes(1);
+});

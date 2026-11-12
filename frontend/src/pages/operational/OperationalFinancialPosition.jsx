@@ -17,6 +17,9 @@ import HistoricalShippingFeeReview from "./HistoricalShippingFeeReview";
 import ProviderHistoryReview from "./ProviderHistoryReview";
 import PaginatedReportTable from "./PaginatedReportTable";
 import CustomerWalletBalance from "./CustomerWalletBalance";
+import PendingOrdersDialog from "./PendingOrdersDialog";
+import CompletedShippingFeeReview from "./CompletedShippingFeeReview";
+import { visibleOperationalRead, refreshVisibleSnapshot } from "./visibleOperationalRead";
 
 const emptyFilters = () => ({ order: "", party: "", payment: "" });
 const inactiveMessages = {
@@ -42,7 +45,7 @@ function SectionHeading({ id, number, title, children }) {
 
 function DataCell({ value, column }) {
     if (column.type === "money") return <Money value={value} role={column.role} />;
-    if (column.type === "count") return <bdi className="ofp-count" dir="ltr">{formatPositionCount(value)}</bdi>;
+    if (["count", "exceptions"].includes(column.type)) return <bdi className="ofp-count" dir="ltr">{formatPositionCount(value)}</bdi>;
     if (column.key === "as_of" && value) return formatRiyadhDateTime(value);
     return positionText(value);
 }
@@ -55,13 +58,16 @@ function ReportTable({ table, printing }) {
         <PaginatedReportTable rows={table.rows || []} label={table.title} pageSize={table.id === "provider_collections_expected" ? 10 : 13} showAll={printing && !hideInPrint}>{rows => <div className="ofp-table-scroll"><table>
             <thead><tr>{columns.map(column => <th scope="col" key={column.key}>{column.label}</th>)}</tr></thead>
             <tbody>{rows.map((row, index) => <tr key={row.id || index}>{columns.map(column =>
-                <td key={column.key} className={column.type === "text" ? "ofp-label-cell" : "ofp-value-cell"}><DataCell value={row[column.key]} column={column} /></td>)}</tr>)}
+                <td key={column.key} className={column.type === "text" ? "ofp-label-cell" : "ofp-value-cell"}>{column.type === "exceptions" && !printing
+                    ? <PendingOrdersDialog count={row[column.key]} details={row.pending_order_details} name={row.name || table.title} />
+                    : <DataCell value={row[column.key]} column={column} />}</td>)}</tr>)}
                 {!table.rows?.length && <tr><td className="ofp-empty-cell" colSpan={Math.max(columns.length, 1)}>{table.complete === true ? "لا توجد أرصدة مسجلة لهذا القسم." : "لم تتوفر بيانات مكتملة لهذا القسم."}</td></tr>}
             </tbody>
             {table.show_totals !== false && table.totals && Object.keys(table.totals).length > 0 && <tfoot><tr>{columns.map((column, index) => <td key={column.key}>
                 {index === 0 && column.type === "text" ? "الإجمالي" : <DataCell value={table.totals[column.key]} column={column} />}
             </td>)}</tr></tfoot>}
         </table></div>}</PaginatedReportTable>
+        {table.unassigned_order_details?.length > 0 && <div className="ofp-no-print"><PendingOrdersDialog count={table.unassigned_order_details.length} details={table.unassigned_order_details} name="طلبات لم تثبت جهة توصيلها" /></div>}
         <Notes items={table.notes} />
     </article>;
 }
@@ -80,7 +86,8 @@ function AmountTable({ title, rows = [], className = "", complete, printing }) {
         <PaginatedReportTable rows={rows} label={title} showAll={printing}>{pageRows => <table><thead><tr><th scope="col">البند</th><th scope="col">المبلغ</th></tr></thead><tbody>
             {pageRows.map(row => <tr key={row.id} className={["total", "positive", "negative"].includes(row.emphasis) ? `ofp-row-${row.emphasis}` : ""}>
                 <td className="ofp-label-cell">{row.label}{row.reason && <small className="ofp-row-reason">{row.reason}</small>}</td>
-                <td><Money value={row.amount} role={row.emphasis === "positive" ? "receivable" : row.emphasis === "negative" ? "payable" : "neutral"} /></td>
+                <td><Money value={row.amount} role={row.emphasis === "positive" ? "receivable" : row.emphasis === "negative" ? "payable" : "neutral"} />
+                    {row.amount == null && row.known_subtotal != null && <small className="ofp-row-reason">المجموع المعلوم: <Money value={row.known_subtotal} /></small>}</td>
             </tr>)}
             {!rows.length && <tr><td className="ofp-empty-cell" colSpan="2">لم تتوفر بيانات مكتملة لهذا القسم.</td></tr>}
         </tbody></table>}</PaginatedReportTable>
@@ -114,7 +121,7 @@ function DeliveryDetails({ delivery, filters, onFiltersChange, currency }) {
                 {row.recognition_event === "order_completed" && <small>تم التنفيذ: {row.completed_at ? formatRiyadhDateTime(row.completed_at) : UNAVAILABLE}</small>}
                 <small>التسليم: {row.delivered_at ? formatRiyadhDateTime(row.delivered_at) : UNAVAILABLE}</small></td>
             <td><strong>{positionText(row.party_name)}</strong><small>{PARTY_LABELS[row.party_type] || UNAVAILABLE}</small>
-                {row.recognition_event === "order_completed" && <><small>{shippingRecognitionLabel(row)}</small><small>صندوق الخصم: {positionText(row.cash_account_name)}</small></>}</td>
+                {row.recognition_event === "order_completed" && <><small>{shippingRecognitionLabel(row)}</small>{row.payment_mode === "prepaid" && <small>صندوق الخصم: {positionText(row.cash_account_name)}</small>}</>}</td>
             <td><strong>{paymentLabel(row.payment_method)}</strong><small>{destinationLabel(row.collection_destination)}</small>{row.destination_name && <small>{row.destination_name}</small>}</td>
             <td><CollectionStatus value={row.collection_status} /></td>
             {DELIVERY_MONEY_COLUMNS.map(column => <td key={column.key}><Money value={row[column.key]} role={column.role} /></td>)}
@@ -150,35 +157,38 @@ export default function OperationalFinancialPosition() {
     const [exportError, setExportError] = useState("");
     const [printing, setPrinting] = useState(false);
     const printRef = useRef(null);
+    const readLane = useRef({});
 
     useEffect(() => {
-        let current = true;
         setState({ scope, phase: "loading", report: null, error: "" });
         setExportError("");
-        if (authLoading) return () => { current = false; };
+        if (authLoading) return;
         if (authMissing) {
             setState({ scope, phase: "denied", report: null, error: "يلزم تسجيل الدخول لعرض التقرير المالي التشغيلي." });
-            return () => { current = false; };
+            return;
         }
-        operationalApi.financialPosition().then(report => {
-            if (!current) return;
-            if (report?.permissions?.reports !== true) {
-                setState({ scope, phase: "denied", report: null, error: "ليست لديك صلاحية عرض التقرير المالي التشغيلي." });
-            } else if (!isPositionContract(report)) {
-                setState({ scope, phase: "error", report: null, error: "تعذر قراءة بيانات التقرير. أعد المحاولة." });
-            } else {
-                setState({ scope, phase: "ready", report, error: "" });
-            }
-        }).catch(error => {
-            if (!current) return;
-            const status = error?.response?.status;
-            const denied = status === 401 || status === 403;
-            setState({ scope, phase: denied ? "denied" : "error", report: null, error: status === 403
-                ? "ليست لديك صلاحية عرض التقرير المالي التشغيلي."
-                : status === 401 ? "انتهت الجلسة؛ سجّل الدخول لعرض التقرير."
-                    : "تعذر تحميل التقرير الحالي. أعد المحاولة لتحديث البيانات." });
-        });
-        return () => { current = false; };
+        return visibleOperationalRead(async config => {
+            const update = await refreshVisibleSnapshot(operationalApi, config);
+            return {...await operationalApi.financialPosition(config), ...(update?.refresh_warning ? {refresh_warning: update.refresh_warning} : {})};
+        }, {
+            onData: report => {
+                if (report?.permissions?.reports !== true) {
+                    setState({ scope, phase: "denied", report: null, error: "ليست لديك صلاحية عرض التقرير المالي التشغيلي." });
+                } else if (!isPositionContract(report)) {
+                    setState({ scope, phase: "error", report: null, error: "تعذر قراءة بيانات التقرير. أعد المحاولة." });
+                } else {
+                    setState({ scope, phase: "ready", report, error: "" });
+                }
+            },
+            onError: error => {
+                const status = error?.response?.status;
+                const denied = status === 401 || status === 403;
+                setState({ scope, phase: denied ? "denied" : "error", report: null, error: status === 403
+                    ? "ليست لديك صلاحية عرض التقرير المالي التشغيلي."
+                    : status === 401 ? "انتهت الجلسة؛ سجّل الدخول لعرض التقرير."
+                        : error?.response?.data?.detail?.message || "تعذر تحميل التقرير الحالي. أعد المحاولة لتحديث البيانات." });
+            },
+        }, readLane.current);
     }, [scope, authLoading, authMissing, revision]);
 
     useEffect(() => { setFilters(emptyFilters()); setCurrency(""); setPrinting(false); }, [scope]);
@@ -229,12 +239,14 @@ export default function OperationalFinancialPosition() {
         {exportError && <p className="ofp-warning ofp-no-print" role="alert">{exportError}</p>}
         {report && report.status !== "active" && <div className="ofp-page-notice" role="status"><Info size={24} aria-hidden="true" /><p>{inactiveMessages[report.status] || "التقرير التشغيلي الحالي غير متاح في هذه المرحلة."}</p></div>}
         {report?.status === "active" && !data && <div className="ofp-page-notice" role="status">لا توجد بيانات عملة جاهزة للعرض حتى آخر احتساب.</div>}
+        {report?.refresh_warning && <p role="alert" className="ofp-warning">{report.refresh_warning}</p>}
         {data && user?.role === "owner" && <ProviderHistoryReview key={"history" + scope + report.session_scope} sessionScope={report.session_scope} />}
         {data && user?.role === "owner" && <NativePurchaseReview key={scope + report.session_scope} sessionScope={report.session_scope} onRefresh={refresh} />}
         {data && user?.role === "owner" && <CustomerWalletBalance key={"wallet" + scope + report.session_scope} sessionScope={report.session_scope} onSaved={refresh} />}
         {data && user?.role === "owner" && <div className="ofp-no-print">
             <a className="ofp-button" href="/shipping-settings-v2">مراجعة تعرفة شركات الشحن</a>
             <HistoricalShippingFeeReview key={scope + report.session_scope + activeCurrency} orders={data.shipping_fee_review_orders} />
+            <CompletedShippingFeeReview key={`completed:${scope}:${report.session_scope}:${activeCurrency}`} sessionScope={report.session_scope} orders={data.shipping_fee_review_orders} />
         </div>}
         {data && <article className="ofp-report" dir="rtl" ref={printRef} data-testid="financial-position-content">
             <header className="ofp-report-header"><div className="ofp-brand">ميزان<span>التقرير التشغيلي</span></div><div><h2>تقرير المركز المالي التشغيلي</h2><p>الأرصدة والذمم كما في {formatRiyadhArabicLong(report.as_of)}</p></div><span className="ofp-report-kind">الأرصدة والتوقعات</span></header>

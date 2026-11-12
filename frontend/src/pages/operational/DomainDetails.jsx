@@ -2,6 +2,7 @@ import React, {useState} from 'react';
 import {operationalApi as api, messageFor} from './api';
 import PaginatedReportTable from './PaginatedReportTable';
 import {formatPositionCount, formatPositionMoney} from './financialPositionPresentation';
+import PendingOrdersDialog from './PendingOrdersDialog';
 
 const cents = value => {
   const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(String(value ?? ''));
@@ -11,11 +12,11 @@ const amount = value => value == null ? 'غير مكتمل' : `${value < 0n ? '-
 const sum = values => values.reduce((total,value) => total == null || cents(value) == null ? null : total + cents(value), 0n);
 const codLabels={gross:'إجمالي قيمة طلبات التحصيل',collected:'المحصل من العملاء',customer_outstanding:'المتبقي لدى العملاء',custody_amount:'المبلغ بعهدة المنفذ',confirmed_custody:'عهدة التحصيل المؤكدة',settled:'المورد لأماسي',outstanding:'المتبقي لدى المنفذ'};
 const unique = rows => [...new Map(rows.map(row => [row.id,row])).values()];
-const prepaidShipping = row => row.payment_mode === 'prepaid' || row.recognition_event === 'order_completed' || String(row.id).startsWith('shipping-prepaid:');
+const prepaidShipping = row => row.payment_mode === 'prepaid' || String(row.id).startsWith('shipping-prepaid:');
 const shippingOrderId = row => {
   if (row.order_id != null && String(row.order_id)) return String(row.order_id);
   const id = String(row.id);
-  const prefix = ['shipping:', 'shipping-prepaid:'].find(value => id.startsWith(value));
+  const prefix = ['shipping:', 'shipping-prepaid:', 'shipping-completed:'].find(value => id.startsWith(value));
   if (!prefix) return id;
   const order = id.slice(prefix.length);
   const suffix = row.fee_component && ':' + row.fee_component;
@@ -70,11 +71,11 @@ export default function DomainDetails({report}) {
       const proof = [facts[o.id], facts['shipping:' + shippingOrderId(o)]].some(row => row?.delivered_at
         && (!row.id || row.id === o.party_id) && (!row.party_type || row.party_type === o.party_type));
       // Payment at completion is independent of a later delivery by this carrier.
-      return proof || (!prepaidShipping(o) && (cents(o.confirmed) || 0n) > 0n);
+      return proof || (!prepaidShipping(o) && o.recognition_event !== 'order_completed' && (cents(o.confirmed) || 0n) > 0n);
     });
     const cod=Object.entries(report.details?.cod_reports || {}).filter(([id,row])=>row.party_id===p.party_id&&row.currency===p.currency&&(row.party_type||obligations.find(o=>o.id===id)?.party_type)===p.party_type).map(([,row])=>row);
     return {...p,orderCount:new Set(rows.map(shippingOrderId)).size,deliveredCount:new Set(delivered.map(shippingOrderId)).size,
-      shippingConfirmed:sum(rows.map(o => o.confirmed)),hasPrepaidShipping:prepaid.length > 0,prepaidPaid:sum(prepaid.map(o => o.settled)),
+      shippingConfirmed:rows.length ? sum(rows.map(o => o.confirmed)) : null,hasPrepaidShipping:prepaid.length > 0,prepaidPaid:sum(prepaid.map(o => o.settled)),
       codTotals:cod.length?Object.fromEntries(Object.keys(codLabels).map(key=>[key,sum(cod.map(row=>row[key]))])):null};
   });
   const suppliers = parties.filter(p => p.party_type === 'supplier').map(p => {
@@ -88,15 +89,16 @@ export default function DomainDetails({report}) {
     <details className="op-card"><summary>تفاصيل منصات الدفع</summary>
       {providerBalances.map(([currency, rows]) => <PaginatedReportTable key={currency} rows={rows} label={`منصات الدفع · ${currency}`}>{pageRows => <div className="op-table">
         <table><caption>منصات الدفع · {currency}</caption>
-          <thead><tr><th>المنصة</th><th>عدد الطلبات</th><th>إجمالي المبالغ</th><th>العمولات</th><th>الاستردادات</th><th>صافي المتبقي لنا</th></tr></thead>
+          <thead><tr><th>المنصة</th><th>طلبات مدفوعة مثبتة</th><th>المدفوع المثبت</th><th>العمولات المحتسبة</th><th>الاستردادات</th><th>صافي المتبقي المحتسب لنا</th><th>طلبات غير مؤكدة</th></tr></thead>
           <tbody>{pageRows.map(row => <tr key={row.provider}>
             <td><strong>{row.name}</strong>
               {row.opening != null && <div><small>رصيد البداية <bdi>{formatPositionMoney(row.opening)}</bdi></small></div>}
               {row.settled != null && <div><small>المحول للبنك <bdi>{formatPositionMoney(row.settled)}</bdi></small></div>}
               {row.complete !== true && <div><small>بيانات غير مكتملة</small></div>}
             </td>
-            <td><bdi>{formatPositionCount(row.orders)}</bdi></td>
-            {['gross','fees','refunded','net'].map(key => <td key={key}><bdi>{formatPositionMoney(row[key])}</bdi></td>)}
+            <td><bdi>{formatPositionCount(Object.prototype.hasOwnProperty.call(row, 'paid_orders') ? row.paid_orders : row.orders)}</bdi></td>
+            {['gross','fees','refunded','net'].map(key => <td key={key}><bdi>{formatPositionMoney(Object.prototype.hasOwnProperty.call(row, `known_${key}`) ? row[`known_${key}`] : row[key])}</bdi></td>)}
+            <td><PendingOrdersDialog count={row.pending_orders} details={row.pending_order_details} name={row.name} /></td>
           </tr>)}</tbody>
         </table>
       </div>}</PaginatedReportTable>)}

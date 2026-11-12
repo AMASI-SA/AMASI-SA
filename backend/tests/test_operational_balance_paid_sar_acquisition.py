@@ -85,3 +85,54 @@ def test_historical_lookup_is_bounded_and_scoped_and_repeat_receives_no_second_c
                 assert matching_sar_payment(doc,doc["raw_by_source"]["salla_direct"],owner="owner")==Decimal("121.14")
         assert await db.unified_orders.count_documents({})==12
     run(scenario)
+
+
+def test_visible_refresh_keeps_paid_sar_acquisition_from_a_packed_snapshot_without_cash_posting(monkeypatch):
+    from operational_balance_archive import compact_financial_snapshot, compact_issues
+    from operational_balance_service import refresh
+    from operational_balance_store import STATES, read
+    from operational_balance_worker import tick
+    from test_operational_balance_integration import NOW, started
+    from test_operational_balance_visible_evidence import visible_refresh
+
+    native, raw = pair("17")
+    for row in (native, raw):
+        row["date"] = "2026-10-06T12:00:00Z"
+        row["payment_method"] = row["payment_methods"][0]["payment_method"] = "bank"
+    native["total"]["amount"] = raw["amounts"]["total"]["amount"] = "10.00"
+    raw["updated_at"] = "2026-10-06T12:05:00Z"
+    calls = []
+
+    async def provider(db, owner, method, path, *, params):
+        assert (owner, method, path, params) == ("owner", "GET", "/orders", {"reference_id": "17", "per_page": 10})
+        calls.append("17")
+        return {"data": [deepcopy(native)]}
+
+    monkeypatch.setattr(paid_sar_sync, "call_salla", provider)
+
+    async def scenario(db):
+        await started(db)
+        source = {"user_id": "owner", "order_id": raw["id"], "order_number": "17",
+                  "order_status_slug": "in_progress", "raw_by_source": {"salla_direct": deepcopy(raw)},
+                  "g47_salla_snapshot": {"source_updated_at": raw["updated_at"]}}
+        other = {**deepcopy(source), "user_id": "other"}
+        await db.unified_orders.insert_many([deepcopy(source), deepcopy(other)])
+        first = await refresh(db, "owner", clock=NOW)
+        assert first["engine"]["customer_tender_coverage"]["sar"]["proof_lookups"] == [
+            {"order_id": raw["id"], "order_number": "17"}]
+        stored = await db[STATES].find_one({"_id": "owner"})
+        encoded = compact_issues(compact_financial_snapshot(stored, 12000000), 12000000)
+        await db[STATES].replace_one({"_id": "owner", "revision": stored["revision"]}, encoded)
+        await tick(db)
+        assert calls == []
+        await visible_refresh(db)
+        current = await read(db, "owner")
+        saved = await db.unified_orders.find_one({"user_id": "owner", "order_number": "17"})
+        assert matching_sar_payment(saved, saved["raw_by_source"]["salla_direct"], owner="owner") == Decimal("121.14")
+        assert current["engine"]["customer_tender_coverage"]["sar"]["known_paid"] == "121.14"
+        assert current["openings"] == first["openings"] and current["movements"] == first["movements"]
+        assert await db.unified_orders.find_one({"user_id": "other"}, {"_id": 0}) == other
+        await visible_refresh(db)
+        assert calls == ["17"]
+        assert (await read(db, "owner"))["movements"] == first["movements"]
+    run(scenario)

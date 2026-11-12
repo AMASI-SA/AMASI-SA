@@ -193,6 +193,17 @@ def is_closed_tender_balance(page, currency):
         return False
 
 
+def is_partial_tender_balance(page, currency):
+    """An independently paid partial tender does not establish customer due."""
+    if (not isinstance(page, dict) or page.get("source") != "canonical_salla_partial_tender"
+            or page.get("currency") != currency or "remaining" not in page or page["remaining"] is not None):
+        return False
+    try:
+        return 0 < _amount(page["paid"], currency) < _amount(page["gross"], currency)
+    except (ValueError, KeyError, TypeError):
+        return False
+
+
 def _closed_foreign_tender(raw, payment, *, owner, order_number, provider_order_id, source, created_at, as_of):
     """Keep independently paid money visible when Salla closes an FX order with a small gross difference."""
     from salla_payment_collection import provider_order_page_current
@@ -248,7 +259,7 @@ def normalize_operational_payment(raw, currency, total, created_at, as_of, *, ow
         return normalize_transaction_payment(raw, currency, total, created_at, as_of, owner=owner,
             order_number=order_number, provider_order_id=provider_order_id, rows=rows)
     try:
-        amounts = provider_order_page_balance(raw, currency, total)
+        amounts = provider_order_page_balance(raw, currency, total, allow_paid_only=True)
     except ValueError as exc:
         return None, [{"code": str(exc), "provider": provider}]
     from operational_split_payment import split_payment_evidence
@@ -293,7 +304,8 @@ def normalize_operational_payment(raw, currency, total, created_at, as_of, *, ow
     if (payment.get("paid_observation") and _amount(payment["paid_observation"]["amount"], currency) != paid
             or any(_amount(c["amount"], currency) != paid for c in payment.get("captures", []))):
         return None, [{"code": "provider_payment_amount_conflict", "provider": provider}]
-    payment["order_page_balance"] = {**amounts, "source": "canonical_salla_order_page", "owner_id": owner,
+    page_source = "canonical_salla_partial_tender" if amounts["remaining"] is None else "canonical_salla_order_page"
+    payment["order_page_balance"] = {**amounts, "source": page_source, "owner_id": owner,
         "order_id": provider_order_id, "order_number": order_number, "provider": provider, "currency": currency,
         "gross": format(_amount(total, currency), ".2f"), "source_updated_at": source_stamp}
     if "order_page_reference" in payment:

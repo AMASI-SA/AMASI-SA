@@ -91,7 +91,7 @@ export function deliveryOrderLabel(row) {
 }
 
 export function shippingRecognitionLabel(row) {
-    if (row?.recognition_event === "order_completed") return "مدفوع مقدمًا عند تم التنفيذ";
+    if (row?.recognition_event === "order_completed") return row.payment_mode === "deferred" ? "أجرة مستحقة عند تم التنفيذ" : "مدفوع مقدمًا عند تم التنفيذ";
     return row?.delivered_at ? "عند تم التوصيل" : UNAVAILABLE;
 }
 
@@ -120,7 +120,7 @@ export function readableMessages(items = []) {
 
 function exportValue(value, type) {
     if (type === "money") return typeof value === "string" && moneyPattern.test(value) ? value : UNAVAILABLE;
-    if (type === "count") return formatPositionCount(value) === UNAVAILABLE ? UNAVAILABLE : String(value);
+    if (["count", "exceptions"].includes(type)) return formatPositionCount(value) === UNAVAILABLE ? UNAVAILABLE : String(value);
     return positionText(value);
 }
 
@@ -167,7 +167,7 @@ export function buildFinancialPositionWorkbook(report, currency, filters = {}) {
         ["نطاق الإجماليات", "فلاتر تفاصيل الطلبات لا تغيّر إجماليات التقرير."],
         ["المبالغ", "القيم المالية نصوص دقيقة كما وردت في التقرير؛ غير متاح لا تعني صفرًا."],
         [],
-        ...readableMessages([...(report.issues || []), ...(report.dependencies || []), ...(data.notes || [])]).map(note => [note]),
+        ...readableMessages([report.refresh_warning, ...(report.issues || []), ...(report.dependencies || []), ...(data.notes || [])]).map(note => [note]),
     ];
     appendSheet(workbook, "معلومات التقرير", metadata, [45, 80]);
 
@@ -187,16 +187,32 @@ export function buildFinancialPositionWorkbook(report, currency, filters = {}) {
         appendSheet(workbook, title, rows, columns.map(column => column.type === "text" ? 38 : 24));
     });
 
+    const exceptions = [];
+    for (const table of data.tables || []) {
+        const seen = new Set();
+        for (const row of [...(table.rows || []), {name: "جهة غير محددة", pending_order_details: table.unassigned_order_details || []}]) {
+            for (const detail of row.pending_order_details || []) {
+                const key = JSON.stringify([row.id || row.name, detail.order_id || detail.order_number]);
+                if (seen.has(key)) continue;
+                seen.add(key);
+                exceptions.push([table.title, row.name, positionText(detail.order_number), positionText(detail.order_id),
+                    (detail.reasons || []).map(reason => reason.message).filter(Boolean).join("؛ ")]);
+            }
+        }
+    }
+    if (exceptions.length) appendSheet(workbook, "طلبات تحتاج مراجعة", [["القسم", "الجهة", "رقم الطلب", "معرف الطلب", "أسباب عدم التأكد"], ...exceptions], [30, 30, 24, 32, 85]);
+
     const summaries = [["الإجماليات والمركز والربح", currency], [], ["إجمالي الديون والمستحقات", data.completeness?.actual === true ? "مكتملة" : "الأرصدة المسجّلة فقط"], ["الجهة", "لنا", "علينا"],
         ...(data.debt_rows || []).map(row => [positionText(row.name), exportValue(row.receivable, "money"), exportValue(row.payable, "money")]),
         ["الإجمالي", exportValue(data.debt_totals?.receivable, "money"), exportValue(data.debt_totals?.payable, "money")]];
     [["صافي الأرصدة الحالية", data.current_rows], ["التغير المتوقع من الطلبات المفتوحة", data.forecast_rows], ["حساب الربح المتوقع", data.profit_rows]].forEach(([title, rows]) => {
-        summaries.push([], [title], ["البند", "المبلغ", "ملاحظات"]);
-        (rows || []).forEach(row => summaries.push([positionText(row.label), exportValue(row.amount, "money"), row.reason || ""]));
+        summaries.push([], [title], ["البند", "المبلغ", "ملاحظات", "المجموع المعلوم عند نقص البيانات"]);
+        (rows || []).forEach(row => summaries.push([positionText(row.label), exportValue(row.amount, "money"), row.reason || "",
+            row.known_subtotal == null ? "" : exportValue(row.known_subtotal, "money")]));
     });
     summaries.push([], ["صافي السيولة والمستحقات المتوقع", exportValue(data.metrics?.forecast_monetary_position, "money")],
         ["صافي الربح المتوقع", exportValue(data.metrics?.net_profit, "money")]);
-    appendSheet(workbook, "الإجماليات والمركز", summaries, [48, 26, 75]);
+    appendSheet(workbook, "الإجماليات والمركز", summaries, [48, 26, 75, 30]);
 
     const orderRows = filterDeliveries(deliveries, filters);
     appendSheet(workbook, "تفاصيل الطلبات", [

@@ -15,6 +15,7 @@ const field=name=>[...host.querySelectorAll('.op-field')].find(l=>l.querySelecto
 const input=async(name,value)=>act(async()=>{const e=field(name);Object.getOwnPropertyDescriptor(e.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype,'value').set.call(e,value);e.dispatchEvent(new Event(e.tagName==='SELECT'?'change':'input',{bubbles:true}));});
 const load=async()=>{await act(async()=>root.render(<CustomerReturns/>));await input('رقم الطلب','1001');await click('عرض الطلب');await click('الطلب كاملًا — الكميات المتاحة');};
 beforeEach(()=>{
+ Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});
  global.IS_REACT_ACT_ENVIRONMENT=true;localStorage.clear();jest.resetAllMocks();host=document.createElement('div');document.body.appendChild(host);root=createRoot(host);
  requestId.mockImplementation(()=>`request-${Math.random()}`);
  api.context.mockResolvedValue({session_scope:scope,status:'active',permissions:{move:true}});
@@ -23,7 +24,7 @@ beforeEach(()=>{
  api.returnOrder.mockResolvedValue({id:'o1',order_number:'1001',total:'300.00',refunded:'0.00',provider:'tamara',items:[{id:'a',name:'منتج أ',quantity:2,remaining:2}]});
  api.returnShippingQuote.mockResolvedValue({amount:'28.75',quote_hash:'quote'});
 });
-afterEach(async()=>{await act(async()=>root.unmount());host.remove();});
+afterEach(async()=>{await act(async()=>root.unmount());host.remove();delete document.visibilityState;});
 test('pending return selects all quantities and saves without a financial debit instruction',async()=>{
  await load();expect(host.textContent).toContain('لن يُخصم مبلغ');await click('حفظ المرتجع');
  expect(api.saveCustomerReturn).toHaveBeenCalledWith(expect.objectContaining({status:'pending',items:[{id:'a',quantity:2}],expected_session_scope:scope}),null);
@@ -49,4 +50,15 @@ test('shipping quote is server-derived and missing refund fields block submissio
 });
 test('read-only context disables editing and cannot post',async()=>{
  api.context.mockResolvedValue({session_scope:scope,status:'active',permissions:{move:false}});await act(async()=>root.render(<CustomerReturns/>));expect(field('رقم الطلب').disabled).toBe(true);expect(api.saveCustomerReturn).not.toHaveBeenCalled();
+});
+
+test('an accepted explicit return finishes while hidden without starting a background reload',async()=>{
+ await load();let resolve;api.saveCustomerReturn.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));
+ await click('حفظ المرتجع');const sent=api.saveCustomerReturn.mock.calls[0];
+ await act(async()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});document.dispatchEvent(new Event('visibilitychange'));});
+ await act(async()=>resolve({id:'case1'}));
+ expect(api.saveCustomerReturn).toHaveBeenCalledTimes(1);expect(sent).toHaveLength(2);
+ expect(localStorage.length).toBe(0);expect(api.customerReturns).toHaveBeenCalledTimes(1);
+ await act(async()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});document.dispatchEvent(new Event('visibilitychange'));});
+ expect(api.customerReturns).toHaveBeenCalledTimes(2);expect(api.saveCustomerReturn).toHaveBeenCalledTimes(1);
 });

@@ -53,6 +53,9 @@ def validated_review_facts(state):
 def link_review_destinations(state, deliveries):
     """Never add displayed collection amounts again to the balance totals."""
     result = deepcopy(deliveries)
+    coverage_contract = (type(result.get('coverage_contract_version')) is int
+                         and result['coverage_contract_version'] == 1
+                         and isinstance(result.get('coverage_issues'), list))
     facts, issues = validated_review_facts(state)
     by_order = {}
     for row in result['rows']:
@@ -80,8 +83,20 @@ def link_review_destinations(state, deliveries):
         settled = sum((Decimal(a['amount']) for m in state.get('movements', []) for a in m.get('allocations', [])
                        if fact.get('obligation_id') and a.get('obligation_id') == fact['obligation_id']), Decimal(0))
         row['destination_outstanding'] = format(max(Decimal(fact['amount']) - settled, Decimal(0)), '.2f') if fact['destination_type'] == 'pos_receivable' else '0.00'
-    if issues:
+        if coverage_contract and isinstance(row.get('incomplete_reasons'), list):
+            # Approval proves this noncash destination and its effect only.
+            # Missing fee, executor, period or other-order proof stays missing.
+            row['incomplete_reasons'] = [reason for reason in row['incomplete_reasons']
+                if reason not in {'collection_destination_unresolved', 'collection_unconfirmed'}]
+            row['complete'] = not row['incomplete_reasons']
+    if coverage_contract:
+        result['complete'] = (not issues and not result['coverage_issues']
+                              and all(row.get('complete') is True for row in result['rows']))
+    elif issues:
         result['complete'] = False
     if facts:
         result['notes'].append('التحصيل التشغيلي المرتبط مثبت بحركة بنك أو ذمة شبكة؛ يعرض للتفصيل ولا يضاف إلى الإجماليات مرة ثانية.')
+    if not any(row.get('collection_destination') in {'store_bank_account_unknown', 'store_pos_account_unknown'} for row in result['rows']):
+        result['notes'] = [note for note in result.get('notes', [])
+                           if not note.startswith('غير متاح: هوية البنك أو جهاز الشبكة المستقبل غير مثبتة')]
     return result, issues

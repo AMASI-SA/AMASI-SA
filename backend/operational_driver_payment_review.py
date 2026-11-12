@@ -4,6 +4,7 @@ Bank arrival and POS receivables are distinct; neither is driver cash custody.
 No sales, supplier cost, shipping fee, opening or native journal is replayed.
 """
 from copy import deepcopy
+from bson import BSON
 from datetime import date
 from decimal import Decimal
 from hashlib import sha256
@@ -11,7 +12,10 @@ from typing import Literal
 from pydantic import Field, StrictInt
 
 from accounting_driver_payment_review import DriverReviewInput as NativeInput
-from operational_balance_store import STATES, digest, fail, audit, logical_state, now, read
+from operational_balance_store import STATES, MAX_STATE_BYTES, digest, fail, audit, logical_state, now, read
+from operational_balance_archive import (
+    SNAPSHOT, ArchiveError, CapacityError, compact_financial_snapshot, unpack_financial_snapshot,
+)
 from operational_salary_start import instant, RIYADH
 from operational_driver_review_store import EVENTS, transact
 
@@ -19,6 +23,23 @@ REVIEWS = 'store_delivery_payment_reviews'
 COLLECTIONS = 'store_delivery_collections'
 RECEIPTS = 'store_delivery_receipts'
 FACTS = 'driver_payment_review_facts'
+
+
+def _encode_review_state(original, state):
+    """Repack only changed calculation maps; preserve existing archive pointers.
+
+The review capability cannot append audit pages and never changes engine.audit.
+Its monetary fields are changed in this transaction, then encoded into the same
+owner head before the revision CAS. Packed source issues remain byte-identical.
+    """
+    if SNAPSHOT not in original and len(BSON.encode(state)) <= MAX_STATE_BYTES:
+        return state
+    try:
+        return compact_financial_snapshot(state, MAX_STATE_BYTES)
+    except CapacityError:
+        fail('operational_capacity_requires_archive', 'بلغ السجل حد السعة؛ يلزم أرشفة معتمدة دون حذف التاريخ')
+    except ArchiveError:
+        fail('operational_audit_archive_invalid', 'تعذر التحقق من اكتمال سجل التدقيق التشغيلي', 503)
 
 
 class ReviewInput(NativeInput):
@@ -277,10 +298,14 @@ async def review_payment(db, *, owner, actor, assignment_id, payload, clock=None
             return deepcopy(prior['result'])
         if await financial_source(scoped, owner) != 'operational':
             fail('operational_driver_review_phase_changed')
-        state = await single(scoped, STATES, {'_id': owner, 'owner_id': owner}, 'operational_not_active')
+        original_state = await single(scoped, STATES, {'_id': owner, 'owner_id': owner}, 'operational_not_active')
         # Check the history in this transaction, and retain its compact representation
         # for the revision update. This decision writes only present-day monetary fields.
-        await logical_state(scoped, owner, state)
+        await logical_state(scoped, owner, original_state)
+        # Work on actual monetary maps, not their storage markers. Audit pages
+        # and diagnostic packets retain their already-validated representation;
+        # this decision adds only a top-level review audit, never engine history.
+        state = unpack_financial_snapshot(original_state)
         original_revision = state['revision']
         review, assignment, collection, order, event, value = await _evidence(scoped, owner, assignment_id, state, stamp)
         receipt = movement = None
@@ -379,7 +404,8 @@ async def review_payment(db, *, owner, actor, assignment_id, payload, clock=None
         audit(state, actor, 'driver_payment_review_' + payload.decision, None, fact or result,
               payload.note or 'مطابقة تحصيل المندوب في النظام التشغيلي', 'operational_driver_review', stamp)
         state['revision'] = original_revision + 1
-        changed = await scoped[STATES].replace_one({'_id': owner, 'owner_id': owner, 'revision': original_revision}, state)
+        encoded = _encode_review_state(original_state, state)
+        changed = await scoped[STATES].replace_one({'_id': owner, 'owner_id': owner, 'revision': original_revision}, encoded)
         if changed.matched_count != 1:
             fail('operational_concurrent_change')
         return result

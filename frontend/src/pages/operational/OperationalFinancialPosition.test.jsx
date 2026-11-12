@@ -6,7 +6,7 @@ import XLSX from "../../lib/safeSpreadsheet";
 import { operationalApi } from "./api";
 import OperationalFinancialPosition from "./OperationalFinancialPosition";
 
-jest.mock("./api", () => ({ operationalApi: { financialPosition: jest.fn() } }));
+jest.mock("./api", () => ({ operationalApi: { financialPosition: jest.fn(), refreshBalances: jest.fn() } }));
 jest.mock("../../context/AuthContext", () => ({ useOptionalAuth: jest.fn() }));
 jest.mock("react-to-print", () => ({ useReactToPrint: jest.fn() }));
 global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -74,11 +74,31 @@ beforeEach(() => {
     host = document.createElement("div"); document.body.appendChild(host); root = createRoot(host);
     useOptionalAuth.mockReturnValue({ user: { id: "test-user", owner_id: "test-owner" }, loading: false, authStatus: "authenticated" });
     operationalApi.financialPosition.mockResolvedValue(fixture());
+    operationalApi.refreshBalances.mockResolvedValue({status: 'refreshed'});
     print = jest.fn(); useReactToPrint.mockReturnValue(print);
     jest.spyOn(XLSX, "writeFile").mockResolvedValue(undefined);
 });
 
 afterEach(() => { act(() => root.unmount()); host.remove(); jest.restoreAllMocks(); });
+
+test("a failed source refresh shows the saved balances and dated warning without retries", async () => {
+    operationalApi.refreshBalances.mockRejectedValueOnce({response: {status: 409, data: {detail: {
+        code: "operational_capacity_requires_archive", message: "تعذر تحديث مصدر الأرصدة"}}}});
+    await render();
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(1);
+    expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain("تُعرض آخر أرصدة محفوظة بتاريخها");
+    expect(host.textContent).toContain("678.90");
+    expect(host.querySelector('[data-testid="financial-position-content"]')).not.toBeNull();
+});
+
+test("refresh authorization failure never reads or displays a saved report", async () => {
+    operationalApi.refreshBalances.mockRejectedValueOnce({response: {status: 403}});
+    await render();
+    expect(operationalApi.financialPosition).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-testid="financial-position-content"]')).toBeNull();
+    expect(host.textContent).not.toContain("678.90");
+});
 
 test("loading cannot expose balances or enable print/export before the permission-scoped response", async () => {
     let resolve;

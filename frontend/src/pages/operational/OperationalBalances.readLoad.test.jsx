@@ -6,7 +6,7 @@ import {operationalApi as api} from './api';
 let mockAuth = null;
 jest.mock('../../context/AuthContext', () => ({useOptionalAuth: () => mockAuth}));
 jest.mock('./api', () => ({
-  operationalApi: {context: jest.fn(), reports: jest.fn(), audit: jest.fn()},
+  operationalApi: {context: jest.fn(), reports: jest.fn(), audit: jest.fn(), refreshBalances: jest.fn()},
   entityKinds: [], messageFor: () => 'تعذر إتمام العملية', feeIncomplete: () => false,
 }));
 jest.mock('./OpeningBalances', () => ({OpeningBalances: () => null,
@@ -44,6 +44,7 @@ beforeEach(() => {
   online = jest.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
   api.context.mockResolvedValue(context()); api.reports.mockResolvedValue(report());
+  api.refreshBalances.mockResolvedValue({status: 'refreshed'});
   api.audit.mockResolvedValue({items: [{message: 'سجل مصدر موثق', at: '2026-11-11T20:00:00Z'}]});
 });
 afterEach(async () => {

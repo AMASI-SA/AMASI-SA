@@ -1,6 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {operationalApi as api, requestId, messageFor} from './api';
 import {Field, Notice} from './OpeningBalances';
+import {visibleOperationalRead} from './visibleOperationalRead';
 import './operational.css';
 
 const localTime = () => {const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);};
@@ -25,7 +26,10 @@ function PaymentFields({value,onChange,banks,movements}){
 
 export default function CustomerExchanges(){
   const [context,setContext]=useState(null),[error,setError]=useState('');
-  useEffect(()=>{let alive=true;api.context().then(c=>alive&&setContext(c)).catch(e=>alive&&setError(messageFor(e)));return()=>{alive=false;};},[]);
+  const contextLane=useRef({pending:null});
+  useEffect(()=>visibleOperationalRead(config=>api.context(config),{
+    onData:setContext,onError:e=>setError(messageFor(e)),
+  },contextLane.current),[]);
   if(error)return <main className="op-page" dir="rtl"><Notice error={error}/></main>;
   if(!context)return <main className="op-page" dir="rtl" role="status">جارٍ تحميل الاستبدالات…</main>;
   return <ExchangeForm key={context.session_scope} context={context}/>;
@@ -41,18 +45,36 @@ function ExchangeForm({context}){
   const [paid,setPaid]=useState(false),[payment,setPayment]=useState(emptyPayment),[opened,setOpened]=useState(null),[mode,setMode]=useState('');
   const [invoice,setInvoice]=useState({supplier_id:'',invoice_number:'',invoice_date:localTime().slice(0,10),lines:[]});
   const lock=useRef(false),search=useRef(0);
+  const readLane=useRef({pending:null}),quoteLane=useRef({pending:null}),orderLane=useRef({pending:null});
+  const [revision,setRevision]=useState(0),[orderRead,setOrderRead]=useState(null);
   const writable=context.status==='active'&&context.permissions?.move;
   const disabled=!writable||busy||loading||!!pending||!!restored.error;
-  const reload=async()=>{const [c,m]=await Promise.all([api.customerExchanges(),api.movements()]);setCases(c.items);setMovements(m.items);};
-  useEffect(()=>{let alive=true;Promise.all([api.customerExchanges(),api.movements(),...['bank','courier','supplier'].map(k=>api.entities(k))]).then(([c,m,...a])=>{
-    if(alive){setCases(c.items);setMovements(m.items);setAccounts(Object.fromEntries(['bank','courier','supplier'].map((k,i)=>[k,a[i].items])));}
-  }).catch(e=>alive&&setError(messageFor(e))).finally(()=>alive&&setLoading(false));return()=>{alive=false;};},[]);
-  useEffect(()=>{let alive=true;setQuote(null);if(!carrier||!order)return;api.returnShippingQuote('courier',carrier,order.order_number).then(q=>alive&&setQuote(q)).catch(e=>alive&&setError(messageFor(e)));return()=>{alive=false;};},[carrier,order]);
+  useEffect(()=>visibleOperationalRead(async config=>{
+    const results=await Promise.allSettled([api.customerExchanges(config),api.movements(config),...['bank','courier','supplier'].map(k=>api.entities(k,config))]);
+    const failure=results.find(r=>r.status==='rejected');if(failure)throw failure.reason;
+    return results.map(r=>r.value);
+  },{
+    onStart:()=>setLoading(true),
+    onData:([c,m,...a])=>{setCases(c.items);setMovements(m.items);setAccounts(Object.fromEntries(['bank','courier','supplier'].map((k,i)=>[k,a[i].items])));},
+    onError:e=>setError(messageFor(e)),onEnd:()=>setLoading(false),
+  },readLane.current),[revision]);
+  useEffect(()=>{setQuote(null);if(!carrier||!order)return undefined;
+    return visibleOperationalRead(config=>api.returnShippingQuote('courier',carrier,order.order_number,config),{
+      onData:setQuote,onError:e=>setError(messageFor(e)),
+    },quoteLane.current);
+  },[carrier,order]);
+  useEffect(()=>{if(!orderRead)return undefined;
+    return visibleOperationalRead(config=>api.exchangeOrder(orderRead.number,config),{
+      onStart:()=>setLoading(true),onData:result=>{if(search.current===orderRead.version)setOrder(result);},
+      onError:e=>{if(search.current===orderRead.version)setError(messageFor(e));},
+      onEnd:()=>{if(search.current===orderRead.version)setLoading(false);},
+    },orderLane.current);
+  },[orderRead]);
   const availableMovements=movements.filter(m=>m.bank_kind==='bank'&&m.party_type==='bank'&&m.kind==='collection'&&m.direction==='incoming'&&!m.order_number&&!m.automatic_order_bank&&!m.exchange_id&&m.reference&&!m.allocations?.length&&!cases.some(c=>c.contributions.some(p=>p.movement_id===m.id)));
   const paymentBody=()=>{if(!payment.bank_id||!payment.reference.trim()||price(payment.amount)<=0||!payment.paid_at)throw Error('أكمل بيانات المساهمة المدفوعة بالفعل.');return {...payment,paid_at:new Date(payment.paid_at).toISOString()};};
-  async function findOrder(){
+  function findOrder(){
     if(disabled)return;const version=++search.current;setLoading(true);setError('');setOpened(null);setMode('');setOrder(null);setCarrier('');setSelected({});
-    try{const result=await api.exchangeOrder(number.trim());if(search.current===version)setOrder(result);}catch(e){setError(messageFor(e));}finally{setLoading(false);}
+    setOrderRead({number:number.trim(),version});
   }
   function openCase(row,next){if(disabled)return;setNumber(row.order_number);setOrder(null);setOpened(row);setMode(next);setPayment(emptyPayment());setShipment(row.shipping.reference||'');setMessage('');setError('');setInvoice({supplier_id:'',invoice_number:'',invoice_date:localTime().slice(0,10),lines:row.items.filter(i=>i.remaining_to_buy>0).map(i=>({item_id:i.id,name:i.name,remaining:i.remaining_to_buy,quantity:0,net:'',tax:'0',gross:''}))});}
   async function save(){
@@ -77,7 +99,7 @@ function ExchangeForm({context}){
       }
       const fresh=await api.context();if(fresh.session_scope!==scope||!fresh.permissions?.move)throw Error('تغيرت الجلسة؛ احتفظنا بالعملية للتحقق.');
       await api.saveExchange(command.body,command.id);
-      localStorage.removeItem(key);setPending(null);setOrder(null);setOpened(null);setMode('');setSelected({});setCarrier('');setShipment('');setPaid(false);setPayment(emptyPayment());setMessage('تم حفظ عملية الاستبدال');await reload();
+      localStorage.removeItem(key);setPending(null);setOrder(null);setOrderRead(null);setOpened(null);setMode('');setSelected({});setCarrier('');setShipment('');setPaid(false);setPayment(emptyPayment());setMessage('تم حفظ عملية الاستبدال');setRevision(value=>value+1);
     }catch(e){
       if(e.response?.data?.detail?.not_applied||[400,422].includes(e.response?.status)){localStorage.removeItem(key);setPending(null);}
       setError(e.response?messageFor(e):e.message||'تعذر تأكيد الحفظ؛ أعد المحاولة بالعملية نفسها.');

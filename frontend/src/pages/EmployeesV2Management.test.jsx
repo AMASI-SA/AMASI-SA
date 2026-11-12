@@ -186,6 +186,57 @@ test("owner can assign only an MZ2 cashbox without a default bank", async()=>{
     } finally {await cleanup(container,root);}
 });
 
+test("read-only movement accounts stay separate from payment and transfer assignments", async () => {
+    const data = { ...workspace, management: { ...workspace.management,
+        operational_bank_choices: [{ id: 'inma', name: 'الإنماء', currency: 'SAR' }],
+        operational_cash_choices: [{ id: 'cash1', name: 'صندوق الفرع', currency: 'SAR' }],
+        mobile_app_permission_catalog: [{ key: 'operational', label: 'النظام التشغيلي', permissions: [
+            { key: 'operational_balance_movements_write', label: 'إدخال الحركات', kind: 'action' },
+            { key: 'operational_balance_reports_read', label: 'عرض الأرصدة', kind: 'page' },
+        ] }],
+    } };
+    getEmployeesV2Management.mockResolvedValue(data);
+    assignEmployeesV2MobileAppPermissions.mockResolvedValue(data);
+    const { container, root } = await renderPage();
+    try {
+        const card = container.querySelector('[data-testid="employees-v2-employee-card"]');
+        await act(async () => [...card.querySelectorAll('button')].find(button => button.textContent.includes('صلاحيات التطبيق')).click());
+        await act(async () => document.querySelector('[data-testid="mobile-app-permission-operational_balance_reports_read"]').click());
+        expect(document.querySelector('[aria-label="بنوك الحركات التشغيلية"]')).toBeNull();
+        expect(document.querySelector('[aria-label="البنك الافتراضي"]')).toBeNull();
+        await act(async () => document.querySelector('[aria-label="عرض حركات الإنماء"]').click());
+        await act(async () => document.querySelector('[aria-label="عرض حركات صندوق الفرع"]').click());
+        await act(async () => document.querySelector('[data-testid="employees-v2-mobile-app-permissions-submit"]').click());
+        const body = assignEmployeesV2MobileAppPermissions.mock.calls.at(-1)[1];
+        expect(body.permissions).toContain('operational_balance_reports_read');
+        expect(body.permissions).not.toContain('operational_balance_movements_write');
+        expect(body.operational_banks).toEqual({ bank_ids: [], cash_ids: [], default_bank_id: null,
+            read_bank_ids: ['inma'], read_cash_ids: ['cash1'] });
+    } finally { await cleanup(container, root); }
+});
+
+test("empty read-only account selection is explicitly empty, not all accounts", async () => {
+    const data = { ...workspace, management: { ...workspace.management,
+        operational_bank_choices: [{ id: 'inma', name: 'الإنماء', currency: 'SAR' }],
+        mobile_app_permission_catalog: [{ key: 'operational', label: 'النظام التشغيلي', permissions: [
+            { key: 'operational_balance_reports_read', label: 'عرض الأرصدة', kind: 'page' },
+        ] }],
+    } };
+    getEmployeesV2Management.mockResolvedValue(data);
+    assignEmployeesV2MobileAppPermissions.mockResolvedValue(data);
+    const { container, root } = await renderPage();
+    try {
+        const card = container.querySelector('[data-testid="employees-v2-employee-card"]');
+        await act(async () => [...card.querySelectorAll('button')].find(button => button.textContent.includes('صلاحيات التطبيق')).click());
+        await act(async () => document.querySelector('[data-testid="mobile-app-permission-operational_balance_reports_read"]').click());
+        expect(document.body.textContent).toContain('سيظهر السجل فارغًا');
+        await act(async () => document.querySelector('[data-testid="employees-v2-mobile-app-permissions-submit"]').click());
+        expect(assignEmployeesV2MobileAppPermissions.mock.calls.at(-1)[1].operational_banks).toEqual({
+            bank_ids: [], cash_ids: [], default_bank_id: null, read_bank_ids: [], read_cash_ids: [],
+        });
+    } finally { await cleanup(container, root); }
+});
+
 test("opens full management for all 15 employees with V2 payroll authority", async () => {
     const { container, root } = await renderPage();
     try {

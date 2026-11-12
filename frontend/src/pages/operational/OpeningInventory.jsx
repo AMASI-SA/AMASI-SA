@@ -1,6 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {operationalApi as api, messageFor, requestId} from './api';
 import {Field, Notice} from './OpeningBalances';
+import {visibleOperationalRead} from './visibleOperationalRead';
 
 const choices = ['select', 'radio', 'color', 'image'];
 const texts = ['text', 'string', 'textarea'];
@@ -40,21 +41,22 @@ export default function OpeningInventory({context}) {
   const [preview, setPreview] = useState(null), [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState(false), [result, setResult] = useState(null);
   const [revision, setRevision] = useState(0);
-  const lock = useRef(false), generation = useRef(0);
+  const lock = useRef(false), generation = useRef(0), readLane = useRef({}), previewRead = useRef(null), previewPending = useRef(false);
   useEffect(() => {
-    let alive = true;
     generation.current += 1;
+    if (previewPending.current) {previewPending.current = false; lock.current = false; setBusy(false);}
     setSearch(''); setResultsOpen(true); setCatalog(null); setLines([]); setPreview(null); setResult(null); setError(''); setConfirmed(false);
-    if (allowed) api.inventoryOpeningContext().then(data => {
+    const cancelRead = allowed ? visibleOperationalRead(async config => {
+      const data = await api.inventoryOpeningContext(config);
       if (!Array.isArray(data?.products) || !Array.isArray(data?.locations) || typeof data.writer_disabled !== 'boolean' || typeof data.approved !== 'boolean') throw Error('invalid_context');
-      if (alive) setCatalog(data);
-    }).catch(e => {if (alive) setError(messageFor(e));});
-    return () => {alive = false; generation.current += 1;};
+      return data;
+    }, {onData: setCatalog, onError: e => setError(messageFor(e))}, readLane.current) : null;
+    return () => {cancelRead?.(); previewRead.current?.(); previewRead.current = null; generation.current += 1;};
   }, [allowed, context.session_scope, revision]);
   const edit = next => {setLines(next); setPreview(null); setConfirmed(false); setError('');};
   const update = (index, patch) => edit(lines.map((line, i) => i === index ? {...line, ...patch} : line));
   const config = (index, patch) => update(index, {purchase_configuration: {...lines[index].purchase_configuration, ...patch}});
-  const submitPreview = async () => {
+  const submitPreview = () => {
     if (lock.current || !allowed || !lines.length || catalog?.approved) return;
     lock.current = true; setBusy(true); setError(''); setPreview(null); setConfirmed(false);
     const current = generation.current;
@@ -63,11 +65,20 @@ export default function OpeningInventory({context}) {
         if (lineCents(line) == null || !line.location_id) throw Error('أكمل الكمية الصحيحة لوحدة الصنف حتى 100000 والتكلفة الموجبة بمنزلتين عشريتين وموقع التخزين لكل سطر.');
         return {kind: line.kind, item_id: line.id, location_id: line.location_id, quantity: Number(line.quantity), unit_cost: line.unit_cost, purchase_configuration: line.purchase_configuration};
       })};
-      const data = await api.previewInventoryOpening(body);
-      if (!data?.preview_hash || !Array.isArray(data.lines) || data.financial_effect !== 'none' || typeof data.writer_disabled !== 'boolean') throw Error('تعذر التحقق من المعاينة؛ لم يُحفظ المخزون.');
-      if (current === generation.current) setPreview({body, data});
-    } catch (e) {if (current === generation.current) setError(e.response ? messageFor(e) : e.message);}
-    finally {lock.current = false; setBusy(false);}
+      previewPending.current = true;
+      previewRead.current?.();
+      previewRead.current = visibleOperationalRead(async config => {
+        const data = await api.previewInventoryOpening(body, config);
+        if (!data?.preview_hash || !Array.isArray(data.lines) || data.financial_effect !== 'none' || typeof data.writer_disabled !== 'boolean') throw Error('تعذر التحقق من المعاينة؛ لم يُحفظ المخزون.');
+        return data;
+      }, {
+        onData: data => {if (current === generation.current) setPreview({body, data});},
+        onError: e => {if (current === generation.current) setError(e.response ? messageFor(e) : e.message);},
+        onEnd: () => {if (current === generation.current) {previewPending.current = false; lock.current = false; setBusy(false);}},
+      }, readLane.current);
+    } catch (e) {
+      if (current === generation.current) {setError(e.response ? messageFor(e) : e.message); lock.current = false; setBusy(false);}
+    }
   };
   const approve = async () => {
     if (lock.current || !allowed || !preview || !confirmed || preview.data.writer_disabled || catalog?.writer_disabled || catalog?.approved) return;

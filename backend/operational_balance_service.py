@@ -454,6 +454,8 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
 async def refresh(db, owner, *, clock=None):
     from operational_balance_sources import collect_sources
     from operational_balance_engine import reconcile
+    from operational_demand_refresh import checkpoint, run_calculation
+    from operational_profit_sources import load_profit_snapshot
     stamp = clock or now()
 
     async def apply(state):
@@ -463,23 +465,34 @@ async def refresh(db, owner, *, clock=None):
         if previous_as_of and datetime.fromisoformat(stamp.replace("Z", "+00:00")) < datetime.fromisoformat(previous_as_of.replace("Z", "+00:00")):
             return state
         await active_gate(db, owner, state)
+        await checkpoint()
         try:
             from operational_balance_inventory import assert_no_source_collision
             await assert_no_source_collision(db, owner, state)
             sources = await collect_sources(db, owner, state["started_at"], stamp, baselines=state.get("source_baselines"), operational_state=state)
-        except ValueError:
+            await checkpoint()
+        except ValueError as exc:
+            from operational_read_runtime import SourceReadError
+            if isinstance(exc, SourceReadError):
+                raise HTTPException(409, detail={"code": "operational_source_setup_incomplete",
+                    "cause": exc.code, "source_collection": exc.collection,
+                    "message": "تعذر تحديث مصدر الأرصدة؛ احتُفظ بآخر لقطة ناجحة مع سبب الفشل."}) from None
             fail("operational_source_setup_incomplete", "مصادر ميزان 2 غير مكتملة أو تجاوزت حدود القراءة")
         sources.setdefault("supplier_returns", []).extend(state.get("supplier_returns", []))
         from operational_customer_returns import attach_returns
         attach_returns(state, sources)
         # Pure calculation returns an independent state and performs no I/O.
-        # Keep lease heartbeats and operational jobs responsive while it runs;
-        # all authorization checks and CAS writes remain on the original loop.
-        result = await asyncio.to_thread(reconcile, state, sources, stamp)
+        # The visible request owns calculation and cancellation. Authorization
+        # and the final atomic save remain on the original event loop.
+        result = await run_calculation(reconcile, state, sources, stamp)
+        await checkpoint()
+        result["engine"]["profit_snapshot"] = await load_profit_snapshot(db, owner, result, as_of=stamp)
+        await checkpoint()
         for order in sources.get('orders', []):
             credit = order.get('bank_credit')
             if not credit:
                 continue
+            await checkpoint()
             identity = 'order-bank:' + str(order['id'])
             existing = [m for m in result['movements'] if m.get('request_id') == identity or
                         (m.get('order_number') == order['order_number'] and m.get('direction') == 'incoming')]
@@ -501,6 +514,7 @@ async def refresh(db, owner, *, clock=None):
         from operational_balance_sources import entities
         names = {}
         for kind in {r["party_type"] for r in result["engine"].get("obligations", {}).values()}:
+            await checkpoint()
             try:
                 options = {"operational_state": state} if kind == "ad_account" and state.get("ad_funding") else {}
                 names[kind] = {r["id"]: r["name"] for r in await entities(db, owner, kind, **options)}
@@ -518,6 +532,7 @@ async def refresh(db, owner, *, clock=None):
                         result["engine"]["issues"].append(issue)
         state.update(result)
         state["engine"]["as_of"] = stamp
+        await checkpoint()
         return state
     return await mutate(db, owner, apply)
 
@@ -564,13 +579,17 @@ async def supplier_return(db, owner, actor, payload, *, clock=None):
 
 
 def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=False, provider_balances_net=False):
+    from operational_financial_activity_runtime import preparation_checkpoint
+    preparation_checkpoint()
     state = reconcile_credits(deepcopy(state))
     from operational_provider_balance_sar import convert_claim, convert_projection, unavailable, usable_bases
     valuations = usable_bases(state) if provider_balances_sar else {}
     valuation_issues = []
     allocated = {}
     for movement in state["movements"]:
+        preparation_checkpoint()
         for entry in movement.get("allocations", []):
+            preparation_checkpoint()
             key = entry["obligation_id"]
             allocated[key] = allocated.get(key, Decimal(0)) + Decimal(entry["amount"])
     parties = {}
@@ -587,6 +606,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
         return parties[key]
     obligations = deepcopy([row for row in (state.get("engine", {}).get("obligations") or {}).values() if not row.get("superseded")])
     for opening in state["openings"].values():
+        preparation_checkpoint()
         row = get(opening["party_type"], opening["party_id"], opening["currency"], opening["name"])
         value = Decimal(opening["amount"])
         signed = value if opening["direction"] == "for_us" else -value
@@ -599,6 +619,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
             obligations.append({**opening, "kind": "baseline", "expected": "0.00", "confirmed": opening["amount"],
                                 "direction": "receivable" if signed >= 0 else "payable"})
     for obligation in obligations:
+        preparation_checkpoint()
         used = allocated.get(obligation["id"], Decimal(0))
         if provider_balances_sar and obligation["party_type"] == "provider" and obligation["currency"] != "SAR":
             original = obligation.get("original_obligation_id", obligation["id"])
@@ -635,11 +656,14 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
     external_claims = advance_obligations(state)
     external_settled = {}
     for movement in state["movements"]:
+        preparation_checkpoint()
         for allocation in movement.get("allocations", []):
+            preparation_checkpoint()
             key = allocation["obligation_id"]
             if key in external_claims:
                 external_settled[key] = external_settled.get(key, Decimal(0)) + Decimal(allocation["amount"])
     for movement in state["movements"]:
+        preparation_checkpoint()
         amount = Decimal(movement["amount"])
         signed = amount if movement["direction"] == "incoming" else -amount
         if movement.get("bank_id"):
@@ -713,6 +737,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
     # Salary accrued against a starting amount owed by an employee offsets that
     # amount first; the gross history remains available in obligations.
     for row in parties.values():
+        preparation_checkpoint()
         if row["party_type"] == "employee_custody":
             row["custody_remaining"] = row["actual"]
         if row["party_type"] == "ad_account":
@@ -741,6 +766,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
             row["outstanding_receivable"] -= offset
             row["outstanding_payable"] -= offset
     for case in state.get("customer_returns", []):
+        preparation_checkpoint()
         status = case.get("status")
         kind = case.get("refund_source_type")
         if status == "refunded" and kind == "bank":
@@ -780,10 +806,12 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
     provider_metrics = deepcopy(details.get("provider_reports", {}))
     settlement_parts = {}
     for movement in state["movements"]:
+        preparation_checkpoint()
         gross = Decimal(movement["amount"]) + Decimal(movement.get("actual_fee_amount", "0"))
         cash = Decimal(movement["amount"])
         cumulative, previous_cash = Decimal(0), Decimal(0)
         for allocation in movement.get("allocations", []):
+            preparation_checkpoint()
             value = Decimal(allocation["amount"])
             cumulative += value
             assigned_cash = (cash * cumulative / gross).quantize(Decimal(".01"), rounding=ROUND_HALF_UP)
@@ -804,6 +832,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
                 metrics["cash"] += net
                 metrics["fees"] += value - net
     for identity, projection in provider_metrics.items():
+        preparation_checkpoint()
         totals = settlement_parts.get(identity, {"gross": Decimal(0), "cash": Decimal(0), "fees": Decimal(0)})
         net = Decimal(projection["net"])
         estimated = Decimal(projection["estimated_fees"])
@@ -817,6 +846,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
                           expected_receivable=fmt(expected), settled=fmt(totals["cash"]),
                           outstanding=fmt(expected-totals["cash"]))
     for identity in provider_metrics.keys() & valuations.keys():
+        preparation_checkpoint()
         provider_metrics[identity] = convert_projection(provider_metrics[identity], valuations[identity])
     details["provider_reports"] = provider_metrics
     cod_metrics = deepcopy(details.get("cod_reports", {}))
@@ -825,13 +855,16 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
     cod_settled = {}
     if cod_metrics:
         for movement in state["movements"]:
+            preparation_checkpoint()
             if movement["direction"] != "incoming":
                 continue
             for allocation in movement.get("allocations", []):
+                preparation_checkpoint()
                 identity = allocation["obligation_id"]
                 if identity in cod_metrics:
                     cod_settled[identity] = cod_settled.get(identity, Decimal(0)) + Decimal(allocation["amount"])
     for identity, projection in cod_metrics.items():
+        preparation_checkpoint()
         obligation = state.get("engine", {}).get("obligations", {}).get(identity, {})
         confirmed = Decimal(obligation.get("confirmed", "0"))
         settled = cod_settled.get(identity, Decimal(0))
@@ -850,7 +883,9 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
     issues = [entry for entry in issues if not (
         entry.get("code") == "provider_fee_estimate_unavailable" and entry.get("source_id") in resolved_fees)]
     for currency, providers in details["provider_balances"].items():
+        preparation_checkpoint()
         for provider in providers:
+            preparation_checkpoint()
             if not provider["complete"]:
                 issues.append({"code": "provider_net_balance_incomplete", "provider": provider["provider"],
                                "currency": currency, "source_id": "provider:" + provider["provider"],
@@ -860,6 +895,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
         state, cutoff=as_of or state.get("engine", {}).get("as_of"), require_cutoff=True)
     issues.extend(wallet_issues)
     for currency, balance in details["customer_wallet_balances"].items():
+        preparation_checkpoint()
         if balance["remaining"] is None:
             continue
         row = get("customer_wallet", "salla:" + balance["merchant_id"], currency, balance["name"])
@@ -868,6 +904,7 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
                    read_only=True, balance_role="customer_wallet_liability", source_as_of=balance["as_of"])
     summaries = {}
     for row in parties.values():
+        preparation_checkpoint()
         summary = summaries.setdefault(row["currency"], {key: Decimal(0) for key in (
             "actual_liquidity", "receivable", "payable", "expected_receivable", "expected_payable", "confirmed", "settled", "outstanding",
             "custody_remaining", "operating_expenses_paid", "owner_withdrawals")})
@@ -885,9 +922,11 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
         summary["owner_withdrawals"] += row["owner_withdrawals"]
     summaries = {c: {k: fmt(v) for k, v in s.items()} for c, s in summaries.items()}
     for row in parties.values():
+        preparation_checkpoint()
         if row["party_type"] == "ad_account" and row["ad_wallet_balance"] < 0:
             issues.append({"code": "advertising_prepaid_wallet_negative", "source_id": row["party_id"],
                            "currency": row["currency"], "amount": fmt(row["ad_wallet_balance"])})
+    preparation_checkpoint()
     return {"status": state["status"], "as_of": as_of or state.get("engine", {}).get("as_of"),
             "started_at": state["started_at"], "summaries": summaries,
             "summary": summaries.get("SAR", {k: "0.00" for k in ("actual_liquidity", "receivable", "payable", "expected_receivable", "expected_payable", "confirmed", "settled", "outstanding", "custody_remaining", "operating_expenses_paid", "owner_withdrawals")}),
@@ -916,11 +955,13 @@ async def freeze(db, owner, actor, payload, *, clock=None):
 
 def account_statement(state, account):
     """Project the same account legs as report(), without creating any movement."""
+    from operational_financial_activity_runtime import checked_rows, preparation_checkpoint
+    preparation_checkpoint()
     kind, identity, currency = account['kind'], account['id'], account['currency']
     balance = next((r for r in report(state)['parties'] if r['party_type']==kind
                     and r['party_id']==identity and r['currency']==currency), {})
     items = []
-    for movement in state['movements']:
+    for movement in checked_rows(state['movements']):
         bank_leg = (movement.get('bank_kind') == kind and movement.get('bank_id') == identity
                     and (movement.get('bank_currency') or movement['currency']) == currency)
         party_leg = (movement['party_type'] == kind and movement['party_id'] == identity
@@ -952,7 +993,7 @@ def account_statement(state, account):
                 'effective_fx_rate_to_sar': movement['effective_fx_rate_to_sar']}
                if movement.get('bank_currency') else {})})
     if kind=='bank':
-        for case in state.get('customer_returns',[]):
+        for case in checked_rows(state.get('customer_returns',[])):
             if (case['status'] not in {'refunded', 'salla_refund_confirmed'}
                     or case['refund_source_type']!='bank'
                     or case['refund_source_id']!=identity or case['currency']!=currency):
@@ -966,5 +1007,6 @@ def account_statement(state, account):
                 'business_date':business_day, 'occurred_at':stamp, 'reference':case.get('refund_reference',''),
                 'note':case.get('note',''), 'kind':'customer_refund'})
     items.sort(key=lambda r:(r['business_date'],r['occurred_at'],r['id']),reverse=True)
+    preparation_checkpoint()
     return {'account':{'name':account['name'],'party_type':kind,'party_id':identity,'currency':currency,
                        'actual':balance.get('actual','0.00'),'opening':balance.get('opening','0.00')},'items':items}

@@ -1,17 +1,16 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {operationalApi as api, messageFor, requestId} from './api';
+import {visibleOperationalRead} from './visibleOperationalRead';
 
 export default function AdFundingSettings({onSaved, onClose}) {
   const [data, setData] = useState(null), [account, setAccount] = useState('');
   const [evidence, setEvidence] = useState(''), [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const lock = useRef(false), pending = useRef(null);
-  useEffect(() => {
-    let alive = true;
-    api.adFundingSettings().then(result => {if (alive) setData(result);})
-      .catch(e => {if (alive) setError(messageFor(e));});
-    return () => {alive = false;};
-  }, []);
+  useEffect(() => visibleOperationalRead(config => api.adFundingSettings(config), {
+      onData: setData,
+      onError: e => setError(messageFor(e)),
+    }), []);
   const selected = data?.items.find(item => item.integration_account_id === account);
   const save = async () => {
     if (lock.current || !selected?.editable || data.status !== 'draft') return;

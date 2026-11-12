@@ -15,6 +15,7 @@ from operational_balance_store import read, mutate, fail, digest, now, claim_mov
 from operational_balance_service import active_gate, entity, money, fmt
 from operational_balance_sources import rows, usable, instant
 from operational_inventory_identity import line_identity, compatible_payload
+from operational_financial_activity_runtime import prepare_in_thread, preparation_checkpoint, checked_rows
 
 
 def image_url(value):
@@ -63,61 +64,68 @@ async def catalog(db, owner, *, components_only=False):
                                         ('mezan_cost_resources_v2','component','id')]:
         if components_only and kind == 'product':
             continue
-        seen = set()
-        for row in await rows(db, owner, collection):
-            if not usable(row) or row.get('archived') or row.get('deleted_at'):
-                continue
-            if kind == 'component' and row.get('track_inventory') is not True:
-                continue
-            key = str(row.get(identity) or '').strip()
-            if not key or key in seen or not str(row.get('name') or '').strip():
-                fail('inventory_catalog_ambiguous', 'هوية أو اسم المنتج غير مكتمل في ميزان 2')
-            seen.add(key)
-            base = {'id':key, 'kind':kind, 'name':str(row['name']),
-                'sku':str(row.get('sku') or row.get('code') or ''),
-                'image_url':image_url(row.get('main_image') if kind == 'product' else row.get('image_url')),
-                'unit':str(row.get('unit') or 'piece')}
-            if kind == 'product':
-                base['customization_fields'], base['customization_issues'] = customization_contract(row)
-            variants = row.get('variants') if kind == 'product' else []
-            if variants is None:
-                variants = []
-            if kind == 'product':
-                count = row.get('variants_count')
-                if count is None:
-                    count = 0
-                if type(count) is not int or count < 0 or not isinstance(variants, list) or count > len(variants):
-                    fail('inventory_variants_incomplete', 'خيارات المنتج غير مكتملة في ميزان 2؛ أكمل بيانات المنتج قبل الشراء')
-            if not variants:
-                result.append(base)
-                continue
-            seen_variants = set()
-            for variant in variants:
-                if not isinstance(variant, dict):
-                    fail('inventory_variant_ambiguous', 'خيارات المنتج غير مكتملة في ميزان 2')
-                variant_id = str(variant.get('id') or '').strip()
-                # These labels are canonical MZ2 normalized fields; do not read
-                # a raw provider/Legacy fallback or accept a client-supplied name.
-                label = str(variant.get('display_name') or variant.get('name') or '').strip()
-                if not label:
-                    selections = variant.get('selections') or []
-                    label = ' — '.join(f"{s['name']}: {s['value']}" for s in selections
-                        if isinstance(s, dict) and s.get('name') and s.get('value')) if isinstance(selections, list) else ''
-                if not variant_id or variant_id in seen_variants or not label or label.isdigit():
-                    fail('inventory_variant_ambiguous', 'هوية أو اسم خيار المنتج غير مكتمل في ميزان 2')
-                seen_variants.add(variant_id)
-                fields, issues = customization_contract(row, variant)
-                result.append({**base, 'customization_fields':fields, 'customization_issues':issues, 'variant_id':variant_id, 'variant_name':label,
-                    'name':base['name']+' — '+label,
-                    'sku':str(variant.get('sku') or base['sku']),
-                    'image_url':image_url(variant.get('image')) or base['image_url']})
+        stored = await rows(db, owner, collection)
+        result.extend(await prepare_in_thread(_catalog_rows, stored, kind, identity))
     return sorted(result, key=lambda row:(row['kind'], row['name'], row['id'], row.get('variant_id','')))
+
+
+def _catalog_rows(stored, kind, identity):
+    result = []
+    seen = set()
+    for row in checked_rows(stored):
+        if not usable(row) or row.get('archived') or row.get('deleted_at'):
+            continue
+        if kind == 'component' and row.get('track_inventory') is not True:
+            continue
+        key = str(row.get(identity) or '').strip()
+        if not key or key in seen or not str(row.get('name') or '').strip():
+            fail('inventory_catalog_ambiguous', 'هوية أو اسم المنتج غير مكتمل في ميزان 2')
+        seen.add(key)
+        base = {'id':key, 'kind':kind, 'name':str(row['name']),
+            'sku':str(row.get('sku') or row.get('code') or ''),
+            'image_url':image_url(row.get('main_image') if kind == 'product' else row.get('image_url')),
+            'unit':str(row.get('unit') or 'piece')}
+        if kind == 'product':
+            base['customization_fields'], base['customization_issues'] = customization_contract(row)
+        variants = row.get('variants') if kind == 'product' else []
+        if variants is None:
+            variants = []
+        if kind == 'product':
+            count = row.get('variants_count')
+            if count is None:
+                count = 0
+            if type(count) is not int or count < 0 or not isinstance(variants, list) or count > len(variants):
+                fail('inventory_variants_incomplete', 'خيارات المنتج غير مكتملة في ميزان 2؛ أكمل بيانات المنتج قبل الشراء')
+        if not variants:
+            result.append(base)
+            continue
+        seen_variants = set()
+        for variant in checked_rows(variants):
+            if not isinstance(variant, dict):
+                fail('inventory_variant_ambiguous', 'خيارات المنتج غير مكتملة في ميزان 2')
+            variant_id = str(variant.get('id') or '').strip()
+            # These labels are canonical MZ2 normalized fields; do not read
+            # a raw provider/Legacy fallback or accept a client-supplied name.
+            label = str(variant.get('display_name') or variant.get('name') or '').strip()
+            if not label:
+                selections = variant.get('selections') or []
+                label = ' — '.join(f"{s['name']}: {s['value']}" for s in selections
+                    if isinstance(s, dict) and s.get('name') and s.get('value')) if isinstance(selections, list) else ''
+            if not variant_id or variant_id in seen_variants or not label or label.isdigit():
+                fail('inventory_variant_ambiguous', 'هوية أو اسم خيار المنتج غير مكتمل في ميزان 2')
+            seen_variants.add(variant_id)
+            fields, issues = customization_contract(row, variant)
+            result.append({**base, 'customization_fields':fields, 'customization_issues':issues, 'variant_id':variant_id, 'variant_name':label,
+                'name':base['name']+' — '+label,
+                'sku':str(variant.get('sku') or base['sku']),
+                'image_url':image_url(variant.get('image')) or base['image_url']})
+    return result
 
 
 def project_inventory(state):
     from operational_supplier_adjustments import adjusted_gross
     obligations = state.setdefault('engine', {}).setdefault('obligations', {})
-    for invoice in state.get('inventory_purchases', []):
+    for invoice in checked_rows(state.get('inventory_purchases', [])):
         key = invoice['obligation_id']
         obligations[key] = {'id':key, 'kind':'supplier', 'party_type':'supplier',
             'party_id':invoice['supplier_id'], 'name':invoice['supplier_name'],
@@ -132,7 +140,7 @@ def purchase_view(state, invoice):
     from operational_supplier_adjustments import invoice_view
     result = invoice_view(state,'inventory',invoice)
     result['physical_stock_status'] = 'unproven'
-    for line in result['lines']:
+    for line in checked_rows(result['lines']):
         line['physical_stock_status'] = 'unproven'
         line.setdefault('personalizations', [])
         # Original purchase distribution, not an attribution of subsequent returns.
@@ -142,14 +150,14 @@ def purchase_view(state, invoice):
 
 def inventory_view(state):
     stock = {}
-    for invoice in state.get('inventory_purchases', []):
-        for line in purchase_view(state,invoice)['lines']:
+    for invoice in checked_rows(state.get('inventory_purchases', [])):
+        for line in checked_rows(purchase_view(state,invoice)['lines']):
             key = (*line_identity(line), line['unit'])
             row = stock.setdefault(key, {k:line[k] for k in ('item_id','kind','name','image_url','unit','variant_id','variant_name','purchase_line_key','purchase_configuration','purchase_option_labels','location','location_name','physical_stock_status') if k in line} | {'quantity':0,'returned_quantity':0,'remaining_quantity':0})
             row['quantity'] += line['quantity']
             row['returned_quantity'] += line['returned_quantity']
             row['remaining_quantity'] += line['remaining_quantity']
-    return {'items':[purchase_view(state,p) for p in reversed(state.get('inventory_purchases', []))],
+    return {'items':[purchase_view(state,p) for p in checked_rows(reversed(state.get('inventory_purchases', [])))],
             'stock':list(stock.values())}
 
 
