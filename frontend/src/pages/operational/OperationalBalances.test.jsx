@@ -259,13 +259,13 @@ test('mobile daily permission never fetches private reports or renders supplier 
  await click('حركات أخرى');await input(host.querySelectorAll('select')[0],'supplier');await input(host.querySelectorAll('select')[1],'supplier1');await input(host.querySelectorAll('select')[3],'settlement');
  expect(api.obligations).toHaveBeenCalledWith('supplier','supplier1');expect(api.reports).not.toHaveBeenCalled();
 });
-test('report refreshes every thirty seconds and stops on unmount',async()=>{
+test('report reads once while visible and stops on unmount',async()=>{
  jest.useFakeTimers();
  try {
   api.context.mockResolvedValue({session_scope:'test-owner:test-actor',status:'active',permissions:{view:true,reports:true,move:false,manage:false}});
   await render(<OperationalBalances/>);expect(api.reports).toHaveBeenCalledTimes(1);
-  await act(async()=>jest.advanceTimersByTime(30000));expect(api.reports).toHaveBeenCalledTimes(2);
-  await render(<div/>);await act(async()=>jest.advanceTimersByTime(30000));expect(api.reports).toHaveBeenCalledTimes(2);
+  await act(async()=>jest.advanceTimersByTime(300000));expect(api.reports).toHaveBeenCalledTimes(1);
+  await render(<div/>);await act(async()=>jest.advanceTimersByTime(300000));expect(api.reports).toHaveBeenCalledTimes(1);
  } finally {jest.useRealTimers();}
 });
 
