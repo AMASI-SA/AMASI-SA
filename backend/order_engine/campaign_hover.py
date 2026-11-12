@@ -162,6 +162,14 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
 
     # Account-day raw spend is from locally stored campaigns, never ad API.
     dates = sorted({day for _, _, _, day in accounts})
+    # Only use Riyadh facts from an American account to establish campaign
+    # identity, never as spend for the American local day.
+    riyadh_today = now.astimezone(ZoneInfo("Asia/Riyadh")).date()
+    snapchat_identity_dates = sorted({
+        riyadh_today.isoformat(),
+        (riyadh_today - timedelta(days=1)).isoformat(),
+        *dates,
+    })
     raw_spends = []
     if dates:
         raw_spends = await db.ads_v2_spend_raw.find(
@@ -180,7 +188,7 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         for collection, query, label in (
             ("mezan_snapchat_performance_daily_v2",
              {"user_id": user_id, "entity_type": "campaign",
-              "date": {"$in": dates},
+              "date": {"$in": snapchat_identity_dates},
               "campaign_id": {"$in": campaign_ids},
               "date_timezone": "Asia/Riyadh"}, "snapchat"),
             ("mezan_meta_campaign_performance_daily_v2",
@@ -229,9 +237,13 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         if not detail or cid not in by_campaign:
             continue
         account, _, start, day = detail
-        if row.get("date") != day:
+        is_account_day_aligned = (
+            row.get("date") == day and
+            (provider != "snapchat" or _text(account.get("timezone")) == "Asia/Riyadh")
+        )
+        if provider != "snapchat" and not is_account_day_aligned:
             continue
-        if provider == "snapchat" and _text(account.get("timezone")) != "Asia/Riyadh":
+        if provider == "snapchat" and not is_account_day_aligned and row.get("date") not in snapchat_identity_dates:
             continue
         key = (cid, _text(account.get("id")))
         if key in seen:
@@ -240,8 +252,9 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         by_campaign[cid].append({
             "account": account, "provider": provider, "start": start,
             "date": day,
+            "spend_alignment": None if is_account_day_aligned else "snapchat_account_day_not_aligned",
             "spend_row": {
-                "spend_sar": row.get("spend_sar"),
+                "spend_sar": row.get("spend_sar") if is_account_day_aligned else None,
                 "fetched_at": row.get("updated_at"),
                 "dimension_keys": {"campaign_name": row.get("campaign_name") or cid},
             },
@@ -379,6 +392,8 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         account = detail["account"]
         record["timezone"] = account["timezone"]
         record["date"] = detail["date"]
+        if detail.get("spend_alignment"):
+            record["spend_reason"] = detail["spend_alignment"]
         spend_row = detail["spend_row"]
         record["updated_at"] = spend_row.get("fetched_at")
         record["campaign_name"] = _text((spend_row.get("dimension_keys") or {}).get("campaign_name"))
