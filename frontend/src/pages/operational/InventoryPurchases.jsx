@@ -28,7 +28,7 @@ export default function InventoryPurchases({context,source='mezan2',mode='purcha
     const [result,products,entities,...sources]=await Promise.all([readable?api.inventoryPurchases():Promise.resolve({items:[],stock:[]}),entry?api.inventoryCatalog(true):Promise.resolve({items:[]}),(entry||paying)?api.entities('supplier'):Promise.resolve({items:[]}),... (paying?['bank','cash','employee_custody'].map(kind=>api.entities(kind).then(r=>r.items.map(a=>({...a,kind})))):[])]);
     if(alive){setRows(result.items);setStock(result.stock);setCatalog(products.products?[...products.products,...products.items.filter(i=>i.kind==='component').map(i=>({...i,options:[]}))]:products.items);setLocations(products.locations||[]);setSuppliers(entities.items);setAccounts(sources.flat().filter(a=>!fixedSource||`${a.kind}:${a.id}`===fixedSource));}
   }catch(e){if(alive){setError(messageFor(e));setLoadFailed(true);}}finally{if(alive)setLoading(false);}};load();return()=>{alive=false;};},[readable,writable,entry,paying,loadVersion,recovery.error,fixedSource]);
-  useEffect(()=>{const refreshOnFocus=()=>setLoadVersion(v=>v+1);window.addEventListener('focus',refreshOnFocus);return()=>window.removeEventListener('focus',refreshOnFocus);},[]);
+  useEffect(()=>{if(mode==='reports')return;const refreshOnFocus=()=>setLoadVersion(v=>v+1);window.addEventListener('focus',refreshOnFocus);return()=>window.removeEventListener('focus',refreshOnFocus);},[mode]);
   const totals=()=>form.lines.reduce((sum,line)=>{const q=Number(line.quantity);if(!Number.isSafeInteger(q)||q<=0)throw Error('الكمية يجب أن تكون عددًا صحيحًا موجبًا.'); const n=q*cents(line.unit_price),t=cents(line.tax);if(!Number.isSafeInteger(n+t+sum.gross))throw Error('الإجمالي أكبر من الحد المسموح.');return {net:sum.net+n,tax:sum.tax+t,gross:sum.gross+n+t};},{net:0,tax:0,gross:0});
   let preview=null;try{preview=totals();}catch{}
   const update=(index,key,value)=>setForm(f=>({...f,lines:f.lines.map((l,i)=>i===index?{...l,[key]:value}:l)}));
@@ -58,6 +58,7 @@ export default function InventoryPurchases({context,source='mezan2',mode='purcha
     finally{lock.current=false;setBusy(false);}
   }
   return <section dir="rtl" className="op-inventory"><h2>{mode==='reports'?'فواتير وكميات المشتريات':mode==='payment'?'سداد فاتورة مورد':'شراء المخزون'}</h2>{entry&&<p>اختر الأصناف المستلمة وكمياتها، ثم احفظ الشراء.</p>}<Notice error={error} message={message}/>
+    {mode==='reports'&&readable&&<button type="button" disabled={loading||busy} onClick={()=>setLoadVersion(v=>v+1)}>تحديث المشتريات</button>}
     {loading&&<p role="status">جارٍ تحميل المشتريات…</p>}{loadFailed&&<button disabled={loading||busy} onClick={()=>setLoadVersion(v=>v+1)}>إعادة تحميل بيانات المشتريات</button>}
     {pending&&<div className="op-card"><p>عملية محفوظة بانتظار تأكيد النتيجة؛ أعد المحاولة بالبيانات نفسها.</p>{((entry&&pending.type==='purchase')||(paying&&pending.type==='payment'))?<button disabled={busy||!writable} onClick={()=>save(pending.type)}>إعادة محاولة الحفظ</button>:<p>{pending.type==='purchase'?'تابع العملية من صفحة شراء المخزون.':'تابع العملية من الموردين ← سداد فاتورة مخزون.'}</p>}</div>}
     {entry&&<><fieldset disabled={disabled} className="op-card"><legend>فاتورة شراء مخزون مستلم</legend>
