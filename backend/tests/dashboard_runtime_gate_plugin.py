@@ -256,6 +256,7 @@ def _expected_google_commands(audit, response):
 
     The immutable fixtures have no Google integration/account/native facts.
     Meta/TikTok share two collection names, so their counts must remain intact.
+    The existing integration read also carries the saved owner selection policy.
     Dates come from the frozen historical history, not candidate call arguments.
     """
     cohorts = audit['google_cohorts']
@@ -274,7 +275,8 @@ def _expected_google_commands(audit, response):
     period = {'$gte': dates[0], '$lte': dates[-1]}
     specifications = [
         ('mezan_integrations_v2', {'user_id': owner, 'provider': 'google_ads'},
-         {'_id': 0, 'connection_status': 1}),
+         {'_id': 0, 'connection_status': 1,
+          'account_selection_configured': 1, 'selected_account_ids': 1}),
         ('mezan_integration_accounts_v2',
          {'user_id': owner, 'provider': 'google_ads', 'connection_status': 'connected',
           'connection_provenance': 'api_connection'},

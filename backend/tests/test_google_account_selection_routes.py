@@ -4,17 +4,27 @@ import httpx
 import pytest
 
 from integrations_control_center import google_account_selection as module
+from integrations_control_center.google_connections import attach_google_connection_routes
 from integrations_control_center.routes import _require_owner
 from tests.test_google_reporting_account_selection import DB, IDS, OWNER, seed, snapshot
 
 
-async def request(db, method="GET", *, user=None, payload=None):
-    app = FastAPI()
+def registered_router(db, user=None):
     router = APIRouter(prefix="/integrations-v2")
     async def current_user():
         return user if user is not None else {"id": OWNER, "role": "owner"}
-    module.attach_google_account_selection_routes(router, db, current_user, _require_owner)
-    app.include_router(router)
+    attach_google_connection_routes(router, db, current_user, _require_owner)
+    return router
+
+
+def mounted(db, user=None):
+    app = FastAPI()
+    app.include_router(registered_router(db, user))
+    return app
+
+
+async def request(db, method="GET", *, user=None, payload=None):
+    app = mounted(db, user)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
         return await client.request(method, "/integrations-v2/google_ads/accounts-selection",
                                     **({"json": payload} if payload is not None else {}))
@@ -22,6 +32,15 @@ async def request(db, method="GET", *, user=None, payload=None):
 
 def choice(**overrides):
     return {"selected_account_ids": [IDS[0]], "expected_account_ids": list(IDS), **overrides}
+
+
+def test_google_connection_registrar_mounts_each_selection_method_once():
+    router = registered_router(DB())
+    methods = [method for route in router.routes
+               if route.path == "/integrations-v2/google_ads/accounts-selection"
+               for method in route.methods]
+    assert sorted(methods) == ["GET", "PUT"]
+    assert any(route.path == "/integrations-v2/google/connect/start" for route in router.routes)
 
 
 @pytest.mark.asyncio

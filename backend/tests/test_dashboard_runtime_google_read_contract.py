@@ -112,7 +112,8 @@ def pinned_commands(owner="fixture-owner", start="2026-10-01", end="2026-10-08")
     period = {"$gte": start, "$lte": end}
     queries = [
         ("mezan_integrations_v2", {"user_id": owner, "provider": "google_ads"},
-         {"_id": 0, "connection_status": 1}),
+         {"_id": 0, "connection_status": 1,
+          "account_selection_configured": 1, "selected_account_ids": 1}),
         ("mezan_integration_accounts_v2",
          {"user_id": owner, "provider": "google_ads", "connection_status": "connected",
           "connection_provenance": "api_connection"},
@@ -217,7 +218,8 @@ def test_permission_failure_has_no_google_cohort_or_query():
 
 @pytest.mark.parametrize("defect", [
     "query_owner", "coherent_wrong_owner", "missing_owner", "wider_date", "coherent_wrong_date",
-    "provider", "account_status", "account_provenance", "projection", "collection", "missing_read",
+    "provider", "account_status", "account_provenance", "projection", "selection_marker_missing",
+    "selection_ids_missing", "collection", "missing_read",
     "extra_read", "write", "extra_option", "second_cohort", "command_database", "event_database",
     "native_documents", "shared_account_documents", "legacy_documents", "untracked_find", "get_more",
     "unknown_collection", "missing_native_evidence", "subtract_four", "money", "google_history_zero",
@@ -229,6 +231,10 @@ def test_google_gate_rejects_unreviewed_scope_reads_counts_and_json(defect):
     commands = audit["google_commands"]
     if defect == "query_owner":
         commands[2]["filter"]["user_id"] = "foreign"
+    elif defect == "selection_marker_missing":
+        del commands[0]["projection"]["account_selection_configured"]
+    elif defect == "selection_ids_missing":
+        del commands[0]["projection"]["selected_account_ids"]
     elif defect == "coherent_wrong_owner":
         audit["google_cohorts"][0]["user_id"] = "foreign"
         for command in commands:

@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlsplit
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
+from .google_account_selection import attach_google_account_selection_routes
 from .google_discovery import _discover_google_accounts, _userinfo
 from .google_oauth_security import (
     GOOGLE_PROVIDER_IDS,
@@ -241,6 +242,7 @@ def attach_google_connection_routes(
     require_owner: Callable[[Any], dict],
 ) -> None:
     install_google_connection_actions()
+    attach_google_account_selection_routes(router, db, current_user, require_owner)
 
     @router.post("/google/connect/start")
     async def google_connect_start(
