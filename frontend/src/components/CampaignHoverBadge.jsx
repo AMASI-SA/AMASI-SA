@@ -79,7 +79,17 @@ export default function CampaignHoverBadge({ badge, campaign, report }) {
                     <div className="mt-2 text-[10px] text-slate-500">
                         {report === undefined ? "تحميل الإحصاءات..." :
                          report?.status === "available" ? "طلبات سلة · صرف ميزان المسجل" :
-                         "بيانات غير مكتملة: تحقق من ربط الحملة والحساب والصرف"}
+                         report?.status === "snapchat_account_day_not_aligned"
+                             ? "صرف سناب محفوظ بيوم الرياض ولا يطابق يوم هذا الحساب. لا يجوز جمع الفترتين."
+                         : report?.status === "account_timezone_unavailable"
+                             ? "توقيت الحساب الإعلاني غير متاح."
+                         : report?.status === "ambiguous_account"
+                             ? "الحملة مرتبطة بأكثر من حساب، وتحتاج مطابقة معرّف الحساب."
+                         : report?.status === "campaign_spend_not_available"
+                             ? "صرف هذه الحملة غير متوفر في بيانات اليوم المحفوظة."
+                         : report?.status === "spend_source_truncated"
+                             ? "مصدر الصرف تجاوز الحد الآمن للقراءة."
+                         : "بيانات غير مكتملة: تحقق من ربط الحملة والحساب والصرف"}
                     </div>
                     {report?.updated_at && <div className="mt-1 text-[10px] text-slate-400">آخر تحديث للصرف: {String(report.updated_at).slice(0, 19)}</div>}
                 </div>, document.body
