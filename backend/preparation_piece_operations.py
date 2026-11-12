@@ -2610,6 +2610,11 @@ async def _ensure_assembly_order_eligible(
     plan = await db[PLANS].find_one({"user_id": user_id, "order_id": number})
     if plan:
         await assert_component_execution(db, user_id=user_id, order_number=number, plan=plan)
+    elif reviewed_physical:
+        # Newly allowing a reviewed physical Ready requires an actual current
+        # stock reservation. Never mint a legacy audit exemption for this
+        # exceptional transition.
+        raise HTTPException(409, detail={"code": "component_reservation_missing"})
     elif not await allow_legacy_component_execution(db, user_id=user_id, order_number=number):
         raise HTTPException(409, detail={"code": "component_reservation_missing"})
     if reviewed_physical:
@@ -3148,7 +3153,7 @@ async def _assembly_search(
     if (local_contract and workflow.get("stage") == "reviewed"
             and any(_reviewed_received_physical_piece(piece) for piece in pieces)):
         from stock_component_consumption_service import PLANS
-        from fulfillment_v2_routes import assert_component_execution, allow_legacy_component_execution
+        from fulfillment_v2_routes import assert_component_execution
         try:
             current_plan = await db[PLANS].find_one({
                 "user_id": user_id, "order_id": order_number,
@@ -3159,9 +3164,9 @@ async def _assembly_search(
                 await assert_component_execution(
                     db, user_id=user_id, order_number=order_number, plan=current_plan,
                 )
-            elif not await allow_legacy_component_execution(
-                db, user_id=user_id, order_number=order_number,
-            ):
+            else:
+                # Search is observational. Execution's legacy cohort check
+                # would write a marker; refuse absent reservations instead.
                 reviewed_physical_component_blocker = "component_reservation_missing"
             if not reviewed_physical_component_blocker:
                 await _assert_reviewed_physical_snapshot_current(
