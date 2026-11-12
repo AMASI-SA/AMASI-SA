@@ -184,11 +184,19 @@
   },
   "deployment": {
     "published": false,
-    "shared_app_changed": false,
+    "shared_app_changed": true,
     "own_lease_acquired": false,
     "actual_shared_adapter_run": false,
-    "fresh_shared_guard_status_available": false,
-    "blocker": "Separate code-server password login remains visible after interrupted secure authentication. No automatic retry after cancellation."
+    "fresh_shared_guard_status_available": true,
+    "blocker": null,
+    "authenticated_at_checkpoint": "2026-11-12 14:43:48 UTC",
+    "shared_deployment_git_sha": "570867c02ff2486750e4a99d574c25a8fef6c428",
+    "shared_tree": "654da296269fb22348e87e0629de47ab942ad18a",
+    "tracked_clean": true,
+    "untracked_platform_files_preserved": 120,
+    "platform_manifest_sha256": "ba36f9881479238f135d563c1e007e3ebed42a3bb665fe5a899564fe5f4a7170",
+    "last_observed_live_release_id": "rg5-efde36a8ffed59bbfbfaa1521401fe29a3d59923a59102cd0e34305a38a0e33c",
+    "next": "actual configured shared adapter, own prepare/prepublish, one publication, official verify3/inactive"
   },
   "continuity": {
     "evidence_branch": "codex/financial-read-load-merged-evidence-20261112",

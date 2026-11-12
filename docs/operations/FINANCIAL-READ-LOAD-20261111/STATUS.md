@@ -1,6 +1,6 @@
 # Financial read load — bounded first slice
 
-**Latest state: PR #1892 is merged; Emergent publication has not started.** This copy is a documentation-only continuation on `codex/financial-read-load-merged-evidence-20261112`. Never deploy the evidence branch. The immutable release source/intent and production merge are recorded below.
+**Latest state: PR #1892 is merged; authenticated shared source is fast-forwarded and the actual adapter is next. Live publication has not started.** This copy is a documentation-only continuation on `codex/financial-read-load-merged-evidence-20261112`. Never deploy the evidence branch. The immutable release source/intent and production merge are recorded below.
 
 ## Change contract
 
@@ -201,3 +201,14 @@ Issue #1006 continuity limitation: adding a comment returned GitHub's 2,500-comm
 ## Resume
 
 Read the latest Issue #1006 entry and this STATUS; fetch current production and the exact release continuation checkpoint before further changes. Root owns Git/integration and publication. Implementation/review agents are complete; further review is read-only. Preserve the old PR #1888 checkpoint and all frozen release pairs. Complete the authorized release through the current v5 gates; do not revive the historical finance bundle from the old base.
+
+
+## Authenticated shared source checkpoint — 2026-11-12 14:43:48 UTC
+
+The user requested the secure login form and authentication succeeded, independently verified in a fresh code-server tab displaying `/app`. Fresh remote production is still M `570867c02ff2486750e4a99d574c25a8fef6c428`; independent review reconfirmed the frozen release branch, intent-only A-to-M content and all 11 applicable exact-B successful workflows.
+
+Actual shared preflight ran the official guard and found `active:false`, production branch at J `e0f00c6ec47536aaaa28ac3fa580f3d6abc02c96`, clean tracked/staged source and 120 unrelated untracked platform files. Live read-only `/api/health` still reports the prior `rg5-efde36a8ffed59bbfbfaa1521401fe29a3d59923a59102cd0e34305a38a0e33c` source `361978f854cecf572a8f3d3f0074f41fd91fcfd0`; the financial release was not already deployed.
+
+Root fetched and asserted the exact remote M, rechecked inactive guard, and fast-forwarded `/app` normally. The resulting tree equals reviewed B `654da296269fb22348e87e0629de47ab942ad18a`; tracked/staged source remains clean. Content/mode hashes prove all 120 platform files were preserved exactly; manifest SHA256 `ba36f9881479238f135d563c1e007e3ebed42a3bb665fe5a899564fe5f4a7170`. No reset, lease or publication was performed. A partial UI command-entry attempt was cleared before submission; only the complete inspected preflight command ran.
+
+Root owns this serialized release handoff. Next: run the actual configured `yarn build` adapter in `/app/frontend` using the exact reviewed public origin and bytecode disabled, preserve sanitized evidence, then own prepare/prepublish, one authorized publication, newer explicit deployment success, official verify3/inactive and bounded read-only UI acceptance. No accounting/provider writes, preparation changes or paid Emergent chat. This evidence branch remains documentation only and must never be deployed. Issue #1006's previously recorded persistence limitation still applies; PR1892 plus this branch carry the verified checkpoint.
