@@ -28,6 +28,25 @@ export function googleKnownIncompleteAmount(evidence) {
         && known !== null && known > 0 ? known : null;
 }
 
+// Both dashboard cards display this saved subtotal. It never supplies a full
+// expense, profit, CPA or ROAS, and must belong to the selected period.
+export function dashboardKnownIncompleteAmount(snapshot, { fromDate, toDate } = {}) {
+    const from = safeDate(fromDate);
+    const to = safeDate(toDate || fromDate);
+    const quality = snapshot?.spend_quality;
+    const known = knownAmount(snapshot?.known_total_sar);
+    if (!from || !to || snapshot?.date_from !== from || snapshot?.date_to !== to
+        || snapshot?.total_sar !== null || quality?.status !== "incomplete"
+        || quality?.amount_available !== false || known === null) return null;
+    // A default zero with no observed provider amount is still unknown.
+    const observedZero = DASHBOARD_ADS_PROVIDERS.some((provider) =>
+        knownAmount(snapshot?.provider_totals_sar?.[provider]) === 0)
+        || (Number.isSafeInteger(snapshot?.providers?.snapchat?.known_account_count)
+            && snapshot.providers.snapchat.known_account_count > 0
+            && knownAmount(snapshot.providers.snapchat.known_total_sar) === 0);
+    return known > 0 || observedZero ? known : null;
+}
+
 function accountCount(value) {
     return Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
@@ -200,7 +219,7 @@ export function normalizeDashboardAdsSpend(payload = {}) {
     const totals = Object.fromEntries(
         DASHBOARD_ADS_PROVIDERS.map((provider) => [
             provider,
-            nonnegative(value?.provider_totals_sar?.[provider]),
+            knownAmount(value?.provider_totals_sar?.[provider]),
         ]),
     );
     return {

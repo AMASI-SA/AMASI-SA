@@ -1,6 +1,7 @@
 import { loadDashboardPlatformSpend } from "../lib/dashboardPlatformSpendClient";
 import {
     DASHBOARD_ADS_PROVIDERS,
+    dashboardKnownIncompleteAmount,
     getDashboardAdsSpend,
     normalizeDashboardAdsHourlySpend,
     normalizeDashboardAdsSpend,
@@ -82,6 +83,68 @@ function fourPlatformPayload(overrides = {}) {
         ...overrides,
     };
 }
+
+function incompletePortfolio(overrides = {}) {
+    return fourPlatformPayload({
+        total_sar: null, known_total_sar: 1405.65,
+        provider_totals_sar: { snapchat: 1144.55, meta: 222.22, tiktok: 33.33, google: null },
+        spend_quality: { status: "incomplete", amount_available: false, amount_complete: false },
+        ...overrides,
+    });
+}
+
+const portfolioRange = { fromDate: "2026-08-05", toDate: "2026-08-05" };
+
+test("available portfolio total comes from the saved subtotal once in raw and normalized snapshots", () => {
+    const snapshot = incompletePortfolio();
+    const before = JSON.parse(JSON.stringify(snapshot));
+    expect(dashboardKnownIncompleteAmount(snapshot, portfolioRange)).toBe(1405.65);
+    expect(dashboardKnownIncompleteAmount(normalizeDashboardAdsSpend(snapshot), portfolioRange)).toBe(1405.65);
+    expect(snapshot.total_sar).toBeNull();
+    expect(snapshot).toEqual(before);
+});
+
+test.each([
+    {}, { fromDate: "2026-08-04" }, { fromDate: "2026-08-05", toDate: "2026-08-06" },
+    { fromDate: "invalid", toDate: "2026-08-05" },
+])("available portfolio total requires matching selected dates %p", (range) => {
+    expect(dashboardKnownIncompleteAmount(incompletePortfolio(), range)).toBeNull();
+});
+
+test.each([null, undefined, false, true, "", " ", -1, NaN, Infinity, {}, []])(
+    "available portfolio total rejects invalid known amount %p without manufacturing zero", (known_total_sar) => {
+        expect(dashboardKnownIncompleteAmount(incompletePortfolio({ known_total_sar }), portfolioRange)).toBeNull();
+    },
+);
+
+test.each([
+    { total_sar: 0 }, { total_sar: undefined },
+    { spend_quality: { status: "complete", amount_available: true } },
+    { spend_quality: { status: "incomplete", amount_available: "false" } },
+    { spend_quality: { status: "incomplete" } },
+])("available portfolio total cannot replace a full value or incomplete evidence contract %p", (override) => {
+    expect(dashboardKnownIncompleteAmount(incompletePortfolio(override), portfolioRange)).toBeNull();
+});
+
+test("available portfolio total distinguishes observed subtotal zero from entirely missing data", () => {
+    const snapshot = incompletePortfolio({ known_total_sar: 0,
+        provider_totals_sar: { snapchat: null, meta: null, tiktok: null, google: null } });
+    expect(dashboardKnownIncompleteAmount(snapshot, portfolioRange)).toBeNull();
+    snapshot.provider_totals_sar.meta = 0;
+    expect(dashboardKnownIncompleteAmount(snapshot, portfolioRange)).toBe(0);
+    expect(snapshot.total_sar).toBeNull();
+});
+
+test.each([false, true, [], {}, "", " "])(
+    "available portfolio total rejects malformed provider zero evidence %p before and after normalization", (value) => {
+        const snapshot = incompletePortfolio({ known_total_sar: 0,
+            provider_totals_sar: { snapchat: null, meta: value, tiktok: null, google: null } });
+        expect(dashboardKnownIncompleteAmount(snapshot, portfolioRange)).toBeNull();
+        const normalized = normalizeDashboardAdsSpend(snapshot);
+        expect(normalized.provider_totals_sar.meta).toBeNull();
+        expect(dashboardKnownIncompleteAmount(normalized, portfolioRange)).toBeNull();
+    },
+);
 
 
 test("normalizes and sorts all four Riyadh hourly provider series", () => {

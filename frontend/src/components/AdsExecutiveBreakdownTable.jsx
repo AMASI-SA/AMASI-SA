@@ -1,5 +1,5 @@
 import DashboardTableScroll from "./DashboardTableScroll";
-import { googleKnownIncompleteAmount } from "../services/dashboardAdsSpend";
+import { dashboardKnownIncompleteAmount, googleKnownIncompleteAmount } from "../services/dashboardAdsSpend";
 const PROVIDERS = [
     { key: "snapchat", label: "Snapchat" },
     { key: "tiktok", label: "TikTok" },
@@ -156,9 +156,11 @@ function SnapchatAccountExpenses({ accounts }) {
     </div>;
 }
 
-export default function AdsExecutiveBreakdownTable({ data, snapchatAccounts, googleSpendEvidence }) {
+export default function AdsExecutiveBreakdownTable({ data, snapchatAccounts, googleSpendEvidence,
+    platformSpendEvidence, fromDate, toDate, spendIncomplete = false }) {
     const rows = buildAdsExecutiveMetricRows(data);
     const knownGoogle = googleSpendEvidence ? googleKnownIncompleteAmount(googleSpendEvidence) : null;
+    const knownTotal = dashboardKnownIncompleteAmount(platformSpendEvidence, { fromDate, toDate });
     const coverage = data?.coverage || {};
     const splitSnapchat = snapchatAccounts !== undefined;
     const providers = splitSnapchat ? PROVIDERS.filter(({ key }) => key !== "snapchat") : PROVIDERS;
@@ -219,13 +221,19 @@ export default function AdsExecutiveBreakdownTable({ data, snapchatAccounts, goo
                                         className="p-2 text-center font-mono font-bold text-slate-700"
                                     >
                                         {row.key === "spend" && key === "google"
-                                            && data?.providers?.google?.spend_sar === null && knownGoogle !== null
+                                            && (spendIncomplete || data?.providers?.google?.spend_sar === null) && knownGoogle !== null
                                             ? `المتاح ${fmtSar(knownGoogle)} ر.س · غير مكتمل`
+                                            : spendIncomplete && key === "google" && googleSpendEvidence?.amount_available === false
+                                                && ["spend", "cost_per_order", "roas"].includes(row.key) ? "—"
                                             : formatValue(row.values[key], row.format)}
                                     </td>
                                 ))}
-                                <td className="p-2 text-center font-mono font-extrabold text-emerald-800">
-                                    {formatValue(row.total, row.format)}
+                                <td className="p-2 text-center font-mono font-extrabold text-emerald-800"
+                                    data-testid={row.key === "spend" ? "ads-executive-spend-total" : undefined}>
+                                    {row.key === "spend" && (spendIncomplete || data?.total?.spend_sar === null) && knownTotal !== null
+                                        ? `المتاح ${fmtSar(knownTotal)} ر.س · غير مكتمل`
+                                        : spendIncomplete && ["spend", "cost_per_order", "roas"].includes(row.key) ? "—"
+                                        : formatValue(row.total, row.format)}
                                 </td>
                             </tr>
                         ))}

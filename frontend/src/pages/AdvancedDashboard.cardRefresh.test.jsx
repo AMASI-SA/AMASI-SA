@@ -8,8 +8,16 @@ jest.mock("../lib/api", () => ({ get: jest.fn(), post: jest.fn() }));
 jest.mock("react-router-dom", () => ({ Link: ({ children, to, ...props }) => <a href={to} {...props}>{children}</a> }));
 let mockOrders = [];
 jest.mock("../hooks/useOrders", () => ({ useOrders: () => ({ orders: mockOrders, hasMore: false }) }));
-jest.mock("../services/dashboardAdsSpend", () => ({ getDashboardAdsSpend: jest.fn(async () => null) }));
-jest.mock("../components/DashboardAdsSpendCard", () => () => <div data-testid="unchanged-spend-card" />);
+jest.mock("../services/dashboardAdsSpend", () => ({
+    ...jest.requireActual("../services/dashboardAdsSpend"), getDashboardAdsSpend: jest.fn(async () => null),
+}));
+let mockRenderRealSpendCard = false;
+let mockSpendCardProps;
+jest.mock("../components/DashboardAdsSpendCard", () => (props) => {
+    mockSpendCardProps = props;
+    const RealCard = jest.requireActual("../components/DashboardAdsSpendCard").default;
+    return mockRenderRealSpendCard ? <RealCard {...props} /> : <div data-testid="unchanged-spend-card" />;
+});
 jest.mock("../components/LatestSoldProductsCard", () => () => null);
 jest.mock("../components/AdvancedFilters", () => ({
     __esModule: true,
@@ -45,7 +53,10 @@ beforeEach(() => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
     jest.useFakeTimers(); jest.setSystemTime(START); jest.clearAllMocks();
     mockOrders = [];
+    mockRenderRealSpendCard = false;
+    mockSpendCardProps = null;
     Object.defineProperty(document, "hidden", { configurable: true, value: false });
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
     Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
     api.get.mockImplementation(async (url) => responseFor(url));
     getDashboardAdsSpend.mockResolvedValue(null);
@@ -54,6 +65,72 @@ beforeEach(() => {
 afterEach(async () => {
     await act(async () => root.unmount()); host.remove(); jest.useRealTimers();
     delete global.IS_REACT_ACT_ENVIRONMENT;
+});
+
+function sharedSpend(amount, { day = "2026-11-11", complete = false } = {}) {
+    return { date_from: day, date_to: day, timezone: "Asia/Riyadh",
+        total_sar: complete ? amount : null, known_total_sar: amount,
+        provider_totals_sar: { snapchat: 0, meta: 0, tiktok: 0, google: complete ? amount : null },
+        providers: { google: { connected: true, amount_available: complete,
+            status: complete ? "complete" : "incomplete", known_total_sar: amount } },
+        spend_quality: { status: complete ? "complete" : "incomplete",
+            amount_available: complete, amount_complete: complete },
+        daily_spend: [], hourly_spend: [],
+    };
+}
+
+test("available portfolio total stays identical after the real spend card's existing read without another request", async () => {
+    mockRenderRealSpendCard = true;
+    let amount = 100;
+    getDashboardAdsSpend.mockImplementation(async () => sharedSpend(amount));
+    await render();
+    const cardTotal = () => host.querySelector('[data-testid="dashboard-ads-spend-total"]').textContent;
+    const profitTotal = () => host.querySelector('[data-testid="advanced-profit-row-ads"]').textContent;
+    expect(cardTotal()).toContain("100.00");
+    expect(profitTotal()).toContain("100.00");
+    const reads = getDashboardAdsSpend.mock.calls.length;
+    const apiReads = api.get.mock.calls.length;
+    amount = 200;
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+    expect(cardTotal()).toContain("200.00");
+    expect(profitTotal()).toContain("200.00");
+    expect(host.textContent).toContain("تكلفة الطلب والعائد بانتظار اكتمال الصرف");
+    expect(getDashboardAdsSpend).toHaveBeenCalledTimes(reads + 1);
+    expect(api.get).toHaveBeenCalledTimes(apiReads);
+    expect(api.post).not.toHaveBeenCalled();
+});
+
+test("older platform read cannot replace a newer same-period snapshot or its canonical complete total", async () => {
+    const canonical = { totals: { total_sales: 1000, total_orders: 10,
+        total_ads_cost: 200, ads_spend_data_complete: true },
+        ads_v2: { spend_quality: { status: "complete", amount_complete: true } },
+        snapshot: snapshot("executive") };
+    api.get.mockImplementation(async (url) => url.startsWith(paths.executive)
+        ? { data: canonical } : responseFor(url));
+    getDashboardAdsSpend.mockResolvedValue(sharedSpend(200, { complete: true }));
+    await render();
+    const older = mockSpendCardProps.beginSnapshotRead();
+    const newer = mockSpendCardProps.beginSnapshotRead();
+    await act(async () => mockSpendCardProps.onSnapshot(sharedSpend(200, { complete: true }), newer));
+    await act(async () => mockSpendCardProps.onSnapshot(sharedSpend(100), older));
+    expect(mockSpendCardProps.snapshot.total_sar).toBe(200);
+    const row = host.querySelector('[data-testid="advanced-profit-row-ads"]').textContent;
+    expect(row).toContain("200.00");
+    expect(row).not.toContain("غير مكتمل");
+    expect(canonical.totals.total_ads_cost).toBe(200);
+});
+
+test("a previous-period snapshot cannot replace both cards after the selected period changes", async () => {
+    getDashboardAdsSpend.mockImplementation(async ({ dateFrom }) => sharedSpend(
+        dateFrom === "2026-11-11" ? 100 : 200, { day: dateFrom }));
+    await render();
+    const priorCallbacks = mockSpendCardProps;
+    await act(async () => Array.from(host.querySelectorAll("button")).find((button) => button.textContent === "change period").click());
+    await act(async () => priorCallbacks.onSnapshot(sharedSpend(999), priorCallbacks.beginSnapshotRead()));
+    expect(mockSpendCardProps.snapshot.date_from).toBe("2026-11-10");
+    const row = host.querySelector('[data-testid="advanced-profit-row-ads"]').textContent;
+    expect(row).toContain("200.00");
+    expect(row).not.toContain("999.00");
 });
 
 test("independent cards show their snapshots, requested controls and their own manual refresh", async () => {

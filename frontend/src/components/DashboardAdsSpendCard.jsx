@@ -18,6 +18,7 @@ import {
 import { addDaysISO, todaySA } from "../lib/dates";
 import {
     DASHBOARD_ADS_PROVIDERS,
+    dashboardKnownIncompleteAmount,
     getDashboardAdsSpend,
     googleKnownIncompleteAmount,
 } from "../services/dashboardAdsSpend";
@@ -217,10 +218,11 @@ export function DashboardAdsSpendCardContent({
         || snapchatAmountIncomplete(snapchatState);
     const totalProvisional = data?.spend_quality?.provisional === true
         || snapchatState.provisional === true;
+    const knownTotal = dashboardKnownIncompleteAmount(data, { fromDate, toDate });
     const totalLabel = hasAmount(data?.total_sar) && !totalIncomplete
         ? `${money(data.total_sar)}${totalProvisional ? " · أولي" : ""}`
-        : hasKnownAmount(data?.known_total_sar)
-            ? `غير مكتمل، المتاح ${money(data.known_total_sar)}`
+        : knownTotal !== null
+            ? `غير مكتمل، المتاح ${money(knownTotal)}`
         : data ? "بيانات غير مكتملة" : "بانتظار البيانات";
     const displayError = error || data?.refresh_error || "";
     const xKey = singleDay ? "hour" : "date";
@@ -456,7 +458,8 @@ export function DashboardAdsSpendCardContent({
     );
 }
 
-export default function DashboardAdsSpendCard({ fromDate, toDate, collapsible = false }) {
+export default function DashboardAdsSpendCard({ fromDate, toDate, collapsible = false,
+    snapshot, onSnapshot, beginSnapshotRead }) {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -466,10 +469,13 @@ export default function DashboardAdsSpendCard({ fromDate, toDate, collapsible = 
     const [refreshStatus, setRefreshStatus] = useState("");
     const manualController = useRef(null);
     const manualSequence = useRef(0);
+    const snapshotCallbacks = useRef({ onSnapshot, beginSnapshotRead });
+    snapshotCallbacks.current = { onSnapshot, beginSnapshotRead };
 
     const load = useCallback(async ({ silent = false, refresh = !silent } = {}) => {
         const currentRequest = requestId.current + 1;
         requestId.current = currentRequest;
+        const snapshotVersion = snapshotCallbacks.current.beginSnapshotRead?.();
         if (!silent) setRefreshing(true);
         if (!data) setLoading(true);
         try {
@@ -480,6 +486,7 @@ export default function DashboardAdsSpendCard({ fromDate, toDate, collapsible = 
             });
             if (requestId.current !== currentRequest) return;
             setData(next);
+            snapshotCallbacks.current.onSnapshot?.(next, snapshotVersion);
             setError("");
             return next;
         } catch (requestError) {
@@ -567,7 +574,7 @@ export default function DashboardAdsSpendCard({ fromDate, toDate, collapsible = 
 
     return (
         <DashboardAdsSpendCardContent
-            data={data}
+            data={snapshot === undefined ? data : snapshot}
             collapsible={collapsible}
             fromDate={fromDate}
             toDate={toDate}

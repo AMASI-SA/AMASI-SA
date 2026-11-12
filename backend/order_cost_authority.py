@@ -138,6 +138,56 @@ def _sar(value: Any, evidence: dict | None) -> Decimal | None:
     return amount * rate
 
 
+def _legacy_service_aliases(product, bindings, decisions, selection_evidence, resources, profile):
+    """Collapse one proven legacy field alias of a selected service choice.
+
+    Shared resource identity alone is insufficient: independent options can
+    legitimately charge the same service twice. The legacy field must be shown
+    only for this exact parent choice, with the same service and quantity. Both
+    rules must actually apply, and multiple possible legacy fields are ambiguous.
+    """
+    selected = {}
+    for index, binding in enumerate(bindings):
+        identity = str(binding.get("id") or "")
+        resource_id = str(binding.get("resource_id") or "")
+        quantity = decimal(binding.get("quantity", 1))
+        policy = ((profile or {}).get("composition_components") or {}).get("option_resource:" + identity) or {}
+        if (not identity or identity in selected or decisions[index] is not True
+                or binding.get("mode") != "resource"
+                or (resources.get(resource_id) or {}).get("kind") != "service"
+                or quantity is None or quantity <= 0
+                or policy.get("cost_treatment") == "included_in_base"
+                or binding.get("cost_treatment") == "included_in_base"):
+            continue
+        selected[identity] = (binding, resource_id, quantity)
+    legacy = {identity: row for identity, row in selected.items()
+              if str(row[0].get("value_id") or "") == "__option__"}
+    if not legacy:
+        return set()
+    from report_option_identity import _option_visibility, catalog_options
+    catalog = catalog_options(product or {})
+    resolved = defaultdict(set)
+    for row in selection_evidence:
+        resolved[row["option_id"]].add(row["value_id"])
+    candidates = defaultdict(set)
+    for identity, (binding, resource_id, quantity) in legacy.items():
+        option_id = str(binding.get("option_id") or "")
+        option = catalog.get(option_id) or {}
+        if (option.get("visibility") != "on_condition" or option.get("visibility_condition_type") != "="
+                or option.get("type") not in {"text", "textarea", "long_text"} or option.get("values")
+                or _option_visibility(option_id, catalog, resolved, set(resolved), set()) is not True):
+            continue
+        parent_id = str(option.get("visibility_condition_option") or "")
+        value_id = str(option.get("visibility_condition_value") or "")
+        parents = [key for key, (parent, resource, count) in selected.items()
+                   if key != identity and resource == resource_id and count == quantity
+                   and str(parent.get("option_id") or "") == parent_id
+                   and str(parent.get("value_id") or "") == value_id]
+        if len(parents) == 1:
+            candidates[parents[0]].add(identity)
+    return {next(iter(aliases)) for aliases in candidates.values() if len(aliases) == 1}
+
+
 def calculate_catalog_line_cost(
     item: dict, *, product: dict | None, profile: dict | None,
     product_bindings: list[dict], option_bindings: list[dict],
@@ -166,6 +216,7 @@ def calculate_catalog_line_cost(
                 "unit_cost": _amount(base) if base is not None else None}]
     from report_option_identity import resolve_report_choices
     decisions, selection_evidence = resolve_report_choices(row, product, option_bindings)
+    legacy_aliases = _legacy_service_aliases(product, option_bindings, decisions, selection_evidence, resources, profile)
     seen: set[tuple[str, str]] = set()
     for kind, bindings in (("product", product_bindings), ("option", option_bindings)):
         for index, binding in enumerate(bindings):
@@ -174,6 +225,10 @@ def calculate_catalog_line_cost(
                 continue
             if binding_id:
                 seen.add((kind, binding_id))
+            if kind == "option" and binding_id in legacy_aliases:
+                # Its uniquely matched parent rule provides this same service.
+                # Keep one monetary entry and one detail cell for that charge.
+                continue
             resource = resources.get(str(binding.get("resource_id") or "")) or {}
             cell = {"key": kind + ":" + (binding_id or str(index)),
                     "label": resource.get("name") or binding.get("name") or binding.get("option_name") or binding.get("resource_id") or "بند تكلفة",

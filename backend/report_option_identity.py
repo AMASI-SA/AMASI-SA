@@ -41,10 +41,49 @@ def catalog_options(product):
             entry["labels"].update(_labels(row))
             entry["required"] = bool(row.get("required") or row.get("is_required"))
             entry["multiple"] = row.get("type") in {"checkbox", "multiple", "multi_select"}
+            if "type" in row:
+                entry["type"] = row.get("type")
+            # Normalized product options omit these fields. Preserve the saved
+            # provider condition for this exact ID; labels cannot establish it.
+            if "visibility" in row:
+                entry["visibility"] = row.get("visibility")
+                for key in ("visibility_condition_option", "visibility_condition_value",
+                            "visibility_condition_type"):
+                    entry[key] = row.get(key)
+            if "values" in row:
+                # Old source labels remain useful for identity recovery, but a
+                # removed value cannot prove a current display condition.
+                entry["condition_values"] = {_id(val.get("id")) for val in row.get("values") or []
+                                             if isinstance(val, dict) and _id(val.get("id"))}
             for val in row.get("values") or []:
                 if isinstance(val, dict) and _id(val.get("id")):
                     entry["values"].setdefault(_id(val["id"]), set()).update(_labels(val, True))
     return result
+
+
+def _option_visibility(oid, catalog, selected, present, invalid, active=frozenset()):
+    """Prove a saved Salla condition from known choices, never from absence."""
+    if oid in active or len(active) >= 100 or oid not in catalog:
+        return None
+    option = catalog[oid]
+    visibility = option.get("visibility")
+    if visibility in (None, "", "always"):
+        return True
+    if visibility != "on_condition":
+        return None
+    parent = _id(option.get("visibility_condition_option"))
+    value = _id(option.get("visibility_condition_value"))
+    operator = option.get("visibility_condition_type")
+    choices = (catalog.get(parent) or {}).get("condition_values", {})
+    if (operator not in {"=", "!="} or parent not in catalog
+            or value not in choices
+            or parent not in present or parent in invalid or not selected[parent]
+            or not selected[parent].issubset(choices)):
+        return None
+    if _option_visibility(parent, catalog, selected, present, invalid, active | {oid}) is not True:
+        return None
+    matches = value in selected[parent]
+    return matches if operator == "=" else not matches
 
 
 def resolve_report_choices(item, product, bindings):
@@ -59,6 +98,8 @@ def resolve_report_choices(item, product, bindings):
         return [], []
     catalog = catalog_options(product or {})
     catalog_ids = set(catalog)
+    condition_catalog = {oid: {**entry, "values": dict(entry["values"])}
+                         for oid, entry in catalog.items()}
     # A stored binding itself supplies an identity/old label for deleted or
     # renamed catalog entries; it never supplies a customer's selection.
     for binding in bindings:
@@ -133,7 +174,14 @@ def resolve_report_choices(item, product, bindings):
     decisions = []
     for binding in bindings:
         oid, vid = _id(binding.get("option_id")), _id(binding.get("value_id"))
-        if not oid or not vid or vid == "filled" and oid not in present:
+        # A saved cost rule may recover old labels below, but cannot invent a
+        # valid provider dependency or a deleted parent choice.
+        hidden = _option_visibility(oid, condition_catalog, selected, present, invalid) is False
+        if oid and vid and hidden:
+            # A declined parent proves why its conditional field is absent.
+            # An answer that contradicts that condition is still unresolved.
+            decisions.append(None if oid in present or oid in invalid else False)
+        elif not oid or not vid or vid == "filled" and oid not in present:
             matched = binding_selected(binding, tokens)
             # A legacy unmatched label is not proof that the service was declined.
             name_key = "name:" + " ".join(str(binding.get("option_name") or "").strip().casefold().split())

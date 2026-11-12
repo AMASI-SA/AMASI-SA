@@ -348,6 +348,36 @@ test("complete Google zero uses the ordinary numeric path despite stale known me
     expect(google.textContent).not.toContain("96.48");
 });
 
+test("available portfolio total uses the saved subtotal once across all providers", () => {
+    // Synthetic accounts: two Snapchat amounts plus Meta, TikTok and known Google.
+    expect((1100.11 + 44.44 + 222.22 + 33.33 + 5.55).toFixed(2)).toBe("1405.65");
+    const data = midnightSpend({ knownAllTotal: 1405.65 });
+    Object.assign(data.provider_totals_sar, { snapchat: 1144.55, meta: 222.22, tiktok: 33.33, google: null });
+    data.providers.google = { connected: true, amount_available: false,
+        status: "incomplete", data_state: "unknown_incomplete", known_total_sar: 5.55 };
+    const before = JSON.parse(JSON.stringify(data));
+    const host = midnightMarkup(data);
+    expect(host.querySelector('[data-testid="dashboard-ads-spend-total"]').textContent)
+        .toBe("إجمالي المنصات: غير مكتمل، المتاح 1,405.65 ر.س");
+    expect(data).toEqual(before);
+});
+
+test("available portfolio total cannot leak a saved subtotal from another period", () => {
+    const data = midnightSpend({ knownAllTotal: 1405.65 });
+    data.date_from = "2026-10-25";
+    const host = midnightMarkup(data);
+    expect(host.querySelector('[data-testid="dashboard-ads-spend-total"]').textContent)
+        .toBe("إجمالي المنصات: بيانات غير مكتملة");
+});
+
+test("available portfolio total does not label default zero as known when every provider is unknown", () => {
+    const data = midnightSpend({ knownAllTotal: 0 });
+    data.provider_totals_sar = { snapchat: null, meta: null, tiktok: null, google: null };
+    const host = midnightMarkup(data);
+    expect(host.querySelector('[data-testid="dashboard-ads-spend-total"]').textContent)
+        .toBe("إجمالي المنصات: بيانات غير مكتملة");
+});
+
 
 test.each([null, 0, 81.32])("connected incomplete Snapchat never presents %s as a full amount or no data", (amount) => {
     const host = midnightMarkup(midnightSpend({ amount }));
