@@ -2832,11 +2832,20 @@ async def _assembly_progress(
         plan, evidence, reserved_units = await _historical_assembly_context(
             db, user_id=user_id, workflow=workflow,
         )
-        if plan and evidence and evidence.ready_in_progress:
+        if plan and plan.get("state") == "accepted" and evidence and evidence.ready_in_progress:
+            from stock_component_consumption_service import UNITS
+            material_units = await db[UNITS].find({
+                "user_id": user_id, "plan_id": plan["_id"],
+            }, {"_id": 0, "state": 1}).to_list(None)
+            # A released or unconsumed current unit cannot be shipped, even if
+            # an older Ready event already exists on the piece card.
+            fully_consumed = bool(material_units) and all(
+                unit.get("state") == "consumed" for unit in material_units
+            )
             current_source = eligible_order or await _current_assembly_order(
                 db, user_id=user_id, order_number=order_number,
             )
-            if (current_source is not None
+            if (fully_consumed and current_source is not None
                     and _assembly_in_progress(current_source)
                     and shipping_address_is_complete(getattr(current_source, "shipping", None))
                     and _historical_reviewed_source_units_covered(current_source, pieces, reserved_units)
