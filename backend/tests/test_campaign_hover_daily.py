@@ -13,7 +13,7 @@ from order_engine.campaign_hover import (
 
 def test_account_day_uses_account_timezone_not_riyadh():
     at = datetime(2026, 11, 12, 5, 30, tzinfo=timezone.utc)
-    pst_start, pst_day = _window(at, "America/Los_Angeles")
+    pst_start, pst_day = _window(at, "America/New_York")
     riyadh_start, riyadh_day = _window(at, "Asia/Riyadh")
     assert pst_day == "2026-11-11"
     assert pst_start.isoformat() == "2026-11-11T08:00:00+00:00"
@@ -141,37 +141,37 @@ async def test_native_riyadh_day_must_not_relabel_us_account_local_day():
     from zoneinfo import ZoneInfo
     from order_engine.campaign_hover import read_campaign_hover
     now = datetime.now(timezone.utc)
-    local = now.astimezone(ZoneInfo("America/Los_Angeles"))
+    local = now.astimezone(ZoneInfo("America/New_York"))
     day = local.date().isoformat()
     at = local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).isoformat()
     raw = {
         "date": {"date": at},
         "utm_source": "snapchat",
-        "utm_campaign": "campaign-us",
+        "utm_campaign": "campaign-ny",
         "items": [{"id": "piece-1", "quantity": 3, "type": "product"}],
         "amounts": {"total": {"amount": 250, "currency": "SAR"}},
     }
     db = _DB({
         "ads_v2_accounts": [{
             "id": "ads-account", "provider": "snapchat",
-            "external_account_id": "snap-us",
-            "timezone": "America/Los_Angeles", "currency_native": "USD",
+            "external_account_id": "snap-ny",
+            "timezone": "America/New_York", "currency_native": "USD",
         }],
         "mezan_integration_accounts_v2": [], "ads_v2_spend_raw": [],
         "mezan_snapchat_performance_daily_v2": [{
-            "ad_account_id": "snap-us", "entity_type": "campaign",
-            "campaign_id": "campaign-us", "date": day,
+            "ad_account_id": "snap-ny", "entity_type": "campaign",
+            "campaign_id": "campaign-ny", "date": day,
             "date_timezone": "Asia/Riyadh", "spend_sar": 200,
         }],
         "mezan_meta_campaign_performance_daily_v2": [],
         "unified_orders": [{
-            "order_number": "snap-us-order", "order_date": at,
+            "order_number": "snap-ny-order", "order_date": at,
             "order_status": "processing",
             "raw_by_source": {"salla_direct": raw},
         }],
     })
-    result = await read_campaign_hover(db, "owner", ["campaign-us"])
-    row = result["campaigns"]["campaign-us"]
+    result = await read_campaign_hover(db, "owner", ["campaign-ny"])
+    row = result["campaigns"]["campaign-ny"]
     assert row["spend_sar"] is None
     assert row["orders"] == 1
     assert row["pieces"] == 3
@@ -187,7 +187,7 @@ def test_connected_account_timezone_is_authoritative_over_legacy():
     # Behavioral contract covered by the same-day native Snapchat test above:
     # native timezone is never replaced by a Riyadh assumption for USD accounts.
     assert _window(datetime(2026, 11, 12, 5, 0, tzinfo=timezone.utc),
-                   "America/Los_Angeles")[1] == "2026-11-11"
+                   "America/New_York")[1] == "2026-11-11"
 
 
 @pytest.mark.asyncio
@@ -226,3 +226,20 @@ async def test_salla_campaign_sales_units_without_any_ad_spend_record():
     assert row["cpa_sar"] is None
     assert row["roas"] is None
     assert row["status"] == "partial"
+
+
+def test_new_york_and_riyadh_account_midnight_with_daylight_saving():
+    # Jan: New York UTC-05; July: New York UTC-04.
+    cases = (
+        ("2026-01-15T16:00:00+00:00", "2026-01-15T05:00:00+00:00"),
+        ("2026-07-15T16:00:00+00:00", "2026-07-15T04:00:00+00:00"),
+    )
+    for instant, expected_new_york_start in cases:
+        at = datetime.fromisoformat(instant)
+        ny_start, ny_date = _window(at, "America/New_York")
+        riyadh_start, riyadh_date = _window(at, "Asia/Riyadh")
+        assert ny_start.isoformat() == expected_new_york_start
+        assert riyadh_start.isoformat() == (at.date() - __import__("datetime").timedelta(days=1)).isoformat() + "T21:00:00+00:00"
+        assert ny_date == at.date().isoformat()
+        assert riyadh_date == at.date().isoformat()
+        assert ny_start != riyadh_start
