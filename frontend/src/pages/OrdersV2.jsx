@@ -1,4 +1,6 @@
 import { resolveOrderCampaign } from "../lib/orderCampaignAttribution";
+import { getCampaignHoverBatch } from "../services/campaignHover";
+import CampaignHoverBadge from "../components/CampaignHoverBadge";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -125,7 +127,7 @@ function orderSourceValue(order) {
     return candidates.map((value) => String(value || "").trim().toLowerCase()).find(Boolean) || "";
 }
 
-function SourceBadge({ order }) {
+function SourceBadge({ order, report }) {
     const source = orderSourceValue(order);
     let badge = null;
     if (source.includes("snap")) badge = { label: "سناب", mark: "👻", className: "border-yellow-300 bg-yellow-300 text-slate-950" };
@@ -133,15 +135,7 @@ function SourceBadge({ order }) {
     else if (source.includes("meta") || source.includes("facebook") || source.includes("instagram") || source === "fb" || source === "ig") badge = { label: "ميتا", mark: "∞", className: "border-blue-500 bg-blue-500 text-white" };
     else if (source.includes("google") || source.includes("adwords") || source.includes("gads")) badge = { label: "جوجل", mark: "G", className: "border-blue-200 bg-white text-blue-600" };
     if (!badge) return null;
-    return (
-        <span
-            title={resolveOrderCampaign(order).campaignDisplay || "الحملة غير محددة"}
-            aria-label={`مصدر الطلب: ${badge.label}`}
-            className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[9px] font-black leading-none shadow-sm ${badge.className}`}
-        >
-            {badge.mark}
-        </span>
-    );
+    return <CampaignHoverBadge badge={badge} campaign={resolveOrderCampaign(order)} report={report} />;
 }
 
 function cityName(order) {
@@ -224,6 +218,22 @@ export default function OrdersV2() {
     const [nowMs, setNowMs] = useState(() => Date.now());
 
     const { orders, hasMore, loading, initialLoading, error, searchMode, loadMore, reload, searchCombined, resultSummary } = useOrders({ statusExact: activeStatus });
+    // Prefetch only the campaigns on the visible order page. Hover reads memory
+    // exclusively; no Mongo aggregation or advertising API call on mouse events.
+    const campaignIdsKey = useMemo(() => [...new Set(
+        orders.map((order) => resolveOrderCampaign(order).campaignId).filter(Boolean)
+    )].slice(0, 20).sort().join(","), [orders]);
+    const [campaignHover, setCampaignHover] = useState({});
+    useEffect(() => {
+        let mounted = true;
+        if (!campaignIdsKey) { setCampaignHover({}); return undefined; }
+        getCampaignHoverBatch(campaignIdsKey.split(",")).then(
+            (result) => { if (mounted) setCampaignHover(result); },
+            () => { if (mounted) setCampaignHover({}); },
+        );
+        return () => { mounted = false; };
+    }, [campaignIdsKey]);
+
 
     useEffect(() => {
         if (initialUrlSearchRef.current) return;
@@ -357,7 +367,7 @@ export default function OrdersV2() {
                                     </div>
                                     <div className="col-start-2 flex min-w-0 items-center justify-between gap-2 sm:col-auto sm:shrink-0 sm:justify-end sm:gap-3">
                                         <div className="min-w-0 text-right sm:text-left">
-                                            <div className="flex items-center gap-1.5 sm:justify-end"><SourceBadge order={order} /><OrderCurrencyAmount order={order} /></div>
+                                            <div className="flex items-center gap-1.5 sm:justify-end"><SourceBadge order={order} report={campaignHover[resolveOrderCampaign(order).campaignId]} /><OrderCurrencyAmount order={order} /></div>
                                             <div className="mt-1 whitespace-nowrap text-[11px] text-slate-400 sm:text-xs">{formatOrderDate(order.created_at, nowMs)}</div>
                                         </div>
                                         {!listOnly && <CaretLeft size={17} className="shrink-0 text-slate-300" />}
