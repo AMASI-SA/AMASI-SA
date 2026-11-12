@@ -668,6 +668,35 @@ has been merged or published at this documentation checkpoint.
 
 ### Follow-up work above verified M3
 
+- Follow-up Draft PR: [1902](https://github.com/AMASI-SA/AMASI-SA/pull/1902).
+  Remote WIP checkpoints `82bf5f1bbe2f961e9635bcabea8c7bf197ae1c97` and
+  `e6499740721e0f981ce2e5f61a5d67809368429e` are recoverable. The first passed
+  its complete operational gates (3,628 Backend cases, four canonical-worker
+  cases, 669 Frontend cases in 50 suites, and six Chromium scenarios). The
+  second includes the automatic delivery rule but **is not release ready**:
+  exact-head runs 43308794842 and 43308794827 failed the same eight legacy
+  driver-COD report cases and one prepaid totals assertion. Their passing
+  counts were 3,672 and 3,481 respectively; all ten other exact-head workflows
+  succeeded. The isolated regression lane found an order-number-only legacy
+  assignment no longer reaches the native collection adapter. A narrow
+  compatibility correction must retain strict new delivery-proof identity
+  checks and all established COD amounts. The added `delivered_orders` totals
+  field also requires the existing prepaid contract to be checked. These
+  failures supersede any inference of release readiness from focused tests.
+  The new manual confirmation is still separate work in progress. Root's
+  latest Production ref read remains exact M3. No follow-up release has been
+  merged or published.
+- The nine compatibility failures were subsequently fixed at isolated local
+  commit `988f4abda7df5727f7b203999c6a9b999cef4baf` and root-integrated as
+  `a7fd7f5`. The collector preserves the established native collection adapter
+  only for a single owner-scoped legacy assignment with a unique assignment
+  identity; it does not fabricate the canonical order identity needed by the
+  new delivery proof. Held-evidence COD guards remain unchanged. All **76
+  affected cases passed on disposable real Mongo**, including the prior nine
+  failures, ambiguous/foreign/wrong-order/reused-assignment rejection and
+  preservation of established cash, bank-transfer and card collection evidence.
+  The prepaid totals assertion now includes the legitimate zero delivery count.
+  Fresh combined CI is still required after the manual feature is integrated.
 - Root integration branch/worktree:
   `codex/operational-delivery-refresh-completion-20261112` /
   `/workspace/scratch/e00762959313/mezan-operational-delivery-refresh-completion`.

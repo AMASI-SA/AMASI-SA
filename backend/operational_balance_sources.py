@@ -1604,16 +1604,25 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             event = None
             allow_shipping = True
             current = source.get('salla_shipping_current') or raw.get('salla_shipping_current') or {}
-            from operational_delivery_evidence import (DELIVERED, _status, created_after_start_delivery,
+            from operational_delivery_evidence import (DELIVERED, _status, _text, created_after_start_delivery,
                                                         recorded_courier_fee, resolve_delivery_event)
             native_driver = data['_driver_fee_review'].requires_delivery_proof(order)
             if native_driver or status in DELIVERED or (isinstance(current, dict) and _status(current.get('status')) in DELIVERED):
                 # Legacy drivers have a separate native collection contract. External
                 # couriers must prove this exact current waybill and delivery instant.
-                has_driver = any(str(a.get('order_number')) == order_number and a.get('active') is not False
-                                 and a.get('status') in {'assigned','out_for_delivery','delivered'}
-                                 for a in data['store_delivery_assignments'])
-                if native_driver or not has_driver or created_after_start_delivery(raw, started_at, as_of):
+                assigned = [a for a in data['store_delivery_assignments']
+                            if str(a.get('order_number')) == order_number and a.get('active') is not False
+                            and a.get('status') in {'assigned','out_for_delivery','delivered'}]
+                # The earlier contract-only producer binds one owner-scoped
+                # assignment by the unique canonical order number. Retain its
+                # independent collection contract without promoting a missing
+                # order_id into the new strict delivery-status proof.
+                legacy_driver = (not native_driver and len(assigned) == 1
+                    and assigned[0].get('user_id') == owner
+                    and assigned[0].get('order_id') in (None, '')
+                    and _text(assigned[0].get('id')) and _text(assigned[0].get('driver_id'))
+                    and data['_driver_fee_review'].assignment_ids[assigned[0]['id']] == 1)
+                if native_driver or not assigned or (created_after_start_delivery(raw, started_at, as_of) and not legacy_driver):
                     try:
                         if not native_driver and status not in DELIVERED:
                             raise ValueError('operational_delivery_order_shipment_status_conflict')
