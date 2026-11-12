@@ -39,7 +39,9 @@ def source_event(data, setup, source, raw, state, owner, start, end, history, sh
     if _status(effective) in {'pending', 'new', 'created', 'processing', 'in_progress', 'under_processing',
             'under_review', 'waiting_review', 'awaiting_payment', 'بانتظار المراجعة', 'جاري التجهيز', 'قيد التجهيز'} and not has_completion:
         return True, None  # An unexecuted order has no missing earned-charge proof.
-    current, shipment, waybill = _current_shipping(raw, source, require_delivered=False)
+    # The completed order earns prepaid cost. Printing a label is not an
+    # accounting event; retain carrier/source conflict checks without requiring it.
+    current, shipment, waybill = _current_shipping(raw, source, require_delivered=False, require_label=False)
     party, carrier_key = _courier(setup, owner, current)
     if ('shipment', shipment) in shipment_conflicts or ('waybill', waybill) in shipment_conflicts:
         raise ValueError('operational_prepaid_shipping_shipment_shared_by_orders')

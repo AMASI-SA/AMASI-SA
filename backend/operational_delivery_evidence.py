@@ -158,7 +158,7 @@ def _driver_assignment(assignments, owner, order_id, number):
     return assignment
 
 
-def _current_shipping(raw, source, *, require_delivered=True):
+def _current_shipping(raw, source, *, require_delivered=True, require_label=True):
     current = source.get("salla_shipping_current")
     nested = raw.get("salla_shipping_current")
     if current is None:
@@ -170,7 +170,7 @@ def _current_shipping(raw, source, *, require_delivered=True):
                 "shipment_id", "tracking_number", "company_code", "company_name", "status")):
             _fail("current_shipment_conflict")
     shipment, waybill = _text(current.get("shipment_id")), _text(current.get("tracking_number"))
-    if not shipment or not waybill:
+    if require_label and (not shipment or not waybill):
         _fail("shipment_identity_missing")
     superseded = current.get("superseded_shipment_ids") or []
     if not isinstance(superseded, list):

@@ -15,11 +15,33 @@ def _source_version(raw):
     return _instant(raw.get('updated_at') or date.get('updated') or raw.get('date_updated'))
 
 
+def _label_free_scope(current):
+    if current.get('shipment_id') and current.get('tracking_number'):
+        return {}
+    return {'evidence_scope': 'order_completion',
+            'carrier_code': current.get('company_code'), 'carrier_name': current.get('company_name')}
+
+
+def _proof_identity_matches(observation, current):
+    if observation.get('evidence_scope') == 'order_completion':
+        return (observation.get('source') in {HISTORY_SOURCE, WEBHOOK_SOURCE}
+                and (observation.get('carrier_code') or observation.get('carrier_name'))
+                and observation.get('carrier_code') == current.get('company_code')
+                and observation.get('carrier_name') == current.get('company_name'))
+    return (observation.get('shipment_id') == current.get('shipment_id')
+            and observation.get('waybill') == current.get('tracking_number'))
+
+
 def bind_completed_waybill(raw, current, shipment, waybill, at):
     """The original prepaid label may follow completion within this snapshot."""
     version = _source_version(raw)
     if at > version:
         raise ValueError('operational_prepaid_shipping_completion_time_invalid')
+    # Completion evidence belongs to the order even before a label exists.
+    # If a complete label is present, contradictory original-label evidence
+    # remains a real source conflict; deferred delivery keeps its own rules.
+    if not shipment or not waybill:
+        return
     # Bound label creation to the canonical source version. The authoritative
     # completion time still controls cutover, tariff selection and recognition.
     observation = current.get(COMPLETED_PROOF) or {}
@@ -69,8 +91,7 @@ def completion_time(raw, source, history, end):
                 or observation.get('source') not in {HISTORY_SOURCE, WEBHOOK_SOURCE, CAPTURE_SOURCE}
                 or observation.get('owner') != source['user_id'] or observation.get('order_id') != oid
                 or observation.get('order_number') != number or observation.get('target_status') != 'completed'
-                or observation.get('shipment_id') != current.get('shipment_id')
-                or observation.get('waybill') != current.get('tracking_number')):
+                or not _proof_identity_matches(observation, current)):
             raise ValueError('operational_prepaid_shipping_completion_ambiguous')
         if observation['source'] == HISTORY_SOURCE:
             if (observation.get('history_complete') is not True or not isinstance(observation.get('events'), list)
@@ -117,8 +138,8 @@ def verified_completed_webhook(body, raw, current, owner):
     except (TypeError, ValueError):
         return None
     return {'source': WEBHOOK_SOURCE, 'owner': owner, 'order_id': oid, 'order_number': number,
-            'shipment_id': current['shipment_id'], 'waybill': current['tracking_number'],
-            'at': at.isoformat(), 'target_status': 'completed'}
+            'shipment_id': current.get('shipment_id'), 'waybill': current.get('tracking_number'),
+            'at': at.isoformat(), 'target_status': 'completed', **_label_free_scope(current)}
 
 
 def verified_completed_history(source, histories, owner, now):
@@ -142,7 +163,8 @@ def verified_completed_history(source, histories, owner, now):
     bind_completed_waybill(raw, current, current.get('shipment_id'), current.get('tracking_number'), at)
     result = deepcopy(current)
     result[COMPLETED_PROOF] = {'source': HISTORY_SOURCE, 'owner': owner, 'order_id': oid, 'order_number': number,
-        'shipment_id': current['shipment_id'], 'waybill': current['tracking_number'], 'at': at.isoformat(),
+        'shipment_id': current.get('shipment_id'), 'waybill': current.get('tracking_number'), 'at': at.isoformat(),
         'target_status': 'completed', 'source_updated_at': source['g47_salla_snapshot']['source_updated_at'],
-        'history_complete': True, 'events': sorted(events, key=lambda row: row['source_event_id'])}
+        'history_complete': True, 'events': sorted(events, key=lambda row: row['source_event_id']),
+        **_label_free_scope(current)}
     return result
