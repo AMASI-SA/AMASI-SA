@@ -2,36 +2,69 @@
 
 ## Current state
 
-LOCAL IMPLEMENTATION AND VERIFICATION COMPLETE; RELEASE IN PROGRESS. The owner
-explicitly authorized public-repository upload, merge and publication after the
-public destination was identified. This is one integrated release task;
-no production data, runtime, release lease, merge or publication has changed
-through this task.
+CORE RELEASE MERGED, PUBLISHED AND VERIFIED; LIVE ACCEPTANCE FOLLOW-UP OPEN.
+The owner explicitly authorized public upload, merge and publication after the
+public destination was identified. PR1898 reached production and passed the
+official three-probe release verifier. The matching lease is closed and preview
+backend/frontend services were restored. The first authenticated live financial
+report load exposed a timeout recovery gap and redundant bank-refresh work.
+Corrective draft PR1899 tracks those remaining fixes; no corrective publication
+or new frozen intent is claimed yet.
 
-- Repository: AMASI-SA/AMASI-SA.
-- Branch: codex/operational-balances-completion-20261112.
-- Base: 06d0002fab257e1976dd2344865da4de77c158c3 (PR1893 merge).
-- Local implementation checkpoint: `b2a2d818eba388ab1f94de771e3f87e6db6fb128`.
-  All 200 implementation paths are committed. The integrated backend gate and
-  supplemental canonical startup test passed on this checkpoint; the following
-  verification-record commit changes this document only. This is not a
-  published or reviewed v5 A/B release pair.
-- Worktree: /workspace/scratch/e00762959313/mezan-operational.
-- Authenticated remote checkpoint:
-  `3cd0b7ba93343032180f27f03ba3aa45991ce3e1`, with complete tree
-  `72c0a14d1a4b765e46ab31d0f0d14b71fd484c13`. This tree exactly matches the
-  integrated local checkpoint including the current Production updates. The
-  GitHub connector created a single-parent source commit above J, preserving
-  the release-intent ancestry contract. Earlier local SHAs remain provenance.
-- Reviewed Production integration base J:
-  `88589786f4c30ed78a5c9d185fae6ce7786ca9da` (PR1895 merge). The 15 paths added
-  or changed by PR1894/PR1895 do not overlap the 200 task paths. Their supplier
-  embroidery and dashboard behavior is preserved. The remote source candidate
-  must be a descendant of J with its intent unchanged throughout J..A.
-- Preserve the complete PR1892 demand-only report behavior and all PR1893 changes.
-- Root owns integration, shared routes/service, report core/UI, source-refresh
-  diagnosis, acceptance and release. Three bounded contributors own payments,
-  shipping evidence and daily financial activity respectively.
+- Repository: [AMASI-SA/AMASI-SA](https://github.com/AMASI-SA/AMASI-SA).
+- Release PR: [1898](https://github.com/AMASI-SA/AMASI-SA/pull/1898), normally
+  merged into `hotfix/prod-snap-meta-final` without squash or rebase.
+- Frozen release branch: `codex/operational-balances-completion-20261112`.
+- Corrective task branch:
+  `codex/operational-balances-timeout-fallback-20261112`, based on merge M below.
+  The final corrective source includes this handoff; the initial frozen A/B
+  pair and branch remain unchanged.
+- Implementation worktree: `/workspace/scratch/e00762959313/mezan-operational`.
+- Corrective integration worktree:
+  `/workspace/scratch/e00762959313/mezan-operational-refresh-performance`.
+- Root owns final integration, operator rehearsal, lease, publication and live
+  acceptance. Other contributors have no publication or lease action.
+
+### Immutable release identities
+
+| Identity | Exact value |
+|---|---|
+| Reviewed Production base J, PR1895 | `88589786f4c30ed78a5c9d185fae6ce7786ca9da` |
+| Source A | `b23bed75f09e52b6faf4f985de00dd56a170d59c` |
+| Source A tree | `949b43ce781162e2685f67cf0ff137d9f1f897f9` |
+| Intent-only B | `00c7ad9f9c0643065718751d84317972b24bb7db` |
+| Normal merge M, PR1898 | `54b6fcf56fbe329a0fba7200b130eeca8ce5983c` |
+| Reviewed B and M tree | `d908b7fb33adeae95efaa661d0049d42f18f5103` |
+| Runtime release ID | `rg5-b275cea8a671baf43897993c2925f54ed3cc85a1cc454e927dda14ee67ab4f34` |
+| Frontend artifact tree SHA256 | `47e182eb6c963fadeef16d9606c22fed381c5a75be24495b9533fe746c2fdee1` |
+| Tracked intent Git blob | `e01eac8b75feb9a2f8d54ac490b509ae4c1f89be` |
+| Tracked intent SHA256 | `5ddc906e60cf4d5f966cdf61a3182c0e35127ebb5842a9b465c30d8c717fe062` |
+
+B has exactly one parent, A, and changes only
+`release/release-intent-v5.json`. Its 1,289,972 bytes came unchanged from the
+successful source-build artifact. The intent continues to identify A as source
+and J as its reviewed base. M has exactly J and B as parents, and its complete
+tree equals B. No governed source was added after A. Do not squash, rebase,
+amend or append documentation to the frozen release pair.
+
+### Provenance and preserved work
+
+- Original implementation base: `06d0002fab257e1976dd2344865da4de77c158c3`
+  (PR1893 merge). The 200 implementation paths were initially committed at
+  `b2a2d818eba388ab1f94de771e3f87e6db6fb128` and verified locally.
+- First authenticated integrated remote checkpoint:
+  `3cd0b7ba93343032180f27f03ba3aa45991ce3e1`, tree
+  `72c0a14d1a4b765e46ab31d0f0d14b71fd484c13`. Its source tree matched the
+  local integration while preserving the release-intent ancestry contract.
+- PR1894/PR1895 changed 15 paths with no overlap with the original 200 task
+  paths. Their supplier embroidery and dashboard changes are included in J/A.
+  PR1892 demand-only report behavior and PR1893 changes remain preserved.
+- The initial invalid CI definition was corrected before A by placing
+  runner-dependent browser paths at step scope. Successful exact-A and exact-B
+  runs supersede it; that correction changed no application source.
+- The operator checkout was tracked-clean when root inspected it; unrelated
+  untracked files are preserved. This task has performed no financial approval,
+  settlement, advertising write, migration or backfill.
 
 ## Owner requirements
 
@@ -169,28 +202,29 @@ through this task.
   no financial writes, cancellation during packed-state preparation, and
   inventory CPU cleanup before its snapshot session closes. Independent focused
   runs passed and the final consolidated gate includes these regressions.
-- The actual financial-report/dialog component fixture builds successfully with
-  pinned Node. Its generated data uses three priced deliveries and seven unique
-  unresolved orders. Browser execution is **not verified here**: local Chromium
-  exits before opening a page because this environment denies its Unix socket.
-  No browser assertion or screenshot is claimed from that failed launch.
+- The actual financial-report/dialog component fixture built successfully with
+  pinned Node. Its data uses three priced deliveries and seven unique unresolved
+  orders. Local Chromium exited before opening a page because this environment
+  denied its Unix socket; no browser result is claimed from that attempt. The
+  later sandboxed CI execution passed all six scenarios, as recorded below.
 - Independent reviews covered source/party completeness, worker removal and
   live UI consumers, request cancellation, wallet unknowns, provider counts,
   snapshot packet integrity and the driver bank/POS writer. Concrete findings
   were fixed and checked before this source freeze.
 - Final source/test manifest verification covered 199 files with zero hash
-  mismatches after the backend gate. The working source remains the tested
-  implementation checkpoint; only this verification record follows it.
+  mismatches after the local backend gate. Later changes integrated current
+  Production and the scoped CI gates before immutable source A was frozen.
 - Earlier intermediate failures were addressed, including the daily query
   parameter type, unrelated fact payload parsing, unknown wallet totals,
   provider pending counts and visibility/cancellation gaps. Final results above
-  supersede intermediate counts; exact-source CI remains a separate gate.
+  supersede intermediate counts. The separate exact-source CI gate subsequently
+  passed on A and B as recorded below.
 - CLI previews distinguish a partial known provider net from a complete net.
   A pure reducer result without a service-stamped snapshot timestamp is also
   explicitly incomplete. Mobile history retains the account ACL and redacted
   display contract; granted read accounts never confer write permission.
 
-### Reproduction scope
+### Local reproduction scope
 
 The local disposable runner supplied `OPERATIONAL_TEST_MONGO_URI`,
 `MZ2_TEST_MONGO_URI`, `BUILD37_TEST_MONGO_URI` and (for the supplemental startup
@@ -219,7 +253,98 @@ Frontend verification used the pinned Node binary, React Scripts Jest,
 `--watchAll=false --runInBand`, all `src/pages/operational` suites, suppliers,
 employees, supplier services and navigation shell tests. The existing local
 Python environment is not a claim of full production dependency-lock parity;
-the repository's exact-source CI remains a separate release gate.
+the later exact-source CI supplies the repository-pinned release evidence.
+
+## Exact-source CI and browser acceptance
+
+All **24 workflows on exact source A succeeded**, including CodeQL, Security
+Gate, operational stock eligibility and the affected compatibility workflows.
+The expanded Operational Balance Web run
+[43276337970](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43276337970)
+executed the following gates without skipped cases or failures:
+
+| Gate | Observed result |
+|---|---|
+| Operational backend, including completed shipping, request lifetime, financial review and packed driver state | **3,590 passed** |
+| Actual canonical server-child boot/drain on isolated Mongo | **4 passed**; `operational-balances` absent from registered jobs |
+| Shared shipping summary and calculator compatibility | **16 passed, 18 subtests passed** |
+| Operational/supplier/employee frontend | **666 passed, 50 suites passed** |
+| Sandboxed Chromium actual-component acceptance | **6 of 6 passed**, zero browser errors |
+
+The six browser scenarios establish:
+
+1. The known 75 balance remains visible alongside seven distinct unresolved
+   orders and reasons; keyboard dismissal restores focus.
+2. The dialog fits a mobile viewport and every pending order remains reachable.
+3. A completed visible page sends no repeated requests.
+4. A source-refresh failure retains the dated saved money and shows a warning.
+5. A hidden mount sends zero requests; one visible activation reads once.
+6. A denied refresh does not read a financial snapshot.
+
+The browser fixtures are synthetic, run without production financial access,
+and retain exact source commit/tree/component hashes. Desktop and mobile
+screenshots were visually reviewed. These results complement the real-Mongo
+and actual-process lifetime tests; they do not claim a live financial refresh.
+
+### Exact intent and browser artifacts
+
+| Evidence | Exact source and artifact |
+|---|---|
+| Candidate intent from two clean frontend builds | A; [run 43276337510](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43276337510); artifact **13970766734** |
+| Browser JSON, source hashes and screenshots | A; run **43276337970**; artifact **13970866667** |
+
+- Candidate ZIP SHA256:
+  `ce0ab52b9df04ffe849fe6ba4ac62f021c8c1d4b9c999bf080ea386afa757b0f`.
+- Browser ZIP SHA256:
+  `743a0e5758dabbb0c62a067a5a731852735978c26cf96757e9b8130f1207dcf0`.
+- Both downloaded ZIPs matched GitHub's artifact digests exactly.
+- The candidate payload, runtime identity, frontend files, Backend files and
+  release-control files passed official repository validators against a clean
+  exact-A export. The official J-to-A transition and independently derived Git
+  manifests also matched. No generated local artifact substituted for the
+  downloaded candidate intent.
+- Manifest file counts: frontend **1,169**, Backend runtime **1,194**, release
+  control **282**. Governed toolchain: Node **22.23.2**, Yarn **1.22.22**,
+  Vite **8.2.4**, approved client origin **https://mezansalla.com**.
+
+## Reviewed-B release rehearsal and merge
+
+All applicable exact-B workflows completed: **24 success, zero failures or
+pending workflows, and one expected TikTok branch-specific skip**. That
+conditional workflow skip does not skip the operational acceptance cases.
+
+Both **Host Node 20.20.2 and Host Node 24.19.0** clean-clone adapter rehearsals
+passed in [release-readiness run 43277778171](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43277778171).
+Each exercised the governed clean installation/build, exact reviewed intent,
+reproducibility proof, isolated frontend/Backend package boundaries and actual
+runtime serving of exact JSON build metadata. The adapter used the pinned
+Node 22.23.2/Yarn 1.22.22 toolchain; host versions were dispatcher inputs.
+
+| Artifact | ID |
+|---|---|
+| Host 20.20.2 clean-clone evidence | `13970903190` |
+| Host 24.19.0 clean-clone evidence | `13971013205` |
+| Host 20.20.2 generated outputs | `13971028004` |
+| Host 24.19.0 generated outputs | `13970323822` |
+
+PR1898 was marked ready and normally merged at M. Root independently checked
+the J/B parents, complete B/M tree equality and intent-only A/B diff. These
+checks establish a reviewed, merged deployment input; live acceptance remains
+the separate step below.
+
+### Exact merge-M CI
+
+All **three workflows on exact M succeeded**, independently queried by root:
+
+| Workflow | Successful run |
+|---|---|
+| Mezan Release Readiness | [43279458043](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43279458043) |
+| Security Gate | [43279458121](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43279458121) |
+| CodeQL | [43279458306](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43279458306) |
+
+M's clean-clone adapter rehearsals also passed: Host Node 20.20.2 job
+`131397159682` and Host Node 24.19.0 job `131397159658`. These are the final
+merged-source CI results, in addition to the exact-A and exact-B gates above.
 
 ## Evidence semantics
 
@@ -236,32 +361,120 @@ the task source and operational documentation to the verified public repository
 `https://github.com/AMASI-SA/AMASI-SA.git`. The owner answered the concrete
 destination-specific request with "ارفع وادمج وانشر". Upload, merge and governed
 publication are now authorized. The previous authorization blocker is resolved.
-The task PR will carry the exact remote candidate, CI, intent and deployment
-identities without changing a frozen source/intent pair.
+The task PR records exact remote candidate, CI, intent and merge identities.
+The separate documentation branch records the handoff without changing the
+frozen source/intent pair.
 
-## Pending
+## First publication — VERIFIED
 
-Real-browser acceptance, exact-source CI and the repository's v5 release gates
-remain pending. Source implementation, local
-review and selected regression verification are complete. Production code and
-financial data have not been changed by this task.
+**Production changed through this task: YES.** One Republish → Publish changes
+submission was made after a successful official operator rehearsal and
+prepare/prepublish. The current platform UI shows the newer green
+**Deployment finished — Nov 12, 09:40 PM**, and published platform version
+`7112316`. This is the exact current UI label; the platform version is separate
+from the Git deployment SHA M.
 
-The Operational Balance Web workflow now covers the non-prefix completed
-shipping, request lifetime, packed driver state and financial review groups;
-the employee frontend suite; an isolated canonical server-child boot/drain
-with no operational-balance job; and the six actual-component browser scenarios.
-It rejects missing or skipped cases. Browser execution uses sandboxed Chromium
-and retains exact source hashes plus desktop/mobile screenshots. The expanded
-main selection collected 3,590 cases; YAML, shell, embedded scripts and synthetic
-fixture generation passed local validation. These are preparation results, not
-claims that the newly added remote jobs have already passed.
+### Operator and publication evidence
+
+- Shared `/app` was tracked-clean and its official guard reported `active:false`
+  before the fast-forward to M. Unrelated untracked files/services were preserved.
+- The official adapter passed in **67.78 seconds**, with source A, deployment M,
+  the frozen runtime identity and isolated package/JSON metadata contracts.
+- Two generated Backend bytecode files were preserved outside governed paths at
+  `/tmp/mezan-operational-1898-preserved-54b6`; preview Backend was stopped for
+  the governed build. No tracked source was discarded.
+- Official prepare actor: `operational-balances-1898-20261112`.
+- Prepared at: `2026-11-12T18:29:29.890577+00:00`.
+- Official prepublish returned `ready_to_publish:true` for exact A/M/runtime.
+- Official live verify completed with **`verified:true`, `checks:3`**, source A
+  `b23bed75f09e52b6faf4f985de00dd56a170d59c`, deployment M
+  `54b6fcf56fbe329a0fba7200b130eeca8ce5983c`, and runtime
+  `rg5-b275cea8a671baf43897993c2925f54ed3cc85a1cc454e927dda14ee67ab4f34`.
+- Verified live boot: `2026-11-12T18:40:16.192653+00:00`.
+- Verified Frontend artifact tree:
+  `47e182eb6c963fadeef16d9606c22fed381c5a75be24495b9533fe746c2fdee1`.
+- Each probe checked **582 Frontend requests** across canonical and cache-busted
+  URLs, exact metadata JSON/MIME, HTML shell and retirement service workers.
+  All three probes passed the full Backend/source/identity/hash contract.
+- The official final guard reported **`active:false`**. Under another fresh
+  idle check, `supervisorctl start backend frontend` returned both **started**.
+  No lease remains for this publication.
+- UI runtime logs exposed healthy new backend starts and zero displayed error
+  logs. They did not expose the complete Cloud Build argv/cwd/package transcript;
+  those platform internals are not asserted from the operator rehearsal.
+
+## Corrective live acceptance — OPEN (PR1899)
+
+The first visible load of `/operational-balances/financial-position` returned
+`408 operational_refresh_timeout` after the governed refresh deadline. The UI
+showed the exact saved-snapshot timeout message but no tables. Source inspection
+confirmed that the refresh helper omitted this exact recoverable408, so the
+component never issued its saved-report GET. This observation does not establish
+that the saved GET itself timed out.
+
+Corrective draft: [PR1899](https://github.com/AMASI-SA/AMASI-SA/pull/1899).
+Remote branch: `codex/operational-balances-timeout-fallback-20261112`.
+Remote recoverable checkpoint: `c0811f99944b7138094da52e108356db2f72bf1c`, tree
+`44d02410a6c958c6669c55bf4c013d15373db416`, parent M.
+
+Completed corrective checks before final integration:
+
+- Local `5221bfd6729cc27b214528b32a9dfc5f38f4e22f` has the same tree as that
+  remote checkpoint. It recovers only HTTP408 plus `operational_refresh_timeout`.
+  An actual first-mount component regression failed before the fix with zero
+  saved GETs, then passed with one scoped GET, dated saved money/rows, warning,
+  no repeat/hidden/focus/online refresh and preserved403 denial. **129 tests in
+  four suites passed** under pinned Node22.23.2.
+- Local `6f7b448fbf7f8dfb7b501b66de7ea75019b89198` raises only the saved financial
+  report client budget from45s to60s, giving headroom beyond its optional45s
+  source reader. AbortSignal and explicit overrides are preserved; refresh85/90s
+  limits are unchanged. **47 tests in three suites passed**. Actual live saved
+  GET duration remains unobserved.
+- A bounded harness proved that B already-recorded bank orders added **5B serial
+  Mongo commands and B×M movement visits**. At B500/M2000, the full mutation
+  fixture used2,595 commands before the indexed preparation and105 after it;
+  movement visits dropped from1,000,000 to2,000. This is synthetic evidence,
+  not a production latency measurement. Every new claim and final commit still
+  require fresh authorization/lease admission. The bank fix is local commit
+  `466a3b0d799d46eda16d0c6d55b977b3532ecc5e`, followed by compatibility commit
+  `f807aa04846d7e7f26f391e807683e4e2b502602`. **83 affected cases and12 fresh
+  isolated Mongo cases passed on the final code**;50 Mongo cases had also
+  passed before the narrow legacy metadata follow-up.
+- Independent review found unrelated historical dict/list identity metadata
+  could break the new hash index. The compatibility correction ignores only
+  the malformed index key while preserving the other valid key of that same
+  movement. Four actual-refresh regressions pass, and the independent reviewer
+  reran **20 focused tests successfully** on the final file hashes. An additional
+  deterministic comparison matched the old decisions in5,003 cases.
+  A source-bounded20,000-conflict loop took15.36ms in review and returned499
+  with zero pending tasks on disconnect; no detached task or financial write
+  escaped that cancellation case.
+
+The frontend budget follow-up was cherry-picked into the bank integration at
+`e1818a86a490a98e172948c0520b38e32457d94c`, tree
+`ea638e55fd3b22cd08f6612304c6002c56ae0186`, before this status-only update.
+Final reviewed bank-service SHA256 is
+`1b45adc8decdd113569afeaa7c585da4f9b576119c33ff849bd6c3c44ef2ff89`;
+its regression-file SHA256 is
+`6e1beb4de59409d210775d833cfea78b28c23fc269fed7ad3111aac85b0b6718`.
+Root verified these hashes survived the frontend integration unchanged.
+
+No frozen source/intent pair, merge or publication for the corrective release
+is declared complete by these local checkpoints. Original A/B/M and its frozen branch remain
+unchanged. No manual financial approval, payout or advertising operation was
+performed for the release or acceptance.
 
 ## Continuation
 
-Preserve an authenticated remote checkpoint and verify its complete source tree
-before continuing release work. Issue1006 previously reached GitHub's comment
-limit; preserve a verified task PR and this document as the continuation record.
-Do not change another publisher's /app checkout or
-lease. Before an authorized publication, re-read current production and shared
-guard, rebuild a new immutable source/intent pair if production advanced, and
-verify the published identity three times using the official guard.
+Issue1006 reached its comment limit. PR1898 records the verified first release;
+PR1899 and this document track the corrective work. The first frozen branch is
+remotely recoverable at B and production Git/source remains M until a separately
+verified corrective merge. Before any resumed operator change, run the official
+shared guard status and inspect the current checkout; do not reuse an old lease.
+
+Next safe action: upload the integrated corrections and this status record
+on the corrective task branch, complete exact-source CI, then freeze a new v5
+source/intent pair above the current reviewed production base. Require the new
+pair's gates before a normal tree-equivalent merge and a new governed publication.
+Repeat authenticated live financial-report acceptance after that publication.
+Do not mark overall completion from the already-successful first release alone.

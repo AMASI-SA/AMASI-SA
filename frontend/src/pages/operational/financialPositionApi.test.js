@@ -7,7 +7,7 @@ test("financial position reads the operational report without write or unsupport
     const report = { schema_version: 1, authority: "operational_balance_report", status: "active" };
     http.get.mockResolvedValueOnce({ data: report });
     expect(await operationalApi.financialPosition()).toBe(report);
-    expect(http.get).toHaveBeenCalledWith("/operational-balances/financial-position", {timeout: 45000});
+    expect(http.get).toHaveBeenCalledWith("/operational-balances/financial-position", {timeout: 60000});
     expect(http.post).not.toHaveBeenCalled();
 });
 
