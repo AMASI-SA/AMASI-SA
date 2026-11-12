@@ -2,20 +2,35 @@
 
 ## Current state
 
-CORE RELEASE MERGED, PUBLISHED AND VERIFIED; LIVE ACCEPTANCE FOLLOW-UP OPEN.
+CORRECTIVE RELEASE MERGED; PUBLICATION SUBMITTED; FINAL VERIFICATION AND LIVE
+ACCEPTANCE OPEN.
 The owner explicitly authorized public upload, merge and publication after the
 public destination was identified. PR1898 reached production and passed the
-official three-probe release verifier. The matching lease is closed and preview
-backend/frontend services were restored. The first authenticated live financial
-report load exposed a timeout recovery gap and redundant bank-refresh work.
-Corrective PR1899 completed all source and intent gates, but pre-merge checking
-found an additional source-only Production merge. A new current-production
-branch preserves that merge and all verified operational fixes. No corrective
-publication is claimed yet.
+official three-probe release verifier, and that first lease closed. Its first
+authenticated live financial report load exposed a timeout recovery gap and
+redundant bank-refresh work. Corrective PR1899 completed its source and intent
+gates, then was superseded to preserve an additional Production source merge.
+PR1901 now preserves that merge and the verified operational fixes in exact
+source A3, intent-only B3 and normal merge M3 below. All required B3 gates and
+all three exact-M3 workflows passed. The official operator build,
+prepare/prepublish passed, and one **Publish changes** submission was clicked
+at approximately 19:55 UTC on 2026-11-12. The last observed UI was publishing;
+a new finished deployment/version, the official final three-probe verification
+and corrective live financial-page/modal acceptance are **not complete** at
+this checkpoint.
+
+Preview-service correction: a prior start command reported both services
+started, but this did not establish sustained frontend health. Before this
+corrective publication the legacy preview frontend was **FATAL** because its
+old launcher referenced a missing Node binary. Preview backend was running and
+was stopped by this task for the governed build. Only backend needs restoration
+after the corrective lease closes; do not claim the legacy frontend was restored.
 
 - Repository: [AMASI-SA/AMASI-SA](https://github.com/AMASI-SA/AMASI-SA).
 - Release PR: [1898](https://github.com/AMASI-SA/AMASI-SA/pull/1898), normally
   merged into `hotfix/prod-snap-meta-final` without squash or rebase.
+- Final corrective PR: [1901](https://github.com/AMASI-SA/AMASI-SA/pull/1901),
+  normally merged at M3 without squash or rebase.
 - Frozen release branch: `codex/operational-balances-completion-20261112`.
 - Corrective task branch:
   `codex/operational-balances-current-production-20261112`, based on staged
@@ -24,10 +39,16 @@ publication is claimed yet.
 - Implementation worktree: `/workspace/scratch/e00762959313/mezan-operational`.
 - Corrective integration worktree:
   `/workspace/scratch/e00762959313/mezan-operational-current-production`.
+- Documentation-only handoff branch:
+  `codex/operational-balances-published-handoff-20261112`, based on exact M3.
+- Handoff worktree:
+  `/workspace/scratch/e00762959313/mezan-operational-published-handoff`.
+  This documentation checkpoint preserves the publication-in-progress state;
+  root owns the final evidence update on the same handoff branch.
 - Root owns final integration, operator rehearsal, lease, publication and live
   acceptance. Other contributors have no publication or lease action.
 
-### Immutable release identities
+### Initial release immutable identities — PR1898 history
 
 | Identity | Exact value |
 |---|---|
@@ -371,7 +392,7 @@ frozen source/intent pair.
 
 **Production changed through this task: YES.** One Republish → Publish changes
 submission was made after a successful official operator rehearsal and
-prepare/prepublish. The current platform UI shows the newer green
+prepare/prepublish. At that first publication the platform UI showed the newer green
 **Deployment finished — Nov 12, 09:40 PM**, and published platform version
 `7112316`. This is the exact current UI label; the platform version is separate
 from the Git deployment SHA M.
@@ -400,12 +421,17 @@ from the Git deployment SHA M.
   All three probes passed the full Backend/source/identity/hash contract.
 - The official final guard reported **`active:false`**. Under another fresh
   idle check, `supervisorctl start backend frontend` returned both **started**.
-  No lease remains for this publication.
+  This is the observed start-command response, not proof that the frontend
+  remained healthy. A later prepublication check found the legacy frontend
+  **FATAL** with an old launcher referencing a missing Node binary. Backend was
+  running before this task stopped it for the corrective build. The first
+  publication lease closed; corrective lease closure and backend-only
+  restoration remain separate pending steps below.
 - UI runtime logs exposed healthy new backend starts and zero displayed error
   logs. They did not expose the complete Cloud Build argv/cwd/package transcript;
   those platform internals are not asserted from the operator rehearsal.
 
-## Corrective live acceptance — OPEN (PR1899)
+## Corrective acceptance investigation — PR1899 history
 
 The first visible load of `/operational-balances/financial-position` returned
 `408 operational_refresh_timeout` after the governed refresh deadline. The UI
@@ -414,7 +440,7 @@ confirmed that the refresh helper omitted this exact recoverable408, so the
 component never issued its saved-report GET. This observation does not establish
 that the saved GET itself timed out.
 
-Corrective draft: [PR1899](https://github.com/AMASI-SA/AMASI-SA/pull/1899).
+Superseded corrective draft: [PR1899](https://github.com/AMASI-SA/AMASI-SA/pull/1899).
 Remote branch: `codex/operational-balances-timeout-fallback-20261112`.
 Remote recoverable checkpoint: `c0811f99944b7138094da52e108356db2f72bf1c`, tree
 `44d02410a6c958c6669c55bf4c013d15373db416`, parent M.
@@ -461,8 +487,9 @@ its regression-file SHA256 is
 `6e1beb4de59409d210775d833cfea78b28c23fc269fed7ad3111aac85b0b6718`.
 Root verified these hashes survived the frontend integration unchanged.
 
-No frozen source/intent pair, merge or publication for the corrective release
-is declared complete by these local checkpoints. Original A/B/M and its frozen branch remain
+At those local checkpoints, a corrective source/intent pair, merge and
+publication were not yet complete. The later A2/B2 and final A3/B3/M3 evidence
+is recorded separately below. Original A/B/M and its frozen branch remain
 unchanged. No manual financial approval, payout or advertising operation was
 performed for the release or acceptance.
 
@@ -483,45 +510,149 @@ performed for the release or acceptance.
   B2 has one parentA2 and changes only the intent. No squash/rebase occurred.
 - B2 was not merged or published. Its frozen branch and PR1899 remain recoverable.
 
-## Current Production integration — OPEN
+## Current Production integration — MERGED (PR1901)
 
 The final pre-merge ref read found Production at
 `8379ca2560381bd3c626586d17aa63eb47e2a16c` (PR1897 campaign hover source merge),
 not at the previously verified deployment M. Its six source paths have **zero
 intersection** with the seven operational corrective paths. The merge retains
 M's exact old intent blob `e01eac8b75feb9a2f8d54ac490b509ae4c1f89be`.
-The authenticated platform still displayed published version7112316 when last
-observed; no corrective task publication has occurred.
+At that pre-merge checkpoint the authenticated platform still displayed
+published version `7112316`, and no corrective publication had been submitted.
+The later corrective submission is recorded below without claiming it finished.
 
-The current-production branch starts at8379 and applies the two corrective
-source commits without their frozen B2 intent. All six campaign-hover files
-remain exactly as merged in8379. The operational application/test files remain
-exactly as tested in A2; this status record records the new integration.
-The trusted prior reviewed deployment J remains
+The current-production branch started at 8379 and applied the corrective
+source changes without their frozen B2 intent. All six campaign-hover files
+remain exactly as merged in 8379. The operational application/test files remain
+exactly as tested in A2. The trusted prior reviewed deployment J3 remains
 `54b6fcf56fbe329a0fba7200b130eeca8ce5983c`.
 
 The existing automatic PR candidate-base resolver deliberately rejects staged
-non-documentation changes. Use the repository's documented local governed A/B
-source build and explicit trusted J to freeze the new intent, then require the
-new B's normal CI and clean-clone adapter rehearsals. Its reviewed-intent path
-already permits the staged Production8379 predecessor when8379 is an ancestor
-of the new source. Do not alter release guards/workflows or forge CI markers.
+non-documentation changes. Root used the repository's documented local governed
+A/B source build and explicit trusted J3 to freeze the new intent, then required
+the new B3 gates. The reviewed-intent path permits the staged Production 8379
+predecessor because it is an ancestor of A3. Release guards/workflows were not
+changed, and no CI markers were forged.
+
+### Final immutable identities — A3/B3/M3
+
+| Identity | Exact value |
+|---|---|
+| Trusted prior reviewed deployment J3 | `54b6fcf56fbe329a0fba7200b130eeca8ce5983c` |
+| Preserved staged Production predecessor | `8379ca2560381bd3c626586d17aa63eb47e2a16c` |
+| Source A3 | `549c6c733e8f93f5c632f6473263f3eb37f01767` |
+| Source A3 tree | `6e0c9d87543ca3d4311a374bf231a6dfb619a146` |
+| Intent-only B3 | `854dc1b6920228300346e5ec91396562eb765235` |
+| Normal merge M3, PR1901 | `2c875b5f16b0d58e46effdd7acd28a91041b62fb` |
+| Reviewed B3 and M3 tree | `706980488f7d42f75d40bd789922b6ea7be69ac0` |
+| Runtime release ID | `rg5-e5641d97ab8215c663458630c2af0dcd839b3aed89a05fcdc66be465b036c60e` |
+| Frontend artifact tree SHA256 | `e47bec1b5e0170d843cce0f37e08668566a38513eefe84b9fa1098964250d4fe` |
+| Tracked intent Git blob | `de17bc5e98c0161c3d1233506ba94e037ef189b1` |
+| Tracked intent SHA256 | `9c54d20f9c633d107e7b7323207170d1563435f098685774080a00b7de015d0c` |
+| Tracked intent bytes | `1,291,050` |
+
+B3 has exactly one parent, A3, and changes only the tracked release intent.
+M3 has exactly two ordered parents: staged Production
+`8379ca2560381bd3c626586d17aa63eb47e2a16c` and B3. Its entire tree equals B3.
+The handoff worktree verified these merge parents/tree from the fetched exact
+M3 object. No source or intent in the frozen pairs was rewritten for this
+documentation draft.
+
+### Final B3 gates
+
+The pre-merge B3 gate completed **11 successful workflows plus one expected
+TikTok branch-specific skip**, with no failed or pending required workflow.
+The skip does not omit operational acceptance cases. The exact-B3
+[Operational Balance Web run 43292182652](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43292182652)
+passed the full affected gates recorded by root:
+
+| Gate | Observed result |
+|---|---|
+| Operational backend and affected compatibility suites | **3,610 passed** |
+| Canonical server-child boot/drain on isolated Mongo | **4 passed** |
+| Shared shipping summary and calculator compatibility | **16 passed, 18 subtests passed** |
+| Operational/supplier/employee frontend | **669 passed, 50 suites passed** |
+| Sandboxed Chromium actual-component acceptance | **6 of 6 passed** |
+
+Exact-B3 [Mezan Release Readiness run 43292182835](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43292182835)
+also succeeded. The synthetic tests and CI browser scenarios remain distinct
+from the pending authenticated live acceptance of the corrective publication.
+
+### Final merge-M3 CI — independently verified
+
+The all-event GitHub query restricted to exact M3 at
+**2026-11-12 19:54:39 UTC** returned `total_count=3` and all three records.
+Each had the exact M3 head SHA, event `push`, attempt 1 and
+`status:completed`, `conclusion:success`:
+
+| Workflow | Successful run |
+|---|---|
+| Mezan Release Readiness | [43293557946](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43293557946) |
+| Security Gate | [43293558027](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43293558027) |
+| CodeQL | [43293557903](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43293557903) |
+
+Final exact-M3 count: **3 success, 0 pending, 0 failed, 0 skipped**. CodeQL
+completed at `2026-11-12T19:54:19Z`. B3's results were not substituted for this
+merge-specific evidence.
+
+## Corrective publication — SUBMITTED, FINAL VERIFICATION PENDING
+
+Root owns the operator/build/lease/publication evidence below. This handoff
+records those operations without changing the frozen source or intent.
+
+- The operator's tracked source was clean; **120 unrelated untracked paths**
+  were preserved. **Two generated Backend bytecode files** were backed up
+  outside governed source before the build. No tracked source was discarded.
+- Preview backend was running and was stopped by this task for the build.
+  The legacy preview frontend was already **FATAL**, with an old launcher
+  referencing a missing Node binary; it was not a healthy service stopped by
+  this task. Restore **backend only** after corrective lease closure.
+- The official governed operator build passed in **74.43 seconds**, bound to
+  exact source A3, deployment M3 and the runtime identity in the final table.
+- Official prepare actor: `operational-balances-1901-20261112`.
+- Official prepare succeeded at `2026-11-12T19:54:39.613387+00:00` for exact
+  A3/M3/runtime. Official prepublish returned **`ready_to_publish:true`**.
+- One **Publish changes** click was submitted at approximately **19:55 UTC**
+  on 2026-11-12. The last observed platform UI was **publishing**.
+- A newer green finished deployment and platform version have **not** been
+  recorded for this corrective publication at this checkpoint.
+- Official three-probe live verification, corrective lease closure, live
+  financial-page/modal acceptance and backend restoration are **pending**.
+  No corrective `verified:true` or final business acceptance is claimed.
+
+Production changed through the overall task: **YES**, established by the
+verified first publication above. The corrective submission's completion and
+runtime identity remain unverified until the official live probes succeed.
 
 ## Continuation
 
 Issue1006 is at its comment limit. PR1898 records the verified first publication;
-PR1899 records the preserved A2/B2 verification and the reason it was superseded.
-The new current-production task branch will carry the new source/intent pair.
+PR1899 records the preserved A2/B2 verification and the reason it was superseded;
+PR1901 records the final A3/B3/M3 corrective release. This documentation-only
+handoff checkpoints the publication-in-progress state remotely. Root owns its
+final update after the remaining evidence is available.
 No unrelated draft PR, including the campaign's separate intent draft, is merged
 or changed by this task. No financial approval, payout or advertising operation
 was performed.
 
-Next safe action: checkpoint this integrated source above8379 remotely; perform
-the official pinned local A/B build with the reviewed public client origin;
-freeze an intent-only child using trusted J; require all applicable new-B gates
-and both host clean-clone rehearsals; recheck the current Production ref; normal
-merge with exact reviewed tree; fresh shared guard idle check; operator rehearsal,
-prepare/prepublish, one corrective publication and official three-probe verify.
-Repeat authenticated live financial-report/dialog acceptance and restore preview
-services under a fresh idle check. Do not claim completion from CI or the first
-published release alone.
+Next safe actions, owned by root:
+
+1. Wait for a **new green finished deployment and platform version** after the
+   corrective Publish changes submission. Record the exact displayed label and
+   version; do not repeat the publication merely because it is still running.
+2. Run the official verifier from the operator checkout:
+   `python scripts/production_release_guard.py verify --url https://mezansalla.com`.
+   Require all three probes to bind exact A3, M3, the final runtime release ID
+   and frontend artifact digest above. Record `verified:true`, `checks:3` and
+   the resulting `active:false`; do not close a lease manually or infer success
+   from CI or the first publication.
+3. Repeat authenticated **visible** financial-position and pending-order modal
+   acceptance. Verify the saved dated tables remain available after a recoverable
+   refresh timeout, known amounts/unique pending counts and all modal rows/reasons
+   display correctly, and leaving the page does not continue source work/polling.
+   Record any unresolved live failure separately from successful release probes.
+4. After the corrective lease has closed, obtain a fresh official idle status
+   and restore **preview backend only**. Do not start the pre-existing FATAL
+   legacy frontend as part of this task's restoration. Update PR1901 and this
+   handoff with the actual final deployment, probe, live acceptance and backend
+   status evidence. Do not invent completion while any of those remain pending.
