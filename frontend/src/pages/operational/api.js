@@ -60,7 +60,7 @@ export const operationalApi = {
   reports: (config = {}) => data(api.get(`${base}/reports`, {timeout: 45000, ...config})),
   refreshBalances: (config = {}) => data(api.post(`${base}/refresh`, {visible: true}, {timeout: 90000, ...config})),
   costExposure: (config = {}) => data(api.get(`${base}/cost-exposure`, {timeout: 45000, ...config})),
-  financialPosition: (config = {}) => data(api.get(`${base}/financial-position`, {timeout: 45000, ...config})),
+  financialPosition: (config = {}) => data(api.get(`${base}/financial-position`, {timeout: 60000, ...config})),
   dailyFinancialMovements: (params, config = {}) => data(api.get(`${base}/daily-financial-movements`, {timeout: 30000, ...config, params})),
   audit: (config = {}) => data(api.get(`${base}/audit`, {timeout: 30000, ...config}))
 };
