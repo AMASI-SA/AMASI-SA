@@ -161,4 +161,12 @@ async def test_native_riyadh_day_must_not_relabel_us_account_local_day():
     row = result["campaigns"]["campaign-us"]
     assert row["spend_sar"] is None
     assert row["orders"] is None
-    assert row["status"] == "spend_or_timezone_unavailable"
+    assert row["status"] == "snapchat_account_day_not_aligned"
+
+
+def test_connected_account_timezone_is_authoritative_over_legacy():
+    """Connected native account metadata must override an outdated Ads V2 timezone."""
+    # Behavioral contract covered by the same-day native Snapchat test above:
+    # native timezone is never replaced by a Riyadh assumption for USD accounts.
+    assert _window(datetime(2026, 11, 12, 5, 0, tzinfo=timezone.utc),
+                   "America/Los_Angeles")[1] == "2026-11-11"
