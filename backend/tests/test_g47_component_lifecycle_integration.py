@@ -211,6 +211,50 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db[UNITS].count_documents({"state": "released"}), 2)
         self.assertEqual(await self.on_hand(), 20)
 
+    async def test_reviewed_historical_received_supplier_ready_promotes_without_shipping(self):
+        response, _ = await self.accept()
+        self.assertEqual(response.status_code, 200, response.text)
+        await self.seed_physical()
+        await self.db[fulfillment.WORKFLOWS].update_one(
+            {"user_id": "owner", "order_number": "order-1"},
+            {"$set": {"stage": "reviewed"}},
+        )
+        now = datetime.now(timezone.utc)
+        await self.db[pieces.PIECES].update_one(
+            {"user_id": "owner", "piece_id": "piece-1"},
+            {"$set": {
+                "supplier_dispatch_status": "received",
+                "received_at": now,
+                "preparation_receipt_status": "received",
+                "preparation_received_at": now,
+                "preparation_received_by": "synthetic-receiver",
+            }},
+        )
+        preview = await self.client.get(
+            "/preparation-work-v1/assembly/search?q=order-1"
+        )
+        self.assertEqual(preview.status_code, 200, preview.text)
+        self.assertEqual(preview.json()["stage"], "reviewed")
+        rows = {row["piece_id"]: row for row in preview.json()["pieces"]}
+        self.assertTrue(rows["piece-1"]["can_mark_ready"])
+        self.assertFalse(rows["piece-2"]["can_mark_ready"])
+        before_stock = await self.on_hand()
+        ready = await self.mark_piece("piece-1")
+        self.assertEqual(ready.status_code, 200, ready.text)
+        self.assertFalse(ready.json()["idempotent"])
+        self.assertFalse(ready.json()["progress"]["order_completed"])
+        self.assertEqual(ready.json()["progress"]["stage"], "in_progress")
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
+        after_stock = await self.on_hand()
+        self.assertLess(after_stock, before_stock)
+        repeat = await self.mark_piece("piece-1")
+        self.assertEqual(repeat.status_code, 200, repeat.text)
+        self.assertTrue(repeat.json()["idempotent"])
+        self.assertEqual(await self.on_hand(), after_stock)
+        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({
+            "piece_id": "piece-1", "event_type": "assembly_piece_marked_ready",
+        }), 1)
+
     async def test_physical_completion_rolls_back_stock_and_ready_state_on_event_failure(self):
         response, _ = await self.accept()
         self.assertEqual(response.status_code, 200, response.text)

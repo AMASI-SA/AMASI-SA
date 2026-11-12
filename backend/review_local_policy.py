@@ -255,7 +255,8 @@ def historical_assembly_evidence(*, user_id: str, workflow: dict, canonical: dic
 
 
 def historical_assembly_allowed(evidence: HistoricalAssemblyEvidence | None,
-                                workflow: dict, *, virtual: bool = False, current_order: Any = None) -> bool:
+                                workflow: dict, *, virtual: bool = False, current_order: Any = None,
+                                received_physical: bool = False) -> bool:
     if (evidence is None or workflow.get("completion_mode") is not None
             or workflow.get("user_id") != evidence.user_id
             or workflow.get("order_number") != evidence.order_number):
@@ -264,6 +265,12 @@ def historical_assembly_allowed(evidence: HistoricalAssemblyEvidence | None,
         getattr(current_order, "status", None), getattr(current_order, "status_native", None),
     ):
         return False  # Independent evidence cannot override a mapped blocking status.
+    if (received_physical and not virtual and _text(workflow.get("stage")) == "reviewed"
+            and evidence.ready_in_progress):
+        # Historical accepted plans may also have a reviewed workflow. Caller
+        # must prove physical supplier + employee receipt and current unit
+        # reservation before entering this narrow exception.
+        return True
     return _historical_stage_allowed(workflow, evidence.in_progress, virtual=virtual)
 
 

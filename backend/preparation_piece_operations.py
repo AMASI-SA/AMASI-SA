@@ -2545,6 +2545,8 @@ async def _ensure_assembly_order_eligible(
     if plan:
         if not historical_assembly_allowed(
             evidence, workflow, virtual=allow_reviewed_virtual, current_order=current_order,
+            received_physical=(not allow_reviewed_virtual
+                               and _reviewed_received_physical_piece(piece)),
         ):
             raise HTTPException(409, detail={"code": "assembly_order_not_ready"})
         from fulfillment_v2_routes import assert_component_execution
@@ -3038,11 +3040,14 @@ async def _assembly_search(
     for row, piece in zip(rows, pieces):
         virtual = bool(row["is_direct_assembly"] or row["is_operational_item"])
         received_physical = (
-            local_contract and workflow.get("stage") == "reviewed"
+            workflow.get("stage") == "reviewed"
             and not virtual and _reviewed_received_physical_piece(piece)
         )
         row_eligible = (
-            historical_assembly_allowed(evidence, workflow, virtual=virtual, current_order=current_order)
+            historical_assembly_allowed(
+                evidence, workflow, virtual=virtual, current_order=current_order,
+                received_physical=received_physical,
+            )
             and _historical_piece_matches(piece, user_id=user_id, number=order_number, units=units)
             and not component_blocker
         ) if plan else assembly_execution_allowed(
@@ -3727,8 +3732,9 @@ async def _mark_assembly_piece_ready_in_transaction(
         actor_id=actor_id,
     )
     await _consume_piece_components(db, user_id=user_id, piece=piece, actor_id=actor_id)
-    if local_contract and workflow.get("stage") == "reviewed":
+    if workflow.get("stage") == "reviewed" and _reviewed_received_physical_piece(piece):
         # Same operational_owner transaction as unit consumption and Ready.
+        # Applies to independently proved local and accepted historical plans.
         # The revision fence refuses concurrent review/source transitions.
         changed = await db[WORKFLOWS].update_one(
             {
