@@ -141,7 +141,16 @@ async def test_native_riyadh_day_must_not_relabel_us_account_local_day():
     from zoneinfo import ZoneInfo
     from order_engine.campaign_hover import read_campaign_hover
     now = datetime.now(timezone.utc)
-    day = now.astimezone(ZoneInfo("America/Los_Angeles")).date().isoformat()
+    local = now.astimezone(ZoneInfo("America/Los_Angeles"))
+    day = local.date().isoformat()
+    at = local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).isoformat()
+    raw = {
+        "date": {"date": at},
+        "utm_source": "snapchat",
+        "utm_campaign": "campaign-us",
+        "items": [{"id": "piece-1", "quantity": 3, "type": "product"}],
+        "amounts": {"total": {"amount": 250, "currency": "SAR"}},
+    }
     db = _DB({
         "ads_v2_accounts": [{
             "id": "ads-account", "provider": "snapchat",
@@ -155,13 +164,22 @@ async def test_native_riyadh_day_must_not_relabel_us_account_local_day():
             "date_timezone": "Asia/Riyadh", "spend_sar": 200,
         }],
         "mezan_meta_campaign_performance_daily_v2": [],
-        "unified_orders": [],
+        "unified_orders": [{
+            "order_number": "snap-us-order", "order_date": at,
+            "order_status": "processing",
+            "raw_by_source": {"salla_direct": raw},
+        }],
     })
     result = await read_campaign_hover(db, "owner", ["campaign-us"])
     row = result["campaigns"]["campaign-us"]
     assert row["spend_sar"] is None
-    assert row["orders"] is None
-    assert row["status"] == "snapchat_account_day_not_aligned"
+    assert row["orders"] == 1
+    assert row["pieces"] == 3
+    assert row["sales_sar"] == 250
+    assert row["cpa_sar"] is None
+    assert row["roas"] is None
+    assert row["status"] == "partial"
+    assert row["spend_reason"] == "snapchat_account_day_not_aligned"
 
 
 def test_connected_account_timezone_is_authoritative_over_legacy():
