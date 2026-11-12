@@ -1,6 +1,6 @@
 # Financial read load — bounded first slice
 
-**Latest state: publication is in progress after successful actual adapter, own prepare and prepublish. Live verification is pending.** This copy is a documentation-only continuation on `codex/financial-read-load-merged-evidence-20261112`. Never deploy the evidence branch. The immutable release source/intent and production merge are recorded below.
+**Latest state: Emergent publication a7ebd58 completed; both manual report refreshes passed live UI acceptance. The already-running official three-probe verifier is pending.** This copy is a documentation-only continuation on `codex/financial-read-load-merged-evidence-20261112`. Never deploy the evidence branch. The immutable release source/intent and production merge are recorded below.
 
 ## Change contract
 
@@ -228,3 +228,14 @@ Emergent management UI is accessible and still shows previous publication100 `0c
 Official `prepare --actor codex-financial-read-load-20261112` exited0 and recorded the own lease at `2026-11-12T14:49:29.023969+00:00`, exact deployment M/source A/runtime and protocol5. Official `prepublish` then exited0 with `ready_to_publish:true` and those same identities. Root clicked Republish then Publish changes exactly once; the management UI explicitly shows Publishing… and disabled publication controls. No success is inferred from submission.
 
 Preserve the shared source and this owned lease. Do not repeat publication. Next: observe a newer explicit successful deployment than publication100 `0cdea89`, run official `verify --url https://mezansalla.com` and require all3 matching probes plus inactive status, then bounded read-only report/manual-refresh acceptance. PR1892 has a verified persisted in-progress checkpoint. Actual deployment outcome remains pending.
+
+
+## Published UI and bounded live acceptance — 2026-11-12 15:12:27 UTC
+
+The management UI now shows a new green published-version row **`a7ebd58`**, with prior `0cdea89` retained below it. Its event text is exactly **Deployment finished Nov12,06:03PM** (Asia/Riyadh). The visible list retains the label100thpublish for the latest row; do not invent publication101. The current UI did not expose the literal phrase DeploymentSucceeded, so only the observed wording is recorded. Screenshot `deployment-a7ebd58.jpg` is included as evidence; SHA256 `7b903111a99b69e502766b9919f72175e4889da290ecbd42ecc2159ad0821fec`, 96927bytes.
+
+Root started the official `verify --url https://mezansalla.com` once, with bytecode disabled. Its stdout is captured to the task's temporary verification result on completion; no duplicate verification or publication was launched. The exact immutable intent has284publicfiles, so the unchanged guard makes1731sequentialHTTPrequests over3probes, fetching58448508frontendbytes, with only final JSON output. Silence while the process runs is not failure evidence. Keep this own lease until its official result and inactive status are observed.
+
+Bounded signed-in live UI acceptance: `/operational-balances` rendered the report and both Arabic refresh buttons. Root clicked تحديثالأرصدة once, observed busy/disabled state, and subsequently observed the report rendered, button re-enabled and no error. Root then clicked تحديثالمشتريات once; it independently disabled and re-enabled without an error. No financial entry, recalculation, source synchronization or provider write was triggered. Switching between browser tabs can hold queued demand while hidden, so these observations are not a latency measurement. The displayed report timestamp is the engine's as_of rather than fetch completion; unchanged source data freshness is not claimed as repaired.
+
+The broader accounting data/completeness boundaries remain as documented. Next: wait for this existing verifier's final result; require verified:true/checks:3 with exact identities and inactive guard, then persist the final closure. No additional publication is needed unless a concrete failure is diagnosed through the normal protocol.

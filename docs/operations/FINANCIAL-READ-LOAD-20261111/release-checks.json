@@ -183,7 +183,7 @@
     "local_postmerge_fetch": "503 upstream timeout; no local M verification claimed"
   },
   "deployment": {
-    "published": false,
+    "published": true,
     "shared_app_changed": true,
     "own_lease_acquired": true,
     "actual_shared_adapter_run": true,
@@ -196,7 +196,7 @@
     "untracked_platform_files_preserved": 120,
     "platform_manifest_sha256": "ba36f9881479238f135d563c1e007e3ebed42a3bb665fe5a899564fe5f4a7170",
     "last_observed_live_release_id": "rg5-efde36a8ffed59bbfbfaa1521401fe29a3d59923a59102cd0e34305a38a0e33c",
-    "next": "await newer successful deployment, official verify3/inactive, bounded read-only UI acceptance",
+    "next": "await existing official verifier final JSON and status active:false; no duplicate publication",
     "actual_shared_adapter": {
       "returncode": 0,
       "seconds": 95.324,
@@ -236,7 +236,29 @@
     "publication_started": true,
     "publication_observed_in_progress_at": "2026-11-12T14:50:56Z",
     "publication_click_count": 1,
-    "live_verification_pending": true
+    "live_verification_pending": true,
+    "publication_ui_complete": true,
+    "publication_id": "a7ebd58",
+    "publication_ui_text": "Deployment finished Nov 12, 06:03 PM",
+    "publication_ui_timezone": "Asia/Riyadh",
+    "verification_command_started": true,
+    "verification_start_count": 1,
+    "live_ui_acceptance": {
+      "signed_in_report_rendered": true,
+      "balances_manual_refresh_clicks": 1,
+      "balances_manual_refresh_completed": true,
+      "purchases_manual_refresh_clicks": 1,
+      "purchases_manual_refresh_completed": true,
+      "visible_errors": false,
+      "financial_or_provider_writes": false,
+      "latency_measured": false,
+      "as_of_is_fetch_time": false
+    },
+    "screenshot": {
+      "path": "deployment-a7ebd58.jpg",
+      "bytes": 96927,
+      "sha256": "7b903111a99b69e502766b9919f72175e4889da290ecbd42ecc2159ad0821fec"
+    }
   },
   "continuity": {
     "evidence_branch": "codex/financial-read-load-merged-evidence-20261112",
