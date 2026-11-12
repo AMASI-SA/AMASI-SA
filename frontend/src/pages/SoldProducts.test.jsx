@@ -32,7 +32,7 @@ test("distinguishes not requested, unresolved, missing, included and unavailable
         cost_status: "incomplete", total_cost: null,
     });
     const html = renderToStaticMarkup(<CostDetails row={row} />);
-    for (const label of ["غير محدد", "اختيار غير متحقق", "تكلفة ناقصة", "ضمن تكلفة المنتج", "تفصيل غير متاح"]) expect(html).toContain(label);
+    for (const label of ["غير مطلوب", "اختيار غير متحقق", "تكلفة ناقصة", "ضمن تكلفة المنتج", "تفصيل غير متاح"]) expect(html).toContain(label);
 });
 
 test("keeps partial known costs in summary while withholding a complete total", () => {
@@ -48,7 +48,7 @@ test("collapsed products omit details on screen but details print includes all r
     const details = renderToStaticMarkup(<SoldTable rows={rows} printable allDetails />);
     expect(screen).not.toContain('data-testid="sold-product-cost-details"');
     expect(screen).toContain('aria-expanded="false"');
-    expect(summary).not.toContain("غير محدد");
+    expect(summary).not.toContain("غير مطلوب");
     expect(details.match(/data-testid="sold-product-cost-details"/g)).toHaveLength(2);
 });
 
@@ -70,7 +70,7 @@ test("refreshes every filtered product including unopened later pages and prints
     const print = [...host.querySelectorAll("button")].find(button => button.textContent === "طباعة التقرير مع التفاصيل");
     await act(async () => { print.click(); });
     expect(mockPrint.mock.calls.at(-1)[0]).toContain("SKU20");
-    expect(mockPrint.mock.calls.at(-1)[0]).toContain("غير محدد");
+    expect(mockPrint.mock.calls.at(-1)[0]).toContain("غير مطلوب");
     await act(async () => root.unmount()); host.remove();
 });
 
@@ -190,7 +190,7 @@ test("cost columns show quantity totals and footer sums while unit cost stays pe
     const host = document.createElement("div");
     host.innerHTML = renderToStaticMarkup(<CostDetails row={row} />);
     const rows = [...host.querySelectorAll('tbody tr')].map(tr => [...tr.children].map(td => td.textContent));
-    expect(rows).toEqual([["45.00","24.00","6.00","25.00","3","75.00"],["26.00","غير محدد","4.00","15.00","2","30.00"]]);
+    expect(rows).toEqual([["45.00","24.00","6.00","25.00","3","75.00"],["26.00","غير مطلوب","4.00","15.00","2","30.00"]]);
     expect([...host.querySelectorAll('tfoot td')].map(td => td.textContent)).toEqual(["71.00","24.00","10.00","الإجمالي","5","105.00"]);
 });
 
