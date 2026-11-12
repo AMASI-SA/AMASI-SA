@@ -151,6 +151,160 @@ async def test_native_history_recovers_order_qr_without_reactivating_archived_sh
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("aliases", [
+    pytest.param({}, id="missing"),
+    pytest.param({"company_name": None, "shipping_company_name": None, "external_company_name": None}, id="null"),
+    pytest.param({"external_company_name": ""}, id="native-blank-external-company"),
+    pytest.param({"company_name": "", "shipping_company_name": "", "external_company_name": ""}, id="blank"),
+    pytest.param({"company_name": "مندوب الرياض"}, id="matching-company"),
+    pytest.param({"shipping_company_name": "مندوب الرياض"}, id="matching-shipping-company"),
+    pytest.param({"external_company_name": "مندوب الرياض"}, id="matching-external-company"),
+    pytest.param({"company_name": "", "shipping_company_name": None, "external_company_name": "مندوب الرياض"}, id="mixed"),
+])
+async def test_optional_child_carrier_aliases_allow_absence_or_matching_name(history_route, aliases):
+    db, client, state = history_route
+    state["rows"][0].update(aliases)
+    before = await db.unified_orders.find_one(KEY)
+    response = await client.post(PATH)
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["contract_version"] == 1 and result["print_state"] == "ready" and result["ready"] is True
+    assert result["label_type"] == "store_courier" and result["courier_name"] == "مندوب الرياض"
+    assert result["print_data"]["order_number"] == NUMBER
+    assert result["print_data"]["qr_code"].startswith("data:image/svg+xml;base64,")
+    assert all(result.get(key) is None for key in ("shipment_id", "tracking_number", "shipping_number", "label_url"))
+    assert "ARCHIVED-MUST-NOT-PRINT" not in response.text and "archived.pdf" not in response.text
+    assert state["order_reads"] == 2 and state["list_reads"]["/orders/42/shipments"] == 2
+    assert all(method == "GET" for method, _ in state["calls"])
+    assert await db.unified_orders.find_one(KEY) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("alias", ["company_name", "shipping_company_name", "external_company_name"])
+@pytest.mark.parametrize("value", [
+    pytest.param(" ", id="whitespace"),
+    pytest.param(" مندوب الرياض", id="padded-name"),
+    pytest.param("مندوب\x00 الرياض", id="control-character"),
+    pytest.param("مندوب\u200e الرياض", id="directional-control"),
+    pytest.param(False, id="boolean"),
+    pytest.param(0, id="number"),
+    pytest.param([], id="list"),
+    pytest.param({}, id="object"),
+    pytest.param("مندوب جدة", id="other-city-courier"),
+    pytest.param("iMile للتوصيل", id="external-carrier"),
+])
+async def test_optional_child_carrier_aliases_reject_invalid_or_conflicting_values(history_route, alias, value):
+    db, client, state = history_route
+    state["rows"][0].update(company_name="", shipping_company_name=None, external_company_name="")
+    state["rows"][0][alias] = value
+    before = await db.unified_orders.find_one(KEY)
+    response = await client.post(PATH)
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "courier_history_unproven"
+    assert response.json()["detail"]["print_state"] == "failed"
+    assert not response.json().get("print_data")
+    assert all(method == "GET" for method, _ in state["calls"])
+    assert await db.unified_orders.find_one(KEY) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint", [PATH, PATH.removesuffix("refresh") + "complete-and-refresh"])
+@pytest.mark.parametrize("name", [
+    pytest.param("Synthetic operator ", id="native-trailing-space"),
+    pytest.param(" Synthetic operator ", id="outer-ascii-spaces"),
+    pytest.param("S" * 299 + " ", id="maximum-original-length"),
+])
+async def test_native_history_actor_display_names_allow_outer_ascii_spaces(history_route, endpoint, name):
+    db, client, state = history_route
+    if endpoint.endswith("complete-and-refresh"):
+        employee = "synthetic-actor-name-employee"
+        await db.users.insert_one({"id": employee, "created_by": OWNER, "role": "employee"})
+        await db.mezan_mobile_app_access_v1.insert_one({"owner_user_id": OWNER, "user_id": employee,
+            "enabled": True, "permissions": ["app.page.assembly_shipping"]})
+        state["actor"] = {"id": OWNER, "_session_client": "amasi_mobile",
+                          "_mobile_actor_id": employee, "_mobile_owner_id": OWNER}
+    state["rows"][0]["external_company_name"] = ""
+    for index in (1, 3):
+        state["histories"][index]["created_by"]["name"] = name
+    histories_before = deepcopy(state["histories"])
+    before = await db.unified_orders.find_one(KEY)
+    response = await client.post(endpoint)
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["ready"] is True and result["print_state"] == "ready" and result["contract_version"] == 1
+    assert result["label_type"] == "store_courier" and result["courier_name"] == "مندوب الرياض"
+    assert result["print_data"]["order_number"] == NUMBER
+    assert result["print_data"]["qr_code"].startswith("data:image/svg+xml;base64,")
+    assert all(result.get(key) is None for key in ("shipment_id", "tracking_number", "shipping_number", "label_url"))
+    assert "ARCHIVED-MUST-NOT-PRINT" not in response.text and "archived.pdf" not in response.text
+    assert state["order_reads"] == 2 and state["list_reads"]["/orders/42/shipments"] == 2
+    assert all(method == "GET" for method, _ in state["calls"])
+    assert await db.unified_orders.find_one(KEY) == before
+    assert state["histories"] == histories_before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", [
+    pytest.param(None, id="null"),
+    pytest.param(False, id="boolean"),
+    pytest.param(50, id="number"),
+    pytest.param([], id="list"),
+    pytest.param({}, id="object"),
+    pytest.param("", id="empty"),
+    pytest.param("   ", id="blank"),
+    pytest.param("Synthetic operator\t", id="trailing-tab"),
+    pytest.param("Synthetic\noperator", id="embedded-control"),
+    pytest.param("Synthetic\u200eoperator", id="directional-control"),
+    pytest.param("\u00a0Synthetic operator", id="non-ascii-outer-space"),
+    pytest.param("S" * 301, id="overlong"),
+    pytest.param("S" * 300 + " ", id="overlong-before-trimming"),
+])
+async def test_native_history_actor_display_names_reject_malformed_values(history_route, name):
+    db, client, state = history_route
+    state["histories"][1]["created_by"]["name"] = name
+    before = await db.unified_orders.find_one(KEY)
+    response = await client.post(PATH)
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "courier_history_unproven"
+    assert not response.json().get("print_data")
+    assert all(method == "GET" for method, _ in state["calls"])
+    assert await db.unified_orders.find_one(KEY) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("identity", [None, False, 0, -1, 50.0, "actor-50", " 50 ", ""])
+async def test_native_history_actor_identity_remains_strict(history_route, identity):
+    db, client, state = history_route
+    state["histories"][1]["created_by"]["id"] = identity
+    before = await db.unified_orders.find_one(KEY)
+    response = await client.post(PATH)
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "courier_history_unproven"
+    assert not response.json().get("print_data")
+    assert all(method == "GET" for method, _ in state["calls"])
+    assert await db.unified_orders.find_one(KEY) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["courier", "recipient", "note"])
+async def test_actor_name_space_tolerance_does_not_relax_material_text(history_route, field):
+    db, client, state = history_route
+    if field == "courier":
+        state["rows"][0]["courier_name"] += " "
+    elif field == "recipient":
+        state["rows"][0]["ship_to"]["name"] += " "
+    else:
+        state["histories"][1]["note"] += " "
+    before = await db.unified_orders.find_one(KEY)
+    response = await client.post(PATH)
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "courier_history_unproven"
+    assert not response.json().get("print_data")
+    assert all(method == "GET" for method, _ in state["calls"])
+    assert await db.unified_orders.find_one(KEY) == before
+
+
+@pytest.mark.asyncio
 async def test_existing_explicit_completion_remains_available_outside_completed_cohort(history_route):
     db, client, state = history_route
     employee = "synthetic-history-employee"
@@ -204,8 +358,11 @@ async def test_saved_archived_destination_never_overrides_fresh_child(history_ro
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("endpoint", [PATH, PATH.removesuffix("refresh") + "complete-and-refresh"])
-async def test_fresh_child_destination_is_bound_without_archive_or_provider_write(history_route, endpoint):
+@pytest.mark.parametrize("include_blank_external_alias", [False, True])
+async def test_fresh_child_destination_is_bound_without_archive_or_provider_write(history_route, endpoint, include_blank_external_alias):
     db, client, state = history_route
+    if include_blank_external_alias:
+        state["rows"][0]["external_company_name"] = ""
     if endpoint.endswith("complete-and-refresh"):
         employee = "synthetic-history-employee"
         await db.users.insert_one({"id": employee, "created_by": OWNER, "role": "employee"})
@@ -229,6 +386,8 @@ async def test_fresh_child_destination_is_bound_without_archive_or_provider_writ
     assert "DO NOT USE" not in response.text and "ARCHIVED-MUST-NOT-PRINT" not in response.text
     assert await db.unified_orders.find_one(KEY) == before
     assert state["order_reads"] == 2
+    assert state["list_reads"]["/orders/42/shipments"] == 2
+    assert all(method == "GET" for method, _ in state["calls"])
 
 
 @pytest.mark.asyncio

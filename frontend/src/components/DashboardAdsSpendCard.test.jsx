@@ -300,6 +300,55 @@ function midnightMarkup(data) {
 }
 
 
+function googlePartialCard({ known = 96.48, complete = false, selected = "2026-11-11" } = {}) {
+    const amount = complete ? 0 : null;
+    const data = normalizeDashboardAdsSpend({
+        date_from: "2026-11-11", date_to: "2026-11-11", total_sar: amount,
+        provider_totals_sar: { google: amount },
+        providers: { google: { connected: true, total_sar: amount,
+            status: complete ? "complete" : "incomplete", data_quality: complete ? "complete" : "incomplete",
+            data_state: complete ? "confirmed_data" : "unknown_incomplete",
+            amount_available: complete, amount_complete: complete, known_total_sar: known,
+            account_count: 3, reason_codes: complete ? [] : ["google_native_account_day_missing"] } },
+        spend_quality: { status: complete ? "complete" : "incomplete", amount_available: complete },
+    });
+    const before = JSON.parse(JSON.stringify(data));
+    const host = document.createElement("div");
+    host.innerHTML = renderToStaticMarkup(<DashboardAdsSpendCardContent
+        data={data} fromDate={selected} toDate={selected} />);
+    expect(data).toEqual(before);
+    return { data, host, google: host.querySelector('[data-testid="dashboard-ads-provider-google"]') };
+}
+
+test("shows known Google partial spend while canonical Google and total amounts stay unknown", () => {
+    const { data, host, google } = googlePartialCard();
+    expect(google.textContent).toContain("المتاح 96.48 ر.س · غير مكتمل");
+    expect(google.textContent).not.toContain("لا بيانات");
+    expect(data.provider_totals_sar.google).toBeNull();
+    expect(data.total_sar).toBeNull();
+    expect(host.querySelector('[data-testid="dashboard-ads-spend-total"]').textContent).toContain("بيانات غير مكتملة");
+    expect(host.textContent).not.toContain("line:Google Ads");
+});
+
+test.each([0, false, null, " "])("unknown Google amount %p does not become an observed zero", (known) => {
+    const { google } = googlePartialCard({ known });
+    expect(google.textContent).not.toContain("المتاح");
+    expect(google.textContent).not.toContain("0.00 ر.س");
+});
+
+test("Google partial card excludes evidence from another selected period", () => {
+    const { google } = googlePartialCard({ selected: "2026-11-12" });
+    expect(google.textContent).not.toContain("96.48");
+});
+
+test("complete Google zero uses the ordinary numeric path despite stale known metadata", () => {
+    const { google } = googlePartialCard({ complete: true });
+    expect(google.textContent).toContain("0.00 ر.س");
+    expect(google.textContent).not.toContain("المتاح");
+    expect(google.textContent).not.toContain("96.48");
+});
+
+
 test.each([null, 0, 81.32])("connected incomplete Snapchat never presents %s as a full amount or no data", (amount) => {
     const host = midnightMarkup(midnightSpend({ amount }));
     const snapchat = host.querySelector('[data-testid="dashboard-ads-provider-snapchat"]');

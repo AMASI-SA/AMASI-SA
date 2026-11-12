@@ -865,6 +865,55 @@ test("missing account contract cannot restore the combined Snapchat expense colu
 });
 
 
+function googlePartialProfitPayload() {
+    const payload = accountProfitPayload(false);
+    payload.totals.avg_cost_per_order = null;
+    payload.totals.overall_roas = null;
+    payload.ads_v2.executive_breakdown.providers.google = {
+        spend_sar: null, salla_sales_sar: 1196.98, salla_orders: 5, actual_roas: null,
+    };
+    payload.dashboard_platform_spend.providers.google = {
+        connected: true, total_sar: null, status: "incomplete", data_state: "unknown_incomplete",
+        amount_available: false, known_total_sar: 96.48, account_count: 3,
+        reason_codes: ["google_native_account_day_missing"],
+    };
+    return payload;
+}
+
+test("profit passes same-period Google evidence only for partial spend display", () => {
+    const payload = googlePartialProfitPayload();
+    const before = JSON.parse(JSON.stringify(payload));
+    inspectAccountProfit(payload, (container) => {
+        const details = container.querySelector('[data-testid="advanced-profit-ads-details"]');
+        expect(details.textContent).toContain("المتاح 96.48 ر.س · غير مكتمل");
+        expect(container.querySelector('[data-testid="advanced-profit-row-ads"]').textContent).toContain("غير مكتمل");
+        expect(container.querySelector('[data-testid="advanced-profit-net-margin"]')).toBeNull();
+        expect(payload.totals.total_ads_cost).toBeNull();
+        expect(payload.totals.net_profit).toBeNull();
+        expect(payload.totals.avg_cost_per_order).toBeNull();
+        expect(payload.totals.overall_roas).toBeNull();
+        expect(payload).toEqual(before);
+    });
+});
+
+test.each(["from", "to", "missing-from", "missing-to", "missing-selection"])(
+    "profit cannot expose Google partial evidence with %s period mismatch", (fault) => {
+        const payload = googlePartialProfitPayload();
+        if (fault === "from") payload.dashboard_platform_spend.date_from = "2026-10-25";
+        if (fault === "to") payload.dashboard_platform_spend.date_to = "2026-10-27";
+        if (fault === "missing-from") delete payload.dashboard_platform_spend.date_from;
+        if (fault === "missing-to") delete payload.dashboard_platform_spend.date_to;
+        inspectAccountProfit(payload, (container, root) => {
+            if (fault === "missing-selection") act(() => root.render(<ProfitCard data={payload} />));
+            const details = container.querySelector('[data-testid="advanced-profit-ads-details"]');
+            expect(details.textContent).not.toContain("96.48");
+            expect(payload.totals.total_ads_cost).toBeNull();
+            expect(payload.totals.net_profit).toBeNull();
+        });
+    },
+);
+
+
 test("executive profit hides stale numeric profit when product choices are unresolved", () => {
     const markup = renderToStaticMarkup(<ProfitCard data={{
         totals: {

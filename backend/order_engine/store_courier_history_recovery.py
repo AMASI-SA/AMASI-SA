@@ -215,7 +215,7 @@ def _child(row, context):
     if not isinstance(meta, dict) or type(meta.get("app_id")) not in (int, str) or meta["app_id"] not in (0, "0"):
         _fail()
     for key in ("company_name", "shipping_company_name", "external_company_name"):
-        if row.get(key) is not None and normalize_shipping_carrier(_text(row[key])) != normalize_shipping_carrier(name):
+        if row.get(key) not in (None, "") and normalize_shipping_carrier(_text(row[key])) != normalize_shipping_carrier(name):
             _fail()
     return name
 
@@ -239,8 +239,11 @@ def _history(rows, order, context, courier):
         if any(not _reference(row.get(key), context.number) for key in ("reference_id", "order_number", "order_reference_id")):
             _fail()
         actor = row.get("created_by")
-        if not isinstance(actor, dict) or not _text(actor.get("name")):
+        actor_name = actor.get("name") if isinstance(actor, dict) else None
+        if not isinstance(actor_name, str) or len(actor_name) > 300:
             _fail()
+        # Native display names may have outer ASCII spaces; controls stay invalid.
+        _text(actor_name.strip(" "))
         _id(actor.get("id"))
         at = _time(row.get("created_at"))
         note = "" if row.get("note") == "" else _text(row.get("note"))
