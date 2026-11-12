@@ -77,7 +77,8 @@ export default function CampaignHoverBadge({ badge, campaign, report }) {
                         ))}</tbody>
                     </table>
                     <div className="mt-2 text-[10px] text-slate-500">
-                        {report === undefined ? "تحميل الإحصاءات..." :
+                        {!campaign?.campaignId ? "لا يوجد معرّف حملة موثوق في بيانات هذا الطلب من سلة." :
+                         report === undefined ? "تحميل الإحصاءات أو التحقق من اتصال التقرير..." :
                          report?.status === "available" ? "طلبات سلة · صرف ميزان المسجل" :
                          report?.spend_reason === "snapchat_account_day_not_aligned"
                              ? "طلبات سلة محسوبة بتوقيت الحساب، لكن صرف سناب المحفوظ حسب يوم الرياض ولا يطابقه؛ تكلفة الطلب والعائد غير مكتملين."
