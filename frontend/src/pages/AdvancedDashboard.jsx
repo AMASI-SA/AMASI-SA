@@ -675,6 +675,8 @@ export function ProfitCard({ data, loading = false, fromDate, toDate }) {
     const accountRangeMatches = (!fromDate || platformSnapshot?.date_from === fromDate)
         && (!(toDate || fromDate) || platformSnapshot?.date_to === (toDate || fromDate));
     const snapchatAccounts = accountRangeMatches ? platformSnapshot?.providers?.snapchat?.accounts : null;
+    const googleSpendEvidence = fromDate && platformSnapshot?.date_from === fromDate
+        && platformSnapshot?.date_to === (toDate || fromDate) ? platformSnapshot?.providers?.google : null;
     const fees = t.total_payment_fees ?? (Number(t.other_payment_fees || 0) + Number(t.tamara_fees || 0) + Number(t.tabby_fees || 0) + Number(t.emkan_fees || 0) + Number(t.bank_fees || 0) + Number(t.ad_bank_commission_fees || 0));
     const rows = [
         { key: "sales", label: "المبيعات", value: t.total_sales, Icon: CircleDollarSign, color: "text-emerald-700" },
@@ -695,7 +697,7 @@ export function ProfitCard({ data, loading = false, fromDate, toDate }) {
     const netProfit = finiteFinancialValue(t.net_profit);
     const netMargin = adsSpendAvailable && sales > 0 && netProfit !== null ? (netProfit / sales * 100).toFixed(2) : null;
     const details = {
-        ads: <ProfitDetailBox testid="advanced-profit-ads-details"><AdsExecutiveBreakdownTable data={data?.ads_v2?.executive_breakdown} snapchatAccounts={Array.isArray(snapchatAccounts) ? snapchatAccounts : null} /></ProfitDetailBox>,
+        ads: <ProfitDetailBox testid="advanced-profit-ads-details"><AdsExecutiveBreakdownTable data={data?.ads_v2?.executive_breakdown} snapchatAccounts={Array.isArray(snapchatAccounts) ? snapchatAccounts : null} googleSpendEvidence={googleSpendEvidence} /></ProfitDetailBox>,
         shipping: <ShippingProfitDetails rows={data?.shipping_breakdown} total={t.total_shipping_cost} />,
         payment: <PaymentProfitDetails rows={data?.payment_breakdown} total={fees} />,
         operating: <OperatingProfitDetails totals={t} total={t.operating_expenses_total} />,

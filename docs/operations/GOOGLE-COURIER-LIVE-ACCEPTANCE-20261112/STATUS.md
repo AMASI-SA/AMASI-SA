@@ -8,12 +8,16 @@
 - The user explicitly authorized fixing and publishing the Google dashboard and
   store-courier printing issues, then requested direct print trials on the
   previous affected orders. That authorization remains active.
-- State: the preceding release is deployed and verified; actual acceptance
-  exposed two bounded gaps. The courier gap is implemented and independently
-  verified. The Google display follow-up is being implemented separately.
-- This is a work-in-progress checkpoint, not a new release candidate. No new
-  source/intent pair is frozen, no follow-up PR is merged, and no second
-  publication has been requested.
+- State: the preceding release is deployed and verified. The complete native
+  data review exposed two courier formatting gaps and a Google display gap.
+  The bounded source changes are implemented, tested and independently
+  reviewed. This source checkpoint still requires exact CI, the governed build
+  and a fresh intent-only B before publication.
+- Follow-up Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1890.
+- Earlier recoverable WIP: `b20f308a46070e3bbd50a02be27088c46b1e04a2`.
+  The final source SHA is pinned in PR1890 and Issue1006 after checkpointing.
+- No new source/intent pair is frozen, no follow-up PR is merged, and no second
+  publication has been requested. Source readiness is not live acceptance.
 
 ## Verified preceding release
 
@@ -48,7 +52,7 @@ history. The helper considered every non-null optional alias populated, then
 its strict text validator rejected the empty string before checking history
 or the destination.
 
-The patch changes one condition in
+The first patch changes one condition in
 `backend/order_engine/store_courier_history_recovery.py`: optional aliases are
 absent only when missing, `None`, or exactly `""`. Whitespace, control
 characters, non-text values, a different city courier, and external carrier
@@ -82,10 +86,34 @@ PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend:backend/te
 PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend:backend/tests python -m pytest --noconftest -p no:cacheprovider -q --tb=short --asyncio-mode=auto backend/tests/test_salla_generic_shipping_mode.py backend/tests/test_courier_generic_identity_recovery.py backend/tests/test_courier_explicit_completion_recovery.py
 ```
 
-Reviewed helper SHA256:
-`29faf5cf37bfc78067616e60d6752c58b13c327d271331dd0d27bab32636f762`.
-Reviewed test SHA256:
-`86cbf745e9b5e9e8021647e4973b0efdf4725624b274b56ae5b84000656d187e`.
+The subsequent complete native-shape check, before freezing the new release,
+found outer ASCII spaces in native activity actor display names. Both reported
+orders had nonempty names and valid numeric actor IDs; their names' padding
+failed the shared strict text check. Only the actor display-name boundary now
+checks string type and raw length at most 300, strips outer ASCII spaces, and
+applies the unchanged strict text validator. Other whitespace, control/format
+characters, invalid actor IDs, and padded carrier/recipient/transition text
+remain rejected. No history or saved source is rewritten.
+
+Thirty additional actual-route cases prove this second gap: before the change,
+**6 failed, 24 passed, 84 deselected**, exit 1; after it, the same selection
+**30 passed, 84 deselected**, exit 0. Complete history/race tests now pass
+**132 cases, zero skipped**, exit 0, 9.09 seconds. A separate independent
+reviewer reran all 132: exit 0, zero skipped, 9.21 seconds, with no blocker.
+Positive cases combine both actual formatting shapes and exercise both
+refresh endpoints with zero provider POSTs, unchanged source/tombstones and
+two complete child-list reads.
+
+Root also confirmed both production local records remain completed, have the
+same generic/single-archive cohort and no cancellation/pending G47 flags. Fresh
+provider order, child and history objects were unchanged across repeated
+reads; only sanitized field-shape and equality evidence was retained. Both
+pre-follow-up UI attempts still fail, so no preview success is implied.
+
+Final reviewed helper SHA256:
+`30dcee74f03fc684ed2824eef60cf2406da0d66f206e5bc51c6bfb187eef59bf`.
+Final reviewed test SHA256:
+`28032943306ceb110a3f2178c9d89d0b19ccfc720ebc0dc9b8b3b03ff542526e`.
 
 ## Google gap found by the same-period UI comparison
 
@@ -99,12 +127,50 @@ missing accounts cannot be silently removed or treated as observed zero.
 The backend financial result is therefore intentionally incomplete. The UI
 normalizer currently preserves known-subtotal metadata only for Snapchat, and
 both Google surfaces hide the positive saved amount. The bounded follow-up
-will preserve Google metadata and show a positive known amount explicitly as
+preserves Google metadata and shows a positive known amount explicitly as
 incomplete in the yellow provider card and the executive Google spend cell.
 The executive cell will use the existing same-period platform snapshot and an
 optional display-only prop. Financial totals, profit, raw provider spend,
 ROAS/CPA, aggregation, account selection and backend source rules remain
 unchanged. Unknown/default zero must not become a confirmed or partial spend.
+
+The change is limited to four frontend runtime files:
+
+- `frontend/src/services/dashboardAdsSpend.js` preserves Google quality and
+  known-subtotal metadata and exposes a display-only positive amount helper.
+- `frontend/src/components/DashboardAdsSpendCard.jsx` uses it only for an
+  explicitly null Google full total and the selected matching date range.
+- `frontend/src/pages/AdvancedDashboard.jsx` passes optional Google evidence
+  from the existing platform snapshot only when both selected dates match.
+- `frontend/src/components/AdsExecutiveBreakdownTable.jsx` annotates only the
+  Google spend cell when canonical `spend_sar` is explicitly null.
+
+Display requires typed `connected:true`, `amount_available:false`, explicit
+incomplete quality/state, and a finite positive known amount. Proven complete
+zero keeps the normal numeric path. Missing/invalid/default-zero evidence,
+absent selected dates, and mismatched snapshots cannot produce the annotation.
+`buildAdsExecutiveMetricRows`, the platform-spend merge function, and all
+backend financial or source code are unchanged by this Google follow-up.
+
+Frontend red/green: **14 failed, 32 selected passed** before implementation;
+the same selection then passed **46**, with 105 other tests deliberately
+deselected by the focused name filter. Fresh complete focused suites passed
+**151 tests in four suites**, zero skipped, exit 0, 8.644 seconds. An independent
+reviewer repeated these four suites: **151 passed, zero skipped**, exit 0,
+with no blocker. The existing card-refresh, cart-freeze and platform-merge
+suites also passed **28 tests in three suites**, zero skipped. Total
+implementation verification: **179 tests in seven suites**. No runtime source
+changed after these runs.
+
+```bash
+CI=true PYTHONDONTWRITEBYTECODE=1 python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --no-cache --runTestsByPath src/services/dashboardAdsSpend.test.js src/components/DashboardAdsSpendCard.test.jsx src/components/ProfitSummaryCard.adsExecutive.test.jsx src/pages/AdvancedDashboard.latestOrders.test.jsx
+```
+
+The tests check the real response shape using synthetic financial fixtures,
+normalization, both visible spend cells, unchanged/null totals and metrics,
+full-zero/full-value precedence, and stale or absent period rejection. The
+local governed Node22.23.2/Yarn1.22.22 toolchain is warm-verified, with an
+independent ignored dependency copy matching the existing package/lock files.
 
 No provider sync, reauthorization, account configuration, ad, budget, financial,
 shipment, handoff or customer-state write was used for these completed-order
@@ -112,8 +178,7 @@ and saved-dashboard diagnostics.
 
 ## Next safe action
 
-Finish the bounded frontend change, tests and independent review; checkpoint
-the complete source. Re-read Issue 1006, the current production ref and official
+Checkpoint the complete reviewed source. Re-read Issue 1006, the current production ref and official
 guard before selecting a new source base. Financial PR1889 and Android work
 remain separate; preserve any newer production commits. Freeze a fresh
 protocol-v5 A/B pair, pass its exact required gates and actual adapter, then

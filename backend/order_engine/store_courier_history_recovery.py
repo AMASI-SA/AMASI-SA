@@ -239,8 +239,11 @@ def _history(rows, order, context, courier):
         if any(not _reference(row.get(key), context.number) for key in ("reference_id", "order_number", "order_reference_id")):
             _fail()
         actor = row.get("created_by")
-        if not isinstance(actor, dict) or not _text(actor.get("name")):
+        actor_name = actor.get("name") if isinstance(actor, dict) else None
+        if not isinstance(actor_name, str) or len(actor_name) > 300:
             _fail()
+        # Native display names may have outer ASCII spaces; controls stay invalid.
+        _text(actor_name.strip(" "))
         _id(actor.get("id"))
         at = _time(row.get("created_at"))
         note = "" if row.get("note") == "" else _text(row.get("note"))

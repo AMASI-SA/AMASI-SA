@@ -1,4 +1,5 @@
 import DashboardTableScroll from "./DashboardTableScroll";
+import { googleKnownIncompleteAmount } from "../services/dashboardAdsSpend";
 const PROVIDERS = [
     { key: "snapchat", label: "Snapchat" },
     { key: "tiktok", label: "TikTok" },
@@ -155,8 +156,9 @@ function SnapchatAccountExpenses({ accounts }) {
     </div>;
 }
 
-export default function AdsExecutiveBreakdownTable({ data, snapchatAccounts }) {
+export default function AdsExecutiveBreakdownTable({ data, snapchatAccounts, googleSpendEvidence }) {
     const rows = buildAdsExecutiveMetricRows(data);
+    const knownGoogle = googleSpendEvidence ? googleKnownIncompleteAmount(googleSpendEvidence) : null;
     const coverage = data?.coverage || {};
     const splitSnapchat = snapchatAccounts !== undefined;
     const providers = splitSnapchat ? PROVIDERS.filter(({ key }) => key !== "snapchat") : PROVIDERS;
@@ -216,7 +218,10 @@ export default function AdsExecutiveBreakdownTable({ data, snapchatAccounts }) {
                                         key={key}
                                         className="p-2 text-center font-mono font-bold text-slate-700"
                                     >
-                                        {formatValue(row.values[key], row.format)}
+                                        {row.key === "spend" && key === "google"
+                                            && data?.providers?.google?.spend_sar === null && knownGoogle !== null
+                                            ? `المتاح ${fmtSar(knownGoogle)} ر.س · غير مكتمل`
+                                            : formatValue(row.values[key], row.format)}
                                     </td>
                                 ))}
                                 <td className="p-2 text-center font-mono font-extrabold text-emerald-800">

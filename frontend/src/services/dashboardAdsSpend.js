@@ -20,6 +20,14 @@ function knownAmount(value) {
     return nonnegative(value);
 }
 
+// Display evidence only: this partial amount never supplies a financial total.
+export function googleKnownIncompleteAmount(evidence) {
+    const known = knownAmount(evidence?.known_total_sar);
+    return evidence?.connected === true && evidence?.amount_available === false
+        && (evidence?.status === "incomplete" || evidence?.data_state === "unknown_incomplete")
+        && known !== null && known > 0 ? known : null;
+}
+
 function accountCount(value) {
     return Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
@@ -73,6 +81,22 @@ function normalizeProvider(provider, value = {}) {
             known_total_sar: knownAmount(row.known_total_sar),
             known_account_count: accountCount(row.known_account_count),
             incomplete_account_count: accountCount(row.incomplete_account_count),
+            reason_codes: Array.isArray(row.reason_codes)
+                ? row.reason_codes.filter((code) => typeof code === "string").slice(0, 20)
+                : [],
+        } : {}),
+        ...(provider === "google" ? {
+            status: typeof row.status === "string" ? row.status : null,
+            data_state: typeof row.data_state === "string" ? row.data_state : null,
+            amount_available: typeof row.amount_available === "boolean" ? row.amount_available : null,
+            amount_complete: typeof row.amount_complete === "boolean" ? row.amount_complete : null,
+            coverage_complete: typeof row.coverage_complete === "boolean" ? row.coverage_complete : null,
+            provisional: row.provisional === true,
+            expected: typeof row.expected === "boolean" ? row.expected : null,
+            known_total_sar: knownAmount(row.known_total_sar),
+            account_count: accountCount(row.account_count),
+            observed_days: accountCount(row.observed_days),
+            requested_days: accountCount(row.requested_days),
             reason_codes: Array.isArray(row.reason_codes)
                 ? row.reason_codes.filter((code) => typeof code === "string").slice(0, 20)
                 : [],

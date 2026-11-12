@@ -1,5 +1,6 @@
 import { act } from "react-dom/test-utils";
 import { createRoot } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import AdsExecutiveBreakdownTable, {
     buildAdsExecutiveMetricRows,
@@ -85,6 +86,57 @@ test("ignores Snapchat platform CPA when it conflicts with Salla orders", () => 
     expect(costPerOrder.values.snapchat).toBeCloseTo(129.53, 2);
     expect(costPerOrder.values.snapchat).not.toBe(323.82);
 });
+
+const incompleteGoogleEvidence = {
+    connected: true, total_sar: null, status: "incomplete", data_state: "unknown_incomplete",
+    amount_available: false, known_total_sar: 96.48, account_count: 3,
+    reason_codes: ["google_native_account_day_missing"],
+};
+
+function googlePartialTable(evidence = incompleteGoogleEvidence, spend = null) {
+    const payload = { providers: { google: { spend_sar: spend, salla_sales_sar: 1196.98,
+        salla_orders: 5, actual_roas: null, platform_cost_per_order_sar: null } },
+        total: { spend_sar: null, salla_sales_sar: 1196.98, salla_orders: 5, actual_roas: null } };
+    const before = buildAdsExecutiveMetricRows(payload);
+    const host = document.createElement("div");
+    host.innerHTML = renderToStaticMarkup(<AdsExecutiveBreakdownTable data={payload} googleSpendEvidence={evidence} />);
+    expect(buildAdsExecutiveMetricRows(payload)).toEqual(before);
+    const table = host.querySelector('[data-testid="ads-executive-breakdown-table"]');
+    const column = Array.from(table.querySelectorAll("thead th")).findIndex((cell) => cell.textContent === "Google Ads");
+    const rows = Array.from(table.querySelectorAll("tbody tr"));
+    return { payload, rows, google: rows.map((row) => row.children[column].textContent) };
+}
+
+test("Google known evidence changes only the spend display, not total, commerce, CPA or ROAS", () => {
+    const { payload, rows, google } = googlePartialTable();
+    expect(google).toEqual(["المتاح 96.48 ر.س · غير مكتمل", "1,196.98", "5", "—", "—"]);
+    expect(rows[0].lastElementChild.textContent).toBe("—");
+    expect(payload.providers.google.spend_sar).toBeNull();
+    expect(payload.total.spend_sar).toBeNull();
+    expect(payload.providers.google.actual_roas).toBeNull();
+    expect(payload.providers.google.platform_cost_per_order_sar).toBeNull();
+});
+
+test.each([0, "0", false, true, null, "", " ", -1, NaN, Infinity, {}, []])(
+    "unknown or invalid Google known amount %p cannot replace a missing full spend", (known_total_sar) => {
+        const { google } = googlePartialTable({ ...incompleteGoogleEvidence, known_total_sar });
+        expect(google[0]).toBe("—");
+    },
+);
+
+test.each([
+    { connected: false }, { connected: "true" }, { amount_available: true }, { amount_available: "false" },
+    { status: undefined, data_state: undefined },
+])("Google partial display requires typed unavailable and incomplete evidence %p", (override) => {
+    const { google } = googlePartialTable({ ...incompleteGoogleEvidence, ...override });
+    expect(google[0]).toBe("—");
+});
+
+test.each([0, 12.5])("canonical Google spend %s wins over partial known metadata", (spend) => {
+    const { google } = googlePartialTable(incompleteGoogleEvidence, spend);
+    expect(google[0]).toBe(spend.toFixed(2));
+});
+
 
 test("renders all approved metric rows", () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;

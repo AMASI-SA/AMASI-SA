@@ -19,6 +19,7 @@ import { addDaysISO, todaySA } from "../lib/dates";
 import {
     DASHBOARD_ADS_PROVIDERS,
     getDashboardAdsSpend,
+    googleKnownIncompleteAmount,
 } from "../services/dashboardAdsSpend";
 import { refreshSnapchatSpend, snapchatSpendReadbackMatches } from "../services/snapchatManualSpendRefresh";
 
@@ -93,12 +94,15 @@ function snapchatAmountIncomplete(state) {
     );
 }
 
-function providerValue(data, provider) {
+function providerValue(data, provider, googlePeriodMatches = false) {
     const state = data?.providers?.[provider] || {};
     const total = data?.provider_totals_sar?.[provider];
     if (provider === "snapchat" && snapchatAmountIncomplete(state)) {
         return incompleteSnapchatValue(state);
     }
+    const knownGoogle = provider === "google" && total === null && googlePeriodMatches
+        ? googleKnownIncompleteAmount(state) : null;
+    if (knownGoogle !== null) return `المتاح ${money(knownGoogle)} · غير مكتمل`;
     if (hasAmount(total)) {
         return `${money(total)}${provider === "snapchat" && state.provisional === true ? " · أولي" : ""}`;
     }
@@ -320,7 +324,7 @@ export function DashboardAdsSpendCardContent({
                                     <span>{meta.label}</span>
                                 </div>
                                 <div className="mt-1 text-[11px] font-extrabold text-slate-900">
-                                    {providerValue(data, provider)}
+                                    {providerValue(data, provider, Boolean(fromDate) && accountRangeReady)}
                                 </div>
                                 <div className="mt-0.5 text-[9px] font-semibold text-slate-400">
                                     {provider === "snapchat" && state.connected && (

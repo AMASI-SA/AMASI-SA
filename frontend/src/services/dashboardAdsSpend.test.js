@@ -105,6 +105,47 @@ test("normalizes and sorts all four Riyadh hourly provider series", () => {
 });
 
 
+test("keeps incomplete Google known spend and coverage separate from financial totals", () => {
+    const payload = fourPlatformPayload();
+    payload.total_sar = null;
+    payload.provider_totals_sar.google = null;
+    payload.providers.google = {
+        connected: true, total_sar: null, status: "incomplete", data_quality: "incomplete",
+        data_state: "unknown_incomplete", amount_available: false, amount_complete: false,
+        coverage_complete: false, provisional: false, expected: true, known_total_sar: 96.48,
+        account_count: 3, observed_days: 0, requested_days: 1,
+        reason_codes: ["google_native_account_day_missing"],
+    };
+    const normalized = normalizeDashboardAdsSpend(payload);
+    expect(normalized.providers.google).toMatchObject(payload.providers.google);
+    expect(normalized.total_sar).toBeNull();
+    expect(normalized.provider_totals_sar.google).toBeNull();
+    expect(normalized.providers.google.total_sar).toBeNull();
+    expect(normalized.providers.google.known_account_count).toBeUndefined();
+    expect(normalized.providers.google.incomplete_account_count).toBeUndefined();
+});
+
+test.each([false, true, null, "", " ", -1, Infinity, {}, []])(
+    "rejects invalid known Google amount %p without fabricating zero", (known) => {
+        const normalized = normalizeDashboardAdsSpend({ providers: { google: {
+            connected: true, status: "incomplete", amount_available: false, known_total_sar: known,
+        } } });
+        expect(normalized.providers.google.known_total_sar).toBeNull();
+        expect(normalized.provider_totals_sar.google).toBeNull();
+        expect(normalized.total_sar).toBeNull();
+    },
+);
+
+test("retains Google known zero as metadata without supplying a complete amount", () => {
+    const normalized = normalizeDashboardAdsSpend({ providers: { google: {
+        connected: true, status: "incomplete", amount_available: false, known_total_sar: 0,
+    } } });
+    expect(normalized.providers.google.known_total_sar).toBe(0);
+    expect(normalized.provider_totals_sar.google).toBeNull();
+    expect(normalized.total_sar).toBeNull();
+});
+
+
 test("retains the backwards-compatible hourly normalizer", () => {
     const normalized = normalizeDashboardAdsHourlySpend({
         date: "2026-08-05",

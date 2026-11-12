@@ -1,6 +1,17 @@
 # GOOGLE-DASHBOARD-SPEND-20261111
 
-## Scope and current state
+## Current continuation after live acceptance
+
+PR1887 is deployed and verified by three official probes; its lease is inactive.
+The live same-period trial exposed partial Google data hidden by the UI.
+The reviewed frontend-only follow-up and the remaining courier formatting
+repairs are tracked in [the current task record](../GOOGLE-COURIER-LIVE-ACCEPTANCE-20261112/STATUS.md)
+and Draft PR1890. That record supersedes the historical release-pending text
+below. PR1887's immutable deployment evidence is preserved separately at
+commit `5874b0e3e594dd0c173b8dffcd47348944a1cbec` on the documentation-only
+branch `codex/google-courier-release-evidence-20261112`; never deploy that branch.
+
+## Historical scope and source checkpoints
 
 - Repository: `AMASI-SA/AMASI-SA`
 - Current source branch: `codex/google-dashboard-spend-r2-20261112`

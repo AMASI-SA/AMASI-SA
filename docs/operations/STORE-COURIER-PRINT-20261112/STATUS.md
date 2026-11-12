@@ -1,6 +1,18 @@
 # STORE-COURIER-PRINT-20261112
 
-## Scope and authorization
+## Current continuation after live acceptance
+
+PR1887 is deployed and verified by three official probes; its lease is inactive.
+Both reported courier UI trials still failed. Native empty optional carrier
+aliases and padded actor display names are now covered by bounded repairs and
+red/green HTTP-route tests. The current source/review/release state is recorded
+in [the combined follow-up](../GOOGLE-COURIER-LIVE-ACCEPTANCE-20261112/STATUS.md)
+and Draft PR1890, which supersede the release-pending notes below. PR1887's
+immutable deployment evidence is preserved separately at commit
+`5874b0e3e594dd0c173b8dffcd47348944a1cbec` on the documentation-only branch
+`codex/google-courier-release-evidence-20261112`; never deploy that branch.
+
+## Historical scope and authorization
 
 - Repository: `AMASI-SA/AMASI-SA`.
 - Branch: `codex/google-dashboard-spend-r2-20261112`; draft PR1887.
