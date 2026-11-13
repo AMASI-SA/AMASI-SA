@@ -1,0 +1,156 @@
+name: Patch campaign hover live refresh on task branch
+on:
+  push:
+    branches: [ops/patch-campaign-hover-live-refresh-20261113]
+    paths: [.github/workflows/patch-campaign-hover-live-refresh.yml]
+permissions:
+  contents: write
+concurrency:
+  group: patch-campaign-hover-live-refresh-20261113
+  cancel-in-progress: false
+jobs:
+  patch-task-only:
+    if: github.repository == 'AMASI-SA/AMASI-SA'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      TARGET_BRANCH: codex/campaign-hover-live-refresh-20261113
+      EXPECTED_HEAD: 954c0d22d125f430eec33cbd99c399ec88b3a780
+      PRODUCTION_BASE: 8d25f7a6fa9a310b319b753c32457e70987f7c51
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/campaign-hover-live-refresh-20261113
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Patch exact reviewed source, never production
+        run: |
+          python -B - <<'PY'
+          import ast, os, re, subprocess
+          from pathlib import Path
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          assert git('rev-parse','HEAD') == os.environ['EXPECTED_HEAD']
+          assert git('ls-remote','origin','refs/heads/hotfix/prod-snap-meta-final').split()[0] == os.environ['PRODUCTION_BASE']
+          for folder in ('frontend', 'frontend/src', 'frontend/src/hooks', 'frontend/src/pages',
+                         'frontend/src/services', 'backend', 'backend/order_engine', 'backend/tests',
+                         '.github', '.github/workflows', 'docs', 'docs/operations',
+                         'docs/operations/CAMPAIGN-HOVER-1896'):
+              instruction = Path(folder) / 'AGENTS.md'
+              assert not instruction.exists(), f'Nested instructions require review first: {instruction}'
+          def replace_once(path, old, new):
+              text = Path(path).read_text()
+              assert text.count(old) == 1, f'Unexpected source anchor: {path}: {old[:80]}'
+              Path(path).write_text(text.replace(old, new, 1))
+          for path, call in (
+              ('frontend/src/pages/OrdersV2.jsx', 'useCampaignHover(orders, { limit: 20, totals: orderTotals })'),
+              ('frontend/src/pages/AdvancedDashboard.jsx', 'useCampaignHover(orders, { limit: 8, visibleCount: 8, totals })'),
+          ):
+              text = Path(path).read_text()
+              import_pattern = r'''import\s+\{\s*getCampaignHoverBatch\s*\}\s+from\s+(['"])\.\./services/campaignHover\1;'''
+              text, n = re.subn(import_pattern, 'import useCampaignHover from "../hooks/useCampaignHover";', text)
+              assert n == 1, f'Import anchor mismatch: {path}'
+              block = r'(?m)^([ \t]*)const campaignIdsKey = useMemo\([\s\S]*?^\1\}, \[campaignIdsKey\]\);'
+              matches = list(re.finditer(block, text))
+              assert len(matches) == 1, f'Expected one stale campaign-only effect: {path}'
+              match = matches[0]
+              if 'AdvancedDashboard' in path:
+                  assert match.start() > text.index('export function LatestOrders(')
+              text = text[:match.start()] + match.group(1) + 'const campaignHover = ' + call + ';' + text[match.end():]
+              assert 'getCampaignHoverBatch' not in text and 'campaignIdsKey' not in text
+              Path(path).write_text(text)
+
+          backend = 'backend/order_engine/campaign_hover.py'
+          replace_once(backend,
+              'async def cached_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) -> dict:',
+              'async def cached_campaign_hover(db: Any, user_id: str, campaign_ids: list[str], *, snapshot_revision: str = "") -> dict:')
+          replace_once(backend,
+              '    key = (user_id, tuple(sorted(campaign_ids)))',
+              '    # Revision comes from the observed order list; tenant identity still comes from auth.\n    key = (user_id, tuple(sorted(campaign_ids)), snapshot_revision)')
+          replace_once(backend,
+              '                             user: dict = Depends(current_user)):',
+              '                             user: dict = Depends(current_user),\n                             snapshot_revision: str = Query("", max_length=64, pattern=r"^[a-z0-9:-]*$")):')
+          replace_once(backend,
+              '            return await cached_campaign_hover(db, user_id, ids)',
+              '            return await cached_campaign_hover(db, user_id, ids, snapshot_revision=snapshot_revision)')
+          ast.parse(Path(backend).read_text())
+          ast.parse(Path('backend/tests/test_campaign_hover_refresh.py').read_text())
+
+          Path('frontend/src/pages/AdvancedDashboard.campaignHover.test.js').write_text('''import fs from "fs";
+          import path from "path";
+          const dashboard = fs.readFileSync(path.join(__dirname, "AdvancedDashboard.jsx"), "utf8");
+          const orders = fs.readFileSync(path.join(__dirname, "OrdersV2.jsx"), "utf8");
+          const hook = fs.readFileSync(path.join(__dirname, "../hooks/useCampaignHover.js"), "utf8");
+          test("both order surfaces use the shared revision-aware snapshot hook", () => {
+              expect(dashboard).toContain('import useCampaignHover from "../hooks/useCampaignHover"');
+              expect(orders).toContain('import useCampaignHover from "../hooks/useCampaignHover"');
+              expect(dashboard).toContain('useCampaignHover(orders, { limit: 8, visibleCount: 8, totals })');
+              expect(orders).toContain('useCampaignHover(orders, { limit: 20, totals: orderTotals })');
+              expect(dashboard).toContain('<CampaignHoverBadge');
+              expect(dashboard).not.toContain('}, [campaignIdsKey]);');
+              expect(orders).not.toContain('}, [campaignIdsKey]);');
+          });
+          test("no hover fetch or background polling is added", () => {
+              expect(hook).not.toContain('setInterval(');
+              expect(hook).not.toContain('onMouseEnter');
+              expect(hook).toContain('snapshotRevision: snapshot.revision');
+              expect(hook).toContain('clearTimeout(timer)');
+          });
+          ''')
+          service_tests = Path('frontend/src/services/campaignHover.test.js')
+          with service_tests.open('a') as out:
+              out.write('''\n
+test("an order revision reaches the tenant-scoped server snapshot", async () => {
+    api.get.mockResolvedValue({ data: { campaigns: { a: { orders: 31 } } } });
+    await getCampaignHoverBatch(["a"], { snapshotRevision: "r:31" });
+    expect(api.get).toHaveBeenCalledWith("/orders-v2/campaign-hover", {
+        params: { campaign_ids: "a", snapshot_revision: "r:31" }, timeout: 12000,
+    });
+});
+''')
+          ci = '.github/workflows/campaign-hover-source-acceptance.yml'
+          replace_once(ci, '      - backend/tests/test_campaign_hover_daily.py',
+              '      - backend/tests/test_campaign_hover_daily.py\n      - backend/tests/test_campaign_hover_refresh.py\n      - frontend/src/hooks/useCampaignHover.js\n      - frontend/src/hooks/useCampaignHover.test.jsx')
+          replace_once(ci, '          tests/test_campaign_hover_daily.py',
+              '          tests/test_campaign_hover_daily.py\n          tests/test_campaign_hover_refresh.py')
+          replace_once(ci, '          src/services/campaignHover.test.js',
+              '          src/services/campaignHover.test.js\n          src/hooks/useCampaignHover.test.jsx')
+          status = Path('docs/operations/CAMPAIGN-HOVER-1896/POSTDEPLOY-REFRESH-20261113.md')
+          status.write_text('''# Post-deployment card diagnostics and order-refresh fix
+
+          Production reviewed: 8d25f7a6fa9a310b319b753c32457e70987f7c51. Prior release was verified by the owner with three live guard probes; this does not prove financial correctness.
+
+          Confirmed code defect: both order surfaces watched only the sorted campaign-ID set. New orders for the same campaign did not initiate a new report request. Server TTL alone cannot refresh retained component state.
+
+          This isolated source connects both pages to a shared hook whose bounded cache revision reflects order IDs, status, quantities, amount and totals. Repeated identical list refreshes coalesce. A new same-campaign order generates a new tenant-scoped server snapshot instead of waiting for the old 180-second cache. The existing visible order-reader refresh can also notice a three-minute spend-staleness bucket; no new polling is added. Requests are never initiated by hover/focus/tap. Late stale responses cannot replace the current snapshot.
+
+          Acceptance: same campaign 30 -> 31; unchanged list/no independent polling; cancellation/quantity changes; late response isolation; tenant isolation and coalescing. Exact repository CI is required, not merely file creation or syntax checks.
+
+          Remaining independent issues: TikTok screenshot contains a readable campaign name but the resolver returns no trusted ID. Google screenshot shows unresolved campaign-to-account binding. The campaign reader currently has a native Snapchat catalogue but no equivalent native Google/TikTok catalogue path. Do not infer campaign attribution from product names or guess from duplicate campaign names.
+
+          Snapchat screenshot reports America/Los_Angeles, contradicting the owner's earlier America/New_York description. Do not alter ad account settings or relabel the saved daily spend. Verify provider account ID and authoritative timezone, and check whether the running synchronizer populates account-local snapshots.
+
+          No production merge/deployment, /app mutation, release lease, manual provider sync, database or advertising/accounting writes in this change. Preserve valid partial-spend policy. Keep the PR draft pending CI and a read-only live account/attribution comparison; the timezone and TikTok/Google failures are not claimed fixed by this refresh patch.
+          ''')
+          allowed = {
+              'frontend/src/pages/AdvancedDashboard.jsx', 'frontend/src/pages/OrdersV2.jsx',
+              'frontend/src/pages/AdvancedDashboard.campaignHover.test.js',
+              'frontend/src/services/campaignHover.test.js', backend, ci, str(status),
+          }
+          changed = set(git('diff','--name-only').splitlines())
+          assert changed <= allowed and 'release/release-intent-v5.json' not in changed
+          subprocess.check_call(['git','add','--',*sorted(allowed)])
+          print('PATCH_READY', sorted(allowed))
+          PY
+      - name: Commit and fast-forward the task branch only
+        run: |
+          test "$(git ls-remote origin refs/heads/$TARGET_BRANCH | cut -f1)" = "$EXPECTED_HEAD"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: refresh both campaign cards when the Salla order snapshot changes'
+          git diff --exit-code "$EXPECTED_HEAD" HEAD -- release/release-intent-v5.json
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+          echo "TASK_SOURCE_COMMIT=$(git rev-parse HEAD)"
