@@ -1,0 +1,41 @@
+{
+  "observed_at_utc": "2026-11-13T22:30:18.040Z",
+  "observed_at_riyadh": "2026-11-14 01:30:18",
+  "browser_connection": "restored after JS kernel reset",
+  "financial_page": "https://mezansalla.com/operational-balances/financial-position",
+  "visibility_during_observations": "visible",
+  "financial_acceptance": "failed_to_refresh_sources",
+  "warning": "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. تعذر تحديث مصدر الأرصدة؛ احتُفظ بآخر لقطة ناجحة مع سبب الفشل.",
+  "report_as_of_display": "12/11/2026, 01:07",
+  "report_generated_at_display": "14/11/2026, 01:29 · الرياض",
+  "refresh_button_enabled_after_settlement": true,
+  "loading_ended": true,
+  "source_mapping": {
+    "classification": "inference from exact message in production code; response body not observed",
+    "expected_http_status": 409,
+    "expected_code": "operational_source_setup_incomplete",
+    "stage": "source_collection",
+    "cause": null,
+    "source_collection": null,
+    "exact_cause_established": false
+  },
+  "pending_dialog": {
+    "group": "iMile",
+    "rows": 15,
+    "pages": [
+      10,
+      5
+    ],
+    "number_and_reason_display": "passed",
+    "search": "passed",
+    "false_idle_busy_label": "absent in inspected rows",
+    "confirmation_buttons_clicked": 0
+  },
+  "manual_refresh_clicks_after_navigation": 0,
+  "request_count_observed": false,
+  "request_duration_observed": false,
+  "financial_mutation_buttons_clicked": 0,
+  "production_ref_from_github": "53acc03a178362530f2cb45206fe11a4fb724d88",
+  "current_release_record": "https://github.com/AMASI-SA/AMASI-SA/pull/1908#issuecomment-6864777801",
+  "next_step": "Add narrowly scoped safe diagnostic visibility for code/collection in the existing visible request; prove the cause before changing read budgets, scopes or caps."
+}

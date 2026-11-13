@@ -1,70 +1,68 @@
 # Operational balances follow-up — release continuation 2026-11-13
 
 <!-- RESUMPTION-CURRENT-START -->
-## Current state
+## Current state — 14 November 2026, Riyadh
 
-PR #1906 is merged and published. Official public verification completed successfully on 13 November 2026 at 19:56:56 UTC (22:56:56 Riyadh): actual exit 0, `verified:true`, all 3 passes, and final guard status exactly `{"active":false}`. The source A7, intent B7 and normal merge M are unchanged. The new platform version is `72c5b2e`, explicitly completed at 22:41 Riyadh.
+Browser access was restored by resetting the JavaScript connection kernel. The signed-in financial-position page opened successfully. **Fresh financial acceptance did not pass:** the visible page load settled with a source-read failure warning and the old report `as_of` of 12 November 2026 01:07 Riyadh. This is now a concrete application result, replacing the earlier “unobserved due to browser transport” status.
 
-Fresh financial acceptance remains unobserved because the browser execution connection repeatedly failed. One intentional reload began at `2026-11-13T20:00:53.168Z`; the environment then became unavailable. On recovery, the existing tab was hidden and still displayed loading. It was made visible, followed by an intermediate navigation interruption. A new, intentional financial-position navigation began at `2026-11-13T20:06:45.758Z`, with visibility confirmed `visible` and the loading state observed. Subsequent read-only observations failed at the transport layer; no completed report or refresh response was read. Re-advertised browser access also timed out. Do not infer success, failure, POST count, latency or a new snapshot from elapsed time. The last settled report observed before these attempts was the saved 12 November 01:07 snapshot with a timeout fallback.
+**The pending-order dialog acceptance passed for the inspected 15-row iMile group:** both pages (10 + 5 rows), order numbers, review reasons and search worked. The idle row without valid confirmation metadata did not display the false “جارٍ التحقق وحفظ التأكيد…” message. No confirmation, settlement or payout button was used.
 
-## Canonical identities
+The original PR #1906 release remains fully verified, but production subsequently advanced to PR #1908. Do not republish #1906 or its documentation branch.
+
+## Live observations
+
+[Sanitized acceptance record](LIVE-ACCEPTANCE-20261114.json) preserves this turn's observations without customer data, order identifiers or financial amounts.
+
+- Observation: `2026-11-13T22:30:18.040Z` = 14 November 01:30:18 Riyadh.
+- The financial tab was confirmed `visible` while loading and when the settled report was read.
+- The refresh button became enabled and the loading state ended.
+- Exact warning: “تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. تعذر تحديث مصدر الأرصدة؛ احتُفظ بآخر لقطة ناجحة مع سبب الفشل.”
+- “آخر احتساب”: `12/11/2026, 01:07`.
+- “إعداد التقرير”: `14/11/2026, 01:29 · الرياض`; this fresh rendering timestamp is not evidence of fresh balances.
+- No manual refresh was clicked after the initial page navigation in this turn. The HTTP response body, number of underlying POST requests and request duration were not captured.
+
+## Failure classification and evidence gap
+
+The exact displayed message maps in the production source to `SourceReadError` in the `source_collection` block of `operational_balance_service.refresh`. That handler returns HTTP409 with `detail.code=operational_source_setup_incomplete`, `detail.cause` and `detail.source_collection`.
+
+This classification is **inferred from the exact source-message mapping**; it is not a direct observation of the HTTP response body. It identifies a source-reading failure before the subsequent calculation, but does not identify the failed collection or its exact cause.
+
+The frontend retains only the human message. The current handler does not log the cause/collection and the failing mutation exits before saving the new state, revision or audit. The existing context/audit views therefore cannot recover the missing diagnostic fields from this failed attempt. Expected production logs expose stage/duration/outcome and HTTP status only. Browser network inspection was unavailable under the existing browser restriction, and no bypass was attempted.
+
+Do not infer a collection timeout, more than 20,000 records, owner mismatch, rejected source or invalid source from the message alone. Do not hide the failure by trimming records, substituting zero, relaxing owner filters or starting background refresh.
+
+The next engineering step is narrowly scoped diagnostic visibility for the existing request: retain or log only a whitelisted error code and collection identifier, without customer/order/amount/credential data, then observe one visible attempt and fix the proved cause. A further blind refresh provides no new diagnostic evidence.
+
+## Production has advanced after #1906
+
+The production ref read in this follow-up is `53acc03a178362530f2cb45206fe11a4fb724d88` (PR #1908), with source `47e474fa896e09db353b9928261fe96186ea24e1`, intent-only B `394deb3a09fbf8a3cec5a8e2c3c21d6bbd2fa264`, and runtime `rg5-8bd428e3e93319a15361587b91a09dbd5b0f97f6bbea49d0fd8b4d4343166b9a`.
+
+[PR1908 completion evidence](https://github.com/AMASI-SA/AMASI-SA/pull/1908#issuecomment-6864777801) records platform version `11d385a`, completion 13 November 23:41 Riyadh, official verify exit0/`verified:true`/3 passes at `2026-11-13T20:55:32.260592+00:00`, and final `active:false`. This is the preserved publication record; this follow-up did not run another official production verification.
+
+Independent comparison found no `operational_*` or frontend changes between #1906 and #1908; the frontend artifact tree remains `f77e96091e737b362accb3c17e2a642081b0fec48fdcbced94ff20672772a4e5`. Do not attribute the current application attempt to the old A7 runtime identity.
+
+## Verified #1906 release record
 
 | Item | Exact value |
 | --- | --- |
-| Production/task PR | https://github.com/AMASI-SA/AMASI-SA/pull/1906 |
-| Production branch | `hotfix/prod-snap-meta-final` |
+| PR | https://github.com/AMASI-SA/AMASI-SA/pull/1906 |
 | Source A7 | `286e46ce50d0ae1f5f128646e350bbae38b2ef5c` |
 | Intent B7 | `9502be1eb4adfc8f28a33a190cc3a5be8b75e241` |
-| Reviewed prior production J | `8d25f7a6fa9a310b319b753c32457e70987f7c51` |
+| Prior production J | `8d25f7a6fa9a310b319b753c32457e70987f7c51` |
 | Normal merge M | `791b019e20ffe24439393576129783cd4c9dceb3` |
-| B7 and M exact tree | `663ff410de7bc6e18933ac1d06fcdd4564bd69ba` |
-| Intent SHA-256 | `066eafb9d85445f9868b5d12ec853e7c252b00175aa38f425af2f2c18678f4ad` |
-| Runtime ID | `rg5-4b111864525e317c313f6358c3c42f5ba2deaa6f1610b6e2db47399029b7a57f` |
-| Frontend artifact tree SHA-256 | `f77e96091e737b362accb3c17e2a642081b0fec48fdcbced94ff20672772a4e5` |
+| B7/M tree | `663ff410de7bc6e18933ac1d06fcdd4564bd69ba` |
+| Runtime | `rg5-4b111864525e317c313f6358c3c42f5ba2deaa6f1610b6e2db47399029b7a57f` |
+| Platform version / completion | `72c5b2e` / 13 November 22:41 Riyadh |
 
-This documentation-only handoff branch is separate from the frozen production release. Do not merge it into the A7/B7 deployment contract or publish its HEAD.
+All A7/B7 gates and all 3 exact-M workflows/11 checks passed. Original `/app` fast-forward and actual package adapter passed; tracked files remained clean and all 120 pre-existing untracked-file hashes were preserved. Official prepare/prepublish and one Publish action succeeded. No cleanup, reset of operator files or paid Emergent chat was used.
 
-## Verified milestones
+[Exact official verification JSON](OFFICIAL-RELEASE-VERIFICATION-20261113.json) remains unchanged: 33,299 bytes, SHA256 `c756f0b20cbd728f64df6b0ff6d54a8eb5991fed9c4430e9b1cabe5598d692b0`. Actual exit0, `verified:true`, 3 complete passes, 582 frontend requests per pass, empty stderr and final status exactly `{"active":false}`; wrapper duration822.87 seconds, result written `2026-11-13T19:56:56.421042+00:00`. Independent review matched all 582 request entries and identities to B7.
 
-- Exact A7: all 13 workflows succeeded; 29 checks comprise 23 successes and 6 expected skips.
-- Exact B7: all 13 applicable workflows succeeded, plus one branch-specific TikTok workflow skipped; 31 checks comprise 25 successes and 6 expected skips. Final CodeQL Python, JavaScript/TypeScript and aggregate checks succeeded. A temporary comparison warning cleared when Python analysis completed; no rerun or bypass was used.
-- Readiness run 43489951555 passed both host rehearsals: Node 20.20.2 job 132108986553 and Node 24.19.0 job 132108986525. Their identity and isolated health/package/runtime artifact proofs matched A7/J/B7.
-- Root and independent checks confirmed that B7 changes only `release/release-intent-v5.json` from A7, with the exact reviewed artifact bytes. M has parents J and B7 and exactly the B7 tree.
-- All 3 exact-M push workflows and all 11 check runs succeeded, including final CodeQL and both clean-clone rehearsals.
-- The original `/app` operator fast-forwarded from exact J to exact M while the guard was inactive. The actual `yarn build` dispatcher/adapter exited 0 with `built:true`; the complete materialized runtime identity matched the reviewed intent.
-- Tracked files remained clean. All 120 pre-existing untracked-file content hashes were preserved. Inventory digest: `711375f165d96827e4c1e5596967686ef05ae7c976571b9a8aeeede5e8c368db`. Existing worktrees and the unsaved editor were preserved; no cleanup or reset was used.
-- Official prepare exited 0 for actor `arafat-pr1906-b7-terminal` at `2026-11-13T19:29:50.254295+00:00`. Official prepublish exited 0 with `ready_to_publish:true` and exact A7/M/runtime.
-- One Publish changes action was submitted. The platform explicitly completed version `72c5b2e` at 22:41 Riyadh. Use version/time; the retained ordinal shifted, so do not infer a publication count.
+[Original execution metadata](OFFICIAL-RELEASE-VERIFICATION-METADATA.json) is a historical checkpoint before this follow-up's live application result. The new acceptance record above supersedes only its pending financial-acceptance status.
 
-## Official public verification
+![Original #1906 platform completion at22:41Riyadh](PUBLISH-CONFIRMATION.jpg)
 
-[Exact official verification JSON](OFFICIAL-RELEASE-VERIFICATION-20261113.json) is preserved byte-for-byte from the original operator: 33,299 bytes, SHA-256 `c756f0b20cbd728f64df6b0ff6d54a8eb5991fed9c4430e9b1cabe5598d692b0`. [Execution metadata](OFFICIAL-RELEASE-VERIFICATION-METADATA.json) records the real exit and final guard status.
-
-- Actual exit: 0; stderr: 0 bytes.
-- `verified:true`, `checks:3`; exact source A7, deployment M, runtime and frontend artifact identity.
-- 582 frontend requests per pass, 1,746 across the three passes, plus 3 health checks.
-- Full public file bytes/hashes, shell routes, service workers and build-meta JSON/MIME checks passed. This does not mean every frontend request was a MIME check.
-- Boot observations: `2026-11-13T19:41:24.060844+00:00` and `2026-11-13T19:40:48.045792+00:00`, both after prepare.
-- Wrapper elapsed time: 822.87 seconds.
-- Final official status: exactly `{"active":false}`. No active or incomplete lease remains.
-
-Independent review recomputed the official JSON byte count and hash and matched all 582 request entries, their order, runtime/source/control identities and frontend proof against the exact B7 intent. This was an artifact review, not another production probe.
-
-No further Publish, prepare or verify command is needed for this release.
-
-## Remaining live acceptance
-
-The release is fully verified and the guard is closed. Only application-level acceptance remains. When browser access returns, inspect the existing financial-position tab first; do not blindly reload or publish again. The last observed pre-reload page still showed the saved 12 November 01:07 snapshot and timeout fallback. The post-reload result and the later visible attempt's result were never observed because the execution/browser connection failed repeatedly. This is an observation blocker; it does not establish an application timeout or success on A7. No financial confirmation, settlement or payout was attempted.
-
-Accept only a new report `as_of` / “آخر احتساب” without `refresh_warning`; `generated_at` is merely report rendering time and may be new even with an old snapshot. Capture the existing refresh outcome if it remains accessible, then inspect pending-order numbers/reasons and idle labels. If the existing page cannot yield a result and a new attempt is necessary, make one intentional visible attempt after checking that no refresh is still active. A genuine incomplete-evidence warning is separate from failed refresh.
-
-The pending-order dialog has not yet been checked on the new live release. After the sequence settles, inspect its numbers, reasons, paging/search and the absence of false idle “جارٍ التحقق وحفظ التأكيد…” labels. Opening the dialog is read-only. Do not click confirmation buttons: they may write immediately after successful preview.
-
-Do not switch tabs during an unfinished refresh/report GET: hiding the tab cancels it and returning may resume a new attempt. After settled success or fallback, hide/show should not trigger another calculation. No additional live refresh is needed solely to repeat cancellation cases already covered by tests. Claims about live cancellation require fresh runtime evidence and must not imply individual Mongo operations were interrupted.
-
-No real confirmation, settlement, payout, advertising or other financial test write is authorized. Issue #1006 is at its comment cap; PR #1902 and PR #1906 remain the continuation threads. No paid Emergent chat/Copilot was used.
-
-![New platform completion at 22:41 Riyadh](PUBLISH-CONFIRMATION.jpg)
+This documentation-only handoff branch must not be merged into or published as an application release. Any new source work must start from fresh production and follow the current guarded release contract. Issue #1006 remains at its comment cap; PR #1902/#1906 are the balances continuation threads.
 <!-- RESUMPTION-CURRENT-END -->
 
 ## Historical frozen A7 source record
