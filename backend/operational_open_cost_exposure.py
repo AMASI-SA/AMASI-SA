@@ -158,6 +158,7 @@ async def _project(db, owner, state, *, as_of=None):
     data = await load_collections(db, owner, READS, reader=rows)
     issues = Counter()
     declared_scopes = {}
+    unscoped_codes = set()
     values = defaultdict(lambda: {"amount": ZERO, "units": 0, "orders": set()})
     currencies = defaultdict(lambda: defaultdict(lambda: ZERO))
 
@@ -465,12 +466,18 @@ async def _project(db, owner, state, *, as_of=None):
     for source_issue in engine.get("issues") or []:
         await cpu_checkpoint()
         code = source_issue if isinstance(source_issue, str) else (source_issue.get("code") if isinstance(source_issue, dict) else None)
-        shipping_component = isinstance(source_issue, dict) and source_issue.get("component") in {"shipping_fee", "carrier_identity", "driver_custody"}
+        shipping_component = isinstance(source_issue, dict) and source_issue.get("component") in {
+            "shipping_fee", "carrier_identity", "driver_custody", "prepaid_shipping"}
         if code and (shipping_component or re.search(r"supplier|invoice|shipping|carrier|canonical|product_cost|preparation|bundle|cost_snapshot|order_cost_authority", code)):
             current_code = "current_" + code
             issues[current_code] += 1
-            if shipping_component:
+            if shipping_component and current_code not in unscoped_codes:
                 declared_scopes[current_code] = {"shipping_expected"}
+            elif not shipping_component:
+                # Counts merge equal codes, but a scoped occurrence must not
+                # narrow a separate occurrence whose dependency is unknown.
+                unscoped_codes.add(current_code)
+                declared_scopes.pop(current_code, None)
     for obligation in (engine.get("obligations") or {}).values() if engine_at else []:
         await cpu_checkpoint()
         if obligation.get("superseded") or obligation.get("derived_credit"):

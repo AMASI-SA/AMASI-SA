@@ -66,6 +66,51 @@ def codes(result):
     return {issue["code"] for issue in result["issues"]}
 
 
+@pytest.mark.parametrize("code", [
+    "operational_prepaid_shipping_evidence_incomplete",
+    "operational_prepaid_shipping_completion_timestamp_missing",
+    "operational_prepaid_shipping_native_overlap",
+])
+def test_prepaid_shipping_evidence_gap_blocks_shipping_not_product_cost_buckets(code):
+    db, state = seeded_db(), operating_state()
+    clean = preview(db, state)
+    state['engine']['issues'] = [{'code': code, 'source_id': 'salla-OLD',
+                                 'component': 'prepaid_shipping'}]
+    before_db, before_state = deepcopy(db.data), deepcopy(state)
+    result = preview(db, state)
+    assert result['bucket_completeness']['products_unreceived'] is True
+    assert result['bucket_completeness']['products_received_uninvoiced'] is True
+    assert result['bucket_completeness']['shipping_expected'] is False
+    assert 'current_' + code in codes(result)
+    assert result['complete'] is False
+    assert result['groups'] == clean['groups']
+    assert result['currencies'] == clean['currencies']
+    assert db.data == before_db and state == before_state
+
+
+def test_unscoped_prepaid_warning_keeps_fail_closed_product_coverage():
+    state = operating_state()
+    state['engine']['issues'] = [{'code': 'operational_prepaid_shipping_evidence_incomplete',
+                                 'source_id': 'salla-OLD'}]
+    result = preview(seeded_db(), state)
+    assert result['bucket_completeness']['products_unreceived'] is False
+    assert result['bucket_completeness']['products_received_uninvoiced'] is False
+    assert result['bucket_completeness']['shipping_expected'] is False
+
+
+@pytest.mark.parametrize('scoped_first', [True, False])
+def test_scoped_warning_never_narrows_an_unscoped_warning_with_same_code(scoped_first):
+    state = operating_state()
+    scoped = {'code': 'operational_prepaid_shipping_evidence_incomplete',
+              'source_id': 'first', 'component': 'prepaid_shipping'}
+    unscoped = {'code': scoped['code'], 'source_id': 'second'}
+    state['engine']['issues'] = [scoped, unscoped] if scoped_first else [unscoped, scoped]
+    result = preview(seeded_db(), state)
+    assert all(result['bucket_completeness'][key] is False for key in
+               ('products_unreceived', 'products_received_uninvoiced', 'shipping_expected'))
+    assert next(item for item in result['issues'] if item['code'] == 'current_' + scoped['code'])['count'] == 2
+
+
 def test_old_assigned_unreceived_is_pooled_not_in_supplier_balance_and_is_not_zero():
     db, state = seeded_db(), operating_state()
     before_db, before_state = deepcopy(db.data), deepcopy(state)
