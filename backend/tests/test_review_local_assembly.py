@@ -458,6 +458,17 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(row["can_mark_ready"])
         self.assertTrue(any(r["is_direct_assembly"] and r["can_mark_ready"] for r in rows))
         self.assertEqual((await self.workflow())["stage"], "reviewed")
+        # This observational endpoint must not create/update component audit rows.
+        before_intent = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({
+            "user_id": "owner", "order_number": "local-assembly",
+        })
+        await self._reviewed_supplier_search(physical["piece_id"])
+        self.assertEqual(
+            await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({
+                "user_id": "owner", "order_number": "local-assembly",
+            }),
+            before_intent,
+        )
 
     async def test_reviewed_received_physical_ready_promotes_stage_without_shipping(self):
         physical = await self._reviewed_supplier_piece_fixture()
@@ -516,6 +527,29 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({
             "event_type": "assembly_piece_marked_ready",
         }), 0)
+
+    async def test_reviewed_supplier_missing_approved_source_revision_blocks_ready(self):
+        physical = await self._reviewed_supplier_piece_fixture()
+        lifecycle = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({
+            "user_id": "owner", "order_number": "local-assembly",
+        })
+        self.assertIsNotNone(lifecycle)
+        self.assertIsNotNone(lifecycle.get("snapshot_revision"))
+        before_stock = await self.on_hand()
+        await self.db[fulfillment.COMPONENT_LIFECYCLES].update_one(
+            {"_id": lifecycle["_id"]},
+            {"$unset": {"snapshot_revision": ""}},
+        )
+        row, _ = await self._reviewed_supplier_search(physical["piece_id"])
+        self.assertFalse(row["can_mark_ready"])
+        self.assertEqual(row["assembly_blocker_code"], "component_source_snapshot_stale")
+        blocked = await self.mark_piece(physical["piece_id"])
+        self.assertEqual(blocked.status_code, 409, blocked.text)
+        self.assertEqual(
+            blocked.json()["detail"]["code"], "component_source_snapshot_stale",
+        )
+        self.assertEqual(await self.on_hand(), before_stock)
+        self.assertEqual((await self.workflow())["stage"], "reviewed")
 
     async def test_reviewed_supplier_stale_component_plan_blocks_search_and_write(self):
         physical = await self._reviewed_supplier_piece_fixture()

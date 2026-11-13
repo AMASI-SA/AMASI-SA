@@ -211,9 +211,21 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db[UNITS].count_documents({"state": "released"}), 2)
         self.assertEqual(await self.on_hand(), 20)
 
+    async def _seed_approved_historical_snapshot_revision(self, *, order_number="order-1"):
+        """Give the explicitly accepted legacy fixture a current source watermark."""
+        await self.db[fulfillment.COMPONENT_LIFECYCLES].update_one(
+            {"user_id": "owner", "order_number": order_number},
+            {"$set": {"snapshot_revision": 0}},
+        )
+        await self.db.unified_orders.update_one(
+            {"user_id": "owner", "order_number": order_number},
+            {"$set": {"g47_salla_snapshot.revision": 0}},
+        )
+
     async def test_reviewed_historical_received_supplier_ready_promotes_without_shipping(self):
         response, _ = await self.accept()
         self.assertEqual(response.status_code, 200, response.text)
+        await self._seed_approved_historical_snapshot_revision()
         await self.seed_physical()
         await self.db[fulfillment.WORKFLOWS].update_one(
             {"user_id": "owner", "order_number": "order-1"},
@@ -302,6 +314,7 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
     async def test_reviewed_historical_missing_source_unit_cannot_create_shipment(self):
         response, _ = await self.accept()
         self.assertEqual(response.status_code, 200, response.text)
+        await self._seed_approved_historical_snapshot_revision()
         # The source and stock plan require two units; only one card exists.
         await self.seed_physical(quantity=1)
         await self.db[fulfillment.WORKFLOWS].update_one(

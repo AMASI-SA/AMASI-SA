@@ -2204,7 +2204,8 @@ async def _assert_reviewed_physical_snapshot_current(
     }) or {}
     approved_revision = lifecycle.get("snapshot_revision")
     current_revision = (source.get("g47_salla_snapshot") or {}).get("revision")
-    if approved_revision != current_revision:
+    if (type(approved_revision) is not int or type(current_revision) is not int
+            or approved_revision != current_revision):
         raise HTTPException(409, detail={"code": "component_source_snapshot_stale"})
 
 
@@ -2853,6 +2854,9 @@ async def _assembly_progress(
                 from fulfillment_v2_routes import assert_component_execution
                 await assert_component_execution(
                     db, user_id=user_id, order_number=order_number, plan=plan,
+                )
+                await _assert_reviewed_physical_snapshot_current(
+                    db, user_id=user_id, order_number=order_number,
                 )
                 await enforce_stage_instructions(
                     db, user_id=user_id, order_number=order_number,
