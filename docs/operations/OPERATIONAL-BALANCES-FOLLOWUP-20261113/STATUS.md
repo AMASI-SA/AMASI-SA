@@ -5,7 +5,7 @@
 
 PR #1906 is merged and published. Official public verification completed successfully on 13 November 2026 at 19:56:56 UTC (22:56:56 Riyadh): actual exit 0, `verified:true`, all 3 passes, and final guard status exactly `{"active":false}`. The source A7, intent B7 and normal merge M are unchanged. The new platform version is `72c5b2e`, explicitly completed at 22:41 Riyadh.
 
-Fresh financial acceptance is in progress. One intentional reload of the signed-in financial-position page started at `2026-11-13T20:00:53.168Z`, after the release gate closed. The page is kept visible throughout the attempt. A saved report from 12 November 01:07 is not accepted as a fresh result.
+Fresh financial acceptance remains unobserved. One intentional reload of the signed-in financial-position page started at `2026-11-13T20:00:53.168Z`, after the release gate closed; visibility was confirmed `visible` immediately after reload. The browser transport disconnected before the next observation, and the environment was explicitly reported unavailable by 20:03:31 UTC. No result of this attempt was read. Do not infer success, failure, POST count or a new snapshot from elapsed time. A saved report from 12 November 01:07 is not accepted as a fresh result.
 
 ## Canonical identities
 
@@ -52,9 +52,11 @@ No further Publish, prepare or verify command is needed for this release.
 
 ## Remaining live acceptance
 
-Await the existing visible financial refresh and its report GET. Accept only a new report `as_of` / “آخر احتساب” without `refresh_warning`; `generated_at` is merely report rendering time and may be new even with an old snapshot. A genuine incomplete-evidence warning is separate from failed refresh.
+The release is fully verified and the guard is closed. Only application-level acceptance remains. When browser access returns, inspect the existing financial-position tab first; do not blindly reload or publish again. The last observed pre-reload page still showed the saved 12 November 01:07 snapshot and timeout fallback. The post-reload result was never observed because the execution/browser environment became unavailable. No financial confirmation, settlement or payout was attempted.
 
-After the sequence settles, inspect pending-order numbers, reasons, paging/search and the absence of false idle “جارٍ التحقق وحفظ التأكيد…” labels. Opening the dialog is read-only. Do not click confirmation buttons: they may write immediately after successful preview.
+Accept only a new report `as_of` / “آخر احتساب” without `refresh_warning`; `generated_at` is merely report rendering time and may be new even with an old snapshot. Capture the existing refresh outcome if it remains accessible, then inspect pending-order numbers/reasons and idle labels. If the existing page cannot yield a result and a new attempt is necessary, make one intentional visible attempt after checking that no refresh is still active. A genuine incomplete-evidence warning is separate from failed refresh.
+
+The pending-order dialog has not yet been checked on the new live release. After the sequence settles, inspect its numbers, reasons, paging/search and the absence of false idle “جارٍ التحقق وحفظ التأكيد…” labels. Opening the dialog is read-only. Do not click confirmation buttons: they may write immediately after successful preview.
 
 Do not switch tabs during an unfinished refresh/report GET: hiding the tab cancels it and returning may resume a new attempt. After settled success or fallback, hide/show should not trigger another calculation. No additional live refresh is needed solely to repeat cancellation cases already covered by tests. Claims about live cancellation require fresh runtime evidence and must not imply individual Mongo operations were interrupted.
 

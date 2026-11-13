@@ -18,5 +18,10 @@
   "deployment_git_sha": "791b019e20ffe24439393576129783cd4c9dceb3",
   "platform_version": "72c5b2e",
   "platform_finished_at_riyadh": "2026-11-13 22:41",
-  "financial_acceptance": "pending; one visible reload started2026-11-13T20:00:53.168Z"
+  "financial_acceptance": "unobserved; one intentional visible reload began2026-11-13T20:00:53.168Z; browser transport failed before next result observation; environment unavailable by20:03:31UTC; no success/failure inference",
+  "remaining": [
+    "Observe a fresh financial report as_of without refresh_warning",
+    "Read-only pending-order dialog acceptance on new release"
+  ],
+  "new_publish_required": false
 }
