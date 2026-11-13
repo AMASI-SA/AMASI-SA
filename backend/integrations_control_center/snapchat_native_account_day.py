@@ -138,10 +138,20 @@ async def persist_account_local_campaign_facts(
     currency = str(account.get("currency") or "").strip().upper()
     if not currency:
         return 0
+    # A foreign-currency result without an explicitly stored conversion rate
+    # is unknown, not 3.75 (or any other fallback rate). Read the setting once.
+    fx_rate = 1.0 if currency == "SAR" else None
+    if currency == "USD":
+        fx_doc = await context.db["ads_currency_settings"].find_one(
+            {"user_id": context.user_id}, {"_id": 0, "usd_to_sar_rate": 1},
+        )
+        configured = _as_number((fx_doc or {}).get("usd_to_sar_rate"))
+        if configured is not None and configured > 0:
+            fx_rate = float(configured)
     now_iso = context.now_iso()
     raw_ops = []
     for row in facts.values():
-        hourly_sar = await context.to_sar(row["spend_native"], currency)
+        hourly_sar = round(row["spend_native"] * fx_rate, 2) if fx_rate is not None else None
         key = {
             "user_id": context.user_id, "ad_account_id": account_id,
             "campaign_id": row["campaign_id"], "hour_start_utc": row["start"].isoformat(),
@@ -150,7 +160,8 @@ async def persist_account_local_campaign_facts(
             **key, "hour_end_utc": row["end"].isoformat(),
             "timezone": str(zone), "account_date": row["start"].astimezone(zone).date().isoformat(),
             "currency_native": currency, "spend_native": row["spend_native"],
-            "spend_sar": hourly_sar, "updated_at": now_iso,
+            "spend_sar": hourly_sar, "fx_rate_to_sar": fx_rate,
+            "updated_at": now_iso,
             "source_mode": "snapchat_native_hourly_v2",
             "accounting_eligible": False,
         }}, upsert=True))
@@ -163,7 +174,7 @@ async def persist_account_local_campaign_facts(
     day_ops = []
     for (campaign, day), summary in grouped.items():
         native = round(summary["spend_native"], 6)
-        sar = await context.to_sar(native, currency)
+        sar = round(native * fx_rate, 2) if fx_rate is not None else None
         key = {
             "user_id": context.user_id, "ad_account_id": account_id,
             "campaign_id": campaign, "date": day,
@@ -171,7 +182,7 @@ async def persist_account_local_campaign_facts(
         }
         day_ops.append(UpdateOne(key, {"$set": {
             **key, "spend_native": native, "spend_sar": sar,
-            "currency_native": currency,
+            "currency_native": currency, "fx_rate_to_sar": fx_rate,
             "hours_observed": summary["count"],
             "last_hour_end_utc": summary["last_hour"].isoformat(),
             "updated_at": now_iso,
