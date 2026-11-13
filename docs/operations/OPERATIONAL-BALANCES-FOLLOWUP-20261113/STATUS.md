@@ -1,6 +1,61 @@
-# Operational balances live refresh follow-up — 2026-11-13
+# Operational balances follow-up — release continuation 2026-11-13
 
+<!-- RESUMPTION-CURRENT-START -->
 ## Current state
+
+The reviewed operational refresh follow-up is merged as `791b019e20ffe24439393576129783cd4c9dceb3` and the original operator has fast-forwarded to that exact commit. Source A7 and intent B7 are unchanged. The actual frontend package adapter is running. No new lease or Publish action has occurred yet. Fresh financial acceptance remains pending; the previous saved-report fallback is not accepted as a fresh result.
+
+## Canonical identities
+
+| Item | Exact value |
+| --- | --- |
+| Production/task PR | https://github.com/AMASI-SA/AMASI-SA/pull/1906 |
+| Production branch | `hotfix/prod-snap-meta-final` |
+| Source A7 | `286e46ce50d0ae1f5f128646e350bbae38b2ef5c` |
+| Intent B7 | `9502be1eb4adfc8f28a33a190cc3a5be8b75e241` |
+| Reviewed prior production J | `8d25f7a6fa9a310b319b753c32457e70987f7c51` |
+| Normal merge M | `791b019e20ffe24439393576129783cd4c9dceb3` |
+| B7 and M exact tree | `663ff410de7bc6e18933ac1d06fcdd4564bd69ba` |
+| Intent SHA-256 | `066eafb9d85445f9868b5d12ec853e7c252b00175aa38f425af2f2c18678f4ad` |
+| Runtime ID | `rg5-4b111864525e317c313f6358c3c42f5ba2deaa6f1610b6e2db47399029b7a57f` |
+
+This documentation-only handoff branch is separate from the frozen production release. Do not merge it into the current A7/B7 deployment contract or publish its HEAD.
+
+## Verified milestones
+
+- Exact A7:13 workflows successful;29 checks23success+6expected skips.
+- Exact B7:13 applicable workflows successful, plus one branch-specific TikTok workflow skipped;31 checks25success+6expected skips. Final CodeQL Python, JavaScript/TypeScript, and aggregate checks all succeeded. A temporary comparison warning disappeared when Python analysis completed; no rerun or bypass was used.
+- Readiness run43489951555 passed both host rehearsals: Node20.20.2 job132108986553 and Node24.19.0 job132108986525. Their identity and isolated health/package/runtime artifact proofs matched A7/J/B7.
+- Root and independent checks verified that B7 changes only `release/release-intent-v5.json` from A7, with exact reviewed artifact bytes. M has parents J and B7 and exactly the B7 tree.
+- Original `/app`: fresh official guard was inactive before mutation; exact J and clean tracked files. Fast-forward to exact M completed and post-update tracked state remained clean.
+- All120 pre-existing untracked files retained their original content hashes. Inventory digest: `711375f165d96827e4c1e5596967686ef05ae7c976571b9a8aeeede5e8c368db`. Existing worktrees and unsaved editor content were preserved.
+- Disk feasibility assessed without cleanup: /app had596MiB free and its generated node_modules/build are replaced by the adapter; cache/toolchain/temp package copies use the separate root filesystem with256GiB free.
+- Prior PR1905 lease is closed. Last platform publication before this follow-up remains100/version2285cfe, finished13Nov20:58 Riyadh.
+
+## Running work and next safe action
+
+The original operator is executing `yarn build` from `/app/frontend` through the official dispatcher/adapter with `PYTHONDONTWRITEBYTECODE=1`, `REACT_APP_BACKEND_URL=https://mezansalla.com`, and no bootstrap-intent override. Root is observing exact-M push gates: readiness43491375370, security43491375482, CodeQL43491375289.
+
+Read the true adapter exit code and its governed identity/proof before proceeding. Current local evidence paths are:
+
+- `/tmp/mezan-pr1906-9502be1e-untracked-before.json`
+- `/tmp/mezan-pr1906-9502be1e-fastforward.log`
+- `/tmp/mezan-pr1906-9502be1e-adapter.log`
+- `/tmp/mezan-pr1906-9502be1e-adapter.exit`
+
+After successful adapter/gates, confirm exact M, clean tracked state and unchanged user files; run the official `prepare --actor arafat-pr1906-b7-terminal`, then `prepublish` immediately before one authorized republish. Require a new explicit platform completion, official `verify --url https://mezansalla.com` with all3 complete probes, and final `status` inactive.
+
+Only after release verification, run one visible financial refresh and inspect a new calculation timestamp without dated fallback, plus pending-order dialog idle labels. A bounded navigation-away check must use fresh runtime-stage logs; cached logs do not prove cancellation. No real confirmation, settlement, payout, advertising or other financial test write is authorized.
+
+Issue1006 is at its comment cap; PR1902 and PR1906 remain the continuation threads. No paid Emergent chat/Copilot was used.
+<!-- RESUMPTION-CURRENT-END -->
+
+## Historical frozen A7 source record
+
+The following record describes the source checkpoint before this resumed release. Its old pending/lease states are historical; use the current state above for continuation.
+
+
+### Current state
 
 The corrected source is locally verified and independently reviewed after A5
 failed consumer read-shape contracts and A6 missed the actual application DB
@@ -9,7 +64,7 @@ new reviewed v5 source/intent pair are still required. No intent has been
 committed. This source is not merged or deployed. Fresh financial acceptance
 remains FAILED; no synthetic result is treated as production acceptance.
 
-## Repository and continuity
+### Repository and continuity
 
 - Repository: `AMASI-SA/AMASI-SA`.
 - Task branch: `codex/operational-live-refresh-followup-20261113`.
@@ -24,9 +79,9 @@ remains FAILED; no synthetic result is treated as production acceptance.
 - Issue1006 has reached its comment limit. PR1902 and PR1906 are the linked
   continuation threads. No coordination marker exists; no board was created.
 
-## Completed behavior
+### Completed behavior
 
-### Pending-order dialog
+#### Pending-order dialog
 
 An idle row without valid confirmation metadata could display the busy label
 because both target key and busy key were null. The display now requires a
@@ -35,7 +90,7 @@ modal does not call preview or confirmation. A real explicit request still
 shows its busy label until completion. Eligibility, permissions and saved
 proof semantics are unchanged.
 
-### Bounded cost reads
+#### Bounded cost reads
 
 - Within the positively admitted visible-request path only, do not query units
   when no matching plans exist: `plan_id: {$in: []}` can only return an empty
@@ -65,7 +120,7 @@ prevent incorrectly pricing an older order from its profile. The old filter
 removed that hold. `operational_open_cost_exposure.py` is unchanged; the
 regression preserving the hold is retained in the new test suite.
 
-## Source files
+### Source files
 
 - `backend/order_cost_authority.py`
 - `backend/operational_remaining_bundle_sources.py`
@@ -79,7 +134,7 @@ No manifest, lockfile, release guard or frozen prior release intent was changed.
 All fixtures and measured monetary values are synthetic. No live customer,
 order, party, financial data or credentials are included in this public record.
 
-## Completed verification
+### Completed verification
 
 Backend command (repository root, isolated repository-pinned test dependencies):
 
@@ -129,7 +184,7 @@ execution of the214 tests or a production performance claim.
 | PendingOrdersDialog.jsx | `aeb6d1faa6aaf360f9ec1b1700e68e6382024de7551be473a174fadc7441a831` |
 | PendingOrdersDialog.test.jsx | `6a723434f4f7a9e35ec33f9c48c7bde60562a80a8197963d1e3c22e50a536843` |
 
-## A5 integration rejection and correction
+### A5 integration rejection and correction
 
 All13 exact-A5 workflows ended:9 passed and4 failed. The blocked gates were
 G47 `43472485532`, Dashboard runtime `43472485297`, Operational Balance Web
@@ -161,7 +216,7 @@ A5 candidate artifact14061806909 passed official candidate validation, but
 was NOT committed as an intent or used for publication. It is obsolete for
 the corrected source. A new source/intent identity must be built and verified.
 
-## A6 CI closure and production-adapter correction
+### A6 CI closure and production-adapter correction
 
 At17:42:37UTC all13 exact-A6 workflows passed:29 checks were23 successful plus6
 expected scope/source-role skips, with0 failures. Independent artifact parsing
@@ -188,7 +243,7 @@ Root and an independent reviewer signed off the current hashes above. All214
 local cases passed; the current35 scope cases and full regressions still require
 new exact-source CI and a newly built intent.
 
-## Reproducible synthetic measurement
+### Reproducible synthetic measurement
 
 The tracked measurement script runs the actual `run_visible_refresh` and
 `collect_sources` modules through the actual `AcceptanceConfigDatabase` adapter
@@ -219,7 +274,7 @@ there is no guaranteed elapsed-time improvement claim. Do not repeat samples
 to select a favorable timing. The corrected source preserves the optimization
 only on its admitted visible path, and preserves all default query contracts.
 
-## Live evidence and previous release
+### Live evidence and previous release
 
 PR1902 source `1f8f1d673854f594086a6e87dec6c98633da0061`, deployment
 `b64121c265d8d6e158df0d9fb88debc52c95317d`, is officially verified live.
@@ -247,7 +302,7 @@ Prior release evidence remains on documentation-only branch
 `codex/operational-delivery-release-handoff-20261113` at
 `e1eb7af40d5604a77b93f92f8dfaa071c8b660d4`, linked from PR1902.
 
-### Other operator lease now active
+#### Other operator lease now active
 
 Fresh read-only status positively returned an active protocolv5 lease owned by
 `arafat-pr1905-terminal`, prepared `2026-11-13T17:17:00.403406+00:00`, source
@@ -258,7 +313,7 @@ This is not the closed PR1902 lease and is not owned by this follow-up. Do not
 clear, reuse or verify it on behalf of this task. Preserve its operator state
 and Production head until its owner closes it and fresh status is inactive.
 
-## Next safe action
+### Next safe action
 
 1. Preserve the corrected source checkpoint on this task branch and inspect all
    exact-source CI results, including the new35 cases and every previously
