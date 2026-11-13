@@ -195,7 +195,7 @@ async def load_remaining_bundles(db, owner, raw_orders, as_of, *, preparation_pi
     if not orders:
         return {}
     authority = await load_order_cost_authority(db, owner, orders, include_corrections=False,
-        include_frozen_metadata=True)
+        include_frozen_metadata=True, parallel_reads=True)
     selected, result = {}, {}
     for order in orders:
         for item in order['items']:
