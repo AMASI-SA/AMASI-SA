@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 20
     env:
       TARGET_BRANCH: codex/campaign-hover-live-refresh-20261113
-      EXPECTED_HEAD: 777ee5fcf1db51454a170d07ea3ec8c2bb129413
+      EXPECTED_HEAD: 5c08685d42811c1642a7acb2459d5225b5c27620
       PATCH_SOURCE: a18ce6265325a979d3c797c9610c24e9de742e81
       FINALIZE_SOURCE: 442f2596635915edc604f36c58690d211a58a5db
       PYTHONDONTWRITEBYTECODE: '1'
@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 777ee5fcf1db51454a170d07ea3ec8c2bb129413
+          ref: 5c08685d42811c1642a7acb2459d5225b5c27620
           fetch-depth: 1
       - name: Prepare exact reviewed source and render correction
         id: prepare
