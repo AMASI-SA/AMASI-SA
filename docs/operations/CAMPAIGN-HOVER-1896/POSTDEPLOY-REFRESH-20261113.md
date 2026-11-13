@@ -208,3 +208,13 @@ A fresh read-only production health response still showed the prior source `47e4
 Next safe action: let the current Ready release owner complete its governed build, required rollback rehearsal and serialized publication. Any fresh lease and production verification must use its new source/deployment/release identity above, not this task's superseded candidate. Following successful official 3/3 verification and inactive guard, complete read-only live campaign-card acceptance. Do not restore old M/intent, clear another owner's lease, repeat a concurrent Publish, trigger provider sync or write order/ad/accounting data.
 
 Production changed by this campaign continuation: **NO**. New release verification and live card acceptance remain pending. This documentation-only branch remains outside the deployment candidate.
+
+## Shared release is publishing — 2026-11-13 23:46:51 UTC
+
+The concurrent Ready owner acquired the canonical lease at `2026-11-13T23:38:18.470493+00:00`, actor `codex-ready-server-20261114`, for exact source `cdf175841376d2f68605d66c1979273d23aed70d`, deployment `304e8793a15fd3269fd6f6d4cfba903d1760e285` and release `rg5-3e41b3f0b14d180f45cd3b242798ea348797b06e8edc770592130ac87b2a9cb0`. Fresh tracked state was clean. This campaign task did not acquire, reuse, alter or close that lease.
+
+The updated #1912 handoff confirms its scoped rollback B_R is fully prepared, passed exact-B readiness and the 52.39-second isolated Emergent adapter rehearsal. The actual current-M shared adapter passed in 65.14 seconds.
+
+A refreshed Emergent page now explicitly shows **Deployment Started Nov 14, 02:39 AM** (UTC+3), with Workspace ready and Changes packaged complete and Building your website active. The publishing control is disabled while that operation proceeds. This is a newer authorized publication attempt by the Ready release owner; it includes the campaign fixes. It is not yet Deployment Succeeded or official runtime acceptance.
+
+The campaign continuation is observing that publication and preparing read-only dashboard/OrdersV2 examples for post-deployment acceptance. No duplicate Publish, shared-source/build mutation, foreign-lease operation, provider sync or business-data write has occurred. Wait for the owner's official three-probe verification and final inactive guard, then finish campaign UI acceptance. Production acceptance remains pending; do not describe the old or partial runtime as the completed new release.
