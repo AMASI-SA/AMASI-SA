@@ -162,3 +162,61 @@ async def test_native_riyadh_day_must_not_relabel_us_account_local_day():
     assert row["spend_sar"] is None
     assert row["orders"] is None
     assert row["status"] == "spend_or_timezone_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_new_york_account_local_day_preferred_over_riyadh_native_spend():
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+    from order_engine.campaign_hover import read_campaign_hover
+
+    now = datetime.now(timezone.utc)
+    local = now.astimezone(ZoneInfo("America/New_York"))
+    started = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    at = (started + timedelta(seconds=1)).isoformat()
+    day = local.date().isoformat()
+    db = _DB({
+        "ads_v2_accounts": [{
+            "id": "ads-ny", "external_account_id": "snap-ny",
+            "timezone": "America/New_York", "provider": "snapchat",
+            "currency_native": "USD",
+        }],
+        "mezan_integration_accounts_v2": [],
+        "ads_v2_spend_raw": [],
+        "mezan_snapchat_campaign_account_day_v2": [{
+            "user_id": "owner", "ad_account_id": "snap-ny",
+            "campaign_id": "ny-campaign", "date": day,
+            "account_timezone": "America/New_York",
+            "source_mode": "snapchat_native_account_day_v2",
+            "spend_sar": 93.75, "hours_observed": 12,
+            "coverage_status": "provisional_hourly",
+            "updated_at": now.isoformat(),
+        }],
+        "mezan_snapchat_performance_daily_v2": [{
+            "ad_account_id": "snap-ny", "entity_type": "campaign",
+            "campaign_id": "ny-campaign", "date": day,
+            "date_timezone": "Asia/Riyadh", "spend_sar": 300,
+        }],
+        "mezan_meta_campaign_performance_daily_v2": [],
+        "unified_orders": [{
+            "order_number": "ny-order", "order_date": at,
+            "order_status": "processing",
+            "raw_by_source": {"salla_direct": {
+                "date": {"date": at}, "utm_source": "snapchat",
+                "utm_campaign": "ny-campaign",
+                "amounts": {"total": {"amount": 375, "currency": "SAR"}},
+                "items": [{"id": "piece", "quantity": 4, "type": "product"}],
+            }},
+        }],
+    })
+    result = await read_campaign_hover(db, "owner", ["ny-campaign"])
+    row = result["campaigns"]["ny-campaign"]
+    assert row["date"] == day
+    assert row["timezone"] == "America/New_York"
+    assert row["spend_sar"] == 93.75  # never the Riyadh-day 300
+    assert row["orders"] == 1
+    assert row["pieces"] == 4
+    assert row["sales_sar"] == 375
+    assert row["cpa_sar"] == 93.75
+    assert row["roas"] == 4
+    assert row["spend_coverage"] == "provisional_hourly"
