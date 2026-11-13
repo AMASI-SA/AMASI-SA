@@ -359,6 +359,134 @@ def test_concurrent_acquisition_is_bounded_owner_scoped_and_has_no_financial_eff
     run(scenario)
 
 
+@pytest.fixture
+def missing_native_clock(monkeypatch):
+    class Clock(datetime):
+        instant = datetime.fromisoformat(NOW)
+
+        @classmethod
+        def now(cls, tz=None):
+            return cls.instant if tz is not None else cls.instant.replace(tzinfo=None)
+
+    reads = []
+
+    async def unavailable(_db, owner, method, path, *, params):
+        assert owner == "owner" and method == "GET"
+        assert path.startswith("/orders/") and path.endswith("/histories")
+        reads.append((Clock.instant, path.split("/")[2]))
+        raise ValueError("synthetic_native_history_unavailable")
+
+    monkeypatch.setattr(sync, "datetime", Clock)
+    monkeypatch.setattr(sync, "call_salla", unavailable)
+    return Clock, reads
+
+
+async def assert_only_claimed_retry_deadlines_changed(db, originals, reads):
+    last_attempt = {identity: at for at, identity in reads}
+    for saved in await db.unified_orders.find({}).to_list(length=None):
+        original = deepcopy(originals[saved["_id"]])
+        identity = str(saved["raw_by_source"]["salla_direct"]["id"])
+        if identity in last_attempt:
+            assert saved.pop(sync._RETRY) == (last_attempt[identity] + timedelta(minutes=15)).replace(tzinfo=None)
+            original.pop(sync._RETRY, None)
+        assert saved == original
+
+
+def test_retry_backlog_reaches_unattempted_prepaid_after_deferred_retries_expire(missing_native_clock):
+    from operational_balance_store import read
+    from test_operational_balance_integration import run, started
+    from test_operational_balance_prepaid_shipping import fixture as prepaid_fixture
+
+    clock, reads = missing_native_clock
+    base = clock.instant
+
+    async def scenario(db):
+        await started(db)
+        financial = await read(db, "owner")
+        rows, requests = [], []
+        for index in range(120):
+            identity = str(1000 + index)
+            _, source, _, _ = fixture(identity, str(2000 + index))
+            rows.append({**source, "_id": index})
+            requests.append(issue(identity))
+        data, _ = prepaid_fixture(at=None)
+        rows.append({**data["unified_orders"][0], "_id": 120})
+        requests.append({"source_id": "100", "code": "operational_prepaid_shipping_completion_timestamp_missing"})
+        await db.unified_orders.insert_many(rows)
+        originals = {row["_id"]: row for row in await db.unified_orders.find({}).to_list(length=None)}
+        last_attempt = {}
+        # At four claims every 30 seconds, the first unresolved rows become
+        # eligible again just before the 121st row would get its first attempt.
+        for cycle in range(31):
+            clock.instant = base + timedelta(seconds=30 * cycle)
+            before = len(reads)
+            await sync.acquire_missing(db, "owner", requests, started_at=START)
+            assert len(reads) - before == 4
+            for at, identity in reads[before:]:
+                if identity in last_attempt:
+                    assert at - last_attempt[identity] >= timedelta(minutes=15)
+                last_attempt[identity] = at
+            # Inspect stored deadlines too: returning one row while reserving
+            # another must not satisfy this real-Mongo regression.
+            await assert_only_claimed_retry_deadlines_changed(db, originals, reads)
+        assert set(last_attempt) == {row["source_id"] for row in requests}
+        assert [at for at, identity in reads if identity == "100"] == [base + timedelta(minutes=15)]
+        assert await read(db, "owner") == financial
+        assert await db.general_ledger.count_documents({}) == 0
+    run(scenario)
+
+
+def test_retry_priority_and_exact_deadline_preserve_scope_and_four_claim_limit(missing_native_clock):
+    from operational_balance_store import read
+    from test_operational_balance_integration import run, started
+
+    clock, reads = missing_native_clock
+    base = clock.instant
+
+    async def scenario(db):
+        await started(db)
+        financial = await read(db, "owner")
+        rows, requests = [], []
+        # Reverse insertion for tied priorities; recent due retries precede
+        # older ones physically, while missing deadlines must come first.
+        for identity, retry in [(60, base - timedelta(seconds=1)),
+                                (20, base - timedelta(minutes=2)), (10, base - timedelta(minutes=2)),
+                                (80, None), (70, None), (90, base),
+                                (0, base + timedelta(hours=1)), (-1, None), (-2, None),
+                                (-3, None), (-4, None)]:
+            _, source, _, _ = fixture(str(identity), str(2000 + identity))
+            source["_id"] = identity
+            if retry is not None:
+                source[sync._RETRY] = retry
+            if identity == -1:
+                source["user_id"] = "other"
+            elif identity == -2:
+                source["g47_salla_snapshot"]["source_updated_at"] = "2026-10-04T00:00:00+00:00"
+            elif identity == -4:
+                source["order_status_slug"] = "in_progress"
+            rows.append(source)
+            if identity != -3:
+                requests.append(issue(str(identity)))
+        await db.unified_orders.insert_many(rows)
+        originals = {row["_id"]: row for row in await db.unified_orders.find({}).to_list(length=None)}
+        await sync.acquire_missing(db, "owner", requests, started_at=START, limit=99)
+        assert [identity for _, identity in reads] == ["70", "80", "10", "20"]
+        await assert_only_claimed_retry_deadlines_changed(db, originals, reads)
+        await sync.acquire_missing(db, "owner", requests, started_at=START)
+        assert [identity for _, identity in reads] == ["70", "80", "10", "20", "60", "90"]
+        await assert_only_claimed_retry_deadlines_changed(db, originals, reads)
+        clock.instant = base + timedelta(minutes=15, milliseconds=-1)
+        await sync.acquire_missing(db, "owner", requests, started_at=START)
+        assert len(reads) == 6
+        clock.instant = base + timedelta(minutes=15)
+        await sync.acquire_missing(db, "owner", requests, started_at=START)
+        assert reads[6:] == [(clock.instant, identity) for identity in ("10", "20", "60", "70")]
+        await assert_only_claimed_retry_deadlines_changed(db, originals, reads)
+        assert await read(db, "owner") == financial
+        assert await db.general_ledger.count_documents({}) == 0
+    run(scenario)
+
+
 @pytest.mark.parametrize("fault", [None, "owner", "waybill", "native-order", "source-version", "pending", "reopened"])
 def test_order_dto_projects_the_bound_salla_recording_time_with_its_source(fault):
     from order_engine.mapper import map_salla_order
