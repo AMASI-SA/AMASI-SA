@@ -3,10 +3,10 @@
 ## Current state
 
 PR1902 IS NORMALLY MERGED AT M4; ALL A4/B4/M4 GATES PASSED. THE NOV12 OPERATOR
-BUILD PASSED. ON NOV13 THE OWNER EXPLICITLY APPROVED USING MANAGE PUBLISHING
-INSIDE EMERGENT'S /CHAT INTERFACE. THE NEW RELEASE IS STILL NOT PUBLISHED:
-THE CURRENT EMERGENT BROWSER SESSION REQUIRES SIGN-IN. FRESH OPERATOR
-VALIDATION, PUBLICATION AND LIVE BALANCE ACCEPTANCE REMAIN OPEN.
+BUILD PASSED. MANAGE-PUBLISHING ACCESS IS AUTHORIZED AND EMERGENT SIGN-IN
+HAS NOW SUCCEEDED. LIVE HEALTH STILL REPORTS THE PREVIOUS A3/M3 IDENTITY.
+THE NEW M4 RELEASE IS NOT PUBLISHED. THE OPERATOR WORKSPACE IS WAKING;
+FRESH GUARD/ARTIFACT VALIDATION, PUBLICATION AND LIVE ACCEPTANCE REMAIN OPEN.
 
 The owner authorized upload, merge and publication. Root merged PR1902 after
 the independently reviewed implementation, complete source gates, unchanged
@@ -109,9 +109,36 @@ is outside the frozen release pair; do not deploy its branch as the release.
   from the previous execution are no longer present; frozen source and this
   handoff remain recoverable from GitHub.
 
-Next safe actions: complete Emergent sign-in through the supported browser
-handoff and positively verify the signed-in management page. Then inspect a
-fresh inactive guard, remote/local M4, tracked state and build
+
+- Subsequent Nov13 resume: after the owner again requested the in-chat secure
+  login form, method selection, existing-account email/password and all six
+  OTP fields were handled by browserAuth. The final request returned submitted,
+  and the fresh target-domain page positively showed the signed-in Home and
+  existing Salla Analytics project. No credential values were inspected,
+  copied, printed or entered by root.
+- Root opened only project management and Code controls under the owner's
+  explicit management-interface authorization. Manage Overview now lists
+  latest platform version **117ee36**, with a newer Deployment finished marker.
+  A read-only public health request nevertheless returned the previous
+  source A3 `549c6c733e8f93f5c632f6473263f3eb37f01767`,
+  runtime `rg5-e5641d97ab8215c663458630c2af0dcd839b3aed89a05fcdc66be465b036c60e`
+  and artifact `e47bec1b5e0170d843cce0f37e08668566a38513eefe84b9fa1098964250d4fe`.
+  Health was ok and all identity/source/build flags were true. This is a
+  fresh health observation, not the official complete three-probe verifier.
+  The platform version marker alone does not establish that M4 is deployed.
+- Fresh independent GitHub inspection again found exact M4 and its three
+  successful push workflows, with all seven Readiness jobs successful.
+  PR1902 and frozen A4/B4/M4 remain unchanged; no competing public task-ledger
+  entry was found.
+- The shared operator environment was asleep. The Code surface reports that
+  the app is waking, and root followed its visible Wake up servers link for
+  the same existing workspace. No operator terminal mutation, new lease,
+  Publish click or live financial write occurred. Current guard/artifacts
+  must be read after the operator becomes available.
+
+Next safe actions: let the existing operator wake and inspect the official
+guard before any /app mutation. Require fresh inactive guard, exact remote/local
+M4, tracked state and build
 proof before preparing a new task-owned lease. The operator rehearsal already
 passed; repeat it only if its governed artifacts/source no longer validate.
 Run prepublish immediately before one publication, require explicit new
