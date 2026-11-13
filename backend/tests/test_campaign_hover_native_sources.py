@@ -1,16 +1,111 @@
 """Native-schema and label-only acceptance. Fixtures only, no live writes."""
 import base64
 from copy import deepcopy
+from datetime import datetime, timezone
 
 import pytest
 from fastapi import HTTPException
 from order_engine import campaign_hover as hover
 from order_engine import campaign_hover_native_sources as native
-from test_campaign_hover_daily import Clock, Collection, Cursor, DB, matches, nested, order
 
 CID = "12345678901"
 DAY = "2026-11-13"
 STAMP = "2026-11-13T12:05:00+00:00"
+NOW = datetime(2026, 11, 13, 12, 30, tzinfo=timezone.utc)
+
+
+class Clock(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return NOW.astimezone(tz) if tz else NOW.replace(tzinfo=None)
+
+
+def nested(row, path):
+    value = row
+    for key in path.split("."):
+        if not isinstance(value, dict):
+            return None
+        value = value.get(key)
+    return value
+
+
+def matches(row, query):
+    for key, expected in query.items():
+        if key == "$or":
+            if not any(matches(row, item) for item in expected):
+                return False
+            continue
+        if key == "$and":
+            if not all(matches(row, item) for item in expected):
+                return False
+            continue
+        value = nested(row, key)
+        if not isinstance(expected, dict):
+            if value != expected:
+                return False
+            continue
+        for op, rhs in expected.items():
+            assert op in {"$in", "$ne", "$gte", "$lte", "$lt", "$gt", "$type", "$exists"}, op
+            if op == "$in" and value not in rhs:
+                return False
+            if op == "$ne" and value == rhs:
+                return False
+            if op == "$gte" and (value is None or value < rhs):
+                return False
+            if op == "$lte" and (value is None or value > rhs):
+                return False
+            if op == "$lt" and (value is None or value >= rhs):
+                return False
+            if op == "$gt" and (value is None or value <= rhs):
+                return False
+            if op == "$type" and rhs == "object" and not isinstance(value, dict):
+                return False
+            if op == "$exists" and (value is not None) != rhs:
+                return False
+    return True
+
+
+class Cursor:
+    def __init__(self, rows):
+        self.rows = deepcopy(rows)
+    def max_time_ms(self, value):
+        assert value <= 1500
+        return self
+    def limit(self, value):
+        self.rows = self.rows[:value]
+        return self
+    async def to_list(self, value):
+        return self.rows[:value]
+
+
+class Collection:
+    def __init__(self, rows):
+        self.rows = deepcopy(rows)
+        self.queries = []
+        self.error = None
+    def find(self, query, projection):
+        self.queries.append(deepcopy(query))
+        if self.error:
+            raise self.error
+        return Cursor([row for row in self.rows if matches(row, query)])
+
+
+class DB:
+    def __init__(self, mapping):
+        self.collections = {name: Collection(rows) for name, rows in mapping.items()}
+    def __getitem__(self, key):
+        return self.collections.setdefault(key, Collection([]))
+
+
+def order(cid, number="order-1", at="2026-11-13T06:00:00+00:00", user="owner"):
+    return {"user_id": user, "order_number": number, "order_date": at, "order_status": "processing",
+            "raw_by_source": {"salla_direct": {
+                "date": {"date": at}, "utm_source": "snapchat", "utm_campaign": cid,
+                "amounts": {"total": {"amount": 375, "currency": "SAR"}},
+                "items": [{"id": "p", "type": "product", "quantity": 3},
+                          {"id": "p2", "type": "product", "quantity": 1},
+                          {"id": "s", "type": "service", "quantity": 1}],
+            }}}
 
 
 @pytest.fixture(autouse=True)
