@@ -108,3 +108,81 @@ verify tree equality, then use its canonical remote source SHA for all governed
 builds and the intent. Do not claim a local commit was uploaded until the remote
 branch has been read back. Production publication and live acceptance remain
 pending; no shared workspace, lease or business data has changed.
+
+
+## Continuation checkpoint — 2026-11-13 23:14:53 UTC
+
+**Merged and release-ready; production publication is BLOCKED by the Emergent agent-session state. The new campaign-card release is NOT live. The owner release lease has been closed and final guard status is inactive.**
+
+This record is saved on a separate documentation-only continuation branch. It is not a deployment candidate. Preserve the frozen source/intent/merge commits; do not merge this documentation change into the current release, amend the release, or regenerate its intent merely to record status.
+
+### Immutable reviewed release
+
+| Role | Identity |
+| --- | --- |
+| Baseline J | `53acc03a178362530f2cb45206fe11a4fb724d88` |
+| Source A, sole parent J | `9fc331b8cd6b3c77129090c9661af5fa9d0ca186` |
+| Intent-only B | `4e31be12c3f6053d07a946f0cfd7f2639e1d75d9` |
+| Ordinary merge M, PR #1911 | `5d158f6006b63ac7663c293696d501f595ce8754` |
+| Shared B/M tree | `4dd3da0ee493c1de15b4a2f1c0a6438271f8baa5` |
+| Intent SHA256 | `199a4bc20b5e9849a0e7b9b7e2da518464d484aff4536e452a103851d5192fb2` |
+| Frontend artifact SHA256 | `9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6` |
+| Reproducibility proof SHA256 | `172a7ab404359fc148111d42d2dc3f19ad4abdc6526c81ca913fd593e8f66f3c` |
+| Intended runtime release ID | `rg5-b5c7997f2bac6f0278d492c1ef8e47deeefcbe2dc043cb32a104828a68e825e7` |
+
+PR #1911 was merged at 2026-11-13T22:55:58Z, preserving A/B ancestry and exact B tree. The frozen task branch remains `codex/campaign-hover-final-20261114`. Older #1907 is superseded and must not be merged separately.
+
+### Completed behavior and acceptance
+
+The integrated source observes existing order-reader revisions for same-campaign order/count/quantity/total changes, ignores stale responses, reads bounded saved native Snapchat account-day/TikTok/Google evidence, and preserves commerce-only Salla labels when no trustworthy ad ID exists. A separate OrderDTO enrichment defect that treated long readable labels as IDs was corrected. dnspython is pinned to 2.9.2 in the identical runtime/lock files without an audit exemption.
+
+- Fresh integrated backend: **85 passed**.
+- Focused frontend: **28 passed /8 suites**.
+- Fresh complete frontend: **3696 passed /400 suites**.
+- Exact-B Operational Balance: **3802 passed**, followed by **16 passed +18 subtests**.
+- Exact-B final rollup: **50 success /10 expected skips /0 failed or pending**.
+- Strict backend/frontend dependency audits, both CodeQL languages, and Node20/Node24 clean-clone adapter rehearsals passed.
+- Local and GitHub source-A intent candidates were byte-identical; official candidate and committed-B validators passed.
+- One source-A concurrent driver-approval test failed once. The unchanged baseline and B passed the same suite. That job does not collect the added campaign tests or use the changed dependency files. No operational-source change, waiver, skip or retry of the failed A run was used; its underlying concurrency cause is not claimed to be fixed.
+
+### Actual Emergent preparation
+
+- Separate clean-clone B adapter rehearsal passed in **88.04 seconds**.
+- Shared `/app` advanced to M via fast-forward, with tracked files clean. Its 120 pre-existing untracked files had no incoming-path collisions and were preserved.
+- The first shared-app adapter invocation refused prepackaged bytecode. One ignored `__pycache__` directory containing two regular generated `.pyc` files was validated as untracked/ignored and moved, not deleted, to `/tmp/mezan-campaign-hover-bytecode-s4oogutw`.
+- The fresh official `cd /app/frontend && yarn build` passed in **61.74 seconds**, with exact artifact/identity and isolated package proofs (backend 1205 files; frontend 1469 files). Log: `/tmp/mezan-campaign-hover-app-build-clean.log`.
+- Official prepare succeeded at **2026-11-13T23:04:24.717990+00:00**, actor `codex-campaign-hover-final-20261114`, source A and deployment M.
+- Official prepublish returned `ready_to_publish=true` for the intended runtime identity.
+- Evidence files: `/tmp/mezan-campaign-hover-prepare.json`, `/tmp/mezan-campaign-hover-prepublish.json`.
+
+### Observed publication blocker and safe cleanup
+
+One **Publish changes** action was refused with:
+
+> Agent is Running — Please wait for the agent to finish or stop it manually before re-deploying.
+
+The view displayed Loading/Thinking and a disabled pause control. Automatic approval review rejected closing the project tab because it could disrupt an active session and lose non-trivial state. No agent/project session was stopped or closed, and no indirect bypass was attempted. A separate read-only view also showed the loading state and disabled pause control. No paid chat, support message, credit purchase or settings change was made.
+
+No newer Deployment Succeeded was observed. The displayed published version remained the prior 100th publish, `11d385a`. A read-only production health check after the refused action returned:
+
+- `ok=true`
+- Source: `47e474fa896e09db353b9928261fe96186ea24e1`
+- Release: `rg5-8bd428e3e93319a15361587b91a09dbd5b0f97f6bbea49d0fd8b4d4343166b9a`
+- `verified_identity_available=true`, `critical_file_hashes_match=true`, `frontend_build_verified=true`
+- Boot: `2026-11-13T20:41:20.652963+00:00`
+- New campaign release live: **false**
+
+This is read-only evidence for the previous release, not the required three-probe verification of A. The new release's production verification and live campaign-card acceptance remain **NOT PERFORMED**.
+
+Because publication did not proceed, the owner used the official guarded abort with expected deployment M and the exact intended release ID. It returned `aborted=true`; the subsequent official status returned **`active=false`**. Only this task's lease was closed. Evidence: `/tmp/mezan-campaign-hover-abort.json`; live status: `/tmp/mezan-campaign-hover-live-status.json`.
+
+### Exact next safe action
+
+1. Resolve the Emergent agent-session blocker through the normal UI. General deployment authorization is already present, but no explicit authorization to stop/close the active agent session was found; ask the owner for that specific approval before attempting it.
+2. Do not repeat Publish while the same agent-running condition remains. Do not modify platform state through hidden APIs or terminal workarounds, use paid chat, buy credits, or clear someone else's lease.
+3. Before any new shared-workspace change, run the official guard status and require inactive. Re-read GitHub production HEAD, shared HEAD/tree, clean tracked state, and reviewed artifact identity. If M/source changes, stop and reassess the frozen release rather than assuming this evidence still applies.
+4. Once the UI blocker is resolved and the exact release remains valid, run official prepare and prepublish again for the intended source A/deployment M, then perform one authorized publication.
+5. Require a newer explicit Deployment Succeeded, official `production_release_guard.py verify --url https://mezansalla.com` with three matching probes, and final inactive guard status.
+6. Inspect live campaign cards for native account-day spend and commerce-only labels, and distinguish observed behavior from the 30→31 automated regression. No order/ad/accounting writes or manual provider sync are authorized for this verification.
+
+Issue #1006 has reached comment capacity. PR #1911 comments plus this continuation record carry the current handoff. Production changed by this task: **NO**; source merged and shared preview/deployment workspace prepared: **YES**.
