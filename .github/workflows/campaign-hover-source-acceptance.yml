@@ -1,0 +1,40 @@
+name: Campaign hover source coverage
+on:
+  pull_request:
+    branches: [main, hotfix/prod-snap-meta-final]
+    paths:
+      - backend/order_engine/campaign_hover.py
+      - backend/integrations_control_center/snapchat_native_account_day.py
+      - backend/integrations_control_center/snapchat_native_performance_sync.py
+      - backend/tests/test_campaign_hover_daily.py
+      - backend/tests/test_snapchat_account_local_campaign_day.py
+      - backend/tests/test_snapchat_hourly_response_coverage.py
+      - .github/workflows/campaign-hover-source-acceptance.yml
+permissions:
+  contents: read
+jobs:
+  source-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JWT_SECRET: campaign-hover-offline-test-only
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install public test dependencies
+        run: |
+          sed '/^emergentintegrations==/d' requirements.txt | python -m pip install -q -r /dev/stdin pytest-asyncio
+      - name: Test provider response coverage and independent Salla metrics
+        run: >-
+          python -m pytest -q --tb=short
+          tests/test_snapchat_hourly_response_coverage.py
+          tests/test_snapchat_account_local_campaign_day.py
+          tests/test_campaign_hover_daily.py

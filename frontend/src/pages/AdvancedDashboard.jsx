@@ -22,6 +22,8 @@ import { useOrders } from "../hooks/useOrders";
 import useCampaignShadowJob from "../hooks/useCampaignShadowJob";
 import useDashboardCardSnapshot from "../hooks/useDashboardCardSnapshot";
 import { resolveOrderCampaign } from "../lib/orderCampaignAttribution";
+import CampaignHoverBadge from "../components/CampaignHoverBadge";
+import { getCampaignHoverBatch } from "../services/campaignHover";
 import { orderCityLabel } from "../lib/orderCityLabel";
 import OrderCurrencyAmount from "../components/OrderCurrencyAmount";
 import { mergeDashboardWithPlatformSpend, needsCanonicalDashboardSpendRefresh } from "../lib/dashboardPlatformSpendMerge";
@@ -738,7 +740,7 @@ function orderSource(order) {
     ].map((value) => String(value || "").trim().toLowerCase()).find(Boolean) || "";
 }
 
-function SourceBadge({ order }) {
+function SourceBadge({ order, campaignReport }) {
     const source = orderSource(order);
     let badge = null;
     if (source.includes("snap")) badge = { label: "سناب", mark: "👻", className: "border-yellow-300 bg-yellow-300 text-slate-950" };
@@ -746,7 +748,7 @@ function SourceBadge({ order }) {
     else if (source.includes("meta") || source.includes("facebook") || source.includes("instagram") || source === "fb" || source === "ig") badge = { label: "ميتا", mark: source.includes("instagram") ? <Instagram className="h-3 w-3" /> : "∞", className: "border-blue-500 bg-blue-500 text-white" };
     else if (source.includes("google") || source.includes("adwords") || source.includes("gads")) badge = { label: "جوجل", mark: "G", className: "border-blue-200 bg-white text-blue-600" };
     if (!badge) return null;
-    return <span title={resolveOrderCampaign(order).campaignDisplay || "الحملة غير محددة"} aria-label={`مصدر الطلب: ${badge.label}`} className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[9px] font-black leading-none shadow-sm ${badge.className}`}>{badge.mark}</span>;
+    return <CampaignHoverBadge badge={badge} campaign={resolveOrderCampaign(order)} report={campaignReport} />;
 }
 
 const ORDER_STATUS_AR = {
@@ -783,6 +785,29 @@ function CustomerAvatar({ customer }) {
 }
 
 export function LatestOrders({ orders, totals = {} }) {
+    // The dashboard and Orders V2 use exactly one shared cached batch reader.
+    // Only the eight currently rendered rows contribute campaign identities.
+    // Hover itself never fetches a route, touches Mongo or syncs a platform.
+    const campaignIdsKey = useMemo(() => [...new Set(
+        (orders || []).slice(0, 8)
+            .map((order) => resolveOrderCampaign(order).campaignId)
+            .filter(Boolean)
+    )].slice(0, 8).sort().join(","), [orders]);
+    const [campaignHover, setCampaignHover] = useState({});
+    useEffect(() => {
+        let active = true;
+        if (!campaignIdsKey) {
+            setCampaignHover({});
+            return undefined;
+        }
+        // Old metrics must not follow the badge while the visible orders change.
+        setCampaignHover({});
+        getCampaignHoverBatch(campaignIdsKey.split(",")).then(
+            (rows) => { if (active) setCampaignHover(rows); },
+            () => { if (active) setCampaignHover({}); }
+        );
+        return () => { active = false; };
+    }, [campaignIdsKey]);
     const orderCount = Number(totals.total_orders || 0);
     const totalSales = finiteFinancialValue(totals.total_sales);
     const average = orderCount > 0 && totalSales !== null
@@ -819,7 +844,7 @@ export function LatestOrders({ orders, totals = {} }) {
                     </div>
                 </div>
                 <div className="dashboard-order-amount shrink-0 text-left">
-                    <div className="flex items-center justify-end gap-1.5"><SourceBadge order={order} /><OrderCurrencyAmount order={order} /></div>
+                    <div className="flex items-center justify-end gap-1.5"><SourceBadge order={order} campaignReport={campaignHover[resolveOrderCampaign(order).campaignId]} /><OrderCurrencyAmount order={order} /></div>
                     <div className="mt-1 whitespace-nowrap text-[11px] text-slate-400 sm:text-xs">{relativeTime(order.created_at || order.order_date)}</div>
                 </div>
                 <ChevronLeft className="h-4 w-4 shrink-0 text-slate-300" />
