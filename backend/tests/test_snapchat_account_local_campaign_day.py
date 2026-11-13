@@ -29,7 +29,7 @@ def test_new_york_request_expands_existing_riyadh_window_without_gaps():
                            ZoneInfo("America/New_York"))
     assert windows[0][0].isoformat() == "2026-11-12T21:00:00+00:00"
     assert windows[-1][1].isoformat() == "2026-11-14T05:00:00+00:00"
-    assert all(0 < b-a <= timedelta(days=7) for a,b in windows)
+    assert all(timedelta(0) < b-a <= timedelta(days=7) for a,b in windows)
     assert all(windows[i][1] == windows[i+1][0] for i in range(len(windows)-1))
 
 
