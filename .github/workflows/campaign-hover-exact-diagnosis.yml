@@ -4,13 +4,12 @@ on:
     branches: [ops/patch-campaign-hover-live-refresh-20261113]
     paths: [.github/workflows/campaign-hover-exact-diagnosis.yml]
 permissions:
-  contents: write
+  contents: read
 jobs:
-  checkpoint-and-diagnose:
+  diagnose-read-only:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
-      TARGET_BRANCH: codex/campaign-hover-live-refresh-20261113
       EXPECTED_HEAD: 777ee5fcf1db51454a170d07ea3ec8c2bb129413
       PRODUCTION_BASE: 8d25f7a6fa9a310b319b753c32457e70987f7c51
       PATCH_SOURCE: a18ce6265325a979d3c797c9610c24e9de742e81
@@ -21,10 +20,10 @@ jobs:
         with:
           ref: 777ee5fcf1db51454a170d07ea3ec8c2bb129413
           fetch-depth: 0
-      - name: Preserve reviewed WIP only, never production or release intent
+          persist-credentials: false
+      - name: Prepare reviewed patch in ephemeral checkout only
         run: |
           test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
-          test "$(git ls-remote origin refs/heads/$TARGET_BRANCH | cut -f1)" = "$EXPECTED_HEAD"
           test "$(git ls-remote origin refs/heads/hotfix/prod-snap-meta-final | cut -f1)" = "$PRODUCTION_BASE"
           test "$(git ls-files '*AGENTS.md')" = AGENTS.md
           git fetch --no-tags origin "$PATCH_SOURCE"
@@ -43,14 +42,7 @@ jobs:
           p.write_text(text)
           PY
           python -B "$RUNNER_TEMP/apply.py"
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add backend/order_engine/campaign_hover.py frontend/src/pages/OrdersV2.jsx frontend/src/pages/AdvancedDashboard.jsx frontend/src/lib/orderCampaignAttribution.js frontend/src/components/CampaignHoverBadge.jsx frontend/src/hooks/useCampaignHover.js
-          git commit -m 'WIP: preserve native campaign and Salla-label readers; acceptance still blocked'
-          git diff --exit-code "$EXPECTED_HEAD" HEAD -- release/release-intent-v5.json .github
-          test "$(git ls-remote origin refs/heads/$TARGET_BRANCH | cut -f1)" = "$EXPECTED_HEAD"
-          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
-          echo "WIP_TASK_SOURCE=$(git rev-parse HEAD)"
+          git diff --exit-code -- release/release-intent-v5.json .github
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -58,7 +50,7 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - name: Install public test dependencies
         run: sed '/^emergentintegrations==/d' backend/requirements.txt | python -m pip install -q -r /dev/stdin pytest-asyncio
-      - name: Diagnose exact fixture failures without altering runtime source
+      - name: Diagnose exact fixture failures without runtime writes
         working-directory: backend
         run: |
           python -B - <<'PY'
