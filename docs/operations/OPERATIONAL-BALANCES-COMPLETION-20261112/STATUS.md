@@ -2,14 +2,14 @@
 
 ## Current state
 
-PR1902 M4 IS NOW POSITIVELY OBSERVED LIVE: EXACT A4/RUNTIME/FRONTEND IDENTITY.
-THREE CONSECUTIVE FULL-HEALTH IDENTITY COMPARISONS AND 24 TARGETED PUBLIC BYTE,
-MIME AND CACHE CHECKS PASSED ON NOV13. NEW RUNTIME BOOT: 18:48:16 RIYADH.
-THE AUTHENTICATED BROWSER STILL TIMES OUT, SO EXPLICIT PLATFORM SUCCESS,
-FULL OFFICIAL GUARD VERIFICATION/LEASE CLOSURE AND FRESH FINANCIAL ACCEPTANCE
-REMAIN OPEN. DO NOT REPEAT THE COMPLETED PUBLICATION TO RESOLVE BROWSER ACCESS.
-PRODUCTION GIT HAS ADVANCED THROUGH PR1905; OUR LIVE M4 SOURCE IS PRESERVED.
-INSPECT THE EXISTING TASK-OWNED LEASE BEFORE ANY OPERATOR MUTATION.
+PR1902 M4 IS LIVE AND PLATFORM COMPLETION IS NOW OBSERVED.
+BROWSER ACCESS RECOVERED AFTER RESETTING ITS STALE TOOL SESSION.
+FRESH VISIBLE FINANCIAL REFRESH STILL FAILS AND RETURNS A DATED SAVED SNAPSHOT.
+TABLES AND BOTH CARRIER/DRIVER PENDING-ORDER MODALS ARE ACCESSIBLE.
+A FALSE IDLE BUSY LABEL IN THE PENDING MODAL IS CONFIRMED IN SOURCE.
+OUR EXACT 15:38 V5 RELEASE LEASE IS STILL ACTIVE; OFFICIAL VERIFY IS NEXT.
+DO NOT REPUBLISH M4. PRODUCTION GIT 8d25 PRESERVES M4 AND MUST BE PRESERVED
+BY ANY FOLLOW-UP SOURCE/INTENT PAIR.
 
 The owner authorized upload, merge and publication. Root merged PR1902 after
 the independently reviewed implementation, complete source gates, unchanged
@@ -17,6 +17,53 @@ candidate-intent validation, intent-only B4 gates and a fresh Production ref
 check. GitHub confirms M4 has exactly M3 then B4 as its parents and its entire
 tree equals B4. No source was added after A4. This documentation-only handoff
 is outside the frozen release pair; do not deploy its branch as the release.
+
+
+### Nov13 authenticated recovery and actual balance inspection — 16:47 UTC checkpoint
+
+- A single CUA session reset restored access. The existing signed-in live
+  financial-position page opened without another credential request.
+- The page's one initial visible refresh settled into the explicit
+  source-refresh-failed warning and a dated saved snapshot. Fresh financial
+  acceptance therefore remains FAILED. The exact current HTTP status has not
+  yet been captured; do not describe this new attempt as408 without evidence.
+- The actual report renders all three section groups and26 HTML tables.
+  Known driver/carrier balances and delivery counts remain present alongside
+  unresolved-order counts. These are saved values, not fresh acceptance.
+- The carrier pending dialog opens, presents order numbers/reasons and has
+  working two-page pagination. A driver pending dialog also opens correctly.
+  Date-eligible rows expose the owner confirmation control. Root has clicked
+  no real confirmation control, preview, settlement or payout.
+- A new false busy-label defect was confirmed by independent exact-M4 source
+  inspection: `busyKey` and a missing confirmation target key are both null,
+  so the idle row satisfies `busyKey === key`. Opening the modal only changes
+  local dialog state; preview/confirm is reachable only from its explicit
+  button handler. The observed label is not evidence of an automatic write.
+  A non-null busy-key predicate is the narrow follow-up fix; none applied yet.
+- After refreshing the already-authorized Manage interface, it positively
+  shows a green `Deployment finished Nov13,06:48PM` marker and published
+  version `0cdd01a`. The earlier "Building..." display was stale UI.
+  This is the explicit newer platform completion missing from prior evidence.
+- Code Server reconnect succeeded. In a newly dedicated Terminal2, official
+  guard status returned exit0 and the exact active v5 lease:
+  actor `operational-balances-1902-20261113`,
+  prepared `2026-11-13T15:38:12.898552+00:00`, sourceA4, deploymentM4 and the
+  expected deterministic runtime. No other conversation's lease is involved.
+- Read-only Management logs are available but show only the latest100 lines,
+  which did not cover the already attempted financial refresh. Do not infer
+  its cause from unrelated runtime entries. Next evidence is the refresh
+  status and fixed-name stage timing records, without private data.
+- Fresh GitHub checks still show Production
+  `8d25f7a6fa9a310b319b753c32457e70987f7c51` and unchanged PR1902 lineage.
+  No new publication, /app source mutation, service change or real financial
+  approval occurred in this inspection.
+
+Next safe action: run the official full guard verify for the matching existing
+lease, then confirm inactive status. Do not fast-forward /app before closure.
+Continue the concrete refresh diagnosis and narrow idle-label correction from
+latest Production; do not alter frozenA4/B4/M4. All private financial/order
+observations and screenshots remain outside this public record.
+
 
 | Identity | Exact value |
 |---|---|
