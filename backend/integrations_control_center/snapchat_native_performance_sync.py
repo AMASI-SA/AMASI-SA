@@ -15,7 +15,8 @@ from typing import Any
 import httpx
 
 from .snapchat_native_account_day import (
-    validated_tz, sync_windows, persist_account_local_campaign_facts,
+    validated_tz, sync_windows, required_local_date_range,
+    persist_account_local_campaign_facts,
 )
 from .snapchat_native_data_common import (
     ATTRIBUTION_MODEL,
@@ -360,11 +361,13 @@ async def sync_snapchat_performance(
     account_zone = validated_tz(account.get("timezone"))
     # Preserve the existing Riyadh-day contract. For a New York account,
     # include the neighboring hours required to complete its local day.
-    requested_windows = (
-        sync_windows(start_date, end_date, account_zone)
-        if account_zone and str(account_zone) != BUSINESS_TIMEZONE
-        else riyadh_hourly_windows(start_date, end_date)
-    )
+    if account_zone and str(account_zone) != BUSINESS_TIMEZONE:
+        local_from, local_to = required_local_date_range(
+            start_date, end_date, account_zone, now=context.now(),
+        )
+        requested_windows = sync_windows(local_from, local_to, account_zone)
+    else:
+        requested_windows = riyadh_hourly_windows(start_date, end_date)
     for window_start, window_end in requested_windows:
         url = endpoint
         params: dict[str, Any] | None = {
