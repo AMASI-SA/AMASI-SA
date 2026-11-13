@@ -1,0 +1,123 @@
+name: Google namespace bootstrap capabilities
+on:
+  push:
+    branches: [codex/google-namespace-bootstrap-wip-20261029]
+    paths:
+      - backend/integrations_control_center/google_namespace_bootstrap*.py
+      - backend/tests/test_google_namespace_bootstrap*.py
+      - .github/workflows/google-namespace-bootstrap.yml
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - backend/integrations_control_center/google_namespace_bootstrap*.py
+      - backend/tests/test_google_namespace_bootstrap*.py
+      - .github/workflows/google-namespace-bootstrap.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  authenticated-replica-capabilities:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    env:
+      PYTHONPATH: backend
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHON_DOTENV_DISABLED: "1"
+      GOOGLE_NAMESPACE_BOOTSTRAP_TEST_ADMIN_URI: mongodb://namespace_admin:ephemeral_fixture_only@127.0.0.1:27483/?authSource=admin
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused owner and Mongo dependencies
+        run: >-
+          python -m pip install motor==3.7.1 pymongo==4.18.3 dnspython==2.9.0
+          fastapi==0.140.0 starlette==1.3.1 pydantic==2.13.4 httpx==0.28.1
+          PyJWT==2.15.0 bcrypt==4.1.3 python-dotenv==1.2.2
+          cryptography==50.0.0 pillow==13.0.0 python-multipart==0.0.31
+          openai==1.99.9 google-ads==33.0.0
+          pytest==9.0.3 pytest-asyncio==1.4.0
+      - name: Start disposable authenticated loopback replica
+        shell: bash
+        run: |
+          set -euo pipefail
+          NS_BOOTSTRAP_KEY_DIR="$RUNNER_TEMP/namespace-bootstrap-key"
+          mkdir -p "$NS_BOOTSTRAP_KEY_DIR"
+          python - "$NS_BOOTSTRAP_KEY_DIR/key" <<'PYCODE'
+          import base64,pathlib,secrets,sys
+          path=pathlib.Path(sys.argv[1])
+          path.write_text(base64.b64encode(secrets.token_bytes(512)).decode())
+          path.chmod(0o400)
+          PYCODE
+          sudo chown 999:999 "$NS_BOOTSTRAP_KEY_DIR/key"
+          docker run -d --name namespace-bootstrap-rs -p 127.0.0.1:27483:27483 \
+            -e MONGO_INITDB_ROOT_USERNAME=namespace_admin -e MONGO_INITDB_ROOT_PASSWORD=ephemeral_fixture_only \
+            -v "$NS_BOOTSTRAP_KEY_DIR/key:/run/namespace-key:ro" mongo:8.0.26 \
+            --port 27483 --replSet namespaceBootstrap --keyFile /run/namespace-key --bind_ip_all
+          python - <<'PYCODE'
+          import os,time
+          from pymongo import MongoClient
+          client=MongoClient(os.environ['GOOGLE_NAMESPACE_BOOTSTRAP_TEST_ADMIN_URI'],directConnection=True,serverSelectionTimeoutMS=1000)
+          for attempt in range(60):
+              try:
+                  client.admin.command('ping')
+                  break
+              except Exception:
+                  time.sleep(1)
+          else:
+              raise SystemExit('disposable_authenticated_bootstrap_failed')
+          try:
+              client.admin.command({'replSetInitiate':{'_id':'namespaceBootstrap','members':[{'_id':0,'host':'127.0.0.1:27483'}]}})
+              for attempt in range(60):
+                  try:
+                      if client.admin.command('hello').get('isWritablePrimary') is True:break
+                  except Exception:pass
+                  time.sleep(1)
+              else:raise SystemExit('disposable_primary_unproved')
+          except Exception:
+              raise SystemExit('disposable_replica_initialization_failed') from None
+          finally:client.close()
+          PYCODE
+      - name: Verify engine capabilities and unattached authenticated bootstrap
+        run: |
+          python -m pytest --noconftest -q -W error --tb=short --junitxml=namespace-bootstrap.xml \
+            backend/tests/test_google_namespace_bootstrap.py \
+            backend/tests/test_google_namespace_bootstrap_capabilities_mongo.py \
+            backend/tests/test_google_namespace_bootstrap_mongo.py
+          python - <<'PYCODE'
+          import xml.etree.ElementTree as ET
+          root=ET.parse('namespace-bootstrap.xml').getroot();cases=root.findall('.//testcase')
+          assert len(cases)==111, len(cases)
+          engine=[c for c in cases if 'bootstrap_capabilities_mongo' in c.get('classname','')]
+          runtime=[c for c in cases if c.get('classname','').endswith('test_google_namespace_bootstrap_mongo')]
+          assert len(engine)==20 and len(runtime)==44, (len(engine),len(runtime))
+          assert not root.findall('.//failure') and not root.findall('.//error') and not root.findall('.//skipped')
+          required={
+              'test_real_local_transaction_creates_all_four_with_required_restricted_privileges',
+              'test_real_abort_rolls_back_each_partial_ddl_stage',
+              'test_real_snapshot_explicit_ddl_rejected',
+              'test_real_existing_empty_collection_cannot_receive_new_index_in_transaction',
+              'test_real_raw_create_on_existing_same_options_is_noop',
+              'test_real_transactional_create_rejects_foreign_existing_guard_without_new_index',
+              'test_real_denied_target_privilege_is_not_replaced_by_broad_role',
+              'test_real_catalog_commands_are_not_transaction_snapshot_reads',
+              'test_real_foreign_create_race_before_transaction_is_not_silently_indexed',
+              'test_real_drop_recreate_changes_uuid_even_when_contract_same',
+              'test_real_global_reservation_serializes_independent_clients',
+          }
+          assert {c.get('name','').split('[')[0] for c in engine}==required
+          assert {'test_real_auth_prepare_has_no_ddl_execute_is_single_use_and_keeps_diagnostic_receipts',
+              'test_real_commit_reply_loss_never_recommits_or_recreates',
+              'test_real_owner_revocation_during_transaction_is_checked_outside_stale_snapshot',
+              'test_real_foreign_create_after_consumed_fence_is_rejected_without_adoption',
+              'test_real_existing_uuid_replacement_after_consumption_aborts_new_names',
+              'test_real_interrupted_reply_retains_original_task_and_never_replays_ddl',
+              'test_real_owner_revoked_during_receipt_read_cannot_receive_token_or_history'
+          } <= {c.get('name','').split('[')[0] for c in runtime}
+          print('Verified 111 tests including20 engine and44 bootstrap actual authenticated Mongo cases; zero skips')
+          PYCODE
+      - name: Remove disposable replica
+        if: always()
+        run: docker rm -f namespace-bootstrap-rs || true

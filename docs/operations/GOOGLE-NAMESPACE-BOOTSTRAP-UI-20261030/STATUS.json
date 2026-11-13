@@ -1,0 +1,72 @@
+{
+  "task": "GOOGLE-NAMESPACE-BOOTSTRAP-UI-20261030",
+  "state": "test_fixture_correction_pending_fresh_CI_runtime_unchanged",
+  "branch": "codex/google-namespace-bootstrap-ui-wip-20261030",
+  "base": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+  "contract_source": "2feb6f741d89ea7193b6ee80ee8c225d4472e6db",
+  "frozen_backend_source": "2c6aa43112019544f836f9d8e0d2464d4581f8cf",
+  "source_sha": "this_commit; remote full SHA recorded in subsequent checkpoint/PR",
+  "completed": [
+    "Exact frozen backend module, three tests and workflow copied; original 111-case CI evidence remains historical prerequisite only",
+    "Two additive management-router lines and two explicitly approved Workspace import/render lines",
+    "New untested strict UI service and actual AuthContext child; explicit receipt, prepare and execute actions",
+    "Actual full management router/auth boundary and runtime-serializer fixture parity: 9 cases passed",
+    "Real AuthProvider child/workspace race tests and actual Axios interceptor no-refresh/replay tests written",
+    "Ten additional real full-router Mongo integration cases collected; frozen 111 retained",
+    "New dedicated source-bound UI/replica workflow; append-only full-management test arguments"
+  ],
+  "validation": {
+    "new_code_tests": {
+      "command": "PYTHONPATH=backend PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 /tmp/google-root-acceptance-20261030/bin/python -m pytest --noconftest -q -W error --tb=short backend/tests/test_google_namespace_bootstrap.py backend/tests/test_google_namespace_bootstrap_integration.py",
+      "passed": 56,
+      "skipped": 0,
+      "seconds": 11.37,
+      "exit_status": 0
+    },
+    "frontend_dependencies": "local installation blocked by environment policy; use CI",
+    "frozen_backend_prior_CI": {
+      "run": 40976213231,
+      "job": 123804759846,
+      "source": "2c6aa43112019544f836f9d8e0d2464d4581f8cf",
+      "passed": 111,
+      "actual_mongo": 64,
+      "skipped": 0
+    },
+    "collection": {
+      "total": 130,
+      "original": 111,
+      "new_local": 9,
+      "new_actualMongo": 10,
+      "actualMongo_total": 74,
+      "executed_actualMongo_locally": false
+    },
+    "frontend": "68 tests across four suites; explicit synthetic Web Crypto fixture plus absent-entropy refusal cases, awaiting fresh CI",
+    "preservation": "Five exact 2c6 prerequisite blobs; only two additive router and two additive Workspace lines; release intent unchanged",
+    "prior_candidate_actual_CI": {
+      "source": "93def8efa222daa3f12519e25cfa966175cdd54e",
+      "run": 41074776816,
+      "replica_job": 124127925108,
+      "passed": 130,
+      "actual_mongo": 74,
+      "skipped": 0,
+      "seconds": 22.05,
+      "frontend_job": 124127924502,
+      "frontend_passed": 40,
+      "frontend_failed": 26,
+      "failure": "New test setup assumed global Web Crypto exists in repository JSDOM; corrected only synthetic test fixture, runtime unchanged."
+    }
+  },
+  "remaining": [
+    "Read fresh 130-case real-Mongo CI including 74 actual cases with zero skips",
+    "Read fresh UI/API-interceptor tests and build CI; fix any confirmed failures",
+    "Run full management regression CI and independent review",
+    "Later fresh production source composition and release by root"
+  ],
+  "next": "Read successor direct-source PUSH CI and full PR regression; no runtime change or live action",
+  "production_changed": false,
+  "live_DB_provider_or_flags_changed": false,
+  "release_intent_changed": false,
+  "coordination": "Root owns live production and final shared-file composition. This isolated branch remains based on 622c; do not overwrite later Merchant Workspace changes.",
+  "previous_checkpoint": "93def8efa222daa3f12519e25cfa966175cdd54e",
+  "pr": 1667
+}

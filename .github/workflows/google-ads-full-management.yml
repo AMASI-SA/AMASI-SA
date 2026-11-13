@@ -159,6 +159,8 @@ jobs:
           backend/tests/test_google_ads_workspace.py
           backend/tests/test_google_ads_overview.py
           backend/tests/test_google_ads_protobuf_contract.py
+          backend/tests/test_google_namespace_bootstrap.py
+          backend/tests/test_google_namespace_bootstrap_integration.py
       - name: Check source whitespace
         run: git diff --check
   frontend:
@@ -212,6 +214,10 @@ jobs:
           src/pages/MarketingPlatformWorkspace.google.test.jsx
           src/pages/GoogleAccountScope.test.jsx
           src/pages/AdsManager.test.jsx
+          src/components/marketing/GoogleNamespaceBootstrap.test.jsx
+          src/components/marketing/GoogleNamespaceBootstrapIntegration.test.jsx
+          src/services/googleNamespaceBootstrap.test.js
+          src/services/googleNamespaceBootstrap.authInterceptor.test.js
       - name: Build current reviewed CI checkout
         env:
           CI: "false"
