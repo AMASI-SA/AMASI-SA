@@ -186,3 +186,25 @@ Because publication did not proceed, the owner used the official guarded abort w
 6. Inspect live campaign cards for native account-day spend and commerce-only labels, and distinguish observed behavior from the 30→31 automated regression. No order/ad/accounting writes or manual provider sync are authorized for this verification.
 
 Issue #1006 has reached comment capacity. PR #1911 comments plus this continuation record carry the current handoff. Production changed by this task: **NO**; source merged and shared preview/deployment workspace prepared: **YES**.
+
+## Resumed publication coordination — 2026-11-13 23:35 UTC
+
+The owner explicitly approved closing/reopening the `salla-analytics` project session and stopping its coding agent if needed. Through the normal Emergent UI, the internal project tab was closed and reopened successfully. The previous initial-message/Thinking view is no longer shown; Manage and the free Republish dialog load. No paid chat, credit purchase, agent request, hidden platform call or new Publish action has occurred in this resumed turn. The previous permission blocker is resolved; this is not yet evidence that publication would succeed.
+
+Fresh shared-workspace inspection found a newer production candidate owned by the concurrent Ready task:
+
+- Production and clean tracked `/app` HEAD: `304e8793a15fd3269fd6f6d4cfba903d1760e285`, PR #1912.
+- New source: `cdf175841376d2f68605d66c1979273d23aed70d`; base is our campaign merge `5d158f6006b63ac7663c293696d501f595ce8754`.
+- New intent B: `a948f4592fd725792fe354dfa72fd40e99000915`; B/M tree `baf88eeeb7eec15a043da14358fa77f2ba2bc149`.
+- New intent SHA256: `2c4868e9312d9633cf536d908d5799892f7ac0156f458397bd40e50f91cdfabc`.
+- New runtime identity: `rg5-3e41b3f0b14d180f45cd3b242798ea348797b06e8edc770592130ac87b2a9cb0`.
+
+The descendant preserves every campaign implementation/test/frontend/dependency change. Its only source additions are the Ready repair, its tests and status record. Exact new-B CI was independently read back: 18 successful workflows plus one expected skip; 36 successful check runs and six expected skips, none failed or pending. PR #1912 records its isolated adapter rehearsal passed in 77.44 seconds.
+
+The Ready owner's rollback branch advanced to intent B_R `28adddb16c9e5b17bdd69e88c15be4a7451fbc18` at 23:31:48 UTC. A subsequent read-only shared-process snapshot found a current `yarn build`, `build-entry.cjs` and governed toolchain process. Official guard was inactive while that build was underway. Canonical generated build/identity outputs were absent during the adapter, which intentionally removes inherited outputs at entry. This campaign task has not modified the newer workspace, run another build, acquired a lease, or interfered with the active owner.
+
+A fresh read-only production health response still showed the prior source `47e474fa896e09db353b9928261fe96186ea24e1` and release `rg5-8bd428e3e93319a15361587b91a09dbd5b0f97f6bbea49d0fd8b4d4343166b9a`, with `ok=true` and verified identity/hash/frontend flags. No campaign deployment success is claimed.
+
+Next safe action: let the current Ready release owner complete its governed build, required rollback rehearsal and serialized publication. Any fresh lease and production verification must use its new source/deployment/release identity above, not this task's superseded candidate. Following successful official 3/3 verification and inactive guard, complete read-only live campaign-card acceptance. Do not restore old M/intent, clear another owner's lease, repeat a concurrent Publish, trigger provider sync or write order/ad/accounting data.
+
+Production changed by this campaign continuation: **NO**. New release verification and live card acceptance remain pending. This documentation-only branch remains outside the deployment candidate.
