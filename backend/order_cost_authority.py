@@ -532,12 +532,16 @@ def _request_parallel_reads(db: Any, user_id: str, enabled: bool) -> bool:
         return False
     from motor.motor_asyncio import AsyncIOMotorDatabase
     from operational_demand_refresh import demand_context
+    from review_acceptance_config_guard import AcceptanceConfigDatabase
     context = demand_context()
     # A missing public session attribute is not proof: restricted wrappers can
-    # hide their snapshot session in slots/private fields. Only the exact raw
-    # database owned by this visible refresh may opt in. All wrappers and other
-    # callers retain their serial behavior.
-    allowed = (type(db) is AsyncIOMotorDatabase and context is not None
+    # hide their snapshot session in slots/private fields. The application's
+    # exact acceptance adapter also delegates these reads without a session,
+    # but only when its immediate database is exact raw Motor. Keep the original
+    # adapter for both request ownership and every query; never unwrap it.
+    ordinary = (type(db) is AsyncIOMotorDatabase
+                or type(db) is AcceptanceConfigDatabase and type(db._db) is AsyncIOMotorDatabase)
+    allowed = (ordinary and context is not None
                and context.db is db and context.owner == user_id)
     if allowed:
         context.require_connected()

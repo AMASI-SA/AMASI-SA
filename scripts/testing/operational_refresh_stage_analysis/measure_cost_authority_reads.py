@@ -23,6 +23,7 @@ import operational_balance_sources as source_module
 import order_cost_authority as current_authority
 import operational_remaining_bundle_sources as current_remaining
 from operational_demand_refresh import LEASES, run_visible_refresh
+from review_acceptance_config_guard import AcceptanceConfigDatabase
 from test_operational_balance_demand_refresh import DB as LeaseDB, Request, allowed
 from test_operational_balance_sources import DB as SourceDB, START, NOW
 from scripts.testing.operational_refresh_stage_analysis.measure_hotspots import source_data
@@ -50,11 +51,12 @@ async def measure(authority, remaining, n, latency):
     before = deepcopy(data)
     sources, leases = SourceDB(data), LeaseDB()
     client = AsyncIOMotorClient('mongodb://127.0.0.1:1', connect=False)
-    db = client['synthetic_source_latency']
+    raw_db = client['synthetic_source_latency']
+    db = AcceptanceConfigDatabase(raw_db)
     activity = {'active': 0, 'peak': 0}
 
     def collection(database, name):
-        assert database is db
+        assert database is raw_db
         if name == LEASES:
             return leases[name]
         original = sources[name]
@@ -119,6 +121,7 @@ async def main():
         assert before['lease_operations'] == after['lease_operations']
         print(json.dumps({
             'actual_collector_and_visible_request': True,
+            'production_database_adapter': 'AcceptanceConfigDatabase',
             'base': BASE,
             'orders': n,
             'synthetic_cursor_latency_ms': 10,

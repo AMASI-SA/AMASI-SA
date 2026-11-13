@@ -11,6 +11,7 @@ from operational_demand_refresh import LEASES, demand_context, run_visible_refre
 from operational_open_cost_exposure import project
 from operational_remaining_bundle_sources import load_remaining_bundles
 from order_cost_authority import LIFECYCLES, SNAPSHOTS, load_order_cost_authority
+from review_acceptance_config_guard import AcceptanceConfigDatabase
 from stock_component_consumption_service import PLANS, UNITS
 from test_operational_balance_demand_refresh import DB as LeaseDB, Request, allowed
 from test_operational_open_cost_exposure import NOW, native_order, operating_state, seeded_db
@@ -151,24 +152,38 @@ def test_units_read_requires_a_selected_plan_and_keeps_saved_cost(monkeypatch, h
     asyncio.run(exercise())
 
 
-def test_opt_in_matches_serial_result_and_is_bounded_to_three_reads(monkeypatch):
+@pytest.mark.parametrize('adapter', ['raw', 'acceptance'])
+def test_opt_in_matches_serial_result_and_is_bounded_to_three_reads(monkeypatch, adapter):
     async def exercise():
         boundary = MotorBoundary(monkeypatch)
         try:
+            database = boundary.db if adapter == 'raw' else AcceptanceConfigDatabase(boundary.db)
+            adapter_reads = []
+            actual_getitem = AcceptanceConfigDatabase.__getitem__
+
+            def observed_getitem(self, name):
+                if self is database:
+                    adapter_reads.append(name)
+                return actual_getitem(self, name)
+
+            monkeypatch.setattr(AcceptanceConfigDatabase, '__getitem__', observed_getitem)
             await seed_cost(boundary.memory)
             before = await boundary.memory[SNAPSHOTS].find({}).to_list(None)
-            serial = await boundary.visible(lambda: boundary.load(parallel=False))
+            serial = await boundary.visible(lambda: boundary.load(database=database, parallel=False), database=database)
             assert boundary.peak == 1
             serial_calls = deepcopy(boundary.calls)
             boundary.calls.clear()
+            adapter_reads.clear()
             boundary.peak = 0
-            concurrent = await boundary.visible(boundary.load)
+            concurrent = await boundary.visible(lambda: boundary.load(database=database), database=database)
             assert concurrent == serial and concurrent['lines'][('OLD', 'line')]['cost']['line_total'] == 40
             assert [query for name, query in serial_calls if name == UNITS] == [{
                 'user_id': 'owner', 'plan_id': {'$in': []},
                 'state': {'$ne': 'released'}, 'order_line_id': {'$in': ['line']}}]
             assert boundary.calls == [(name, query) for name, query in serial_calls if name != UNITS]
             assert boundary.peak == 3
+            if adapter == 'acceptance':
+                assert [name for name in adapter_reads if name != LEASES] == [name for name, _ in boundary.calls]
             assert await boundary.memory[SNAPSHOTS].find({}).to_list(None) == before
             boundary.settled()
         finally:
@@ -177,16 +192,18 @@ def test_opt_in_matches_serial_result_and_is_bounded_to_three_reads(monkeypatch)
 
 
 @pytest.mark.parametrize('opt_in', ['default', 'disabled', 'invalid_truthy'])
-def test_default_and_disabled_opt_in_preserve_empty_units_read(monkeypatch, opt_in):
+@pytest.mark.parametrize('adapter', ['raw', 'acceptance'])
+def test_default_and_disabled_opt_in_preserve_empty_units_read(monkeypatch, opt_in, adapter):
     async def exercise():
         boundary = MotorBoundary(monkeypatch)
         try:
+            database = boundary.db if adapter == 'raw' else AcceptanceConfigDatabase(boundary.db)
             await seed_cost(boundary.memory)
             options = {'include_corrections': False, 'include_frozen_metadata': True}
             if opt_in != 'default':
                 options['parallel_reads'] = False if opt_in == 'disabled' else 1
             result = await boundary.visible(lambda: load_order_cost_authority(
-                boundary.db, 'owner', ORDERS, **options))
+                database, 'owner', ORDERS, **options), database=database)
             assert result['lines'][('OLD', 'line')]['cost']['line_total'] == 40
             assert [query for name, query in boundary.calls if name == UNITS] == [{
                 'user_id': 'owner', 'plan_id': {'$in': []},
@@ -198,16 +215,18 @@ def test_default_and_disabled_opt_in_preserve_empty_units_read(monkeypatch, opt_
     asyncio.run(exercise())
 
 
-def test_remaining_bundle_adapter_opts_in_only_inside_visible_request(monkeypatch):
+@pytest.mark.parametrize('adapter', ['raw', 'acceptance'])
+def test_remaining_bundle_adapter_opts_in_only_inside_visible_request(monkeypatch, adapter):
     async def exercise():
         boundary = MotorBoundary(monkeypatch)
         try:
+            database = boundary.db if adapter == 'raw' else AcceptanceConfigDatabase(boundary.db)
             raw = native_order()['raw_by_source']['salla_direct']
             async def load():
-                return await load_remaining_bundles(boundary.db, 'owner', [raw], NOW)
+                return await load_remaining_bundles(database, 'owner', [raw], NOW)
             assert await load() == {} and boundary.peak == 1
             boundary.peak = 0
-            assert await boundary.visible(load) == {} and boundary.peak == 3
+            assert await boundary.visible(load, database=database) == {} and boundary.peak == 3
             boundary.settled()
         finally:
             boundary.client.close()
@@ -263,6 +282,61 @@ def test_snapshot_wrappers_and_unowned_calls_stay_serial(monkeypatch, kind):
     asyncio.run(exercise())
 
 
+@pytest.mark.parametrize('kind', ['snapshot', 'private_wrapper', 'nested_acceptance', 'subclass',
+    'raw_context', 'adapter_context_for_raw', 'other_adapter_context', 'wrong_owner', 'no_context'])
+def test_acceptance_adapter_requires_immediate_raw_and_original_request_database(monkeypatch, kind):
+    async def exercise():
+        boundary = MotorBoundary(monkeypatch)
+        try:
+            class Snapshot:
+                __slots__ = ('__db', '__session')
+                def __init__(self, database):
+                    self.__db, self.__session = database, object()
+                def __getitem__(self, name):
+                    return self.__db[name]
+
+            class Private:
+                def __init__(self, database):
+                    self.__db, self.__session = database, object()
+                def __getitem__(self, name):
+                    return self.__db[name]
+
+            class Subclass(AcceptanceConfigDatabase):
+                pass
+
+            database = AcceptanceConfigDatabase(boundary.db)
+            if kind == 'snapshot':
+                database = AcceptanceConfigDatabase(Snapshot(boundary.db))
+            elif kind == 'private_wrapper':
+                database = AcceptanceConfigDatabase(Private(boundary.db))
+            elif kind == 'nested_acceptance':
+                database = AcceptanceConfigDatabase(database)
+            elif kind == 'subclass':
+                database = Subclass(boundary.db)
+            context_database = database
+            if kind == 'raw_context':
+                context_database = boundary.db
+            elif kind == 'adapter_context_for_raw':
+                context_database, database = database, boundary.db
+            elif kind == 'other_adapter_context':
+                context_database = AcceptanceConfigDatabase(boundary.db)
+            owner = 'different-owner' if kind == 'wrong_owner' else 'owner'
+            async def load():
+                return await boundary.load(database=database, owner=owner)
+            if kind == 'no_context':
+                await load()
+            else:
+                await boundary.visible(load, database=context_database)
+            assert boundary.peak == 1
+            assert [query for name, query in boundary.calls if name == UNITS] == [{
+                'user_id': owner, 'plan_id': {'$in': []},
+                'state': {'$ne': 'released'}, 'order_line_id': {'$in': ['line']}}]
+            boundary.settled()
+        finally:
+            boundary.client.close()
+    asyncio.run(exercise())
+
+
 def test_read_limit_error_is_preserved_and_sibling_reads_are_joined(monkeypatch):
     async def exercise():
         boundary = MotorBoundary(monkeypatch)
@@ -298,15 +372,18 @@ def test_parallel_failures_keep_the_original_serial_error_order(monkeypatch):
 
 
 @pytest.mark.parametrize('repeated', [False, True])
-def test_disconnect_joins_all_reads_even_during_repeated_cancellation(monkeypatch, repeated):
+@pytest.mark.parametrize('adapter', ['raw', 'acceptance'])
+def test_disconnect_joins_all_reads_even_during_repeated_cancellation(monkeypatch, repeated, adapter):
     async def exercise():
         boundary = MotorBoundary(monkeypatch)
         task = None
         try:
+            database = boundary.db if adapter == 'raw' else AcceptanceConfigDatabase(boundary.db)
             boundary.blocked = True
             boundary.cleanup.clear()
             request = Request()
-            task = asyncio.create_task(boundary.visible(boundary.load, request=request))
+            task = asyncio.create_task(boundary.visible(lambda: boundary.load(database=database),
+                database=database, request=request))
             await asyncio.wait_for(boundary.entered.wait(), 2)
             request.disconnect()
             await asyncio.wait_for(boundary.all_stopping.wait(), 2)
