@@ -8,10 +8,26 @@ const day = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val
 const amount = value => typeof value === 'string' && /^(0|[1-9]\d*)\.\d{2}$/.test(value);
 const issues = {
   salary_contract_missing: 'عقد راتب غير مكتمل؛ راجع الراتب وتاريخ سريانه.',
+  employee_salary_contract_incomplete: 'عقد راتب غير مكتمل؛ راجع الراتب وتاريخ سريانه وحالة الموظف.',
+  employee_salary_contract_missing_or_ambiguous: 'عقد راتب مفقود أو متعدد؛ يلزم تحديد العقد المعتمد للموظف.',
   operational_salary_source_incomplete: 'بيانات راتب غير مكتملة؛ يلزم مراجعتها.',
   operational_salary_employee_identity_ambiguous: 'هوية موظف مكررة أو غير مكتملة.',
   operational_salary_recorded_day_reconciliation_required: 'يوجد استحقاق محفوظ يختلف عن المصدر؛ يلزم تسوية موثقة ولا يُعدّل تلقائيًا.'
 };
+function SalaryIssue({item}) {
+  const conflict = item?.code === 'operational_salary_recorded_day_reconciliation_required';
+  const money = (value, currency) => amount(value) && typeof currency === 'string' && /^[A-Z]{3}$/.test(currency)
+    ? `${value} ${currency}` : 'غير متاح';
+  return <div role="alert" className="op-error">
+    <p>{issues[item?.code] || 'توجد بيانات تحتاج مراجعة؛ الاعتماد متوقف.'}</p>
+    {typeof item?.source_id === 'string' && <p>مرجع المراجعة: <bdi>{item.source_id}</bdi></p>}
+    {conflict && <>
+      {day(item.business_date) && <p>يوم الاستحقاق: <bdi>{item.business_date}</bdi></p>}
+      <p>المحفوظ: <bdi>{money(item.recorded, item.currency)}</bdi> · حسب البداية المقترحة: <bdi>{money(item.proposed, item.proposed_currency)}</bdi></p>
+      {item.reason === 'cutover_rounding_changed' && <p>يتطابق المحفوظ مع الحساب من البداية السابقة؛ تغيير يوم البداية يغيّر توزيع التقريب بين الأيام. يبقى الفرق للمراجعة ولا يُعتمد تلقائيًا.</p>}
+    </>}
+  </div>;
+}
 const invalid = () => new Error('تعذر التحقق من استجابة النظام؛ أعد تحميل بداية الرواتب.');
 const scopeKey = context => `${context.session_scope || ''}:${context.started_at || ''}:${context.status || ''}:${context.can_manage_salary_start === true}`;
 function validContext(data, context) {
@@ -129,7 +145,7 @@ export default function SalaryStart({context}) {
             <tbody>{Object.entries(preview.additional_amounts).sort(([a], [b]) => a.localeCompare(b)).map(([currency, value]) => <tr key={currency}><th scope="row">{currency}</th><td><bdi>{value}</bdi></td></tr>)}</tbody>
           </table></div>
           {preview.new_days === 0 && <p>لا توجد أيام ناقصة في المعاينة الحالية؛ لا تُضاف مبالغ مكررة.</p>}
-          {preview.issues.map((item, i) => <p role="alert" key={i}>{issues[item?.code] || 'توجد بيانات تحتاج مراجعة؛ الاعتماد متوقف.'}</p>)}
+          {preview.issues.map((item, i) => <SalaryIssue key={i} item={item}/>)}
           {preview.can_approve ? <>
             <label className="op-field"><span><input type="checkbox" checked={confirmed} disabled={busy || uncertain} onChange={e => setConfirmed(e.target.checked)}/> أؤكد أن الأرصدة الافتتاحية لا تشمل رواتب يوم القطع وما بعده.</span></label>
             <button type="button" disabled={busy || (!confirmed && !uncertain)} onClick={approve}>{uncertain ? 'إعادة إرسال طلب الاعتماد نفسه' : 'اعتماد بداية الرواتب من يوم القطع'}</button>
