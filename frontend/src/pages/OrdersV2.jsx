@@ -1,5 +1,5 @@
-import { resolveOrderCampaign } from "../lib/orderCampaignAttribution";
-import { getCampaignHoverBatch } from "../services/campaignHover";
+import { resolveOrderCampaign, campaignHoverKey } from "../lib/orderCampaignAttribution";
+import useCampaignHover from "../hooks/useCampaignHover";
 import CampaignHoverBadge from "../components/CampaignHoverBadge";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -220,19 +220,7 @@ export default function OrdersV2() {
     const { orders, hasMore, loading, initialLoading, error, searchMode, loadMore, reload, searchCombined, resultSummary } = useOrders({ statusExact: activeStatus });
     // Prefetch only the campaigns on the visible order page. Hover reads memory
     // exclusively; no Mongo aggregation or advertising API call on mouse events.
-    const campaignIdsKey = useMemo(() => [...new Set(
-        orders.map((order) => resolveOrderCampaign(order).campaignId).filter(Boolean)
-    )].slice(0, 20).sort().join(","), [orders]);
-    const [campaignHover, setCampaignHover] = useState({});
-    useEffect(() => {
-        let mounted = true;
-        if (!campaignIdsKey) { setCampaignHover({}); return undefined; }
-        getCampaignHoverBatch(campaignIdsKey.split(",")).then(
-            (result) => { if (mounted) setCampaignHover(result); },
-            () => { if (mounted) setCampaignHover({}); },
-        );
-        return () => { mounted = false; };
-    }, [campaignIdsKey]);
+    const campaignHover = useCampaignHover(orders, { limit: 20, totals: resultSummary });
 
 
     useEffect(() => {
@@ -367,7 +355,7 @@ export default function OrdersV2() {
                                     </div>
                                     <div className="col-start-2 flex min-w-0 items-center justify-between gap-2 sm:col-auto sm:shrink-0 sm:justify-end sm:gap-3">
                                         <div className="min-w-0 text-right sm:text-left">
-                                            <div className="flex items-center gap-1.5 sm:justify-end"><SourceBadge order={order} report={campaignHover[resolveOrderCampaign(order).campaignId]} /><OrderCurrencyAmount order={order} /></div>
+                                            <div className="flex items-center gap-1.5 sm:justify-end"><SourceBadge order={order} report={campaignHover[campaignHoverKey(order)]} /><OrderCurrencyAmount order={order} /></div>
                                             <div className="mt-1 whitespace-nowrap text-[11px] text-slate-400 sm:text-xs">{formatOrderDate(order.created_at, nowMs)}</div>
                                         </div>
                                         {!listOnly && <CaretLeft size={17} className="shrink-0 text-slate-300" />}

@@ -21,7 +21,13 @@ function accountTime(value, zone) {
 }
 
 function explanation(campaign, report) {
-    if (!campaign?.campaignId) return "لا يوجد معرّف حملة موثوق في بيانات هذا الطلب من سلة.";
+    if (report?.commerce_scope === "salla_utm_label") {
+        return "طلبات ومبيعات سلة مجمّعة بحسب اسم التتبع المسجل، وليست مطابقة مؤكدة لحملة إعلانية؛ الصرف وتكلفة الطلب والعائد غير متاحة لهذا التجميع.";
+    }
+    if (report?.spend_warning === "snapchat_hour_coverage_unverified" && known(report?.spend_sar)) {
+        return "الصرف المتوفر من تقرير سناب بيوم الحساب؛ اكتمال كل الساعات غير مثبت، وتكلفة الطلب والعائد أوليان وقابلان للتحديث.";
+    }
+    if (!campaign?.campaignId && report === undefined) return "لا يوجد معرّف حملة موثوق؛ بيانات مصدر النقر العامة لا تحدد حملة بعينها.";
     if (report === undefined) return "تحميل الإحصاءات...";
     if (report?.spend_warning === "snapchat_hours_incomplete" && known(report?.spend_sar)) {
         return "الصرف وتكلفة الطلب والعائد محسوبة من المبلغ المتوفر؛ بعض ساعات سناب غير مكتملة، والأرقام قابلة للتحديث.";
@@ -33,6 +39,7 @@ function explanation(campaign, report) {
     if (reason === "campaign_spend_not_available") return "طلبات سلة ومبيعاتها مستقلة؛ صرف الحملة غير متوفر للفترة نفسها.";
     if (reason === "ambiguous_account") return "معرّف الحملة يطابق أكثر من حساب؛ يلزم تحديد الحساب الصحيح.";
     if (reason === "account_timezone_unavailable") return "توقيت الحساب غير متاح؛ لم يُفترض توقيت بديل.";
+    if (reason === "campaign_identity_missing") return "بيانات مصدر النقر العامة لا تتضمن معرّف الحملة؛ لا يمكن نسبتها إلى حملة محددة.";
     if (reason === "campaign_account_unavailable") return "تعذرت مطابقة معرّف الحملة بالحساب الإعلاني.";
     if (reason === "report_unavailable" || reason === "account_read_incomplete") return "تعذر تحميل التقرير الآن. أعد فتح الصفحة؛ لا توجد أرقام تقديرية.";
     if (report?.status === "available") return "طلبات ومبيعات سلة · الصرف المسجل في ميزان";
@@ -64,7 +71,7 @@ export default function CampaignHoverBadge({ badge, campaign, report }) {
     ];
     const updated = accountTime(report?.updated_at, report?.timezone);
     const covered = accountTime(report?.spend_as_of, report?.timezone);
-    const displayName = campaign?.campaignDisplay || report?.campaign_name || "الحملة غير محددة";
+    const displayName = campaign?.campaignName || report?.campaign_name || campaign?.campaignDisplay || "الحملة غير محددة";
     return <>
         <span
             ref={ref} role="button" tabIndex={0}
@@ -94,9 +101,10 @@ export default function CampaignHoverBadge({ badge, campaign, report }) {
                 style={{ ...position, maxHeight: "calc(100vh - 20px)", overflowY: "auto", pointerEvents: "none" }}>
                 <div className="mb-1 font-black leading-5">{displayName}</div>
                 <div className="mb-2 text-[10px] text-slate-500">
-                    اليوم من 12:00 ص بتوقيت الحساب: <bdi dir="ltr">{report?.timezone || "غير متاح"}</bdi>
+                    {report?.period_basis === "salla_store_day" ? "اليوم من 12:00 ص بتوقيت المتجر: " : "اليوم من 12:00 ص بتوقيت الحساب: "}<bdi dir="ltr">{report?.timezone || "غير متاح"}</bdi>
                     {report?.date && <span> · <bdi dir="ltr">{report.date}</bdi></span>}
                 </div>
+                {report?.commerce_scope === "salla_utm_label" && <div className="mb-2 text-[10px] font-bold text-amber-700">تجميع اسم التتبع في سلة · غير مربوط إعلانياً</div>}
                 <table className="w-full border-collapse"><tbody>{rows.map(([label, value]) =>
                     <tr key={label} className="border-t border-slate-100">
                         <th className="py-1.5 text-right font-medium text-slate-600">{label}</th>
