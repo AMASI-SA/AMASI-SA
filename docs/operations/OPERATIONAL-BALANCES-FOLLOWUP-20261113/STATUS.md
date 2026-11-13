@@ -3,7 +3,7 @@
 <!-- RESUMPTION-CURRENT-START -->
 ## Current state
 
-The reviewed operational refresh follow-up is merged as `791b019e20ffe24439393576129783cd4c9dceb3` and the original operator has fast-forwarded to that exact commit. Source A7 and intent B7 are unchanged. The actual frontend package adapter is running. No new lease or Publish action has occurred yet. Fresh financial acceptance remains pending; the previous saved-report fallback is not accepted as a fresh result.
+The reviewed operational refresh follow-up is merged as `791b019e20ffe24439393576129783cd4c9dceb3` and the original operator has fast-forwarded to that exact commit. Source A7 and intent B7 are unchanged. The actual frontend package adapter completed successfully with true process exit0 and `built:true`; the full materialized runtime identity exactly matches the reviewed intent. No new lease or Publish action has occurred yet. Fresh financial acceptance remains pending; the previous saved-report fallback is not accepted as a fresh result.
 
 ## Canonical identities
 
@@ -34,9 +34,9 @@ This documentation-only handoff branch is separate from the frozen production re
 
 ## Running work and next safe action
 
-The original operator is executing `yarn build` from `/app/frontend` through the official dispatcher/adapter with `PYTHONDONTWRITEBYTECODE=1`, `REACT_APP_BACKEND_URL=https://mezansalla.com`, and no bootstrap-intent override. Root is observing exact-M push gates: readiness43491375370, security43491375482, CodeQL43491375289.
+The original operator completed `yarn build` from `/app/frontend` through the official dispatcher/adapter with `PYTHONDONTWRITEBYTECODE=1`, `REACT_APP_BACKEND_URL=https://mezansalla.com`, and no bootstrap-intent override. Exact-M readiness43491375370 and security43491375482 succeeded. Both clean-clone rehearsals passed again on the merged tree. Root is waiting for CodeQL43491375289 Python analysis to finish; JavaScript/TypeScript already succeeded.
 
-Read the true adapter exit code and its governed identity/proof before proceeding. Current local evidence paths are:
+True adapter exit0 and `built:true` were read from the saved official output. Exact A7/runtime identity, M head, clean tracked state, and all120 pre-existing untracked-file hashes were rechecked after build. Current local evidence paths are:
 
 - `/tmp/mezan-pr1906-9502be1e-untracked-before.json`
 - `/tmp/mezan-pr1906-9502be1e-fastforward.log`
