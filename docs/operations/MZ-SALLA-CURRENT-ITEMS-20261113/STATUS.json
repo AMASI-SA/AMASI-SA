@@ -6,7 +6,7 @@
   "base_sha": "8d25f7a6fa9a310b319b753c32457e70987f7c51",
   "integrated_base_sha": "791b019e20ffe24439393576129783cd4c9dceb3",
   "state": "implementation_checkpoint_pending_ci",
-  "previous_remote_checkpoint": "70a0f6e12c9491b997eac9ba094514d0c6a84e16",
+  "previous_remote_checkpoint": "a63dbfa4b8860e8830780e3b3468798b9675ffed",
   "scope": "Keep root products aligned with accepted native Salla items; bounded explicit repair for existing projection drift.",
   "completed": [
     "Reproduced the longest-list merge bug with a failing three-to-one regression before the source change.",
@@ -21,8 +21,8 @@
     "independent_focused_review": "50 passed and 88 subtests passed after empty-proof and historical-fingerprint findings were fixed",
     "local_integrated_suite": "169 passed, 19 explicit Mongo-gated skips, 88 subtests passed, exit 0; 2 pre-existing Pydantic deprecation warnings",
     "report_regression": "Synthetic 13 pieces / 961.50 known incomplete cost becomes 11 pieces / 830.50 complete cost at 75.50 per piece",
-    "real_mongo": "G47 run 43492962482, backend job 132118633968: Salla projection/repair suite and zero-skips gate passed on checkpoint 70a0f6e12c9491b997eac9ba094514d0c6a84e16. Broader suites and next-head checks pending.",
-    "ci_contract_followup": "Fulfillment CI found one stale source-text assertion expecting /orders/items in the former caller. Updated the assertion to follow the shared complete reader, retaining endpoint and no-shipments guarantees. Existing behavioral endpoint test passed."
+    "real_mongo": "G47 run 43492962482, job 132118633968: Salla projection/repair 188 passed plus 88 subtests, zero skips; G47 acceptance 327 passed plus 127 subtests, zero skips. Run cancelled by next checkpoint before historical-cost stage; final-head checks pending.",
+    "ci_contract_followup": "Updated the source-text contract to follow the shared complete reader, retaining endpoints and no-shipments guarantees (24 focused tests passed). Shipping fixture previously treated a complete GET items empty response as a light event; it now separately verifies sparse same-ID option preservation and complete-empty removal while preserving the current carrier. No production source changes were needed for either test adaptation."
   },
   "review": "Independent review identified and confirmed fixes for unproven empty legacy events and historical option fingerprint changes. Repair call site and frozen-cost regression verified; no additional material source findings.",
   "production_changed": false,
