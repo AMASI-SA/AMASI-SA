@@ -131,6 +131,7 @@ def test_salla_refresh_is_centralized_in_orders_v2():
     review_source = (ROOT / "backend/order_review_routes.py").read_text(encoding="utf-8")
     routes_source = (ROOT / "backend/order_engine/routes.py").read_text(encoding="utf-8")
     refresh_source = (ROOT / "backend/order_engine/salla_refresh.py").read_text(encoding="utf-8")
+    items_source = (ROOT / "backend/salla_integration/order_items_snapshot.py").read_text(encoding="utf-8")
     service_source = (ROOT / "frontend/src/services/orderEngine.js").read_text(encoding="utf-8")
     details_source = (ROOT / "frontend/src/pages/OrderDetailsV2.jsx").read_text(encoding="utf-8")
 
@@ -139,8 +140,10 @@ def test_salla_refresh_is_centralized_in_orders_v2():
     assert "_refresh_review_source_once" not in review_source
     assert '"/{order_number}/refresh-from-salla"' in routes_source
     assert 'f"/orders/{internal_id}"' in refresh_source
-    assert '"/orders/items"' in refresh_source
+    assert "return await fetch_complete_order_items(db, user_id, internal_order_id, request=call_salla)" in refresh_source
+    assert 'request(db, user_id, "GET", "/orders/items", params=params)' in items_source
     assert '"/shipments"' not in refresh_source
+    assert '"/shipments"' not in items_source
     assert "no_shipments_api_calls" in refresh_source
     assert "refreshOrderFromSalla" in service_source
     assert 'data-testid="order-v2-refresh-from-salla"' in details_source

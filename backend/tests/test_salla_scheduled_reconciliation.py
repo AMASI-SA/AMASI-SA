@@ -113,8 +113,8 @@ async def test_short_order_pages_still_refresh_all_orders_and_items(monkeypatch)
 async def test_items_explicit_pages_and_invalid_payload(monkeypatch):
     monkeypatch.setattr(sync.asyncio, 'sleep', AsyncMock())
     monkeypatch.setattr(sync, 'call_salla', AsyncMock(side_effect=[
-        {'data': [{'id': 1}], 'pagination': {'currentPage': 1, 'totalPages': 2}},
-        {'data': [{'id': 2}], 'pagination': {'currentPage': 2, 'totalPages': 2}},
+        {'data': [{'id': 1, 'quantity': 1}], 'pagination': {'currentPage': 1, 'totalPages': 2}},
+        {'data': [{'id': 2, 'quantity': 1}], 'pagination': {'currentPage': 2, 'totalPages': 2}},
     ]))
     assert [r['id'] for r in await sync._fetch_scheduled_order_items(None, 'owner', 'id')] == [1, 2]
     monkeypatch.setattr(sync, 'call_salla', AsyncMock(return_value={'data': [None]}))

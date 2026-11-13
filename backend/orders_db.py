@@ -262,18 +262,59 @@ def _merge_salla_item_snapshot(existing: dict, incoming: dict) -> dict:
 
 def _merge_salla_raw_snapshot(existing: Any, incoming: Any) -> Any:
     """Preserve rich order items without reviving unrelated stale raw facts."""
+    from salla_integration.order_items_snapshot import CompleteOrderItems
     previous = existing if isinstance(existing, dict) else {}
     merged = deepcopy(incoming) if isinstance(incoming, dict) else {}
     existing_items = previous.get("items")
     incoming_items = merged.get("items")
+    # Only the internal complete-reader result can prove that an empty array
+    # removes the last line. A missing/empty array in a light webhook cannot.
+    complete_items = isinstance(incoming_items, CompleteOrderItems)
+    if complete_items:
+        incoming_items.validate_for(merged.get("id"))
     if isinstance(incoming_items, list) and incoming_items:
         merged["items"] = _merge_salla_order_items(
             existing_items if isinstance(existing_items, list) else [],
             incoming_items,
         )
+    elif complete_items:
+        merged["items"] = []
     elif isinstance(existing_items, list) and existing_items:
         merged["items"] = deepcopy(existing_items)
     return merged
+
+
+def _current_salla_products(raw: dict, order_number: str, *, complete_items=None) -> list[dict] | None:
+    """Project the same accepted native lines used by Order Engine V2.
+
+    Call only after raw snapshot merging, within the existing fenced writer.
+    This changes no webhook membership/version policy. Older imports without
+    native line identity keep the compatibility merge rather than guessing a
+    join by SKU/name. No historical cost or preparation snapshot is rewritten.
+    """
+    from salla_integration.order_items_snapshot import CompleteOrderItems, validate_order_items
+    reference = raw.get("reference_id") or raw.get("order_number")
+    if reference is not None and str(reference).strip() != order_number:
+        raise ValueError("salla_products_order_reference_mismatch")
+    rows = raw.get("items")
+    if not isinstance(rows, list):
+        return None
+    if not rows:
+        # A legacy root-only order may have no previous raw items at all.
+        # An empty light event still cannot discard its known products.
+        if not isinstance(complete_items, CompleteOrderItems):
+            return None
+        complete_items.validate_for(raw.get("id"), rows)
+    try:
+        validate_order_items(rows, order_id=raw.get("id"))
+    except ValueError:
+        # Legacy/partial sources are not authority to discard unmatched lines.
+        return None
+    from salla_integration.sync import _salla_order_to_doc
+    # Keep the established legacy option representation. Adding options_raw
+    # here would change historical cost fingerprints for unchanged lines.
+    # Native option IDs remain available in raw_by_source for current reports.
+    return _salla_order_to_doc(raw)["products"]
     
     # ── Phase 1: Auto-seed /products from order line-items ──────────────
 # Safe scope:
@@ -1019,6 +1060,15 @@ async def _upsert_order(db, user_id: str, order_number: str, incoming: dict,
                 existing_raw = raws.get(source) or {}
                 attributed_raw = preserve_salla_raw_attribution(existing_raw, raw)
                 raws[source] = _merge_salla_raw_snapshot(existing_raw, attributed_raw)
+                products = _current_salla_products(
+                    raws[source], order_number, complete_items=attributed_raw.get("items"),
+                )
+                if products is not None:
+                    # products is a compatibility projection, not an independent
+                    # source. Length/legacy Make precedence must not retain
+                    # lines absent from the accepted native Salla snapshot.
+                    merged["products"] = products
+                    merged.setdefault("field_sources", {})["products"] = source
             else:
                 raws[source] = raw
             merged["raw_by_source"] = raws

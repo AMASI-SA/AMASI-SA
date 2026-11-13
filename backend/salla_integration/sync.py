@@ -1148,43 +1148,8 @@ async def run_orders_sync(
 
 async def _fetch_scheduled_order_items(db, user_id, internal_id):
     """Read every item page; incomplete items must never replace stored lines."""
-    if not internal_id:
-        raise ValueError("missing_internal_order_id")
-    items = {}
-    for page in range(1, 101):
-        response = await call_salla(db, user_id, "GET", "/orders/items",
-                                    params={"order_id": internal_id, "page": page, "per_page": 50})
-        rows = response.get("data") if isinstance(response, dict) else None
-        if not isinstance(rows, list) or any(not isinstance(row, dict) or not row.get("id") for row in rows):
-            raise ValueError("invalid_order_items")
-        # The documented items response is an unpaginated complete array.
-        # Also handle explicit pagination if the provider supplies it.
-        if "pagination" not in response:
-            if page != 1:
-                raise ValueError("item_pagination_disappeared")
-            return rows
-        pagination = response.get("pagination")
-        if not isinstance(pagination, dict):
-            raise ValueError("invalid_item_pagination")
-        total = _pagination_number(pagination, ("totalPages", "total_pages", "last_page"), minimum=0)
-        current = _pagination_number(pagination, ("currentPage", "current_page", "page"), minimum=1)
-        if current is not None and current != page:
-            raise ValueError("invalid_item_page")
-        if not rows:
-            if total and page <= total:
-                raise ValueError("incomplete_order_items")
-            return list(items.values())
-        before = len(items)
-        for row in rows:
-            items[str(row["id"])] = row
-        if len(items) == before:
-            raise ValueError("repeated_item_page")
-        if total is not None and page >= total:
-            if page != total:
-                raise ValueError("invalid_item_page_count")
-            return list(items.values())
-        await asyncio.sleep(0.25)
-    raise ValueError("order_items_page_limit")
+    from .order_items_snapshot import fetch_complete_order_items
+    return await fetch_complete_order_items(db, user_id, internal_id, request=call_salla)
 
 
 async def _fetch_salla_order_items(
@@ -1197,32 +1162,8 @@ async def _fetch_salla_order_items(
     Salla Order Details does not embed line items. They are retrieved
     separately through GET /orders/items?order_id=<internal id>.
     """
-    internal_order_id = str(internal_order_id or "").strip()
-
-    if not internal_order_id:
-        raise RuntimeError("Salla order items missing internal order id")
-
-    response = await call_salla(
-        db,
-        user_id,
-        "GET",
-        "/orders/items",
-        params={"order_id": internal_order_id},
-    )
-
-    rows = response.get("data") if isinstance(response, dict) else None
-
-    if not isinstance(rows, list):
-        raise RuntimeError(
-            "Salla List Order Items returned invalid payload: "
-            f"internal_order_id={internal_order_id}"
-        )
-
-    return [
-        dict(row)
-        for row in rows
-        if isinstance(row, dict)
-    ]
+    from .order_items_snapshot import fetch_complete_order_items
+    return await fetch_complete_order_items(db, user_id, internal_order_id, request=call_salla)
 
 
 def _order_item_sku(item: dict) -> str:
@@ -1566,7 +1507,9 @@ async def _fetch_salla_order_details(
             details.get("shipments"),
         ),
     )
-    items = await _enrich_missing_order_item_skus(db, user_id, items)
+    enriched_items = await _enrich_missing_order_item_skus(db, user_id, items)
+    from .order_items_snapshot import CompleteOrderItems
+    items = items.with_rows(enriched_items) if isinstance(items, CompleteOrderItems) else enriched_items
 
     enriched_details = dict(details)
     enriched_details = await _enrich_order_receiving_bank(

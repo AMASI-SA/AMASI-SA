@@ -331,7 +331,8 @@ async def test_verified_order_update_persists_new_carrier_without_provider_calls
 
 
 @pytest.mark.asyncio
-async def test_light_refresh_preserves_verified_current_carrier_and_rich_items(db, monkeypatch):
+@pytest.mark.parametrize("complete_empty", [False, True])
+async def test_refresh_preserves_current_carrier_and_complete_item_membership(db, monkeypatch, complete_empty):
     from order_engine.salla_refresh import refresh_order_from_salla
     monkeypatch.setattr("fulfillment_v2_routes.persist_component_source_snapshot", local_source_persist)
     monkeypatch.setattr("fulfillment_v2_routes.auto_route_instant_order", AsyncMock(return_value={"promoted": False}))
@@ -346,7 +347,9 @@ async def test_light_refresh_preserves_verified_current_carrier_and_rich_items(d
         if path == "/orders/9001":
             return {"data": {"id": "9001", "reference_id": "3001", "date": "2026-10-01T08:00:00Z", "updated_at": "2026-10-01T11:00:00Z"}}
         if path == "/orders/items":
-            return {"data": []}
+            # A sparse item keeps the same native identity while omitting its
+            # rich choices. A complete empty endpoint response means no items.
+            return {"data": [] if complete_empty else [{"id": "i1", "name": "test item", "quantity": 1}]}
         raise AssertionError(path)
     monkeypatch.setattr("order_engine.salla_refresh.call_salla", provider)
     result = await refresh_order_from_salla(db, "u1", "3001", force=True)
@@ -354,7 +357,13 @@ async def test_light_refresh_preserves_verified_current_carrier_and_rich_items(d
     assert paths == ["/orders/9001", "/orders/items"]
     row = await db.unified_orders.find_one({"user_id": "u1"})
     assert row["shipping_company"] == "مندوب الرياض"
-    assert row["raw_by_source"]["salla_direct"]["items"][0]["options"][0]["value"]["name"] == "yes"
+    if complete_empty:
+        assert row["products"] == []
+        assert row["raw_by_source"]["salla_direct"]["items"] == []
+    else:
+        assert row["raw_by_source"]["salla_direct"]["items"][0]["options"][0]["value"]["name"] == "yes"
+        assert row["products"][0]["order_item_id"] == "i1"
+        assert row["products"][0]["options"][0]["value"] == "yes"
     raw = await MongoOrderRepository(db).get_salla_order(user_id="u1", order_number="3001")
     assert map_salla_order(raw.salla_raw).shipping.company == "مندوب الرياض"
     assert map_salla_order(raw.salla_raw).shipping.shipment_id == "s-new"

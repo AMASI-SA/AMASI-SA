@@ -12,6 +12,7 @@ on:
       - "scripts/benchmark_order_cost_authority.py"
       - "scripts/repair_order_cost_reporting.py"
       - "scripts/repair_bundle_base_definition.py"
+      - "scripts/repair_salla_products_projection.py"
       - ".github/workflows/g47-focused-integration.yml"
   workflow_dispatch:
 
@@ -72,6 +73,51 @@ jobs:
           done
           docker exec g47-rs mongosh --port 27018 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'
           docker exec g47-standalone mongosh --port 27019 --quiet --eval 'const h=db.hello(); if(h.setName || !h.isWritablePrimary){quit(1)}'
+      - name: Verify current Salla products projection and bounded repair
+        env:
+          PYTHONPATH: ".:tests"
+        run: |
+          python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
+            tests/test_salla_products_projection.py \
+            tests/test_salla_products_projection_integration.py \
+            tests/test_salla_products_projection_repair.py \
+            tests/test_salla_order_items_snapshot.py \
+            tests/test_salla_raw_snapshot_preservation.py \
+            tests/test_salla_single_order_status_resync.py \
+            tests/test_order_engine_salla_refresh.py \
+            tests/test_salla_scheduled_reconciliation.py \
+            tests/test_salla_sync_component_snapshot.py \
+            tests/test_sold_product_cost_details.py \
+            tests/test_report_raw_option_recovery.py \
+            tests/test_report_option_identity.py \
+            --junitxml="$RUNNER_TEMP/salla-products-projection.xml"
+      - name: Require Salla projection transactions to execute without skips
+        if: always()
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          report = Path(os.environ["RUNNER_TEMP"]) / "salla-products-projection.xml"
+          cases = list(ET.parse(report).iter("testcase"))
+          assert cases, "No Salla projection tests executed"
+          rejected = [(row.get("classname"), row.get("name")) for row in cases
+                      if any(row.find(tag) is not None for tag in ("skipped", "failure", "error"))]
+          assert not rejected, f"Salla projection skipped or failed: {rejected}"
+          expected = {"test_salla_products_projection", "test_salla_products_projection_integration",
+                      "test_salla_products_projection_repair", "test_salla_order_items_snapshot",
+                      "test_salla_sync_component_snapshot"}
+          observed = {part for row in cases for part in row.get("classname", "").split(".")}
+          assert expected <= observed, f"Missing suites: {sorted(expected - observed)}"
+          print(f"Salla projection: {len(cases)} executed cases, zero skips/failures/errors")
+          PY
+      - name: Retain Salla projection and transaction evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: salla-products-projection-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/salla-products-projection.xml
+          if-no-files-found: error
       - name: Run all G47 acceptance suites with real transactions
         shell: bash
         run: |

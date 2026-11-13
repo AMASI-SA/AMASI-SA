@@ -379,20 +379,8 @@ async def _fetch_order_items(
     internal_order_id: str,
 ) -> list[dict[str, Any]]:
     """Fetch authoritative line items through the Orders read permission."""
-    response = await call_salla(
-        db,
-        user_id,
-        "GET",
-        "/orders/items",
-        params={"order_id": str(internal_order_id)},
-    )
-    rows = response.get("data") if isinstance(response, dict) else None
-    if not isinstance(rows, list):
-        raise RuntimeError(
-            "Salla List Order Items returned invalid payload: "
-            f"internal_order_id={internal_order_id}"
-        )
-    return [dict(row) for row in rows if isinstance(row, dict)]
+    from salla_integration.order_items_snapshot import fetch_complete_order_items
+    return await fetch_complete_order_items(db, user_id, internal_order_id, request=call_salla)
 
 
 async def refresh_order_from_salla(

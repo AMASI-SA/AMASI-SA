@@ -1,0 +1,43 @@
+{
+  "task_id": "MZ-SALLA-CURRENT-ITEMS-20261113",
+  "repository": "AMASI-SA/AMASI-SA",
+  "task_branch": "codex/salla-current-items-20261113",
+  "base_branch": "hotfix/prod-snap-meta-final",
+  "base_sha": "8d25f7a6fa9a310b319b753c32457e70987f7c51",
+  "integrated_base_sha": "791b019e20ffe24439393576129783cd4c9dceb3",
+  "state": "source_verified_awaiting_release_authorization",
+  "scope": "Keep root products aligned with accepted native Salla items; bounded explicit repair for existing projection drift.",
+  "completed": [
+    "Reproduced the longest-list merge bug with a failing three-to-one regression before the source change.",
+    "Rebuild products from the same merged raw snapshot within the existing fenced writer.",
+    "Unify complete API item reads, pagination validation and internal complete-empty provenance.",
+    "Retain legacy option representation to preserve unchanged historical cost fingerprints.",
+    "Add explicit dry-run and manifest-bound owner-transaction repair; only products and its source label may change.",
+    "Add real transaction, stale/replay, rollback, cancellation and historical-preservation acceptance cases to existing G47 CI."
+  ],
+  "verification": {
+    "red_regression": "4 failed, 1 passed against original source",
+    "independent_focused_review": "50 passed and 88 subtests passed after empty-proof and historical-fingerprint findings were fixed",
+    "local_integrated_suite": "169 passed, 19 explicit Mongo-gated skips, 88 subtests passed, exit 0; 2 pre-existing Pydantic deprecation warnings",
+    "report_regression": "Synthetic 13 pieces / 961.50 known incomplete cost becomes 11 pieces / 830.50 complete cost at 75.50 per piece",
+    "real_mongo": "Final source G47 run 43493928455, backend job 132122100261: completed success. Salla projection/repair 188 passed plus 88 subtests; G47 acceptance 327 passed plus 127 subtests; historical costs 436 passed. All three zero-skips/failures/errors gates passed. UI tests/build passed in job 132122099927.",
+    "ci_contract_followup": "Updated the old source-text contract to follow the shared reader and distinguish a sparse same-native-ID item from a proven complete empty list. Carrier and choice preservation remain tested. Final local focused suite:74 passed. Independent reviewer reproduced both old failures and the corrected behaviors without changing production source.",
+    "ci_artifacts": {
+      "salla_projection": 14072015460,
+      "g47_core": 14070173334,
+      "historical_cost": 14071486211,
+      "frontend": 14071636062
+    },
+    "adjacent_ci": "All 15 workflows at tested source d4d19d82c3c784cb0842e5e013cfb4c21ccf4bde completed successfully, including G47, native shipping, fulfillment, operational stock/balance, review completion, security, CodeQL and release readiness. This is not evidence of an actual protocol-v5 release rehearsal or deployment."
+  },
+  "review": "Independent review identified and confirmed fixes for unproven empty legacy events and historical option fingerprint changes. Repair call site and frozen-cost regression verified; no additional material source findings.",
+  "production_changed": false,
+  "production_actions": "No merge, release intent, release lease, deploy, order sync or live database repair performed.",
+  "next_safe_action": "After explicit production approval, recheck production base and PR gates, prepare the governed source/intent release under AGENTS.md protocol v5, verify deployed identity, then preview only explicitly reviewed affected orders using the runbook. Apply only a fresh approved manifest and verify order/report results. No broad sync or automatic backfill.",
+  "release_gate": "Production publication and live repair remain separate operations after verified source review under AGENTS.md protocol v5.",
+  "tested_source_sha": "d4d19d82c3c784cb0842e5e013cfb4c21ccf4bde",
+  "tested_source_tree": "f952e7b01290e904263031a532731a8179826fb9",
+  "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1908",
+  "documentation_checkpoint_policy": "Documentation-only final checkpoint; every tested non-documentation file remains unchanged. CI success belongs to the exact tested source above; no new execution is claimed for a documentation-only head.",
+  "continuity_record": "PR #1908 comment 6863057733 is an additional durable handoff. Issue #1006 rejects new comments at 2500; body-update receipts include the task but subsequent GET readback returns the old body, so ledger persistence is not claimed verified."
+}
