@@ -33,7 +33,11 @@ jobs:
           test "$(git ls-files '*AGENTS.md')" = AGENTS.md
           git fetch --no-tags origin "$PATCH_SOURCE"
           git show "$PATCH_SOURCE:scripts/ops_patch_campaign_hover_native.py" > "$RUNNER_TEMP/apply-native-hover.py"
-          python -B "$RUNNER_TEMP/apply-native-hover.py"
+          python -B "$RUNNER_TEMP/apply-native-hover.py" || {
+            git diff --binary > "$RUNNER_TEMP/hover-preparation.patch"
+            sha256sum backend/order_engine/campaign_hover.py frontend/src/pages/OrdersV2.jsx frontend/src/pages/AdvancedDashboard.jsx frontend/src/lib/orderCampaignAttribution.js frontend/src/components/CampaignHoverBadge.jsx frontend/src/hooks/useCampaignHover.js
+            exit 1
+          }
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -103,5 +107,7 @@ jobs:
             ${{ runner.temp }}/hover-focused.log
             ${{ runner.temp }}/hover-full.json
             ${{ runner.temp }}/hover-full.log
+            ${{ runner.temp }}/hover-preparation.patch
+            ${{ runner.temp }}/apply-native-hover.py
           if-no-files-found: ignore
           retention-days: 3
