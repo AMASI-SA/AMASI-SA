@@ -6,7 +6,7 @@ No provider calls and no accounting writes are performed by this module.
 """
 from __future__ import annotations
 
-from collections import defaultdict
+import logging
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Any
@@ -20,6 +20,7 @@ ACCOUNT_DAY_COLLECTION = "mezan_snapchat_campaign_account_day_v2"
 MAX_FACTS_PER_SYNC = 10000
 BATCH_SIZE = 200
 MAX_WINDOW = timedelta(days=7)
+log = logging.getLogger("mezan.snapchat_account_day")
 
 
 def validated_tz(name: Any) -> ZoneInfo | None:
@@ -131,7 +132,10 @@ async def persist_account_local_campaign_facts(
         facts[key] = {"campaign_id": campaign, "start": hour_start,
                       "end": hour_end, "spend_native": spend_native}
     if len(facts) > MAX_FACTS_PER_SYNC:
-        raise ValueError("snapchat_hour_fact_limit_exceeded")
+        # Supplemental analytics cannot invalidate the existing Riyadh sync.
+        # Do not publish an incomplete subset as a complete daily amount.
+        log.warning("snapchat hourly projection skipped: fact limit exceeded (%s)", len(facts))
+        return 0
     if not facts:
         return 0
 
