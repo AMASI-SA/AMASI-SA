@@ -54,6 +54,17 @@ jobs:
           assert artifact['digest'] == 'sha256:9540b61da77b32fdbcf41da7b1905291a94b61cc71f426dbf0050cd4f0cc64b7'
           print('SOURCE_AND_ARTIFACT_PROVENANCE_VERIFIED')
           PY
+      - name: Establish the verified production-base ref in this disposable checkout
+        run: |
+          test "$(git ls-remote origin refs/heads/hotfix/prod-snap-meta-final | cut -f1)" = "$BASE_J"
+          if git show-ref --verify --quiet refs/heads/hotfix/prod-snap-meta-final; then
+            test "$(git rev-parse refs/heads/hotfix/prod-snap-meta-final)" = "$BASE_J"
+          else
+            git branch --no-track hotfix/prod-snap-meta-final "$BASE_J"
+          fi
+          test "$(git rev-parse HEAD)" = "$SOURCE_A"
+          test "$(git rev-parse refs/heads/hotfix/prod-snap-meta-final)" = "$BASE_J"
+          echo "LOCAL_BASE_REF_VERIFIED=$BASE_J"
       - uses: actions/download-artifact@v4
         with:
           name: release-v5-reviewed-intent-candidate
