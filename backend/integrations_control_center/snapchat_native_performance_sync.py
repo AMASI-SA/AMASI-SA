@@ -14,6 +14,9 @@ from typing import Any
 
 import httpx
 
+from .snapchat_native_account_day import (
+    validated_tz, sync_windows, persist_account_local_campaign_facts,
+)
 from .snapchat_native_data_common import (
     ATTRIBUTION_MODEL,
     BUSINESS_TIMEZONE,
@@ -354,10 +357,15 @@ async def sync_snapchat_performance(
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
     endpoint = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats"
-    for window_start, window_end in riyadh_hourly_windows(
-        start_date,
-        end_date,
-    ):
+    account_zone = validated_tz(account.get("timezone"))
+    # Preserve the existing Riyadh-day contract. For a New York account,
+    # include the neighboring hours required to complete its local day.
+    requested_windows = (
+        sync_windows(start_date, end_date, account_zone)
+        if account_zone and str(account_zone) != BUSINESS_TIMEZONE
+        else riyadh_hourly_windows(start_date, end_date)
+    )
+    for window_start, window_end in requested_windows:
         url = endpoint
         params: dict[str, Any] | None = {
             "start_time": window_start.isoformat(timespec="seconds"),
@@ -454,6 +462,8 @@ async def sync_snapchat_performance(
             provider_end=row.get("end_time"),
         )
 
+    # Additional native account-local analytics, using the same HOUR response.
+    # Source Riyadh daily rows above remain unchanged for Dashboard V2.
     saved = 0
     account_daily: dict[str, dict[str, Any]] = {}
     for (external_id, date_string), bucket in sorted(
@@ -493,6 +503,11 @@ async def sync_snapchat_performance(
             provider_breakdown="campaign",
         )
         saved += 1
+    # Failures here are explicit sync failures, never silently treated as
+    # complete spend. Writes are idempotent by account/campaign/hour.
+    saved += await persist_account_local_campaign_facts(
+        context, account, rows, windows=requested_windows,
+    )
     return saved, errors
 
 
