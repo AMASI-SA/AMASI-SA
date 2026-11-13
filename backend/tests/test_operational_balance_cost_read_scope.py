@@ -164,8 +164,34 @@ def test_opt_in_matches_serial_result_and_is_bounded_to_three_reads(monkeypatch)
             boundary.peak = 0
             concurrent = await boundary.visible(boundary.load)
             assert concurrent == serial and concurrent['lines'][('OLD', 'line')]['cost']['line_total'] == 40
-            assert boundary.calls == serial_calls and boundary.peak == 3
+            assert [query for name, query in serial_calls if name == UNITS] == [{
+                'user_id': 'owner', 'plan_id': {'$in': []},
+                'state': {'$ne': 'released'}, 'order_line_id': {'$in': ['line']}}]
+            assert boundary.calls == [(name, query) for name, query in serial_calls if name != UNITS]
+            assert boundary.peak == 3
             assert await boundary.memory[SNAPSHOTS].find({}).to_list(None) == before
+            boundary.settled()
+        finally:
+            boundary.client.close()
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize('opt_in', ['default', 'disabled', 'invalid_truthy'])
+def test_default_and_disabled_opt_in_preserve_empty_units_read(monkeypatch, opt_in):
+    async def exercise():
+        boundary = MotorBoundary(monkeypatch)
+        try:
+            await seed_cost(boundary.memory)
+            options = {'include_corrections': False, 'include_frozen_metadata': True}
+            if opt_in != 'default':
+                options['parallel_reads'] = False if opt_in == 'disabled' else 1
+            result = await boundary.visible(lambda: load_order_cost_authority(
+                boundary.db, 'owner', ORDERS, **options))
+            assert result['lines'][('OLD', 'line')]['cost']['line_total'] == 40
+            assert [query for name, query in boundary.calls if name == UNITS] == [{
+                'user_id': 'owner', 'plan_id': {'$in': []},
+                'state': {'$ne': 'released'}, 'order_line_id': {'$in': ['line']}}]
+            assert boundary.peak == 1
             boundary.settled()
         finally:
             boundary.client.close()
@@ -227,6 +253,10 @@ def test_snapshot_wrappers_and_unowned_calls_stay_serial(monkeypatch, kind):
             else:
                 await boundary.visible(lambda: boundary.load(database=database), database=database)
             assert boundary.peak == 1
+            assert [query for name, query in boundary.calls if name == UNITS] == [{
+                'user_id': 'different-owner' if kind == 'wrong_owner' else 'owner',
+                'plan_id': {'$in': []}, 'state': {'$ne': 'released'},
+                'order_line_id': {'$in': ['line']}}]
             boundary.settled()
         finally:
             boundary.client.close()

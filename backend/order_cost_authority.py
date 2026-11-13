@@ -609,10 +609,12 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
             stored, lifecycle, plans = await _parallel_inputs((read_stored, read_lifecycle, read_plans))
         else:
             stored, lifecycle, plans = await read_stored(), await read_lifecycle(), await read_plans()
+        # Default readers and session wrappers retain their audited read shape.
+        # Only the positively owned visible path may omit a provably empty read.
         units = await _read(db, UNITS, {"user_id": user_id, "plan_id": {"$in": [p["_id"] for p in plans]},
             "state": {"$ne": "released"}, "order_line_id": {"$in": sorted(aliases)}}, {"_id": 0, "plan_id": 1, "order_line_id": 1,
             "unit_index": 1, "state": 1, "selected_context": 1, "bundle_leaves": 1},
-            max(10000, sum(int(decimal(item.get("quantity", 1)) or 0) for number in selected for item in order_items(order_map[number]))) + limit) if plans else []
+            max(10000, sum(int(decimal(item.get("quantity", 1)) or 0) for number in selected for item in order_items(order_map[number]))) + limit) if plans or not parallel_reads else []
         corrections = await _read(db, CORRECTIONS, {**keys, "state": "applied", "order_item_id": {"$in": sorted(aliases)}},
                                   {"_id": 0}, max(1, limit * 4)) if include_corrections else []
         item_maps = {}
