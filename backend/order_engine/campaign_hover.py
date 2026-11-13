@@ -170,6 +170,10 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
     native_spends = []
     if dates:
         for collection, query, label in (
+            ("mezan_snapchat_campaign_account_day_v2",
+             {"user_id": user_id, "campaign_id": {"$in": campaign_ids},
+              "date": {"$in": dates},
+              "source_mode": "snapchat_native_account_day_v2"}, "snapchat_local"),
             ("mezan_snapchat_performance_daily_v2",
              {"user_id": user_id, "entity_type": "campaign",
               "date": {"$in": dates},
@@ -183,7 +187,9 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
             rows = await db[collection].find(
                 query, {"_id": 0, "date": 1, "ad_account_id": 1,
                         "campaign_id": 1, "external_id": 1, "campaign_name": 1,
-                        "spend_sar": 1, "updated_at": 1},
+                        "spend_sar": 1, "updated_at": 1,
+                        "account_timezone": 1, "coverage_status": 1,
+                        "hours_observed": 1},
             ).limit(MAX_SPEND_ROWS + 1).to_list(MAX_SPEND_ROWS + 1)
             native_spends.extend((label, item) for item in rows)
     truncated_spend = (len(raw_spends) > MAX_SPEND_ROWS or
@@ -214,7 +220,9 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         for account, provider, start, day in accounts
         if account.get("external_account_id")
     }
-    for provider, row in native_spends[:MAX_SPEND_ROWS]:
+    for raw_provider, row in native_spends[:MAX_SPEND_ROWS]:
+        is_account_day = raw_provider == "snapchat_local"
+        provider = "snapchat" if is_account_day else raw_provider
         cid = _text(row.get("campaign_id") or row.get("external_id"))
         account_id = _text(row.get("ad_account_id")).removeprefix("act_")
         detail = external_lookup.get((provider, account_id))
@@ -223,7 +231,11 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         account, _, start, day = detail
         if row.get("date") != day:
             continue
-        if provider == "snapchat" and _text(account.get("timezone")) != "Asia/Riyadh":
+        if is_account_day:
+            if (_text(row.get("account_timezone")) != _text(account.get("timezone")) or
+                _text(row.get("coverage_status")) != "provisional_hourly"):
+                continue
+        elif provider == "snapchat" and _text(account.get("timezone")) != "Asia/Riyadh":
             continue
         key = (cid, _text(account.get("id")))
         if key in seen:
@@ -236,6 +248,8 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
                 "spend_sar": row.get("spend_sar"),
                 "fetched_at": row.get("updated_at"),
                 "dimension_keys": {"campaign_name": row.get("campaign_name") or cid},
+                "spend_coverage": row.get("coverage_status") if is_account_day else None,
+                "hours_observed": row.get("hours_observed") if is_account_day else None,
             },
         })
 
@@ -354,6 +368,9 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         record["date"] = detail["date"]
         spend_row = detail["spend_row"]
         record["updated_at"] = spend_row.get("fetched_at")
+        if spend_row.get("spend_coverage"):
+            record["spend_coverage"] = spend_row["spend_coverage"]
+            record["hours_observed"] = spend_row.get("hours_observed")
         record["campaign_name"] = _text((spend_row.get("dimension_keys") or {}).get("campaign_name"))
         currency = _text(spend_row.get("currency_native") or account.get("currency_native")).upper()
         amount = _amount(spend_row.get("spend_native"))
