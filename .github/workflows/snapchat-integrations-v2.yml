@@ -11,6 +11,7 @@ on:
       - "backend/tests/test_snapchat_native_integrations_v2.py"
       - "backend/tests/test_snapchat_native_data_sync_v2.py"
       - "backend/tests/test_snapchat_account_local_campaign_day.py"
+      - "backend/tests/test_campaign_hover_daily.py"
       - "backend/tests/test_snapchat_native_async_selected_reads.py"
       - "backend/tests/test_snapchat_sync_30_day_window.py"
       - "backend/snapchat_v2/**"
@@ -57,6 +58,7 @@ jobs:
           python -m py_compile tests/test_snapchat_native_integrations_v2.py
           python -m py_compile tests/test_snapchat_native_data_sync_v2.py
           python -m py_compile tests/test_snapchat_account_local_campaign_day.py
+          python -m py_compile tests/test_campaign_hover_daily.py
           python -m py_compile tests/test_snapchat_native_async_selected_reads.py
           python -m py_compile tests/test_snapchat_entity_pagination_v2.py
           python -m py_compile tests/test_snapchat_native_tracking_diagnostics_v2.py
@@ -70,6 +72,7 @@ jobs:
           python -m pytest
           tests/test_snapchat_native_data_sync_v2.py
           tests/test_snapchat_account_local_campaign_day.py
+          tests/test_campaign_hover_daily.py
           tests/test_snapchat_native_async_selected_reads.py
           tests/test_snapchat_sync_30_day_window.py
           tests/test_snapchat_entity_pagination_v2.py
