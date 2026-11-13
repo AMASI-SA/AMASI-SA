@@ -41,6 +41,8 @@ jobs:
           subprocess.check_call(['git', 'merge-base', '--is-ancestor', base, source])
           remote = git('ls-remote', 'origin', 'refs/heads/hotfix/prod-snap-meta-final').split()[0]
           assert remote == base, 'Production advanced; a fresh candidate is required'
+          target = git('ls-remote', 'origin', 'refs/heads/' + os.environ['TARGET_BRANCH']).split()[0]
+          assert target == source, 'Release branch must exist at the exact reviewed source A'
           assert not git('diff', '--name-only', base, source, '--', 'release/release-intent-v5.json')
           def api(suffix):
               req = urllib.request.Request('https://api.github.com/repos/AMASI-SA/AMASI-SA/' + suffix,
@@ -110,13 +112,12 @@ jobs:
                             'release_id': intent['runtime_identity']['release_id'],
                             'deployment': subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()}))
           PY
-      - name: Push a new release branch only, never production
+      - name: Fast-forward the isolated release branch with intent only, never production
         run: |
           test "$(git ls-remote origin refs/heads/hotfix/prod-snap-meta-final | cut -f1)" = "$BASE_J"
-          if git ls-remote --exit-code origin "refs/heads/$TARGET_BRANCH" >/dev/null 2>&1; then
-            echo 'Target branch already exists; refusing to overwrite.'
-            exit 1
-          fi
+          test "$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | cut -f1)" = "$SOURCE_A"
+          test "$(git rev-parse HEAD^)" = "$SOURCE_A"
+          test "$(git diff --name-only "$SOURCE_A" HEAD)" = 'release/release-intent-v5.json'
           git push origin "HEAD:refs/heads/$TARGET_BRANCH"
           echo "INTENT_ONLY_BRANCH=$TARGET_BRANCH"
           echo "INTENT_ONLY_COMMIT=$(git rev-parse HEAD)"
