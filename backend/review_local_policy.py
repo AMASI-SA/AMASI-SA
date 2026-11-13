@@ -255,7 +255,8 @@ def historical_assembly_evidence(*, user_id: str, workflow: dict, canonical: dic
 
 
 def historical_assembly_allowed(evidence: HistoricalAssemblyEvidence | None,
-                                workflow: dict, *, virtual: bool = False, current_order: Any = None) -> bool:
+                                workflow: dict, *, virtual: bool = False, current_order: Any = None,
+                                received_physical: bool = False) -> bool:
     if (evidence is None or workflow.get("completion_mode") is not None
             or workflow.get("user_id") != evidence.user_id
             or workflow.get("order_number") != evidence.order_number):
@@ -264,6 +265,12 @@ def historical_assembly_allowed(evidence: HistoricalAssemblyEvidence | None,
         getattr(current_order, "status", None), getattr(current_order, "status_native", None),
     ):
         return False  # Independent evidence cannot override a mapped blocking status.
+    if (received_physical and not virtual and _text(workflow.get("stage")) == "reviewed"
+            and evidence.ready_in_progress):
+        # Historical accepted plans may also have a reviewed workflow. Caller
+        # must prove physical supplier + employee receipt and current unit
+        # reservation before entering this narrow exception.
+        return True
     return _historical_stage_allowed(workflow, evidence.in_progress, virtual=virtual)
 
 
@@ -279,6 +286,7 @@ def _historical_stage_allowed(workflow: dict, in_progress: bool, *, virtual: boo
 def assembly_execution_allowed(
     order: Any, workflow: dict[str, Any], *,
     approved_workflow: dict[str, Any] | None = None, virtual: bool = False,
+    received_physical: bool = False,
 ) -> bool:
     """Shared search/physical/virtual decision; callers retain piece guards.
 
@@ -293,7 +301,10 @@ def assembly_execution_allowed(
     stage = _text(workflow.get("stage"))
     if mode == LOCAL_COMPLETION_MODE:
         stages = {"in_progress", "ready_to_ship", "completed"}
-        if virtual:
+        if virtual or received_physical:
+            # A physical Ready request must carry independently proved supplier
+            # and employee receipt; the caller is responsible for that proof.
+            # Virtual review-stage execution keeps its existing semantics.
             stages.add("reviewed")
         return local_review_stage_eligible(order, approved_workflow, stages)
     in_progress = _normalized(getattr(order, "status", None)) == "in progress"

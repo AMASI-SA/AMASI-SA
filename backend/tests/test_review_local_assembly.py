@@ -411,6 +411,162 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             json={"client_request_id": "receive-" + piece["piece_id"]},
         )
 
+    async def _reviewed_supplier_piece_fixture(self, *, receive=True):
+        """Reproduce a mixed reviewed order without using production data."""
+        self.mount_assignment()
+        await self.complete_review(mixed=True)
+        supplier = [
+            row for row in await self.catalog_cards()
+            if row["source_lines"][0]["order_item_id"] == self.supplier_line_id
+        ]
+        self.assertTrue(supplier)
+        assignment = await self.assign_cards(supplier[:1], "reviewed-received-physical")
+        self.assertEqual(assignment.status_code, 200, assignment.text)
+        piece = await self.db[pieces.PIECES].find_one({
+            "user_id": "owner", "order_number": "local-assembly",
+            "order_item_id": self.supplier_line_id,
+        })
+        self.assertIsNotNone(piece)
+        await self.ready_for_receipt(piece)
+        if receive:
+            receipt = await self.receive(piece)
+            self.assertEqual(receipt.status_code, 200, receipt.text)
+        # Model the exact interrupted review-stage transition seen on the
+        # affected order, keeping review approval and the real receipt intact.
+        await self.db[completion.WORKFLOWS].update_one(
+            {"user_id": "owner", "order_number": "local-assembly"},
+            {"$set": {"stage": "reviewed"}},
+        )
+        self.assertEqual((await self.workflow())["stage"], "reviewed")
+        return await self.db[pieces.PIECES].find_one({"piece_id": piece["piece_id"]})
+
+    async def _reviewed_supplier_search(self, piece_id):
+        response = await self.client.get(
+            "/preparation-work-v1/assembly/search?q=local-assembly"
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["stage"], "reviewed")
+        rows = response.json()["pieces"]
+        return next(row for row in rows if row["piece_id"] == piece_id), rows
+
+    async def test_reviewed_received_physical_search_matches_direct_readiness(self):
+        physical = await self._reviewed_supplier_piece_fixture()
+        self.assertEqual(physical["status"], pieces.PIECE_STATUS_READY_FOR_ASSEMBLY)
+        self.assertEqual(physical["preparation_receipt_status"], "received")
+        row, rows = await self._reviewed_supplier_search(physical["piece_id"])
+        self.assertEqual(row["assembly_blocker_code"], None)
+        self.assertTrue(row["can_mark_ready"])
+        self.assertTrue(any(r["is_direct_assembly"] and r["can_mark_ready"] for r in rows))
+        self.assertEqual((await self.workflow())["stage"], "reviewed")
+        # This observational endpoint must not create/update component audit rows.
+        before_intent = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({
+            "user_id": "owner", "order_number": "local-assembly",
+        })
+        await self._reviewed_supplier_search(physical["piece_id"])
+        self.assertEqual(
+            await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({
+                "user_id": "owner", "order_number": "local-assembly",
+            }),
+            before_intent,
+        )
+
+    async def test_reviewed_received_physical_ready_promotes_stage_without_shipping(self):
+        physical = await self._reviewed_supplier_piece_fixture()
+        marked = await self.mark(physical["piece_id"])
+        self.assertTrue(marked["ok"])
+        self.assertFalse(marked["idempotent"])
+        self.assertFalse(marked["progress"]["order_completed"])
+        self.assertEqual((await self.workflow())["stage"], "in_progress")
+        self.assertEqual(
+            await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0
+        )
+        self.assertEqual(
+            await self.db[pieces.PIECE_EVENTS].count_documents({
+                "piece_id": physical["piece_id"],
+                "event_type": "assembly_piece_marked_ready",
+            }), 1,
+        )
+
+    async def test_reviewed_received_physical_ready_retry_does_not_consume_twice(self):
+        physical = await self._reviewed_supplier_piece_fixture()
+        first = await self.mark(physical["piece_id"])
+        self.assertFalse(first["idempotent"])
+        after_first_stock = await self.on_hand()
+        retry = await self.mark(physical["piece_id"])
+        self.assertTrue(retry["idempotent"])
+        self.assertEqual(await self.on_hand(), after_first_stock)
+        self.assertEqual(
+            await self.db[pieces.PIECE_EVENTS].count_documents({
+                "piece_id": physical["piece_id"],
+                "event_type": "assembly_piece_marked_ready",
+            }), 1,
+        )
+
+    async def test_reviewed_supplier_without_employee_receipt_stays_blocked(self):
+        physical = await self._reviewed_supplier_piece_fixture(receive=False)
+        row, rows = await self._reviewed_supplier_search(physical["piece_id"])
+        self.assertFalse(row["can_mark_ready"])
+        self.assertTrue(any(r["is_direct_assembly"] and r["can_mark_ready"] for r in rows))
+        rejected = await self.mark_piece(physical["piece_id"])
+        self.assertEqual(rejected.status_code, 409, rejected.text)
+        self.assertEqual((await self.workflow())["stage"], "reviewed")
+
+    async def test_reviewed_supplier_completed_receipt_with_pending_service_or_hold_is_blocked(self):
+        physical = await self._reviewed_supplier_piece_fixture()
+        selector = {"user_id": "owner", "piece_id": physical["piece_id"]}
+        for patch in (
+            {"services": [{"service_name": "Synthetic service", "status": "pending"}]},
+            {"services": [], "active_hold_id": "synthetic-hold"},
+        ):
+            await self.db[pieces.PIECES].update_one(selector, {"$set": patch})
+            row, _ = await self._reviewed_supplier_search(physical["piece_id"])
+            self.assertFalse(row["can_mark_ready"])
+            rejected = await self.mark_piece(physical["piece_id"])
+            self.assertEqual(rejected.status_code, 409, rejected.text)
+            self.assertEqual((await self.workflow())["stage"], "reviewed")
+        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({
+            "event_type": "assembly_piece_marked_ready",
+        }), 0)
+
+    async def test_reviewed_supplier_missing_approved_source_revision_blocks_ready(self):
+        physical = await self._reviewed_supplier_piece_fixture()
+        lifecycle = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({
+            "user_id": "owner", "order_number": "local-assembly",
+        })
+        self.assertIsNotNone(lifecycle)
+        self.assertIsNotNone(lifecycle.get("snapshot_revision"))
+        before_stock = await self.on_hand()
+        await self.db[fulfillment.COMPONENT_LIFECYCLES].update_one(
+            {"_id": lifecycle["_id"]},
+            {"$unset": {"snapshot_revision": ""}},
+        )
+        row, _ = await self._reviewed_supplier_search(physical["piece_id"])
+        self.assertFalse(row["can_mark_ready"])
+        self.assertEqual(row["assembly_blocker_code"], "component_source_snapshot_stale")
+        blocked = await self.mark_piece(physical["piece_id"])
+        self.assertEqual(blocked.status_code, 409, blocked.text)
+        self.assertEqual(
+            blocked.json()["detail"]["code"], "component_source_snapshot_stale",
+        )
+        self.assertEqual(await self.on_hand(), before_stock)
+        self.assertEqual((await self.workflow())["stage"], "reviewed")
+
+    async def test_reviewed_supplier_stale_component_plan_blocks_search_and_write(self):
+        physical = await self._reviewed_supplier_piece_fixture()
+        plan = await self.db[PLANS].find_one({
+            "user_id": "owner", "order_id": "local-assembly",
+        })
+        self.assertIsNotNone(plan, "Test requires an actual component reservation plan")
+        await self.db[PLANS].update_one({"_id": plan["_id"]}, {
+            "$set": {"state": "cancelled"},
+        })
+        row, _ = await self._reviewed_supplier_search(physical["piece_id"])
+        self.assertFalse(row["can_mark_ready"])
+        rejected = await self.mark_piece(physical["piece_id"])
+        self.assertEqual(rejected.status_code, 409, rejected.text)
+        self.assertEqual((await self.workflow())["stage"], "reviewed")
+
+
     async def test_partial_receipt_preserves_mixed_remaining_units_then_completes(self):
         self.mount_assignment()
         await self.complete_review(mixed=True)

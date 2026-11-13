@@ -211,6 +211,225 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db[UNITS].count_documents({"state": "released"}), 2)
         self.assertEqual(await self.on_hand(), 20)
 
+    async def _seed_approved_historical_snapshot_revision(self, *, order_number="order-1"):
+        """Give the explicitly accepted legacy fixture a current source watermark."""
+        await self.db[fulfillment.COMPONENT_LIFECYCLES].update_one(
+            {"user_id": "owner", "order_number": order_number},
+            {"$set": {"snapshot_revision": 0}},
+        )
+        await self.db.unified_orders.update_one(
+            {"user_id": "owner", "order_number": order_number},
+            {"$set": {"g47_salla_snapshot.revision": 0}},
+        )
+
+    async def _assert_reviewed_historical_snapshot_preserves_virtual_gates(self, *, missing):
+        order = self.order(quantity=1)
+        direct_item = order.items[0].model_copy(update={"order_item_id": "direct-line"})
+        order = order.model_copy(update={"items": [order.items[0], direct_item]})
+        response, _ = await self.accept(order)
+        self.assertEqual(response.status_code, 200, response.text)
+        await self._seed_approved_historical_snapshot_revision()
+        await self.seed_physical(quantity=1)
+        await self.db[fulfillment.WORKFLOWS].update_one(
+            {"user_id": "owner", "order_number": "order-1"},
+            {"$set": {
+                "stage": "reviewed",
+                "items": [{
+                    "order_item_id": "direct-line", "product_id": "p",
+                    "preparation_route": "direct_assembly", "quantity": 1,
+                    "direct_assembly_piece_ids": ["direct-regression"],
+                }],
+                "operational_items": [{
+                    "operational_item_id": "operational-regression",
+                    "name": "Synthetic operational work",
+                }],
+            }},
+        )
+        now = datetime.now(timezone.utc)
+        await self.db[pieces.PIECES].update_one(
+            {"user_id": "owner", "piece_id": "piece-1"},
+            {"$set": {
+                "supplier_dispatch_status": "received", "received_at": now,
+                "preparation_receipt_status": "received",
+                "preparation_received_at": now,
+                "preparation_received_by": "synthetic-receiver",
+            }},
+        )
+        self.context["permissions"].add("fulfillment.ready.read")
+        initial = await self.client.get("/preparation-work-v1/assembly/search?q=order-1")
+        self.assertEqual(initial.status_code, 200, initial.text)
+        initial_rows = {row["piece_id"]: row for row in initial.json()["pieces"]}
+        self.assertEqual(set(initial_rows), {
+            "piece-1", "direct-regression", "operational-regression",
+        })
+        self.assertTrue(all(row["can_mark_ready"] for row in initial_rows.values()))
+
+        if missing:
+            await self.db[fulfillment.COMPONENT_LIFECYCLES].update_one(
+                {"user_id": "owner", "order_number": "order-1"},
+                {"$unset": {"snapshot_revision": ""}},
+            )
+        else:
+            await self.db.unified_orders.update_one(
+                {"user_id": "owner", "order_number": "order-1"},
+                {"$set": {"g47_salla_snapshot.revision": 1}},
+            )
+        before_lifecycle = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({})
+        before_stock = await self.on_hand()
+        preview = await self.client.get("/preparation-work-v1/assembly/search?q=order-1")
+        self.assertEqual(preview.status_code, 200, preview.text)
+        rows = {row["piece_id"]: row for row in preview.json()["pieces"]}
+        self.assertFalse(rows["piece-1"]["can_mark_ready"])
+        self.assertEqual(rows["piece-1"]["assembly_blocker_code"], "component_source_snapshot_stale")
+        for piece_id in ("direct-regression", "operational-regression"):
+            self.assertTrue(rows[piece_id]["can_mark_ready"], piece_id)
+            self.assertIsNone(rows[piece_id]["assembly_blocker_code"])
+        self.assertEqual(
+            await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({}), before_lifecycle,
+        )
+        blocked = await self.mark_piece("piece-1")
+        self.assertEqual(blocked.status_code, 409, blocked.text)
+        self.assertEqual(blocked.json()["detail"]["code"], "component_source_snapshot_stale")
+        self.assertEqual(await self.on_hand(), before_stock)
+        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({}), 0)
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
+        workflow = await self.db[fulfillment.WORKFLOWS].find_one({"order_number": "order-1"})
+        self.assertEqual(workflow["stage"], "reviewed")
+
+        # The existing shared execution guard must still protect every row.
+        await self.db[fulfillment.COMPONENT_LIFECYCLES].update_one(
+            {"user_id": "owner", "order_number": "order-1"},
+            {"$set": {"cancelled": True}},
+        )
+        invalid_plan = await self.client.get("/preparation-work-v1/assembly/search?q=order-1")
+        self.assertEqual(invalid_plan.status_code, 200, invalid_plan.text)
+        self.assertTrue(all(
+            not row["can_mark_ready"] and row["assembly_blocker_code"] == "component_execution_blocked"
+            for row in invalid_plan.json()["pieces"]
+        ))
+
+    async def test_reviewed_historical_missing_revision_preserves_virtual_readiness(self):
+        await self._assert_reviewed_historical_snapshot_preserves_virtual_gates(missing=True)
+
+    async def test_reviewed_historical_newer_revision_preserves_virtual_readiness(self):
+        await self._assert_reviewed_historical_snapshot_preserves_virtual_gates(missing=False)
+
+    async def test_reviewed_historical_received_supplier_ready_promotes_without_shipping(self):
+        response, _ = await self.accept()
+        self.assertEqual(response.status_code, 200, response.text)
+        await self._seed_approved_historical_snapshot_revision()
+        await self.seed_physical()
+        await self.db[fulfillment.WORKFLOWS].update_one(
+            {"user_id": "owner", "order_number": "order-1"},
+            {"$set": {"stage": "reviewed"}},
+        )
+        now = datetime.now(timezone.utc)
+        await self.db[pieces.PIECES].update_one(
+            {"user_id": "owner", "piece_id": "piece-1"},
+            {"$set": {
+                "supplier_dispatch_status": "received",
+                "received_at": now,
+                "preparation_receipt_status": "received",
+                "preparation_received_at": now,
+                "preparation_received_by": "synthetic-receiver",
+            }},
+        )
+        self.context["permissions"].add("fulfillment.ready.read")
+        preview = await self.client.get(
+            "/preparation-work-v1/assembly/search?q=order-1"
+        )
+        self.assertEqual(preview.status_code, 200, preview.text)
+        self.assertEqual(preview.json()["stage"], "reviewed")
+        rows = {row["piece_id"]: row for row in preview.json()["pieces"]}
+        self.assertTrue(rows["piece-1"]["can_mark_ready"])
+        self.assertFalse(rows["piece-2"]["can_mark_ready"])
+        before_stock = await self.on_hand()
+        ready = await self.mark_piece("piece-1")
+        self.assertEqual(ready.status_code, 200, ready.text)
+        self.assertFalse(ready.json()["idempotent"])
+        self.assertFalse(ready.json()["progress"]["order_completed"])
+        self.assertEqual(ready.json()["progress"]["stage"], "in_progress")
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
+        after_stock = await self.on_hand()
+        self.assertLess(after_stock, before_stock)
+        repeat = await self.mark_piece("piece-1")
+        self.assertEqual(repeat.status_code, 200, repeat.text)
+        self.assertTrue(repeat.json()["idempotent"])
+        self.assertEqual(await self.on_hand(), after_stock)
+        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({
+            "piece_id": "piece-1", "event_type": "assembly_piece_marked_ready",
+        }), 1)
+        # Last completed unit may close the historical review recovery, but
+        # only after exact plan/source-unit coverage and all receipt proofs.
+        await self.db[pieces.PIECES].update_one(
+            {"user_id": "owner", "piece_id": "piece-2"},
+            {"$set": {
+                "supplier_dispatch_status": "received",
+                "received_at": now,
+                "preparation_receipt_status": "received",
+                "preparation_received_at": now,
+                "preparation_received_by": "synthetic-receiver",
+            }},
+        )
+        last = await self.mark_piece("piece-2")
+        self.assertEqual(last.status_code, 200, last.text)
+        # This legacy fixture intentionally has NO authoritative Salla item
+        # list in unified_orders; even two ready pieces must not fabricate a
+        # complete source order or create a shipment.
+        self.assertFalse(last.json()["progress"]["order_completed"])
+        self.assertEqual(last.json()["progress"]["stage"], "in_progress")
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
+        self.assertEqual(await self.on_hand(), after_stock - (before_stock - after_stock))
+        rows = await self.db[pieces.PIECES].find({
+            "user_id": "owner", "order_number": "order-1",
+        }).to_list(None)
+        plan = await self.db[PLANS].find_one({
+            "user_id": "owner", "order_id": "order-1",
+        })
+        units = await self.db[UNITS].find({
+            "user_id": "owner", "plan_id": plan["_id"],
+        }).to_list(None)
+        identities = {
+            (unit["order_line_id"], unit["unit_index"]) for unit in units
+        }
+        # Exact current-source coverage succeeds when independent canonical
+        # order and component unit proofs exist; it is intentionally not
+        # inferred from the thin legacy fixture in the HTTP route above.
+        self.assertTrue(pieces._historical_reviewed_source_units_covered(
+            self.order(status="in_progress"), rows, identities,
+        ))
+        replay = await self.mark_piece("piece-2")
+        self.assertEqual(replay.status_code, 200, replay.text)
+        self.assertTrue(replay.json()["idempotent"])
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
+
+    async def test_reviewed_historical_missing_source_unit_cannot_create_shipment(self):
+        response, _ = await self.accept()
+        self.assertEqual(response.status_code, 200, response.text)
+        await self._seed_approved_historical_snapshot_revision()
+        # The source and stock plan require two units; only one card exists.
+        await self.seed_physical(quantity=1)
+        await self.db[fulfillment.WORKFLOWS].update_one(
+            {"user_id": "owner", "order_number": "order-1"},
+            {"$set": {"stage": "reviewed"}},
+        )
+        now = datetime.now(timezone.utc)
+        await self.db[pieces.PIECES].update_one(
+            {"user_id": "owner", "piece_id": "piece-1"},
+            {"$set": {
+                "supplier_dispatch_status": "received",
+                "received_at": now,
+                "preparation_receipt_status": "received",
+                "preparation_received_at": now,
+                "preparation_received_by": "synthetic-receiver",
+            }},
+        )
+        ready = await self.mark_piece("piece-1")
+        self.assertEqual(ready.status_code, 200, ready.text)
+        self.assertFalse(ready.json()["progress"]["order_completed"])
+        self.assertEqual(ready.json()["progress"]["stage"], "in_progress")
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
+
     async def test_physical_completion_rolls_back_stock_and_ready_state_on_event_failure(self):
         response, _ = await self.accept()
         self.assertEqual(response.status_code, 200, response.text)
