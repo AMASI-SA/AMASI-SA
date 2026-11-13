@@ -8,6 +8,7 @@ Reads never reserve stock, rewrite orders, create snapshots, or post journals.
 """
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -526,10 +527,55 @@ async def _read_snapshots(db: Any, collection: str, query: dict, projection: dic
     return rows
 
 
+def _request_parallel_reads(db: Any, user_id: str, enabled: bool) -> bool:
+    if enabled is not True:
+        return False
+    from motor.motor_asyncio import AsyncIOMotorDatabase
+    from operational_demand_refresh import demand_context
+    from review_acceptance_config_guard import AcceptanceConfigDatabase
+    context = demand_context()
+    # A missing public session attribute is not proof: restricted wrappers can
+    # hide their snapshot session in slots/private fields. The application's
+    # exact acceptance adapter also delegates these reads without a session,
+    # but only when its immediate database is exact raw Motor. Keep the original
+    # adapter for both request ownership and every query; never unwrap it.
+    ordinary = (type(db) is AsyncIOMotorDatabase
+                or type(db) is AcceptanceConfigDatabase and type(db._db) is AsyncIOMotorDatabase)
+    allowed = (ordinary and context is not None
+               and context.db is db and context.owner == user_id)
+    if allowed:
+        context.require_connected()
+    return allowed
+
+
+async def _parallel_inputs(readers):
+    """Three request-owned reads; preserve result/error order and join cleanup."""
+    tasks = [asyncio.create_task(reader()) for reader in readers]
+    try:
+        # Await in the old serial order, including when a later read fails
+        # first. Completion order must not change the error exposed to callers.
+        return [await asyncio.shield(task) for task in tasks]
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        settled = asyncio.gather(*tasks, return_exceptions=True)
+        cancelled = False
+        while not settled.done():
+            try:
+                await asyncio.shield(settled)
+            except asyncio.CancelledError:
+                cancelled = True
+        settled.result()
+        if cancelled:
+            raise asyncio.CancelledError
+
+
 async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *, budget: Any = None,
                                     include_corrections: bool = True,
                                     include_frozen_metadata: bool = False,
-                                    current_profitability_estimate: bool | None = None) -> dict:
+                                    current_profitability_estimate: bool | None = None,
+                                    parallel_reads: bool = False) -> dict:
     """Bounded, tenant-scoped batches, never one DB query per order/component."""
     from bundle_catalog_v2 import BUNDLES
     from stock_component_consumption_service import PLANS, UNITS
@@ -537,6 +583,7 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
     order_map = {str(order.get("order_number") or ""): order for order in orders if order.get("order_number")}
     if not order_map:
         return result
+    parallel_reads = _request_parallel_reads(db, user_id, parallel_reads)
     # This small metadata read is tenant scoped. It only guards unknown bundles;
     # current catalog composition is never used as historical price evidence.
     definitions = await _read(db, BUNDLES, {"user_id": user_id, "product_type": "composite"},
@@ -548,18 +595,30 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
         keys = {"user_id": user_id, "order_number": {"$in": selected}}
         limit = max(1, sum(len(order_items(order_map[number])) for number in selected))
         aliases = {alias for number in selected for item in order_items(order_map[number]) for alias in line_aliases(item)}
-        stored = await _read(db, SNAPSHOTS, {**keys, "order_item_id": {"$in": sorted(aliases)}}, {"_id": 0}, max(1, limit * 4))
-        lifecycle = await _read_snapshots(db, LIFECYCLES, keys,
-            {"_id": 0, "order_number": 1, "bundle_intake_snapshots": 1,
-             "reporting_cost_snapshots": 1, "source_fingerprint": 1}, "bundle_intake_snapshots", len(selected), full=include_frozen_metadata)
-        plans = await _read_snapshots(db, PLANS, {"user_id": user_id, "order_id": {"$in": selected},
-            "bundle_snapshots": {"$exists": True}},
-            {"_id": 1, "order_id": 1, "bundle_snapshots": 1, "reconciliation_required": 1, "lines": 1},
-            "bundle_snapshots", len(selected), full=include_frozen_metadata)
+        async def read_stored():
+            return await _read(db, SNAPSHOTS, {**keys, "order_item_id": {"$in": sorted(aliases)}}, {"_id": 0}, max(1, limit * 4))
+
+        async def read_lifecycle():
+            return await _read_snapshots(db, LIFECYCLES, keys,
+                {"_id": 0, "order_number": 1, "bundle_intake_snapshots": 1,
+                 "reporting_cost_snapshots": 1, "source_fingerprint": 1}, "bundle_intake_snapshots", len(selected), full=include_frozen_metadata)
+
+        async def read_plans():
+            return await _read_snapshots(db, PLANS, {"user_id": user_id, "order_id": {"$in": selected},
+                "bundle_snapshots": {"$exists": True}},
+                {"_id": 1, "order_id": 1, "bundle_snapshots": 1, "reconciliation_required": 1, "lines": 1},
+                "bundle_snapshots", len(selected), full=include_frozen_metadata)
+
+        if parallel_reads:
+            stored, lifecycle, plans = await _parallel_inputs((read_stored, read_lifecycle, read_plans))
+        else:
+            stored, lifecycle, plans = await read_stored(), await read_lifecycle(), await read_plans()
+        # Default readers and session wrappers retain their audited read shape.
+        # Only the positively owned visible path may omit a provably empty read.
         units = await _read(db, UNITS, {"user_id": user_id, "plan_id": {"$in": [p["_id"] for p in plans]},
             "state": {"$ne": "released"}, "order_line_id": {"$in": sorted(aliases)}}, {"_id": 0, "plan_id": 1, "order_line_id": 1,
             "unit_index": 1, "state": 1, "selected_context": 1, "bundle_leaves": 1},
-            max(10000, sum(int(decimal(item.get("quantity", 1)) or 0) for number in selected for item in order_items(order_map[number]))) + limit)
+            max(10000, sum(int(decimal(item.get("quantity", 1)) or 0) for number in selected for item in order_items(order_map[number]))) + limit) if plans or not parallel_reads else []
         corrections = await _read(db, CORRECTIONS, {**keys, "state": "applied", "order_item_id": {"$in": sorted(aliases)}},
                                   {"_id": 0}, max(1, limit * 4)) if include_corrections else []
         item_maps = {}

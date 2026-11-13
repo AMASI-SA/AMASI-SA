@@ -73,6 +73,33 @@ const renderConfirmation = async (controls = control(), rows = [eligible()]) => 
 };
 const openConfirmation = async controls => { await renderConfirmation(controls); await click("طلبات غير مؤكدة"); };
 
+test.each(["absent", "malformed"])("idle rows with %s confirmation metadata show their reason without starting a request", async metadata => {
+    const row = eligible();
+    if (metadata === "absent") delete row.delivery_after_start_confirmation;
+    if (metadata === "malformed") row.delivery_after_start_confirmation.party_id = "";
+    await renderConfirmation(control(), [row]); await click("طلبات غير مؤكدة");
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog.textContent).toContain(row.order_number);
+    expect(dialog.textContent).toContain("تاريخ التوصيل غير مؤكد");
+    expect(dialog.textContent).not.toContain("جارٍ التحقق وحفظ التأكيد…");
+    expect(confirmButton()).toBeNull();
+    expect(operationalApi.previewDeliveryAfterStart).not.toHaveBeenCalled();
+    expect(operationalApi.confirmDeliveryAfterStart).not.toHaveBeenCalled();
+});
+
+test("an explicit confirmation keeps its busy status until the response arrives", async () => {
+    let resolve;
+    operationalApi.confirmDeliveryAfterStart.mockReturnValue(new Promise(done => { resolve = done; }));
+    await openConfirmation(); await act(async () => confirmButton().click());
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog.querySelector('tbody [role="status"]').textContent).toBe("جارٍ التحقق وحفظ التأكيد…");
+    expect(operationalApi.previewDeliveryAfterStart).toHaveBeenCalledTimes(1);
+    expect(operationalApi.confirmDeliveryAfterStart).toHaveBeenCalledTimes(1);
+    await act(async () => resolve(confirmation()));
+    expect(dialog.textContent).not.toContain("جارٍ التحقق وحفظ التأكيد…");
+    expect(dialog.textContent).toContain("تم حفظ التأكيد؛ بانتظار تحديث الأرصدة");
+});
+
 test("one explicit click previews then confirms exactly once and retains the saved proof", async () => {
     const controls = control();
     await openConfirmation(controls);

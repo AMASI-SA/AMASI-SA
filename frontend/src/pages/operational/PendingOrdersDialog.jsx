@@ -232,7 +232,7 @@ export default function PendingOrdersDialog({ count, details, name = "هذه ا�
                             <td>{row.reasons.length ? row.reasons.map((reason, reasonIndex) => <p key={`${reason.code}:${reasonIndex}`}>{reason.message}</p>) : "سبب المراجعة غير متوفر في هذه اللقطة."}
                                 {canConfirm && <button type="button" className="ofp-button" aria-label={confirmationLabel} disabled={busyKey !== null || !active}
                                     onClick={() => confirmDelivery(row)}>{confirmationLabel}</button>}
-                                {busyKey === key && <p role="status">جارٍ التحقق وحفظ التأكيد…</p>}
+                                {busyKey !== null && busyKey === key && <p role="status">جارٍ التحقق وحفظ التأكيد…</p>}
                                 {record && <p role="status">{savedMessage(record.state)}{record.confirmed_at && <> · وقت التسجيل: <bdi>{formatRiyadhDateTime(record.confirmed_at)}</bdi></>}</p>}
                                 {action.error && <p role="alert">{action.error}</p>}
                             </td>
