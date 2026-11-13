@@ -57,8 +57,17 @@ Verification captured before this checkpoint:
 - New regression before correction: two tests failed on direct-card eligibility
   for the intended reason; no setup failures or skips.
 - Same regression after correction: two tests passed, 35 deselected, exit 0.
-- Full affected-file and final exact-source CI results must be recorded in the
-  release PR before declaring release readiness.
+- Both affected test files passed against a private real Mongo replica set:
+  75 tests and 38 subtests, no failures, errors, or skips (228.019 seconds).
+- The initial integrated source `5a482a86d6914e8e36e89bf81349573986eaad35`
+  passed Source Release Readiness, but its Security Gate found the inherited
+  `dnspython==2.9.0` advisory `GHSA-vvf4-9x63-8xvv`. This checkpoint updates
+  only that dependency to the patched `2.9.2` in both mirrored requirements.
+  The requirements remain byte-identical. Adapter unit tests: 37 passed;
+  dependency bounds, DNS wire roundtrip, bounded WKS parsing, and offline
+  PyMongo/email-validator compatibility passed with installed 2.9.2.
+- The initial source's frozen intent candidate is superseded. Fresh exact-source
+  CI, including the complete Security Gate, and a new intent are required.
 - Shared `/app` Release Guard was read and reported `active:false` before any
   release rehearsal. This is an observation, not a lease reservation.
 
@@ -82,10 +91,10 @@ Verification captured before this checkpoint:
 
 ## Scoped rollback preparation
 
-Create a contingency branch from final merge M, reverse only this release's
-J-to-A source changes, and retain M's intent during source construction. Restore
-the two runtime modules and affected tests to J; preserve all other production
-changes and all live data. Commit rollback source A_R, build it with M as its
+Create a contingency branch from final merge M and retain M's intent during
+source construction. Restore only the two Ready runtime modules and affected
+tests to J; retain the `dnspython==2.9.2` security patch, all other production
+changes, and all live data. Commit rollback source A_R, build it with M as its
 source base, freeze a new intent-only B_R, and rehearse it through the same
 protocol-v5 adapter and package/runtime checks. Record branch, exact SHAs,
 test results, and identity in the release PR. Do not activate it by default.
