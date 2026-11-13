@@ -1,0 +1,103 @@
+name: Prepare reviewed campaign hover intent B
+on:
+  push:
+    branches: [ops/prepare-campaign-hover-1905-intent-20261113]
+    paths: [.github/workflows/prepare-campaign-hover-1905-intent.yml]
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: prepare-campaign-hover-1905-intent
+  cancel-in-progress: false
+jobs:
+  prepare-intent-only:
+    if: github.repository == 'AMASI-SA/AMASI-SA' && github.ref == 'refs/heads/ops/prepare-campaign-hover-1905-intent-20261113'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SOURCE_A: 3cb6e44b0396aa2876b39201197fc4c4b786a6fe
+      BASE_J: b64121c265d8d6e158df0d9fb88debc52c95317d
+      INTENT_SHA256: 6b8c76baee24df20ffee79977ed3ee1155144a1643d336744421493e55edb81c
+      TARGET_BRANCH: release/campaign-hover-1905-intent-b-20261113
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 3cb6e44b0396aa2876b39201197fc4c4b786a6fe
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify immutable source and successful artifact producer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess, urllib.request
+          source, base = os.environ['SOURCE_A'], os.environ['BASE_J']
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          assert git('rev-parse', 'HEAD') == source
+          assert git('rev-parse', 'HEAD^') == base
+          remote = git('ls-remote', 'origin', 'refs/heads/hotfix/prod-snap-meta-final').split()[0]
+          assert remote == base, 'Production advanced; a fresh candidate is required'
+          assert not git('diff', '--name-only', base, source, '--', 'release/release-intent-v5.json')
+          def api(suffix):
+              req = urllib.request.Request('https://api.github.com/repos/AMASI-SA/AMASI-SA/' + suffix,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  return json.load(response)
+          run = api('actions/runs/43447671267')
+          assert run['head_sha'] == source and run['conclusion'] == 'success'
+          artifact = api('actions/artifacts/14049340972')
+          assert artifact['name'] == 'release-v5-reviewed-intent-candidate' and not artifact['expired']
+          assert artifact['workflow_run']['head_sha'] == source
+          assert artifact['digest'] == 'sha256:9540b61da77b32fdbcf41da7b1905291a94b61cc71f426dbf0050cd4f0cc64b7'
+          print('SOURCE_AND_ARTIFACT_PROVENANCE_VERIFIED')
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-v5-reviewed-intent-candidate
+          run-id: 43447671267
+          repository: AMASI-SA/AMASI-SA
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/reviewed-intent-1905
+      - name: Create only intent commit B and verify the governed contract
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'reviewed-intent-1905/release-intent-v5.json'
+          data = path.read_bytes()
+          assert hashlib.sha256(data).hexdigest() == os.environ['INTENT_SHA256']
+          intent = json.loads(data)
+          assert intent['source_git_sha'] == os.environ['SOURCE_A']
+          assert intent['source_base_git_sha'] == os.environ['BASE_J']
+          assert intent['schema_version'] == 2 and intent['protocol_version'] == 5
+          assert intent['branch'] == 'hotfix/prod-snap-meta-final'
+          pathlib.Path('release/release-intent-v5.json').write_bytes(data)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- release/release-intent-v5.json
+          test "$(git diff --cached --name-only)" = 'release/release-intent-v5.json'
+          git commit -m 'release: reviewed campaign hover intent B for source 3cb6e44'
+          python - <<'PY'
+          import importlib.util, json, subprocess
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('reviewed_adapter', Path('scripts/emergent_deployment_adapter.py'))
+          adapter = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(adapter)
+          intent = adapter.load_release_intent()
+          assert intent['source_git_sha'] == '3cb6e44b0396aa2876b39201197fc4c4b786a6fe'
+          print(json.dumps({'intent_git_verified': True, 'source': intent['source_git_sha'],
+                            'deployment': subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()}))
+          PY
+      - name: Push a new release branch only, never production
+        run: |
+          test "$(git ls-remote origin refs/heads/hotfix/prod-snap-meta-final | cut -f1)" = "$BASE_J"
+          if git ls-remote --exit-code origin "refs/heads/$TARGET_BRANCH" >/dev/null 2>&1; then
+            echo 'Target branch already exists; refusing to overwrite.'
+            exit 1
+          fi
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+          echo "INTENT_ONLY_BRANCH=$TARGET_BRANCH"
+          echo "INTENT_ONLY_COMMIT=$(git rev-parse HEAD)"
