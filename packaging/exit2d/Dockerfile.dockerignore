@@ -1,0 +1,12 @@
+**
+!backend
+!backend/**
+!packaging
+!packaging/exit2d
+!packaging/exit2d/runtime-requirements.txt
+**/.env*
+**/__pycache__
+**/*.pyc
+**/*.log
+backend/uploads
+backend/tests

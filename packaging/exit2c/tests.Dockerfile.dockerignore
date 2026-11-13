@@ -1,0 +1,6 @@
+**
+!frontend
+!frontend/src
+!frontend/src/pages
+!frontend/src/pages/Login.jsx
+**/.env*

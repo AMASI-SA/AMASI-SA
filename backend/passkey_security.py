@@ -878,12 +878,13 @@ class PasskeySecurityMiddleware:
         await response(scope, _replay_receive(messages), send)
 
 
-async def install_passkey_security(app, db) -> None:
+async def install_passkey_security(app, db, *, initialize_indexes: bool = True) -> None:
     """Install trusted-device passkey middleware once and prepare indexes."""
     if getattr(app.state, "mezan_passkey_security_installed", False):
         return
     store = PasskeyStore(db)
-    await store.ensure_indexes()
+    if initialize_indexes:
+        await store.ensure_indexes()
     app.user_middleware.append(Middleware(PasskeySecurityMiddleware, db=db))
     app.middleware_stack = app.build_middleware_stack()
     app.state.mezan_passkey_security_installed = True

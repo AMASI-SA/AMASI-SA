@@ -97,6 +97,7 @@ DELETE /api/bank-transfer-review/{id}           — only when pending
 """
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -198,17 +199,22 @@ def make_bank_transfer_review_router(db, current_user):
     # settlement.  Partial filter excludes manual & legacy rows so the
     # merchant can still re-test by hand.
     try:
-        db.bank_transfer_reviews.create_index(
-            [("user_id", 1), ("source_type", 1),
-             ("source_id", 1), ("target_bank_id", 1)],
-            unique=True,
-            partialFilterExpression={
-                "source_type": {"$in": ["salla", "tamara", "tabby",
-                                          "imkan", "shipping_cod",
-                                          "customer_transfer"]},
-            },
-            name="uniq_review_source_target",
-        )
+        # Independent entrypoint owns this index in its explicit migration.
+        if (os.environ.get("MEZAN_INDEPENDENT_RUNTIME") == "1"
+                or os.environ.get("MEZAN_EXIT2A_REHEARSAL") == "1"):
+            pass
+        else:
+            db.bank_transfer_reviews.create_index(
+                [("user_id", 1), ("source_type", 1),
+                 ("source_id", 1), ("target_bank_id", 1)],
+                unique=True,
+                partialFilterExpression={
+                    "source_type": {"$in": ["salla", "tamara", "tabby",
+                                              "imkan", "shipping_cod",
+                                              "customer_transfer"]},
+                },
+                name="uniq_review_source_target",
+            )
     except Exception:
         # In tests / fresh DBs Motor may not yet be connected — the
         # index will be created on the first hit anyway.

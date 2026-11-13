@@ -1,6 +1,7 @@
 """Conservative runtime bounds and transient failures for the main Mongo client."""
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 import os
 
@@ -29,6 +30,15 @@ TRANSIENT_MONGO_ERRORS = (
     ServerSelectionTimeoutError,
     WaitQueueTimeoutError,
 )
+
+
+async def bounded_readiness(client, *, timeout_seconds=2.5):
+    """Bound independent readiness without treating unavailable Mongo as logout."""
+    try:
+        await asyncio.wait_for(client.admin.command("ping"), timeout=timeout_seconds)
+        return True
+    except Exception:
+        return False
 
 
 def main_client_options(*, event_listener: Any) -> dict[str, Any]:
