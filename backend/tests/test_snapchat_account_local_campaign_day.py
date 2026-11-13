@@ -6,7 +6,7 @@ import pytest
 
 from integrations_control_center.snapchat_native_account_day import (
     HOUR_COLLECTION, ACCOUNT_DAY_COLLECTION, local_day_utc_range,
-    sync_windows, normalize_hour_point, summarize_hours,
+    sync_windows, required_local_date_range, normalize_hour_point, summarize_hours,
     persist_account_local_campaign_facts,
 )
 
@@ -152,3 +152,25 @@ async def test_partial_window_cannot_create_false_account_day_total():
         [point], windows=[(start, start+timedelta(hours=3))])
     assert len(db[HOUR_COLLECTION].rows) == 1
     assert db[ACCOUNT_DAY_COLLECTION].rows == []
+
+
+def test_riyadh_midnight_sync_still_covers_prior_new_york_day():
+    # 01:00 Riyadh on Nov 13 is 17:00 the previous day in New York.
+    instant = datetime(2026, 11, 12, 22, 0, tzinfo=timezone.utc)
+    ny = ZoneInfo("America/New_York")
+    start, end = required_local_date_range(
+        date(2026, 11, 13), date(2026, 11, 13),
+        ny, now=instant,
+    )
+    assert (start, end) == (date(2026, 11, 12), date(2026, 11, 13))
+    windows = sync_windows(start, end, ny)
+    nov12_ny_start, nov12_ny_end = local_day_utc_range(date(2026, 11, 12), ny)
+    assert windows[0][0] <= nov12_ny_start
+    assert windows[-1][1] >= nov12_ny_end
+    # A historical backfill must not expand merely because the wall clock
+    # happens to be on a different reporting date.
+    historical = required_local_date_range(
+        date(2026, 11, 1), date(2026, 11, 2),
+        ny, now=instant,
+    )
+    assert historical == (date(2026, 11, 1), date(2026, 11, 2))
