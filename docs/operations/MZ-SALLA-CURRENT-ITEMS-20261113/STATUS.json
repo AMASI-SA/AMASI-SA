@@ -39,7 +39,7 @@
   "tested_source_tree": "f952e7b01290e904263031a532731a8179826fb9",
   "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1908",
   "documentation_checkpoint_policy": "This checkpoint records the completed first release and an incomplete separately scoped runtime surface. It is not a claim that follow-up tests, build, merge or deployment passed.",
-  "continuity_record": "Issue #1006 has reached its comment limit and prior body changes did not persist on GET readback. PR #1908 comments 6864479641, 6864660593 and 6864777801 are durable supplementary records. A separate Draft follow-up will preserve the remaining work.",
+  "continuity_record": "Issue #1006 has reached its comment limit and prior body changes did not persist on GET readback. PR #1908 comments 6864479641, 6864660593 and 6864777801 are durable supplementary records. A separate Draft follow-up will preserve the remaining work. Draft PR #1909 preserves the exact recovered WIP and this status; no material WIP depends only on the unavailable filesystem.",
   "original_task_branch": "codex/salla-current-items-20261113",
   "release": {
     "protocol_version": 5,
@@ -86,8 +86,28 @@
   "followup": {
     "base_sha": "53acc03a178362530f2cb45206fe11a4fb724d88",
     "state": "draft_checkpoint",
-    "implementation": "Backend route and frontend manual preview/apply work started with isolated file ownership. Recover exact available source from retained patches; do not assume ephemeral files survived.",
-    "tests": "Backend missing-route reproduction observed three expected 404 failures before implementation. Subsequent integrated verification is pending; historical #1908 results do not validate follow-up code.",
-    "write_boundaries": "Root owns GitHub/integration/release/live actions. Agents own isolated backend/frontend source only. No follow-up production changes."
+    "implementation": "Recovered exact applied frontend patches: orderEngine service, ProductsProjectionRepair component, OrderDetailsV2 wiring, and service tests. Recovered exact backend three-test red suite. Backend route module and routes.py wiring were not implemented.",
+    "tests": "Frontend agent observed 16 service tests fail before implementation and 16/16 pass afterward, exit 0. Backend agent observed three expected absent-route 404 failures, exit 1 in 2.24s. No component/page tests, integrated suite, build, lint or complete independent review was executed. Root could not rerun after environment loss.",
+    "write_boundaries": "Root owns GitHub/integration/release/live actions. Agents own isolated backend/frontend source only. No follow-up production changes.",
+    "frontend_command": "CI=true node node_modules/react-scripts/bin/react-scripts.js test --watchAll=false --runInBand --runTestsByPath src/services/orderEngine.productsProjectionRepair.test.js",
+    "backend_command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend:backend/tests <isolated-python> -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_salla_products_projection_repair_routes.py",
+    "review": "Independent read-only middleware and frontend service inspection completed without a blocking service finding. Runtime handlers and rendered component/integration were not reviewed.",
+    "ci": "Existing G47 workflow includes only the two recovered test paths. Planned component/page test paths are not added because those files were not written. Draft checkpoint intentionally retains red backend tests and must not merge or deploy. Fresh exact-head CI is required after implementation.",
+    "pull_request": "https://github.com/AMASI-SA/AMASI-SA/pull/1909",
+    "recovered_files": [
+      "backend/tests/test_salla_products_projection_repair_routes.py",
+      "frontend/src/services/orderEngine.js",
+      "frontend/src/services/orderEngine.productsProjectionRepair.test.js",
+      "frontend/src/components/orders/ProductsProjectionRepair.jsx",
+      "frontend/src/pages/OrderDetailsV2.jsx"
+    ],
+    "missing_work": [
+      "Backend route module and factory wiring",
+      "Expanded authorization/refusal/idempotence HTTP tests",
+      "Rendered component and page integration tests",
+      "Independent integrated review and complete gates",
+      "New governed source/intent release",
+      "Production preview/apply/no-op/report result"
+    ]
   }
 }

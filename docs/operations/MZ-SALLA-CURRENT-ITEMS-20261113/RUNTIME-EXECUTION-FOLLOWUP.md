@@ -37,11 +37,23 @@ and release. No unrelated authorization allowlist changes are required.
 
 ## Verification and recovery
 
-The missing routes were reproduced by three expected 404 test failures. The
-execution environment then became unavailable; no follow-up green suite, governed
-build, publication or live repair is claimed. Restore the remote checkpoint,
+The missing routes were reproduced by three expected 404 test failures (exit 1,
+2.24 seconds). The frontend service tests first failed 16 cases, then passed all
+16 after implementation (exit 0, observed by the frontend worker). The execution
+environment then became unavailable. No rendered component/page suite, integrated
+gate, governed build, publication or live repair is claimed. Restore the remote checkpoint,
 inspect any recovered source, complete tests and independent review, and create a
 fresh protocol-v5 source/intent release. After verified publication: reviewed
 one-order preview, explicit manifest-bound apply, second preview no-op, and the
 original filtered report. Never substitute broader refresh/resync or a manual
 DB edit for the existing repair's guarantees.
+
+## Exact recovered WIP
+
+The saved frontend service, component, page wiring and service test are recovered
+from the original applied tool inputs, not newly reconstructed code. The backend
+file contains the three exact red tests; no backend handler module or factory
+wiring was written. Planned component/page tests do not exist yet and are not
+listed in the workflow. The Draft must remain unmerged until those steps and all
+release gates are completed. The original PR #1908 source/intent/merge identities
+remain unchanged; this checkpoint changes no production data or deployment.
