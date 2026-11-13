@@ -1,0 +1,64 @@
+name: Diagnose campaign hover base contract
+on:
+  push:
+    branches: [ops/prepare-campaign-hover-1905-intent-20261113]
+    paths: [.github/workflows/diagnose-campaign-hover-base.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 3cb6e44b0396aa2876b39201197fc4c4b786a6fe
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-v5-reviewed-intent-candidate
+          run-id: 43447671267
+          repository: AMASI-SA/AMASI-SA
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/intent-diagnostic
+      - name: Inspect approved Git facts and the unmodified validator
+        run: |
+          python - <<'PY'
+          import hashlib, importlib.util, inspect, json, os, subprocess
+          from pathlib import Path
+          def git(*args):
+              return subprocess.check_output(['git',*args],text=True).strip()
+          source='3cb6e44b0396aa2876b39201197fc4c4b786a6fe'
+          base='b64121c265d8d6e158df0d9fb88debc52c95317d'
+          assert git('rev-parse','HEAD') == source
+          data=(Path(os.environ['RUNNER_TEMP'])/'intent-diagnostic/release-intent-v5.json').read_bytes()
+          assert hashlib.sha256(data).hexdigest() == '6b8c76baee24df20ffee79977ed3ee1155144a1643d336744421493e55edb81c'
+          intent=json.loads(data)
+          assert intent['source_git_sha']==source and intent['source_base_git_sha']==base
+          ref='refs/heads/hotfix/prod-snap-meta-final'
+          if subprocess.run(['git','show-ref','--verify','--quiet',ref]).returncode:
+              subprocess.check_call(['git','branch','--no-track','hotfix/prod-snap-meta-final',base])
+          assert git('rev-parse',ref)==base
+          Path('release/release-intent-v5.json').write_bytes(data)
+          subprocess.check_call(['git','-c','user.name=diagnostic','-c','user.email=diagnostic@example.invalid','add','release/release-intent-v5.json'])
+          subprocess.check_call(['git','-c','user.name=diagnostic','-c','user.email=diagnostic@example.invalid','commit','-m','local diagnostic intent B; never pushed'])
+          print('GIT_FACTS',json.dumps({'source':source,'base':base,'head':git('rev-parse','HEAD'),'local_base':git('rev-parse',ref),'diff_after_source':git('diff','--name-only',source,'HEAD')}))
+          path=Path('scripts/emergent_deployment_adapter.py')
+          expected=[r for r in intent['release_control_source']['files'] if r['path']=='scripts/emergent_deployment_adapter.py']
+          print('ADAPTER_IDENTITIES',json.dumps({'actual_blob':git('hash-object',str(path)),'tracked_blob':git('rev-parse',source+':'+str(path)),'expected':expected}))
+          spec=importlib.util.spec_from_file_location('diagnostic_adapter',path)
+          adapter=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(adapter)
+          for name in ('_validate_base_git_contract','verify_release_intent_git','load_release_intent'):
+              function=getattr(adapter,name,None)
+              if function:
+                  print('VALIDATOR_SOURCE_BEGIN',name)
+                  print(inspect.getsource(function))
+                  print('VALIDATOR_SOURCE_END',name)
+          checked=adapter.load_release_intent()
+          print('UNMODIFIED_VALIDATOR_PASS',checked['source_git_sha'])
+          PY
