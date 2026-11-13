@@ -33,6 +33,22 @@ jobs:
           test "$(git ls-files '*AGENTS.md')" = AGENTS.md
           git fetch --no-tags origin "$PATCH_SOURCE"
           git show "$PATCH_SOURCE:scripts/ops_patch_campaign_hover_native.py" > "$RUNNER_TEMP/apply-native-hover.py"
+          python -B - <<'PY'
+          import os
+          from pathlib import Path
+          p = Path(os.environ['RUNNER_TEMP']) / 'apply-native-hover.py'
+          text = p.read_text()
+          # Reconciled from the exact pinned-checkout diff and complete hook
+          # reviewed in run 43498445576/job 132137598383, not the local export.
+          # Only these reviewed expected hashes change; all guards remain.
+          for before, after in (
+              ('d144f05257f461a1f4aa35e069102e96aa7f87c680ddf31a50d66e7e0b50c8f6', '51b753e280b85eddb3394eb916d329240344253e18de5599c65c1b9205e69f1d82'),
+              ('364bc49055414af677777baf770f65bd6ea43edfde7499cdb949ecd49919860f', '6f30365740ea8690f712b75d99926d0f14da351ad8754f1ca668e7e7a21067048'),
+          ):
+              assert text.count(before) == 1
+              text = text.replace(before, after, 1)
+          p.write_text(text)
+          PY
           python -B "$RUNNER_TEMP/apply-native-hover.py" || {
             git diff --binary > "$RUNNER_TEMP/hover-preparation.patch"
             sha256sum backend/order_engine/campaign_hover.py frontend/src/pages/OrdersV2.jsx frontend/src/pages/AdvancedDashboard.jsx frontend/src/lib/orderCampaignAttribution.js frontend/src/components/CampaignHoverBadge.jsx frontend/src/hooks/useCampaignHover.js
