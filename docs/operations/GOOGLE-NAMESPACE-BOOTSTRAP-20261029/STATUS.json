@@ -1,0 +1,96 @@
+{
+  "task": "GOOGLE-NAMESPACE-BOOTSTRAP-20261029",
+  "status": "unattached_runtime_wip_fresh_actual_behavior_ci_pending",
+  "base": "08160c883a040f3a9fb49a165dab8074d4ef7309",
+  "branch": "codex/google-namespace-bootstrap-wip-20261029",
+  "owner": "google_product_acceptance",
+  "scope": "NEW module/tests/workflow and standalone unattached owner preflight/execution POST plus receipt GET; four fixed target names and a disjoint record in the existing technical receipt collection",
+  "production_changed": false,
+  "host_or_provider_actions": false,
+  "implementation_complete": false,
+  "actual_mongo_ddl_verified": true,
+  "root_reported_live_prerequisites": {
+    "technical_transaction_majority_j_readback_cleanup": "passed by root; historical prerequisite only",
+    "target_required_actions_and_policy_create_index": "passed by root; fresh revalidation required",
+    "target_collection_index_inventory": "unproved; zero checked is not empty or absent proof"
+  },
+  "decisions": {
+    "root_authorized_durable_global_receipt_in_existing_slots": true,
+    "existing_diagnostic_receipts_unchanged": true,
+    "atomic_proved_absent_targets_only": true,
+    "existing_complete_empty_noop": true,
+    "existing_incomplete_nonempty_custom_blocks": true,
+    "ambiguous_outcome_retains_reservation_across_restart": true,
+    "no_nontransactional_ddl_fallback": true,
+    "no_legacy_adoption_or_index_repair": true,
+    "no_financial_flags_or_provider_writes": true,
+    "funded_grants_runs_separately_owned": "google_connection",
+    "root_approved_prepare_execute_separation": true,
+    "no_record_boundary": "No durable first preparation or claim attempt cannot be distinguished after total process loss. Prepare never sends DDL; execute never creates missing receipt; DDL requires positive durable consumed-fence proof. No automatic retries, stored consumed/applied states block duplicates.",
+    "private_confirmation_token": "Bound to exact owned prepared receipt/auth/nonce/manifest/metadata; not standalone authority; receipt GET can recover original prepared token state for freshly authenticated owner."
+  },
+  "verification": {
+    "contract_primary_sources": "MongoDB official v8.0 transactions/create/privilege actions plus catalog command documentation read; constraints also independently confirmed by root",
+    "live_mongo_experiments": "none",
+    "source_changes": "NEW unattached module, unit and actual-Mongo tests, dedicated workflow, contract and status; existing production files unchanged",
+    "next_evidence": "Fresh111-case gate:47unit+20engine+44actual bootstrap cases",
+    "local": "19 capability cases collected successfully with -W error, 0.31s; no actual local Mongo execution",
+    "workflow": "google-namespace-bootstrap.yml exact111/64actualMongo/zero-skips gate, direct source-head checkout, authenticated disposable Mongo8.0.26 port27483",
+    "CI": {
+      "run": 40971850976,
+      "job": 123790260212,
+      "source": "ad5dbb127a3be69d6277257ebf93ff0d630e1728",
+      "tree": "69c119c28283330d1933364641cfaa0023861de2",
+      "checkout": "direct exact source",
+      "result": "19 passed in 3.22s; exact19 actual authenticated Mongo8.0.26 cases; zero skips; all setup/test/cleanup steps success",
+      "logs_read_by": "google_product_acceptance"
+    },
+    "qualification": "Engine capability tests only, not production bootstrap implementation or live availability. Negative DDL cases plus positive privilege case exercised on the disposable server.",
+    "additional_probe": "Transactional raw create on a same-options foreign existing guard, without any policy-index command; expected NamespaceExists(48) must be demonstrated, not assumed from earlier policy races. New20-case CI pending.",
+    "guard_race_CI": {
+      "run": 40972826009,
+      "job": 123793501584,
+      "source": "0b418ea8aad5164592970ffb72db505147f5abb6",
+      "tree": "c562ab14824135d603c5f7c4d1de4a85b040f486",
+      "result": "20 passed in 3.62s; exact20 actual authenticated Mongo8.0.26, zero skips, all steps success",
+      "guard_race": "raw create inside local transaction rejects same-options existing guard with exact NamespaceExists code48, no new-index command involved; outside transaction create is a separate no-op success case",
+      "logs_read_by": "google_product_acceptance"
+    },
+    "runtime_local": "47 unit/typed/lifecycle cases passed in1.18s; two owner-fast-path races confirmed red before new checks; fresh111-case actualCI pending",
+    "runtime_changes": "Adds fresh owner checks before returning an existing prepare token or historical verified receipt. Two local red/green regressions and three actual-Mongo owner-revocation cases; existing production files unchanged.",
+    "first_runtime_CI": {
+      "run": 40974558579,
+      "job": 123799265538,
+      "source": "717d536e4b9eaf865a0fa2dc197368ed6571b932",
+      "tree": "e85d53e4ad0380b170a2baf9d17cb74bd623aa48",
+      "result": "Collection failed: missing cryptography dependency via package initializer. No runtime test passed or failed. Owned workflow dependencies corrected in successor.",
+      "logs_read_by": "google_product_acceptance"
+    },
+    "runtime_CI_rejected": {
+      "source": "0b9fe9a3e13b63f4b7c661dff62ced583b2517eb",
+      "tree": "2de24d99dfe0fb2c67bd0aae0cc90038bec020c9",
+      "run": 40975473171,
+      "job": 123802301656,
+      "result": "33 failed,67 passed in13.04s; whole100-case gate failed; actual prepare failed during session cleanup",
+      "confirmed_local_red": "Motor-style Future caused asyncio.create_task TypeError; expired body CSOT deadline leaked into cleanup; two regressions failed before fix",
+      "fix": "await Motor Future in coroutine under an independent bounded cleanup context; no retry or other production changes"
+    },
+    "runtime106_CI": {
+      "source": "2a4d9fb0adc63fec23242053c1ab16edb4c9ac25",
+      "tree": "52c7ee75baf615903aca74e6eb118711a5095e7b",
+      "run": 40975903205,
+      "job": 123803731107,
+      "result": "SUCCESS;106 total with20engine+41actual bootstrap Mongo and45unit; zero skips; exact source checkout; logs read",
+      "scope": "Includes actual caller-cancel/deadline after create and after commit, original diagnostic GET preservation, restricted roles, lost ACK and restart; not latest owner-fast-path fix"
+    }
+  },
+  "next": "Inspect fresh111-case actual behavior CI; then request independent review of the standalone module and exact source. No attachment or production namespace action.",
+  "contract_checkpoint": "a68d012b19410edb555eba87b4b742cba48ea288",
+  "limitations": [
+    "Unattached WIP; no current production or provider/DB actions.",
+    "Catalog observations are bounded PRIMARY observations, not an atomic catalog snapshot.",
+    "New UUID continuity between commit and first catalog observation is unproved and explicitly false.",
+    "No-record preparation/claim boundary is explicitly qualified; no automatic retry.",
+    "Latest owner-fast-path fixes still require fresh111-case CI and independent acceptance; prior106-case pass does not validate the successor."
+  ]
+}
