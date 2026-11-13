@@ -3,7 +3,7 @@
 <!-- RESUMPTION-CURRENT-START -->
 ## Current state
 
-The reviewed operational refresh follow-up is merged as `791b019e20ffe24439393576129783cd4c9dceb3` and the original operator has fast-forwarded to that exact commit. Source A7 and intent B7 are unchanged. The actual frontend package adapter completed successfully with true process exit0 and `built:true`; the full materialized runtime identity exactly matches the reviewed intent. Official prepare and prepublish succeeded, and one Publish changes action has been submitted. The platform UI shows Publishing; completion and official live verification are pending. Fresh financial acceptance remains pending; the previous saved-report fallback is not accepted as a fresh result.
+The reviewed operational refresh follow-up is merged as `791b019e20ffe24439393576129783cd4c9dceb3` and the original operator has fast-forwarded to that exact commit. Source A7 and intent B7 are unchanged. The actual frontend package adapter completed successfully with true process exit0 and `built:true`; the full materialized runtime identity exactly matches the reviewed intent. Official prepare and prepublish succeeded, and one Publish changes action has been submitted. The platform showed a new explicit Deployment finished at13Nov22:41Riyadh, version72c5b2e. Official live verification is now running; financial acceptance is still pending. Fresh financial acceptance remains pending; the previous saved-report fallback is not accepted as a fresh result.
 
 ## Canonical identities
 
@@ -43,11 +43,17 @@ True adapter exit0 and `built:true` were read from the saved official output. Ex
 - `/tmp/mezan-pr1906-9502be1e-adapter.log`
 - `/tmp/mezan-pr1906-9502be1e-adapter.exit`
 
-Official prepare exited0 for actor `arafat-pr1906-b7-terminal` at `2026-11-13T19:29:50.254295+00:00`; official prepublish exited0 with `ready_to_publish:true`, A7/M/runtime exact. One Publish changes action was submitted through Manage/Republish; the UI showed Publishing. Do not click Publish again. Next require a new explicit platform completion, run official `verify --url https://mezansalla.com` with all3 complete probes in the original operator, and observe final `status` inactive.
+Official prepare exited0 for actor `arafat-pr1906-b7-terminal` at `2026-11-13T19:29:50.254295+00:00`; official prepublish exited0 with `ready_to_publish:true`, A7/M/runtime exact. One Publish changes action was submitted through Manage/Republish; a new explicit Deployment finished appeared13Nov22:41Riyadh, version72c5b2e. The retained ordinal shifted in the platform UI, so use version/time rather than infer a publication count. The original operator has confirmed this task still owns the lease and started official `verify --url https://mezansalla.com`. Do not click Publish or run a parallel guard status. Await its real exit0, all3 complete probes and final inactive status.
 
 Only after release verification, run one visible financial refresh and inspect a new calculation timestamp without dated fallback, plus pending-order dialog idle labels. A bounded navigation-away check must use fresh runtime-stage logs; cached logs do not prove cancellation. No real confirmation, settlement, payout, advertising or other financial test write is authorized.
 
 Issue1006 is at its comment cap; PR1902 and PR1906 remain the continuation threads. No paid Emergent chat/Copilot was used.
+### Platform and initial live identity evidence
+
+A bounded independent public health GET at19:43:47.296607UTC returned HTTP200 and the new exact A7/runtime identity, with verified backend/control/critical/frontend flags true. New boot19:41:24.060844UTC is after prepare. This single GET is preliminary; the official three-pass verification remains the release acceptance gate.
+
+![New platform completion at22:41Riyadh](PUBLISH-CONFIRMATION.jpg)
+
 <!-- RESUMPTION-CURRENT-END -->
 
 ## Historical frozen A7 source record
