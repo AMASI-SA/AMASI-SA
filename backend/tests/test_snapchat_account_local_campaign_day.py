@@ -1,58 +1,31 @@
-"""DST, source granularity, idempotency and account-local campaign spend."""
+"""Real coverage, New York DST, tenant isolation and saved FX contracts."""
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
 
 from integrations_control_center.snapchat_native_account_day import (
-    HOUR_COLLECTION, ACCOUNT_DAY_COLLECTION, local_day_utc_range,
-    sync_windows, required_local_date_range, normalize_hour_point, summarize_hours,
+    HOUR_COLLECTION, ACCOUNT_DAY_COLLECTION, local_day_utc_range, sync_windows,
+    normalize_hour_point, summarize_hours, required_local_date_range,
     persist_account_local_campaign_facts,
 )
 
-
-def test_local_day_uses_23_25_and_24_hour_real_intervals():
-    ny = ZoneInfo("America/New_York")
-    riyadh = ZoneInfo("Asia/Riyadh")
-    spring = local_day_utc_range(date(2026, 3, 8), ny)
-    fall = local_day_utc_range(date(2026, 11, 1), ny)
-    sa = local_day_utc_range(date(2026, 11, 1), riyadh)
-    assert spring[1] - spring[0] == timedelta(hours=23)
-    assert fall[1] - fall[0] == timedelta(hours=25)
-    assert sa[1] - sa[0] == timedelta(hours=24)
-    assert spring[0].isoformat() == "2026-03-08T05:00:00+00:00"
-    assert fall[0].isoformat() == "2026-11-01T04:00:00+00:00"
+UTC = timezone.utc
+NY = ZoneInfo("America/New_York")
+DAY = date(2026, 11, 13)
+START, END = local_day_utc_range(DAY, NY)
+NOW = datetime(2026, 11, 13, 12, tzinfo=UTC)
+ACCOUNT = {"ad_account_id": "ny-account", "timezone": "America/New_York", "currency": "USD"}
 
 
-def test_new_york_request_expands_existing_riyadh_window_without_gaps():
-    windows = sync_windows(date(2026, 11, 13), date(2026, 11, 13),
-                           ZoneInfo("America/New_York"))
-    assert windows[0][0].isoformat() == "2026-11-12T21:00:00+00:00"
-    assert windows[-1][1].isoformat() == "2026-11-14T05:00:00+00:00"
-    assert all(timedelta(0) < b-a <= timedelta(days=7) for a,b in windows)
-    assert all(windows[i][1] == windows[i+1][0] for i in range(len(windows)-1))
+def point(hour, micro=0, campaign="ny-campaign"):
+    start = START + timedelta(hours=hour)
+    return {"external_id": campaign, "start_time": start.isoformat(),
+            "end_time": (start + timedelta(hours=1)).isoformat(), "metrics": {"spend": micro}}
 
 
-def test_genuine_hour_only_no_fake_day_and_repeated_hour_not_lost():
-    day = date(2026, 11, 1)
-    start, end = local_day_utc_range(day, ZoneInfo("America/New_York"))
-    items = []
-    for n in range(25):
-        hour = start + timedelta(hours=n)
-        row = {"external_id": "campaign-1",
-               "start_time": hour.isoformat(),
-               "end_time": (hour + timedelta(hours=1)).isoformat(),
-               "metrics": {"spend": 1_000_000}}
-        parsed = normalize_hour_point(row, window_start=start, window_end=end)
-        assert parsed
-        cid, st, en, native = parsed
-        items.append({"campaign_id": cid, "start": st, "end": en, "spend_native": native})
-    summary = summarize_hours(items, ZoneInfo("America/New_York"), start=start, end=end)
-    assert summary[("campaign-1", day.isoformat())]["spend_native"] == 25
-    assert summary[("campaign-1", day.isoformat())]["count"] == 25
-    invalid = {"external_id": "campaign-1", "start_time": start.isoformat(),
-               "end_time": end.isoformat(), "metrics": {"spend": 25_000_000}}
-    assert normalize_hour_point(invalid, window_start=start, window_end=end) is None
+def dense_points():
+    return [point(0, 12_500_000), *[point(h) for h in range(1, 7)]]
 
 
 class MemoryCollection:
@@ -63,114 +36,169 @@ class MemoryCollection:
         self.calls += 1
         for op in operations:
             key = op._filter
-            update = op._doc["$set"]
-            matching = next((row for row in self.rows if all(row.get(k) == v for k,v in key.items())), None)
-            if matching is None:
-                self.rows.append(dict(update))
+            value = op._doc["$set"]
+            row = next((r for r in self.rows if all(r.get(k) == v for k, v in key.items())), None)
+            if row is None:
+                self.rows.append(dict(value))
             else:
-                matching.update(update)
+                row.update(value)
     async def find_one(self, *args, **kwargs):
         return self.rows[0] if self.rows else None
 
 
 class MemoryDB:
-    def __init__(self, fx=None):
-        self.coll = {
-            HOUR_COLLECTION: MemoryCollection(),
-            ACCOUNT_DAY_COLLECTION: MemoryCollection(),
-            "ads_currency_settings": MemoryCollection(
-                [{"usd_to_sar_rate": fx}] if fx is not None else []),
-        }
+    def __init__(self, fx=3.752):
+        self.coll = {"ads_currency_settings": MemoryCollection(
+            [{"usd_to_sar_rate": fx}] if fx is not None else [])}
     def __getitem__(self, name):
         return self.coll.setdefault(name, MemoryCollection())
 
 
 class MemoryContext:
     user_id = "owner-1"
-    def __init__(self, db):
-        self.db = db
+    def __init__(self, db, now=NOW):
+        self.db, self.now = db, now
     def now_iso(self):
-        return "2026-11-13T12:00:00+00:00"
+        return self.now.isoformat()
+
+
+async def save(points, db=None, **kwargs):
+    db = db or MemoryDB()
+    count = await persist_account_local_campaign_facts(MemoryContext(db), ACCOUNT, points,
+                                                      windows=[(START, END)], **kwargs)
+    return db, count
+
+
+def test_new_york_dst_and_riyadh_utc_intervals():
+    spring = local_day_utc_range(date(2026, 3, 8), NY)
+    fall = local_day_utc_range(date(2026, 11, 1), NY)
+    sa = local_day_utc_range(date(2026, 11, 1), ZoneInfo("Asia/Riyadh"))
+    assert spring[1] - spring[0] == timedelta(hours=23)
+    assert fall[1] - fall[0] == timedelta(hours=25)
+    assert sa[1] - sa[0] == timedelta(hours=24)
+    assert spring[0].isoformat() == "2026-03-08T05:00:00+00:00"
+    assert fall[0].isoformat() == "2026-11-01T04:00:00+00:00"
+
+
+def test_windows_cover_riyadh_and_new_york_and_never_exceed_seven_days():
+    windows = sync_windows(DAY, DAY + timedelta(days=8), NY)
+    assert windows[0][0].isoformat() == "2026-11-12T21:00:00+00:00"
+    assert windows[-1][1].isoformat() == "2026-11-22T05:00:00+00:00"
+    assert all(timedelta(0) < b-a <= timedelta(days=7) for a, b in windows)
+    assert all(windows[i][1] == windows[i+1][0] for i in range(len(windows)-1))
+
+
+def test_riyadh_midnight_retains_still_active_new_york_date():
+    now = datetime(2026, 11, 12, 22, tzinfo=UTC)
+    assert required_local_date_range(DAY, DAY, NY, now=now) == (date(2026, 11, 12), DAY)
+    assert required_local_date_range(date(2026, 11, 1), date(2026, 11, 2), NY, now=now) == (date(2026, 11, 1), date(2026, 11, 2))
+
+
+def test_fall_back_repeated_clock_hour_is_two_distinct_utc_hours():
+    start, end = local_day_utc_range(date(2026, 11, 1), NY)
+    rows = [{"campaign_id": "c", "start": start + timedelta(hours=h),
+             "end": start + timedelta(hours=h+1), "spend_native": 1} for h in range(25)]
+    row = summarize_hours(rows, NY, start=start, end=end, as_of=end)[("c", "2026-11-01")]
+    assert row["spend_native"] == row["hours_expected"] == row["count"] == 25
+    assert row["coverage_complete"] is True
+
+
+def test_daily_or_naive_timestamp_is_not_an_hour():
+    fake = point(0)
+    fake["end_time"] = END.isoformat()
+    assert normalize_hour_point(fake, window_start=START, window_end=END) is None
+    fake = point(0)
+    fake["start_time"] = "2026-11-13T05:00:00"
+    assert normalize_hour_point(fake, window_start=START, window_end=END) is None
 
 
 @pytest.mark.asyncio
-async def test_hourly_upsert_idempotent_and_verified_sar_account_day():
-    ny = ZoneInfo("America/New_York")
-    day = date(2026, 11, 13)
-    start, end = local_day_utc_range(day, ny)
-    # The API has actual hour-level evidence from midnight to local 1 AM.
-    points = [{
-        "external_id": "ny-campaign", "start_time": start.isoformat(),
-        "end_time": (start + timedelta(hours=1)).isoformat(),
-        "metrics": {"spend": 12_500_000},
-    }]
-    db = MemoryDB(fx=3.752)
-    context = MemoryContext(db)
-    account = {"ad_account_id": "ny-account", "timezone": "America/New_York",
-               "currency": "USD"}
-    a = await persist_account_local_campaign_facts(
-        context, account, points, windows=[(start, end)])
-    b = await persist_account_local_campaign_facts(
-        context, account, points + points, windows=[(start, end)])
-    assert a == b == 2
-    hours = db[HOUR_COLLECTION].rows
-    days = db[ACCOUNT_DAY_COLLECTION].rows
-    assert len(hours) == len(days) == 1
-    assert hours[0]["spend_native"] == 12.5
-    assert days[0]["spend_sar"] == round(12.5 * 3.752, 2)
-    assert days[0]["account_timezone"] == "America/New_York"
-    assert days[0]["coverage_status"] == "provisional_hourly"
+async def test_dense_hours_are_idempotent_and_use_saved_fx_once():
+    db, count = await save(dense_points())
+    assert count == 8
+    await save(dense_points() * 2, db)
+    assert len(db[HOUR_COLLECTION].rows) == 7
+    assert len(db[ACCOUNT_DAY_COLLECTION].rows) == 1
+    row = db[ACCOUNT_DAY_COLLECTION].rows[0]
+    assert row["spend_native"] == 12.5
+    assert row["spend_sar"] == 46.9
+    assert row["coverage_complete"] is True
+    assert row["missing_hours"] == 0
+    assert row["coverage_end_utc"] == NOW.isoformat()
 
 
 @pytest.mark.asyncio
-async def test_missing_fx_remains_unknown_but_native_spend_stays_present():
-    ny = ZoneInfo("America/New_York")
-    start,end = local_day_utc_range(date(2026,11,13),ny)
-    row = {"external_id":"c","start_time":start.isoformat(),
-           "end_time":(start+timedelta(hours=1)).isoformat(),
-           "metrics":{"spend":2_000_000}}
-    db=MemoryDB()
-    await persist_account_local_campaign_facts(
-        MemoryContext(db),
-        {"ad_account_id":"ny","timezone":"America/New_York","currency":"USD"},
-        [row], windows=[(start,end)])
+@pytest.mark.parametrize("missing", [0, 3, 6])
+async def test_a_missing_first_middle_or_last_elapsed_hour_never_becomes_full_spend(missing):
+    db, _ = await save([p for i, p in enumerate(dense_points()) if i != missing])
+    row = db[ACCOUNT_DAY_COLLECTION].rows[0]
+    assert row["coverage_complete"] is False
+    assert row["missing_hours"] == 1
+    assert row["spend_sar"] is None
+    assert row["spend_native"] is None
+
+
+@pytest.mark.asyncio
+async def test_explicit_dense_zero_is_zero_not_unknown():
+    db, _ = await save([point(h) for h in range(7)])
+    row = db[ACCOUNT_DAY_COLLECTION].rows[0]
+    assert row["coverage_complete"] is True
+    assert row["spend_sar"] == 0
+
+
+@pytest.mark.asyncio
+async def test_no_fx_retains_native_but_never_guesses_sar():
+    db, _ = await save(dense_points(), MemoryDB(fx=None))
+    row = db[ACCOUNT_DAY_COLLECTION].rows[0]
+    assert row["spend_native"] == 12.5
+    assert row["spend_sar"] is None
+
+
+@pytest.mark.asyncio
+async def test_future_points_do_not_inflate_todays_total():
+    db, _ = await save([*dense_points(), point(8, 100_000_000)])
+    assert len(db[HOUR_COLLECTION].rows) == 7
+    assert db[ACCOUNT_DAY_COLLECTION].rows[0]["spend_native"] == 12.5
+
+
+@pytest.mark.asyncio
+async def test_conflicting_duplicate_and_invalid_spend_fail_closed():
+    db, _ = await save([*dense_points(), point(0, 9_000_000)])
     assert db[ACCOUNT_DAY_COLLECTION].rows[0]["spend_sar"] is None
-    assert db[ACCOUNT_DAY_COLLECTION].rows[0]["spend_native"] == 2
+    bad = point(3)
+    bad["metrics"]["spend"] = None
+    db, _ = await save([*dense_points(), bad])
+    assert db[ACCOUNT_DAY_COLLECTION].rows[0]["spend_sar"] is None
 
 
 @pytest.mark.asyncio
-async def test_partial_window_cannot_create_false_account_day_total():
-    ny = ZoneInfo("America/New_York")
-    start,end = local_day_utc_range(date(2026,11,13),ny)
-    point={"external_id":"c","start_time":start.isoformat(),
-           "end_time":(start+timedelta(hours=1)).isoformat(),
-           "metrics":{"spend":1_000_000}}
-    db=MemoryDB(fx=3.75)
-    await persist_account_local_campaign_facts(
-        MemoryContext(db),
-        {"ad_account_id":"ny","timezone":"America/New_York","currency":"USD"},
-        [point], windows=[(start, start+timedelta(hours=3))])
-    assert len(db[HOUR_COLLECTION].rows) == 1
+async def test_failed_provider_response_must_not_publish_projection():
+    db, count = await save(dense_points(), source_complete=False)
+    assert count == 0
+    assert db[HOUR_COLLECTION].rows == db[ACCOUNT_DAY_COLLECTION].rows == []
+
+
+@pytest.mark.asyncio
+async def test_requested_partial_window_or_gap_cannot_claim_account_day():
+    db = MemoryDB()
+    await persist_account_local_campaign_facts(MemoryContext(db), ACCOUNT, dense_points()[:3],
+                                              windows=[(START, START + timedelta(hours=3))])
+    assert len(db[HOUR_COLLECTION].rows) == 3
     assert db[ACCOUNT_DAY_COLLECTION].rows == []
+    db = MemoryDB()
+    count = await persist_account_local_campaign_facts(MemoryContext(db), ACCOUNT, dense_points(),
+        windows=[(START, START + timedelta(hours=2)), (START + timedelta(hours=3), END)])
+    assert count == 0
 
 
-def test_riyadh_midnight_sync_still_covers_prior_new_york_day():
-    # 01:00 Riyadh on Nov 13 is 17:00 the previous day in New York.
-    instant = datetime(2026, 11, 12, 22, 0, tzinfo=timezone.utc)
-    ny = ZoneInfo("America/New_York")
-    start, end = required_local_date_range(
-        date(2026, 11, 13), date(2026, 11, 13),
-        ny, now=instant,
-    )
-    assert (start, end) == (date(2026, 11, 12), date(2026, 11, 13))
-    windows = sync_windows(start, end, ny)
-    nov12_ny_start, nov12_ny_end = local_day_utc_range(date(2026, 11, 12), ny)
-    assert windows[0][0] <= nov12_ny_start
-    assert windows[-1][1] >= nov12_ny_end
-    # A historical backfill must not expand merely because the wall clock
-    # happens to be on a different reporting date.
-    historical = required_local_date_range(
-        date(2026, 11, 1), date(2026, 11, 2),
-        ny, now=instant,
-    )
-    assert historical == (date(2026, 11, 1), date(2026, 11, 2))
+@pytest.mark.asyncio
+async def test_partial_current_hour_is_labelled_provisional_and_not_future():
+    now = NOW + timedelta(minutes=15)
+    db = MemoryDB()
+    await persist_account_local_campaign_facts(MemoryContext(db, now), ACCOUNT,
+        [*dense_points(), point(7, 1_000_000)], windows=[(START, END)])
+    row = db[ACCOUNT_DAY_COLLECTION].rows[0]
+    assert row["coverage_complete"] is True
+    assert row["coverage_end_utc"] == now.isoformat()
+    assert row["coverage_status"] == "provisional_hourly"
+    assert row["spend_native"] == 13.5
