@@ -23,8 +23,12 @@ function accountTime(value, zone) {
 function explanation(campaign, report) {
     if (!campaign?.campaignId) return "لا يوجد معرّف حملة موثوق في بيانات هذا الطلب من سلة.";
     if (report === undefined) return "تحميل الإحصاءات...";
+    if (report?.spend_warning === "snapchat_hours_incomplete" && known(report?.spend_sar)) {
+        return "الصرف وتكلفة الطلب والعائد محسوبة من المبلغ المتوفر؛ بعض ساعات سناب غير مكتملة، والأرقام قابلة للتحديث.";
+    }
     const reason = report?.spend_reason || report?.status;
-    if (reason === "snapchat_hours_incomplete") return "مبيعات سلة مستقلة؛ ساعات صرف سناب غير مكتملة، لذلك لا تُحسب تكلفة الطلب أو العائد من صرف جزئي.";
+    if (reason === "snapchat_hours_incomplete") return "ساعات الصرف غير مكتملة؛ لم تتوفر قيمة صرف صالحة. طلبات ومبيعات سلة مستقلة.";
+    if (reason === "snapchat_hour_evidence_invalid") return "تعذر اعتماد بيانات الصرف أو توقيتها؛ طلبات ومبيعات سلة مستقلة.";
     if (reason === "snapchat_account_day_not_aligned") return "طلبات سلة بتوقيت الحساب؛ صرف سناب المتوفر حسب يوم الرياض لا يطابق يوم هذا الحساب.";
     if (reason === "campaign_spend_not_available") return "طلبات سلة ومبيعاتها مستقلة؛ صرف الحملة غير متوفر للفترة نفسها.";
     if (reason === "ambiguous_account") return "معرّف الحملة يطابق أكثر من حساب؛ يلزم تحديد الحساب الصحيح.";
@@ -56,7 +60,7 @@ export default function CampaignHoverBadge({ badge, campaign, report }) {
         ["عدد القطع", count(report?.pieces, "قطعة")],
         ["إجمالي المبيعات", money(report?.sales_sar)],
         ["تكلفة الطلب", report?.orders === 0 && known(report?.spend_sar) ? "لا توجد طلبات" : money(report?.cpa_sar)],
-        ["العائد الإعلاني", report?.spend_sar === 0 ? "لا يوجد صرف" : known(report?.roas) ? report.roas.toFixed(2) + "×" : "غير مكتمل"],
+        ["العائد الإعلاني", report?.spend_sar === 0 ? "لا يوجد صرف مسجل" : known(report?.roas) ? report.roas.toFixed(2) + "×" : "غير مكتمل"],
     ];
     const updated = accountTime(report?.updated_at, report?.timezone);
     const covered = accountTime(report?.spend_as_of, report?.timezone);
@@ -100,7 +104,8 @@ export default function CampaignHoverBadge({ badge, campaign, report }) {
                     </tr>
                 )}</tbody></table>
                 <div className="mt-2 text-[10px] text-slate-500">{explanation(campaign, report)}</div>
-                {covered && <div className="mt-1 text-[10px] text-slate-500">الصرف حتى: <bdi dir="ltr">{covered}</bdi> · قراءة أولية قابلة للتحديث</div>}
+                {known(report?.missing_hours) && report.missing_hours > 0 && <div className="mt-1 text-[10px] text-slate-500">الساعات الناقصة: <bdi dir="ltr">{report.missing_hours}</bdi> · تنبيه لا يمنع احتساب الصرف المتوفر</div>}
+                {covered && <div className="mt-1 text-[10px] text-slate-500">بيانات الصرف حتى: <bdi dir="ltr">{covered}</bdi> · قراءة أولية قابلة للتحديث</div>}
                 {updated && <div className="mt-1 text-[10px] text-slate-400">آخر تحديث للصرف: <bdi dir="ltr">{updated}</bdi></div>}
             </div>, document.body
         )}

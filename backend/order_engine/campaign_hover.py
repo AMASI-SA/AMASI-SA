@@ -223,7 +223,8 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
              "campaign_name": 1, "spend_native": 1, "currency_native": 1,
              "spend_sar": 1, "updated_at": 1, "account_timezone": 1,
              "coverage_status": 1, "coverage_complete": 1, "coverage_start_utc": 1,
-             "coverage_end_utc": 1, "hours_observed": 1, "missing_hours": 1})
+             "coverage_end_utc": 1, "hours_observed": 1, "missing_hours": 1,
+             "spend_evidence_valid": 1})
         source_health.append(complete)
         for row in rows:
             cid = _text(row.get("campaign_id") or row.get("external_id"))
@@ -239,13 +240,20 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
                 if row.get("account_timezone") != zone:
                     continue
                 through = _timestamp(row.get("coverage_end_utc"))
-                coverage_valid = (row.get("coverage_complete") is True and
-                                  row.get("coverage_status") == "provisional_hourly" and
+                # Missing hours are advisory. Preserve evidence, account-day
+                # alignment and future-time guards without hiding valid spend.
+                evidence_valid = (row.get("spend_evidence_valid") is not False and
+                                  row.get("coverage_status") in {"provisional_hourly", "incomplete_hourly"} and
+                                  (_amount(row.get("hours_observed")) or 0) > 0 and
                                   _timestamp(row.get("coverage_start_utc")) == start and
                                   through is not None and start < through <= now)
                 value["spend_coverage"] = row.get("coverage_status")
-                if not coverage_valid:
-                    value.update(spend_sar=None, spend_native=None, spend_reason="snapchat_hours_incomplete")
+                if not evidence_valid:
+                    value.update(spend_sar=None, spend_native=None, spend_reason="snapchat_hour_evidence_invalid")
+                elif (row.get("coverage_complete") is not True or
+                      row.get("coverage_status") == "incomplete_hourly" or
+                      (_amount(row.get("missing_hours")) or 0) > 0):
+                    value["spend_warning"] = "snapchat_hours_incomplete"
             elif provider == "snapchat" and zone != "Asia/Riyadh":
                 value.update(spend_sar=None, spend_native=None, spend_reason="snapchat_account_day_not_aligned")
             offer(cid, key, value, rank)
@@ -346,6 +354,7 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
             sales_sar=round(metric["sales"], 2) if commerce_ok and metric["time_ok"] and metric["sales_ok"] else None,
             spend_sar=round(amount, 2) if amount is not None else None,
             spend_reason=spend.get("spend_reason") or ("campaign_spend_not_available" if amount is None else None),
+            spend_warning=spend.get("spend_warning"),
             spend_coverage=spend.get("spend_coverage"), spend_as_of=spend.get("coverage_end_utc"),
             hours_observed=spend.get("hours_observed"), missing_hours=spend.get("missing_hours"))
         if record["orders"] and amount is not None:

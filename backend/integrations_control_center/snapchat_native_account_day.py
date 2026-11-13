@@ -1,8 +1,8 @@
 """Bounded Snapchat hourly evidence and account-local spend snapshots.
 
-Existing Riyadh accounting facts are not changed. A requested window is not
-proof that every elapsed hour was returned: missing/invalid hours keep the
-account-day amount unknown. Explicit zero-spend hours are valid evidence.
+Existing Riyadh accounting facts are not changed. Valid observed spend remains
+usable when hours are missing; coverage is separate advisory metadata. Missing
+hours are never fabricated as zero. Invalid/conflicting evidence stays unknown.
 """
 from __future__ import annotations
 
@@ -110,10 +110,10 @@ def normalize_hour_point(row: dict[str, Any], *, window_start: datetime, window_
 
 def summarize_hours(rows: list[dict[str, Any]], zone: ZoneInfo, *, start: datetime, end: datetime,
                     as_of: datetime | None = None) -> dict:
-    """Validate a dense midnight-to-observation prefix, not requested dates alone.
+    """Sum observed hours and report midnight-to-observation coverage separately.
 
     A current-hour bucket may be provisional. Future buckets never contribute.
-    For historical days, all 23/24/25 UTC hours must be present explicitly.
+    Missing historical 23/24/25-hour buckets are advisory, not invented zeros.
     """
     observed = _instant(as_of) if as_of is not None else end
     if observed is None:
@@ -150,8 +150,9 @@ def summarize_hours(rows: list[dict[str, Any]], zone: ZoneInfo, *, start: dateti
         missing = expected - present
         amount = sum((_decimal(bucket[h]["spend_native"]) or Decimal(0) for h in present), Decimal(0))
         complete = bool(expected) and not missing and key not in conflicts
+        spend_valid = bool(present) and key not in conflicts
         result[key] = {
-            "spend_native": float(amount) if complete else None,
+            "spend_native": float(amount) if spend_valid else None,
             "known_spend_native": float(amount),
             "count": len(present), "hours_expected": len(expected),
             "missing_hours": len(missing), "coverage_complete": complete,
@@ -240,13 +241,15 @@ async def persist_account_local_campaign_facts(context: Any, account: dict[str, 
     day_ops = []
     for (campaign, day), summary in grouped.items():
         complete = summary["coverage_complete"] and campaign not in invalid_campaigns
-        native = summary["spend_native"] if complete else None
+        spend_valid = summary["spend_native"] is not None and campaign not in invalid_campaigns
+        native = summary["spend_native"] if spend_valid else None
         sar = _sar(Decimal(str(native)), rate) if native is not None else None
         key = {"user_id": context.user_id, "ad_account_id": account_id, "campaign_id": campaign,
                "date": day, "account_timezone": str(zone)}
         day_ops.append(UpdateOne(key, {"$set": {
             **key, "spend_native": native, "spend_sar": sar,
             "known_spend_native": summary["known_spend_native"],
+            "spend_evidence_valid": spend_valid,
             "currency_native": currency, "fx_rate_to_sar": float(rate) if rate is not None else None,
             "hours_observed": summary["count"], "hours_expected": summary["hours_expected"],
             "missing_hours": summary["missing_hours"], "coverage_complete": complete,
@@ -254,7 +257,8 @@ async def persist_account_local_campaign_facts(context: Any, account: dict[str, 
             "coverage_end_utc": summary["coverage_end"].isoformat(),
             "last_hour_end_utc": summary["last_hour"].isoformat(),
             "updated_at": now_iso, "source_mode": "snapchat_native_account_day_v2",
-            "coverage_status": "provisional_hourly" if complete else "incomplete_hourly",
+            "coverage_status": ("provisional_hourly" if complete else
+                                "incomplete_hourly" if spend_valid else "invalid_hourly"),
             "accounting_eligible": False,
         }}, upsert=True))
     await _bulk(context.db[ACCOUNT_DAY_COLLECTION], day_ops)

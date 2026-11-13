@@ -123,19 +123,35 @@ async def test_dense_hours_are_idempotent_and_use_saved_fx_once():
     assert row["spend_native"] == 12.5
     assert row["spend_sar"] == 46.9
     assert row["coverage_complete"] is True
+    assert row["spend_evidence_valid"] is True
     assert row["missing_hours"] == 0
     assert row["coverage_end_utc"] == NOW.isoformat()
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("missing", [0, 3, 6])
-async def test_a_missing_first_middle_or_last_elapsed_hour_never_becomes_full_spend(missing):
+async def test_missing_first_middle_or_last_hour_keeps_observed_spend_with_warning(missing):
     db, _ = await save([p for i, p in enumerate(dense_points()) if i != missing])
     row = db[ACCOUNT_DAY_COLLECTION].rows[0]
     assert row["coverage_complete"] is False
     assert row["missing_hours"] == 1
-    assert row["spend_sar"] is None
-    assert row["spend_native"] is None
+    assert row["spend_evidence_valid"] is True
+    assert row["coverage_status"] == "incomplete_hourly"
+    assert row["hours_observed"] == 6
+    assert len(db[HOUR_COLLECTION].rows) == 6
+    assert row["spend_native"] == (0 if missing == 0 else 12.5)
+    assert row["spend_sar"] == (0 if missing == 0 else 46.9)
+
+
+@pytest.mark.asyncio
+async def test_single_valid_hour_is_usable_without_filling_missing_hours():
+    db, _ = await save([point(0, 12_500_000)])
+    row = db[ACCOUNT_DAY_COLLECTION].rows[0]
+    assert row["spend_native"] == 12.5 and row["spend_sar"] == 46.9
+    assert row["missing_hours"] == 6 and row["hours_observed"] == 1
+    assert row["coverage_complete"] is False and row["spend_evidence_valid"] is True
+    assert len(db[HOUR_COLLECTION].rows) == 1
+    assert row["accounting_eligible"] is False
 
 
 @pytest.mark.asyncio
@@ -155,6 +171,14 @@ async def test_no_fx_retains_native_but_never_guesses_sar():
 
 
 @pytest.mark.asyncio
+async def test_partial_hours_without_fx_keep_native_not_invented_sar():
+    db, _ = await save([point(0, 12_500_000)], MemoryDB(fx=None))
+    row = db[ACCOUNT_DAY_COLLECTION].rows[0]
+    assert row["spend_native"] == 12.5 and row["spend_sar"] is None
+    assert row["coverage_complete"] is False and row["spend_evidence_valid"] is True
+
+
+@pytest.mark.asyncio
 async def test_future_points_do_not_inflate_todays_total():
     db, _ = await save([*dense_points(), point(8, 100_000_000)])
     assert len(db[HOUR_COLLECTION].rows) == 7
@@ -162,13 +186,23 @@ async def test_future_points_do_not_inflate_todays_total():
 
 
 @pytest.mark.asyncio
+async def test_no_observed_hours_does_not_fabricate_a_zero_snapshot():
+    db, count = await save([point(8, 100_000_000)])
+    assert count == 0
+    assert db[HOUR_COLLECTION].rows == db[ACCOUNT_DAY_COLLECTION].rows == []
+
+
+@pytest.mark.asyncio
 async def test_conflicting_duplicate_and_invalid_spend_fail_closed():
     db, _ = await save([*dense_points(), point(0, 9_000_000)])
     assert db[ACCOUNT_DAY_COLLECTION].rows[0]["spend_sar"] is None
+    assert db[ACCOUNT_DAY_COLLECTION].rows[0]["spend_evidence_valid"] is False
+    assert db[ACCOUNT_DAY_COLLECTION].rows[0]["coverage_status"] == "invalid_hourly"
     bad = point(3)
     bad["metrics"]["spend"] = None
     db, _ = await save([*dense_points(), bad])
     assert db[ACCOUNT_DAY_COLLECTION].rows[0]["spend_sar"] is None
+    assert db[ACCOUNT_DAY_COLLECTION].rows[0]["spend_evidence_valid"] is False
 
 
 @pytest.mark.asyncio

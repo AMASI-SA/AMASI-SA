@@ -40,3 +40,35 @@ test("tap prevents navigation of enclosing order link and Escape dismisses", asy
     expect(document.querySelector('[role="tooltip"]')).toBeNull();
     expect(api.get).not.toHaveBeenCalled();
 });
+
+test("missing hours are advisory and do not hide available spend CPA or ROAS", async () => {
+    await act(async () => root.render(<CampaignHoverBadge badge={badge} campaign={campaign} report={{
+        status: "available", timezone: "America/New_York", date: "2026-11-13",
+        orders: 1, pieces: 4, sales_sar: 375, spend_sar: 93.75, cpa_sar: 93.75, roas: 4,
+        spend_warning: "snapchat_hours_incomplete", missing_hours: 2,
+        spend_coverage: "incomplete_hourly", updated_at: "2026-11-13T12:05:00Z",
+    }} />));
+    await act(async () => host.querySelector('[role="button"]').dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+    const popup = document.querySelector('[role="tooltip"]');
+    const values = [...popup.querySelectorAll("td")].map(cell => cell.textContent);
+    expect(values.filter(value => value.includes("93.75"))).toHaveLength(2);
+    expect(values).toContain("4.00×");
+    expect(values.join(" ")).not.toContain("غير مكتمل");
+    expect(popup.textContent).toContain("محسوبة من المبلغ المتوفر");
+    expect(popup.textContent).toContain("الساعات الناقصة: 2");
+    expect(popup.textContent).not.toContain("لا تُحسب");
+    expect(api.get).not.toHaveBeenCalled();
+});
+
+test("zero observed spend with missing hours stays zero without claiming a final zero day", async () => {
+    await act(async () => root.render(<CampaignHoverBadge badge={badge} campaign={campaign} report={{
+        status: "available", orders: 1, pieces: 1, sales_sar: 375,
+        spend_sar: 0, cpa_sar: 0, roas: null, spend_warning: "snapchat_hours_incomplete", missing_hours: 1,
+    }} />));
+    await act(async () => host.querySelector('[role="button"]').dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+    const popup = document.querySelector('[role="tooltip"]');
+    expect(popup.textContent).toContain("0.00 ر.س");
+    expect(popup.textContent).toContain("لا يوجد صرف مسجل");
+    expect(popup.textContent).toContain("الساعات الناقصة: 1");
+    expect(api.get).not.toHaveBeenCalled();
+});

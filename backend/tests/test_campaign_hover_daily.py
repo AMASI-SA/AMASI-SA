@@ -171,20 +171,67 @@ async def test_ny_account_spend_preferred_and_riyadh_report_not_relabelled():
     assert row["spend_sar"] == row["cpa_sar"] == 93.75
     assert row["roas"] == 4 and row["orders"] == 1
     assert row["spend_coverage"] == "provisional_hourly"
+    assert row["spend_warning"] is None
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("changes", [
-    {"coverage_complete": False}, {"coverage_start_utc": "2026-11-13T06:00:00+00:00"},
-    {"coverage_end_utc": "2026-11-14T00:00:00+00:00"}, {"coverage_status": "incomplete_hourly"},
+    {"coverage_complete": False}, {"coverage_status": "incomplete_hourly"}, {"missing_hours": 2},
+    {"coverage_complete": False, "coverage_status": "incomplete_hourly", "missing_hours": 1,
+     "spend_evidence_valid": True, "hours_observed": 6},
 ])
-async def test_unproven_hour_coverage_cannot_enter_cpa_or_roas(changes):
+async def test_missing_hours_do_not_block_available_spend_cpa_or_roas(changes):
+    db = database()
+    db["mezan_snapchat_campaign_account_day_v2"].rows = [local_spend(**changes)]
+    row = await read(db)
+    assert row["orders"] == 1 and row["pieces"] == 4 and row["sales_sar"] == 375
+    assert row["spend_sar"] == row["cpa_sar"] == 93.75
+    assert row["roas"] == 4 and row["status"] == "available"
+    assert row["spend_reason"] is None
+    assert row["spend_warning"] == "snapchat_hours_incomplete"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("changes", [
+    {"coverage_start_utc": "2026-11-13T06:00:00+00:00"},
+    {"coverage_end_utc": "2026-11-14T00:00:00+00:00"},
+    {"coverage_status": "invalid_hourly"}, {"spend_evidence_valid": False}, {"hours_observed": 0},
+])
+async def test_invalid_hour_evidence_or_wrong_window_still_cannot_enter_metrics(changes):
     db = database()
     db["mezan_snapchat_campaign_account_day_v2"].rows = [local_spend(**changes)]
     row = await read(db)
     assert row["orders"] == 1 and row["sales_sar"] == 375
     assert row["spend_sar"] is row["cpa_sar"] is row["roas"] is None
-    assert row["spend_reason"] == "snapchat_hours_incomplete"
+    assert row["spend_reason"] == "snapchat_hour_evidence_invalid"
+
+
+@pytest.mark.asyncio
+async def test_legacy_unknown_partial_amount_is_not_promoted_from_unaudited_known_total():
+    db = database()
+    db["mezan_snapchat_campaign_account_day_v2"].rows = [local_spend(
+        coverage_complete=False, coverage_status="incomplete_hourly", spend_sar=None,
+        spend_native=None, known_spend_native=25, missing_hours=1)]
+    row = await read(db)
+    assert row["orders"] == 1
+    assert row["spend_sar"] is row["cpa_sar"] is row["roas"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rate,expected", [(None, None), (3.75, 93.75)])
+async def test_partial_native_spend_still_requires_saved_currency_rate(rate, expected):
+    db = database()
+    db["mezan_snapchat_campaign_account_day_v2"].rows = [local_spend(
+        coverage_complete=False, coverage_status="incomplete_hourly", spend_evidence_valid=True,
+        spend_sar=None, spend_native=25, currency_native="USD", missing_hours=1)]
+    if rate is not None:
+        db["ads_v2_spend_daily"].rows = [{"user_id": "owner", "date": "2026-11-13",
+            "account_id": "snap-ny", "currency_native": "USD", "fx_rate_to_sar": rate}]
+    row = await read(db)
+    assert row["spend_sar"] == expected
+    assert row["cpa_sar"] == expected
+    assert row["roas"] == (4 if rate else None)
+    assert row["spend_warning"] == "snapchat_hours_incomplete"
 
 
 @pytest.mark.asyncio
@@ -224,7 +271,8 @@ async def test_ambiguous_campaign_account_never_guessed():
     db["mezan_snapchat_entities_v2"].rows.append({"user_id": "owner", "entity_type": "campaign",
         "external_id": "ny-campaign", "ad_account_id": "snap-sa"})
     row = await read(db)
-    assert row["status"] == "ambiguous_account" and row["orders"] is None
+    assert row["status"] == "ambiguous_account"
+    assert row["orders"] is None
 
 
 @pytest.mark.asyncio
@@ -261,6 +309,17 @@ async def test_zero_spend_and_zero_orders_keep_division_undefined():
     row = await read(db)
     assert row["orders"] == row["spend_sar"] == 0
     assert row["cpa_sar"] is row["roas"] is None
+
+
+@pytest.mark.asyncio
+async def test_partial_explicit_zero_is_usable_and_division_by_zero_stays_undefined():
+    db = database()
+    db["mezan_snapchat_campaign_account_day_v2"].rows = [local_spend(
+        spend_sar=0, coverage_complete=False, coverage_status="incomplete_hourly", missing_hours=1)]
+    row = await read(db)
+    assert row["orders"] == 1 and row["spend_sar"] == row["cpa_sar"] == 0
+    assert row["roas"] is None
+    assert row["spend_warning"] == "snapchat_hours_incomplete"
 
 
 @pytest.mark.asyncio
