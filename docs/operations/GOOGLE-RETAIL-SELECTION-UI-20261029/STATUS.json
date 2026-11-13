@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "task": "google-retail-selection-ui",
+  "date_utc": "2026-10-29",
+  "branch": "codex/google-retail-selection-ui-20261029",
+  "production_base_sha": "e51f5b88b68905460417a01fb9ceb3704706c168",
+  "status": "reviewed and CI verified; ready for combined c7 integration, not standalone deployment",
+  "owned_files": [
+    "frontend/src/components/marketing/GoogleCampaignComposer.jsx",
+    "frontend/src/components/marketing/GoogleCampaignComposer.test.jsx",
+    "docs/operations/GOOGLE-RETAIL-SELECTION-UI-20261029/STATUS.json"
+  ],
+  "backend_dependency": {
+    "pr": 1617,
+    "reviewed_source": "c7a36165f48f433ab3275320187e4d9c5b298020",
+    "tree": "13a9fa63a2deb026b1b137f99728dd4b3cb6a9f5",
+    "integration": "path-only UI companion; does not include or modify backend dependency; must release together with c7 gate or verified equivalent",
+    "ui_only_release": "Forbidden: previous production lookup omits channel, so UI without c7 would conservatively disable all new retail selections."
+  },
+  "behavior": [
+    "New pair and group selections require complete current-account/current-merchant inventory, native ELIGIBLE/ELIGIBLE_LIMITED status, ONLINE channel and IN_STOCK availability; approved flag alone is insufficient.",
+    "Duplicate offer IDs collapse to a disabled ambiguous choice; backend remains authoritative for full native identity, exact campaign feed, merchant/account ownership and final dispatch freshness.",
+    "If the owner explicitly selects a campaign feed, new offers with a different or unknown feed are disabled in both pickers. Leaving feed blank preserves the AI selection flow; full server validation is still required. Changing feed never removes existing saved offers.",
+    "Existing unavailable or missing selections remain visible without automatic edits, stay in saved drafts, and can be explicitly removed by the owner.",
+    "Owner-selected product/offer mapping is disclosed as an unverified manual assertion in selection and frozen review; native eligibility does not prove store-to-offer identity.",
+    "Account changes clear scoped lookup options; failed or late previous-account lookups cannot restore stale selectable rows.",
+    "Generic all-feed option, Search and nonretail PMax remain available. No campaign creation or execution logic changed."
+  ],
+  "validation": {
+    "focused_composer": "51 cases passed within full suite (27 existing + 24 new)",
+    "full_frontend": {
+      "result": "252 passed; 18 suites; 0 skips; exit 0",
+      "seconds": 7.352,
+      "toolchain": "governed Node v22.23.2 / Yarn 1.22.22",
+      "scope": "same 18 frontend paths as Google Ads full management workflow"
+    },
+    "dependency_lock": "same yarn.lock SHA256 1bfa215ae3fb98df72a4c934fa0de33c9f11038ccede9affde4dab0a2cae5d4a; existing node_modules reused read-only",
+    "live_google_calls": false,
+    "paid_writes": false,
+    "deployment": false,
+    "git_diff_check": "passed",
+    "independent_review": {
+      "reviewer": "google_product_acceptance",
+      "verdict": "bounded PASS; no confirmed blocker",
+      "source": "0972717d35582c45371863e833c7ee29464275d7",
+      "tree": "5d9bf0341fcb0793160d9c1ec7d66215dad6d165",
+      "composer": "51 passed, 3.275s",
+      "full_frontend": "252 passed, 18 suites, 0 skips, 7.128s",
+      "additional_probes": "merchant-switch failure and late old-merchant response passed on0e40; relevant logic unchanged in097",
+      "scope": "source-only UI contract; no live provider or deployment proof"
+    },
+    "ci": {
+      "run": 40934142859,
+      "result": "success after one infrastructure-only frontend retry",
+      "synthetic_merge": "d8d98383fc39a6180c0da7e9dc90d2bce4253dc6",
+      "synthetic_tree": "5d9bf0341fcb0793160d9c1ec7d66215dad6d165",
+      "parents": [
+        "e51f5b88b68905460417a01fb9ceb3704706c168",
+        "0972717d35582c45371863e833c7ee29464275d7"
+      ],
+      "backend": {
+        "job": 123671963255,
+        "passed": 1242,
+        "skipped": 0,
+        "seconds": 23.27,
+        "actual_mongo": "8.0.26 disposable loopback; fake Google provider"
+      },
+      "frontend": {
+        "job": 123671959845,
+        "passed": 252,
+        "suites": 18,
+        "skipped": 0,
+        "build_seconds": 6.15
+      },
+      "scope": "UI-only branch; c7 backend gate is not included. Synthetic merge has exact reviewed source tree."
+    },
+    "infrastructure_retries": [
+      {
+        "run": 40934142859,
+        "failed_job": 123660087607,
+        "cause": "Yarn registry HTTP502 fetching json-parse-even-better-errors2.3.1 before tests",
+        "retry_count": 1,
+        "retry_job": 123671959845,
+        "result": "success; unchanged source and dependency lock"
+      },
+      {
+        "run": 40934142895,
+        "failed_job": 123660092318,
+        "cause": "Yarn registry HTTP502 fetching @phosphor-icons/react2.1.10 before tests; missing artifact was consequential",
+        "retry_count": 1,
+        "retry_job": 123671945284,
+        "result": "187 tests/14 suites passed; entire Operational Balance Web workflow success"
+      }
+    ],
+    "release_readiness": {
+      "run": 40934142902,
+      "frontend_job": 123660088252,
+      "backend_job": 123660088890,
+      "result": "success; source candidate reproducible build and backend preflight",
+      "deployment": "not performed; root must generate new combined Source A and Intent B"
+    }
+  },
+  "remaining": [
+    "Prepare one isolated combined c7 backend plus097 UI source directly on freshly fetched production; preserve concurrent changes.",
+    "Run combined backend/252 UI/build CI and independent integration review.",
+    "Root alone creates final Release Guard v5 A/B, deploys and verifies live owner flow. No independent mapping or paid-launch completion claimed."
+  ],
+  "next_action": "Build combined integration under root assignment; do not deploy UI alone.",
+  "previous_checkpoint": {
+    "source_sha": "0e40b85471d6e97eb168933886feb2b6355eed88",
+    "tree_sha": "538fd37d7c68775dd33704b9fefe548666b5f168",
+    "superseded_reason": "Root-requested explicit-feed mismatch UX improvement with three new regression cases",
+    "independent_review": "48 composer cases passed; independent merchant switch and late-response probes passed; final successor review pending",
+    "ci": {
+      "google_full_run": 40933480932,
+      "synthetic_merge": "8d8245a4544bc79c407749f470f53a36b6ab3952",
+      "backend": "1242 passed; 0 skips; 19.12s",
+      "frontend": "249 passed; 18 suites; build 6.41s; independently inspected by product_acceptance",
+      "readiness_run": 40933480809,
+      "readiness": "source candidate classified; reproducible double build and backend preflight passed; not a deployed release"
+    }
+  },
+  "reviewed_source_sha": "0972717d35582c45371863e833c7ee29464275d7",
+  "reviewed_source_tree": "5d9bf0341fcb0793160d9c1ec7d66215dad6d165",
+  "pull_request": {
+    "number": 1620,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1620",
+    "state": "draft"
+  }
+}
