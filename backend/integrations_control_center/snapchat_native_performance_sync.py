@@ -1,10 +1,8 @@
-"""Hourly Snapchat V2 ingestion aggregated to the Riyadh business day.
+"""Hourly Snapchat V2 ingestion with separate Riyadh/account-local projections.
 
-Snapchat ad accounts can use different native timezones.  A DAY request for
-an America/Los_Angeles account therefore starts around midday in Riyadh.  The
-merchant-facing Mezan day is always Asia/Riyadh 00:00-23:59, so this module
-requests HOUR buckets and folds every bucket into the matching Riyadh date
-before persisting campaign and ad-account daily rows.
+Existing campaign and account facts retain the Riyadh business-day contract.
+The same HOUR response additionally feeds account-local campaign snapshots.
+No partial or truncated provider response is published as a complete refresh.
 """
 from __future__ import annotations
 import latency_evidence
@@ -14,6 +12,10 @@ from typing import Any
 
 import httpx
 
+from .snapchat_native_account_day import (
+    validated_tz, sync_windows, required_local_date_range,
+    persist_account_local_campaign_facts,
+)
 from .snapchat_native_data_common import (
     ATTRIBUTION_MODEL,
     BUSINESS_TIMEZONE,
@@ -44,10 +46,8 @@ FUNNEL_STAT_FIELDS = (
     "conversion_add_billing",
     "conversion_purchases",
 )
-# Audience metrics are intentionally excluded from HOUR/day summation.  A
-# frequency of 1.5 today plus 1.7 yesterday is not a 3.2 multi-day frequency;
-# each value must remain attached to the exact provider TOTAL window that
-# produced it.
+# Audience metrics are intentionally excluded from HOUR/day summation. A
+# frequency of 1.5 today plus 1.7 yesterday is not a 3.2 multi-day frequency.
 NON_ADDITIVE_TOTAL_FIELDS = ("uniques", "frequency")
 TOTAL_STAT_FIELDS = (*STAT_FIELDS, *NON_ADDITIVE_TOTAL_FIELDS)
 
@@ -173,8 +173,6 @@ def _finalize_bucket(bucket: dict[str, Any]) -> dict[str, int | float | None]:
     for key in tuple(bucket.get("fields") or STAT_FIELDS):
         seen = int(bucket["seen"].get(key) or 0)
         if key in NON_ADDITIVE_TOTAL_FIELDS:
-            # A provider TOTAL audience value is valid only as one exact
-            # window.  Multiple values must never be added together.
             complete = seen == 1
         else:
             complete = bool(row_count and seen == row_count)
@@ -190,11 +188,7 @@ def riyadh_business_window(
     start_date: date,
     end_date: date,
 ) -> tuple[datetime, datetime]:
-    """Return the exact inclusive-date window in Asia/Riyadh.
-
-    The returned end is exclusive, so a one-day request is Riyadh 00:00 of
-    that date through Riyadh 00:00 of the following date.
-    """
+    """Return inclusive Riyadh dates as an exact half-open datetime window."""
     business_tz = _timezone(BUSINESS_TIMEZONE)
     start = datetime(
         start_date.year,
@@ -216,11 +210,7 @@ def riyadh_hourly_windows(
     start_date: date,
     end_date: date,
 ) -> list[tuple[datetime, datetime]]:
-    """Split an inclusive Riyadh date range into valid Snapchat HOUR windows.
-
-    Snapchat requires HOUR report boundaries to be no more than seven days
-    apart.  Adjacent half-open windows preserve every hour exactly once.
-    """
+    """Split an inclusive Riyadh date range into adjacent <=7-day windows."""
     start, end = riyadh_business_window(start_date, end_date)
     windows: list[tuple[datetime, datetime]] = []
     cursor = start
@@ -288,9 +278,6 @@ async def _upsert_performance(
             provider_granularity=provider_granularity,
             provider_breakdown=provider_breakdown,
         ),
-        # Keep the provider's raw purchase count at the document top level so
-        # Dashboard reads the exact account fact instead of reconstructing it
-        # from unrelated order sources.
         "purchases": purchases,
         "spend_native": spend_native,
         "spend_sar": await context.to_sar(spend_native, currency),
@@ -313,11 +300,8 @@ async def _upsert_performance(
         "stored_granularity": "RIYADH_DAY",
         "updated_at": now_iso,
     }
-    # Optional publish marker: identifies exactly which analytics_refresh
-    # run produced this fact.  The dashboard reader binds to this run_id
-    # (and validates the run is complete) instead of relying on the
-    # "latest" run, so a subsequent unrelated run (queued/running/failed)
-    # cannot invalidate an earlier committed publication.
+    # Bind financial facts to the exact completed publisher, not an unrelated
+    # later queued/running refresh.
     published_by_run_id = getattr(context, "run_id", None)
     if isinstance(published_by_run_id, str) and published_by_run_id.strip():
         document["published_by_run_id"] = published_by_run_id.strip()
@@ -354,10 +338,15 @@ async def sync_snapchat_performance(
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
     endpoint = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats"
-    for window_start, window_end in riyadh_hourly_windows(
-        start_date,
-        end_date,
-    ):
+    account_zone = validated_tz(account.get("timezone"))
+    if account_zone and str(account_zone) != BUSINESS_TIMEZONE:
+        local_from, local_to = required_local_date_range(
+            start_date, end_date, account_zone, now=context.now(),
+        )
+        requested_windows = sync_windows(local_from, local_to, account_zone)
+    else:
+        requested_windows = riyadh_hourly_windows(start_date, end_date)
+    for window_start, window_end in requested_windows:
         url = endpoint
         params: dict[str, Any] | None = {
             "start_time": window_start.isoformat(timespec="seconds"),
@@ -376,6 +365,10 @@ async def sync_snapchat_performance(
             payload = await context.get_json(
                 client, url, headers=headers, params=params
             )
+            request_status = str(payload.get("request_status") or "SUCCESS").upper()
+            if "FAIL" in request_status or "ERROR" in request_status:
+                errors.append({"kind": "stats", "error": request_status[:80]})
+                break
             wrapped_stats = payload.get("timeseries_stats") or []
             if not isinstance(wrapped_stats, list):
                 raise SnapchatNativeSyncError(
@@ -386,6 +379,7 @@ async def sync_snapchat_performance(
                 )
             for wrapped in wrapped_stats:
                 if not isinstance(wrapped, dict):
+                    errors.append({"kind": "stats", "error": "invalid_stats_entry"})
                     continue
                 status = str(
                     wrapped.get("sub_request_status") or "SUCCESS"
@@ -395,6 +389,7 @@ async def sync_snapchat_performance(
                     continue
                 stat = wrapped.get("timeseries_stat", wrapped)
                 if not isinstance(stat, dict):
+                    errors.append({"kind": "stats", "error": "invalid_timeseries_stat"})
                     continue
                 entities: list[dict[str, Any]] = []
                 breakdown = stat.get("breakdown_stats")
@@ -413,6 +408,7 @@ async def sync_snapchat_performance(
                     external_id = str(entity.get("id") or "").strip()
                     points = entity.get("timeseries")
                     if not external_id or not isinstance(points, list):
+                        errors.append({"kind": "stats", "error": "invalid_campaign_timeseries"})
                         continue
                     for point in points:
                         if (
@@ -425,12 +421,21 @@ async def sync_snapchat_performance(
                                 "end_time": point.get("end_time"),
                                 "metrics": point["stats"],
                             })
+                        else:
+                            errors.append({"kind": "stats", "error": "invalid_hour_point"})
             next_url = _safe_next_url(
                 (payload.get("paging") or {}).get("next_link")
             )
             if not next_url:
                 break
             url, params = next_url, None
+        else:
+            # A next page still exists at the configured cap. Never overwrite
+            # the prior known-good daily facts with a truncated refresh.
+            errors.append({"kind": "stats", "error": "stats_pagination_incomplete"})
+
+    if errors:
+        return 0, errors
 
     campaign_daily: dict[tuple[str, str], dict[str, Any]] = {}
     for row in rows:
@@ -493,6 +498,10 @@ async def sync_snapchat_performance(
             provider_breakdown="campaign",
         )
         saved += 1
+    saved += await persist_account_local_campaign_facts(
+        context, account, rows, windows=requested_windows,
+        source_complete=not errors,
+    )
     return saved, errors
 
 
