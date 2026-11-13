@@ -8,10 +8,9 @@ permissions:
 jobs:
   diagnose-read-only:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     env:
       EXPECTED_HEAD: 777ee5fcf1db51454a170d07ea3ec8c2bb129413
-      PRODUCTION_BASE: 8d25f7a6fa9a310b319b753c32457e70987f7c51
       PATCH_SOURCE: a18ce6265325a979d3c797c9610c24e9de742e81
       JWT_SECRET: campaign-hover-offline-test-only
       PYTHONDONTWRITEBYTECODE: '1'
@@ -19,14 +18,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: 777ee5fcf1db51454a170d07ea3ec8c2bb129413
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
-      - name: Prepare reviewed patch in ephemeral checkout only
+      - name: Prepare pinned patch without changing any remote branch
         run: |
           test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
-          test "$(git ls-remote origin refs/heads/hotfix/prod-snap-meta-final | cut -f1)" = "$PRODUCTION_BASE"
           test "$(git ls-files '*AGENTS.md')" = AGENTS.md
-          git fetch --no-tags origin "$PATCH_SOURCE"
+          # Offline diagnosis never deploys or writes a ref. Unrelated production
+          # advancement is observed, not a reason to skip fixture tests.
+          git ls-remote origin refs/heads/hotfix/prod-snap-meta-final
+          git fetch --depth=1 --no-tags origin "$PATCH_SOURCE"
           git show "$PATCH_SOURCE:scripts/ops_patch_campaign_hover_native.py" > "$RUNNER_TEMP/apply.py"
           python -B - <<'PY'
           import os
@@ -43,23 +44,33 @@ jobs:
           PY
           python -B "$RUNNER_TEMP/apply.py"
           git diff --exit-code -- release/release-intent-v5.json .github
+          python -B - <<'PY'
+          import os, subprocess, zipfile
+          from pathlib import Path
+          out = Path(os.environ['RUNNER_TEMP']) / 'hover-diagnosis'
+          out.mkdir()
+          with zipfile.ZipFile(out / 'prepared-source.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+              for path in subprocess.check_output(['git','ls-files','-z']).decode().split('\0'):
+                  if path and Path(path).is_file():
+                      z.write(path, path)
+          (out/'prepared.patch').write_bytes(subprocess.check_output(['git','diff','--binary']))
+          PY
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: pip
           cache-dependency-path: backend/requirements.txt
-      - name: Install public test dependencies
+      - name: Install test dependencies
         run: sed '/^emergentintegrations==/d' backend/requirements.txt | python -m pip install -q -r /dev/stdin pytest-asyncio
-      - name: Diagnose exact fixture failures without runtime writes
+      - name: Diagnose fixture failures
         working-directory: backend
         run: |
-          python -B - <<'PY'
+          python -B - <<'PY' > "$RUNNER_TEMP/hover-diagnosis/backend.log" 2>&1
           import inspect, pytest
           from datetime import datetime, timezone
           from order_engine import campaign_hover as hover
-          print('WINDOW_FUNCTION', inspect.getsource(hover._window))
-          print('READ_ENTRY', '\n'.join(inspect.getsource(hover.read_campaign_hover).splitlines()[:30]))
           at = datetime(2026, 11, 13, 12, 30, tzinfo=timezone.utc)
+          print('WINDOW_FUNCTION', inspect.getsource(hover._window))
           for zone in ('Asia/Riyadh', 'America/Los_Angeles'):
               print('BASE_WINDOW', zone, repr(hover._window(at, zone)))
           class Diagnostic:
@@ -67,9 +78,15 @@ jobs:
                   for entry in call.excinfo.traceback:
                       if str(entry.path).endswith('campaign_hover.py'):
                           frame = entry.frame.f_locals
-                          print('FAILED_FRAME', entry.lineno, {k: repr(frame.get(k)) for k in ('now','label_window','labels','windows','start','day','at')})
-                  print('WINDOW_AT_FAILURE', inspect.getsource(hover._window))
+                          print('FAILED_FRAME', entry.lineno, {k: repr(frame.get(k)) for k in ('now','label_window','labels','windows','at')})
                   for zone in ('Asia/Riyadh', 'America/Los_Angeles'):
                       print('FAILURE_WINDOW', zone, repr(hover._window(at, zone)))
-          raise SystemExit(pytest.main(['-q','-s','--tb=short','tests/test_campaign_hover_native_sources.py'], plugins=[Diagnostic()]))
+          raise SystemExit(pytest.main(['-q','-s','--tb=short','tests/test_snapchat_hourly_response_coverage.py','tests/test_snapchat_account_local_campaign_day.py','tests/test_campaign_hover_daily.py','tests/test_campaign_hover_refresh.py','tests/test_campaign_hover_native_sources.py'], plugins=[Diagnostic()]))
           PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hover-exact-diagnosis-777ee5fc
+          path: ${{ runner.temp }}/hover-diagnosis
+          if-no-files-found: error
+          retention-days: 3
