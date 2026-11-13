@@ -17,7 +17,7 @@ jobs:
       TARGET_BRANCH: codex/campaign-hover-live-refresh-20261113
       EXPECTED_HEAD: 777ee5fcf1db51454a170d07ea3ec8c2bb129413
       PRODUCTION_BASE: 8d25f7a6fa9a310b319b753c32457e70987f7c51
-      PATCH_SOURCE: 27ae0723a7e179f620770d8ed7594a7ee28821a9
+      PATCH_SOURCE: a18ce6265325a979d3c797c9610c24e9de742e81
       PYTHONDONTWRITEBYTECODE: '1'
       JWT_SECRET: campaign-hover-offline-test-only
     steps:
@@ -38,8 +38,7 @@ jobs:
           from pathlib import Path
           p = Path(os.environ['RUNNER_TEMP']) / 'apply-native-hover.py'
           text = p.read_text()
-          # Exact checkout diff reviewed in run 43498445576/job 132137598383.
-          # Preserve all guards; reconcile only the two reviewed source hashes.
+          # Exact resulting source diff reviewed in run 43498445576.
           for before, after in (
               ('d144f05257f461a1f4aa35e069102e96aa7f87c680ddf31a50d66e7e0b50c8f6', '51b753e280b85eddb3394eb916d329240344253e18de5599c65c1b9205e69f1d82'),
               ('364bc49055414af677777baf770f65bd6ea43edfde7499cdb949ecd49919860f', '6f30365740ea8690f712b75d99926d0f14da351ad8754f1ca668e7e7a21067048'),
@@ -56,7 +55,7 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - name: Install public test closure
         run: sed '/^emergentintegrations==/d' backend/requirements.txt | python -m pip install -q -r /dev/stdin pytest-asyncio
-      - name: Backend account day, native schema and Salla acceptance
+      - name: Backend acceptance
         working-directory: backend
         run: python -m pytest -q --tb=short tests/test_snapchat_hourly_response_coverage.py tests/test_snapchat_account_local_campaign_day.py tests/test_campaign_hover_daily.py tests/test_campaign_hover_refresh.py tests/test_campaign_hover_native_sources.py
       - uses: actions/setup-node@v4
@@ -75,7 +74,7 @@ jobs:
         run: |
           yarn test --watchAll=false --runInBand --runTestsByPath src/components/CampaignHoverBadge.test.jsx src/components/CampaignHoverNativeSources.test.jsx src/pages/AdvancedDashboard.campaignHover.test.js src/services/campaignHover.test.js src/hooks/useCampaignHover.test.jsx src/lib/orderCampaignAttribution.test.js src/lib/campaignHoverScopes.test.js > "$RUNNER_TEMP/hover-focused.log" 2>&1 || { tail -160 "$RUNNER_TEMP/hover-focused.log"; exit 1; }
           tail -12 "$RUNNER_TEMP/hover-focused.log"
-      - name: Checkpoint the tested task source only
+      - name: Checkpoint tested task source only
         run: |
           test "$(git ls-remote origin refs/heads/$TARGET_BRANCH | cut -f1)" = "$EXPECTED_HEAD"
           test "$(git ls-remote origin refs/heads/hotfix/prod-snap-meta-final | cut -f1)" = "$PRODUCTION_BASE"
@@ -86,7 +85,7 @@ jobs:
           git diff --exit-code "$EXPECTED_HEAD" HEAD -- release/release-intent-v5.json .github
           git push origin "HEAD:refs/heads/$TARGET_BRANCH"
           echo "TESTED_TASK_SOURCE=$(git rev-parse HEAD)"
-      - name: Full frontend regression with compact failure report
+      - name: Full frontend regression
         working-directory: frontend
         env:
           CI: 'true'
