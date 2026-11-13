@@ -1,8 +1,9 @@
 """Read-only Snapchat Campaign and Ad Squad settings projections.
 
-This module reads only the provider-backed native entity catalogue populated by
-snapchat_native_entities_sync. It never calls Snapchat, writes MongoDB,
-schedules work, backfills facts, or reads reporting/performance data.
+This module reads provider-backed native and canonical identity catalogues.
+Canonical observations require account-scoped completed identity-sync proof.
+This module never calls Snapchat, writes MongoDB, schedules work, backfills
+facts, or reads reporting/performance data.
 """
 
 from __future__ import annotations
@@ -20,6 +21,9 @@ from .snapchat_native_data_common import (
     SNAPCHAT_PROVIDER_ID,
     _collection,
 )
+
+CANONICAL_ENTITY_COLLECTION = "mezan_snapchat_entity_facts_v2"
+CANONICAL_SYNC_RUN_COLLECTION = "mezan_snapchat_sync_runs_v2"
 
 SETTINGS_SYNC_RUN_COLLECTION = "mezan_integration_sync_runs_v2"
 INTEGRATION_ACCOUNTS_COLLECTION = "mezan_integration_accounts_v2"
@@ -196,6 +200,88 @@ async def _latest_sync_run(db: Any, user_id: str) -> dict[str, Any] | None:
     return rows[0] if rows else None
 
 
+async def _settings_rows(
+    db: Any,
+    query: dict[str, Any],
+    projection: dict[str, Any],
+    *,
+    limit: int,
+) -> tuple[list[dict[str, Any]], bool]:
+    """Read both catalogues, giving canonical observations precedence per identity.
+
+    Old canonical rows deliberately remain unavailable until a new sync captures
+    the provider settings. Inactive canonical rows suppress old legacy copies.
+    """
+    legacy, legacy_truncated = await _find_rows(
+        _collection(db, SNAPCHAT_ENTITY_COLLECTION), query, projection, limit=limit
+    )
+    canonical_query = {key: value for key, value in query.items() if key != "deleted"}
+    canonical, canonical_truncated = await _find_rows(
+        _collection(db, CANONICAL_ENTITY_COLLECTION), canonical_query, {"_id": 0}, limit=limit
+    )
+    runs = {}
+    merged = {
+        (row.get("ad_account_id"), row.get("entity_type"), row.get("external_id")): row
+        for row in legacy
+    }
+    for source in canonical:
+        account_id = source.get("ad_account_id")
+        key = (account_id, source.get("entity_type"), source.get("external_id"))
+        merged.pop(key, None)
+        if not source.get("active") or source.get("missing_from_latest_sync"):
+            continue
+        if account_id not in runs:
+            cursor = _collection(db, CANONICAL_SYNC_RUN_COLLECTION).find({
+                "user_id": query["user_id"], "provider": SNAPCHAT_PROVIDER_ID,
+                "ad_account_id": account_id,
+            }, {"_id": 0})
+            cursor = cursor.sort("started_at", -1)
+            found, _ = await _cursor_rows(cursor, limit=1)
+            runs[account_id] = found[0] if found else {}
+        run = runs[account_id]
+        observed = _as_utc(source.get("last_seen_at"))
+        started, finished = _as_utc(run.get("started_at")), _as_utc(run.get("finished_at"))
+        identity = (run.get("summary") or {}).get("identity") or {}
+        level = identity.get(source.get("entity_type")) or {}
+        proof = bool(
+            source.get("sync_run_id")
+            and source.get("sync_run_id") == run.get("sync_run_id")
+            and run.get("identity_sync_status") == "complete"
+            and run.get("status") in {"complete", "partial"}
+            and (level.get("coverage") or {}).get("status") == "complete"
+            and observed and started and finished
+            and started <= observed <= finished
+        )
+        counts = {
+            kind: details.get("rows_saved")
+            for kind, details in identity.items()
+            if isinstance(details, dict)
+            and (details.get("coverage") or {}).get("status") == "complete"
+        }
+        projected_run = {
+            **run,
+            "run_id": run.get("sync_run_id"),
+            "status": "complete" if proof else "failed",
+            "summary": {"entity_counts": {account_id: counts}},
+        }
+        merged[key] = {
+            **source,
+            "display_name": source.get("name"),
+            "source_mode": SNAPCHAT_NATIVE_SYNC_SOURCE_MODE,
+            "last_observed_at": source.get("last_seen_at"),
+            "provider_snapshot": source.get("raw"),
+            "_canonical_proof": proof,
+            "_canonical_run": projected_run,
+            "_source_collection": CANONICAL_ENTITY_COLLECTION,
+        }
+    rows = list(merged.values())
+    if canonical_truncated:
+        # A bounded canonical scan cannot prove a legacy row has no newer
+        # canonical observation or tombstone outside the loaded page.
+        rows = [{**row, "_canonical_proof": False} for row in rows]
+    return rows[:limit], legacy_truncated or canonical_truncated or len(rows) > limit
+
+
 def _settings_quality(
     row: dict[str, Any] | None,
     *,
@@ -216,7 +302,13 @@ def _settings_quality(
         settings_synced_at = row.get("last_observed_at")
         observed = _as_utc(settings_synced_at)
         snapshot = _provider_snapshot(row)
-        if snapshot is None:
+        if row.get("_canonical_proof") is False:
+            status = _SYNC_FAILED
+            reason = "canonical_settings_sync_proof_missing"
+            freshness_seconds = (
+                None if observed is None else max(0, int((now - observed).total_seconds()))
+            )
+        elif snapshot is None:
             status = _NOT_LOADED
             reason = "provider_snapshot_missing"
             freshness_seconds = (
@@ -348,6 +440,7 @@ def _base_item(
     expected_provider_entity_id: str | None = None,
     expected_parent_unified_id: str | None = None,
 ) -> dict[str, Any]:
+    latest_run = row.get("_canonical_run", latest_run)
     entity_type = str(row.get("entity_type") or "")
     snapshot = _provider_snapshot(row) or {}
     provider_entity_id = _safe_id(snapshot.get("id"))
@@ -467,19 +560,20 @@ def _base_item(
         value, present = _provider_field(row, name)
         return value if present else None
 
+    identity_contract = _identity_contract(unified_entity_id, provider_entity_id)
+    if row.get("_source_collection") == CANONICAL_ENTITY_COLLECTION:
+        identity_contract["unified_id_source"] = CANONICAL_ENTITY_COLLECTION + ".external_id"
+        identity_contract["provider_id_source"] = CANONICAL_ENTITY_COLLECTION + ".raw.id"
     return {
         "entity_type": entity_type,
         "unified_entity_id": unified_entity_id,
         "provider_entity_id": provider_entity_id,
         "provider_parent_id": provider_parent_id,
-        "identity_contract": _identity_contract(
-            unified_entity_id,
-            provider_entity_id,
-        ),
+        "identity_contract": identity_contract,
         "mapping_status": mapping_status,
         "mapping_verified": mapping_status == "verified",
         "mapping_source": (
-            "mezan_snapchat_entities_v2.provider_snapshot.id"
+            identity_contract["provider_id_source"]
             if mapping_status == "verified"
             else None
         ),
@@ -976,8 +1070,8 @@ async def list_financial_management_settings(
         "updated_at_provider": 1,
         "provider_snapshot": 1,
     }
-    rows, rows_truncated = await _find_rows(
-        _collection(db, SNAPCHAT_ENTITY_COLLECTION),
+    rows, rows_truncated = await _settings_rows(
+        db,
         query,
         projection,
         limit=bounded_limit,
@@ -1002,6 +1096,7 @@ async def list_financial_management_settings(
 
     items: list[dict[str, Any]] = []
     rows_by_campaign: dict[str, dict[str, Any]] = {}
+    campaign_runs = {}
     for row in rows:
         external_id = _safe_id(row.get("external_id"))
         if external_id is None:
@@ -1018,6 +1113,7 @@ async def list_financial_management_settings(
             shared, present = _provider_field(row, "shared_properties")
             item["_shared_properties"] = shared if present else None
             rows_by_campaign[external_id] = item
+            campaign_runs[external_id] = row.get("_canonical_run", latest_run)
         items.append(item)
 
     children_truncated = False
@@ -1029,8 +1125,8 @@ async def list_financial_management_settings(
                 if (account_id := _safe_id(campaign.get("ad_account_id")))
             }
         )
-        child_rows, children_truncated = await _find_rows(
-            _collection(db, SNAPCHAT_ENTITY_COLLECTION),
+        child_rows, children_truncated = await _settings_rows(
+            db,
             {
                 "user_id": str(user_id),
                 "provider": SNAPCHAT_PROVIDER_ID,
@@ -1049,7 +1145,10 @@ async def list_financial_management_settings(
             if account_id in account_rows:
                 account_rows[account_id].append(row)
 
-        observed_child_rows = _rows_observed_in_latest_run(latest_run, child_rows)
+        observed_child_rows = [
+            row for row in child_rows
+            if _rows_observed_in_latest_run(row.get("_canonical_run", latest_run), [row])
+        ]
         children_by_campaign: dict[tuple[str, str], list[dict[str, Any]]] = {
             (
                 _safe_id(campaign.get("ad_account_id")) or "",
@@ -1080,7 +1179,7 @@ async def list_financial_management_settings(
                 children_by_campaign.get((account_id or "", campaign_id), []),
                 truncated=children_truncated,
                 catalog_coverage=_ad_squad_catalog_coverage(
-                    latest_run,
+                    campaign_runs.get(campaign_id),
                     campaign,
                     account_id,
                     account_rows.get(account_id or "", []),
@@ -1107,6 +1206,7 @@ async def list_financial_management_settings(
     return {
         "provider": SNAPCHAT_PROVIDER_ID,
         "source_collection": SNAPCHAT_ENTITY_COLLECTION,
+        "canonical_source_collection": CANONICAL_ENTITY_COLLECTION,
         "settings_source": "existing_native_entity_settings_sync",
         "provider_write_calls": 0,
         "settings_freshness_threshold_seconds": SETTINGS_FRESHNESS_MAX_AGE_SECONDS,
@@ -1149,22 +1249,13 @@ async def resolve_financial_management_settings(
             expected_parent_unified_id=_safe_id(parent_unified_id),
         )
 
-    row = await _collection(db, SNAPCHAT_ENTITY_COLLECTION).find_one(
-        {
-            "user_id": str(user_id),
-            "provider": SNAPCHAT_PROVIDER_ID,
-            "entity_type": entity_type,
-            "external_id": requested_id,
-        },
-        {
-            "_id": 0,
-            "entity_type": 1,
-            "external_id": 1,
-            "campaign_id": 1,
-            "source_mode": 1,
-            "provider_snapshot": 1,
-        },
-    )
+    resolved_rows, truncated = await _settings_rows(db, {
+        "user_id": str(user_id), "provider": SNAPCHAT_PROVIDER_ID,
+        "ad_account_id": item.get("ad_account_id"),
+        "entity_type": entity_type, "external_id": requested_id,
+        "deleted": {"$ne": True},
+    }, {"_id": 0}, limit=1)
+    row = resolved_rows[0] if resolved_rows and not truncated else {}
     mapping_status = _mapping_status(
         row or {},
         unified_entity_id=requested_id,
