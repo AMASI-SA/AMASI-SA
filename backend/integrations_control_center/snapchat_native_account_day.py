@@ -59,6 +59,27 @@ def sync_windows(start_date: date, end_date: date, zone: ZoneInfo) -> list[tuple
     return windows
 
 
+def required_local_date_range(
+    start_date: date,
+    end_date: date,
+    zone: ZoneInfo,
+    *,
+    now: datetime,
+) -> tuple[date, date]:
+    """Include the current account date during a current Riyadh-day sync.
+
+    Between 00:00 Riyadh and 00:00 New York, an hourly sync requested for
+    Riyadh 'today' must also include New York's still-active prior date.
+    Historical backfills retain precisely their requested date range.
+    """
+    point = now.astimezone(timezone.utc)
+    riyadh_today = point.astimezone(ZoneInfo(BUSINESS_TIMEZONE)).date()
+    if start_date <= riyadh_today <= end_date:
+        account_today = point.astimezone(zone).date()
+        return min(start_date, account_today), max(end_date, account_today)
+    return start_date, end_date
+
+
 def normalize_hour_point(row: dict[str, Any], *, window_start: datetime, window_end: datetime):
     start = _parse_datetime(row.get("start_time"))
     end = _parse_datetime(row.get("end_time"))
