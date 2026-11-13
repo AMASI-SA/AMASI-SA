@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "kind": "official_operator_release_verification",
+  "observed_date": "2026-11-13",
+  "command": "python -B scripts/production_release_guard.py verify --url https://mezansalla.com",
+  "started_at": "2026-11-13T16:48:39Z",
+  "result_file_mtime": "2026-11-13T17:02:16.625571+00:00",
+  "exit_code": 0,
+  "duration_seconds": 816.76,
+  "verified": true,
+  "checks": 3,
+  "frontend_requests_per_check": 582,
+  "frontend_requests_total": 1746,
+  "source_git_sha": "1f8f1d673854f594086a6e87dec6c98633da0061",
+  "deployment_git_sha": "b64121c265d8d6e158df0d9fb88debc52c95317d",
+  "release_id": "rg5-380f5ea8b7afe39ebfc3ab2b3c28a4431d9ec77f61519ab4414bf80b7bda3e35",
+  "frontend_artifact_tree_sha256": "e4f01cbf70cb34088b9b46f1ccd473d791d428af90dce905e4c3e3f33f0f8b25",
+  "boot_started_at_observations": [
+    "2026-11-13T16:45:33.510094+00:00",
+    "2026-11-13T16:43:37.047090+00:00"
+  ],
+  "operator_result_sha256": "b887eba864967444ece5a7893957721acc97a73c6e820234a52eaca9143912b0",
+  "subsequent_guard_status": {
+    "active": false
+  },
+  "platform": {
+    "marker": "Deployment finished Nov 13, 06:48 PM",
+    "timezone": "Asia/Riyadh",
+    "version": "0cdd01a"
+  },
+  "financial_acceptance": "failed_saved_snapshot_fallback",
+  "new_publication_during_inspection": false
+}

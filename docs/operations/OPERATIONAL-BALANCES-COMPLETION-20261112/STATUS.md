@@ -2,14 +2,14 @@
 
 ## Current state
 
-PR1902 M4 IS LIVE AND PLATFORM COMPLETION IS NOW OBSERVED.
-BROWSER ACCESS RECOVERED AFTER RESETTING ITS STALE TOOL SESSION.
-FRESH VISIBLE FINANCIAL REFRESH STILL FAILS AND RETURNS A DATED SAVED SNAPSHOT.
-TABLES AND BOTH CARRIER/DRIVER PENDING-ORDER MODALS ARE ACCESSIBLE.
-A FALSE IDLE BUSY LABEL IN THE PENDING MODAL IS CONFIRMED IN SOURCE.
-OUR EXACT 15:38 V5 RELEASE LEASE IS STILL ACTIVE; OFFICIAL VERIFY IS NEXT.
-DO NOT REPUBLISH M4. PRODUCTION GIT 8d25 PRESERVES M4 AND MUST BE PRESERVED
-BY ANY FOLLOW-UP SOURCE/INTENT PAIR.
+PR1902 M4 IS OFFICIALLY VERIFIED LIVE AND ITS MATCHING LEASE IS CLOSED.
+PLATFORM COMPLETION: NOV13 18:48 RIYADH, VERSION0cdd01a.
+OFFICIAL GUARD: EXIT0, THREE FULL PASSES,582 FRONTEND REQUESTS PER PASS.
+FRESH FINANCIAL ACCEPTANCE STILL FAILS: DATED FALLBACK, INCLUDING TWO
+CONTROLLED VISIBLE REQUESTS WITH THE EXACT85-SECOND-TIMEOUT MESSAGE.
+TABLES/MODALS WORK; AN IDLE BUSY-LABEL DEFECT IS SOURCE-CONFIRMED.
+NARROW FOLLOW-UP WORK HAS STARTED FROM CURRENT PRODUCTION8d25, WITHOUT
+MODIFYING FROZENA4/B4/M4. NO NEW RELEASE HAS BEEN PREPARED OR PUBLISHED.
 
 The owner authorized upload, merge and publication. Root merged PR1902 after
 the independently reviewed implementation, complete source gates, unchanged
@@ -17,6 +17,53 @@ candidate-intent validation, intent-only B4 gates and a fresh Production ref
 check. GitHub confirms M4 has exactly M3 then B4 as its parents and its entire
 tree equals B4. No source was added after A4. This documentation-only handoff
 is outside the frozen release pair; do not deploy its branch as the release.
+
+
+
+### Nov13 official M4 verification completed — 17:02 UTC
+
+- The official command ran in the original authorized operator environment:
+  `python -B scripts/production_release_guard.py verify --url https://mezansalla.com`.
+  It started at16:48:39UTC, completed with exit0 in816.760seconds, and its
+  saved result mtime is `2026-11-13T17:02:16.625571+00:00`.
+- Result: `verified:true`, three full consecutive checks, exactA4/M4/runtime/
+  artifact identities, and582 public Frontend byte/MIME/cache requests per
+  check (1,746 total). This closes the prior distinction between targeted
+  public probes and the official full verification.
+- The verifier observed current valid runtime boots at
+  `2026-11-13T16:45:33.510094+00:00` and
+  `2026-11-13T16:43:37.047090+00:00`; both carry the exact reviewed identity.
+  Full private operator result:
+  `/tmp/mezan-operational-1902-official-verify-20261113.json`,
+  SHA256 `b887eba864967444ece5a7893957721acc97a73c6e820234a52eaca9143912b0`.
+- Fresh subsequent official `status` positively returned `active:false`.
+  The task-owned15:38 v5lease is closed by successful verification, not abort.
+  No source update, service change, new prepare or repeated publication occurred.
+- The authenticated financial page has now had its initial mount plus two
+  explicit diagnostic refreshes, all while visibly open. The initial attempt
+  used the source-read-failure message; both later attempts used the exact
+  server refresh-timeout message. No real order confirmation was clicked.
+  Fresh financial acceptance remains FAILED despite successful deployment.
+- Runtime logs expose a saved financial-position GET with status200 and
+  duration31839.360ms. The available Management log window stayed at16:51:58
+  through16:52:54 even after a later full UI reload; it did not expose the
+  relevant refresh stage records. Do not infer which stage caused the timeout.
+- A new clean checkout of latest Production8d25 is at
+  `/workspace/scratch/e00762959313/mezan-balance-followup-20261113`,
+  local task branch `codex/operational-live-refresh-followup-20261113`.
+  The source work is not yet a verified/released candidate. Root owns integration.
+  Independent frontend and backend slices are limited to the idle-busy label
+  and demonstrated redundant source reads; deadlines, authorization, monetary
+  rules, cancellation ownership and no-background-work requirements remain.
+- Read-only source measurement found repeated cost-authority reads in the
+  report path. This is a synthetic/local mechanism, not proof of the production
+  timeout's sole cause. Do not replace live fresh acceptance with that result.
+
+Next safe action: finish and verify the narrow follow-up from latest Production,
+preserve a new remote source checkpoint, then use a new reviewed source/intent
+pair if a corrective release is needed. M4 itself is fully published and verified;
+do not prepare or republish it again. Any operator mutation still requires a
+fresh guard and coordination check because the old lease is now inactive.
 
 
 ### Nov13 authenticated recovery and actual balance inspection — 16:47 UTC checkpoint
