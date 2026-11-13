@@ -1,0 +1,42 @@
+{
+  "task": "GOOGLE-NAMESPACE-BOOTSTRAP-UI-CONTRACT-20261030",
+  "status": "documentation_only_proposal_pending_coordinator_review",
+  "branch": "codex/google-namespace-bootstrap-ui-contract-20261030",
+  "base": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+  "base_tree": "c4074b70bc63d0bc44759256841319938516af20",
+  "owner": "google_product_acceptance",
+  "scope": "Only NEW CONTRACT.md and STATUS.json; proposed two-line coordinator-owned router seam and new child/service/tests; no Workspace edit",
+  "production_changed": false,
+  "runtime_changed": false,
+  "host_or_live_db_actions": false,
+  "pr1658_untouched": true,
+  "prerequisite": {
+    "source": "2c6aa43112019544f836f9d8e0d2464d4581f8cf",
+    "tree": "bed2199f00fb4d7fc7cba308bf125f2ff9394e03",
+    "final_status": "23e836301334bb08725275ba2b1049b515320ce6",
+    "run": 40976213231,
+    "job": 123804759846,
+    "result": "111 passed18.05s;47unit+64actualMongo;zero skips; prerequisite only"
+  },
+  "evidence_read": [
+    "Current production ref and Git commit/tree622c",
+    "Current rootAGENTS; docs/AGENTS.md and docs/operations/AGENTS.md absent via404",
+    "Exact frozen bootstrap module/public states and CONTRACT",
+    "Current actual management router, Workspace storage section, AuthContext.jsx, API401 refresh interceptor, existing storage services/components"
+  ],
+  "decisions": [
+    "AuthProvider exposes no public generation: derive local generation from observed status/user identity/public fields; server remains authority",
+    "Separate explicit GET, prepare acknowledgment and execute acknowledgment; no auto request/retry/refresh replay",
+    "Current-interaction unknown execute remains inspection-only; browser memory is not durable cross-process authority",
+    "Consumed/applied share public reconciliation_required; never invent internal state",
+    "Historical receipt is not fresh readiness; no-op creates no reservation or targetDDL",
+    "Bootstrap is global fixed storage scope, no account/currency/budget authority"
+  ],
+  "tests": {
+    "new_tests_run": false,
+    "reason": "Contract only; proposed acceptance matrix is not execution evidence",
+    "prerequisite_reverified": true
+  },
+  "local_environment": "Local exec server unavailable on resume; isolated remote Git Data branch based on verified622c; no claim of local worktree or fresh local test",
+  "next": "Coordinator reviews CONTRACT; only after approval assign exact shared-file owners and implement isolated new child/service/tests plus approved attachment. Root owns release and any live actions."
+}
