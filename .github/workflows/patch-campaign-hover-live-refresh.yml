@@ -35,7 +35,7 @@ jobs:
               return subprocess.check_output(['git', *args], text=True).strip()
           assert git('rev-parse','HEAD') == os.environ['EXPECTED_HEAD']
           assert git('ls-remote','origin','refs/heads/hotfix/prod-snap-meta-final').split()[0] == os.environ['PRODUCTION_BASE']
-          for folder in ('frontend', 'frontend/src', 'frontend/src/hooks', 'frontend/src/pages', 'frontend/src/services', 'backend', 'backend/order_engine', 'backend/tests', '.github', '.github/workflows', 'docs', 'docs/operations', 'docs/operations/CAMPAIGN-HOVER-1896'):
+          for folder in ('frontend', 'frontend/src', 'frontend/src/hooks', 'frontend/src/pages', 'frontend/src/services', 'backend', 'backend/order_engine', 'backend/tests', 'docs', 'docs/operations', 'docs/operations/CAMPAIGN-HOVER-1896'):
               instruction = Path(folder) / 'AGENTS.md'
               assert not instruction.exists(), f'Nested instructions require review first: {instruction}'
           def replace_once(path, old, new):
@@ -103,10 +103,6 @@ jobs:
                   '    params: { campaign_ids: "a", snapshot_revision: "r:31" }, timeout: 12000,',
                   '  });', '});', '',
               ]))
-          ci = '.github/workflows/campaign-hover-source-acceptance.yml'
-          replace_once(ci, '      - backend/tests/test_campaign_hover_daily.py', '      - backend/tests/test_campaign_hover_daily.py\n      - backend/tests/test_campaign_hover_refresh.py\n      - frontend/src/hooks/useCampaignHover.js\n      - frontend/src/hooks/useCampaignHover.test.jsx')
-          replace_once(ci, '          tests/test_campaign_hover_daily.py', '          tests/test_campaign_hover_daily.py\n          tests/test_campaign_hover_refresh.py')
-          replace_once(ci, '          src/services/campaignHover.test.js', '          src/services/campaignHover.test.js\n          src/hooks/useCampaignHover.test.jsx')
           status = Path('docs/operations/CAMPAIGN-HOVER-1896/POSTDEPLOY-REFRESH-20261113.md')
           status.write_text(
               '# Post-deployment campaign snapshot refresh — source only\n\n'
@@ -117,7 +113,7 @@ jobs:
               'Unresolved separately: TikTok visible name but no trusted campaign ID; Google campaign/account mapping; screenshot timezone America/Los_Angeles conflicts with earlier owner description America/New_York; missing Snap account-local spend. Do not guess campaign IDs from names/products or change account timezones. Read-only live evidence is needed.\n\n'
               'No production merge/deployment, /app or release lease, provider sync, database or accounting/ad write. Preserve the accepted partial-spend policy. This patch does not claim the attribution/timezone issues fixed.\n'
           )
-          allowed = {'frontend/src/pages/AdvancedDashboard.jsx', 'frontend/src/pages/OrdersV2.jsx', 'frontend/src/pages/AdvancedDashboard.campaignHover.test.js', 'frontend/src/services/campaignHover.test.js', backend, ci, str(status)}
+          allowed = {'frontend/src/pages/AdvancedDashboard.jsx', 'frontend/src/pages/OrdersV2.jsx', 'frontend/src/pages/AdvancedDashboard.campaignHover.test.js', 'frontend/src/services/campaignHover.test.js', backend, str(status)}
           assert set(git('diff','--name-only').splitlines()) <= allowed
           subprocess.check_call(['git','add','--',*sorted(allowed)])
           print('PATCH_READY', sorted(allowed))
@@ -128,6 +124,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'fix: refresh both campaign cards when the Salla order snapshot changes'
-          git diff --exit-code "$EXPECTED_HEAD" HEAD -- release/release-intent-v5.json
+          git diff --exit-code "$EXPECTED_HEAD" HEAD -- release/release-intent-v5.json .github/workflows
           git push origin "HEAD:refs/heads/$TARGET_BRANCH"
           echo "TASK_SOURCE_COMMIT=$(git rev-parse HEAD)"
