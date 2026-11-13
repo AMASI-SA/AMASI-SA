@@ -7,10 +7,14 @@ on:
       - backend/integrations_control_center/snapchat_native_account_day.py
       - backend/integrations_control_center/snapchat_native_performance_sync.py
       - backend/tests/test_campaign_hover_daily.py
+      - backend/tests/test_campaign_hover_refresh.py
       - backend/tests/test_snapchat_account_local_campaign_day.py
       - backend/tests/test_snapchat_hourly_response_coverage.py
       - frontend/src/components/CampaignHoverBadge.jsx
       - frontend/src/components/CampaignHoverBadge.test.jsx
+      - frontend/src/hooks/useCampaignHover.js
+      - frontend/src/hooks/useCampaignHover.test.jsx
+      - frontend/src/pages/OrdersV2.jsx
       - frontend/src/pages/AdvancedDashboard.jsx
       - frontend/src/pages/AdvancedDashboard.campaignHover.test.js
       - frontend/src/services/campaignHover.js
@@ -44,6 +48,7 @@ jobs:
           tests/test_snapchat_hourly_response_coverage.py
           tests/test_snapchat_account_local_campaign_day.py
           tests/test_campaign_hover_daily.py
+          tests/test_campaign_hover_refresh.py
 
   frontend-coverage:
     runs-on: ubuntu-latest
@@ -70,3 +75,4 @@ jobs:
           src/components/CampaignHoverBadge.test.jsx
           src/pages/AdvancedDashboard.campaignHover.test.js
           src/services/campaignHover.test.js
+          src/hooks/useCampaignHover.test.jsx

@@ -26,3 +26,11 @@ test("failure is an explicit unavailable result, not zero or endless loading", a
     expect(value.sales_sar).toBeUndefined();
     expect(await getCampaignHoverBatch([])).toEqual({});
 });
+
+test("order revision reaches the server snapshot", async () => {
+  api.get.mockResolvedValue({ data: { campaigns: { a: { orders: 31 } } } });
+  await getCampaignHoverBatch(["a"], { snapshotRevision: "r:31" });
+  expect(api.get).toHaveBeenCalledWith("/orders-v2/campaign-hover", {
+    params: { campaign_ids: "a", snapshot_revision: "r:31" }, timeout: 12000,
+  });
+});

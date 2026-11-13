@@ -377,8 +377,9 @@ def _local_days_still_current(data: dict) -> bool:
     return True
 
 
-async def cached_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) -> dict:
-    key = (user_id, tuple(sorted(campaign_ids)))
+async def cached_campaign_hover(db: Any, user_id: str, campaign_ids: list[str], *, snapshot_revision: str = "") -> dict:
+    # Revision scopes freshness only; the tenant still comes from authentication.
+    key = (user_id, tuple(sorted(campaign_ids)), snapshot_revision)
     cached = _CACHE.get(key)
     if cached and time.monotonic() - cached[0] < CACHE_TTL and _local_days_still_current(cached[1]):
         _CACHE.move_to_end(key)
@@ -406,12 +407,13 @@ async def cached_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) 
 def install_campaign_hover_route(router, db, current_user):
     @router.get("/campaign-hover")
     async def campaign_hover(campaign_ids: str = Query(..., min_length=1, max_length=1500),
-                             user: dict = Depends(current_user)):
+                             user: dict = Depends(current_user),
+                             snapshot_revision: str = Query("", max_length=64, pattern=r"^[a-z0-9:-]*$")):
         user_id = _valid_user(user)
         ids = list(dict.fromkeys(x.strip() for x in campaign_ids.split(",") if x.strip()))
         if not ids or len(ids) > MAX_CAMPAIGNS or any(len(x) > 160 for x in ids):
             raise HTTPException(status_code=400, detail="invalid_campaign_ids")
         try:
-            return await cached_campaign_hover(db, user_id, ids)
+            return await cached_campaign_hover(db, user_id, ids, snapshot_revision=snapshot_revision)
         except asyncio.TimeoutError:
             raise HTTPException(status_code=503, detail="campaign_snapshot_timeout")

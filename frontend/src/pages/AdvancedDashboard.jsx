@@ -23,7 +23,7 @@ import useCampaignShadowJob from "../hooks/useCampaignShadowJob";
 import useDashboardCardSnapshot from "../hooks/useDashboardCardSnapshot";
 import { resolveOrderCampaign } from "../lib/orderCampaignAttribution";
 import CampaignHoverBadge from "../components/CampaignHoverBadge";
-import { getCampaignHoverBatch } from "../services/campaignHover";
+import useCampaignHover from "../hooks/useCampaignHover";
 import { orderCityLabel } from "../lib/orderCityLabel";
 import OrderCurrencyAmount from "../components/OrderCurrencyAmount";
 import { mergeDashboardWithPlatformSpend, needsCanonicalDashboardSpendRefresh } from "../lib/dashboardPlatformSpendMerge";
@@ -788,26 +788,7 @@ export function LatestOrders({ orders, totals = {} }) {
     // The dashboard and Orders V2 use exactly one shared cached batch reader.
     // Only the eight currently rendered rows contribute campaign identities.
     // Hover itself never fetches a route, touches Mongo or syncs a platform.
-    const campaignIdsKey = useMemo(() => [...new Set(
-        (orders || []).slice(0, 8)
-            .map((order) => resolveOrderCampaign(order).campaignId)
-            .filter(Boolean)
-    )].slice(0, 8).sort().join(","), [orders]);
-    const [campaignHover, setCampaignHover] = useState({});
-    useEffect(() => {
-        let active = true;
-        if (!campaignIdsKey) {
-            setCampaignHover({});
-            return undefined;
-        }
-        // Old metrics must not follow the badge while the visible orders change.
-        setCampaignHover({});
-        getCampaignHoverBatch(campaignIdsKey.split(",")).then(
-            (rows) => { if (active) setCampaignHover(rows); },
-            () => { if (active) setCampaignHover({}); }
-        );
-        return () => { active = false; };
-    }, [campaignIdsKey]);
+    const campaignHover = useCampaignHover(orders, { limit: 8, visibleCount: 8, totals });
     const orderCount = Number(totals.total_orders || 0);
     const totalSales = finiteFinancialValue(totals.total_sales);
     const average = orderCount > 0 && totalSales !== null
