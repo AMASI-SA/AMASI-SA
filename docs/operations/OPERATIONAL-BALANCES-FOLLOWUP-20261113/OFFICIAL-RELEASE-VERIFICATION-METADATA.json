@@ -18,10 +18,31 @@
   "deployment_git_sha": "791b019e20ffe24439393576129783cd4c9dceb3",
   "platform_version": "72c5b2e",
   "platform_finished_at_riyadh": "2026-11-13 22:41",
-  "financial_acceptance": "unobserved; one intentional visible reload began2026-11-13T20:00:53.168Z; browser transport failed before next result observation; environment unavailable by20:03:31UTC; no success/failure inference",
+  "financial_acceptance": "unobserved; browser transport repeatedly unavailable/timed out before a completed financial result could be read",
   "remaining": [
-    "Observe a fresh financial report as_of without refresh_warning",
-    "Read-only pending-order dialog acceptance on new release"
+    "Read existing financial tab result first; accept only fresh report as_of without refresh_warning",
+    "Inspect pending-order dialog numbers/reasons and idle labels on new live release"
   ],
-  "new_publish_required": false
+  "new_publish_required": false,
+  "financial_attempts": [
+    {
+      "action": "intentional reload",
+      "started_at": "2026-11-13T20:00:53.168Z",
+      "visibility_at_start": "visible",
+      "outcome": "unobserved; environment interrupted; later found hidden/loading"
+    },
+    {
+      "action": "visible financial-position navigation after interrupted resumption",
+      "started_at": "2026-11-13T20:06:45.758Z",
+      "visibility_at_start": "visible",
+      "ui_observation": "loading; refresh button disabled",
+      "outcome": "unobserved; all subsequent result reads failed at browser transport layer"
+    }
+  ],
+  "last_settled_report_observed": {
+    "as_of_riyadh": "2026-11-12 01:07",
+    "state": "saved snapshot with refresh timeout warning",
+    "scope": "before post-release attempts; not evidence of A7 failure"
+  },
+  "final_observation_blocker_recorded_at": "2026-11-13T20:21:03Z"
 }

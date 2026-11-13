@@ -5,7 +5,7 @@
 
 PR #1906 is merged and published. Official public verification completed successfully on 13 November 2026 at 19:56:56 UTC (22:56:56 Riyadh): actual exit 0, `verified:true`, all 3 passes, and final guard status exactly `{"active":false}`. The source A7, intent B7 and normal merge M are unchanged. The new platform version is `72c5b2e`, explicitly completed at 22:41 Riyadh.
 
-Fresh financial acceptance remains unobserved. One intentional reload of the signed-in financial-position page started at `2026-11-13T20:00:53.168Z`, after the release gate closed; visibility was confirmed `visible` immediately after reload. The browser transport disconnected before the next observation, and the environment was explicitly reported unavailable by 20:03:31 UTC. No result of this attempt was read. Do not infer success, failure, POST count or a new snapshot from elapsed time. A saved report from 12 November 01:07 is not accepted as a fresh result.
+Fresh financial acceptance remains unobserved because the browser execution connection repeatedly failed. One intentional reload began at `2026-11-13T20:00:53.168Z`; the environment then became unavailable. On recovery, the existing tab was hidden and still displayed loading. It was made visible, followed by an intermediate navigation interruption. A new, intentional financial-position navigation began at `2026-11-13T20:06:45.758Z`, with visibility confirmed `visible` and the loading state observed. Subsequent read-only observations failed at the transport layer; no completed report or refresh response was read. Re-advertised browser access also timed out. Do not infer success, failure, POST count, latency or a new snapshot from elapsed time. The last settled report observed before these attempts was the saved 12 November 01:07 snapshot with a timeout fallback.
 
 ## Canonical identities
 
@@ -48,11 +48,13 @@ This documentation-only handoff branch is separate from the frozen production re
 - Wrapper elapsed time: 822.87 seconds.
 - Final official status: exactly `{"active":false}`. No active or incomplete lease remains.
 
+Independent review recomputed the official JSON byte count and hash and matched all 582 request entries, their order, runtime/source/control identities and frontend proof against the exact B7 intent. This was an artifact review, not another production probe.
+
 No further Publish, prepare or verify command is needed for this release.
 
 ## Remaining live acceptance
 
-The release is fully verified and the guard is closed. Only application-level acceptance remains. When browser access returns, inspect the existing financial-position tab first; do not blindly reload or publish again. The last observed pre-reload page still showed the saved 12 November 01:07 snapshot and timeout fallback. The post-reload result was never observed because the execution/browser environment became unavailable. No financial confirmation, settlement or payout was attempted.
+The release is fully verified and the guard is closed. Only application-level acceptance remains. When browser access returns, inspect the existing financial-position tab first; do not blindly reload or publish again. The last observed pre-reload page still showed the saved 12 November 01:07 snapshot and timeout fallback. The post-reload result and the later visible attempt's result were never observed because the execution/browser connection failed repeatedly. This is an observation blocker; it does not establish an application timeout or success on A7. No financial confirmation, settlement or payout was attempted.
 
 Accept only a new report `as_of` / “آخر احتساب” without `refresh_warning`; `generated_at` is merely report rendering time and may be new even with an old snapshot. Capture the existing refresh outcome if it remains accessible, then inspect pending-order numbers/reasons and idle labels. If the existing page cannot yield a result and a new attempt is necessary, make one intentional visible attempt after checking that no refresh is still active. A genuine incomplete-evidence warning is separate from failed refresh.
 
