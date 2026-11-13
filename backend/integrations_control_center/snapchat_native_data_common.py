@@ -252,6 +252,22 @@ async def ensure_snapchat_native_sync_indexes(db: Any) -> None:
         [("user_id", 1), ("date", -1), ("entity_type", 1)],
         name="mezan_snapchat_performance_v2_date",
     )
+    # Account-timezone projections are kept separate from the established
+    # Riyadh-day performance facts. These indexes permit bounded exact reads.
+    await _collection(db, "mezan_snapchat_campaign_hourly_v2").create_index(
+        [("user_id", 1), ("ad_account_id", 1),
+         ("campaign_id", 1), ("hour_start_utc", 1)],
+        unique=True, name="snap_campaign_hour_identity",
+    )
+    await _collection(db, "mezan_snapchat_campaign_account_day_v2").create_index(
+        [("user_id", 1), ("ad_account_id", 1),
+         ("campaign_id", 1), ("date", 1), ("account_timezone", 1)],
+        unique=True, name="snap_campaign_account_day_identity",
+    )
+    await _collection(db, "mezan_snapchat_campaign_account_day_v2").create_index(
+        [("user_id", 1), ("campaign_id", 1), ("date", 1)],
+        name="snap_campaign_account_day_lookup",
+    )
 
 
 
