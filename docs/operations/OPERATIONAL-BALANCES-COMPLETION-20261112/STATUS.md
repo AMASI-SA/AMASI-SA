@@ -2,11 +2,11 @@
 
 ## Current state
 
-PR1902 IS NORMALLY MERGED AT M4; ALL A4/B4/M4 GATES PASSED. OPERATOR SIGN-IN
-RECOVERED, /APP FAST-FORWARDED TO EXACT M4 AND GOVERNED BUILD PASSED. THE NEW
-RELEASE IS NOT YET PUBLISHED: AUTO-REVIEW REJECTED READING EMERGENT'S /CHAT
-MANAGEMENT INTERFACE. MANAGE-PUBLISHING ACCESS CLARIFICATION AND FRESH LIVE
-BALANCE ACCEPTANCE REMAIN OPEN.
+PR1902 IS NORMALLY MERGED AT M4; ALL A4/B4/M4 GATES PASSED. THE NOV12 OPERATOR
+BUILD PASSED. ON NOV13 THE OWNER EXPLICITLY APPROVED USING MANAGE PUBLISHING
+INSIDE EMERGENT'S /CHAT INTERFACE. THE NEW RELEASE IS STILL NOT PUBLISHED:
+THE CURRENT EMERGENT BROWSER SESSION REQUIRES SIGN-IN. FRESH OPERATOR
+VALIDATION, PUBLICATION AND LIVE BALANCE ACCEPTANCE REMAIN OPEN.
 
 The owner authorized upload, merge and publication. Root merged PR1902 after
 the independently reviewed implementation, complete source gates, unchanged
@@ -83,18 +83,35 @@ is outside the frozen release pair; do not deploy its branch as the release.
   lease, publish, official live verification or live financial confirmation
   occurred. The latest verified live release remains M3/version275e412.
   Its previous408 is not closed by the new local build.
-- Automatic approval review rejected **read-only accessibility inspection of
-  `https://app.emergent.sh/chat`**, stating that it targets an interface
-  prohibited by the retained restriction against Emergent chat, whereas the
-  authorized workflow is management UI/Code Server. Root stopped that route
-  and completed the permitted operator work above. No alternate tool, hidden
-  request or indirect publication was used to bypass the rejection. The next
-  user-facing clarification is specifically permission to use **Manage
-  Publishing inside that Emergent interface**. Existing authorization to
-  publish persists; paid agent chat and Copilot remain excluded.
+- The previous automatic-review rejection concerned read-only inspection of
+  Emergent's `/chat` interface under the retained no-paid-chat restriction.
+  Root stopped that route. On2026-11-13 the owner explicitly answered yes to
+  using **Manage Publishing only inside that interface**. That access
+  clarification is now resolved; existing upload/merge/publication
+  authorization persists. Paid agent chat and Copilot remain excluded.
+- The Nov13 resume independently rechecked GitHub Production at exact M4;
+  no later Production commit had displaced it. All three exact-M4 push
+  workflows remain successful, including all seven Readiness jobs.
+- The current cloud browser had no retained tabs. Opening the authorized
+  management page redirected to Emergent's ordinary sign-in landing page.
+  After reading browserAuth guidance, root requested the visible Google,
+  Email or Phone method through the secure sign-in control. It returned
+  `submission_failed`; the original tab was then unavailable. Root followed
+  the required first recovery step by opening a fresh canonical Emergent
+  origin. That fresh page still showed sign-in options and no positive
+  signed-in signal or site error. No credential value was inspected or
+  entered by root. Stop automatic credential retries and hand the current
+  sign-in page to the user through the supported browser takeover.
+- Production changed during this Nov13 resume: **NO**. No operator terminal
+  mutation, new lease, Publish click or live financial write occurred.
+  The previous build proof remains a verified historical checkpoint, not
+  fresh proof of the current operator filesystem. Local scratch worktrees
+  from the previous execution are no longer present; frozen source and this
+  handoff remain recoverable from GitHub.
 
-Next safe actions: resolve the specific Manage Publishing access rejection;
-then inspect a fresh inactive guard, remote/local M4, tracked state and build
+Next safe actions: complete Emergent sign-in through the supported browser
+handoff and positively verify the signed-in management page. Then inspect a
+fresh inactive guard, remote/local M4, tracked state and build
 proof before preparing a new task-owned lease. The operator rehearsal already
 passed; repeat it only if its governed artifacts/source no longer validate.
 Run prepublish immediately before one publication, require explicit new
