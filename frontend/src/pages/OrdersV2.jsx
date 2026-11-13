@@ -1,5 +1,5 @@
 import { resolveOrderCampaign } from "../lib/orderCampaignAttribution";
-import { getCampaignHoverBatch } from "../services/campaignHover";
+import useCampaignHover from "../hooks/useCampaignHover";
 import CampaignHoverBadge from "../components/CampaignHoverBadge";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -220,19 +220,7 @@ export default function OrdersV2() {
     const { orders, hasMore, loading, initialLoading, error, searchMode, loadMore, reload, searchCombined, resultSummary } = useOrders({ statusExact: activeStatus });
     // Prefetch only the campaigns on the visible order page. Hover reads memory
     // exclusively; no Mongo aggregation or advertising API call on mouse events.
-    const campaignIdsKey = useMemo(() => [...new Set(
-        orders.map((order) => resolveOrderCampaign(order).campaignId).filter(Boolean)
-    )].slice(0, 20).sort().join(","), [orders]);
-    const [campaignHover, setCampaignHover] = useState({});
-    useEffect(() => {
-        let mounted = true;
-        if (!campaignIdsKey) { setCampaignHover({}); return undefined; }
-        getCampaignHoverBatch(campaignIdsKey.split(",")).then(
-            (result) => { if (mounted) setCampaignHover(result); },
-            () => { if (mounted) setCampaignHover({}); },
-        );
-        return () => { mounted = false; };
-    }, [campaignIdsKey]);
+    const campaignHover = useCampaignHover(orders, { limit: 20, totals: orderTotals });
 
 
     useEffect(() => {
