@@ -2,11 +2,15 @@
 
 ## Current state
 
-PR1902 IS NORMALLY MERGED AT M4; ALL A4/B4/M4 GATES PASSED. THE NOV12 OPERATOR
-BUILD PASSED. MANAGE-PUBLISHING ACCESS IS AUTHORIZED AND EMERGENT SIGN-IN
-HAS NOW SUCCEEDED. LIVE HEALTH STILL REPORTS THE PREVIOUS A3/M3 IDENTITY.
-THE NEW M4 RELEASE IS NOT PUBLISHED. THE OPERATOR WORKSPACE IS WAKING;
-FRESH GUARD/ARTIFACT VALIDATION, PUBLICATION AND LIVE ACCEPTANCE REMAIN OPEN.
+PR1902 IS NORMALLY MERGED AT M4; ALL A4/B4/M4 GATES PASSED. CURRENT OPERATOR
+SOURCE, RETAINED ARTIFACTS AND RUNTIME IDENTITY WERE REVALIDATED SUCCESSFULLY.
+SECURE EMERGENT AND CODE SERVER SIGN-IN SUCCEEDED. PREPARE/PREPUBLISH PASSED,
+AND EXACTLY ONE PUBLISH CHANGES ACTION WAS SUBMITTED AT 18:38 RIYADH NOV13.
+THE LAST VISIBLE DEPLOYMENT STAGE WAS BUILDING YOUR WEBSITE.
+THE BROWSER/EXECUTION ENVIRONMENT THEN BECAME UNAVAILABLE. DEPLOYMENT OUTCOME,
+OFFICIAL THREE-PROBE VERIFICATION AND FRESH LIVE BALANCE ACCEPTANCE ARE UNVERIFIED.
+ROOT HAS NOT CLOSED ITS PREPARED LEASE. INSPECT THAT LEASE AND THE EXISTING
+PUBLICATION BEFORE ANY MUTATION OR ANOTHER PUBLISH ACTION.
 
 The owner authorized upload, merge and publication. Root merged PR1902 after
 the independently reviewed implementation, complete source gates, unchanged
@@ -136,17 +140,80 @@ is outside the frozen release pair; do not deploy its branch as the release.
   Publish click or live financial write occurred. Current guard/artifacts
   must be read after the operator becomes available.
 
-Next safe actions: let the existing operator wake and inspect the official
-guard before any /app mutation. Require fresh inactive guard, exact remote/local
-M4, tracked state and build
-proof before preparing a new task-owned lease. The operator rehearsal already
-passed; repeat it only if its governed artifacts/source no longer validate.
-Run prepublish immediately before one publication, require explicit new
-deployment success and the official three-probe verifier, then confirm guard
-inactive and restore only services stopped by this task. Finally accept a successful fresh visible
-balance calculation and the new delivery/modal behavior without clicking a
-live order-confirmation button. If the live refresh still times out, use the
-fixed-name timing records to diagnose and complete that remaining defect.
+### Nov13 current publication checkpoint — environment interruption
+
+- The Code UI generated the existing workspace's current Code Server link.
+  Code Server required its own password. BrowserAuth handled that single
+  visible field securely and returned submitted; the fresh page positively
+  showed the signed-in `/app` workspace. No secret credential values were
+  inspected, copied or entered by root. The requested in-chat login forms
+  succeeded for both Emergent and Code Server.
+- Root opened a dedicated Terminal2, leaving the unrelated Terminal1 and
+  unsaved Untitled-1 editor untouched. The first official guard status was
+  `active:false`. Fresh source inspection found exact M4, tree equal to B4,
+  production branch, tracked-clean state and exactly120 untracked paths.
+  A fresh origin fetch still matched M4.
+- Existing governed artifacts and full materialized runtime identity matched
+  the reviewed intent. Both reviewed-source relation and local identity/
+  artifact/proof binding validators passed. No new build, source modification
+  or service stop/start was needed. Backend was RUNNING pid792 after the
+  environment wake; the pre-existing preview frontend FATAL state was unchanged.
+  Untracked path inventory SHA256:
+  `603f133f62112942a5791e4a4850867eab37a003c950f2c4ba70784142fe0d62`.
+  Current operator evidence:
+  `/tmp/mezan-operational-1902-resume-untracked.json` and
+  `/tmp/mezan-operational-1902-resume-validation.json`.
+  The previous Nov12 `/tmp` evidence was not present in the resumed environment;
+  the retained actual build/proof files were validated directly.
+- Official prepare created the task-owned lease for actor
+  `operational-balances-1902-20261113` at
+  `2026-11-13T15:38:12.898552+00:00`.
+  Official prepublish then returned `ready_to_publish:true` with exact A4,
+  M4 and expected runtime ID. Full command output is retained privately in
+  `/tmp/mezan-operational-1902-prepare-20261113.json` and
+  `/tmp/mezan-operational-1902-prepublish-20261113.json`.
+- Root submitted exactly one **Publish changes** in the existing authorized
+  Manage Publishing interface. It showed **Publishing...**, then a new
+  **Deployment Started Nov13,06:38PM** marker. Expanded progress showed
+  **Workspace ready**, **Changes packaged**, and
+  **Building your website...** at1m40s. No new Deployment finished marker,
+  success or failure was observed before the interruption.
+  Public coordination comment: PR1902#issuecomment-6857650911.
+- The cloud-browser tool transport disconnected while waiting for the result.
+  Its documented recovery call also failed, after which the tool namespace
+  was removed and the environment was explicitly reported unavailable.
+  A separate shell health read failed with **No usable execution environment**;
+  the public web retrieval tool could not access `/api/health`.
+  Neither failure establishes a production failure. The current deployment
+  outcome remains unknown; do not repeat Publish based solely on this loss
+  of observability.
+- Root has not run verify or abort and has not closed the prepared lease.
+  Treat it as active until inspected. No live order-delivery confirmation,
+  settlement, payout or other financial approval was clicked. The previous
+  fresh-refresh408 remains open until a successful visible calculation.
+
+Next safe actions: recover the existing management/operator environment and
+inspect the actual guard and existing publication outcome first. Do not create
+a competing lease or repeat Publish blindly. Require an explicit success for
+the publication started18:38Riyadh and run the official three-probe verifier
+against `https://mezansalla.com` using the matching task-owned lease and exact
+A4/M4/runtime/artifact above. Require `verified:true`, `checks:3` and fresh
+`active:false`. If publication failed, inspect the surfaced reason and handle
+only this matching lease under the production protocol before a justified retry.
+No preview service was stopped during this resume.
+
+Then open the visible financial report at
+`https://mezansalla.com/operational-balances/financial-position`.
+Its initial visible mount already performs refresh, so avoid a duplicate
+manual refresh. Require current last-calculation time, no stale-source fallback
+warning, all three report groups and all tables supplied by current data.
+Table count is conditional; do not hardcode21 as a universal invariant.
+Inspect known courier/driver amounts and delivery counts alongside unresolved
+counts, open the pending modal and verify order-number/reason columns and
+eligible owner controls. **Do not click the manual confirmation button: its
+single click can preview and submit a real financial evidence confirmation.**
+If fresh refresh still times out, use fixed-name timing records to diagnose
+that concrete remaining defect. Do not close the408 solely on build/publication.
 
 ## Previous M3 publication and live acceptance history
 
