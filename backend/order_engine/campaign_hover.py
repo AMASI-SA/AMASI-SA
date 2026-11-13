@@ -6,6 +6,9 @@ identity comes from explicit identifiers, never names or spend availability.
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
+import re
 import time
 from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
@@ -16,7 +19,7 @@ from fastapi import Depends, HTTPException, Query
 from order_currency import salla_order_currency_fields
 from salla_integration.abandoned_carts import parse_salla_datetime
 from salla_marketing_attribution import (
-    SALLA_RAW_ATTRIBUTION_PROJECTION, canonical_ad_platform, campaign_id_candidates,
+    SALLA_RAW_ATTRIBUTION_PROJECTION, canonical_ad_platform, campaign_id_candidates, field_values,
 )
 
 MAX_CAMPAIGNS = 20
@@ -117,6 +120,21 @@ def _source(raw, row):
     return result
 
 
+def _label_scope(key):
+    if not key.startswith("salla:"):
+        return None
+    parts = key.split(":", 2)
+    if len(parts) != 3 or parts[1] not in PROVIDERS or not re.fullmatch(r"[A-Za-z0-9_-]{1,960}", parts[2]):
+        raise HTTPException(status_code=400, detail="invalid_campaign_scope")
+    try:
+        label = base64.b64decode(parts[2] + "=" * (-len(parts[2]) % 4), altchars=b"-_", validate=True).decode("utf-8")
+    except (ValueError, UnicodeError, binascii.Error):
+        raise HTTPException(status_code=400, detail="invalid_campaign_scope") from None
+    if not label or label != label.strip() or len(label) > 180 or any(ord(c) < 32 for c in label) or re.match(r"using\s+the\s+clickid\b", label, re.I):
+        raise HTTPException(status_code=400, detail="invalid_campaign_scope")
+    return parts[1], label
+
+
 def _salla_query(user_id, campaign_ids, start, now):
     # Derive the predicate from the existing safe attribution schema, so raw
     # source_details/UTM orders are included even with NO campaign spend row.
@@ -124,7 +142,7 @@ def _salla_query(user_id, campaign_ids, start, now):
     paths = {key for key in SALLA_RAW_ATTRIBUTION_PROJECTION
              if key.split(".")[-1] in leaves or key.endswith((".campaign.id", ".campaign.external_id"))}
     paths.update(leaves)
-    values = list(campaign_ids)
+    values = [scope[1] if (scope := _label_scope(cid)) else cid for cid in campaign_ids]
     values.extend(int(cid) for cid in campaign_ids if cid.isdigit() and len(cid) < 19)
     return {"user_id": user_id, "raw_by_source.salla_direct": {"$type": "object"},
             "order_date": {"$gte": (start - timedelta(days=1)).date().isoformat(),
@@ -134,6 +152,12 @@ def _salla_query(user_id, campaign_ids, start, now):
 
 async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) -> dict:
     now = datetime.now(timezone.utc)
+    labels = {cid: scope for cid in campaign_ids if (scope := _label_scope(cid))}
+    blocked = {cid for cid in campaign_ids if re.match(r"using\s+the\s+clickid\b", cid, re.I)}
+    platform_ids = [cid for cid in campaign_ids if cid not in labels and cid not in blocked]
+    # Label-only commerce has no verified ad account. Its explicitly labelled
+    # store day must not masquerade as an inferred advertising-account day.
+    label_window = _window(now, "Asia/Riyadh") if labels else None
     result = {cid: _blank(cid) for cid in campaign_ids}
     legacy, old_ok = await _read(db, "ads_v2_accounts",
         {"user_id": user_id, "soft_deleted": {"$ne": True}},
@@ -142,7 +166,9 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         {"user_id": user_id, "provider": {"$in": ["snapchat_ads", "meta_ads", "tiktok_ads", "google_ads"]}},
         {"_id": 0, "ad_account_id": 1, "external_account_id": 1, "provider": 1, "timezone": 1, "currency": 1}, 250)
     if not old_ok or not native_ok:
-        return {"as_of": now.isoformat(), "campaigns": {cid: _blank(cid, "account_read_incomplete") for cid in campaign_ids}}
+        if not labels:
+            return {"as_of": now.isoformat(), "campaigns": {cid: _blank(cid, "account_read_incomplete") for cid in campaign_ids}}
+        legacy, native = [], []
     accounts = {}
     internal = {}
     for row in legacy:
@@ -163,14 +189,14 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         internal.setdefault(key[1], key)
     windows = {key: _window(now, account.get("timezone")) for key, account in accounts.items()}
     dates = sorted({value[1] for value in windows.values() if value})
-    if not dates:
+    if not dates and not labels:
         return {"as_of": now.isoformat(), "campaigns": {cid: _blank(cid, "account_timezone_unavailable") for cid in campaign_ids}}
     identities = {cid: set() for cid in campaign_ids}
     names = {}
     spends = {}
 
     def identify(cid, key, name=None):
-        if cid in identities and key in accounts:
+        if cid in identities and cid not in labels and cid not in blocked and key in accounts:
             identities[cid].add(key)
             if name:
                 names.setdefault(cid, _text(name))
@@ -258,11 +284,23 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
                 value.update(spend_sar=None, spend_native=None, spend_reason="snapchat_account_day_not_aligned")
             offer(cid, key, value, rank)
 
+    from .campaign_hover_native_sources import read_native_campaign_sources
+    native_identities, native_spends, extra_health = await read_native_campaign_sources(
+        db, user_id, platform_ids, accounts, windows, now)
+    catalog_ok = catalog_ok and extra_health
+    for cid, key, name in native_identities:
+        identify(cid, key, name)
+    for cid, key, spend in native_spends:
+        if identify(cid, key):
+            offer(cid, key, spend, 3)
+
     usable = {cid: next(iter(keys)) for cid, keys in identities.items() if len(keys) == 1}
     # All configured accounts, including invalid-timezone ones, participate in
     # uniqueness. An unreadable second account must not look like one account.
     by_provider = {provider: [key for key in accounts if key[0] == provider] for provider in PROVIDERS}
     starts = [window[0] for window in windows.values() if window]
+    if label_window:
+        starts.append(label_window[0])
     projection = {**SALLA_RAW_ATTRIBUTION_PROJECTION,
         "order_number": 1, "order_date": 1, "order_status": 1, "campaign_id": 1,
         "campaign_name": 1, "utm_campaign": 1, "utm_source": 1, "source": 1,
@@ -287,7 +325,12 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
             continue
         order = _source(raw_order, row)
         provider = canonical_ad_platform(order)
-        cids = set(campaign_id_candidates(order)).intersection(campaign_ids)
+        cids = set(campaign_id_candidates(order)).intersection(platform_ids)
+        raw_provider = canonical_ad_platform(raw_order)
+        raw_labels = set(field_values(raw_order, "utm_campaign", "campaign"))
+        # No fuzzy/normalized name join and no reliance on product/display names.
+        cids.update(cid for cid, (label_provider, label) in labels.items()
+                    if raw_provider == label_provider and raw_labels == {label})
         at = parse_salla_datetime(raw_order.get("date")) or parse_salla_datetime(raw_order.get("created_at")) or _timestamp(row.get("order_date"))
         status = _text(row.get("order_status") or raw_order.get("status")).lower()
         if at is None:
@@ -297,6 +340,22 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         if at > now or any(token in status for token in ("cancel", "refund", "ملغ", "مسترج", "محذوف", "deleted")):
             continue
         for cid in cids:
+            if cid in labels:
+                if at < label_window[0]:
+                    continue
+                metric = totals[cid]
+                metric["orders"] += 1
+                pieces = _quantity(raw_order)
+                sales = _amount(salla_order_currency_fields(raw_order).get("total_amount_sar"))
+                if pieces is None:
+                    metric["pieces_ok"] = False
+                else:
+                    metric["pieces"] += pieces
+                if sales is None:
+                    metric["sales_ok"] = False
+                else:
+                    metric["sales"] += sales
+                continue
             if len(identities[cid]) > 1:
                 continue
             key = usable.get(cid)
@@ -325,6 +384,21 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
     for cid in campaign_ids:
         key = usable.get(cid)
         record = result[cid]
+        if cid in blocked:
+            record["status"] = "campaign_identity_missing"
+            continue
+        if cid in labels:
+            metric = totals[cid]
+            okay = commerce_ok and metric["time_ok"]
+            record.update(campaign_id=None, scope_key=cid, commerce_scope="salla_utm_label",
+                period_basis="salla_store_day", campaign_name=labels[cid][1],
+                provider=labels[cid][0], account_id=None, timezone="Asia/Riyadh",
+                date=label_window[1], period_start=label_window[0].isoformat(),
+                orders_as_of=now.isoformat(), orders=metric["orders"] if okay else None,
+                pieces=metric["pieces"] if okay and metric["pieces_ok"] else None,
+                sales_sar=round(metric["sales"], 2) if okay and metric["sales_ok"] else None,
+                spend_reason="campaign_label_not_linked", status="partial")
+            continue
         if len(identities[cid]) > 1:
             record["status"] = "ambiguous_account"
             continue
@@ -377,8 +451,9 @@ def _local_days_still_current(data: dict) -> bool:
     return True
 
 
-async def cached_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) -> dict:
-    key = (user_id, tuple(sorted(campaign_ids)))
+async def cached_campaign_hover(db: Any, user_id: str, campaign_ids: list[str], *, snapshot_revision: str = "") -> dict:
+    # Revision scopes freshness only; the tenant still comes from authentication.
+    key = (user_id, tuple(sorted(campaign_ids)), snapshot_revision)
     cached = _CACHE.get(key)
     if cached and time.monotonic() - cached[0] < CACHE_TTL and _local_days_still_current(cached[1]):
         _CACHE.move_to_end(key)
@@ -405,13 +480,14 @@ async def cached_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) 
 
 def install_campaign_hover_route(router, db, current_user):
     @router.get("/campaign-hover")
-    async def campaign_hover(campaign_ids: str = Query(..., min_length=1, max_length=1500),
-                             user: dict = Depends(current_user)):
+    async def campaign_hover(campaign_ids: str = Query(..., min_length=1, max_length=22000),
+                             user: dict = Depends(current_user),
+                             snapshot_revision: str = Query("", max_length=64, pattern=r"^[a-z0-9:-]*$")):
         user_id = _valid_user(user)
         ids = list(dict.fromkeys(x.strip() for x in campaign_ids.split(",") if x.strip()))
-        if not ids or len(ids) > MAX_CAMPAIGNS or any(len(x) > 160 for x in ids):
+        if not ids or len(ids) > MAX_CAMPAIGNS or any(len(x) > (1000 if x.startswith("salla:") else 160) for x in ids):
             raise HTTPException(status_code=400, detail="invalid_campaign_ids")
         try:
-            return await cached_campaign_hover(db, user_id, ids)
+            return await cached_campaign_hover(db, user_id, ids, snapshot_revision=snapshot_revision)
         except asyncio.TimeoutError:
             raise HTTPException(status_code=503, detail="campaign_snapshot_timeout")

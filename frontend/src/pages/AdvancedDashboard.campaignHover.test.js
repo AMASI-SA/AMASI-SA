@@ -1,29 +1,19 @@
-/**
- * Regression: homepage LatestOrders must use the same campaign hover component
- * as OrdersV2, without adding any hover-triggered request or extra polling.
- */
 import fs from "fs";
 import path from "path";
-
 const dashboard = fs.readFileSync(path.join(__dirname, "AdvancedDashboard.jsx"), "utf8");
-const badge = fs.readFileSync(path.join(__dirname, "../components/CampaignHoverBadge.jsx"), "utf8");
-
-test("latest orders uses shared account-local campaign tooltip", () => {
-    expect(dashboard).toContain('import CampaignHoverBadge from "../components/CampaignHoverBadge"');
-    expect(dashboard).toContain('import { getCampaignHoverBatch } from "../services/campaignHover"');
-    expect(dashboard).toContain('function SourceBadge({ order, campaignReport })');
-    expect(dashboard).toContain('<CampaignHoverBadge badge={badge} campaign={resolveOrderCampaign(order)} report={campaignReport} />');
-    expect(dashboard).toContain('campaignReport={campaignHover[resolveOrderCampaign(order).campaignId]}');
+const orders = fs.readFileSync(path.join(__dirname, "OrdersV2.jsx"), "utf8");
+const hook = fs.readFileSync(path.join(__dirname, "../hooks/useCampaignHover.js"), "utf8");
+test("both surfaces use the revision-aware shared hook", () => {
+  expect(dashboard).toContain("useCampaignHover(orders, { limit: 8, visibleCount: 8, totals })");
+  expect(orders).toContain("useCampaignHover(orders, { limit: 20, totals: resultSummary })");
+  expect(orders).not.toContain("orderTotals");
+  expect(dashboard).toContain("<CampaignHoverBadge");
+  expect(dashboard).not.toContain("}, [campaignIdsKey]);");
+  expect(orders).not.toContain("}, [campaignIdsKey]);");
 });
-
-test("dashboard prefetches only the eight visible campaigns", () => {
-    const start = dashboard.indexOf("export function LatestOrders(");
-    const end = dashboard.indexOf("\nfunction GaLive", start);
-    const component = dashboard.slice(start, end);
-    expect(component).toContain("(orders || []).slice(0, 8)");
-    expect(component).toContain("getCampaignHoverBatch(campaignIdsKey.split");
-    expect(component).not.toContain("onMouseEnter={");
-    expect(component).not.toContain("setInterval(");
-    expect(badge).toContain("onMouseEnter={show}");
-    expect(badge).not.toContain("api.get(");
+test("no hover fetch or independent polling is added", () => {
+  expect(hook).not.toContain("setInterval(");
+  expect(hook).not.toContain("onMouseEnter");
+  expect(hook).toContain("snapshotRevision: snapshot.revision");
+  expect(hook).toContain("clearTimeout(timer)");
 });

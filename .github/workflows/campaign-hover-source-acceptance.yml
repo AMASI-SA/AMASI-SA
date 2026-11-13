@@ -4,13 +4,26 @@ on:
     branches: [main, hotfix/prod-snap-meta-final]
     paths:
       - backend/order_engine/campaign_hover.py
+      - backend/order_engine/campaign_hover_native_sources.py
+      - backend/order_engine/campaign_enrichment.py
+      - backend/tests/test_campaign_hover_native_sources.py
+      - backend/tests/test_order_engine_campaign_enrichment.py
       - backend/integrations_control_center/snapchat_native_account_day.py
       - backend/integrations_control_center/snapchat_native_performance_sync.py
       - backend/tests/test_campaign_hover_daily.py
+      - backend/tests/test_campaign_hover_refresh.py
       - backend/tests/test_snapchat_account_local_campaign_day.py
       - backend/tests/test_snapchat_hourly_response_coverage.py
       - frontend/src/components/CampaignHoverBadge.jsx
       - frontend/src/components/CampaignHoverBadge.test.jsx
+      - frontend/src/components/CampaignHoverNativeSources.test.jsx
+      - frontend/src/lib/orderCampaignAttribution.js
+      - frontend/src/lib/orderCampaignAttribution.test.js
+      - frontend/src/lib/campaignHoverScopes.test.js
+      - frontend/src/pages/OrdersV2.navigation.test.jsx
+      - frontend/src/hooks/useCampaignHover.js
+      - frontend/src/hooks/useCampaignHover.test.jsx
+      - frontend/src/pages/OrdersV2.jsx
       - frontend/src/pages/AdvancedDashboard.jsx
       - frontend/src/pages/AdvancedDashboard.campaignHover.test.js
       - frontend/src/services/campaignHover.js
@@ -44,6 +57,9 @@ jobs:
           tests/test_snapchat_hourly_response_coverage.py
           tests/test_snapchat_account_local_campaign_day.py
           tests/test_campaign_hover_daily.py
+          tests/test_campaign_hover_refresh.py
+          tests/test_campaign_hover_native_sources.py
+          tests/test_order_engine_campaign_enrichment.py
 
   frontend-coverage:
     runs-on: ubuntu-latest
@@ -70,3 +86,8 @@ jobs:
           src/components/CampaignHoverBadge.test.jsx
           src/pages/AdvancedDashboard.campaignHover.test.js
           src/services/campaignHover.test.js
+          src/hooks/useCampaignHover.test.jsx
+          src/components/CampaignHoverNativeSources.test.jsx
+          src/lib/orderCampaignAttribution.test.js
+          src/lib/campaignHoverScopes.test.js
+          src/pages/OrdersV2.navigation.test.jsx

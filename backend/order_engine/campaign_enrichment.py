@@ -29,7 +29,9 @@ def _looks_like_campaign_id(value: Any) -> bool:
     text = _text(value)
     if not text:
         return False
-    return bool(_UUID_LIKE.fullmatch(text) or text.isdigit() or len(text) >= 24)
+    # A long readable UTM label is still a name, not evidence of an ad ID.
+    # Explicit source.campaign_id values are preserved separately below.
+    return bool(_UUID_LIKE.fullmatch(text) or text.isdigit())
 
 
 async def _lookup_campaign_name(db: Any, *, user_id: str, campaign_id: str) -> str | None:
