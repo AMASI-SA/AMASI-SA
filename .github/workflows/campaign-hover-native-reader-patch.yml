@@ -1,0 +1,107 @@
+name: Campaign hover native reader source acceptance
+on:
+  push:
+    branches: [ops/patch-campaign-hover-live-refresh-20261113]
+    paths: [.github/workflows/campaign-hover-native-reader-patch.yml]
+permissions:
+  contents: write
+concurrency:
+  group: campaign-hover-native-reader-task-only
+  cancel-in-progress: false
+jobs:
+  patch-test-task-only:
+    if: github.repository == 'AMASI-SA/AMASI-SA'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TARGET_BRANCH: codex/campaign-hover-live-refresh-20261113
+      EXPECTED_HEAD: 31d7f14c61866de50c9dc58428813e0bcc61f5e2
+      PRODUCTION_BASE: 8d25f7a6fa9a310b319b753c32457e70987f7c51
+      PATCH_SOURCE: 27ae0723a7e179f620770d8ed7594a7ee28821a9
+      PYTHONDONTWRITEBYTECODE: '1'
+      JWT_SECRET: campaign-hover-offline-test-only
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 31d7f14c61866de50c9dc58428813e0bcc61f5e2
+          fetch-depth: 0
+      - name: Prepare pinned source only
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test "$(git ls-remote origin refs/heads/$TARGET_BRANCH | cut -f1)" = "$EXPECTED_HEAD"
+          test "$(git ls-remote origin refs/heads/hotfix/prod-snap-meta-final | cut -f1)" = "$PRODUCTION_BASE"
+          test "$(git ls-files '*AGENTS.md')" = AGENTS.md
+          git fetch --no-tags origin "$PATCH_SOURCE"
+          git show "$PATCH_SOURCE:scripts/ops_patch_campaign_hover_native.py" > "$RUNNER_TEMP/apply-native-hover.py"
+          python -B "$RUNNER_TEMP/apply-native-hover.py"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install public test closure
+        run: sed '/^emergentintegrations==/d' backend/requirements.txt | python -m pip install -q -r /dev/stdin pytest-asyncio
+      - name: Backend account day, native schema and Salla acceptance
+        working-directory: backend
+        run: python -m pytest -q --tb=short tests/test_snapchat_hourly_response_coverage.py tests/test_snapchat_account_local_campaign_day.py tests/test_campaign_hover_daily.py tests/test_campaign_hover_refresh.py tests/test_campaign_hover_native_sources.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Install pinned frontend dependencies
+        run: |
+          corepack enable && corepack prepare yarn@1.22.22 --activate
+          yarn --cwd frontend install --frozen-lockfile --non-interactive
+      - name: Focused frontend acceptance
+        working-directory: frontend
+        env:
+          CI: 'true'
+        run: |
+          yarn test --watchAll=false --runInBand --runTestsByPath src/components/CampaignHoverBadge.test.jsx src/components/CampaignHoverNativeSources.test.jsx src/pages/AdvancedDashboard.campaignHover.test.js src/services/campaignHover.test.js src/hooks/useCampaignHover.test.jsx src/lib/orderCampaignAttribution.test.js src/lib/campaignHoverScopes.test.js > "$RUNNER_TEMP/hover-focused.log" 2>&1 || { tail -120 "$RUNNER_TEMP/hover-focused.log"; exit 1; }
+          tail -12 "$RUNNER_TEMP/hover-focused.log"
+      - name: Checkpoint the tested task source only
+        run: |
+          test "$(git ls-remote origin refs/heads/$TARGET_BRANCH | cut -f1)" = "$EXPECTED_HEAD"
+          test "$(git ls-remote origin refs/heads/hotfix/prod-snap-meta-final | cut -f1)" = "$PRODUCTION_BASE"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/order_engine/campaign_hover.py frontend/src/pages/OrdersV2.jsx frontend/src/pages/AdvancedDashboard.jsx frontend/src/lib/orderCampaignAttribution.js frontend/src/components/CampaignHoverBadge.jsx frontend/src/hooks/useCampaignHover.js
+          git commit -m 'fix: read native campaign days and separate Salla label commerce from ad identity'
+          git diff --exit-code "$EXPECTED_HEAD" HEAD -- release/release-intent-v5.json .github
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+          echo "TESTED_TASK_SOURCE=$(git rev-parse HEAD)"
+      - name: Full frontend regression with compact failure report
+        working-directory: frontend
+        env:
+          CI: 'true'
+        run: |
+          set +e
+          yarn test --watchAll=false --runInBand --json --outputFile="$RUNNER_TEMP/hover-full.json" > "$RUNNER_TEMP/hover-full.log" 2>&1
+          status=$?
+          set -e
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p = Path(os.environ['RUNNER_TEMP']) / 'hover-full.json'
+          if not p.exists():
+              print((p.with_suffix('.log')).read_text()[-5000:])
+              raise SystemExit(1)
+          data = json.loads(p.read_text())
+          print(json.dumps({k: data.get(k) for k in ('numTotalTestSuites','numPassedTestSuites','numFailedTestSuites','numTotalTests','numPassedTests','numFailedTests','success')}, indent=2))
+          for row in data.get('testResults', []):
+              if row.get('status') != 'passed':
+                  print('FAILED_SUITE', row.get('name'))
+                  print(str(row.get('message', ''))[-5000:])
+          PY
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: campaign-hover-native-source-test-results
+          path: |
+            ${{ runner.temp }}/hover-focused.log
+            ${{ runner.temp }}/hover-full.json
+            ${{ runner.temp }}/hover-full.log
+          if-no-files-found: ignore
+          retention-days: 3
