@@ -1,0 +1,31 @@
+name: Campaign hover patch diff review
+on:
+  push:
+    branches: [ops/patch-campaign-hover-live-refresh-20261113]
+    paths: [.github/workflows/campaign-hover-patch-diff-review.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 31d7f14c61866de50c9dc58428813e0bcc61f5e2
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Inspect source-only preparation without pushing
+        run: |
+          test "$(git rev-parse HEAD)" = 31d7f14c61866de50c9dc58428813e0bcc61f5e2
+          git fetch --no-tags origin 27ae0723a7e179f620770d8ed7594a7ee28821a9
+          git show 27ae0723a7e179f620770d8ed7594a7ee28821a9:scripts/ops_patch_campaign_hover_native.py > "$RUNNER_TEMP/patch.py"
+          python -B "$RUNNER_TEMP/patch.py" || true
+          git diff -- backend/order_engine/campaign_hover.py frontend/src/hooks/useCampaignHover.js
+          echo BEGIN_HOOK
+          cat frontend/src/hooks/useCampaignHover.js
+          echo END_HOOK
+          echo BEGIN_HASHES
+          git hash-object backend/order_engine/campaign_hover.py frontend/src/hooks/useCampaignHover.js
+          sha256sum backend/order_engine/campaign_hover.py frontend/src/hooks/useCampaignHover.js
+          echo END_HASHES
