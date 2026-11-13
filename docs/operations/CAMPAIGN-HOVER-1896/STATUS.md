@@ -1,27 +1,51 @@
-# Campaign hover — source A preparation, 2026-11-13
+# Campaign hover — MERGED, live deployment not performed
 
-## Authorization and production boundary
-Owner explicitly authorized implementation, merge and governed publication, then requested continuation. Production inspected as `b64121c265d8d6e158df0d9fb88debc52c95317d`. This task has NOT changed production, advertising settings, accounting records, or a live release lease.
+Checkpoint: 2026-11-13, after explicit owner instruction to continue and merge.
+Repository: AMASI-SA/AMASI-SA.
+This status update lives ONLY on the isolated ops handoff branch; do not merge that branch or its preparation workflows into production.
 
-## Recoverable source
-PR1905: `codex/snapchat-account-local-campaign-hourly-20261113`.
-Previous combined source `5a00e603486176ef6d97f80876ffcde3618baf60` is preserved at `checkpoint/campaign-hover-1905-before-source-a-20261113`. It includes exact PR1903 source and PR1905 NY/Riyadh hourly work. The replacement source is prepared directly above current production, before any intent freeze, to avoid carrying a second branch's historical release-intent transitions. No release guard, classifier, or old intent bytes are altered.
+## Exact recoverable identities
 
-## Verified results before this checkpoint
-On combined `5a00e603486176ef6d97f80876ffcde3618baf60`, frontend/security, Salla/dashboard, Snapchat integrations, midnight handling and other triggered feature checks passed. Mezan Release Readiness run43437326575 failed before dependency installation in candidate-role classification. Its log described an intent-B/governed-source mismatch. Read APIs returned differing adapter revisions by path and Git tree; immutable tree/blob evidence was used where available. Do not bypass classification or treat the release as ready from application checks alone.
+- Production branch: hotfix/prod-snap-meta-final.
+- Previous production J: b64121c265d8d6e158df0d9fb88debc52c95317d.
+- Reviewed source A: c05108b41a3cb603955b210acb0fba32743d5d5f.
+- Reviewed intent-only B: 9b35e287604130f2d04243c2fcade6861d14be78.
+- PR #1905 MERGED at 2026-11-13T15:48:51Z.
+- Production merge M: 8d25f7a6fa9a310b319b753c32457e70987f7c51.
+- Task branch: codex/snapchat-account-local-campaign-hourly-20261113, retained at B.
+- Release backup branch: release/campaign-hover-1905-intent-b-c05108-20261113, retained at B.
+- Runtime release ID: rg5-9f65056bf0d9f1bc5e40da895de78a8288fee5e532ecaaa26daf4f468522894b.
+- Reviewed intent Git blob: cc339628e488d58aa8f860248c036a047b12cd4f.
+- Reviewed intent JSON SHA256: 347667bc3423d9bc762d1d4eec0350c417d8d598f08dbee54fe678728a6c164f.
 
-## Functional scope preserved
-- Shared homepage and OrdersV2 popup, bounded prefetch, no hover/focus/tap network calls or new polling/cron.
-- Independent Salla orders, units and SAR sales, exact campaign catalogue account binding (two Snapchat accounts), raw UTM query coverage, no name guessing.
-- Account-local NY/Riyadh spending from hourly facts, dense elapsed-hour coverage, DST 23/25-hour days, recorded USD/SAR rate only.
-- Source accessibility labels and touch navigation guards. No cross-session browser financial cache.
-- Bounded tenant-scoped server cache/concurrency and fail-closed unknown values.
+## Completed functionality
 
-## Additional correction
-The HOUR orchestration now rejects failed top-level/subrequests, malformed rows and an unfinished pagination chain before publishing either daily projection. Existing facts are retained, not overwritten with a partial amount. The account-local writer receives explicit source-completeness evidence. Dedicated offline orchestration tests cover failed requests, pagination cap and a successful last page exactly at the cap.
+The main release combines the homepage LatestOrders and OrdersV2 campaign card, independent Salla campaign-attributed orders/piece quantities/SAR sales, exact Snapchat campaign/account catalogue resolution and account-local New York/Riyadh spending. Recorded USD/SAR conversion and DST boundaries are preserved.
 
-## Remaining gates
-1. Exact new-source CI, including new provider-response acceptance, all existing regressions and unmodified Mezan Release Readiness.
-2. Inspect current production/source ancestry again; build reproducible candidate A and freeze intent-only B. Do not merge source-only production or reuse the old intent.
-3. Measure cold/warm reads and reconcile real NY/Riyadh campaign hours, FX and Salla attribution. Unit fixtures are not live financial acceptance.
-4. Check `/app` release guard lease before any terminal action, rehearse approved V5, publish once, and require successful live runtime identity plus three probes. CI or a merge is not proof of deployment.
+Owner correction is implemented: valid available Snapchat spend is shown and used for CPA/ROAS even when hours are missing. Coverage is advisory; missing hours are NOT fabricated as zero. Invalid/conflicting/future evidence, wrong account-day facts and missing recorded FX still remain unavailable. Salla commerce stays independent.
+
+No request is initiated by hover, focus or tap. Bounded component prefetch and tenant-scoped server cache remain. No new polling, cron, runtime query or sync-frequency change was introduced by the partial-spend policy.
+
+## Verification and merge evidence
+
+1. All triggered source-A workflows passed, including Mezan Release Readiness43452250648 and backend/UI coverage.
+2. Artifact14053265932 supplied the exact reviewed intent; downloaded bytes matched its SHA256, and the remote Git blob matched independently.
+3. Isolated preparation43454758030 passed the unmodified adapter.load_release_intent A/J/B verification. Python -B prevents bytecode pollution; no validator or release guard was relaxed. The preparation workflows were not included in the release.
+4. Exact-B checks passed before merge, including Mezan Release Readiness43454994616 (both Host20.20.2 and24.19.0 clean-clone adapter rehearsals, artifact/package/runtime JSON probes), Campaign hover source coverage43454993078, Security Gate43454992738, CodeQL43454992658, Snapchat Integrations43454992996, Page/read performance43454992746, Operational Stock43454992492 and Operational Balance43454992809, plus the other application regressions. Earlier cancelled duplicate Snap runs were superseded by successful latest runs. The unrelated TikTok creator candidate workflow was skipped by its condition, not counted as passed.
+5. Production still equalled J immediately before normal merge. The merge used expected head B and did not squash or rebase source A or intent B.
+6. Read-back: PR1905 is merged, and the production ref equals M. Compare B..M has zero changed files. Compare A..B has exactly one changed file: release/release-intent-v5.json. Unrelated production changes were retained.
+7. PR1903 closed WITHOUT separate merge because its work is incorporated and corrected in PR1905. Do not merge that obsolete branch.
+
+## Production and live-runtime boundary
+
+Production Git branch changed: YES, verified at M.
+Live Emergent deployment performed by this task: NO.
+No /app mutations, release lease, provider campaign/budget changes, accounting writes, manual sync, database backfill or real-data reconciliation were performed in this merge step.
+
+A merge and clean-clone CI are not proof of the live website running the release or of actual campaign monetary reconciliation. Account-local snapshots need the existing Snapchat sync to populate them after deployment; hover itself does not refresh the advertising provider.
+
+## Next safe action
+
+Follow AGENTS.md for a separately authorized deployment. Before touching /app, inspect the current production ref and run the release guard status; do not change another conversation's active lease. Rehearse the current approved A/B release, prepare/prepublish only according to V5, publish through Emergent, then require newer explicit deployment success and three verify probes matching the source/release identity. Verify homepage/OrdersV2 cards and actual NY/Riyadh campaign account, spend, recorded FX, Salla order/piece/sales and cold/warm latency. Do not use git reset --hard or reuse an old intent.
+
+Issue1006 had a verified comment-capacity403 in earlier work. The task PR comments and this isolated handoff document preserve continuation without retrying that blocked ledger or altering the frozen release.
