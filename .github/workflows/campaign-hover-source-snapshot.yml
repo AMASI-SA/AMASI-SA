@@ -1,0 +1,29 @@
+name: Campaign hover exact source snapshot
+on:
+  push:
+    branches: [ops/patch-campaign-hover-live-refresh-20261113]
+    paths: [.github/workflows/campaign-hover-source-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 37e1ad91b1dd9b1698f96d520f92a7b500609a80
+          persist-credentials: false
+      - name: Export tracked source only, no runtime data or credentials
+        run: |
+          test "$(git rev-parse HEAD)" = 37e1ad91b1dd9b1698f96d520f92a7b500609a80
+          git status --short
+          git log -6 --oneline
+          git ls-files '*AGENTS.md'
+          mkdir -p "$RUNNER_TEMP/hover-source"
+          git archive --format=zip HEAD > "$RUNNER_TEMP/hover-source/source-37e1ad91.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: campaign-hover-source-37e1ad91
+          path: ${{ runner.temp }}/hover-source/source-37e1ad91.zip
+          retention-days: 3
