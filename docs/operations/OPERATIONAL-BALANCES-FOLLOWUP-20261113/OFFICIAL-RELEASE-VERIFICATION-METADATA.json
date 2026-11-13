@@ -1,0 +1,22 @@
+{
+  "actual_exit": 0,
+  "verified": true,
+  "checks": 3,
+  "wrapper_elapsed_seconds": 822.87,
+  "frontend_requests_per_pass": 582,
+  "frontend_requests_total": 1746,
+  "health_requests_total": 3,
+  "status_after": {
+    "active": false
+  },
+  "stderr_bytes": 0,
+  "result_written_at": "2026-11-13T19:56:56.421042+00:00",
+  "result_file_bytes": 33299,
+  "result_file_sha256": "c756f0b20cbd728f64df6b0ff6d54a8eb5991fed9c4430e9b1cabe5598d692b0",
+  "original_operator_result_path": "/tmp/mezan-pr1906-9502be1e-verify.json",
+  "source_git_sha": "286e46ce50d0ae1f5f128646e350bbae38b2ef5c",
+  "deployment_git_sha": "791b019e20ffe24439393576129783cd4c9dceb3",
+  "platform_version": "72c5b2e",
+  "platform_finished_at_riyadh": "2026-11-13 22:41",
+  "financial_acceptance": "pending; one visible reload started2026-11-13T20:00:53.168Z"
+}

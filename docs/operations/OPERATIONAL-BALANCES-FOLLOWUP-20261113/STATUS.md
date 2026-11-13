@@ -3,7 +3,9 @@
 <!-- RESUMPTION-CURRENT-START -->
 ## Current state
 
-The reviewed operational refresh follow-up is merged as `791b019e20ffe24439393576129783cd4c9dceb3` and the original operator has fast-forwarded to that exact commit. Source A7 and intent B7 are unchanged. The actual frontend package adapter completed successfully with true process exit0 and `built:true`; the full materialized runtime identity exactly matches the reviewed intent. Official prepare and prepublish succeeded, and one Publish changes action has been submitted. The platform showed a new explicit Deployment finished at13Nov22:41Riyadh, version72c5b2e. Official live verification is now running; financial acceptance is still pending. Fresh financial acceptance remains pending; the previous saved-report fallback is not accepted as a fresh result.
+PR #1906 is merged and published. Official public verification completed successfully on 13 November 2026 at 19:56:56 UTC (22:56:56 Riyadh): actual exit 0, `verified:true`, all 3 passes, and final guard status exactly `{"active":false}`. The source A7, intent B7 and normal merge M are unchanged. The new platform version is `72c5b2e`, explicitly completed at 22:41 Riyadh.
+
+Fresh financial acceptance is in progress. One intentional reload of the signed-in financial-position page started at `2026-11-13T20:00:53.168Z`, after the release gate closed. The page is kept visible throughout the attempt. A saved report from 12 November 01:07 is not accepted as a fresh result.
 
 ## Canonical identities
 
@@ -18,42 +20,47 @@ The reviewed operational refresh follow-up is merged as `791b019e20ffe2443939357
 | B7 and M exact tree | `663ff410de7bc6e18933ac1d06fcdd4564bd69ba` |
 | Intent SHA-256 | `066eafb9d85445f9868b5d12ec853e7c252b00175aa38f425af2f2c18678f4ad` |
 | Runtime ID | `rg5-4b111864525e317c313f6358c3c42f5ba2deaa6f1610b6e2db47399029b7a57f` |
+| Frontend artifact tree SHA-256 | `f77e96091e737b362accb3c17e2a642081b0fec48fdcbced94ff20672772a4e5` |
 
-This documentation-only handoff branch is separate from the frozen production release. Do not merge it into the current A7/B7 deployment contract or publish its HEAD.
+This documentation-only handoff branch is separate from the frozen production release. Do not merge it into the A7/B7 deployment contract or publish its HEAD.
 
 ## Verified milestones
 
-- Exact A7:13 workflows successful;29 checks23success+6expected skips.
-- Exact B7:13 applicable workflows successful, plus one branch-specific TikTok workflow skipped;31 checks25success+6expected skips. Final CodeQL Python, JavaScript/TypeScript, and aggregate checks all succeeded. A temporary comparison warning disappeared when Python analysis completed; no rerun or bypass was used.
-- Readiness run43489951555 passed both host rehearsals: Node20.20.2 job132108986553 and Node24.19.0 job132108986525. Their identity and isolated health/package/runtime artifact proofs matched A7/J/B7.
-- Root and independent checks verified that B7 changes only `release/release-intent-v5.json` from A7, with exact reviewed artifact bytes. M has parents J and B7 and exactly the B7 tree.
-- Original `/app`: fresh official guard was inactive before mutation; exact J and clean tracked files. Fast-forward to exact M completed and post-update tracked state remained clean.
-- All120 pre-existing untracked files retained their original content hashes. Inventory digest: `711375f165d96827e4c1e5596967686ef05ae7c976571b9a8aeeede5e8c368db`. Existing worktrees and unsaved editor content were preserved.
-- Disk feasibility assessed without cleanup: /app had596MiB free and its generated node_modules/build are replaced by the adapter; cache/toolchain/temp package copies use the separate root filesystem with256GiB free.
-- Prior PR1905 lease is closed. Last platform publication before this follow-up remains100/version2285cfe, finished13Nov20:58 Riyadh.
+- Exact A7: all 13 workflows succeeded; 29 checks comprise 23 successes and 6 expected skips.
+- Exact B7: all 13 applicable workflows succeeded, plus one branch-specific TikTok workflow skipped; 31 checks comprise 25 successes and 6 expected skips. Final CodeQL Python, JavaScript/TypeScript and aggregate checks succeeded. A temporary comparison warning cleared when Python analysis completed; no rerun or bypass was used.
+- Readiness run 43489951555 passed both host rehearsals: Node 20.20.2 job 132108986553 and Node 24.19.0 job 132108986525. Their identity and isolated health/package/runtime artifact proofs matched A7/J/B7.
+- Root and independent checks confirmed that B7 changes only `release/release-intent-v5.json` from A7, with the exact reviewed artifact bytes. M has parents J and B7 and exactly the B7 tree.
+- All 3 exact-M push workflows and all 11 check runs succeeded, including final CodeQL and both clean-clone rehearsals.
+- The original `/app` operator fast-forwarded from exact J to exact M while the guard was inactive. The actual `yarn build` dispatcher/adapter exited 0 with `built:true`; the complete materialized runtime identity matched the reviewed intent.
+- Tracked files remained clean. All 120 pre-existing untracked-file content hashes were preserved. Inventory digest: `711375f165d96827e4c1e5596967686ef05ae7c976571b9a8aeeede5e8c368db`. Existing worktrees and the unsaved editor were preserved; no cleanup or reset was used.
+- Official prepare exited 0 for actor `arafat-pr1906-b7-terminal` at `2026-11-13T19:29:50.254295+00:00`. Official prepublish exited 0 with `ready_to_publish:true` and exact A7/M/runtime.
+- One Publish changes action was submitted. The platform explicitly completed version `72c5b2e` at 22:41 Riyadh. Use version/time; the retained ordinal shifted, so do not infer a publication count.
 
-## Running work and next safe action
+## Official public verification
 
-The original operator completed `yarn build` from `/app/frontend` through the official dispatcher/adapter with `PYTHONDONTWRITEBYTECODE=1`, `REACT_APP_BACKEND_URL=https://mezansalla.com`, and no bootstrap-intent override. All3 exact-M push workflows and all11 check runs succeeded, including final CodeQL. Both clean-clone rehearsals passed again on the merged tree.
+[Exact official verification JSON](OFFICIAL-RELEASE-VERIFICATION-20261113.json) is preserved byte-for-byte from the original operator: 33,299 bytes, SHA-256 `c756f0b20cbd728f64df6b0ff6d54a8eb5991fed9c4430e9b1cabe5598d692b0`. [Execution metadata](OFFICIAL-RELEASE-VERIFICATION-METADATA.json) records the real exit and final guard status.
 
-True adapter exit0 and `built:true` were read from the saved official output. Exact A7/runtime identity, M head, clean tracked state, and all120 pre-existing untracked-file hashes were rechecked after build. Current local evidence paths are:
+- Actual exit: 0; stderr: 0 bytes.
+- `verified:true`, `checks:3`; exact source A7, deployment M, runtime and frontend artifact identity.
+- 582 frontend requests per pass, 1,746 across the three passes, plus 3 health checks.
+- Full public file bytes/hashes, shell routes, service workers and build-meta JSON/MIME checks passed. This does not mean every frontend request was a MIME check.
+- Boot observations: `2026-11-13T19:41:24.060844+00:00` and `2026-11-13T19:40:48.045792+00:00`, both after prepare.
+- Wrapper elapsed time: 822.87 seconds.
+- Final official status: exactly `{"active":false}`. No active or incomplete lease remains.
 
-- `/tmp/mezan-pr1906-9502be1e-untracked-before.json`
-- `/tmp/mezan-pr1906-9502be1e-fastforward.log`
-- `/tmp/mezan-pr1906-9502be1e-adapter.log`
-- `/tmp/mezan-pr1906-9502be1e-adapter.exit`
+No further Publish, prepare or verify command is needed for this release.
 
-Official prepare exited0 for actor `arafat-pr1906-b7-terminal` at `2026-11-13T19:29:50.254295+00:00`; official prepublish exited0 with `ready_to_publish:true`, A7/M/runtime exact. One Publish changes action was submitted through Manage/Republish; a new explicit Deployment finished appeared13Nov22:41Riyadh, version72c5b2e. The retained ordinal shifted in the platform UI, so use version/time rather than infer a publication count. The original operator has confirmed this task still owns the lease and started official `verify --url https://mezansalla.com`. Do not click Publish or run a parallel guard status. Await its real exit0, all3 complete probes and final inactive status.
+## Remaining live acceptance
 
-Only after release verification, run one visible financial refresh and inspect a new calculation timestamp without dated fallback, plus pending-order dialog idle labels. A bounded navigation-away check must use fresh runtime-stage logs; cached logs do not prove cancellation. No real confirmation, settlement, payout, advertising or other financial test write is authorized.
+Await the existing visible financial refresh and its report GET. Accept only a new report `as_of` / “آخر احتساب” without `refresh_warning`; `generated_at` is merely report rendering time and may be new even with an old snapshot. A genuine incomplete-evidence warning is separate from failed refresh.
 
-Issue1006 is at its comment cap; PR1902 and PR1906 remain the continuation threads. No paid Emergent chat/Copilot was used.
-### Platform and initial live identity evidence
+After the sequence settles, inspect pending-order numbers, reasons, paging/search and the absence of false idle “جارٍ التحقق وحفظ التأكيد…” labels. Opening the dialog is read-only. Do not click confirmation buttons: they may write immediately after successful preview.
 
-A bounded independent public health GET at19:43:47.296607UTC returned HTTP200 and the new exact A7/runtime identity, with verified backend/control/critical/frontend flags true. New boot19:41:24.060844UTC is after prepare. This single GET is preliminary; the official three-pass verification remains the release acceptance gate.
+Do not switch tabs during an unfinished refresh/report GET: hiding the tab cancels it and returning may resume a new attempt. After settled success or fallback, hide/show should not trigger another calculation. No additional live refresh is needed solely to repeat cancellation cases already covered by tests. Claims about live cancellation require fresh runtime evidence and must not imply individual Mongo operations were interrupted.
 
-![New platform completion at22:41Riyadh](PUBLISH-CONFIRMATION.jpg)
+No real confirmation, settlement, payout, advertising or other financial test write is authorized. Issue #1006 is at its comment cap; PR #1902 and PR #1906 remain the continuation threads. No paid Emergent chat/Copilot was used.
 
+![New platform completion at 22:41 Riyadh](PUBLISH-CONFIRMATION.jpg)
 <!-- RESUMPTION-CURRENT-END -->
 
 ## Historical frozen A7 source record
