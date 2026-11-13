@@ -1,0 +1,30 @@
+{
+  "task_id": "MZ-SALLA-CURRENT-ITEMS-20261113",
+  "repository": "AMASI-SA/AMASI-SA",
+  "task_branch": "codex/salla-current-items-20261113",
+  "base_branch": "hotfix/prod-snap-meta-final",
+  "base_sha": "8d25f7a6fa9a310b319b753c32457e70987f7c51",
+  "integrated_base_sha": "791b019e20ffe24439393576129783cd4c9dceb3",
+  "state": "implementation_checkpoint_pending_ci",
+  "scope": "Keep root products aligned with accepted native Salla items; bounded explicit repair for existing projection drift.",
+  "completed": [
+    "Reproduced the longest-list merge bug with a failing three-to-one regression before the source change.",
+    "Rebuild products from the same merged raw snapshot within the existing fenced writer.",
+    "Unify complete API item reads, pagination validation and internal complete-empty provenance.",
+    "Retain legacy option representation to preserve unchanged historical cost fingerprints.",
+    "Add explicit dry-run and manifest-bound owner-transaction repair; only products and its source label may change.",
+    "Add real transaction, stale/replay, rollback, cancellation and historical-preservation acceptance cases to existing G47 CI."
+  ],
+  "verification": {
+    "red_regression": "4 failed, 1 passed against original source",
+    "independent_focused_review": "50 passed and 88 subtests passed after empty-proof and historical-fingerprint findings were fixed",
+    "local_integrated_suite": "169 passed, 19 explicit Mongo-gated skips, 88 subtests passed, exit 0; 2 pre-existing Pydantic deprecation warnings",
+    "report_regression": "Synthetic 13 pieces / 961.50 known incomplete cost becomes 11 pieces / 830.50 complete cost at 75.50 per piece",
+    "real_mongo": "Pending CI. Local Mongo 8 and 7 cannot initialize in this sandbox; no transaction pass is claimed."
+  },
+  "review": "Independent review identified and confirmed fixes for unproven empty legacy events and historical option fingerprint changes. Repair call site and frozen-cost regression verified; no additional material source findings.",
+  "production_changed": false,
+  "production_actions": "No merge, release intent, release lease, deploy, order sync or live database repair performed.",
+  "next_safe_action": "Push the implementation checkpoint to its task branch, open a Draft PR, execute exact-head G47 CI including Mongo acceptance, resolve any failures, and update this status plus Issue #1006.",
+  "release_gate": "Production publication and live repair remain separate operations after verified source review under AGENTS.md protocol v5."
+}
