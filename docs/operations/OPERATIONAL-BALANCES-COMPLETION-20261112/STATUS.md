@@ -2,15 +2,14 @@
 
 ## Current state
 
-PR1902 IS NORMALLY MERGED AT M4; ALL A4/B4/M4 GATES PASSED. CURRENT OPERATOR
-SOURCE, RETAINED ARTIFACTS AND RUNTIME IDENTITY WERE REVALIDATED SUCCESSFULLY.
-SECURE EMERGENT AND CODE SERVER SIGN-IN SUCCEEDED. PREPARE/PREPUBLISH PASSED,
-AND EXACTLY ONE PUBLISH CHANGES ACTION WAS SUBMITTED AT 18:38 RIYADH NOV13.
-THE LAST VISIBLE DEPLOYMENT STAGE WAS BUILDING YOUR WEBSITE.
-THE BROWSER/EXECUTION ENVIRONMENT THEN BECAME UNAVAILABLE. DEPLOYMENT OUTCOME,
-OFFICIAL THREE-PROBE VERIFICATION AND FRESH LIVE BALANCE ACCEPTANCE ARE UNVERIFIED.
-ROOT HAS NOT CLOSED ITS PREPARED LEASE. INSPECT THAT LEASE AND THE EXISTING
-PUBLICATION BEFORE ANY MUTATION OR ANOTHER PUBLISH ACTION.
+PR1902 M4 IS NOW POSITIVELY OBSERVED LIVE: EXACT A4/RUNTIME/FRONTEND IDENTITY.
+THREE CONSECUTIVE FULL-HEALTH IDENTITY COMPARISONS AND 24 TARGETED PUBLIC BYTE,
+MIME AND CACHE CHECKS PASSED ON NOV13. NEW RUNTIME BOOT: 18:48:16 RIYADH.
+THE AUTHENTICATED BROWSER STILL TIMES OUT, SO EXPLICIT PLATFORM SUCCESS,
+FULL OFFICIAL GUARD VERIFICATION/LEASE CLOSURE AND FRESH FINANCIAL ACCEPTANCE
+REMAIN OPEN. DO NOT REPEAT THE COMPLETED PUBLICATION TO RESOLVE BROWSER ACCESS.
+PRODUCTION GIT HAS ADVANCED THROUGH PR1905; OUR LIVE M4 SOURCE IS PRESERVED.
+INSPECT THE EXISTING TASK-OWNED LEASE BEFORE ANY OPERATOR MUTATION.
 
 The owner authorized upload, merge and publication. Root merged PR1902 after
 the independently reviewed implementation, complete source gates, unchanged
@@ -140,7 +139,7 @@ is outside the frozen release pair; do not deploy its branch as the release.
   Publish click or live financial write occurred. Current guard/artifacts
   must be read after the operator becomes available.
 
-### Nov13 current publication checkpoint — environment interruption
+### Earlier Nov13 publication checkpoint — environment interruption
 
 - The Code UI generated the existing workspace's current Code Server link.
   Code Server required its own password. BrowserAuth handled that single
@@ -192,28 +191,94 @@ is outside the frozen release pair; do not deploy its branch as the release.
   settlement, payout or other financial approval was clicked. The previous
   fresh-refresh408 remains open until a successful visible calculation.
 
-Next safe actions: recover the existing management/operator environment and
-inspect the actual guard and existing publication outcome first. Do not create
-a competing lease or repeat Publish blindly. Require an explicit success for
-the publication started18:38Riyadh and run the official three-probe verifier
-against `https://mezansalla.com` using the matching task-owned lease and exact
-A4/M4/runtime/artifact above. Require `verified:true`, `checks:3` and fresh
-`active:false`. If publication failed, inspect the surfaced reason and handle
-only this matching lease under the production protocol before a justified retry.
-No preview service was stopped during this resume.
+### Nov13 direct live verification — public checks passed, browser blocked
+
+- On the owner's request to open and verify, CUA `getState` and the existing
+  management-tab lookup each timed out after300seconds; the second request
+  specified a10second execution timeout but the transport did not respond.
+  Root stopped browser retries. This is an automation-environment limitation,
+  not evidence of a site or login failure. No new credential request, operator
+  mutation, lease change or Publish click occurred during this resume.
+- Local read-only public HTTP access recovered. Production health positively
+  returned exact A4, expected runtime and frontend artifact above, with
+  `boot_started_at=2026-11-13T15:48:16.163161+00:00`
+  (18:48:16 Asia/Riyadh). All five identity/critical/source/control/build flags
+  are true and health is ok. The previously unknown publication now has direct
+  live runtime evidence. This does not substitute for an explicit platform
+  completion event or the official lease-owning verifier.
+- Root downloaded only the immutable M4 guard, its two standard-library
+  dependencies, AGENTS.md and the reviewed intent to an isolated local
+  verification bundle. Intent bytes1295990 and SHA256
+  `3973ea6676e1cc19365e3d72f8ec8673ebaf2363fc45521d5701f83748e63fd8`
+  matched the frozen record. Root read current protocol/instructions and used
+  the existing guard's read-only HTTP, exact-byte, JSON-MIME and cache helpers.
+- `python -B targeted_public_check.py` exited0. Three consecutive
+  cache-busted health comparisons passed at16:11:27.878769,
+  16:11:35.671870 and16:11:43.491371 UTC. These compared the complete expected
+  health identity fields, including source manifests, critical hashes,
+  frontend build and reproducibility, rather than checking only the release ID.
+  The runtime boot timestamp is after the prepared lease.
+- **24 targeted public requests passed**, finishing
+  `2026-11-13T16:14:45.393367+00:00` (19:14:45 Riyadh):
+  canonical/cache-busted build metadata with both Accept headers and JSON MIME;
+  root, index and financial-position SPA shells with exact bytes/cache headers;
+  financial-position JS/CSS, main JS/CSS and visible-read cancellation JS;
+  both service-worker retirement scripts and required headers.
+  This is a scoped public-file verification, **not** the official three-pass
+  verification of every public file. The frozen build contains287 public files.
+- Reproducible evidence is preserved beside this status:
+  [PUBLIC-RELEASE-OBSERVATION-20261113.json](PUBLIC-RELEASE-OBSERVATION-20261113.json)
+  and [PUBLIC-RELEASE-CHECK-20261113.py](PUBLIC-RELEASE-CHECK-20261113.py).
+  The recorded runner was executed from the temporary bundle root containing
+  unchanged M4 `scripts/production_release_guard.py`,
+  `backend/frontend_build_identity.py`, `backend/release_protocol_v5.py`
+  and `release/release-intent-v5.json`; place it at that bundle root to
+  reproduce the same check. Runner SHA256:
+  `7060bc628061491c6e827d9630003f0fb71e86b51bf1b449ffe242b3c561b429`.
+  Raw result SHA256:
+  `a767a1269d839e98cd2ac5538dff870e96b5f07dd1a907bddbaaf877c66755e1`.
+  The result explicitly records official_guard_verify_run=false,
+  operator_lease_closed=false and authenticated_financial_acceptance=false.
+- Root independently rechecked the newer Production comparison:
+  `8d25f7a6fa9a310b319b753c32457e70987f7c51` (PR1905) is ahead5/behind0
+  above exact M4, with M4 as merge base and no operational-balance or guard
+  changes. Another reviewer checked its release ledger, which reports source
+  integration only and no live publication/operator mutation. The currently
+  observed live identity is our A4 release. Do not fast-forward the shared
+  operator while the existing lease remains unresolved.
+- Public GitHub APIs exposed no provider-generated Emergent deployment
+  success event for M4. The empty commit-status aggregate is not a deployment
+  verdict. The platform UI remains inaccessible through CUA, and no fresh
+  operator guard status could be obtained. Root has not closed its15:38 lease.
+- All new live requests were public GETs. The authenticated financial report,
+  real balances, pending-order modal and visible refresh were not exercised.
+  No financial approval, delivery evidence confirmation, settlement, payout or
+  advertising action occurred. The historical refresh408 remains unclosed.
+  Public coordination milestone: PR1902#issuecomment-6858452324.
+
+Next safe actions: restore access to the existing management/operator browser,
+inspect the actual task lease and explicit completion of the publication
+started18:38Riyadh. M4 is already observed live; do not submit another Publish
+merely because the browser timed out. When the matching lease is present and
+the explicit platform outcome is established, run the unchanged official
+`python -B scripts/production_release_guard.py verify --url https://mezansalla.com`
+and require `verified:true`, `checks:3` and fresh `active:false`.
+Respect any newer lease owner or newer live release if observed; do not clear
+another task's lease. Production Git's later PR1905 integration is a separate
+publication and does not authorize replacing the prepared M4 tuple.
 
 Then open the visible financial report at
 `https://mezansalla.com/operational-balances/financial-position`.
-Its initial visible mount already performs refresh, so avoid a duplicate
-manual refresh. Require current last-calculation time, no stale-source fallback
+Initial mount already performs the authorized visible refresh, so avoid a
+duplicate refresh. Require current last-calculation time with no stale-source
 warning, all three report groups and all tables supplied by current data.
-Table count is conditional; do not hardcode21 as a universal invariant.
-Inspect known courier/driver amounts and delivery counts alongside unresolved
-counts, open the pending modal and verify order-number/reason columns and
-eligible owner controls. **Do not click the manual confirmation button: its
-single click can preview and submit a real financial evidence confirmation.**
-If fresh refresh still times out, use fixed-name timing records to diagnose
-that concrete remaining defect. Do not close the408 solely on build/publication.
+The table count is conditional. Inspect known courier/driver amounts and
+delivery counts alongside unresolved counts, open the pending-order dialog,
+and verify order-number/reason columns and eligible owner controls.
+Do not click the live manual-confirmation button: one click can preview and
+submit the real evidence change. If refresh still times out, use fixed-name
+timing records to isolate and fix that concrete defect. Passing public release
+checks does not close the financial-refresh acceptance.
 
 ## Previous M3 publication and live acceptance history
 

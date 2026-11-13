@@ -1,0 +1,222 @@
+{
+  "kind": "targeted-public-release-check",
+  "source_git_sha": "1f8f1d673854f594086a6e87dec6c98633da0061",
+  "release_id": "rg5-380f5ea8b7afe39ebfc3ab2b3c28a4431d9ec77f61519ab4414bf80b7bda3e35",
+  "frontend_artifact_tree_sha256": "e4f01cbf70cb34088b9b46f1ccd473d791d428af90dce905e4c3e3f33f0f8b25",
+  "official_guard_verify_run": false,
+  "operator_lease_closed": false,
+  "authenticated_financial_acceptance": false,
+  "health_observations": [
+    {
+      "checked_at": "2026-11-13T16:11:27.878769+00:00",
+      "boot_started_at": "2026-11-13T15:48:16.163161+00:00",
+      "exact_identity_match": true
+    },
+    {
+      "checked_at": "2026-11-13T16:11:35.671870+00:00",
+      "boot_started_at": "2026-11-13T15:48:16.163161+00:00",
+      "exact_identity_match": true
+    },
+    {
+      "checked_at": "2026-11-13T16:11:43.491371+00:00",
+      "boot_started_at": "2026-11-13T15:48:16.163161+00:00",
+      "exact_identity_match": true
+    }
+  ],
+  "public_file_checks": [
+    {
+      "path": "/build-meta.json",
+      "accept": "application/json",
+      "cache_bust": false,
+      "bytes": 471364,
+      "sha256": "fa48463a3539c95bf400ec36ea27d94b1f58a505c8cca072891dadaac8f55b7a",
+      "passed": true
+    },
+    {
+      "path": "/build-meta.json",
+      "accept": "application/json",
+      "cache_bust": true,
+      "bytes": 471364,
+      "sha256": "fa48463a3539c95bf400ec36ea27d94b1f58a505c8cca072891dadaac8f55b7a",
+      "passed": true
+    },
+    {
+      "path": "/build-meta.json",
+      "accept": "*/*",
+      "cache_bust": false,
+      "bytes": 471364,
+      "sha256": "fa48463a3539c95bf400ec36ea27d94b1f58a505c8cca072891dadaac8f55b7a",
+      "passed": true
+    },
+    {
+      "path": "/build-meta.json",
+      "accept": "*/*",
+      "cache_bust": true,
+      "bytes": 471364,
+      "sha256": "fa48463a3539c95bf400ec36ea27d94b1f58a505c8cca072891dadaac8f55b7a",
+      "passed": true
+    },
+    {
+      "path": "/",
+      "accept": "*/*",
+      "cache_bust": false,
+      "bytes": 3836,
+      "sha256": "54dc1bf3d8286a6e193616d52827590f141386c8e91b8faa7848a7c602c1ea5d",
+      "passed": true
+    },
+    {
+      "path": "/",
+      "accept": "*/*",
+      "cache_bust": true,
+      "bytes": 3836,
+      "sha256": "54dc1bf3d8286a6e193616d52827590f141386c8e91b8faa7848a7c602c1ea5d",
+      "passed": true
+    },
+    {
+      "path": "/index.html",
+      "accept": "*/*",
+      "cache_bust": false,
+      "bytes": 3836,
+      "sha256": "54dc1bf3d8286a6e193616d52827590f141386c8e91b8faa7848a7c602c1ea5d",
+      "passed": true
+    },
+    {
+      "path": "/index.html",
+      "accept": "*/*",
+      "cache_bust": true,
+      "bytes": 3836,
+      "sha256": "54dc1bf3d8286a6e193616d52827590f141386c8e91b8faa7848a7c602c1ea5d",
+      "passed": true
+    },
+    {
+      "path": "/operational-balances/financial-position",
+      "accept": "*/*",
+      "cache_bust": false,
+      "bytes": 3836,
+      "sha256": "54dc1bf3d8286a6e193616d52827590f141386c8e91b8faa7848a7c602c1ea5d",
+      "passed": true
+    },
+    {
+      "path": "/operational-balances/financial-position",
+      "accept": "*/*",
+      "cache_bust": true,
+      "bytes": 3836,
+      "sha256": "54dc1bf3d8286a6e193616d52827590f141386c8e91b8faa7848a7c602c1ea5d",
+      "passed": true
+    },
+    {
+      "path": "/assets/OperationalFinancialPosition-Cryy54Oi.js",
+      "accept": "*/*",
+      "cache_bust": false,
+      "bytes": 70940,
+      "sha256": "b38d709f01a8d3e8d4813174615876112baaaa2e56ed938f7b649fbfb7674dea",
+      "passed": true
+    },
+    {
+      "path": "/assets/OperationalFinancialPosition-Cryy54Oi.js",
+      "accept": "*/*",
+      "cache_bust": true,
+      "bytes": 70940,
+      "sha256": "b38d709f01a8d3e8d4813174615876112baaaa2e56ed938f7b649fbfb7674dea",
+      "passed": true
+    },
+    {
+      "path": "/assets/OperationalFinancialPosition-Dfvfj_1P.css",
+      "accept": "*/*",
+      "cache_bust": false,
+      "bytes": 741,
+      "sha256": "38320c73184e3de2c3c83ea4200dc38d702598496bbfbe0b6f4cb71e30a35d80",
+      "passed": true
+    },
+    {
+      "path": "/assets/OperationalFinancialPosition-Dfvfj_1P.css",
+      "accept": "*/*",
+      "cache_bust": true,
+      "bytes": 741,
+      "sha256": "38320c73184e3de2c3c83ea4200dc38d702598496bbfbe0b6f4cb71e30a35d80",
+      "passed": true
+    },
+    {
+      "path": "/assets/index-B1roasOU.js",
+      "accept": "*/*",
+      "cache_bust": false,
+      "bytes": 996576,
+      "sha256": "92f49968471e72f1f8b7067670e032bab22a413a0e4f3660bd1951878b7a83a8",
+      "passed": true
+    },
+    {
+      "path": "/assets/index-B1roasOU.js",
+      "accept": "*/*",
+      "cache_bust": true,
+      "bytes": 996576,
+      "sha256": "92f49968471e72f1f8b7067670e032bab22a413a0e4f3660bd1951878b7a83a8",
+      "passed": true
+    },
+    {
+      "path": "/assets/index-CpNGBGvA.css",
+      "accept": "*/*",
+      "cache_bust": false,
+      "bytes": 207921,
+      "sha256": "53df6979c994fa97964c2cf9b23b2f63fb8a73002a61e96234335af0c4d4b867",
+      "passed": true
+    },
+    {
+      "path": "/assets/index-CpNGBGvA.css",
+      "accept": "*/*",
+      "cache_bust": true,
+      "bytes": 207921,
+      "sha256": "53df6979c994fa97964c2cf9b23b2f63fb8a73002a61e96234335af0c4d4b867",
+      "passed": true
+    },
+    {
+      "path": "/assets/visibleOperationalRead-D9AU2IZs.js",
+      "accept": "*/*",
+      "cache_bust": false,
+      "bytes": 2144,
+      "sha256": "03150168d9add79cef747796af1c442075a01d1da38eecb226d7b0e6a881a253",
+      "passed": true
+    },
+    {
+      "path": "/assets/visibleOperationalRead-D9AU2IZs.js",
+      "accept": "*/*",
+      "cache_bust": true,
+      "bytes": 2144,
+      "sha256": "03150168d9add79cef747796af1c442075a01d1da38eecb226d7b0e6a881a253",
+      "passed": true
+    },
+    {
+      "path": "/service-worker.js",
+      "accept": "*/*",
+      "cache_bust": false,
+      "bytes": 574,
+      "sha256": "c81e48cc4257fc1af42c731588f47dfe3a784591bd60f1b603d46d3856f2cebd",
+      "passed": true
+    },
+    {
+      "path": "/service-worker.js",
+      "accept": "*/*",
+      "cache_bust": true,
+      "bytes": 574,
+      "sha256": "c81e48cc4257fc1af42c731588f47dfe3a784591bd60f1b603d46d3856f2cebd",
+      "passed": true
+    },
+    {
+      "path": "/sw.js",
+      "accept": "*/*",
+      "cache_bust": false,
+      "bytes": 574,
+      "sha256": "c81e48cc4257fc1af42c731588f47dfe3a784591bd60f1b603d46d3856f2cebd",
+      "passed": true
+    },
+    {
+      "path": "/sw.js",
+      "accept": "*/*",
+      "cache_bust": true,
+      "bytes": 574,
+      "sha256": "c81e48cc4257fc1af42c731588f47dfe3a784591bd60f1b603d46d3856f2cebd",
+      "passed": true
+    }
+  ],
+  "completed_at": "2026-11-13T16:14:45.393367+00:00",
+  "targeted_checks_passed": true
+}
