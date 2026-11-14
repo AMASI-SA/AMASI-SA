@@ -291,3 +291,19 @@ B tree:d636970f1a954530cf7845e408e05362af160cfa.
 No source edits afterA; task branch nowB. Both exactB host20.20.2/24.19.0
 clean-clone adapter rehearsals and all B checks remain required before normal
 merge M. No lease, merge or publication has occurred for this task.
+
+## Original-workspace runner templates
+
+PR1921 templates are preserved under release-runners. Root inspected their
+controlled diff and verified all manifest hashes. Independent read-only review
+passed all four runners against immutable21d4a86f baseline: normalized ASTs
+match except the intended additional lexical evidence-placeholder rejection.
+Known A/J/B/tree/runtime/intent/actor pins agree throughout. Actual-exit records,
+exact owned-lease checks, fresh nonignored-file preservation and separate
+unsaved-buffer checks remain intact. Static compile and --help actual exits
+were0; no live, /app or release action was run by the reviewers.
+
+This approves templates only. M, fresh untracked count and successful new
+rehearsal evidence remain invalid placeholders. Root must fill and review them
+from observed evidence before original use. No template publishes or clears
+another actor's lease. B CI is still in progress; no merge or publication yet.

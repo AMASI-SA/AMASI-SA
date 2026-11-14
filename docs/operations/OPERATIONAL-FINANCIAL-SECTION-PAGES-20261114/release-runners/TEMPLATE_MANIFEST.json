@@ -1,0 +1,56 @@
+{
+  "reference_commit": "21d4a86f10c91239f6b2812dd258e6713916ab3e",
+  "source_A": "0dd26a620a0acc4235d6fdfa0a3a8e714982fcae",
+  "source_base_J": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
+  "production_branch": "hotfix/prod-snap-meta-final",
+  "actor": "codex-financial-section-pages-1921",
+  "unfilled": [
+    "M",
+    "fresh_nonignored_untracked_count",
+    "successful_new_rehearsal_evidence_directory"
+  ],
+  "files": {
+    "pr1921_original_rehearsal.py": {
+      "reference_path": "docs/operations/OPERATIONAL-FINANCIAL-LOAD-RECOVERY-20261114/release-runners/pr1919_original_rehearsal.py",
+      "reference_sha256": "44e120f42f69d7b996c5422d41386b54b6c4843dfaefb2d9b898ac1c0e226cd4",
+      "sha256": "406e65728bce45aeb75f4f73528e32c4d7f51c1c02823b4ec444d55df7cd168c",
+      "bytes": 16649
+    },
+    "pr1921_original_gate.py": {
+      "reference_path": "docs/operations/OPERATIONAL-FINANCIAL-LOAD-RECOVERY-20261114/release-runners/pr1919_original_gate.py",
+      "reference_sha256": "1b82d25a905e686965fe1586e47426aa774ca65ebd8966cf14f0525436901821",
+      "sha256": "ee7008ba46a39877547ba3054b71a33678b3314e21fa0f18a94afcd5fad876c2",
+      "bytes": 11522
+    },
+    "pr1921_original_verify.py": {
+      "reference_path": "docs/operations/OPERATIONAL-FINANCIAL-LOAD-RECOVERY-20261114/release-runners/pr1919_original_verify.py",
+      "reference_sha256": "5af29358edf007e07091373c952435d6a1af3accc389bd0ca5b71c099647c6f1",
+      "sha256": "ad6110d73b0d892d4b15a4485ab128b9b73a112ba58648edef97ed1c89606ccb",
+      "bytes": 11551
+    },
+    "pr1921_preserve_untracked.py": {
+      "reference_path": "docs/operations/OPERATIONAL-FINANCIAL-LOAD-RECOVERY-20261114/release-runners/pr1919_preserve_untracked.py",
+      "reference_sha256": "3c0c19680521017765f62ca200dffcf603d1b36cccc689c0e444d6248a45fded",
+      "sha256": "26d5aadb61b017c389754d7d209627c347b564aa697248b96e2abfb7f26ae4d0",
+      "bytes": 5348
+    }
+  },
+  "reviewed_B": "5fc08eef0b430b53911934d9f866ec7b13b61b47",
+  "reviewed_B_tree": "d636970f1a954530cf7845e408e05362af160cfa",
+  "runtime_release_id": "rg5-5a1f26faa5108bc63621c816cdbd90697e422290a4245a460ff6020e6c97dc30",
+  "intent_byte_sha256": "ad0a524b2de8da1a734e46bfeb4d851f9743ae28293eedb361075c41fcc4a4b2",
+  "supporting_files": {
+    "REVIEW_GUIDE.md": {
+      "sha256": "3cddad098d5d213127f3b65cdf546de40911b3ea9eed58be7fcff96c4c501d9f",
+      "bytes": 10196
+    },
+    "TEMPLATE_DIFF.patch": {
+      "sha256": "62df72ca2f908f53d5fb112b96a71f685af1be90223af0201a450145eb2e43dc",
+      "bytes": 9747
+    },
+    "VALIDATION.json": {
+      "sha256": "734db6c76f7654d30ffb5f0349b96e76463830fb7166bc809569ef787278d919",
+      "bytes": 1429
+    }
+  }
+}

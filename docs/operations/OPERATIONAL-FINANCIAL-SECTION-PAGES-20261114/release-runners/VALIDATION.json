@@ -1,0 +1,39 @@
+{
+  "mode": "static compile, definition-only validation, and --help only",
+  "original_app_or_release_commands_executed": false,
+  "reference_commit": "21d4a86f10c91239f6b2812dd258e6713916ab3e",
+  "checks": [
+    {
+      "file": "pr1921_original_rehearsal.py",
+      "ast_compile": "passed",
+      "help_actual_exit": 0,
+      "help_elapsed_seconds": 0.370322,
+      "unfilled_configuration_rejected": "Fill the exact reviewed MERGE before running this template",
+      "missing_fresh_count_rejected": true
+    },
+    {
+      "file": "pr1921_original_gate.py",
+      "ast_compile": "passed",
+      "help_actual_exit": 0,
+      "help_elapsed_seconds": 0.147125,
+      "unfilled_configuration_rejected": "Fill the exact reviewed MERGE before running this template",
+      "missing_fresh_count_rejected": true,
+      "placeholder_evidence_rejected_without_filesystem_access": true
+    },
+    {
+      "file": "pr1921_original_verify.py",
+      "ast_compile": "passed",
+      "help_actual_exit": 0,
+      "help_elapsed_seconds": 0.191406,
+      "unfilled_configuration_rejected": "Fill the exact reviewed MERGE before running this template",
+      "missing_fresh_count_rejected": true
+    },
+    {
+      "file": "pr1921_preserve_untracked.py",
+      "ast_compile": "passed",
+      "help_actual_exit": 0,
+      "help_elapsed_seconds": 0.096805,
+      "imports_new_rehearsal_definitions_and_validates_before_evidence": true
+    }
+  ]
+}
