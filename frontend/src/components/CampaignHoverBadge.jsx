@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 const known = (value) => typeof value === "number" && Number.isFinite(value);
@@ -7,6 +7,20 @@ const money = (value) => known(value)
     : "غير مكتمل";
 const count = (value, suffix) => known(value)
     ? value.toLocaleString("en-US", { maximumFractionDigits: 2 }) + " " + suffix : "غير مكتمل";
+const percent = (value) => value.toLocaleString("en-US", { style: "percent", maximumFractionDigits: 2 });
+
+function tooltipPosition(anchor, measuredHeight = 0) {
+    const width = Math.max(0, Math.min(320, window.innerWidth - 20));
+    const maxHeight = Math.max(0, window.innerHeight - 20);
+    const height = Math.min(measuredHeight, maxHeight);
+    const below = anchor.bottom + 8;
+    const preferredTop = below + height <= window.innerHeight - 10 ? below : anchor.top - height - 8;
+    return {
+        left: Math.max(10, Math.min(anchor.left, window.innerWidth - width - 10)),
+        top: Math.max(10, Math.min(preferredTop, window.innerHeight - height - 10)),
+        width, maxHeight,
+    };
+}
 
 function accountTime(value, zone) {
     if (!value || !zone) return null;
@@ -48,6 +62,7 @@ function explanation(campaign, report) {
 
 export default function CampaignHoverBadge({ badge, campaign, report }) {
     const ref = useRef(null);
+    const tooltipRef = useRef(null);
     const tooltipId = useId();
     const [position, setPosition] = useState(null);
     const [pinned, setPinned] = useState(false);
@@ -55,23 +70,60 @@ export default function CampaignHoverBadge({ badge, campaign, report }) {
     const show = () => {
         const rect = ref.current?.getBoundingClientRect();
         if (!rect) return;
-        const width = Math.min(320, window.innerWidth - 20);
-        const left = Math.max(10, Math.min(rect.left, window.innerWidth - width - 10));
-        const top = rect.bottom + 380 > window.innerHeight ? Math.max(8, rect.top - 370) : rect.bottom + 8;
-        setPosition({ left, top, width });
+        setPosition(tooltipPosition(rect, tooltipRef.current?.getBoundingClientRect().height));
     };
     const hide = () => { if (!pinned) setPosition(null); };
+    const close = () => { setPinned(false); setPosition(null); };
+    const hideOnBlur = (event) => {
+        if (ref.current?.contains(event.relatedTarget) || tooltipRef.current?.contains(event.relatedTarget)) return;
+        close();
+    };
+    const directCostIncomplete = report?.product_cost_complete === false || report?.costs_complete === false;
+    const costsComplete = report?.product_cost_complete === true && report?.costs_complete === true && known(report?.total_cost_sar);
+    const operatingComplete = report?.operating_expenses_complete === true
+        && known(report?.operating_expenses_sar) && known(report?.operating_expenses_ratio);
+    const profitAvailable = costsComplete && operatingComplete && report?.net_profit_available === true
+        && known(report?.sales_sar) && known(report?.spend_sar) && known(report?.net_profit_sar);
+    const profitProvisional = profitAvailable && (report?.profit_provisional === true
+        || report?.spend_warning === "snapchat_hours_incomplete" || report?.spend_warning === "snapchat_hour_coverage_unverified"
+        || (known(report?.missing_hours) && report.missing_hours > 0));
+    const profitValue = directCostIncomplete ? "ناقص التكلفة" : profitAvailable
+        ? money(report.net_profit_sar) + (profitProvisional ? " · تقديري" : "") : "غير مكتمل";
     const rows = [
         ["الصرف المسجل", money(report?.spend_sar)],
         ["عدد الطلبات", count(report?.orders, "طلب")],
         ["عدد القطع", count(report?.pieces, "قطعة")],
         ["إجمالي المبيعات", money(report?.sales_sar)],
+        ["إجمالي التكاليف", directCostIncomplete ? "التكلفة غير مكتملة" : costsComplete ? money(report.total_cost_sar) : "غير مكتمل"],
+        ["المصروفات التشغيلية", operatingComplete ? `${money(report.operating_expenses_sar)} (${percent(report.operating_expenses_ratio)})` : "غير مكتمل"],
         ["تكلفة الطلب", report?.orders === 0 && known(report?.spend_sar) ? "لا توجد طلبات" : money(report?.cpa_sar)],
         ["العائد الإعلاني", report?.spend_sar === 0 ? "لا يوجد صرف مسجل" : known(report?.roas) ? report.roas.toFixed(2) + "×" : "غير مكتمل"],
+        ["صافي الأرباح", profitValue, true],
     ];
     const updated = accountTime(report?.updated_at, report?.timezone);
     const covered = accountTime(report?.spend_as_of, report?.timezone);
     const displayName = campaign?.campaignName || report?.campaign_name || campaign?.campaignDisplay || "الحملة غير محددة";
+    const popupWidth = position?.width;
+    useLayoutEffect(() => {
+        if (!isShown) return undefined;
+        const place = () => {
+            const anchor = ref.current?.getBoundingClientRect();
+            const tooltip = tooltipRef.current;
+            if (!anchor || !tooltip) return;
+            const next = tooltipPosition(anchor, tooltip.getBoundingClientRect().height);
+            setPosition(current => !current || Object.keys(next).every(key => current[key] === next[key]) ? current : next);
+        };
+        place();
+        window.addEventListener("resize", place);
+        window.addEventListener("scroll", place, true);
+        const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
+        if (tooltipRef.current) observer?.observe(tooltipRef.current);
+        return () => {
+            window.removeEventListener("resize", place);
+            window.removeEventListener("scroll", place, true);
+            observer?.disconnect();
+        };
+    }, [isShown, popupWidth, report, displayName]);
     return <>
         <span
             ref={ref} role="button" tabIndex={0}
@@ -79,7 +131,7 @@ export default function CampaignHoverBadge({ badge, campaign, report }) {
             aria-label={`مصدر الطلب: ${badge.label}، تقرير الحملة: ${displayName}`}
             aria-expanded={isShown} aria-describedby={isShown ? tooltipId : undefined}
             onMouseEnter={show} onMouseLeave={hide} onFocus={show}
-            onBlur={() => { setPinned(false); setPosition(null); }}
+            onBlur={hideOnBlur}
             onClick={(event) => {
                 event.preventDefault(); event.stopPropagation();
                 if (isShown && pinned) { setPinned(false); setPosition(null); }
@@ -87,6 +139,7 @@ export default function CampaignHoverBadge({ badge, campaign, report }) {
             }}
             onKeyDown={(event) => {
                 if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setPinned(false); setPosition(null); }
+                if (event.key === "Tab" && pinned && !event.shiftKey) { event.preventDefault(); event.stopPropagation(); tooltipRef.current?.focus(); }
                 if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault(); event.stopPropagation();
                     if (pinned) { setPinned(false); setPosition(null); }
@@ -96,22 +149,38 @@ export default function CampaignHoverBadge({ badge, campaign, report }) {
             className={`inline-flex h-5 w-5 shrink-0 cursor-help items-center justify-center rounded-full border text-[9px] font-black leading-none shadow-sm ${badge.className}`}
         >{badge.mark}</span>
         {isShown && createPortal(
-            <div id={tooltipId} role="tooltip" dir="rtl"
+            <div ref={tooltipRef} id={tooltipId} role="tooltip" dir="rtl" tabIndex={pinned ? 0 : undefined}
+                onBlur={hideOnBlur}
+                onClick={(event) => { event.preventDefault(); event.stopPropagation(); }}
+                onKeyDown={(event) => {
+                    event.stopPropagation();
+                    if (event.key === "Escape") { event.preventDefault(); ref.current?.focus(); close(); }
+                    if (event.key === "Tab" && event.shiftKey) { event.preventDefault(); ref.current?.focus(); }
+                }}
                 className="fixed z-[9999] rounded-xl border border-slate-200 bg-white p-3 text-right text-xs text-slate-900 shadow-xl"
-                style={{ ...position, maxHeight: "calc(100vh - 20px)", overflowY: "auto", pointerEvents: "none" }}>
+                style={{ ...position, boxSizing: "border-box", overflowY: "auto", pointerEvents: pinned ? "auto" : "none" }}>
                 <div className="mb-1 font-black leading-5">{displayName}</div>
                 <div className="mb-2 text-[10px] text-slate-500">
                     {report?.period_basis === "salla_store_day" ? "اليوم من 12:00 ص بتوقيت المتجر: " : "اليوم من 12:00 ص بتوقيت الحساب: "}<bdi dir="ltr">{report?.timezone || "غير متاح"}</bdi>
                     {report?.date && <span> · <bdi dir="ltr">{report.date}</bdi></span>}
                 </div>
                 {report?.commerce_scope === "salla_utm_label" && <div className="mb-2 text-[10px] font-bold text-amber-700">تجميع اسم التتبع في سلة · غير مربوط إعلانياً</div>}
-                <table className="w-full border-collapse"><tbody>{rows.map(([label, value]) =>
-                    <tr key={label} className="border-t border-slate-100">
-                        <th className="py-1.5 text-right font-medium text-slate-600">{label}</th>
-                        <td className="py-1.5 text-left font-bold" dir="ltr">{value}</td>
+                <table className="w-full border-collapse"><tbody>{rows.map(([label, value, emphasized]) =>
+                    <tr key={label} className={`border-t ${emphasized ? "border-slate-300 bg-slate-50" : "border-slate-100"}`}>
+                        <th className={`py-1.5 text-right ${emphasized ? "font-black text-slate-900" : "font-medium text-slate-600"}`}>{label}</th>
+                        <td className={`py-1.5 text-left font-bold ${emphasized && profitAvailable && report.net_profit_sar < 0 ? "text-rose-700" : ""}`} dir="ltr">{value}</td>
                     </tr>
                 )}</tbody></table>
                 <div className="mt-2 text-[10px] text-slate-500">{explanation(campaign, report)}</div>
+                <div className="mt-1 text-[10px] text-slate-500">إجمالي التكاليف: المنتجات والشحن ورسوم الدفع وعمولة بنك الإعلان.</div>
+                <div className="mt-1 text-[10px] text-slate-500">صافي الأرباح بعد خصم التكاليف والصرف الإعلاني وحصة المصروفات التشغيلية.</div>
+                {report?.product_cost_complete === false && <div className="mt-1 text-[10px] text-amber-700">بانتظار حسم خيارات المنتجات وتكاليفها.</div>}
+                <div className="mt-1 text-[10px] text-slate-500">
+                    نسبة التشغيل من مصروفات الملخص التنفيذي إلى مبيعاته حسب يوم المتجر
+                    {report?.operating_basis?.date && <>: <bdi dir="ltr">{report.operating_basis.date}</bdi></>}
+                    {report?.operating_basis?.timezone && <> · <bdi dir="ltr">{report.operating_basis.timezone}</bdi></>}.
+                </div>
+                {profitProvisional && <div className="mt-1 text-[10px] text-amber-700">صافي الأرباح تقديري حتى اكتمال بيانات الصرف.</div>}
                 {known(report?.missing_hours) && report.missing_hours > 0 && <div className="mt-1 text-[10px] text-slate-500">الساعات الناقصة: <bdi dir="ltr">{report.missing_hours}</bdi> · تنبيه لا يمنع احتساب الصرف المتوفر</div>}
                 {covered && <div className="mt-1 text-[10px] text-slate-500">بيانات الصرف حتى: <bdi dir="ltr">{covered}</bdi> · قراءة أولية قابلة للتحديث</div>}
                 {updated && <div className="mt-1 text-[10px] text-slate-400">آخر تحديث للصرف: <bdi dir="ltr">{updated}</bdi></div>}

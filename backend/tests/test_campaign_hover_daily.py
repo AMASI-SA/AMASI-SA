@@ -324,9 +324,86 @@ async def test_partial_explicit_zero_is_usable_and_division_by_zero_stays_undefi
 
 @pytest.mark.asyncio
 async def test_batch_query_count_does_not_grow_per_campaign():
-    db = database()
-    await hover.read_campaign_hover(db, "owner", ["ny-campaign", "sa-campaign"])
-    assert sum(len(c.queries) for c in db.collections.values()) <= 10
+    from collections import Counter
+    from mongomock_motor import AsyncMongoMockClient
+    from .test_dashboard_bundle_cost_authority import ReadOnlyDB
+
+    async def measured_batch(campaign_count):
+        # Exercise successful financial reads: the lightweight commerce double
+        # above lacks aggregate/find_one and would stop those paths early.
+        db = AsyncMongoMockClient().campaign_hover_query_budget
+        campaign_ids = [f"batch-campaign-{index}" for index in range(campaign_count)]
+        orders = []
+        for index, cid in enumerate(campaign_ids):
+            row = order(cid=cid, number=f"batch-order-{index}")
+            row.update(order_date="2026-11-13", total_amount=375, currency="SAR",
+                shipping_company="Carrier", payment_fee_status="actual", actual_payment_fee=2,
+                products=[{"order_item_id": f"line-{index}", "product_id": f"product-{index}",
+                    "quantity": 1, "sku": f"SKU-{index}"}])
+            row["raw_by_source"]["salla_direct"].update(reference_id=row["order_number"],
+                items=[{"id": f"line-{index}", "product_id": f"product-{index}",
+                    "quantity": 1, "type": "product"}])
+            orders.append(row)
+        sources = {name: collection.rows for name, collection in database(orders).collections.items()}
+        sources.update({
+            "mezan_snapchat_entities_v2": [{"user_id": "owner", "entity_type": "campaign",
+                "external_id": cid, "ad_account_id": "snap-ny"} for cid in campaign_ids],
+            "mezan_snapchat_campaign_account_day_v2": [local_spend(campaign_id=cid, spend_sar=10)
+                for cid in campaign_ids],
+            "mezan_products_v2": [{"user_id": "owner", "salla_product_id": f"product-{index}",
+                "sku": f"SKU-{index}"} for index in range(campaign_count)],
+            "mezan_product_cost_profiles_v2": [{"user_id": "owner",
+                "salla_product_id": f"product-{index}", "base_cost": 10} for index in range(campaign_count)],
+            "settings": [{"user_id": "owner", "shipping_companies": [{"name": "Carrier", "cost_per_order": 5}]}],
+            "mezan_employees_v2": [{"user_id": "owner", "id": "employee", "status": "active",
+                "hire_date": "2026-11-01"}],
+            "mezan_employee_salary_contracts_v2": [{"user_id": "owner", "id": "salary",
+                "employee_id": "employee", "monthly_amount": 3000, "effective_from": "2026-11-01"}],
+            "operating_recurring_obligations_v2": [{"user_id": "owner", "id": "water", "status": "active",
+                "expense_type": "water", "cycle": "monthly", "start_date": "2026-11-01", "auto_renew": True}],
+            "operating_recurring_invoices_v2": [{"user_id": "owner", "obligation_id": "water",
+                "amount": 600, "period_start": "2026-11-01", "period_end": "2026-11-30"}],
+        })
+        for name, rows in sources.items():
+            if rows:
+                await db[name].insert_many(deepcopy(rows))
+        readonly = ReadOnlyDB(db)
+        result = await hover.read_campaign_hover(readonly, "owner", campaign_ids)
+        assert set(result["campaigns"]) == set(campaign_ids)
+        for row in result["campaigns"].values():
+            assert row["orders"] == 1 and row["net_profit_available"] is True
+            assert row["product_cost_sar"] == 10 and row["total_cost_sar"] == 17.23
+            assert row["operating_basis"]["expenses_sar"] == 120
+        return readonly.reads
+
+    single = await measured_batch(1)
+    maximum = await measured_batch(hover.MAX_CAMPAIGNS)
+    assert hover.MAX_CAMPAIGNS == 20
+    assert single == maximum
+    # Exact successful-path budget for one authority chunk (1..20 orders):
+    # 10 account/commerce/spend + 12 catalog/authority/merchant + 1 ad settings
+    # + 7 executive operating reads = 30. No new read may scale by campaign.
+    # Commerce and executive sales intentionally read unified_orders twice;
+    # settings has one merchant find_one and one executive find projection.
+    find_once = {
+        "ads_v2_accounts", "mezan_integration_accounts_v2", "mezan_snapchat_entities_v2",
+        "ads_v2_spend_raw", "mezan_snapchat_performance_daily_v2",
+        "mezan_meta_campaign_performance_daily_v2", "mezan_snapchat_campaign_account_day_v2",
+        "mezan_snapchat_performance_account_day_v3",
+        "ads_v2_spend_daily", "mezan_products_v2", "mezan_product_cost_profiles_v2",
+        "mezan_product_resource_bindings_v2", "mezan_product_option_cost_bindings_v2",
+        "mezan_cost_resources_v2", "mezan_bundle_definitions_v2", "mezan_order_item_cost_snapshots_v2",
+        "mezan_component_consumption_units_v1", "mezan_order_cost_corrections_v1",
+        "mezan_ad_account_cost_settings_v2", "mezan_employee_salary_contracts_v2",
+        "mezan_employees_v2", "operating_salaries", "operating_recurring_obligations_v2",
+        "operating_recurring_invoices_v2",
+    }
+    expected = Counter({(name, "find"): 1 for name in find_once})
+    expected.update({("unified_orders", "find"): 2, ("settings", "find"): 1,
+        ("settings", "find_one"): 1, ("mezan_component_order_lifecycle_v1", "aggregate"): 1,
+        ("mezan_component_consumption_plans_v1", "aggregate"): 1})
+    assert maximum == expected
+    assert sum(maximum.values()) == sum(expected.values()) == 30
 
 
 def test_owner_only_and_daily_cache_invalidation():

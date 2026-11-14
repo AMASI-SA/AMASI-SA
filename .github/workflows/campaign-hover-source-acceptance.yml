@@ -5,6 +5,25 @@ on:
     paths:
       - backend/order_engine/campaign_hover.py
       - backend/order_engine/campaign_hover_native_sources.py
+      - backend/order_engine/campaign_hover_profit.py
+      - backend/order_engine/campaign_hover_operating.py
+      - backend/tests/test_campaign_hover_profit.py
+      - backend/tests/test_campaign_hover_operating.py
+      - backend/order_cost_authority.py
+      - backend/order_cost_reporting_repair.py
+      - backend/order_profitability_summary.py
+      - backend/marketing_report_costs.py
+      - backend/dashboard_v2_ad_costs.py
+      - backend/dashboard_v2_routes.py
+      - backend/order_currency.py
+      - backend/report_option_identity.py
+      - backend/report_option_recovery.py
+      - backend/product_catalog_cost_resolution.py
+      - backend/current_bundle_reporting_estimate.py
+      - backend/shipping_cost_ssot.py
+      - backend/employee_payroll_status.py
+      - backend/recurring_obligations_routes.py
+      - backend/expenses_routes.py
       - backend/order_engine/campaign_enrichment.py
       - backend/tests/test_campaign_hover_native_sources.py
       - backend/tests/test_order_engine_campaign_enrichment.py
@@ -16,6 +35,7 @@ on:
       - backend/tests/test_snapchat_hourly_response_coverage.py
       - frontend/src/components/CampaignHoverBadge.jsx
       - frontend/src/components/CampaignHoverBadge.test.jsx
+      - frontend/src/components/CampaignHoverProfit.test.jsx
       - frontend/src/components/CampaignHoverNativeSources.test.jsx
       - frontend/src/lib/orderCampaignAttribution.js
       - frontend/src/lib/orderCampaignAttribution.test.js
@@ -50,7 +70,7 @@ jobs:
           cache: pip
       - name: Install public test dependencies
         run: |
-          sed '/^emergentintegrations==/d' requirements.txt | python -m pip install -q -r /dev/stdin pytest-asyncio
+          sed '/^emergentintegrations==/d' requirements.txt | python -m pip install -q -r /dev/stdin pytest-asyncio mongomock==4.3.0 mongomock-motor==0.0.36
       - name: Test provider response coverage and independent Salla metrics
         run: >-
           python -m pytest -q --tb=short
@@ -60,6 +80,12 @@ jobs:
           tests/test_campaign_hover_refresh.py
           tests/test_campaign_hover_native_sources.py
           tests/test_order_engine_campaign_enrichment.py
+          tests/test_campaign_hover_profit.py
+          tests/test_campaign_hover_operating.py
+          tests/test_dashboard_bundle_cost_authority.py
+          tests/test_order_profitability_summary.py
+          tests/test_recurring_obligations_v2.py
+          tests/test_dashboard_v2_arabic_status_normalization.py
 
   frontend-coverage:
     runs-on: ubuntu-latest
@@ -84,6 +110,7 @@ jobs:
         run: >-
           CI=true yarn test --watchAll=false --runInBand --runTestsByPath
           src/components/CampaignHoverBadge.test.jsx
+          src/components/CampaignHoverProfit.test.jsx
           src/pages/AdvancedDashboard.campaignHover.test.js
           src/services/campaignHover.test.js
           src/hooks/useCampaignHover.test.jsx

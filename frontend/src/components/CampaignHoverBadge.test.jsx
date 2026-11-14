@@ -47,6 +47,9 @@ test("missing hours are advisory and do not hide available spend CPA or ROAS", a
         orders: 1, pieces: 4, sales_sar: 375, spend_sar: 93.75, cpa_sar: 93.75, roas: 4,
         spend_warning: "snapchat_hours_incomplete", missing_hours: 2,
         spend_coverage: "incomplete_hourly", updated_at: "2026-11-13T12:05:00Z",
+        total_cost_sar: 100, product_cost_complete: true, costs_complete: true,
+        operating_expenses_sar: 11.25, operating_expenses_ratio: 0.03, operating_expenses_complete: true,
+        net_profit_sar: 170, net_profit_available: true, profit_provisional: true,
     }} />));
     await act(async () => host.querySelector('[role="button"]').dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
     const popup = document.querySelector('[role="tooltip"]');
