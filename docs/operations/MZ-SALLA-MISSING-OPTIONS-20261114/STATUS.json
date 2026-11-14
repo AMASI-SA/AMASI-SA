@@ -5,7 +5,7 @@
   "base_sha": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
   "previous_checkpoint_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
   "live_source_observed": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
-  "state": "own_release_superseded_waiting_combined_pr1928_publication",
+  "state": "own_fix_preserved_in_combined_pr1928_publication_in_progress",
   "scope": "Explain and prevent missing incoming customer choices without manual Salla refresh.",
   "confirmed": [
     "Initial native and root choices empty at revision 1.",
@@ -33,7 +33,7 @@
   ],
   "reproduction_limit": "Synthetic source mechanisms, not full webhook/Mongo integration or a passing preventive-fix suite.",
   "access": "Official Production viewer connected through secure user authentication. Scoped reads; edit off; no credential extracted.",
-  "next_safe_action": "Do not mutate original /app, run older guard/rehearsal, revert production or clear another lease. Independently verify PR1928 preserves our exact code and ancestry, monitor its immutable operator handoff to actual publication/official3probe/inactive, then confirm live source includes this fix and finalize this task truthfully. No manual Salla order refresh.",
+  "next_safe_action": "Do not execute any old pinned operator or alter original /app. Current combined PR1928 owner has begun publication. Await newer explicit platform success, its official three consecutive identity/artifact probes and inactive guard; independently observe the live combined identity containing our unchanged options fix. No manual Salla refresh.",
   "continuity": "PR1923, task status and archival branch are durable. Issue1006 body update acknowledged but fresh readback absent; not claimed persisted.",
   "diagnosis_base_sha": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
   "source_implementation_present": true,
@@ -255,6 +255,63 @@
     "handoffBranch": "codex/financial-source-read-handoff-20261114",
     "statusPath": "docs/operations/OPERATIONAL-SOURCE-READ-RECOVERY-20261114/STATUS.md",
     "ownerOriginalStarted": true,
-    "oursOldCandidateMustNotPublish": true
+    "oursOldCandidateMustNotPublish": true,
+    "inclusion_review": {
+      "reviewed_at": "2026-11-14T18:59:57Z",
+      "source_direct_child_of_own_merge": true,
+      "normal_merge_parents_verified": true,
+      "tree_equals_intent_commit": true,
+      "source_to_merge_intent_only": true,
+      "own_changed_files_identical": 10,
+      "shared_transaction_dependencies_identical": 6,
+      "runtime_hashes_bound_in_combined_manifest": true,
+      "financial_order_projection_fields_unchanged": 21,
+      "whole_raw_by_source_preserved": true,
+      "independent_dependency_review": "No concrete regression affecting Salla intake, options enrichment or source/owner transaction fence."
+    },
+    "original_rehearsal": {
+      "owner_handoff_sha": "abff26067a8f926c4c903829b330fa516347c6d7",
+      "evidence_directory": "/tmp/mezan-pr1928-original-2e86crex",
+      "started_at": "2026-11-14T18:51:39.359831Z",
+      "finished_at": "2026-11-14T18:52:42.293406Z",
+      "actual_exit": 0,
+      "ready": true,
+      "preserved_count": 120,
+      "preserved_changed_paths": [],
+      "guard_active": false,
+      "identity_sha256": "5c040d9a31bf14a85d81eba4a2041b6d1402762482c26fe8e06d1201fc2bec50",
+      "publication": false
+    },
+    "exact_m_push_ci": {
+      "head_sha": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+      "runs": [
+        {
+          "id": 43628601204,
+          "name": "Mezan Release Readiness",
+          "conclusion": "success",
+          "attempt": 1
+        },
+        {
+          "id": 43628601257,
+          "name": "Security Gate",
+          "conclusion": "success",
+          "attempt": 1
+        },
+        {
+          "id": 43628601179,
+          "name": "CodeQL",
+          "conclusion": "success",
+          "attempt": 1
+        }
+      ],
+      "root_directly_verified": true
+    },
+    "root_ui_observed": {
+      "observed_at_utc": "2026-11-14 19:01:46 UTC",
+      "phase": "publishing",
+      "platform_started_display": "Nov 14, 09:58 PM",
+      "platform_state": "Building your website",
+      "root_clicked_publish": false
+    }
   }
 }
