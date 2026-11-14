@@ -7,8 +7,10 @@ on:
       - backend/order_engine/campaign_hover_native_sources.py
       - backend/order_engine/campaign_hover_profit.py
       - backend/order_engine/campaign_hover_operating.py
+      - backend/order_engine/campaign_hover_scope.py
       - backend/tests/test_campaign_hover_profit.py
       - backend/tests/test_campaign_hover_operating.py
+      - backend/tests/test_campaign_hover_operating_context.py
       - backend/order_cost_authority.py
       - backend/order_cost_reporting_repair.py
       - backend/order_profitability_summary.py
@@ -46,6 +48,7 @@ on:
       - frontend/src/pages/OrdersV2.jsx
       - frontend/src/pages/AdvancedDashboard.jsx
       - frontend/src/pages/AdvancedDashboard.campaignHover.test.js
+      - frontend/src/pages/AdvancedDashboard.cardRefresh.test.jsx
       - frontend/src/services/campaignHover.js
       - frontend/src/services/campaignHover.test.js
       - .github/workflows/campaign-hover-source-acceptance.yml
@@ -82,6 +85,7 @@ jobs:
           tests/test_order_engine_campaign_enrichment.py
           tests/test_campaign_hover_profit.py
           tests/test_campaign_hover_operating.py
+          tests/test_campaign_hover_operating_context.py
           tests/test_dashboard_bundle_cost_authority.py
           tests/test_order_profitability_summary.py
           tests/test_recurring_obligations_v2.py
@@ -112,6 +116,7 @@ jobs:
           src/components/CampaignHoverBadge.test.jsx
           src/components/CampaignHoverProfit.test.jsx
           src/pages/AdvancedDashboard.campaignHover.test.js
+          src/pages/AdvancedDashboard.cardRefresh.test.jsx
           src/services/campaignHover.test.js
           src/hooks/useCampaignHover.test.jsx
           src/components/CampaignHoverNativeSources.test.jsx

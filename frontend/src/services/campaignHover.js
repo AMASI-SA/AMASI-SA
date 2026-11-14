@@ -1,14 +1,21 @@
 import api from "../lib/api";
+import { dashboardCardQuery } from "./dashboardCardSnapshot";
 
 // Components preload one batch. The server cache is tenant-scoped; a revision
 // distinguishes new Salla order lists from an older cached financial snapshot.
 // No request is initiated by mouse/focus/tap handlers.
-export async function getCampaignHoverBatch(ids, { snapshotRevision } = {}) {
+export async function getCampaignHoverBatch(ids, { snapshotRevision, operatingContext } = {}) {
+    if (operatingContext === null) return {};
     const unique = [...new Set(ids.map(String).filter(Boolean))].sort().slice(0, 20);
     if (!unique.length) return {};
     const params = { campaign_ids: unique.join(",") };
     if (typeof snapshotRevision === "string" && /^[a-z0-9:-]{1,64}$/.test(snapshotRevision)) {
         params.snapshot_revision = snapshotRevision;
+    }
+    if (operatingContext !== undefined) {
+        const scope = new URLSearchParams(dashboardCardQuery(operatingContext));
+        if (!scope.get("from_date") || !scope.get("to_date")) return {};
+        for (const [name, value] of scope) params[`operating_${name}`] = value;
     }
     try {
         const { data } = await api.get("/orders-v2/campaign-hover", { params, timeout: 12000 });

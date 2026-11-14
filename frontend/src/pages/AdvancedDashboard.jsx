@@ -784,11 +784,11 @@ function CustomerAvatar({ customer }) {
     </div>;
 }
 
-export function LatestOrders({ orders, totals = {} }) {
+export function LatestOrders({ orders, totals = {}, operatingContext }) {
     // The dashboard and Orders V2 use exactly one shared cached batch reader.
     // Only the eight currently rendered rows contribute campaign identities.
     // Hover itself never fetches a route, touches Mongo or syncs a platform.
-    const campaignHover = useCampaignHover(orders, { limit: 8, visibleCount: 8, totals });
+    const campaignHover = useCampaignHover(orders, { limit: 8, visibleCount: 8, totals, operatingContext });
     const orderCount = Number(totals.total_orders || 0);
     const totalSales = finiteFinancialValue(totals.total_sales);
     const average = orderCount > 0 && totalSales !== null
@@ -1094,7 +1094,7 @@ export default function AdvancedDashboard() {
                 <div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]">
                     <div dir="rtl" className="min-w-0 space-y-4">
                         {(Boolean(visibleData) || loading) && <ProfitCard data={visibleData} loading={loading} fromDate={filters.from} toDate={filters.to} platformSpend={visiblePlatformSpend} />}
-                        <LatestOrders orders={orders} totals={visibleData?.totals} />
+                        <LatestOrders orders={orders} totals={visibleData?.totals} operatingContext={visibleData ? filters : null} />
                     </div>
                     <div dir="rtl" className="min-w-0 space-y-4"><GaLive data={ga} /><LatestSoldProductsCard collapsible /></div>
                 </div>

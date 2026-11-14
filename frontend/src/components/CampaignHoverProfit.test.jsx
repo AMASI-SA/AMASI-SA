@@ -130,6 +130,40 @@ test("negative profit is displayed without clamping and missing profit is not re
     expect(values(popup)["صافي الأرباح"]).toBe("غير مكتمل");
 });
 
+test("the operating note identifies its exact selected range independently of the campaign account day", async () => {
+    const popup = await renderCard({ operating_basis: { source: "executive_selected_period",
+        date_from: "2026-11-01", date_to: "2026-11-12", timezone: "Asia/Riyadh",
+        payment_methods: ["mada"], shipping_companies: [], report_statuses: null } });
+    const basis = popup.querySelector('[data-testid="campaign-operating-basis"]').textContent;
+    expect(basis).toContain("2026-11-01 إلى 2026-11-12");
+    expect(basis).toContain("Asia/Riyadh");
+    expect(basis).not.toContain("حسب يوم المتجر");
+    expect(popup.textContent).toContain("2026-11-13");
+    expect(popup.textContent).toContain("America/Los_Angeles");
+});
+
+test("unknown operating period is described as unavailable", async () => {
+    const popup = await renderCard({ operating_basis: null, operating_expenses_complete: false });
+    expect(popup.querySelector('[data-testid="campaign-operating-basis"]').textContent)
+        .toContain("فترة احتساب المصروفات التشغيلية غير متاحة");
+    expect(values(popup)["المصروفات التشغيلية"]).toBe("غير مكتمل");
+    expect(values(popup)["صافي الأرباح"]).toBe("غير مكتمل");
+});
+
+test.each([{ operating_expenses_sar: Infinity }, { operating_expenses_ratio: Infinity }])(
+    "overflow remains incomplete and never exposes a stale net profit: %j", async (overflow) => {
+        const popup = await renderCard({ ...overflow, net_profit_sar: 12345 });
+        expect(values(popup)["المصروفات التشغيلية"]).toBe("غير مكتمل");
+        expect(values(popup)["صافي الأرباح"]).toBe("غير مكتمل");
+        expect(popup.textContent).not.toContain("12,345");
+    });
+
+test("a proven operating ratio over one hundred percent retains the actual loss", async () => {
+    const popup = await renderCard({ operating_expenses_ratio: 1.2, operating_expenses_sar: 600, net_profit_sar: -355 });
+    expect(values(popup)["المصروفات التشغيلية"]).toBe("600.00 ر.س (120%)");
+    expect(values(popup)["صافي الأرباح"]).toBe("-355.00 ر.س");
+});
+
 test("label-only Salla aggregation can show known costs and operating share while profit stays unknown", async () => {
     const popup = await renderCard({ commerce_scope: "salla_utm_label", period_basis: "salla_store_day",
         spend_sar: null, cpa_sar: null, roas: null, net_profit_sar: 987654.32 },

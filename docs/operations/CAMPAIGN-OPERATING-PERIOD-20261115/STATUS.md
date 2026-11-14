@@ -1,27 +1,38 @@
 # Campaign operating period and cohort correction
 
-## Current state
+## Scope and verified base
 
-WIP diagnosis and implementation. Production has not changed in this task. Verified production base: `324dab9fd01fab17a28a5f7de4bb2bd298d7aea9`, tree `c2d683827c54574fcd60ee4102c9de7c163f5ef8`. Prior PR1929 completed publication and three-probe verification; its intent and receipts are historical and must not be reused for this correction.
+Task CAMPAIGN-OPERATING-PERIOD-20261115, PR 1932, branch `codex/campaign-operating-period-20261115`.
+Production base: `324dab9fd01fab17a28a5f7de4bb2bd298d7aea9`, tree `c2d683827c54574fcd60ee4102c9de7c163f5ef8`.
+Prior PR 1929 completed publication and three-probe verification. Its frozen intent and release receipts are historical and must not be reused for this correction.
 
-## Confirmed defect
+## Confirmed defect and implemented behavior
 
-The published campaign hover computes its campaign metrics using the advertising account day, but obtains the operating allocation denominator from the current Asia/Riyadh day. The dashboard retains the selected executive period across midnight. The selected executive period and cohort never reach the hover API or its cache key. A read-only deterministic execution of the actual production operating reader confirmed that its basis flips at Riyadh midnight while the campaign account day remains unchanged. Synthetic basis data reproduced a change from 20 to 2000 in the allocation without changing campaign sales. No private financial values or identifiers are recorded here.
+The published hover selected its operating denominator using the current Asia/Riyadh day, independently of the visible executive summary's chosen period. At Riyadh midnight that basis could change while the campaign account day and selected executive period remained unchanged.
 
-## Implementation contract
+The correction carries the selected executive inclusive date range and payment, shipping and report-status cohort through AdvancedDashboard, the hook, API, immutable normalized cache/pending key, profit enrichment and bounded operating reader. Campaign commerce and spend retain the advertising account day. Returned basis metadata identifies the actual operating period and cohort.
 
-Carry the explicit selected executive from/to dates and payment, shipping and report-status filters through dashboard, hook, API, normalized cache/pending key and bounded operating reader. Keep campaign commerce/spend account-day semantics. The response identifies the actual operating period and cohort. The hook must not render the previous context while a new executive selection is pending. Standalone order-page scope is resolved explicitly once on entry.
+The hook rejects old-context results immediately during rendering and after late responses. An explicit null dashboard context means the selected executive snapshot is pending. Standalone order-page scope follows the current Riyadh day only when existing orders/totals data refresh; it does not add a timer or polling. The initial proposal to pin the standalone page-entry day was revised after independent review to preserve overnight refresh behavior.
 
-Range calculation uses bounded existing saved-data reads and executive salary/recurring/cohort/currency rules. Accumulate raw daily values across the range before subtotal rounding. Preserve incomplete states, limits, deadlines and disabled-pilot safeguards. No percentage cap or negative-profit clamp. A selected-scope recalculation may be fresher than an already displayed cached executive snapshot; no exact snapshot identity contract currently exists.
+Range calculations load each existing collection once, apply canonical salary/recurring/calendar/status/currency rules and round each range subtotal once. Existing disabled-pilot, completeness, ownership, read-limit, timeout and cancellation protections remain. Ratios above 100% and real negative profits are not capped.
 
-## Verification and next action
+## Focused evidence and limitations
 
-Confirmed: source trace and deterministic prior-defect reproduction. Pending: implementation, real mounted frontend context/race regression, public backend midnight/cache/cohort/range regressions, affected CI, independent review and fresh Release Guard v5 source A / intent-only B / merge M sequence. Add the real mounted dashboard regression to the campaign acceptance workflow.
+The exact production M6 public regression, with synthetic data at before/after Riyadh midnight, fails for its monetary defect: allocation changes from 20 to 2,000 for a fixed selected day. The corrected candidate keeps 20 across both times and honors an explicitly selected new day independently.
 
-Exclusive ownership: backend and frontend agents use separate candidate paths in an isolated scratch tree; root owns integration, workflow, remote checkpoints and original release actions. No original /app mutation, release rehearsal, lease, merge or publish has occurred in this task.
+The isolated backend runner passes 103/103 cases. Root independently repeated the candidate run: exit 0, 1.678 seconds; baseline regression: expected exit 1, 1.290 seconds. The runner uses real scope, route, cache, attribution, currency, calendar and profit arithmetic, with synthetic in-memory persistence and substituted direct-product pricing seams. This is not a full pytest result. Full exact-source repository CI remains required.
 
-Before any original write or rehearsal, read fresh official guard status and continue only if inactive. Preserve unrelated work and other leases. No advertising, payroll, order, financial-data, provider-sync, new polling or paid agent actions.
+Backend source and test fingerprints were independently reviewed without an unresolved finding. All 9 frontend files pass the installed Babel parser; 4 new mounted regressions and the revised standalone overnight contract are ready for full React/Jest execution in CI. The acceptance workflow includes the new public operating-context tests and full mounted AdvancedDashboard.cardRefresh suite.
 
-## Continuity
+The operating reader retains its 4,000-order bound; large selected periods may return incomplete instead of using partial data. Matching scope does not establish exact generated_at snapshot identity: independently refreshed saved data can be fresher than the visible executive cache.
 
-Issue1006 has reached its comment limit. This task branch, its Draft PR and task status/checkpoint documents are the continuation fallback. After every material milestone update the durable record, retaining exact source and verification identities. Next: complete and independently verify the isolated implementation before freezing a new source A.
+## Release and continuity
+
+Production changed by this task: no. No new lease, merge or publication.
+Read-only original inspection at 2026-11-14T21:22:06.790532Z found guard inactive, HEAD at the verified base, tracked worktree clean and 120 untracked files. Current publication UI remained 75ee080 with Deployment finished Nov 14, 10:45 PM. Fresh official status is required again before any original write or rehearsal.
+
+Source-A CI, independent integrated review, a fresh reviewed intent-only B, exact B/host checks, ordinary tree-equivalent merge M, merge push checks, original governed build, prepare/prepublish, one authorized publication and actual three-probe verification remain pending. Disabled new operator templates cannot run until all new identities and actual receipts are pinned and independently reviewed. Do not invoke old PR 1929 runners.
+
+No financial, payroll, order, advertising/budget/bid, provider-sync or paid agent actions. Preserve unrelated original files, unsaved buffers and other owners' leases.
+
+Issue 1006 is full; PR 1932, this task branch and a separate continuation branch/checkpoint are the durable fallback. Next: integrate the frozen implementation, run exact-source CI and resolve concrete failures before freezing a fresh intent.

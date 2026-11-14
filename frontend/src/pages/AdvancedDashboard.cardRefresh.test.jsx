@@ -21,7 +21,11 @@ jest.mock("../components/DashboardAdsSpendCard", () => (props) => {
 jest.mock("../components/LatestSoldProductsCard", () => () => null);
 jest.mock("../components/AdvancedFilters", () => ({
     __esModule: true,
-    default: ({ onChange }) => <button onClick={() => onChange({ from: "2026-11-10", to: "2026-11-10", payment_methods: ["cash"], shipping_companies: ["other"] })}>change period</button>,
+    default: ({ onChange, value }) => <>
+        <button onClick={() => onChange({ from: "2026-11-10", to: "2026-11-10", payment_methods: ["cash"], shipping_companies: ["other"] })}>change period</button>
+        <button onClick={() => onChange({ ...value, payment_methods: [" cash ", "bank", "cash"],
+            shipping_companies: ["other", "courier", "other"], report_statuses: ["reviewed", "in_progress", "reviewed"] })}>change cohort</button>
+    </>,
     defaultFilters: () => ({ from: "2026-11-11", to: "2026-11-11", payment_methods: ["mada"], shipping_companies: ["carrier"] }),
     filtersToQueryString: ({ from, to }) => `from_date=${from}&to_date=${to}`,
 }));
@@ -400,4 +404,138 @@ test("the focused executive reader forces one same-filter recomputation when sav
         expect(config._mezanAuthDeadlineAt).toBe(START + 60_000);
     }
     expect(setData.mock.calls[0][0].totals.net_profit).toBe(90);
+});
+
+const HOVER_PATH = "/orders-v2/campaign-hover";
+const HOVER_CAMPAIGN = "11111111-1111-4111-8111-111111111111";
+const campaignOrders = () => [{ order_number: "campaign-order", created_at: "2026-11-11T18:00:00Z",
+    status: "processing", source: { channel: "snapchat", campaign_id: HOVER_CAMPAIGN, campaign_name: "حملة الاختبار" },
+    totals: { total: 500, total_sar: 500, currency: "SAR" }, items: [{ id: "piece", quantity: 1 }] }];
+const hoverReads = () => api.get.mock.calls.filter(([url]) => url === HOVER_PATH);
+function campaignResult(params, { amount = 10, ratio = 0.02, net = 235 } = {}) {
+    return { data: { campaigns: { [HOVER_CAMPAIGN]: {
+        status: "available", timezone: "America/Los_Angeles", date: "2026-11-11",
+        orders: 1, pieces: 1, sales_sar: 500, spend_sar: 100, cpa_sar: 100, roas: 5,
+        total_cost_sar: 155, product_cost_complete: true, costs_complete: true,
+        operating_expenses_sar: amount, operating_expenses_ratio: ratio, operating_expenses_complete: true,
+        net_profit_sar: net, net_profit_available: true,
+        operating_basis: { source: "executive_selected_period", timezone: "Asia/Riyadh",
+            date_from: params.operating_from_date, date_to: params.operating_to_date,
+            payment_methods: params.operating_payment_methods?.split(",") || [],
+            shipping_companies: params.operating_shipping_companies?.split(",") || [],
+            report_statuses: params.operating_report_statuses?.split(",") || null },
+    } } } };
+}
+function executiveCampaignResponse(url, operatingTotal = 20) {
+    const response = responseFor(url);
+    if (url.startsWith(paths.executive)) response.data.totals.operating_expenses_total = operatingTotal;
+    return response;
+}
+async function openCampaign() {
+    await act(async () => host.querySelector('[role="button"][aria-label^="مصدر الطلب"]').click());
+}
+function campaignCell(label) {
+    const row = [...document.querySelector('[role="tooltip"]').querySelectorAll("tr")]
+        .find((item) => item.querySelector("th").textContent === label);
+    return row.querySelector("td").textContent;
+}
+async function selectCampaignFilters(label) {
+    await act(async () => Array.from(host.querySelectorAll("button")).find((button) => button.textContent === label).click());
+}
+
+test("campaign operating basis keeps the visible executive selection through Riyadh midnight", async () => {
+    jest.setSystemTime(new Date("2026-11-11T20:59:50Z"));
+    mockOrders = campaignOrders();
+    api.get.mockImplementation(async (url, config) => url === HOVER_PATH
+        ? campaignResult(config.params) : executiveCampaignResponse(url));
+    await render();
+    await tick(400);
+    await openCampaign();
+    expect(campaignCell("المصروفات التشغيلية")).toBe("10.00 ر.س (2%)");
+    jest.setSystemTime(new Date("2026-11-11T21:00:10Z"));
+    mockOrders = mockOrders.map((order) => ({ ...order }));
+    await render();
+    await tick(400);
+    expect(hoverReads()).toHaveLength(2);
+    for (const [, { params }] of hoverReads()) {
+        expect(params).toMatchObject({ operating_from_date: "2026-11-11", operating_to_date: "2026-11-11",
+            operating_payment_methods: "mada", operating_shipping_companies: "carrier" });
+    }
+    expect(host.querySelector('[data-testid="advanced-profit-row-operating"]').textContent).toContain("2.00%");
+    expect(campaignCell("المصروفات التشغيلية")).toBe("10.00 ر.س (2%)");
+    expect(document.querySelector('[data-testid="campaign-operating-basis"]').textContent).toContain("2026-11-11");
+    expect(document.querySelector('[data-testid="campaign-operating-basis"]').textContent).not.toContain("2026-11-12");
+    expect(document.querySelector('[role="tooltip"]').textContent).toContain("America/Los_Angeles");
+});
+
+test("identical campaign IDs cannot show or request the old basis while a new executive period is pending", async () => {
+    mockOrders = campaignOrders();
+    api.get.mockImplementation(async (url, config) => url === HOVER_PATH
+        ? campaignResult(config.params) : executiveCampaignResponse(url));
+    await render();
+    await tick(400);
+    await openCampaign();
+    expect(campaignCell("صافي الأرباح")).toBe("235.00 ر.س");
+    let pendingExecutive;
+    api.get.mockImplementation((url, config) => {
+        if (url.startsWith(paths.executive)) return new Promise((resolve) => { pendingExecutive = { url, resolve }; });
+        if (url === HOVER_PATH) return Promise.resolve(campaignResult(config.params));
+        return Promise.resolve(responseFor(url));
+    });
+    await selectCampaignFilters("change period");
+    expect(campaignCell("المصروفات التشغيلية")).toBe("غير مكتمل");
+    expect(campaignCell("صافي الأرباح")).toBe("غير مكتمل");
+    await tick(400);
+    expect(hoverReads()).toHaveLength(1);
+    expect(pendingExecutive).toBeDefined();
+    await act(async () => pendingExecutive.resolve(executiveCampaignResponse(pendingExecutive.url)));
+    await tick(400);
+    expect(hoverReads()).toHaveLength(2);
+    expect(hoverReads()[1][1].params).toMatchObject({ campaign_ids: HOVER_CAMPAIGN,
+        operating_from_date: "2026-11-10", operating_to_date: "2026-11-10",
+        operating_payment_methods: "cash", operating_shipping_companies: "other" });
+    expect(hoverReads()[1][1].params.snapshot_revision).toBe(hoverReads()[0][1].params.snapshot_revision);
+    expect(document.querySelector('[data-testid="campaign-operating-basis"]').textContent).toContain("2026-11-10");
+    expect(campaignCell("صافي الأرباح")).toBe("235.00 ر.س");
+});
+
+test("campaign operating requests inherit every executive cohort selector with unchanged rows and totals", async () => {
+    mockOrders = campaignOrders();
+    api.get.mockImplementation(async (url, config) => url === HOVER_PATH
+        ? campaignResult(config.params) : executiveCampaignResponse(url));
+    await render();
+    await tick(400);
+    await selectCampaignFilters("change cohort");
+    await tick(400);
+    expect(hoverReads()).toHaveLength(2);
+    const params = hoverReads()[1][1].params;
+    expect(params).toMatchObject({ campaign_ids: HOVER_CAMPAIGN,
+        operating_from_date: "2026-11-11", operating_to_date: "2026-11-11",
+        operating_payment_methods: "bank,cash", operating_shipping_companies: "courier,other",
+        operating_report_statuses: "in_progress,reviewed" });
+    const executiveQuery = new URLSearchParams(calls("executive").at(-1)[0].split("?")[1]);
+    for (const name of ["from_date", "to_date", "payment_methods", "shipping_companies", "report_statuses"]) {
+        expect(params[`operating_${name}`]).toBe(executiveQuery.get(name));
+    }
+    expect(params.snapshot_revision).toBe(hoverReads()[0][1].params.snapshot_revision);
+});
+
+test("an older campaign response cannot replace the report for a newer visible executive period", async () => {
+    mockOrders = campaignOrders();
+    const pending = [];
+    api.get.mockImplementation((url, config) => url === HOVER_PATH
+        ? new Promise((resolve) => pending.push({ params: config.params, resolve }))
+        : Promise.resolve(executiveCampaignResponse(url, url.includes("2026-11-10") ? 40 : 20)));
+    await render();
+    await tick(400);
+    await selectCampaignFilters("change period");
+    await tick(400);
+    expect(pending).toHaveLength(2);
+    await act(async () => pending[1].resolve(campaignResult(pending[1].params, { amount: 20, ratio: 0.04, net: 225 })));
+    await openCampaign();
+    expect(campaignCell("المصروفات التشغيلية")).toBe("20.00 ر.س (4%)");
+    await act(async () => pending[0].resolve(campaignResult(pending[0].params)));
+    expect(campaignCell("المصروفات التشغيلية")).toBe("20.00 ر.س (4%)");
+    expect(campaignCell("صافي الأرباح")).toBe("225.00 ر.س");
+    expect(document.querySelector('[data-testid="campaign-operating-basis"]').textContent).toContain("2026-11-10");
 });

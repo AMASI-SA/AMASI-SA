@@ -13,6 +13,9 @@ from order_engine import campaign_hover_operating as operating
 OWNER = "hover-operating-owner"
 NOW = datetime(2026, 11, 13, 22, 0, tzinfo=timezone.utc)  # Already Nov 14 in Riyadh.
 DAY = "2026-11-14"
+LEGACY_SCOPE_METADATA = {"date_from": DAY, "date_to": DAY, "date": DAY,
+    "timezone": "Asia/Riyadh", "payment_methods": [], "shipping_companies": [],
+    "report_statuses": None, "source": "store_day"}
 
 
 class ReadCursor:
@@ -126,8 +129,8 @@ def test_basis_matches_executive_salary_recurring_sales_and_status_scope_without
         result = await operating.read_operating_basis(read_db, OWNER, NOW)
         # Nov salary 100 + household 50 + charity 10 + rent 100 + water 20.
         assert result == {"complete": True, "ratio": 280 / 2220,
-            "expenses_sar": 280.0, "sales_sar": 2220.0, "date": DAY,
-            "timezone": "Asia/Riyadh", "reasons": []}
+            "expenses_sar": 280.0, "sales_sar": 2220.0,
+            **LEGACY_SCOPE_METADATA, "reasons": []}
         assert result["ratio"] != round(result["ratio"], 2)
         assert all(count == 1 for count in Counter(c["collection"] for c in read_db.calls).values())
         order_read = next(c for c in read_db.calls if c["collection"] == "unified_orders")
@@ -286,7 +289,7 @@ def test_disabled_pilot_without_salary_history_matches_executive_salary_cohort()
         # The explicitly disabled pilot has no accrual dates/history. Only the
         # executive's contributing employee earns 3,000 / 30 days.
         assert result == {"complete": True, "ratio": .1, "expenses_sar": 100.0,
-            "sales_sar": 1000.0, "date": DAY, "timezone": "Asia/Riyadh", "reasons": []}
+            "sales_sar": 1000.0, **LEGACY_SCOPE_METADATA, "reasons": []}
         assert all(count == 1 for count in Counter(c["collection"] for c in readonly.calls).values())
         assert await db.mezan_employee_salary_contracts_v2.find({}).to_list(10) == before
     asyncio.run(check())
@@ -415,7 +418,7 @@ def test_noncontributing_employee_contract_cannot_invalidate_known_daily_basis(s
         # One contributing employee earns 3,000 / 30 days; the other contributes
         # nothing by identity or calendar, irrespective of its monetary fields.
         assert result == {"complete": True, "ratio": .1, "expenses_sar": 100.0,
-            "sales_sar": 1000.0, "date": DAY, "timezone": "Asia/Riyadh", "reasons": []}
+            "sales_sar": 1000.0, **LEGACY_SCOPE_METADATA, "reasons": []}
         assert all(count == 1 for count in Counter(c["collection"] for c in readonly.calls).values())
         assert await db.mezan_employee_salary_contracts_v2.find({}).to_list(10) == before
     asyncio.run(check())
@@ -503,4 +506,91 @@ def test_profit_enrichment_preserves_the_real_operating_deadline_reason(monkeypa
         assert row["operating_basis"]["complete"] is False
         assert row["operating_expenses_sar"] is None and row["operating_expenses_ratio"] is None
         assert row["net_profit_available"] is False and row["net_profit_sar"] is None
+    asyncio.run(check())
+
+def test_selected_range_rounds_salary_and_recurring_subtotals_once_with_one_read_per_collection():
+    from datetime import date
+    from expenses_routes import compute_operating_expenses_for_range
+    from recurring_obligations_routes import compute_recurring_obligations_for_range
+
+    async def check():
+        db = await fixture_db(sale("range-start", 1000, order_date="2026-11-01"),
+            sale("range-end", 1000, order_date="2026-11-30"),
+            sale("outside", 9000, order_date="2026-12-01"))
+        await add_salary(db, monthly=1)
+        await db.mezan_employees_v2.update_one({"id": "employee"}, {"$set": {"hire_date": "2026-10-31"}})
+        await db.mezan_employee_salary_contracts_v2.update_one({"id": "contract"}, {"$set": {"effective_from": "2026-10-31"}})
+        await db.operating_recurring_obligations_v2.insert_one(obligation("fractional", period_amount=1))
+        readonly = ReadDB(db)
+        scope = operating.resolve_operating_scope(from_date="2026-11-01", to_date="2026-11-30")
+        result = await operating.read_operating_basis(readonly, OWNER, NOW, operating_scope=scope)
+        # Each authority accrues 1/30 per day: the whole month is 1 + 1, not
+        # 30 * (round(1/30, 2) + round(1/30, 2)) = 1.8.
+        assert result["complete"] and result["expenses_sar"] == 2
+        canonical_salary = await compute_operating_expenses_for_range(db, OWNER, date(2026, 11, 1), date(2026, 11, 30))
+        canonical_recurring = await compute_recurring_obligations_for_range(db, OWNER, date(2026, 11, 1), date(2026, 11, 30))
+        assert result["expenses_sar"] == round(canonical_salary["salaries_total"] + canonical_recurring["total"], 2)
+        assert result["sales_sar"] == 2000 and result["ratio"] == .001
+        assert result["date_from"] == "2026-11-01" and result["date_to"] == "2026-11-30"
+        assert "date" not in result
+        assert all(count == 1 for count in Counter(c["collection"] for c in readonly.calls).values())
+        assert next(c for c in readonly.calls if c["collection"] == "unified_orders")["query"]["order_date"] == {
+            "$gte": "2026-11-01", "$lte": "2026-11-30"}
+    asyncio.run(check())
+
+
+def test_selected_range_reuses_month_lengths_and_salary_effective_calendar():
+    from datetime import date
+    from expenses_routes import compute_operating_expenses_for_range
+
+    async def check():
+        db = await fixture_db(sale("range", 1000, order_date="2026-11-01"))
+        await add_salary(db, monthly=3100, revisions=[
+            {"effective_from": "2026-10-01", "monthly_amount": 3100},
+            {"effective_from": "2026-11-01", "monthly_amount": 3000}])
+        await db.mezan_employees_v2.update_one({"id": "employee"}, {"$set": {"hire_date": "2026-10-01"}})
+        await db.mezan_employee_salary_contracts_v2.update_one({"id": "contract"}, {"$set": {"effective_from": "2026-10-01"}})
+        scope = operating.resolve_operating_scope(from_date="2026-10-31", to_date="2026-11-02")
+        result = await operating.read_operating_basis(ReadDB(db), OWNER, NOW, operating_scope=scope)
+        assert result["complete"] and result["expenses_sar"] == 300
+        canonical = await compute_operating_expenses_for_range(db, OWNER, date(2026, 10, 31), date(2026, 11, 2))
+        assert result["expenses_sar"] == canonical["salaries_total"]
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("report_statuses, expected", [
+    (None, 600), ("default", 300), ("in_progress", 100),
+])
+def test_explicit_cohort_matches_payment_shipping_status_slug_and_default(report_statuses, expected):
+    async def check():
+        db = await fixture_db(
+            sale("slug", 100, order_status="custom", order_status_slug="processing", payment_method="MADA", shipping_company="Carrier"),
+            sale("review", 200, payment_method="mada", shipping_company="Carrier"),
+            sale("cancelled", 300, order_status="cancelled", payment_method="mada", shipping_company="Carrier"),
+            sale("other-payment", 900, payment_method="visa", shipping_company="Carrier"),
+            sale("other-shipping", 900, payment_method="mada", shipping_company="Other"))
+        scope = operating.resolve_operating_scope(from_date=DAY, to_date=DAY,
+            payment_methods=" MADA, mada ", shipping_companies="carrier", report_statuses=report_statuses)
+        readonly = ReadDB(db)
+        result = await operating.read_operating_basis(readonly, OWNER, NOW, operating_scope=scope)
+        assert result["complete"] and result["sales_sar"] == expected
+        assert result["payment_methods"] == ["mada"] and result["shipping_companies"] == ["carrier"]
+        assert result["report_statuses"] == ([report_statuses] if report_statuses is not None else None)
+        projection = next(c for c in readonly.calls if c["collection"] == "unified_orders")["projection"]
+        assert all(projection[key] == 1 for key in ("order_status_slug", "payment_method", "shipping_company"))
+    asyncio.run(check())
+
+
+def test_explicit_range_overflow_never_uses_partial_sales_or_current_day(monkeypatch):
+    async def check():
+        db = await fixture_db(sale("start", 1000, order_date="2026-11-01"),
+            sale("end", 1000, order_date="2026-11-30"), sale("current", 1))
+        monkeypatch.setattr(operating, "MAX_STORE_ORDERS", 1)
+        scope = operating.resolve_operating_scope(from_date="2026-11-01", to_date="2026-11-30")
+        readonly = ReadDB(db)
+        result = await operating.read_operating_basis(readonly, OWNER, NOW, operating_scope=scope)
+        assert not result["complete"] and result["ratio"] is None and result["sales_sar"] is None
+        assert result["reasons"] == ["operating_basis_read_limit"]
+        assert result["date_from"] == "2026-11-01" and result["date_to"] == "2026-11-30"
+        assert sum(c["collection"] == "unified_orders" for c in readonly.calls) == 1
     asyncio.run(check())

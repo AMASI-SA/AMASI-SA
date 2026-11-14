@@ -17,7 +17,7 @@ def clear_snapshot_state():
 @pytest.mark.asyncio
 async def test_same_campaign_new_revision_recounts_salla_without_waiting_for_ttl(monkeypatch):
     calls = []
-    async def read(db, owner, ids):
+    async def read(db, owner, ids, *, operating_scope=None):
         calls.append((owner, tuple(ids)))
         return {"campaigns": {ids[0]: {"orders": 29 + len(calls)}}}
     monkeypatch.setattr(hover, "read_campaign_hover", read)
@@ -33,7 +33,7 @@ async def test_same_campaign_new_revision_recounts_salla_without_waiting_for_ttl
 @pytest.mark.asyncio
 async def test_identical_revision_is_coalesced_and_tenant_scope_is_preserved(monkeypatch):
     calls = []
-    async def read(db, owner, ids):
+    async def read(db, owner, ids, *, operating_scope=None):
         calls.append(owner)
         await asyncio.sleep(0)
         return {"campaigns": {ids[0]: {"orders": len(calls)}}}
@@ -50,7 +50,7 @@ async def test_identical_revision_is_coalesced_and_tenant_scope_is_preserved(mon
 @pytest.mark.asyncio
 async def test_legacy_client_without_revision_retains_bounded_cache(monkeypatch):
     calls = []
-    async def read(db, owner, ids):
+    async def read(db, owner, ids, *, operating_scope=None):
         calls.append(owner)
         return {"campaigns": {}}
     monkeypatch.setattr(hover, "read_campaign_hover", read)

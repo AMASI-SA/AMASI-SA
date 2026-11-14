@@ -22,6 +22,7 @@ from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION, canonical_ad_platform, campaign_id_candidates, field_values,
 )
 from .campaign_hover_profit import COST_ORDER_PROJECTION, blank_profit_fields, enrich_campaign_profit
+from .campaign_hover_scope import OperatingScope, resolve_operating_scope
 
 MAX_CAMPAIGNS = 20
 MAX_SALLA_ROWS = 4000
@@ -151,8 +152,10 @@ def _salla_query(user_id, campaign_ids, start, now):
             "$or": [{key: {"$in": values}} for key in sorted(paths)]}
 
 
-async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) -> dict:
+async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str],
+        *, operating_scope: OperatingScope | None = None) -> dict:
     now = datetime.now(timezone.utc)
+    operating_scope = operating_scope or resolve_operating_scope(now=now)
     labels = {cid: scope for cid in campaign_ids if (scope := _label_scope(cid))}
     blocked = {cid for cid in campaign_ids if re.match(r"using\s+the\s+clickid\b", cid, re.I)}
     platform_ids = [cid for cid in campaign_ids if cid not in labels and cid not in blocked]
@@ -440,7 +443,7 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         if record["sales_sar"] is not None and amount is not None and amount > 0:
             record["roas"] = round(record["sales_sar"] / amount, 2)
         record["status"] = "available" if all(record[k] is not None for k in ("orders", "pieces", "sales_sar", "spend_sar")) else "partial"
-    await enrich_campaign_profit(db, user_id, result, cohorts, now)
+    await enrich_campaign_profit(db, user_id, result, cohorts, now, operating_scope=operating_scope)
     return {"as_of": now.isoformat(), "campaigns": result,
             "sources_complete": {"campaign_catalog": catalog_ok, "raw_spend": raw_ok,
                                  "native_spend": all(source_health), "salla": commerce_ok}}
@@ -456,9 +459,13 @@ def _local_days_still_current(data: dict) -> bool:
     return True
 
 
-async def cached_campaign_hover(db: Any, user_id: str, campaign_ids: list[str], *, snapshot_revision: str = "") -> dict:
+async def cached_campaign_hover(db: Any, user_id: str, campaign_ids: list[str], *, snapshot_revision: str = "",
+        operating_scope: OperatingScope | None = None) -> dict:
     # Revision scopes freshness only; the tenant still comes from authentication.
-    key = (user_id, tuple(sorted(campaign_ids)), snapshot_revision)
+    # Resolve an omitted legacy scope before lookup, so Riyadh midnight cannot
+    # reuse another operating day while the campaign account day stays open.
+    operating_scope = operating_scope or resolve_operating_scope(now=datetime.now(timezone.utc))
+    key = (user_id, tuple(sorted(campaign_ids)), snapshot_revision, operating_scope)
     cached = _CACHE.get(key)
     if cached and time.monotonic() - cached[0] < CACHE_TTL and _local_days_still_current(cached[1]):
         _CACHE.move_to_end(key)
@@ -467,7 +474,8 @@ async def cached_campaign_hover(db: Any, user_id: str, campaign_ids: list[str], 
     if task is None:
         if len(_PENDING) >= 8:
             raise HTTPException(status_code=503, detail="campaign_snapshot_busy")
-        task = asyncio.create_task(asyncio.wait_for(read_campaign_hover(db, user_id, campaign_ids), timeout=10))
+        task = asyncio.create_task(asyncio.wait_for(
+            read_campaign_hover(db, user_id, campaign_ids, operating_scope=operating_scope), timeout=10))
         _PENDING[key] = task
         def finished(done):
             if _PENDING.get(key) is done:
@@ -487,12 +495,22 @@ def install_campaign_hover_route(router, db, current_user):
     @router.get("/campaign-hover")
     async def campaign_hover(campaign_ids: str = Query(..., min_length=1, max_length=22000),
                              user: dict = Depends(current_user),
-                             snapshot_revision: str = Query("", max_length=64, pattern=r"^[a-z0-9:-]*$")):
+                             snapshot_revision: str = Query("", max_length=64, pattern=r"^[a-z0-9:-]*$"),
+                             operating_from_date: str | None = Query(None, max_length=10),
+                             operating_to_date: str | None = Query(None, max_length=10),
+                             operating_payment_methods: str | None = Query(None, max_length=2000),
+                             operating_shipping_companies: str | None = Query(None, max_length=2000),
+                             operating_report_statuses: str | None = Query(None, max_length=200)):
         user_id = _valid_user(user)
         ids = list(dict.fromkeys(x.strip() for x in campaign_ids.split(",") if x.strip()))
         if not ids or len(ids) > MAX_CAMPAIGNS or any(len(x) > (1000 if x.startswith("salla:") else 160) for x in ids):
             raise HTTPException(status_code=400, detail="invalid_campaign_ids")
+        operating_scope = resolve_operating_scope(
+            from_date=operating_from_date, to_date=operating_to_date,
+            payment_methods=operating_payment_methods, shipping_companies=operating_shipping_companies,
+            report_statuses=operating_report_statuses, now=datetime.now(timezone.utc))
         try:
-            return await cached_campaign_hover(db, user_id, ids, snapshot_revision=snapshot_revision)
+            return await cached_campaign_hover(db, user_id, ids, snapshot_revision=snapshot_revision,
+                operating_scope=operating_scope)
         except asyncio.TimeoutError:
             raise HTTPException(status_code=503, detail="campaign_snapshot_timeout")

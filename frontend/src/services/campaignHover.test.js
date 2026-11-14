@@ -34,3 +34,30 @@ test("order revision reaches the server snapshot", async () => {
     params: { campaign_ids: "a", snapshot_revision: "r:31" }, timeout: 12000,
   });
 });
+
+test("forwards the complete normalized executive scope, never client financial inputs", async () => {
+    api.get.mockResolvedValue({ data: { campaigns: { a: { orders: 2 } } } });
+    await getCampaignHoverBatch(["a"], { snapshotRevision: "r:31", operatingContext: {
+        from: "2026-11-01", to: "2026-11-13", payment_methods: [" mada ", "cash", "cash"],
+        shipping_companies: ["b", "a", "b"], report_statuses: ["reviewed", "in_progress", "reviewed"],
+        operating_expenses_ratio: 0.99, operating_expenses_total: 999, total_sales: 1,
+    } });
+    expect(api.get).toHaveBeenCalledWith("/orders-v2/campaign-hover", {
+        params: { campaign_ids: "a", snapshot_revision: "r:31",
+            operating_from_date: "2026-11-01", operating_to_date: "2026-11-13",
+            operating_payment_methods: "cash,mada", operating_shipping_companies: "a,b",
+            operating_report_statuses: "in_progress,reviewed" }, timeout: 12000,
+    });
+});
+
+test("default report statuses stay omitted instead of becoming an explicit status override", async () => {
+    api.get.mockResolvedValue({ data: { campaigns: {} } });
+    await getCampaignHoverBatch(["a"], { operatingContext: { from: "2026-11-13", report_statuses: [] } });
+    expect(api.get.mock.calls[0][1].params).toEqual({ campaign_ids: "a",
+        operating_from_date: "2026-11-13", operating_to_date: "2026-11-13" });
+});
+
+test.each([null, {}, { payment_methods: ["cash"] }])("a pending or missing period never invokes a silent default: %j", async (operatingContext) => {
+    expect(await getCampaignHoverBatch(["a"], { operatingContext })).toEqual({});
+    expect(api.get).not.toHaveBeenCalled();
+});
