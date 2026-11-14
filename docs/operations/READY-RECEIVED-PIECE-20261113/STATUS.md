@@ -1,45 +1,27 @@
 # Ready server release and Android continuation — 2026-11-14
 
-## Checkpoint status and authority
+## Current verified state and expanded scope
 
-This is a WIP continuity checkpoint recorded during the accepted deployment.
-The latest platform observation is described below; unobserved outcomes remain pending. It records completed evidence and explicitly marks facts
-that were still pending at that time. The release owner must fill the final-state
-fields below from observed results before publishing the final documentation
-checkpoint. A pending field is not a passed check.
-
-The owner authorized this order of work: **publish the Ready server repair,
-verify the live service, then build and publish the separate Android Ready-ordering
-repair**. That authorization remains in effect. Android publication depends on
-successful server acceptance.
-
-At this checkpoint:
+**The Ready server release is published and officially verified.** The user subsequently added supplier-receiving storage-full recovery and clarified that saved operational-product images are missing only in mobile assembly and labeling. No new APK has been built or distributed. The final app candidate now combines Ready ordering and storage recovery; the image permission repair is a separate server release dependency.
 
 | Operation | Observed state |
 | --- | --- |
-| Ready source reviewed and checked | Complete for the current frozen source/intent pair |
-| Ready PR #1912 merged | Yes, normal merge M; M has the exact reviewed B tree |
-| Forward isolated Emergent adapter | Passed |
-| Forward adapter in shared `/app` | PASS, 65.14 seconds, exit 0; tracked clean and all 120 untracked files preserved |
-| Previous owner's release lease | Officially aborted by its owner; inactive state independently observed by the Ready release owner |
-| Ready task's own lease | Officially prepared by `codex-ready-server-20261114` for exact M/A/runtime; final closure pending |
-| Ready prepublish | Executed twice; both returned `ready_to_publish=true` for the same exact M/A/runtime |
-| Ready Publish action | **One normal UI `Publish changes` action accepted at approximately 23:39 UTC** |
-| Current deployment stage | **In progress: `Building website`**; `Workspace Ready` and `Changes Packaged` complete |
-| Ready live identity and functional acceptance | Pending; no claim that Ready is deployed |
-| Hosting publication control | Historical `Agent Running` blocker resolved through the normal UI; the deployment was accepted |
-| Current rollback behavior suite | Passed on the current combined tree |
-| Current rollback B readiness/adapters | PASS, including both actual Host Node 20/24 adapter/runtime/package checks |
-| Current rollback isolated Emergent adapter | PASS, 52.39 seconds, exit 0 |
-| Android source and CI | Draft PR #351 prepared; all seven checks passed |
-| New Android APK | Not built or published; EAS execution not yet confirmed |
+| Ready PR1912 merge | Normal M, tree exactly reviewed B |
+| Forward isolated/shared adapters | PASS77.44s / PASS65.14s;120 existing untracked files preserved |
+| Scoped rollback | Source/intent prepared; fresh64tests+38subtests; exact-B Host20/24 and isolated Emergent adapter pass; not activated |
+| Ready Publish | Exactly one normal Publish,23:39UTC /02:39UTC+03 |
+| Platform outcome | New green `Deployment finished`,14November02:49UTC+03; new version `4e63025` |
+| Official verifier | `verified=true`, `checks=3`, exact M/A/runtime; stderr empty |
+| Matching lease | Closed by successful verify; fresh official status `active:false` |
+| Original order readback | Current Salla status completed, local assembly incomplete; existing Ready source-status gate remains correctly blocked |
+| Operational image on web | Existing image loaded with311×500 natural dimensions |
+| Mobile image defect | Assembly-only request denied403 by earlier generic review permission bridge; narrow GET-only repair in PR1914 |
+| Combined Android candidate | PR352, source `a667ad320eb1cb80b6e57e742eda58f84ec5bba4`,1.0.65/code80; fresh CI running |
+| New APK | Not built or distributed; old c10-only build form canceled |
 
-The production Git branch **has changed** through PR #1912's merge, and **one
-Ready deployment has now started**. Whether the reviewed runtime has become
-active is still pending platform completion and live verification. This is an
-in-progress deployment, not a blocked publication handoff. Do not confuse an
-accepted Publish action, adapter materialization, or a successful CI run with a
-successfully verified live rollout.
+Ready verify JSON SHA256: `0a91a8097d530c0027b34bf5d6150eb536722335f98af1884af00df5b258e2c8`. Final guard JSON SHA256: `7410be1a1dec3ea052e3dbfb62c5896880cc53d98149b928eeef1cbfa1a5a2be`. The current platform says `Deployment finished`, not the old literal `Deployment Succeeded`; the existing November12 Google/courier protocol record accepts this green new event/new version followed by the unchanged official three-probe verifier. No protocol was weakened.
+
+The actual production Git branch subsequently advanced through independent PR1913 to `6012ceb480bf9dc0f51ec6cc64c054e5e0db3846`; this does not change the recorded identity of the completed Ready deployment. The image source A is `f91eb6c43d2faeb2f7da174ecdc67a455ac0ec2c`, based on6012, preserving all other merged work. Its intent/deployment remains pending at this checkpoint.
 
 ## Canonical records and repositories
 
@@ -133,12 +115,9 @@ test in every workflow executed.
 | PR #1912 merge tree check | M tree equals B tree exactly |
 | Shared `/app` adapter retry | PASS, **65.14 seconds**, exit **0**, reviewed M; final tracked state clean |
 
-The clean-clone/isolated adapter checks establish the governed build and package
-contract for the reviewed candidate. They do not establish that the accepted
-deployment has completed or that the public runtime serves those bytes. The
-newer platform success result and live probes remain required.
+The clean-clone/isolated adapter checks establish the governed build and package contract. The later platform event and completed official three-probe verification independently established the public runtime identity and served artifact bytes.
 
-## Shared Emergent workspace and deployment in progress
+## Shared Emergent workspace and verified deployment
 
 The Ready release owner independently confirmed that the previous PR #1911
 owner had used the official abort path to close its own lease; the shared guard
@@ -191,14 +170,11 @@ post-deployment guard state.
 | Normal UI action | One accepted `Publish changes` action at approximately **2026-11-13 23:39 UTC** |
 | New platform deployment entry | `Deployment Started`, **Nov 14, 02:39 AM** in the UI's UTC+03 time |
 | Completed platform stages | `Workspace Ready`; `Changes Packaged` |
-| Current stage | **`Building website` — in progress** |
-| Newer explicit `Deployment Succeeded` | **[PENDING]** |
-| Official three-probe live verification and matching lease closure | **[PENDING]** |
+| Final platform stage | New green `Deployment finished`,14November02:49UTC+03; version `4e63025` |
+| Current UI success wording | `Deployment finished`; prior literal not shown; existing protocol precedent applied with unchanged verifier |
+| Official three-probe live verification and matching lease closure | PASS, verified=true/checks3/exactM/A/runtime; matching lease closed, fresh active=false |
 
-Keep observing this already-started deployment. Do not repeat `prepare`, click
-Publish again, or abort the matching lease merely because the conversation or
-terminal changes. A failed deployment or verification needs its own observed
-result and an owner-directed recovery decision.
+This Ready deployment is complete. Do not repeat its prepare, Publish or verify merely because a conversation or terminal changes. A subsequent image release requires its own fresh source/intent/gates and lease, preserving the current production branch.
 
 The runtime adapter contract remains protocol v5: `frontend`'s governed build
 entry point dispatches the adapter; the reviewed origin is
@@ -415,83 +391,25 @@ to compensate for a conversation or terminal interruption.
 
 Next actions, in order:
 
-1. Reconcile the most recent release-owner and platform observations with this
-   draft. Retain the completed forward and rollback proof. Do not launch a
-   duplicate adapter rehearsal or another publication while the accepted
-   deployment is still running.
-2. Observe the existing **Nov 14, 02:39 AM UTC+03** deployment through the normal
-   UI. Preserve sanitized build/adapter output when available. `Workspace Ready`
-   and `Changes Packaged` are complete; `Building website` was still running at
-   the latest observation. Require a newer explicit **Deployment Succeeded** for
-   this deployment, not a historical success entry.
-3. Keep this deployment's matching lease intact during the in-progress attempt.
-   Read-only status checks may confirm its exact M/A/runtime binding. Do not
-   clear another owner's lease, force a reset, stop/close the hosting agent, or
-   treat the earlier pre-lease `active: false` result as final closure. If the
-   platform or verification fails, record the actual failure and reconcile the
-   live state before an owner-directed retry, abort, or scoped recovery. An
-   official abort must match this lease's recorded deployment SHA and release
-   ID; it does not itself undo a deployment.
-4. Once the newer platform success has been observed, use the official
-   verification command:
+1. Preserve the successful Ready publication and tested scoped rollback records. Do not republish the old Ready source.
+2. Complete server PR1914 for the narrow operational-image permission fix: exact-source CI, new source A/intent-only B, exact-B gates, original isolated/shared adapters, normal merge, fresh inactive guard, prepare/prepublish, one Publish, green platform completion and unchanged three-probe verification. Re-read the actual production ref and never interfere with another owner.
+3. Complete fresh CI on Android PR352, including storage recovery, full application TypeScript/lint, full-history route-return and Android export. Do not build the superseded c10-only source.
+4. After server dependencies are accepted, build exact combined Android source through the existing Expo internal APK profile. Verify actual artifact identity/signature/metadata through permitted means and provide its install link. Retain any physical-device or signer-comparison limitations honestly.
+5. Update this documentation-only continuation branch and the corresponding PRs at each verified milestone. Never modify a frozen release pair to add post-release documentation.
 
-   ```bash
-   cd /app
-   python scripts/production_release_guard.py verify --url https://mezansalla.com
-   python scripts/production_release_guard.py status
-   ```
+## Current final facts and remaining work
 
-   The single governed verification must pass all three consecutive probes for
-   the intended forward release ID and source A, with
-   `verified_identity_available=true`, `critical_file_hashes_match=true`, and
-   `frontend_build_verified=true`. Canonical and cache-busted `/build-meta.json`
-   must return the exact governed JSON bytes with `application/json` content
-   type. SPA HTML or a stale identity is failure. The matching lease must close,
-   and final status must be `active: false`.
-
-5. Inspect the reported order and representative unaffected direct/operational
-   behavior read-only. Compare eligibility, receipt/services, current revision,
-   readiness, and shipping completeness with the reviewed contract. Do not
-   manufacture acceptance evidence by repeating Ready, consuming stock,
-   completing/shipping an order, printing a provider label, syncing/backfilling,
-   or performing accounting, supplier, or advertising writes. Preserve useful
-   sanitized outcomes; do not commit customer records or secrets.
-6. Proceed to Android only after the server's live identity and acceptance are
-   established. Build exact reviewed PR #351 source, verify actual artifact
-   identity/signature/metadata through permitted means, and record the remaining
-   device or distribution limitation honestly.
-7. Publish the completed documentation-only checkpoint and update PR #1912 with
-   its branch, full SHA, final live/rollback/mobile state, blockers, and the exact
-   next safe action. Do not alter frozen forward or rollback release content to
-   add the documentation.
-
-## Final-state fields for the release owner
-
-These fields must be completed from new evidence. Leave an item explicitly
-blocked or not performed when that is the observed outcome; do not replace an
-unknown with success.
-
-| Required final fact | Value to record |
+| Fact | Observed value |
 | --- | --- |
-| Final record timestamp, UTC and Asia/Riyadh | **[PENDING]** |
-| Actual production branch SHA/tree at final check | **[PENDING]** |
-| Shared forward adapter retry | PASS, 65.14 seconds, exit 0; append durable output reference |
-| Shared tracked status and preservation proof | Clean at M after adapter; all 120 pre-existing untracked files preserved, 0 added; append final post-attempt observation |
-| Rollback B_R final CI/adapters | PASS: run 43527983003 complete at 23:36:36 UTC, both Host 20/24 adapters executed; isolated Emergent PASS 52.39 seconds, exit 0 |
-| Hosting `Agent Running` blocker | Resolved through normal UI; one Publish action accepted without agent stop/close or paid chat |
-| Ready lease prepare/prepublish | Official actor `codex-ready-server-20261114`; prepared exact M/A/runtime; two prepublish checks returned `ready_to_publish=true`; final closure pending |
-| Publish action and platform result | One action accepted approximately 23:39 UTC; new `Deployment Started` Nov 14, 02:39 AM UTC+03; `Building website` in progress; **final success/failure pending** |
-| Three live identity/hash/Frontend probes | **[PENDING: exact values or not performed]** |
-| Canonical/cache-busted build metadata bytes and MIME | **[PENDING]** |
-| Final shared guard state | **[PENDING: fresh output; do not reuse an earlier inactive observation]** |
-| Read-only functional acceptance | **[PENDING: sanitized findings and any unresolved discrepancy]** |
-| Running Production changed by this task | Deployment initiated; **[PENDING: observed live cutover and final identity, with platform/live evidence]** |
-| Android build, artifact verification, device and distribution state | **[PENDING]** |
-| Documentation-only checkpoint branch/full SHA/PR | **[PENDING]** |
-| Exact next safe action if work remains | **[PENDING]** |
+| Ready production deployment | M304e8793, sourceAcdf17584, runtime rg5-3e41b3… exactly as the identity table above |
+| Platform | One Publish; new green finished02:49UTC+03, new version4e63025 |
+| Official verification | PASS3probes, full governed identity/hash/frontend and canonical/cache-busted artifact metadata/bytes/MIME; empty stderr |
+| Final Ready lease | Closed by verifier; fresh official active=false |
+| Reported order | Source completed / تم التنفيذ; local incomplete; source-status safety gate correctly blocks further Ready, no business mutation |
+| Additional positive live Ready sample | Not yet recorded; do not claim the completed order exercises the new reviewed physical exception |
+| Image server fix | PR1914 sourceAf91eb6c43d2faeb2f7da174ecdc67a455ac0ec2c on latest6012;45freshcombined-base tests pass, separately reviewed; new release pending |
+| Combined Android | PR352 sourcea667ad320eb1cb80b6e57e742eda58f84ec5bba4, tree93be9b3ef5e3464640b4fcd9fdea9ea75b715f4c,1.0.65/code80;19local script commands and77independentchecks pass; fresh full CI pending |
+| APK/device/distribution | No new build, no physical-phone acceptance; old Ready-only form canceled |
+| Next action | Complete image server protocol and combined appCI, then build/verify/deliver the combined APK |
 
-At this draft's latest update, all preparatory gates had passed, the official
-lease and both prepublish checks had succeeded, and one normal UI Publish action
-had started the new deployment. Continue observing that deployment; do not
-republish. Its final platform outcome, live verification, matching lease closure,
-read-only functional acceptance, and Android publication remain pending.
+The historical Android parent/earlier APK/tool evidence above is retained for provenance; its c10 SHA is no longer the final candidate. No images, unresolved receipts, pending invoices, credentials, orders, stock or shipping records were cleared to obtain acceptance. The final deliverable is still in progress because the newly requested image release and combined APK remain outstanding.
