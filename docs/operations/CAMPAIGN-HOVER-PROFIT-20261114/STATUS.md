@@ -241,3 +241,11 @@ Next: observe a newer explicit Deployment finished event and a new current publi
 - Every witnessed bookkeeping prefix is retained (48,418;48,590;48,676 bytes), with same regular-file inode/mode, plus the whole new before-verify prefix afterward. All other119 preservation records remain exact; paths count120.
 - All original lineage/runtime/intent, completed prepare/prepublish, exact owned lease, actual UI completion, official three-probe and inactive post-status checks remain. Actual official receipt is saved before postchecks; no failure can trigger an automatic verification rerun.
 - Not yet executed. Next is one official verify attempt through this separate reviewed receipt path. No repeat publish, prepare, prepublish, abort or source modification.
+
+
+## Reviewed verification continuation invoked once — 2026-11-14 16:10:43 UTC
+
+- Bootstrap downloaded both exact pinned reviewed sources, checking d072 frozen gate and f3eef7ec recovery runner digests; wrote new private regular files outside `/app` under `/tmp/mezan-pr1920-verify-reviewed-f3eef7ec` and invoked the distinct runner once.
+- Terminal3 now shows running python. Final official receipt/exit is not yet observed; do not infer verification success or repeat the command.
+- Narrow operating diagnosis reached only the two exact-name campaign catalogs in original configured DB, both empty; no owner chosen and no financial basis function called. Process environment did not override Mongo settings. No broader searches, provider calls, writes, or credentials printed. Live operating cause remains unproven.
+- A separate candidate payroll-scope correction exists in scratch with synthetic regression evidence; it is not part of frozen M and has not been accepted, merged, or published.
