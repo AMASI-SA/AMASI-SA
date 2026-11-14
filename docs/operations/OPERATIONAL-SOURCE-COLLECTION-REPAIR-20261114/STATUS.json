@@ -1,0 +1,94 @@
+{
+  "task_id": "OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114",
+  "stage": "diagnosis_in_progress",
+  "updated_at": "2026-11-14T04:08:57.390Z",
+  "repo": "AMASI-SA/AMASI-SA",
+  "source": {
+    "J": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+    "Jtree": "c5bd7fb6c357e17c17104282d1d175676e95ed3e",
+    "source_branch": "codex/operational-source-collection-fix-20261114",
+    "handoff_branch": "codex/operational-source-collection-handoff-20261114",
+    "worktree": "/workspace/scratch/019fa8a18b3d/mezan-source-collection-fix",
+    "prefix": "docs/operations/OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114/",
+    "prior_pr": 1916,
+    "prior_handoff": "613e352b30c4b11766bcc6f34bb6e4a1a53a756d",
+    "live_diagnostic": {
+      "attempt_started_at": "2026-11-14T03:57:55.990Z",
+      "recorded_at": "2026-11-14T04:01:31.755Z",
+      "manual_refresh_clicks_this_attempt": 1,
+      "total_PR1916_financial_attempts": 3,
+      "visibility_confirmed": true,
+      "reason": "Final controlled reproduction timed after observed log-cache interval to capture actual cancelled stage",
+      "logs": {
+        "logPanelPresent": true,
+        "requests": [
+          {
+            "duration_ms": 85040.132,
+            "method": "POST",
+            "status": 408,
+            "timestamp": "2026-11-14 03:59:22,255"
+          }
+        ],
+        "stageMarkerCount": 4,
+        "stages": [
+          {
+            "duration_ms": 82063.009,
+            "outcome": "cancelled",
+            "stage": "aggregate",
+            "timestamp": "2026-11-14 03:59:22,246"
+          },
+          {
+            "duration_ms": 72942.769,
+            "outcome": "cancelled",
+            "stage": "source_collection",
+            "timestamp": "2026-11-14 03:59:22,245"
+          },
+          {
+            "duration_ms": 9084.282,
+            "outcome": "complete",
+            "stage": "snapshot_load",
+            "timestamp": "2026-11-14 03:58:09,282"
+          },
+          {
+            "duration_ms": 2926.31,
+            "outcome": "complete",
+            "stage": "native_evidence",
+            "timestamp": "2026-11-14 03:58:00,182"
+          }
+        ],
+        "window_max": "2026-11-14 03:59:32,186",
+        "window_min": "2026-11-14 03:57:51,832"
+      },
+      "source_failure_logs": [],
+      "result": {
+        "asOf": "12/11/2026, 01:07",
+        "loading": null,
+        "mainError": null,
+        "refreshWarning": "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة",
+        "reportPresent": true,
+        "visibility": "visible"
+      },
+      "source_git_sha": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+      "deployment_git_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+      "release_id": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
+      "conclusion": "snapshot_load completed; total request deadline cancelled source_collection before reconciliation"
+    }
+  },
+  "production_changed_by_this_followup": false,
+  "verified_scope": "Live source_collection cancelled after72942.769ms; snapshot_load completed9084.282ms; no reconciliation started.",
+  "constraints": [
+    "Full owner history and all financial evidence remain required",
+    "No increase to85-second request deadline or row caps",
+    "No financial confirmation, payout, settlement or provider writes as tests",
+    "No additional live financial attempts before source changes",
+    "Original /app120 untracked files and unsaved Untitled-1 preserved; no original edits yet"
+  ],
+  "read_only_review": [
+    "No per-source DB authorization checkpoint amplification in primary32-source batch",
+    "Four concurrent reads, per-read15s starts after semaphore; no collective60s budget in collector",
+    "Collision preflight and secondary reads are not localized by current stage logs",
+    "Repeated fee/assignment/cost scans exist inside source_collection; bounded synthetic measurement is running"
+  ],
+  "next_action": "Measure actual source_collection CPU helpers offline; select narrow evidence-backed improvement, add fixed safe substage timings if needed, test and independently review before freezing A.",
+  "ledger_note": "Issue1006 has2500 comments; latest ledger explicitly documents new-comment limit. Task-specific STATUS and forthcoming PR carry continuation."
+}
