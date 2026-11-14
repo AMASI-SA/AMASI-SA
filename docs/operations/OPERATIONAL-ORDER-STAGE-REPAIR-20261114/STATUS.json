@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-ORDER-STAGE-REPAIR-20261114",
-  "stage": "integrated_implementation_checkpoint",
+  "stage": "source_A_frozen_exact_CI_running",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "2db0edc9edb315026eee4b6edd43b420a569c37d",
@@ -155,7 +155,242 @@
         "sha256": "6b959ce5c9defb09931ec107658bed5ace72a4d041958d57ad47db83ecc8eaf6",
         "chars": 10659
       }
-    ]
+    ],
+    "A": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+    "Atree": "38b0dec1fc53cb9bd1ba36236bcc730f0e1d0367",
+    "sourceFrozenAt": "2026-11-14T06:04:58.205Z",
+    "source_files": [
+      {
+        "path": "backend/operational_balance_sources.py",
+        "sha256": "e5aa59de263c24a5f3dc831da474c1c1f6115f9b256cec6d4d7f32792f0998e5",
+        "chars": 148649
+      },
+      {
+        "path": "backend/operational_completed_shipping_sources.py",
+        "sha256": "a4aae7ac0d64f75bbebff39ecdb3156a2862539f14e5c6924e3e6f829e034733",
+        "chars": 8637
+      },
+      {
+        "path": "backend/operational_delivery_confirmation.py",
+        "sha256": "1bd80af7a3d06dae1647d71079579adfd5661b84aa22a340d213340de67e0b56",
+        "chars": 14333
+      },
+      {
+        "path": "backend/operational_delivery_evidence.py",
+        "sha256": "f0903effb9f616c8a1a2ee17b34d43ce9c64ce3d025bd41969fd700ce75c94ac",
+        "chars": 32325
+      },
+      {
+        "path": "backend/operational_shipping_fee_review.py",
+        "sha256": "bbd637b0a10c7cd12fa257bb7ef8a42698494fb28d3cdeff3e8a2ce3514908d8",
+        "chars": 23304
+      },
+      {
+        "path": "backend/tests/test_operational_balance_source_stage_timing.py",
+        "sha256": "1e4dd88f1984e9398ba4c6b5942ad8b49c74d292ace8a7029643a2b449209b6a",
+        "chars": 12508
+      },
+      {
+        "path": "backend/operational_cost_catalog_index.py",
+        "sha256": "1d3b93a1f24fb047232ef102bfcf73d459f58af7c193cb3e1ee3c0255810affb",
+        "chars": 3571
+      },
+      {
+        "path": "backend/operational_courier_hold_history.py",
+        "sha256": "ba1321862700a005b57eaeca66d2f70a781a5536df71fe835ec19b11af8d61e9",
+        "chars": 6843
+      },
+      {
+        "path": "backend/operational_delivery_assignment_index.py",
+        "sha256": "9fa319a0c1b13bfeb55d587713da634f8c46f65276edb627843c26171d2763d4",
+        "chars": 5841
+      },
+      {
+        "path": "backend/operational_issue_index.py",
+        "sha256": "bed1e3ad3bb345c11ba2b2582a4cb54c942fb514bdc91316f897985c75d6644b",
+        "chars": 4757
+      },
+      {
+        "path": "backend/tests/test_operational_balance_cost_catalog_index.py",
+        "sha256": "dc2348f91909f8620eec81f3f71f68c2183e1c9f535983d6087a56255365bebc",
+        "chars": 21350
+      },
+      {
+        "path": "backend/tests/test_operational_balance_courier_hold_history.py",
+        "sha256": "51bc28fd4cd95dc7aecb0e33578c5c63352a0009a027e9e49e163d709598222f",
+        "chars": 21693
+      },
+      {
+        "path": "backend/tests/test_operational_balance_delivery_assignment_index.py",
+        "sha256": "00ef94a220182d5be2432cb900485c337efdc886e8252b511006ce23bb5ae873",
+        "chars": 23990
+      },
+      {
+        "path": "backend/tests/test_operational_balance_issue_index.py",
+        "sha256": "6b959ce5c9defb09931ec107658bed5ace72a4d041958d57ad47db83ecc8eaf6",
+        "chars": 10659
+      },
+      {
+        "path": "docs/operations/OPERATIONAL-ORDER-STAGE-REPAIR-20261114/STATUS.md",
+        "sha256": "04a803208c670fbdbbbf121203f7fca83e1d8c77fab4e79920edbf5d8277a625",
+        "chars": 4342
+      }
+    ],
+    "source_entries": [
+      {
+        "path": "backend/operational_balance_sources.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "9f010c4220c715b8be0344eaf0e93037ca63f550"
+      },
+      {
+        "path": "backend/operational_completed_shipping_sources.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "7a234b9cb1949554227a92725a04d56db9cbbc0d"
+      },
+      {
+        "path": "backend/operational_delivery_confirmation.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "9583b757e0744af2bd322a799f4183703383d7e5"
+      },
+      {
+        "path": "backend/operational_delivery_evidence.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "813859d25c3104e0aeb463915015564aa2758f06"
+      },
+      {
+        "path": "backend/operational_shipping_fee_review.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "c100b82944574f79ab47800440ef05082feb2ed3"
+      },
+      {
+        "path": "backend/tests/test_operational_balance_source_stage_timing.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "2df4486153afd6f3c2dce65ddb2def475daef835"
+      },
+      {
+        "path": "backend/operational_cost_catalog_index.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "61d2eee8233fb3886b7d42b9c6c1557bacc52eb3"
+      },
+      {
+        "path": "backend/operational_courier_hold_history.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "85a67f830fff00b298da65fa52cee9c050ca0333"
+      },
+      {
+        "path": "backend/operational_delivery_assignment_index.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "fe71998444eed5acf6e3e7cc1c51daa254a95f91"
+      },
+      {
+        "path": "backend/operational_issue_index.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "872611390c2b4ae3cee4a84cd55e7aac9a9c9ab5"
+      },
+      {
+        "path": "backend/tests/test_operational_balance_cost_catalog_index.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "ec8e73de31aa15c0b1f755b659b29720e8f8252a"
+      },
+      {
+        "path": "backend/tests/test_operational_balance_courier_hold_history.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "8f858c5143b86d701ef863a4c8c94a2c3fa97f0a"
+      },
+      {
+        "path": "backend/tests/test_operational_balance_delivery_assignment_index.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "1e9b806dd64efa7d564742ac557640aa47c1015e"
+      },
+      {
+        "path": "backend/tests/test_operational_balance_issue_index.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "12bd98a39b1d91b67feff7c592d828cef794f73d"
+      },
+      {
+        "path": "docs/operations/OPERATIONAL-ORDER-STAGE-REPAIR-20261114/STATUS.md",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "9f96b7ac42ac3870d8af179e779a302632cdb19a"
+      }
+    ],
+    "pr_body": "## Problem\nThe verified PR1917 deployment still returns the old financial snapshot. Its single visible attempt cancelled in `source_orders` after 61.803 seconds and returned HTTP 408. Four independent synthetic measurements reproduce repeated whole-cohort work inside that stage. They do not establish each helper's production share.\n\n## Change\nBuild attempt-local indexes for delivery assignments, courier hold history and cost catalogues through the existing joined preparation worker. Add an owned diagnostic-membership index while preserving full-dictionary equality and metadata enrichment. Preserve original ordering, duplicate and identity semantics, lazy Decimal evaluation, fallback errors, and unchanged default callers. Every collector invocation and CAS retry rebuilds its indexes.\n\nAdd fixed timing labels for index preparation and the existing bank-catalogue read. No additional database read, financial write, cross-request cache, cap change, deadline extension or authorization change.\n\n## Verification\n- Final combined local selection: **1,467 passed, actual exit 0**, with the exact source manifest unchanged during the run. Four real-Mongo cases are deferred to exact-A CI because the local replica set is unavailable; the initial connection-refused result is retained.\n- Focused suites: assignment130, cost113, hold177, diagnostics21; these overlap the combined selection.\n- Negative controls for assignment, cost and diagnostics fail the intended repeated-work assertion when indexing is disabled. Construction is included in growth measurements.\n- Independent reviews cover collector/reconcile/report parity, duplicate/order and first-error behavior, immutable inputs, Decimal flags, new attempts, cancellation, worker joining and lease cleanup.\n- Exact-source CI must execute all four new suites, four additional timing cases and all four deferred Mongo cases in both official backend XML artifacts.\n\n## Frozen source\nJ: `2db0edc9edb315026eee4b6edd43b420a569c37d`  \nA: `d70b42cda3d70a7f07c78c3efc5fde8331fdc877`  \nA tree: `38b0dec1fc53cb9bd1ba36236bcc730f0e1d0367`\n\n## Remaining gates\nExact-A checks and reviewed candidate artifact, then intent-only B and exact-B checks, normal merge, the original operator's governed build, guarded publish, official production verification and a new visible report **as_of**. Production is unchanged by this follow-up so far; live financial acceptance is not yet established.\n\n[Handoff and evidence](https://github.com/AMASI-SA/AMASI-SA/blob/codex/operational-order-stage-handoff-20261114/docs/operations/OPERATIONAL-ORDER-STAGE-REPAIR-20261114/STATUS.md). The handoff branch is documentation only and must not be merged or deployed. Original /app120 pending files and the unsaved editor buffer remain preserved.",
+    "pr": 1918,
+    "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1918",
+    "validation": {
+      "combined_passed": 1467,
+      "local_mongo_deferred": 4,
+      "actual_exit": 0,
+      "source_unchanged": true,
+      "proofs": [
+        {
+          "path": "/workspace/scratch/019fa8a18b3d/order-stage-integrated-final/result.json",
+          "sha256": "39bcdc5ec7dd0381570a7b5b6b729774bfe70fa807172e3c93038ab1224db183",
+          "chars": 4547
+        },
+        {
+          "path": "/workspace/scratch/019fa8a18b3d/order-stage-integrated-final/combined.xml",
+          "sha256": "905f6a0ebc95c550c9b5f03f64177cdfccaa54ec0c7777d45be21adf6a7b9b73",
+          "chars": 280612
+        },
+        {
+          "path": "/workspace/scratch/019fa8a18b3d/order-stage-integrated/result.json",
+          "sha256": "92a9b7ad6e986a6175e0157fb5a0d1e523bc8170a5a330681bb05b1380e64823",
+          "chars": 4365
+        },
+        {
+          "path": "/workspace/scratch/019fa8a18b3d/order-stage-root-focused/negative.result.json",
+          "sha256": "d6b631e6886cf208aa813a5ede2c8b93346cd617cecc05a55686031845a1ee07",
+          "chars": 789
+        },
+        {
+          "path": "/workspace/scratch/019fa8a18b3d/order-stage-independent-review.json",
+          "sha256": "e6500137d09cb886ca051098bdd5b9b91fc1d620aef84bdda8f2b73bfd67f0b3",
+          "chars": 9123
+        },
+        {
+          "path": "/workspace/scratch/019fa8a18b3d/cost-index-execution-proof.json",
+          "sha256": "5d93ba26670648b1bd70ee922e69b9d7f309c71e14e274e012cbd9c48c98d236",
+          "chars": 7707
+        },
+        {
+          "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/proof.json",
+          "sha256": "53e176398d3342e68c4f1cf893134653097c27f2eb3aafd7f1143fc3e85c511c",
+          "chars": 45871
+        },
+        {
+          "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/expected-ci-cases.json",
+          "sha256": "48259bfa49a54ad0d666ebbc5d4abf10593d693fed9211dab316a91d1433b4d2",
+          "chars": 132388
+        },
+        {
+          "path": "/workspace/scratch/019fa8a18b3d/pr1918-courier-hold-history-review/verification.json",
+          "sha256": "7fea117fba3f37c0b8d626db5e366b5bf39cb9a046b73c06206b68d2d4139aef",
+          "chars": 2775
+        },
+        {
+          "path": "/workspace/scratch/019fa8a18b3d/pr1918-courier-hold-history-review/diagnostic-index-independent-review.json",
+          "sha256": "e64b22c4832cd9270537816414c8c3490156a5d9ea7f4e6b6596b521c90ca085",
+          "chars": 1282
+        }
+      ],
+      "independent_review": "PASS_SOURCE_REVIEW",
+      "mandatory_exact_ci_cases": 449
+    }
   },
   "production_changed_by_this_followup": false,
   "constraints": [
@@ -167,6 +402,6 @@
     "FrozenpreviousA/B untouched"
   ],
   "ledger_note": "Issue1006 reached2500commentlimit; use taskstatus+PRcontinuation",
-  "updated_at": "2026-11-14T05:57:15.489Z",
-  "next_action": "Complete final owned-file reviews and combined focused/adjacent validation. Freeze exact A only after results and independent integrated review, then candidate/intent B/normal merge/original build/publish/official verify/live fresh-as_of acceptance."
+  "updated_at": "2026-11-14T06:06:51.089Z",
+  "next_action": "Verify exact-A CI and complete candidate provenance, then intent-only B, exact-B checks, normal merge, originalbuild, guarded publish, officialverify and fresh visible as_of."
 }

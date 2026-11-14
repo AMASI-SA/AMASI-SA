@@ -324,6 +324,22 @@ def test_custom_record_key_does_not_raise_before_saved_approval_short_circuit():
     assert ComparisonKey.comparisons == 0 and prior['engine']['obligations']['pooled'] is row
 
 
+def test_custom_scalar_metaclass_is_not_compared_before_legacy_short_circuit():
+    class ComparingType(type):
+        comparisons = 0
+        def __eq__(cls, other):
+            ComparingType.comparisons += 1
+            raise RuntimeError('original metaclass comparison')
+    class Identity(metaclass=ComparingType):
+        pass
+    value = Identity()
+    prior = state(obligations={'other': obligation(party_type='supplier', party_id=value)},
+                  **{APPROVALS: {digest('101'): {'approved': True}}})
+    lookup = history.build_courier_hold_lookup(prior)
+    assert lookup(event(), None) is hold_prior_courier_event(prior, event(), None) is True
+    assert ComparingType.comparisons == 0
+
+
 def cohort(size):
     return state(obligations={'pool:' + str(i): obligation(party_id='other:' + str(i)) for i in range(size)},
         openings={'opening:' + str(i): obligation(id='opening:' + str(i), direction='for_party',

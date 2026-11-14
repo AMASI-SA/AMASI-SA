@@ -1,0 +1,193 @@
+{
+  "schema": "mezan_order_stage_integrated_review_v1",
+  "reviewer": "/root/screenshot_handoff",
+  "repository": "/workspace/scratch/019fa8a18b3d/mezan-order-stage-fix",
+  "base": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+  "head": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+  "verdict": "PASS_SOURCE_REVIEW",
+  "blocking_findings": [],
+  "scope": "Read-only integrated review of 14 backend source/test paths. No new test suite, benchmark, live call, DB access, Git mutation or repository edit was performed for this review.",
+  "authorship_disclosure": {
+    "reviewer_authored_cost_helper_and_test": true,
+    "separate_cost_review": "source_read_review independently read cost helper/default wiring and reported no blocker."
+  },
+  "paths": [
+    {
+      "path": "backend/operational_balance_sources.py",
+      "sha256": "e5aa59de263c24a5f3dc831da474c1c1f6115f9b256cec6d4d7f32792f0998e5",
+      "bytes": 149617,
+      "kind": "source"
+    },
+    {
+      "path": "backend/operational_completed_shipping_sources.py",
+      "sha256": "a4aae7ac0d64f75bbebff39ecdb3156a2862539f14e5c6924e3e6f829e034733",
+      "bytes": 8709,
+      "kind": "source"
+    },
+    {
+      "path": "backend/operational_cost_catalog_index.py",
+      "sha256": "1d3b93a1f24fb047232ef102bfcf73d459f58af7c193cb3e1ee3c0255810affb",
+      "bytes": 3571,
+      "kind": "source"
+    },
+    {
+      "path": "backend/operational_courier_hold_history.py",
+      "sha256": "ba1321862700a005b57eaeca66d2f70a781a5536df71fe835ec19b11af8d61e9",
+      "bytes": 6843,
+      "kind": "source"
+    },
+    {
+      "path": "backend/operational_delivery_assignment_index.py",
+      "sha256": "9fa319a0c1b13bfeb55d587713da634f8c46f65276edb627843c26171d2763d4",
+      "bytes": 5841,
+      "kind": "source"
+    },
+    {
+      "path": "backend/operational_delivery_confirmation.py",
+      "sha256": "1bd80af7a3d06dae1647d71079579adfd5661b84aa22a340d213340de67e0b56",
+      "bytes": 14333,
+      "kind": "source"
+    },
+    {
+      "path": "backend/operational_delivery_evidence.py",
+      "sha256": "f0903effb9f616c8a1a2ee17b34d43ce9c64ce3d025bd41969fd700ce75c94ac",
+      "bytes": 32392,
+      "kind": "source"
+    },
+    {
+      "path": "backend/operational_issue_index.py",
+      "sha256": "bed1e3ad3bb345c11ba2b2582a4cb54c942fb514bdc91316f897985c75d6644b",
+      "bytes": 4757,
+      "kind": "source"
+    },
+    {
+      "path": "backend/operational_shipping_fee_review.py",
+      "sha256": "bbd637b0a10c7cd12fa257bb7ef8a42698494fb28d3cdeff3e8a2ce3514908d8",
+      "bytes": 24550,
+      "kind": "source"
+    },
+    {
+      "path": "backend/tests/test_operational_balance_cost_catalog_index.py",
+      "sha256": "dc2348f91909f8620eec81f3f71f68c2183e1c9f535983d6087a56255365bebc",
+      "bytes": 21350,
+      "kind": "test"
+    },
+    {
+      "path": "backend/tests/test_operational_balance_courier_hold_history.py",
+      "sha256": "51bc28fd4cd95dc7aecb0e33578c5c63352a0009a027e9e49e163d709598222f",
+      "bytes": 21693,
+      "kind": "test"
+    },
+    {
+      "path": "backend/tests/test_operational_balance_delivery_assignment_index.py",
+      "sha256": "00ef94a220182d5be2432cb900485c337efdc886e8252b511006ce23bb5ae873",
+      "bytes": 23999,
+      "kind": "test"
+    },
+    {
+      "path": "backend/tests/test_operational_balance_issue_index.py",
+      "sha256": "6b959ce5c9defb09931ec107658bed5ace72a4d041958d57ad47db83ecc8eaf6",
+      "bytes": 10659,
+      "kind": "test"
+    },
+    {
+      "path": "backend/tests/test_operational_balance_source_stage_timing.py",
+      "sha256": "1e4dd88f1984e9398ba4c6b5942ad8b49c74d292ace8a7029643a2b449209b6a",
+      "bytes": 12508,
+      "kind": "test"
+    }
+  ],
+  "additional_path_outside_review": [
+    "docs/operations/OPERATIONAL-ORDER-STAGE-REPAIR-20261114/STATUS.md"
+  ],
+  "checks": {
+    "collector_wiring": "Assignment/cost/hold builders execute once per collect inside source_order_indexes through existing joined prepare_in_thread. Optional indexes are passed only at intended collector call sites; existing recorded-fee lookup remains.",
+    "eager_failures": "Exact-type scalar/container guards avoid custom method execution; malformed/unusual shapes select legacy fallback. Price/currency/options, assignment status/driver proof and hold Decimal/saved/direct/pooled short circuits remain at their original use points.",
+    "attempt_and_CAS_scope": "Data, output and indexes are newly owned by collect_sources. The store calls collect within its operation for each CAS attempt; there is no shared cache or final-cost/financial-decision cache.",
+    "issue_integrity": "Issue buckets retain row references/order and full dictionary equality. Append/update wrappers maintain or invalidate buckets; date_gap_identity changes metadata only. Collector removes its private index before normal return. Other callers without the private index keep ordinary list behavior.",
+    "reads_and_writes": "No new DB read/query or financial write is introduced. Existing bank_identities await only receives a fixed stage context. Runtime/auth/store/CAS/caps/deadlines and persisted financial schema are unchanged.",
+    "default_other_callers": "Optional cost/assignment arguments default to None and retain legacy paths; original _driver_assignment and hold_prior_courier_event bodies remain unchanged.",
+    "cancellation": "Helper loops use existing calculation_checkpoint; prepare_in_thread joins cancelled workers. No new background task or scheduler; cancellation is not converted into a monetary decision.",
+    "logging": "Only fixed source_order_indexes/source_bank_catalog stage names are added. No IDs, amounts, exception text or dynamic payload logging added.",
+    "CI_discovery": "All five changed/new test paths retain test_operational_balance prefix consumed by existing Operational glob."
+  },
+  "resolved_finding": {
+    "issue": "Type membership could call hostile metaclass __eq__ during eager construction.",
+    "resolution": "Assignment/hold helpers now use type identity comparisons, with adversarial regression cases. Final hashes recorded."
+  },
+  "existing_evidence": {
+    "cost_final": {
+      "path": "/workspace/scratch/019fa8a18b3d/cost-index-integration-final.xml",
+      "sha256": "08a15511b2f67a2ede6ab411125dc3124a473b98ea1bbf24fe2fe0ee6a1761d0",
+      "totals": {
+        "tests": 113,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "cost_proof": "/workspace/scratch/019fa8a18b3d/cost-index-execution-proof.json",
+    "peers": [
+      {
+        "scope": "assignment",
+        "result_path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/focused-final.result.json",
+        "result_sha256": "bc5d35fc00787ab04b409de9b638bbc5e4d5419851f22c44769a83686da6f2d5",
+        "actual_exit_from_result": 0,
+        "junit": {
+          "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/focused-final.xml",
+          "sha256": "1869b2ecccf854061f3c8e1ff03ff38fe3e50a9be884dbf7a5308729c89fda22",
+          "totals": {
+            "tests": 130,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          }
+        }
+      },
+      {
+        "scope": "issue_and_stage",
+        "result_path": "/workspace/scratch/019fa8a18b3d/order-stage-root-focused/result.json",
+        "result_sha256": "7e49f5d79f6164f42316bc6120a2088c6271276b33803db1107f57ea7d6dd7f1",
+        "actual_exit_from_result": 0,
+        "junit": {
+          "path": "/workspace/scratch/019fa8a18b3d/order-stage-root-focused/focused.xml",
+          "sha256": "daa4962e1a07830a107afc84e8189c974fa2796a8373e38bf67f2908e4d0b448",
+          "totals": {
+            "tests": 38,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          }
+        }
+      },
+      {
+        "scope": "courier_hold",
+        "actual_exit_reported_by_author": 0,
+        "exit_provenance": "release_gate_audit team message; JUnit parsed independently here.",
+        "junit": {
+          "path": "/workspace/scratch/019fa8a18b3d/pr1918-courier-hold-history.xml",
+          "sha256": "6812547cff41a0307a3aaac81a5bbedcaa63c969c0ea0a25a0c3548f3f1d25f4",
+          "totals": {
+            "tests": 177,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          }
+        }
+      }
+    ],
+    "root_combined": {
+      "provenance": "Root team message received during report preparation, not executed by reviewer",
+      "passed": 1467,
+      "deselected_local_Mongo": 4,
+      "actual_exit_reported": 0,
+      "source_unchanged_during_run_reported": true
+    }
+  },
+  "residual_limitations": [
+    "Within one attempt, source rows/state must remain unchanged, as provided by the current collector/store scope; these are not persistent general-purpose caches.",
+    "Unusual input retains legacy scans and may receive less performance benefit.",
+    "Synthetic/local results do not prove live acceptance or attribute the production delay to a particular item shape. Exact CI, publication and a visible successful refresh remain root release gates."
+  ],
+  "timestamp_policy": "No reconstructed execution timestamps."
+}

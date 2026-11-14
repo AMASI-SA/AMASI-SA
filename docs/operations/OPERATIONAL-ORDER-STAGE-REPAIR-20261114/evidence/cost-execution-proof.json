@@ -1,0 +1,121 @@
+{
+  "schema": "mezan_cost_index_execution_proof_v1",
+  "repository": "/workspace/scratch/019fa8a18b3d/mezan-order-stage-fix",
+  "base": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+  "run_cwd": "/workspace/scratch/019fa8a18b3d/mezan-order-stage-fix",
+  "authored_final_files": {
+    "backend/operational_cost_catalog_index.py": "1d3b93a1f24fb047232ef102bfcf73d459f58af7c193cb3e1ee3c0255810affb",
+    "backend/tests/test_operational_balance_cost_catalog_index.py": "dc2348f91909f8620eec81f3f71f68c2183e1c9f535983d6087a56255365bebc"
+  },
+  "timestamp_policy": "No execution times were reconstructed from mtimes or chronology; this artifact records actual exit statuses, native pytest summaries and current hashes of the original JUnit files.",
+  "runs": [
+    {
+      "phase": "initial_meaningful_red",
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend:backend/tests /workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python -B -m pytest --noconftest -q backend/tests/test_operational_balance_cost_catalog_index.py --asyncio-mode=auto --tb=short -o cache_dir=/workspace/scratch/019fa8a18b3d/cost-index-test-cache --junitxml=/workspace/scratch/019fa8a18b3d/cost-index-red.xml",
+      "actual_exit": 1,
+      "native_pytest_summary": "1 failed in 1.14s",
+      "execution_evidence": "Actual exec/write_stdin output observed by this agent; retained session ID is a conversation locator, not a new run.",
+      "tool_exec_session_id": 99665,
+      "junit": {
+        "path": "/workspace/scratch/019fa8a18b3d/cost-index-red.xml",
+        "sha256": "00e7fdea46f9a6cb4f92bca4677d248f59fb4d0d97e278ea540ac5f8b113784f",
+        "totals": {
+          "tests": 1,
+          "failures": 1,
+          "errors": 0,
+          "skipped": 0
+        }
+      },
+      "failure": "Growth assertion 70273 <= 18753 * 2.4 failed after known output assertions passed; a None-returning helper stub preserved the original scans.",
+      "executed_helper_sha256": "6ba853e945b03cc6e7b91bc5048f31be67af2d6a9019706bbbe29eaa663d172b",
+      "executed_test_sha256": "0a1599f399b36851faf7a4e5a32446406bea7362c489508a852c94736817ee49"
+    },
+    {
+      "phase": "first_helper_green",
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend:backend/tests /workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python -B -m pytest --noconftest -q backend/tests/test_operational_balance_cost_catalog_index.py --asyncio-mode=auto --tb=short -o cache_dir=/workspace/scratch/019fa8a18b3d/cost-index-test-cache --junitxml=/workspace/scratch/019fa8a18b3d/cost-index-focused.xml",
+      "actual_exit": 0,
+      "native_pytest_summary": "102 passed in 1.41s",
+      "execution_evidence": "Actual exec/write_stdin output observed by this agent; retained session ID is a conversation locator, not a new run.",
+      "tool_exec_session_id": 70821,
+      "junit": {
+        "path": "/workspace/scratch/019fa8a18b3d/cost-index-focused.xml",
+        "sha256": "5ea58e50595ae7b8aeb464457236b7e8f126e69d1defc48da1c430a9be38c010",
+        "totals": {
+          "tests": 102,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      }
+    },
+    {
+      "phase": "integration_fake_gap",
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend:backend/tests /workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python -B -m pytest --noconftest -q backend/tests/test_operational_balance_cost_catalog_index.py --asyncio-mode=auto --tb=short -o cache_dir=/workspace/scratch/019fa8a18b3d/cost-index-test-cache --junitxml=/workspace/scratch/019fa8a18b3d/cost-index-integration.xml",
+      "actual_exit": 1,
+      "native_pytest_summary": "2 failed, 111 passed in 2.60s",
+      "execution_evidence": "Actual exec/write_stdin output observed by this agent; retained session ID is a conversation locator, not a new run.",
+      "tool_exec_session_id": 93328,
+      "junit": {
+        "path": "/workspace/scratch/019fa8a18b3d/cost-index-integration.xml",
+        "sha256": "8c8c264047bda7ee111665afe8efd6a2c0ab41fac61ccbbb62caf4d56675f874",
+        "totals": {
+          "tests": 113,
+          "failures": 2,
+          "errors": 0,
+          "skipped": 0
+        }
+      },
+      "failure": "Two catalog_recovery fixtures rejected the existing owner-scoped products $in query before cost indexing. Only the test fake was extended for that exact pre-existing query/projection/cap; production query behavior was not changed."
+    },
+    {
+      "phase": "final_expanded_green",
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend:backend/tests /workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python -B -m pytest --noconftest -q backend/tests/test_operational_balance_cost_catalog_index.py --asyncio-mode=auto --tb=short -o cache_dir=/workspace/scratch/019fa8a18b3d/cost-index-test-cache --junitxml=/workspace/scratch/019fa8a18b3d/cost-index-integration-final.xml",
+      "actual_exit": 0,
+      "native_pytest_summary": "113 passed in 5.52s",
+      "execution_evidence": "Actual exec/write_stdin output observed by this agent; retained session ID is a conversation locator, not a new run.",
+      "tool_exec_session_id": 9859,
+      "junit": {
+        "path": "/workspace/scratch/019fa8a18b3d/cost-index-integration-final.xml",
+        "sha256": "08a15511b2f67a2ede6ab411125dc3124a473b98ea1bbf24fe2fe0ee6a1761d0",
+        "totals": {
+          "tests": 113,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      },
+      "authored_final_files": {
+        "backend/operational_cost_catalog_index.py": "1d3b93a1f24fb047232ef102bfcf73d459f58af7c193cb3e1ee3c0255810affb",
+        "backend/tests/test_operational_balance_cost_catalog_index.py": "dc2348f91909f8620eec81f3f71f68c2183e1c9f535983d6087a56255365bebc"
+      }
+    },
+    {
+      "phase": "final_legacy_negative_control",
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend:backend/tests /workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python -B -",
+      "stdin_python": "import pytest\nimport operational_cost_catalog_index as catalog\ncatalog.build_cost_catalog_index = lambda *_: None\nraise SystemExit(pytest.main(['--noconftest','-q','-p','no:cacheprovider','backend/tests/test_operational_balance_cost_catalog_index.py::test_attempt_catalog_work_does_not_multiply_items_by_entire_catalog','--asyncio-mode=auto','--tb=short','--junitxml=/workspace/scratch/019fa8a18b3d/cost-index-negative-control.xml']))",
+      "actual_exit": 1,
+      "expected_nonzero": true,
+      "native_pytest_summary": "1 failed in 3.22s",
+      "tool_exec_session_id": 13964,
+      "failure": "Growth assertion 71040 <= 19136 * 2.4 failed with only the process-local builder replaced; no file changed.",
+      "junit": {
+        "path": "/workspace/scratch/019fa8a18b3d/cost-index-negative-control.xml",
+        "sha256": "a54e0d0a290f18eed9d46c56b98f4d56f1245595e72c69919d1c19be02b700f2",
+        "totals": {
+          "tests": 1,
+          "failures": 1,
+          "errors": 0,
+          "skipped": 0
+        }
+      }
+    }
+  ],
+  "prior_static_evidence": {
+    "actual_exit": 0,
+    "result": "Exact-base default cost_components AST after removing only the optional index branches; unchanged unique_index, number, option_tokens, selected_cost_options, _verified_option_tokens. Authored files AST/whitespace checks passed."
+  },
+  "limitations": [
+    "No paired cost wall-time benchmark was run; pytest duration is not a performance claim.",
+    "Synthetic parity/workload tests do not establish production refresh success."
+  ]
+}

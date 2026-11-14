@@ -1,0 +1,14 @@
+{
+  "started_at": "2026-11-14T05:58:15.979662+00:00",
+  "finished_at": "2026-11-14T05:58:18.361347+00:00",
+  "seconds": 2.3816978619870497,
+  "exit_code": 1,
+  "expected_exit_code": 1,
+  "command": [
+    "/workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python",
+    "-B",
+    "-c",
+    "import operational_issue_index as index, pytest; index.enable_issue_index=lambda out:None; raise SystemExit(pytest.main(['--noconftest','-q','-p','no:cacheprovider','--tb=short','--junitxml=/workspace/scratch/019fa8a18b3d/order-stage-root-focused/negative.xml','backend/tests/test_operational_balance_issue_index.py::test_four_thousand_distinct_diagnostics_avoid_repeated_whole_list_work']))"
+  ],
+  "stdout_sha256": "751aef42cad1544dcd9e771397aa415cc3c44b32f90c7992893b2b8ed4b3edf8"
+}

@@ -25,7 +25,8 @@ def _checked(rows):
 def _plain_scalar(value):
     # Keep native equality/hash semantics (including True == 1 and Int64 == int).
     # Float/Decimal NaNs and custom equality methods do not have that contract.
-    return value is None or type(value) in (str, int, bool, Int64)
+    kind = type(value)
+    return value is None or kind is str or kind is int or kind is bool or kind is Int64
 
 
 def _plain_record(value):

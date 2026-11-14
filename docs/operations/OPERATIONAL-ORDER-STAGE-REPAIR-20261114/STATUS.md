@@ -15,3 +15,8 @@ Root created cleanisolatedworktree atJ2db0edc9edb315026eee4b6edd43b420a569c37d a
 ## preserve integrated order-stage source before final verification — 2026-11-14T05:57:15.489Z
 
 Saved current WIP source copies, including request-local assignment/cost/hold/diagnostic indexes and source_order_indexes/source_bank_catalog fixed timings. These are not a frozen source A or deployment. Focused parity and growth tests are being completed; final manifests will supersede this snapshot. The production ref remains the verified PR1917 merge, whose first financial attempt timed out. Original /app and its 120 pending files have not been touched by this follow-up.
+
+
+## freeze reviewed source A and preserve integrated verification — 2026-11-14T06:06:51.089Z
+
+PR1918 freezes source A d70b42cda3d70a7f07c78c3efc5fde8331fdc877, tree 38b0dec1fc53cb9bd1ba36236bcc730f0e1d0367, direct parent J 2db0edc9edb315026eee4b6edd43b420a569c37d. All15source paths are saved in the source branch; final changed source copies supersede the earlier WIP snapshot. Local combined validation passed1467 cases with actualexit0 and identical source hashes throughout. Four Mongo cases remain explicitly deferred to exact-A CI. Independent integrated, diagnostic, assignment and hold reviews have no remaining blocker. The expected CI list requires449named cases across the fournew suites, fouradded timing cases and fourdeferred Mongo cases. Candidate review and release gates are pending; no originaloperator mutation or financial retry in this follow-up.

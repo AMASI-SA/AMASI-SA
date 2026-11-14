@@ -1,0 +1,669 @@
+{
+  "created_at": "2026-11-14T06:00:36.635692+00:00",
+  "worktree": "/workspace/scratch/019fa8a18b3d/mezan-order-stage-fix",
+  "baseline": {
+    "base_commit": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+    "module_sha256": "0a64e6a27dcf9e49afe23b0240c15f0ba4bd74c3ea79aafe6b6f5e056c7eabcc",
+    "literal_function_sha256": "2a303aae88ae84f44f0853df72b0e34179d5e26e4dc4cc5d71edae84b474204d",
+    "frozen_literal_matches_original_ast": true,
+    "original_function_unchanged": true
+  },
+  "owned_files": {
+    "backend/operational_delivery_assignment_index.py": {
+      "sha256": "9fa319a0c1b13bfeb55d587713da634f8c46f65276edb627843c26171d2763d4",
+      "bytes": 5841
+    },
+    "backend/operational_delivery_evidence.py": {
+      "sha256": "f0903effb9f616c8a1a2ee17b34d43ce9c64ce3d025bd41969fd700ce75c94ac",
+      "bytes": 32392
+    },
+    "backend/operational_delivery_confirmation.py": {
+      "sha256": "1bd80af7a3d06dae1647d71079579adfd5661b84aa22a340d213340de67e0b56",
+      "bytes": 14333
+    },
+    "backend/tests/test_operational_balance_delivery_assignment_index.py": {
+      "sha256": "00ef94a220182d5be2432cb900485c337efdc886e8252b511006ce23bb5ae873",
+      "bytes": 23999
+    }
+  },
+  "focused": {
+    "result": {
+      "argv": [
+        "/workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--asyncio-mode=auto",
+        "--tb=short",
+        "--junitxml=/workspace/scratch/019fa8a18b3d/assignment-index-review/focused-final.xml",
+        "backend/tests/test_operational_balance_delivery_assignment_index.py"
+      ],
+      "started_at": "2026-11-14T05:56:16.218050+00:00",
+      "actual_exit": 0,
+      "elapsed_seconds": 4.389851504005492,
+      "stdout_sha256": "74efecf6bddf091d1c58e77df824b02eba8976b525b261e708990ee4ab6c60f9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "junit": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/focused-final.xml",
+      "sha256": "1869b2ecccf854061f3c8e1ff03ff38fe3e50a9be884dbf7a5308729c89fda22",
+      "cases": 130,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "case_ids": [
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows0]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows1]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows2]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[None]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows4]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[invalid]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows6]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows7]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows8]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows9]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows10]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows11]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows12]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows13]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows14]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows15]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows16]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows17]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows18]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows19]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows20]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows21]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows22]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows23]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows24]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows25]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows26]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows27]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows28]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows29]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_plain_and_malformed_cohorts_preserve_value_exception_and_row_identity[rows30]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[None-id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[None-order_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[None-order_number]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[None-driver_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[-id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[-order_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[-order_number]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[-driver_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[0-id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[0-order_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[0-order_number]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[0-driver_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[False-id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[False-order_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[False-order_number]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[False-driver_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[True-id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[True-order_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[True-order_number]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[True-driver_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[1_0-id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[1_0-order_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[1_0-order_number]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[1_0-driver_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[1_1-id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[1_1-order_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[1_1-order_number]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[1_1-driver_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[ padded -id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[ padded -order_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[ padded -order_number]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[ padded -driver_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[bad\\x00id-id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[bad\\x00id-order_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[bad\\x00id-order_number]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[bad\\x00id-driver_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-order_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-order_number]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-driver_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[value10-id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[value10-order_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[value10-order_number]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[value10-driver_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[value11-id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[value11-order_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[value11-order_number]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[value11-driver_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[1.5-id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[1.5-order_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[1.5-order_number]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[1.5-driver_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[1_2-id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[1_2-order_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[1_2-order_number]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_exact_identity_normalization_and_raw_number_view_remain_separate[1_2-driver_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_queries_and_owner_mismatches_use_original_contract[foreign-order-10]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_queries_and_owner_mismatches_use_original_contract[None-order-10]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_queries_and_owner_mismatches_use_original_contract[owner-None-10]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_queries_and_owner_mismatches_use_original_contract[owner-order-None]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_queries_and_owner_mismatches_use_original_contract[owner-1-10]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_queries_and_owner_mismatches_use_original_contract[owner-order-10]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_queries_and_owner_mismatches_use_original_contract[owner-oid6-number6]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_queries_and_owner_mismatches_use_original_contract[owner--]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_queries_and_owner_mismatches_use_original_contract[owner-missing-missing]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_owner_error_still_precedes_conflict_and_status_errors",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_or_match_keeps_conflicting_inactive_rows_and_duplicate_occurrences",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_raw_view_does_not_normalize_whitespace_null_boolean_or_negative_number",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_native_bson_integer_ids_use_index_and_preserve_normalized_matching",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_scope_mismatch_and_changed_list_length_cannot_reuse_index",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_build_does_not_touch_unusual_container_or_identity_methods",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_metaclass_equality_is_never_invoked_by_build[container]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_metaclass_equality_is_never_invoked_by_build[id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_metaclass_equality_is_never_invoked_by_build[order_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_metaclass_equality_is_never_invoked_by_build[order_number]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_metaclass_equality_is_never_invoked_by_build[user_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_each_attempt_rebuilds_after_same_cohort_rows_change",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_history_traversal_grows_with_cohort_instead_of_orders_times_cohort",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_cancellation_during_owned_build_joins_worker_without_mutation",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_actual_delivery_resolver_uses_optional_index_without_legacy_scan[courier]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_actual_delivery_resolver_uses_optional_index_without_legacy_scan[driver]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_owner_confirmation_forwards_index_without_changing_sealed_evidence[courier]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_owner_confirmation_forwards_index_without_changing_sealed_evidence[native_driver]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_owner_confirmation_forwards_index_without_changing_sealed_evidence[contract_driver]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_date_gap_enrichment_keeps_all_matching_issue_rows_and_original_references",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_optional_index_does_not_move_assignment_error_before_canonical_error",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_whole_collector_reconciliation_and_reports_match_legacy_assignment_views[False-old_driver]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_whole_collector_reconciliation_and_reports_match_legacy_assignment_views[False-old_courier]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_whole_collector_reconciliation_and_reports_match_legacy_assignment_views[False-new_native_driver]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_whole_collector_reconciliation_and_reports_match_legacy_assignment_views[False-new_contract_driver]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_whole_collector_reconciliation_and_reports_match_legacy_assignment_views[False-new_courier]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_whole_collector_reconciliation_and_reports_match_legacy_assignment_views[True-old_driver]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_whole_collector_reconciliation_and_reports_match_legacy_assignment_views[True-old_courier]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_whole_collector_reconciliation_and_reports_match_legacy_assignment_views[True-new_native_driver]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_whole_collector_reconciliation_and_reports_match_legacy_assignment_views[True-new_contract_driver]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_whole_collector_reconciliation_and_reports_match_legacy_assignment_views[True-new_courier]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_collector_builds_one_new_assignment_index_per_invocation",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_actual_visible_collector_joins_assignment_worker_and_releases_own_lease[disconnect]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_actual_visible_collector_joins_assignment_worker_and_releases_own_lease[deadline]"
+      ]
+    },
+    "environment": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHON_DOTENV_DISABLED": "1",
+      "PYTHONPATH": "backend:backend/tests"
+    }
+  },
+  "metaclass_regression": {
+    "red_result": {
+      "argv": [
+        "/workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--asyncio-mode=auto",
+        "--tb=short",
+        "--junitxml=/workspace/scratch/019fa8a18b3d/assignment-index-review/metaclass-red.xml",
+        "backend/tests/test_operational_balance_delivery_assignment_index.py::test_unusual_metaclass_equality_is_never_invoked_by_build"
+      ],
+      "actual_exit": 1,
+      "elapsed_seconds": 2.3235265999974217,
+      "stdout_sha256": "b4c24a8365780c7d41aa57a8794845eb8541c77b3366d78bb1e2d0688908d61f"
+    },
+    "red_junit": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/metaclass-red.xml",
+      "sha256": "6f9081e45117f2950cfada1a580fffb06ecb336a9c4581ec4517a63c2401246d",
+      "cases": 5,
+      "failures": 5,
+      "errors": 0,
+      "skipped": 0,
+      "case_ids": [
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_metaclass_equality_is_never_invoked_by_build[container]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_metaclass_equality_is_never_invoked_by_build[id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_metaclass_equality_is_never_invoked_by_build[order_id]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_metaclass_equality_is_never_invoked_by_build[order_number]",
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_unusual_metaclass_equality_is_never_invoked_by_build[user_id]"
+      ]
+    },
+    "final_guard_change": "exact class identity comparisons replace tuple membership to avoid metaclass equality hooks",
+    "green_included_in_final_130": true
+  },
+  "negative_control": {
+    "result": {
+      "argv": [
+        "/workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python",
+        "-B",
+        "/workspace/scratch/019fa8a18b3d/assignment-index-review/negative_control.py"
+      ],
+      "started_at": "2026-11-14T05:50:45.259294+00:00",
+      "actual_exit": 1,
+      "elapsed_seconds": 2.12286800199945,
+      "stdout_sha256": "be31f021b85c377c7a833303c807b531dfef555066db8c540bfd75399ec5492f",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "junit": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/negative.xml",
+      "sha256": "cdb7c84ecd80c0b499acada986e37fd2cab607c4f6c7ff586dc2254e4db3fdfc",
+      "cases": 1,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "case_ids": [
+        "backend.tests.test_operational_balance_delivery_assignment_index::test_history_traversal_grows_with_cohort_instead_of_orders_times_cohort"
+      ]
+    },
+    "method": "Exact baseline function extracted by git show + AST; candidate builder forced to return None in isolated child memory only; source files untouched. Growth assertion intentionally fails.",
+    "observed_legacy_line_visits": [
+      123264,
+      495872
+    ],
+    "allowed_growth_ratio": 2.4
+  },
+  "collector_assignment_inspection": {
+    "source_sha256": "e5aa59de263c24a5f3dc831da474c1c1f6115f9b256cec6d4d7f32792f0998e5",
+    "call_comparisons": {
+      "resolve_delivery_event": {
+        "baseline_count": 2,
+        "current_count": 2,
+        "calls": [
+          {
+            "baseline_line": 1487,
+            "current_line": 1499,
+            "previous_arguments_ast_equal": true,
+            "added_assignment_index_values": [
+              "assignment_index"
+            ]
+          },
+          {
+            "baseline_line": 1689,
+            "current_line": 1702,
+            "previous_arguments_ast_equal": true,
+            "added_assignment_index_values": [
+              "assignment_index"
+            ]
+          }
+        ]
+      },
+      "date_gap_identity": {
+        "baseline_count": 2,
+        "current_count": 2,
+        "calls": [
+          {
+            "baseline_line": 1708,
+            "current_line": 1722,
+            "previous_arguments_ast_equal": true,
+            "added_assignment_index_values": [
+              "assignment_index"
+            ]
+          },
+          {
+            "baseline_line": 1731,
+            "current_line": 1746,
+            "previous_arguments_ast_equal": true,
+            "added_assignment_index_values": [
+              "assignment_index"
+            ]
+          }
+        ]
+      }
+    },
+    "legacy_driver_ast_unchanged": true,
+    "owned_build_calls": [
+      {
+        "line": 1426,
+        "call": "prepare_in_thread(build_delivery_assignment_index, data['store_delivery_assignments'], owner)"
+      }
+    ],
+    "raw_view_count": 2,
+    "raw_view_review": "Both raw filters retain str(order_number), active is not False, and exact assigned/out_for_delivery/delivered statuses; strict normalized OR matching remains separate. Whole cohort and owner are unchanged; index kept on attempt-local data."
+  },
+  "paired_benchmark": {
+    "identity": {
+      "baseline_commit": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+      "helper_sha256": "44fb5dc4c21df3f53ccbd8eb31d17a14b0dae7af9f70000cd0e2a3e1bdceec7a",
+      "harness_sha256": "b85c36d090dc359db7e36172354aa6c59147317fe3dbeb9f36c4f8984a9de7c9",
+      "database_access": false
+    },
+    "runner_result": {
+      "argv": [
+        "/workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python",
+        "-B",
+        "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired_bench.py"
+      ],
+      "started_at": "2026-11-14T05:52:43.406501+00:00",
+      "actual_exit": 0,
+      "elapsed_seconds": 19.37144817499211,
+      "stdout_sha256": "7f47e6be865ff660f643fba231f99ec872bd37f8971bf487aff0f57477cdf030",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "children": [
+      {
+        "cohort": "1000-1000",
+        "child_result": {
+          "label": "paired-1000-1000",
+          "argv": [
+            "/workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python",
+            "-B",
+            "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired_bench.py",
+            "--rows",
+            "1000",
+            "--calls",
+            "1000"
+          ],
+          "started_at": "2026-11-14T05:52:43.513167+00:00",
+          "actual_exit": 0,
+          "elapsed_seconds": 3.236355683999136,
+          "timed_out": false,
+          "timeout_seconds": 35,
+          "stdout_sha256": "9ad65ceeafce44a743412085da1ee7ae98c8e9251783e9b9d3b314760a3d5e04",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "measurement": {
+          "assignment_rows": 1000,
+          "strict_plus_raw_query_pairs": 1000,
+          "baseline_commit": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+          "baseline_source_sha256": "0a64e6a27dcf9e49afe23b0240c15f0ba4bd74c3ea79aafe6b6f5e056c7eabcc",
+          "helper_sha256": "44fb5dc4c21df3f53ccbd8eb31d17a14b0dae7af9f70000cd0e2a3e1bdceec7a",
+          "legacy_wall_seconds": 2.2275907040020684,
+          "legacy_cpu_seconds": 2.215157991,
+          "indexed_total_wall_seconds": 0.04887881100876257,
+          "indexed_total_cpu_seconds": 0.048881567000000015,
+          "build_wall_seconds": 0.04468222500872798,
+          "build_cpu_seconds": 0.04468588200000001,
+          "all_results_equal_and_expected": true,
+          "inputs_unchanged": true,
+          "input_sha256": "66dcf62f0be71db64434377bdd4ef04cb9fa0b02433f4969d61dd892fd515807",
+          "database_access": false
+        }
+      },
+      {
+        "cohort": "2000-2000",
+        "child_result": {
+          "label": "paired-2000-2000",
+          "argv": [
+            "/workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python",
+            "-B",
+            "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired_bench.py",
+            "--rows",
+            "2000",
+            "--calls",
+            "2000"
+          ],
+          "started_at": "2026-11-14T05:52:46.750404+00:00",
+          "actual_exit": 0,
+          "elapsed_seconds": 10.797697230998892,
+          "timed_out": false,
+          "timeout_seconds": 35,
+          "stdout_sha256": "687dbc7c1ec40193871db700e5ec5db55bfda4340bf6d09cf1fa79217174dc1d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "measurement": {
+          "assignment_rows": 2000,
+          "strict_plus_raw_query_pairs": 2000,
+          "baseline_commit": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+          "baseline_source_sha256": "0a64e6a27dcf9e49afe23b0240c15f0ba4bd74c3ea79aafe6b6f5e056c7eabcc",
+          "helper_sha256": "44fb5dc4c21df3f53ccbd8eb31d17a14b0dae7af9f70000cd0e2a3e1bdceec7a",
+          "legacy_wall_seconds": 9.968135874005384,
+          "legacy_cpu_seconds": 9.827332496,
+          "indexed_total_wall_seconds": 0.016067397998995148,
+          "indexed_total_cpu_seconds": 0.015996346999999744,
+          "build_wall_seconds": 0.012340001994743943,
+          "build_cpu_seconds": 0.012269499000000295,
+          "all_results_equal_and_expected": true,
+          "inputs_unchanged": true,
+          "input_sha256": "9ef1e9e888de287195d8fa8ef34f19f534bf16d7ba9f85a6f9a808c85d27f3df",
+          "database_access": false
+        }
+      },
+      {
+        "cohort": "20000-100",
+        "child_result": {
+          "label": "paired-20000-100",
+          "argv": [
+            "/workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python",
+            "-B",
+            "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired_bench.py",
+            "--rows",
+            "20000",
+            "--calls",
+            "100"
+          ],
+          "started_at": "2026-11-14T05:52:57.548906+00:00",
+          "actual_exit": 0,
+          "elapsed_seconds": 4.534481887007132,
+          "timed_out": false,
+          "timeout_seconds": 35,
+          "stdout_sha256": "f223b43c3c68f0bbc97ec55fd182fb4b659365a0bda86b4cbf8a8c6271001d55",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "measurement": {
+          "assignment_rows": 20000,
+          "strict_plus_raw_query_pairs": 100,
+          "baseline_commit": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+          "baseline_source_sha256": "0a64e6a27dcf9e49afe23b0240c15f0ba4bd74c3ea79aafe6b6f5e056c7eabcc",
+          "helper_sha256": "44fb5dc4c21df3f53ccbd8eb31d17a14b0dae7af9f70000cd0e2a3e1bdceec7a",
+          "legacy_wall_seconds": 3.4598841660044855,
+          "legacy_cpu_seconds": 3.4537921359999997,
+          "indexed_total_wall_seconds": 0.1960407180013135,
+          "indexed_total_cpu_seconds": 0.19601820699999983,
+          "build_wall_seconds": 0.19574042000749614,
+          "build_cpu_seconds": 0.19572188099999988,
+          "all_results_equal_and_expected": true,
+          "inputs_unchanged": true,
+          "input_sha256": "e93045bfa5ca4c4b4b06a8b1d0932c2e2680f567b78112ad6c6c05e64e3a565d",
+          "database_access": false
+        }
+      },
+      {
+        "cohort": "0-20000",
+        "child_result": {
+          "label": "paired-0-20000",
+          "argv": [
+            "/workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python",
+            "-B",
+            "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired_bench.py",
+            "--rows",
+            "0",
+            "--calls",
+            "20000"
+          ],
+          "started_at": "2026-11-14T05:53:02.084120+00:00",
+          "actual_exit": 0,
+          "elapsed_seconds": 0.6681002590048593,
+          "timed_out": false,
+          "timeout_seconds": 35,
+          "stdout_sha256": "06e64903bf8a21471c4c5bfcdce6359f8a374d364d2f25cf61a28db10d0d4507",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "measurement": {
+          "assignment_rows": 0,
+          "strict_plus_raw_query_pairs": 20000,
+          "baseline_commit": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+          "baseline_source_sha256": "0a64e6a27dcf9e49afe23b0240c15f0ba4bd74c3ea79aafe6b6f5e056c7eabcc",
+          "helper_sha256": "44fb5dc4c21df3f53ccbd8eb31d17a14b0dae7af9f70000cd0e2a3e1bdceec7a",
+          "legacy_wall_seconds": 0.01945815098588355,
+          "legacy_cpu_seconds": 0.019460749,
+          "indexed_total_wall_seconds": 0.05788303300505504,
+          "indexed_total_cpu_seconds": 0.05789094300000003,
+          "build_wall_seconds": 3.1436997232958674e-05,
+          "build_cpu_seconds": 3.140100000004198e-05,
+          "all_results_equal_and_expected": true,
+          "inputs_unchanged": true,
+          "input_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "database_access": false
+        }
+      }
+    ],
+    "scope": "Synthetic only; one strict plus one raw-number query per pair; new timings include build. 20k-row sample has only 100 query pairs. No production data or DB.",
+    "final_source_delta": "Benchmark predates the final type-is-only metaclass guard fix; the parent explicitly requested no rerun for that change. Final 130-case suite verifies final helper.",
+    "empty_control": "Empty cohort adds approximately 38.425 ms across 20k query pairs; no speedup claim for this case.",
+    "scaling_caveat": "Small timings are noisy and nonmonotonic; operation-growth regression supplies the complexity evidence."
+  },
+  "limitations": [
+    "This is local implementation and synthetic evidence, not a production refresh acceptance result.",
+    "CI with exact frozen release identity and live financial as_of acceptance remain root-owned.",
+    "Attempt-local index requires unchanged row contents for its lifetime and is rebuilt on each collector invocation/CAS attempt.",
+    "Exotic containers/identities use the original reader and retain its original scan cost."
+  ],
+  "artifacts": {
+    "baseline.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/baseline.json",
+      "sha256": "9c36364bb47d57723d75ba9622279a034363e4a4d0eeaa3f250601cfb43e921e",
+      "bytes": 334
+    },
+    "focused-final.stdout": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/focused-final.stdout",
+      "sha256": "74efecf6bddf091d1c58e77df824b02eba8976b525b261e708990ee4ab6c60f9",
+      "bytes": 180
+    },
+    "focused-final.stderr": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/focused-final.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "focused-final.result.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/focused-final.result.json",
+      "sha256": "bc5d35fc00787ab04b409de9b638bbc5e4d5419851f22c44769a83686da6f2d5",
+      "bytes": 693
+    },
+    "focused-final.xml": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/focused-final.xml",
+      "sha256": "1869b2ecccf854061f3c8e1ff03ff38fe3e50a9be884dbf7a5308729c89fda22",
+      "bytes": 26396
+    },
+    "metaclass-red.stdout": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/metaclass-red.stdout",
+      "sha256": "b4c24a8365780c7d41aa57a8794845eb8541c77b3366d78bb1e2d0688908d61f",
+      "bytes": 6687
+    },
+    "metaclass-red.stderr": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/metaclass-red.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "metaclass-red.result.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/metaclass-red.result.json",
+      "sha256": "598a60e393200a40d8ed603d8a0c4743732cb8f2e6db15fce493a0eff403ffde",
+      "bytes": 614
+    },
+    "metaclass-red.xml": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/metaclass-red.xml",
+      "sha256": "6f9081e45117f2950cfada1a580fffb06ecb336a9c4581ec4517a63c2401246d",
+      "bytes": 6844
+    },
+    "negative_control.py": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/negative_control.py",
+      "sha256": "bf4442ae127e28cbdf56049992edf5213e95a023b300102ad5000982730e5d2e",
+      "bytes": 1572
+    },
+    "negative.stdout": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/negative.stdout",
+      "sha256": "be31f021b85c377c7a833303c807b531dfef555066db8c540bfd75399ec5492f",
+      "bytes": 991
+    },
+    "negative.stderr": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/negative.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "negative.result.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/negative.result.json",
+      "sha256": "6d9357c93589addc353209cfd6a7344bba649edd5b260651e9f761c6f512d387",
+      "bytes": 475
+    },
+    "negative.xml": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/negative.xml",
+      "sha256": "cdb7c84ecd80c0b499acada986e37fd2cab607c4f6c7ff586dc2254e4db3fdfc",
+      "bytes": 813
+    },
+    "paired_bench.py": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired_bench.py",
+      "sha256": "b85c36d090dc359db7e36172354aa6c59147317fe3dbeb9f36c4f8984a9de7c9",
+      "bytes": 6004
+    },
+    "paired-identity.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired-identity.json",
+      "sha256": "8cfe39fea80bb8ff8558a58620e368e9cb58369648f20b5a4edcbb655f1f46ce",
+      "bytes": 271
+    },
+    "paired-harness.stdout": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired-harness.stdout",
+      "sha256": "7f47e6be865ff660f643fba231f99ec872bd37f8971bf487aff0f57477cdf030",
+      "bytes": 5458
+    },
+    "paired-harness.stderr": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired-harness.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "paired-harness.result.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired-harness.result.json",
+      "sha256": "1e2d6609938149584a50e9fc263c738fc9f2411567ed753ce9519e73fbfe6bf3",
+      "bytes": 472
+    },
+    "paired-1000-1000.stdout": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired-1000-1000.stdout",
+      "sha256": "9ad65ceeafce44a743412085da1ee7ae98c8e9251783e9b9d3b314760a3d5e04",
+      "bytes": 746
+    },
+    "paired-1000-1000.stderr": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired-1000-1000.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "paired-1000-1000.result.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired-1000-1000.result.json",
+      "sha256": "e815070367c72fa772f895080912f50449f885645af8ce32b8f493575a6e2393",
+      "bytes": 603
+    },
+    "paired-2000-2000.stdout": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired-2000-2000.stdout",
+      "sha256": "687dbc7c1ec40193871db700e5ec5db55bfda4340bf6d09cf1fa79217174dc1d",
+      "bytes": 748
+    },
+    "paired-2000-2000.stderr": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired-2000-2000.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "paired-2000-2000.result.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired-2000-2000.result.json",
+      "sha256": "b17c0726d3181ae476c678c47767bf2123a5057b2138eee4c0df3467f8916205",
+      "bytes": 604
+    },
+    "paired-20000-100.stdout": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired-20000-100.stdout",
+      "sha256": "f223b43c3c68f0bbc97ec55fd182fb4b659365a0bda86b4cbf8a8c6271001d55",
+      "bytes": 751
+    },
+    "paired-20000-100.stderr": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired-20000-100.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "paired-20000-100.result.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired-20000-100.result.json",
+      "sha256": "cfeebb864ca3c5deec9a60f149a0ae0106785b142253b9ec43effa55a33825c0",
+      "bytes": 603
+    },
+    "paired-0-20000.stdout": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired-0-20000.stdout",
+      "sha256": "06e64903bf8a21471c4c5bfcdce6359f8a374d364d2f25cf61a28db10d0d4507",
+      "bytes": 749
+    },
+    "paired-0-20000.stderr": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired-0-20000.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "paired-0-20000.result.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/paired-0-20000.result.json",
+      "sha256": "f8fda737dfad0205fbdafef9e779d5a821eb81599173c2f2f72cdb4d8d5064f3",
+      "bytes": 600
+    }
+  }
+}

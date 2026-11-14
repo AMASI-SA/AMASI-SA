@@ -1,0 +1,25 @@
+{
+  "actual_cancelled_error_propagates": true,
+  "actual_date_gap_nonlast_row_enrichment": true,
+  "callsite_contract": [
+    "Only fresh collector out enables the index.",
+    "No observed issue-row reordering/deletion or bare identity mutation; courier updates use update_issue and date-gap changes metadata only.",
+    "Employees, advertising, and recurring producers use sequential awaited request-owned prepare_in_thread calls.",
+    "No full-out serialization/copy before the single finish-and-return.",
+    "Arbitrary earlier identity mutation requires explicit invalidation and is outside this owned scope."
+  ],
+  "custom_key_fallback": true,
+  "custom_list_contains_fallback": true,
+  "custom_out_no_new_get": true,
+  "database_calls": 0,
+  "finding": "No remaining blocker in the actual indexed callsite scope.",
+  "frozen_M_helper_parity_steps": 13,
+  "frozen_legacy_base": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+  "index_source_sha256": "bed1e3ad3bb345c11ba2b2582a4cb54c942fb514bdc91316f897985c75d6644b",
+  "nested_payload_mutation": true,
+  "ordinary_list_and_exact_output_after_finish": true,
+  "production_calls": 0,
+  "schema": "independent_diagnostic_index_review_v1",
+  "single_collect_return_after_finish": true,
+  "source_files_changed_during_review": 0
+}

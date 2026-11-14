@@ -1,0 +1,67 @@
+{
+  "api": "build_courier_hold_lookup(state) -> callable(event, carrier)",
+  "base": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+  "database_calls": 0,
+  "dictionary_key_guard": "Exact dictionaries used for field lookup require exact-string keys before get; otherwise lazy legacy fallback.",
+  "excluded_scalars": "float, Decimal, and custom classes retain lazy legacy fallback",
+  "files": [
+    {
+      "bytes": 6843,
+      "path": "backend/operational_courier_hold_history.py",
+      "sha256": "ba1321862700a005b57eaeca66d2f70a781a5536df71fe835ec19b11af8d61e9"
+    },
+    {
+      "bytes": 21693,
+      "path": "backend/tests/test_operational_balance_courier_hold_history.py",
+      "sha256": "51bc28fd4cd95dc7aecb0e33578c5c63352a0009a027e9e49e163d709598222f"
+    }
+  ],
+  "final_version_growth_assertions": {
+    "includes_build_and_all_lookups": true,
+    "indexed_large_at_most_small_times": 2.4,
+    "indexed_large_less_than_legacy_large_fraction": 0.25,
+    "legacy_large_more_than_small_times": 3.5,
+    "metric": "Python line events in new module and exact legacy source module",
+    "size_large": 128,
+    "size_small": 64,
+    "test_passed": true
+  },
+  "initial_version_growth_measurement": {
+    "indexed_large": 17301,
+    "indexed_small": 8661,
+    "legacy_large": 362880,
+    "legacy_small": 91328,
+    "metric": "Python line events in new module and exact legacy source module; includes build and N lookups, unrelated histories N each",
+    "size_large": 128,
+    "size_small": 64
+  },
+  "legacy_function_sha256": "1c77149049631c7e35006e1c52b47756eed14bc5b825c4c7d027859f9d1aa51d",
+  "legacy_function_unchanged": true,
+  "limitations": [
+    "Pooled payouts that match the same party/currency are intentionally re-evaluated in order; their Decimal decisions are not cached.",
+    "Lookup lifetime requires an unchanged state and a new build for every collection/CAS attempt."
+  ],
+  "metaclass_regression": {
+    "after_fix": "included in 177 passed",
+    "before_fix": "1 failed, 176 deselected; RuntimeError from custom metaclass __eq__ during builder eligibility",
+    "fix": "type identity comparisons with is, not tuple membership",
+    "name": "test_custom_scalar_metaclass_is_not_compared_before_legacy_short_circuit"
+  },
+  "scalar_conversion": "none; native equality and hashing",
+  "scalar_eligibility": [
+    "exact str",
+    "exact int",
+    "exact bool",
+    "None",
+    "exact bson.int64.Int64"
+  ],
+  "schema": "courier_hold_history_local_review_v1",
+  "synthetic_only": true,
+  "tests": {
+    "elapsed_seconds_from_pytest": 1.36,
+    "exit_code": 0,
+    "junit": "/workspace/scratch/019fa8a18b3d/pr1918-courier-hold-history.xml",
+    "junit_sha256": "6812547cff41a0307a3aaac81a5bbedcaa63c969c0ea0a25a0c3548f3f1d25f4",
+    "passed": 177
+  }
+}
