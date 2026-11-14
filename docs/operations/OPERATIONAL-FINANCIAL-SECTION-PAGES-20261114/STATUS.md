@@ -307,3 +307,34 @@ This approves templates only. M, fresh untracked count and successful new
 rehearsal evidence remain invalid placeholders. Root must fill and review them
 from observed evidence before original use. No template publishes or clears
 another actor's lease. B CI is still in progress; no merge or publication yet.
+
+## Normal merge M and filled rehearsal runners
+
+All11 applicable exactB workflows passed. Readiness43615727641 host20.20.2
+job132510889314 and host24.19.0 job132510889332 each actually ran and passed
+adapter materialization, artifact/proof/identity/package-boundary verification,
+and JSON build-metadata route checks; these were not skipped A jobs.
+
+PR1921 normal mergeM:94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894.
+Root verified through GitHub's commit object and local Git: exact parents
+J29ec1e07/B5fc08eef, tree equals reviewed B d636970f, A is ancestor, A-to-M
+changes exactly the intent file and raw intent SHA256 remainsad0a524b.
+ExactM production-push CI is pending (Readiness43616365743,CodeQL43616365742,
+Security43616365916). Do not publish before those required checks pass.
+
+Original read-only preflight at2026-11-14T16:32:20.133559Z: guard inactive,
+HEADJ29ec, correct production branch, clean tracked files,120 nonignored
+untracked entries,0 ignored backend bytecode files. UI separately shows the
+same1 unsaved Untitled-1 and120 pending changes; no editor save/discard.
+
+The filled/ runner copies contain only the actual M and freshly observed
+count120 substitutions. Independent static review passed exact byte diffs,
+all4 hashes/lengths and unchanged function/entrypoint ASTs. Gate evidence
+remains invalid until this release's successful original build. Templates
+remain untouched. The original guard must be rechecked immediately before
+original work; the rehearsal captures and compares a new full file manifest.
+
+Emergent management tab6 stopped responding to browser focus; a fresh tab19
+on the same original salla-analytics project opened successfully. Manage /
+Overview shows prior100th publish1b4c4f6; no new task publication was clicked.
+No task lease or original /app mutation has occurred.
