@@ -1,5 +1,31 @@
 # Operational financial section pages — 2026-11-14
 
+## Final outcome — published and verified
+
+The requested independently loaded financial-center sidebar pages are complete,
+merged in PR1921, published once, and verified on the original production site.
+The default page is the existing financial summaries. Providers, couriers,
+drivers and employees load when selected; all other former report tables remain
+reachable. The published release is source A `0dd26a620a0acc4235d6fdfa0a3a8e714982fcae`,
+deployment M `94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894`, platform `ecb9679`.
+The one official verifier passed with actual exit 0 and all three identity probes;
+the owned release lease closed normally and the final guard was inactive.
+All 120 original nonignored files, original terminals 1/2, and unsaved Untitled-1
+were preserved. No source change followed the frozen release.
+
+The wider global-refresh issue is still open: the single post-release manual
+attempt failed with a source-read timeout for orders and retained saved
+calculation time **14 November 2026, 18:22 Riyadh**. Page-read success is not
+evidence of a newly calculated balance. No second post-release refresh or
+speculative optimization was performed.
+
+Verified live result:
+https://mezansalla.com/operational-balances/financial-position?view=summary
+
+All earlier checkpoint statements below are historical. The final diagnostic
+and safe continuation are recorded at the end of this document. This branch is
+documentation only and must not enter the frozen production release lineage.
+
 ## Contract and current state
 
 User requested faster financial-center loading by splitting payment platforms,
@@ -474,3 +500,70 @@ at17:11:12.018Z in Mezan tab21 after officialverification. Before it, the filter
 new timeouttiming consolelog countwas0. Afterclick,refreshbuttondisabled,
 manualrefreshnoticepresent,savedreportstillvisible withas_of18:22Riyadh.
 Its outcomeisnotyetknown. Keepthispagevisible anddo not repeat the refresh.
+
+## Final live refresh outcome and bounded diagnosis
+
+The one explicit manual refresh began at2026-11-14T17:11:12.018Z after official
+verification. At an observation86.659s later the button was enabled again, the
+saved report remained visible, and as_of still read14/11/2026,18:22Riyadh.
+That duration includes observation and browser-control overhead; it is not
+the order-query duration or a precise HTTP latency.
+
+The actual visible report warning was:
+> تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. تعذر تحديث الطلبات: انتهت مهلة قراءة هذا المصدر. احتُفظ بآخر لقطة ناجحة بتاريخها. يمكنك إعادة التحديث يدويًا؛ إذا تكرر التعذر، أرسل هذه الرسالة للدعم.
+
+There were no captured `operational_refresh_timeout_stage_timings` console
+entries before or after the attempt. The actual HTTP status/detail was not
+retained. Source mapping, not a direct live HTTP observation, identifies the
+warning as `unified_orders` / `operational_source_read_timeout`. The source
+error branch in service.refresh raises409/code
+`operational_source_setup_incomplete`; it does not emit the bounded stage list
+reserved for outer408/code`operational_refresh_timeout`. Do not describe this
+attempt as an observed408 or observed409.
+
+The bounded read-only source review found the initial collection-read path:
+aggregate -> source_collection -> source_primary_reads -> load_collections ->
+refresh_source_rows(unified_orders), before source_orders normalization.
+The existing query is owner-bound, uses21 top-level projected fields, fetches
+up to20001 rows to enforce the20000 cap, and validates every returned owner.
+Whole canonical/evidence containers deliberately preserve malformed shapes and
+financial contradictions. Date/status/nested-field narrowing is not presently
+proved safe. The per-acquired-reader timeout is15s, ordinary concurrency4 or1
+in a snapshot session; semaphore queue wait does not consume that reader's15s.
+The overall request has a separate85s deadline, so the observed total cannot
+be treated as MongoDB execution time.
+
+server._global_startup already declares user_id-leading indexes on order_number,
+order_date and data_source. Their live presence/planner selection, returned
+bytes, execution time and cursor cost were not measured. There is no evidence
+for reporting a missing index, a specific payload bottleneck or a database-pool
+cause. Two independent read-only reviews agreed that no further optimization
+patch is justified without primary production evidence. No source edits, new
+tests, database queries, second refresh, merge or publication followed this
+diagnosis.
+
+## Completion and next safe action
+
+Production changed: **yes**, through the one authorized publication described
+above. All requested sidebar pages passed direct live navigation checks:
+providers9.621s, couriers14.912s, drivers9.774s, employees8.524s,
+returnsummary10.663s. Each is a single click-to-confirmed-report observation
+including browser-control overhead, not a pure server benchmark or a measured
+percentage improvement. Summary forecast later rendered separately with7 rows.
+
+The useful live summary tab was retained for user review. Original UI cleanup
+was directly rechecked: only Terminal1/Terminal2 remain and the title still
+indicates unsaved Untitled-1. Cropped screenshot export through the browser API
+timed out; no production screenshot or financial/customer data was committed.
+
+For the remaining global-refresh defect, first retain the same attempt's
+sanitized HTTP code/cause/source_collection, existing stage-failure logs, and
+separate POST/GET timings. Then obtain the authenticated-owner-bound actual
+query plan/index inventory and sanitized returned/examined counts and response
+size or cursor timing. Do not infer owner from a timestamp, reduce financial
+evidence coverage, increase deadlines speculatively, or rerun this completed
+release. The original active lease is closed and must be freshly rechecked
+before any future release work.
+
+Issue1006 has reached its2500-comment limit; the final durable continuity record
+is this task document and PR1921. No retry to that full ledger was performed.
