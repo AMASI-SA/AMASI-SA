@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-FINANCIAL-LOAD-RECOVERY-20261114",
-  "phase": "original-governed-build-running",
+  "phase": "prepared-for-authorized-publication",
   "repository": "AMASI-SA/AMASI-SA",
   "release_branch": "codex/financial-loading-resume-20261114",
   "handoff_branch": "codex/financial-loading-release-handoff-20261114",
@@ -18,8 +18,8 @@
   "source_A_operational_run": 43604085026,
   "source_A_stock_run": 43604084975,
   "production_changed": false,
-  "lease_started": false,
-  "next": "Observe original72x801fd outcome and actual22-build result. Requireexit0, exactidentity, preserved120files, inactiveguard. Onlythenstage exactfilledgate and executeprepare; preservecheck; immediately beforeauthorizedUIpublish execute prepublish+preservecheck. Observefreshsuccess, officialverify3probes, inactiveguard, finalpreservation+liveacceptance.",
+  "lease_started": true,
+  "next": "Original prepared lease is owned by codex-financial-loading-recovery-1919. Run exact gateprepublish once pluspreservationafter-prepublish, immediatelyclickopenEmergentPublishchangesdialog. Observeexplicitnewsuccess andnewversion, thenrunoriginalverifywrapperonce with72x801fddirectory/M/actor, threeprobesandclosure. Neverrepeatprepare orpublishwithoutinspectingexistingresults/liveUI.",
   "notes": [
     "Issue1006 is full; this branch, task status and PR1919 carry continuation.",
     "The handoff branch is documentation only and must never be merged into frozen release A/B.",
@@ -46,7 +46,7 @@
   "merge_M_codeql_run": 43605488109,
   "live_production_changed": false,
   "original_app_preflight_utc": "2026-11-14T14:31:46.889739+00:00",
-  "original_app_head": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+  "original_app_head": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
   "original_app_tracked_clean": true,
   "original_app_guard_active": false,
   "original_app_untracked_count": 120,
@@ -77,6 +77,18 @@
   "quarantine_v2_untracked120_preserved": true,
   "quarantine_v2_cache_bytes_modes_inodes_preserved": true,
   "original_rehearsal_evidence": "/tmp/mezan-pr1919-original-72x801fd",
-  "original_rehearsal_build_pending": true,
-  "gate_sha256": "1b82d25a905e686965fe1586e47426aa774ca65ebd8966cf14f0525436901821"
+  "original_rehearsal_build_pending": false,
+  "gate_sha256": "1b82d25a905e686965fe1586e47426aa774ca65ebd8966cf14f0525436901821",
+  "original_build_actual_exit": 0,
+  "original_build_elapsed_seconds": 91.25982752995333,
+  "original_materialized_identity_matches": true,
+  "original_untracked120_preserved": true,
+  "lease_actor": "codex-financial-loading-recovery-1919",
+  "prepare_actual_exit": 0,
+  "prepare_elapsed_seconds": 2.909684497048147,
+  "prepare_ended_at": "2026-11-14T14:50:45.041309+00:00",
+  "prepare_owned_active": true,
+  "preservation_after_prepare": true,
+  "prepublish_started": false,
+  "publish_started": false
 }

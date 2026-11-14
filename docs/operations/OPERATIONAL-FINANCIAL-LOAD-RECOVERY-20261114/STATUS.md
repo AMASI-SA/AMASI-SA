@@ -218,3 +218,19 @@ The unchanged original rehearsal then started a fresh build-mode run at
 checkpoint. The gate has been filled with that exact directory and frozen;
 its checks require the actual successful build evidence before preparing any
 lease. No prepare/prepublish/publish has run. AllMCI gates passed already.
+
+## Original build and prepare succeeded
+
+Original `/app/frontend yarn build` completed with actualexit0 in
+91.25982752995333seconds. Its materialized identity matches the reviewed intent;
+original HEAD is M, tracked state is clean, and the same120untracked files were
+preserved. The guard was inactive after rehearsal. Root read the actual
+22-build result and identity/preservation/guard evidence, not just a summary.
+
+Official prepare completed with actualexit0 in2.909684497048147seconds at
+14:50:45.041309UTC. Lease ownership and exact source/deployment/runtime match
+`codex-financial-loading-recovery-1919`; after-prepare preservation passed120.
+The Emergent Republish dialog is open with Publish changes available. Its
+currently published version remains279b7a3/100thpublish. Prepublish and publication
+have not yet run. Next action is prepublish+preservation, then the authorized UI
+publication immediately afterward. The prepared lease must not be duplicated.
