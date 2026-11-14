@@ -1,0 +1,32 @@
+{
+  "source": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
+  "deployment": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
+  "tree": "14dfe135d6633f72c92cb1cb359f4b9933ac176a",
+  "release_id": "rg5-5c3980b0f83f3859023070ef846486e877849ca7ca848367a181995ca32c1d5e",
+  "evidence": "/tmp/mezan-pr1920-original-a_3qop92",
+  "adapter": {
+    "argv": [
+      "yarn",
+      "build"
+    ],
+    "cwd": "/app/frontend",
+    "exit_code": 0,
+    "seconds": 64.0998787919525
+  },
+  "packages": {
+    "argv": [
+      "python",
+      "-B",
+      "scripts/emergent_deployment_adapter.py",
+      "verify-packages"
+    ],
+    "cwd": "/app",
+    "exit_code": 0,
+    "seconds": 2.1528923290316015
+  },
+  "backend_identity_sha256": "dccfab7d9d59cc5670969744606dcc2f97f1351401b9b60c0a4563aba6eb622c",
+  "identity_matches": true,
+  "preserved_untracked_files": 120,
+  "tracked_clean": true,
+  "guard_inactive": true
+}
