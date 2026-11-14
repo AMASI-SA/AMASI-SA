@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-FINANCIAL-LOAD-RECOVERY-20261114",
-  "phase": "source-A-CI-in-progress",
+  "phase": "intent-B-CI-in-progress",
   "repository": "AMASI-SA/AMASI-SA",
   "release_branch": "codex/financial-loading-resume-20261114",
   "handoff_branch": "codex/financial-loading-release-handoff-20261114",
@@ -19,11 +19,22 @@
   "source_A_stock_run": 43604084975,
   "production_changed": false,
   "lease_started": false,
-  "next": "Finish every applicable exact-A workflow and inspect deferred Mongo XML. Then commit only the reviewed intent as direct child B; pass exact-B CI and Node20/24 clone rehearsals; normal merge and original workspace release protocol; official verification and visible live report acceptance.",
+  "next": "Wait for exact-B applicable CI and independent Host20/24 adapter evidence. Then normal merge with exact B tree; exact-M applicable CI; fresh original /app guard/preservation/rehearsal; prepare/prepublish; explicit platform success; official verification and live financial report acceptance.",
   "notes": [
     "Issue1006 is full; this branch, task status and PR1919 carry continuation.",
     "The handoff branch is documentation only and must never be merged into frozen release A/B.",
     "Original /app has120 unrelated untracked files and1 unsaved buffer; preserve them.",
     "No financial transaction or provider/source write as a test."
-  ]
+  ],
+  "intent_B": "b8f50264becf51d3f5aaf279e7cf2ddba1844193",
+  "intent_B_tree": "14626f7c528626d422d6098800ac109bcba2984b",
+  "source_A_all_11_workflows_passed": true,
+  "source_A_backend_unique_cases": 4672,
+  "source_A_eligibility_unique_cases": 4481,
+  "source_A_eligibility_subtests": 7,
+  "all_four_deferred_mongo_cases_passed": true,
+  "all_25_new_reconciliation_cases_passed": true,
+  "intent_B_readiness_run": 43604791836,
+  "intent_B_operational_run": 43604791530,
+  "intent_B_stock_run": 43604791701
 }

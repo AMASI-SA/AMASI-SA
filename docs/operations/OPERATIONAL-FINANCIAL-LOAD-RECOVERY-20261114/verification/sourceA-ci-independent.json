@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "reviewer": "independent_reconciliation_review",
+  "review_date_utc": "2026-11-14",
+  "verdict": "PASS",
+  "scope": "Independent read-only verification of exact-source-A official CI artifacts and targeted test coverage; this is not production deployment or live acceptance evidence.",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pull_request": 1919,
+  "source_A": "5f7fce4fcf1b81f3fbe1093d0983184c281ca733",
+  "source_tree": "b435301d907e20d8bd354cb48c83dec3959a999d",
+  "baseline_J": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+  "method": {
+    "artifact_bytes": "Downloaded official artifact ZIP bytes into memory and compared SHA256 with GitHub artifact metadata before parsing XML or JSON.",
+    "case_validation": "Counted actual testcase elements, rejected any failure/error/skipped children, checked duplicate classname/name pairs, and compared all 25 reconciliation-state case names with tracked root-integrated-backend.xml.",
+    "source_validation": "Checked artifact workflow_run.head_sha plus embedded source SHA/tree where present; Eligibility source SHA/tree additionally confirmed in the official Record exact tested source job log.",
+    "mutations": "No repository, remote, browser, live system, or release state was changed by these verification checks. This scratch summary is the only new file written for this handoff."
+  },
+  "operational_balance_web": {
+    "workflow_run_id": 43604085026,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43604085026",
+    "backend": {
+      "artifact_id": 14118115799,
+      "artifact_name": "operational-backend-results",
+      "zip_sha256": "d12249d2de033c2a1f53552ea9a71b8df62001c7fc75f57d24f4614a1edd36d8",
+      "embedded_source_sha": "5f7fce4fcf1b81f3fbe1093d0983184c281ca733",
+      "embedded_source_tree": "b435301d907e20d8bd354cb48c83dec3959a999d",
+      "xml": "operational-backend.xml",
+      "testcase_elements": 4672,
+      "suite_header_tests": 4672,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duplicate_testcase_identities": 0,
+      "xml_elapsed_seconds": 258.046,
+      "reconciliation_state_cases": 25,
+      "reconciliation_state_missing_names": [],
+      "reconciliation_state_extra_names": [],
+      "deferred_real_mongo_cases": {
+        "test_real_refresh_persists_unknown_delivery_date_once_without_rewriting_sources_or_cash[courier]": "PASS; exactly once",
+        "test_real_refresh_persists_unknown_delivery_date_once_without_rewriting_sources_or_cash[native_driver]": "PASS; exactly once",
+        "test_actual_provider_payout_allocates_to_one_split_share_only_and_replay_is_idempotent": "PASS; exactly once",
+        "test_frozen_split_order_does_not_turn_into_a_second_bank_receipt_or_cod_collection": "PASS; exactly once"
+      }
+    },
+    "frontend": {
+      "artifact_id": 14117004915,
+      "artifact_name": "operational-frontend-results",
+      "zip_sha256": "b0d5f2128b9e8fd050241d4c5790afa6c25a9f3d3d6a278fe931ca0d15ab0375",
+      "workflow_artifact_head_sha": "5f7fce4fcf1b81f3fbe1093d0983184c281ca733",
+      "source_provenance": "Official artifact metadata and workflow exact-head checkout; this artifact does not embed a separate source-SHA file.",
+      "success": true,
+      "tests": 733,
+      "suites": 51,
+      "failures": 0,
+      "pending": 0,
+      "todo": 0,
+      "interrupted": false,
+      "financial_position_tests": 53,
+      "visible_operational_read_tests": 18
+    },
+    "worker": {
+      "artifact_id": 14118100261,
+      "artifact_name": "operational-worker-results",
+      "zip_sha256": "e89d66dd4a2770d884e59d84e5cb304836aa6f1cbe0de97b0e629ae8f7b0bd40",
+      "embedded_source_sha": "5f7fce4fcf1b81f3fbe1093d0983184c281ca733",
+      "embedded_source_tree": "b435301d907e20d8bd354cb48c83dec3959a999d",
+      "testcase_elements": 4,
+      "failures_errors_skipped": 0,
+      "coverage": [
+        "CPU-busy child leaves health responsive and drains",
+        "Child failure and restart",
+        "Web/ads startup performs no provider work",
+        "Canonical empty-database runtime boot and drain"
+      ]
+    },
+    "browser_acceptance": {
+      "artifact_id": 14117212697,
+      "artifact_name": "operational-balances-browser-results",
+      "zip_sha256": "29b33a7d11fc3f8f177a29ff57b1d3390f443409bec04d2ac06aed36858f4138",
+      "embedded_source_sha": "5f7fce4fcf1b81f3fbe1093d0983184c281ca733",
+      "embedded_source_tree": "b435301d907e20d8bd354cb48c83dec3959a999d",
+      "source_manifest_matches_reviewed_frontend": true,
+      "synthetic_only": true,
+      "passed_cases": 9,
+      "total_cases": 9,
+      "errors": [],
+      "png_evidence_files": 4,
+      "coverage": [
+        "Mobile layout bounds",
+        "Known balances and dialog",
+        "No repeat traffic",
+        "Saved-money fallback",
+        "Hidden view makes no request and visible view makes one",
+        "Denied refresh makes no snapshot request",
+        "Explicit delivery confirmation occurs once",
+        "Saved-confirmation fallback",
+        "Hidden preflight prevents confirmation and automatic retry"
+      ]
+    }
+  },
+  "operational_stock_eligibility": {
+    "workflow_run_id": 43604084975,
+    "job_id": 132474849172,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43604084975",
+    "workflow_conclusion": "success",
+    "job_conclusion": "success",
+    "artifact_id": 14118121050,
+    "artifact_name": "eligibility-backend-5f7fce4fcf1b81f3fbe1093d0983184c281ca733",
+    "zip_sha256": "7706ade93d545411f0e773e058f9d12f000399b5e57bdceae12d7dd94513e8fd",
+    "xml": "eligibility-backend.xml",
+    "source_sha_in_official_job_log": "5f7fce4fcf1b81f3fbe1093d0983184c281ca733",
+    "source_tree_in_official_job_log": "b435301d907e20d8bd354cb48c83dec3959a999d",
+    "testcase_elements": 4481,
+    "suite_header_tests": 4488,
+    "passing_subtests": 7,
+    "count_explanation": "The official pytest log reports 4481 passed and 7 subtests passed; the XML header includes those 7 subtests, while there are 4481 unique testcase elements. This is a resolved accounting difference, not missing or failed cases.",
+    "warnings_in_pytest_summary": 8,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "duplicate_testcase_identities": 0,
+    "xml_elapsed_seconds": 350.748,
+    "reconciliation_state_cases": 25,
+    "reconciliation_state_missing_names": [],
+    "reconciliation_state_extra_names": [],
+    "deferred_real_mongo_cases": {
+      "test_real_refresh_persists_unknown_delivery_date_once_without_rewriting_sources_or_cash[courier]": "PASS; exactly once",
+      "test_real_refresh_persists_unknown_delivery_date_once_without_rewriting_sources_or_cash[native_driver]": "PASS; exactly once",
+      "test_actual_provider_payout_allocates_to_one_split_share_only_and_replay_is_idempotent": "PASS; exactly once",
+      "test_frozen_split_order_does_not_turn_into_a_second_bank_receipt_or_cod_collection": "PASS; exactly once"
+    },
+    "ephemeral_mongo_start_test_no_skip_gate_and_cleanup_steps": "All completed successfully"
+  },
+  "remaining_release_gates": [
+    "Verify the intent-only B exact-source CI and both Host Node clean-clone adapter artifacts.",
+    "Root reviews and performs normal merge and original-workspace rehearsal with preservation checks.",
+    "Root performs authorized prepare/prepublish/publication and waits for explicit newer platform completion.",
+    "Official production verifier must pass three probes with exact identity/artifacts and close the matching lease; live user-flow acceptance remains separate."
+  ]
+}

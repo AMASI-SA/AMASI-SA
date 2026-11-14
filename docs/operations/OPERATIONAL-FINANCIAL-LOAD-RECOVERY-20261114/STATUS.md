@@ -133,3 +133,22 @@ This documentation-only continuation branch is separate from the release
 branch. Never merge it into the frozen release history. Follow RELEASE_CHECKPOINT.json
 for identities and next actions. The original /app has 120 untracked files and
 one unsaved editor buffer, which must remain preserved.
+
+## Release continuation checkpoint — reviewed intent B
+
+Every one of the 11 applicable exact-A workflows passed. Independent official
+artifact validation confirms 4,672 backend cases; 4,481 stock eligibility cases
+plus 7 subtests; 733 frontend tests / 51 suites; 9 synthetic browser scenarios;
+and 4 canonical-worker cases. All four locally deferred Mongo cases and all 25
+new reconciliation regressions passed on both backend suites. See
+`verification/sourceA-ci-independent.json` for artifact digests and identities.
+
+The release branch now contains reviewed intent-only B
+`b8f50264becf51d3f5aaf279e7cf2ddba1844193`, direct parent A, with tree
+`14626f7c528626d422d6098800ac109bcba2984b`. A..B changes only the exact
+reviewed intent. Local and remote trees match and the checkout is clean.
+Exact-B workflows are in progress, including Readiness run 43604791836 and
+both Host20/24 clean-clone adapter rehearsals. Production remains unchanged,
+with no release lease or publication. The unsaved editor buffer is Untitled-1;
+its dirty indicator remains present. The unrelated missing PR1906 temporary
+JSON editor tab was left as found.
