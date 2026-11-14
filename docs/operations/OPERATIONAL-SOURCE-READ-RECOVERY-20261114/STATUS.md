@@ -450,3 +450,22 @@ The wrapper completed at18:52:42.482984UTC with phasebuild,readytrue, exact A2/B
 - Gate EVIDENCE is now filled with that actual successful rehearsal path. Independent review confirmed exactly one line changed against `bdc94f86`; all other helpers are byte-identical and no configuration placeholders remain. Gate SHA-256 `adb97abc5a513aa4263d4dfff5f7e3e6a5e02cfdfae8655a860b20d4def31667`,11518bytes.
 
 Next stage these completed reviewed bytes privately, run prepare and the preservation helper, then prepublish and preservation, promptly perform the already authorized free Republish, wait for a newer explicit platform completion, and run the official verifier once through the no-timeout wrapper. Do not rebaseline the120-file manifest, interrupt the verifier, touch original terminals1/2 or the unsaved Untitled buffer, use paid chat/Build/Ask-agent controls, or trigger financial refresh before official identity verification. No lease or publication has yet occurred for this task; the live manual refresh remains pending.
+
+
+## Original publication completed; official verification running
+
+Final fully reviewed helpers were staged from `abff26067a8f926c4c903829b330fa516347c6d7` into `/tmp/mezan-pr1928-runners-1083fdjp` at18:56:21.863842UTC. Staging rechecked original HEAD M2, tracked-clean,120 untracked files and inactiveguard. The prior helper directory was preserved.
+
+Prepare completed18:57:25.565951UTC with actualexit0, elapsed2.645402seconds and an owned active protocol5 lease for actor `codex-financial-source-read-1928`, exact A2/J2/M2/runtime. Prepare stdoutSHA256 `1afdcd9219c59cb0f61a3cb404289429d8880c8e6028d35cd35c2ffee78c67ae`. The separate after-prepare preservation passed at18:57:25.820059UTC,120 files preserved.
+
+Prepublish completed18:58:20.037505UTC with actualexit0, elapsed3.393089seconds, ready_to_publishtrue and the identical owned lease. Prepublish stdoutSHA256 `be3393e35ea17893b451fc01feb86148854df80423b164a9f2b18c31d0995680`. Its separate after-prepublish preservation passed at18:58:20.248301UTC,120 files preserved.
+
+Root used the original project's Manage/Overview controls, opened Republish, observed Free republishes and submitted Publish changes exactly once. No paid chat/Build/Ask-agent/credit purchase was used. The platform progressed through Workspace ready, Changes packaged, cloud installation and Health Check Successful, then displayed a NEW explicit **Deployment finished Nov 14,10:08PM (Asia/Riyadh)** and version **3a22e2d**. This is the current publication attempt; do not submit it again.
+
+After that explicit completion, root started the official verification exactly once from task-owned original Terminal3:
+
+`python -B /tmp/mezan-pr1928-runners-1083fdjp/pr1928_original_verify.py --evidence-dir /tmp/mezan-pr1928-original-2e86crex --deployment-sha 3e9dc3b25e41c663e001822a666323c802e5ec5a --actor codex-financial-source-read-1928`
+
+**Current state: official verification is in progress.** It has no external timeout and must not be interrupted, detached or restarted. Do not change original `/app`, clear another or this lease manually, publish again, or run a financial refresh while it is active. Wait for its actual `28-verify.result.json`/summary, all three expected live probes, matching runtime/frontend identity and a fresh inactive guard, then run the separate preservation helper with labelafter-verify using the original120-file baseline. Only after that make one visible intentional `تحديث المصادر والأرصدة` attempt and observe its settled saved `as_of` and sanitized stage logs. No financial recovery is claimed at this checkpoint.
+
+Production branch watch has remained M2. Frozen source A2, intent B2 and M2 are unchanged. Original terminals1/2 and unsaved Untitled-1 remain untouched. Browser tab37 is the current working Emergent management tab, tab27 the original code-server, tab21 the financial page (reload it once after official verification to load the published frontend before the manual test). Private evidence stays at `/tmp/mezan-pr1928-original-2e86crex`; never publish raw manifests, customer/financial records or secrets.
