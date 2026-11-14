@@ -30,3 +30,8 @@ All11exact-A workflows passed. Officialbackend XMLs: Operational4647, Stock4456+
 ## preserve independent operator rehearsal review — 2026-11-14T06:17:14.968Z
 
 Both original-operator helpers are now independently reviewed with exact identities and source hashes. The rehearsal retains the120file preservation contract, rejectsGitHubmarkers withoutremoval, requiresinactiveguard beforeFF/build and savesactualyarnbuildexit beforepostconditions. It createsno lease orpublish. ExactBchecks remaininprogress; nofailureobserved butpendingchecks/temporaryCodeQLneutral are notaccepted asPASS.
+
+
+## preserve normal merge and original build handoff — 2026-11-14T06:23:09.791Z
+
+PR1918 is merged as M23cc06da003c18c0f3fc6c2e749aad1326666166. GitAPI proves normalparents [J2db0edc9edb315026eee4b6edd43b420a569c37d,B9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9] and tree9de141756a4c5dcfa8d1d4dfb6513178c406ac8e, exactlyBtree. FreshpremergeB metadata showed14completedworkflows:13success and1expectedTikTokskip;35checks25success10expectedskips, nofailure/pending/neutral. Productionref wasJ andPRheadB immediatelybeforemerge. Originalpreflight remainsHEADJ, trackedclean120pending,inactiveguard; nineaddedpaths havezero untrackedcollisions. Rootwillrunreviewed originalrehearsal script with exactM; nolease/publish yet.

@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-ORDER-STAGE-REPAIR-20261114",
-  "stage": "B_CI_running_operator_helpers_reviewed",
+  "stage": "normal_merge_verified_original_build_next",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "2db0edc9edb315026eee4b6edd43b420a569c37d",
@@ -601,9 +601,36 @@
       "bytes": 8119,
       "review": "PASS",
       "review_sha256": "8866961a00ab908f18dbd3d4a5876b3d3ebfa42fa5cee78b278a1094fdfeb1b5"
-    }
+    },
+    "originalCollisionPreflight": {
+      "conflicts": [],
+      "new_paths": 9,
+      "untracked_count": 120
+    },
+    "BCI": {
+      "status": "all_applicable_passed",
+      "workflows": 14,
+      "success": 13,
+      "expected_skipped_workflows": [
+        {
+          "id": 43565291099,
+          "name": "TikTok Creator Release Candidate"
+        }
+      ],
+      "checks": 35,
+      "success_checks": 25,
+      "expected_skipped_checks": 10,
+      "observed_at": "2026-11-14T06:22:23.175Z"
+    },
+    "M": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+    "mergedAt": "2026-11-14T06:22:31.946Z",
+    "Mtree": "9de141756a4c5dcfa8d1d4dfb6513178c406ac8e",
+    "mergeParents": [
+      "2db0edc9edb315026eee4b6edd43b420a569c37d",
+      "9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9"
+    ]
   },
-  "production_changed_by_this_followup": false,
+  "production_changed_by_this_followup": "Git production branch merged; platform remains PR1917 until separate authorized publish.",
   "constraints": [
     "Original/app120untracked andunsavedUntitled-1 preserved",
     "Onlyroot mutatesGitHub/original/operator",
@@ -613,6 +640,6 @@
     "FrozenpreviousA/B untouched"
   ],
   "ledger_note": "Issue1006 reached2500commentlimit; use taskstatus+PRcontinuation",
-  "updated_at": "2026-11-14T06:17:14.968Z",
-  "next_action": "Wait for final exactBsuccess including bothactualadapterrehearsals; thennormalmerge androot-onlyoriginalbuild. NooriginalFF/build/publishyet."
+  "updated_at": "2026-11-14T06:23:09.791Z",
+  "next_action": "Run original/app actual governed yarnbuild, preserve all120pending+Untitled1, require actualexit0 andidentity. IndependentlycheckMpushworkflows. Then prepare/prepublish onlyafterbuild andgates, publishonce,newcompletion,officialverify,newvisibleasof."
 }
