@@ -1,0 +1,245 @@
+{
+  "created_at": "2026-11-14T06:31:22.115423+00:00",
+  "result": "PASS",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pr_number": 1918,
+  "source_A": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+  "reviewed_B": "9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9",
+  "deployment_M": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+  "production_parent_J": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+  "B_tree": "9de141756a4c5dcfa8d1d4dfb6513178c406ac8e",
+  "M_tree": "9de141756a4c5dcfa8d1d4dfb6513178c406ac8e",
+  "merge_parent_order": [
+    "2db0edc9edb315026eee4b6edd43b420a569c37d",
+    "9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9"
+  ],
+  "merged_at": "2026-11-14T06:22:30Z",
+  "tree_equivalence": true,
+  "A_to_B_scope": "One commit; release/release-intent-v5.json only.",
+  "observed_at": "2026-11-14T06:30:24.529Z",
+  "workflows": [
+    {
+      "id": 43566026421,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "event": "push",
+      "head_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "run_attempt": 1,
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43566026421",
+      "updated_at": "2026-11-14T06:25:35Z"
+    },
+    {
+      "id": 43566026424,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success",
+      "event": "push",
+      "head_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "run_attempt": 1,
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43566026424",
+      "updated_at": "2026-11-14T06:25:58Z"
+    },
+    {
+      "id": 43566026400,
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success",
+      "event": "push",
+      "head_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "run_attempt": 1,
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43566026400",
+      "updated_at": "2026-11-14T06:30:11Z"
+    }
+  ],
+  "check_counts": {
+    "total": 11,
+    "success": 11,
+    "failure": 0,
+    "pending": 0,
+    "neutral": 0,
+    "skipped": 0
+  },
+  "check_runs": [
+    {
+      "id": 132360772438,
+      "name": "Emergent manual redeploy required",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43566026424/job/132360772438",
+      "started_at": "2026-11-14T06:25:54Z",
+      "completed_at": "2026-11-14T06:25:58Z"
+    },
+    {
+      "id": 132360219767,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43566026424/job/132360219767",
+      "started_at": "2026-11-14T06:23:38Z",
+      "completed_at": "2026-11-14T06:25:51Z"
+    },
+    {
+      "id": 132360219688,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43566026424/job/132360219688",
+      "started_at": "2026-11-14T06:23:38Z",
+      "completed_at": "2026-11-14T06:25:18Z"
+    },
+    {
+      "id": 132359959078,
+      "name": "Backend preflight",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43566026424/job/132359959078",
+      "started_at": "2026-11-14T06:22:35Z",
+      "completed_at": "2026-11-14T06:22:50Z"
+    },
+    {
+      "id": 132359959071,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43566026424/job/132359959071",
+      "started_at": "2026-11-14T06:22:36Z",
+      "completed_at": "2026-11-14T06:22:50Z"
+    },
+    {
+      "id": 132359959047,
+      "name": "CodeQL (javascript-typescript)",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43566026400/job/132359959047",
+      "started_at": "2026-11-14T06:22:35Z",
+      "completed_at": "2026-11-14T06:25:02Z"
+    },
+    {
+      "id": 132359959042,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43566026424/job/132359959042",
+      "started_at": "2026-11-14T06:22:35Z",
+      "completed_at": "2026-11-14T06:22:47Z"
+    },
+    {
+      "id": 132359958969,
+      "name": "Backend security contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43566026421/job/132359958969",
+      "started_at": "2026-11-14T06:22:35Z",
+      "completed_at": "2026-11-14T06:24:08Z"
+    },
+    {
+      "id": 132359958887,
+      "name": "Frontend build",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43566026424/job/132359958887",
+      "started_at": "2026-11-14T06:22:36Z",
+      "completed_at": "2026-11-14T06:23:36Z"
+    },
+    {
+      "id": 132359958788,
+      "name": "Frontend dependency and CSP checks",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43566026421/job/132359958788",
+      "started_at": "2026-11-14T06:22:35Z",
+      "completed_at": "2026-11-14T06:25:35Z"
+    },
+    {
+      "id": 132359958731,
+      "name": "CodeQL (python)",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43566026400/job/132359958731",
+      "started_at": "2026-11-14T06:22:35Z",
+      "completed_at": "2026-11-14T06:30:10Z"
+    }
+  ],
+  "legacy_status_context_count": 0,
+  "actual_host_adapter_jobs": [
+    {
+      "id": 132360219688,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success",
+      "required_steps_passed": [
+        "Create a clean tracked-source clone",
+        "Rehearse a conservative outer Host frozen install",
+        "Emulate a Cloud Build checkout without Git metadata",
+        "Invoke the Emergent package adapter under the selected Host Node",
+        "Verify artifact, proof, identity, and package boundaries",
+        "Prove the governed runtime returns build metadata as JSON",
+        "Archive verified generated release outputs"
+      ],
+      "all_job_steps_passed": true
+    },
+    {
+      "id": 132360219767,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success",
+      "required_steps_passed": [
+        "Create a clean tracked-source clone",
+        "Rehearse a conservative outer Host frozen install",
+        "Emulate a Cloud Build checkout without Git metadata",
+        "Invoke the Emergent package adapter under the selected Host Node",
+        "Verify artifact, proof, identity, and package boundaries",
+        "Prove the governed runtime returns build metadata as JSON",
+        "Archive verified generated release outputs"
+      ],
+      "all_job_steps_passed": true
+    }
+  ],
+  "readiness_job_count": 7,
+  "scope": "Independent GET-only GitHub merge provenance and exact-M push CI inspection. No dispatch, rerun, Git/source mutations or production operations. No extra artifact downloads were needed; check/run identities and complete successful host step metadata were retained.",
+  "remaining_boundary": "Original operator build, release guard, publishing and live financial acceptance are separate root-owned steps.",
+  "evidence_files": {
+    "A-to-B-compare.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-m-ci/A-to-B-compare.json",
+      "bytes": 1058,
+      "sha256": "506df7634704c561bf12969612fa904fd5cc0e0d4b1466ed1b2a8c1a8301b766"
+    },
+    "legacy-status.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-m-ci/legacy-status.json",
+      "bytes": 186,
+      "sha256": "f057826701fcd08e0fddb4476b403fe8b3406a33bbb87ef37c01dfeb6f5199d3"
+    },
+    "provenance.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-m-ci/provenance.json",
+      "bytes": 719,
+      "sha256": "2b85314778a30c1ed8e01b1553e9ea543022a1c40a17ff2dc01d9ac93bfa21a1"
+    },
+    "readiness-jobs.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-m-ci/readiness-jobs.json",
+      "bytes": 15252,
+      "sha256": "28ce8dc5a3129c9cc398788310bea81cda21f96c5d77f0b54fa96af719421301"
+    },
+    "snapshots.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-m-ci/snapshots.json",
+      "bytes": 33129,
+      "sha256": "64048fb1bb072243dc3ab50e86a58c632d668a9f3c1ebf890c697112ec0e2549"
+    },
+    "verified-host-steps.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-m-ci/verified-host-steps.json",
+      "bytes": 8234,
+      "sha256": "6fcbd191c6683db48b6b1d36c2b51321adf25c57e4ca00e4140d197720033482"
+    }
+  }
+}

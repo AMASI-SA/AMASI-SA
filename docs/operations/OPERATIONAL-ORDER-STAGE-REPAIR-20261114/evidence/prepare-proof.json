@@ -1,0 +1,21 @@
+{
+  "actor": "codex-operational-order-stage-rootfix-1918",
+  "actual_exit": 0,
+  "branch": "hotfix/prod-snap-meta-final",
+  "completed": true,
+  "deployment_git_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+  "elapsed_seconds": 2.9636030830151867,
+  "ended_at": "2026-11-14T06:31:21.012193+00:00",
+  "fresh_owned_active": true,
+  "git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+  "intent_commit": "9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9",
+  "prefix": "/tmp/mezan-pr1918-original-6jyavqt4/26-prepare",
+  "protocol_version": 5,
+  "release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+  "source_base_git_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+  "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+  "stage": "prepare",
+  "started_at": "2026-11-14T06:31:18.048582+00:00",
+  "stdout_sha256": "3a010c334b72ef2d7372a763aa204960e1b39d2ea95aaaa12569b7d61e1e5f73",
+  "tree": "9de141756a4c5dcfa8d1d4dfb6513178c406ac8e"
+}

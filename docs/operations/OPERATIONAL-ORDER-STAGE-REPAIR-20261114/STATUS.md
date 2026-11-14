@@ -40,3 +40,8 @@ PR1918 is merged as M23cc06da003c18c0f3fc6c2e749aad1326666166. GitAPI proves nor
 ## preserve original governed build and reviewed guard helper — 2026-11-14T06:26:17.896Z
 
 Original/app advancednormally toM23cc06da003c18c0f3fc6c2e749aad1326666166; actual/app/frontend yarnbuild ran06:23:34.369860–06:24:46.289322UTC,71.919475seconds,actualexit0. Runtimeidentity equalsfullreviewedintent. Before/after120pendingfiles arebyte-identical (actualchangedcount0), tracked/indexclean; freshguardinactive, noleasecreated. Evidence/tmp/mezan-pr1918-original-6jyavqt4. Independentreviewapprovedprepare/prepublishhelper with exactA/J/B/M/R/tree/actor andsameprivateevidence directory. ExactMpushchecks stillpending; do notprepare/publishbeforecompletion. ExactBproofwithbothactualhostrehearsals preserved.
+
+
+## preserve passed M gate and owned release lease — 2026-11-14T06:32:04.349Z
+
+ExactM all3pushworkflows and11checks passed, includingactualHost20/24adapterrehearsals. Originalbuildpassed andpreserved120files. Officialprepare actualexit0 at06:31:18.048582–06:31:21.012193UTC; freshownedactivelease actorcodex-operational-order-stage-rootfix-1918, Ad70b42cda3d70a7f07c78c3efc5fde8331fdc877, M23cc06da003c18c0f3fc6c2e749aad1326666166, Rrg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f. Evidence/tmp/mezan-pr1918-original-6jyavqt4. NoUIpublish hasoccurred for1918 yet. Nextaction mustfreshprepublish thenoneauthorizedpublish, withleaseownership retained untilofficialverification. Do notclear/abortotherleases orrerunexistingstageevidence.
