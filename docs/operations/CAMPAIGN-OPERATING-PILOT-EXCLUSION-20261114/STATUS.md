@@ -47,3 +47,9 @@ All prerequisites are satisfied as of19:25:26UTC. Stage the exact reviewed origi
 ## Original build started
 
 Staged operator was byte-verified under officialinactive mutex at19:26:21.051934UTC from checkpoint0c8c833f230804df44643ed46e39f23b85996c48; path /tmp/mezan-pr1929-operators-pcqr8if2/original-build-1929.py. The exactM6 one-shot build is now running in /tmp/mezan-operating-followup-original-5dp0ykxf. Do not repeat it. Result not yet observed. UI baseline refreshed:3a22e2d, Deployment finishedNov14,10:08PM. No own lease/publication.
+
+## Original build accepted; final gate frozen
+
+Original build completed19:27:47.455448UTC. Actual yarnbuild19:26:40.730998→19:27:45.148168 exited0 (64.417136860s); actual verify-packages19:27:45.148670→19:27:47.409288 exited0. Its completepackageproof SHAa129f03a2cfb48439c8ff0a09a0d969e5cf2ef4162bc8308be2f5a264722ab83 matches bothCIhosts exactly, including backend1217/frontend1472 package trees. Root read actual receipts and hashes. Runtime/intent pins match. All120untrackedfiles retained,119exact; bookkeeping50052→50052, allprefixesverified. Guardinactive. Do not repeat this completed build.
+
+Finalgate operators/release-gate-1929.py is29124bytes,SHA256852c696585a98fd218ea65fb85958ced8aa132b5718f2cd27ec5a46c5f97d78b. Root andindependent fullstatic/AST reviews passed. It binds the actualevidence /tmp/mezan-operating-followup-original-5dp0ykxf, actorcodex-campaign-operating-pilot-1929, baselineUI3a22e2d and immutableA6/B6/M6. No phaseexecuted yet. Stage it underofficialinactive mutex and verifythehash, then prepareonce, prepublishonce, singlefreeUIpublish, explicitnewUIevent/version, verifyonce3checks andfinalinactive/preservation/livearithmetic. Actualreceipts are retained before postchecks; neverrepeat an officialphase because a latercheck fails.

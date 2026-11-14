@@ -2,7 +2,7 @@
   "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
   "round": 6,
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 19:27:11 UTC",
+  "updated_at_utc": "2026-11-14 19:30:26 UTC",
   "branch": "codex/campaign-operating-pilot-m3e9d-20261114",
   "pr": 1929,
   "base_J6": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
@@ -345,19 +345,87 @@
       }
     }
   },
-  "next": "Let the already running original-build operator finish. Read its actual result/06-governed-adapter/07-package-proof receipts in evidence directory. Do not repeat build or invoke the disabled gate. Only after successful actual build/preservation, pin final gate to that directory and currentUIbaseline3a22e2d.",
+  "next": "Stage exact frozen finalgate while officialinactive under mutex, verify SHA852c...; run prepare once and inspect actualresult/receipt. Then prepublish once immediately before one authorizedfreeUIpublish. Never repeat a claimedphase. Wait explicitnewUIversion/event before officialverify once, then livearithmetic andfinalclosure.",
   "original_build": {
-    "state": "running",
-    "evidence": "/tmp/mezan-operating-followup-original-5dp0ykxf",
-    "operator": "/tmp/mezan-pr1929-operators-pcqr8if2/original-build-1929.py",
-    "deployment": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
-    "actual_command": [
-      "python",
-      "-B",
-      "/tmp/mezan-pr1929-operators-pcqr8if2/original-build-1929.py",
-      "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9"
-    ],
-    "result_not_yet_observed": true
+    "state": "success",
+    "result": {
+      "source": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "base": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+      "intent_commit": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+      "deployment": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+      "tree": "c2d683827c54574fcd60ee4102c9de7c163f5ef8",
+      "release_id": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2",
+      "intent_sha256": "0b46743398c032f7f8e151125e52e5360ba3061fd70434fa51ba257f5db90223",
+      "identity_sha256": "bbae56b576d8ac89a878b0486ff63783a09b077cb9e19d77e2aec8aa37515554",
+      "adapter_exit": 0,
+      "package_proof_exit": 0,
+      "preserved_untracked_files": 120,
+      "exact_original_records": 119,
+      "append_only_file": ".emergent/stripped_env_names",
+      "before_bookkeeping_bytes": 50052,
+      "after_bookkeeping_bytes": 50052,
+      "preservation_sha256": {
+        "before-untracked.json": "3d0dfd4bbf62eb69f18ade74dc3f497ca2f09d12e7540b5974fccf0000d811cd",
+        "before-bookkeeping-prefix-proof.json": "76be36839561a0aff35b7d109bc7881afd6b5d2bda12cd34162bc95de8f7fc7c",
+        "after-fast-forward-untracked.json": "3d0dfd4bbf62eb69f18ade74dc3f497ca2f09d12e7540b5974fccf0000d811cd",
+        "after-fast-forward-bookkeeping-prefix-proof.json": "18e03c83294d569032c2e4e45fd993794b99849d65f84b5c914d19a7b3cd3a1d",
+        "after-untracked.json": "3d0dfd4bbf62eb69f18ade74dc3f497ca2f09d12e7540b5974fccf0000d811cd",
+        "after-bookkeeping-prefix-proof.json": "6c78473479e3112bd70e7e147780d14442ebbe3870c181682580a622815584c8"
+      },
+      "guard_inactive": true,
+      "finished_at": "2026-11-14T19:27:47.455448Z",
+      "evidence": "/tmp/mezan-operating-followup-original-5dp0ykxf"
+    },
+    "actual_receipts": {
+      "06-governed-adapter": {
+        "argv": [
+          "yarn",
+          "build"
+        ],
+        "cwd": "/app/frontend",
+        "started_at": "2026-11-14T19:26:40.730998Z",
+        "exit_code": 0,
+        "finished_at": "2026-11-14T19:27:45.148168Z",
+        "seconds": 64.41713686002186,
+        "stdout_sha256": "2aeb454745400beecd1301107419738ab3eb898a0feca0f569c7da0ece86e97b",
+        "stderr_sha256": "f9de9a5c904514893fea046115f3a8ce6346639f86ce2fae7c20dd6ea7532633"
+      },
+      "07-package-proof": {
+        "argv": [
+          "python",
+          "-B",
+          "scripts/emergent_deployment_adapter.py",
+          "verify-packages"
+        ],
+        "cwd": "/app",
+        "started_at": "2026-11-14T19:27:45.148670Z",
+        "exit_code": 0,
+        "finished_at": "2026-11-14T19:27:47.409288Z",
+        "seconds": 2.2605637810193002,
+        "stdout_sha256": "a129f03a2cfb48439c8ff0a09a0d969e5cf2ef4162bc8308be2f5a264722ab83",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "package_boundary": {
+      "source": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "release_id": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2",
+      "backend": {
+        "file_count": 1217,
+        "package_tree_sha256": "a128259231911b5be2a90b8935b8bf41cdaf210d925daf999b77f1387e758b8b"
+      },
+      "frontend": {
+        "file_count": 1472,
+        "package_tree_sha256": "07a29832618970100b866703f2d94c23b31e33cf76917bf06fd7a578f8346a3c"
+      },
+      "canonical_sha256": "a129f03a2cfb48439c8ff0a09a0d969e5cf2ef4162bc8308be2f5a264722ab83"
+    },
+    "evidence_file_sha256": {
+      "result.json": "39cff53a9c8b98653d50a9ed043f508e05a3b77496c212886e8228164f53d743",
+      "06-governed-adapter.json": "101358ce76fb300eff519794fcb00f241ea50440f103cf8bb74ef53a41d9237a",
+      "07-package-proof.json": "004f1bec3deb0ef283b08fb9965a6242abaad11996856e74886950984156895c",
+      "07-package-proof.stdout": "a129f03a2cfb48439c8ff0a09a0d969e5cf2ef4162bc8308be2f5a264722ab83"
+    },
+    "root_direct_original_receipt_review": "PASS"
   },
   "lease": false,
   "published": false,
@@ -989,5 +1057,29 @@
     "current_version": "3a22e2d",
     "last_event": "Deployment finished Nov 14, 10:08 PM",
     "republish_available": true
+  },
+  "gate_operator": {
+    "path": "/workspace/scratch/a7d75184af2d/campaign-operating-release-gate-1929.py",
+    "bytes": 29124,
+    "sha256": "852c696585a98fd218ea65fb85958ced8aa132b5718f2cd27ec5a46c5f97d78b",
+    "pins": {
+      "SOURCE": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "BASE": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+      "INTENT_COMMIT": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+      "DEPLOYMENT": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+      "TREE": "c2d683827c54574fcd60ee4102c9de7c163f5ef8",
+      "RELEASE": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2",
+      "INTENT_SHA256": "0b46743398c032f7f8e151125e52e5360ba3061fd70434fa51ba257f5db90223",
+      "IDENTITY_SHA256": "bbae56b576d8ac89a878b0486ff63783a09b077cb9e19d77e2aec8aa37515554",
+      "PINS_REVIEWED": true,
+      "ACTOR": "codex-campaign-operating-pilot-1929",
+      "BASELINE_UI_VERSION": "3a22e2d",
+      "ORIGINAL": "/tmp/mezan-operating-followup-original-5dp0ykxf"
+    },
+    "root_review": "PASS exact doc+pins diff; behavior unchanged",
+    "independent_review": "PASS fullstatic/AST, phaseownership/receipts/preservation/no-retry",
+    "executed_phases": [],
+    "repository_path": "docs/operations/CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114/operators/release-gate-1929.py",
+    "git_blob": "ae9168e84bf34d24540084327f1c019773c0236e"
   }
 }
