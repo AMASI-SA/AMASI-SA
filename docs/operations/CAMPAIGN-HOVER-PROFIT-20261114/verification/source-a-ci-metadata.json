@@ -1,0 +1,537 @@
+{
+  "source_sha": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
+  "tree_sha": "b18db6ce619970c2a5c11c86e332fd21199b6dd3",
+  "observed_at": "2026-11-14T14:56:10.542Z",
+  "coverage_note": "Operational and stock workflows are regression gates using isolated real Mongo fixtures. They do not collect new campaign-hover suites; those run separately in campaign acceptance using their committed fixtures.",
+  "runs": [
+    {
+      "id": 43606645134,
+      "name": "Operational Balance Web",
+      "head_sha": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43606645134",
+      "jobs": [
+        {
+          "id": 132482682499,
+          "name": "Canonical worker excludes operational balance jobs",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 43606645134,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Install the canonical runtime public dependency closure",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Start this job's isolated empty Mongo replica set",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Prove the exact source's canonical child boots and drains",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Run actions/upload-artifact@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Remove only this job's isolated Mongo fixture",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 15
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 16
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 17
+            }
+          ]
+        },
+        {
+          "id": 132482682692,
+          "name": "Operational balances browser, mobile and visibility acceptance",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 43606645134,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Install synthetic report and locked component dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Run the real report and pending-order dialog in sandboxed Chromium",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Run actions/upload-artifact@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 12
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 14
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 15
+            }
+          ]
+        },
+        {
+          "id": 132482682700,
+          "name": "Operational Balance Backend",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 43606645134,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Install isolated test dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Start isolated projection Replica Set",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Record exact tested source",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Run operational contracts",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Preserve shipping summary and calculator contracts",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8
+            },
+            {
+              "name": "Reject missing or skipped tests",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9
+            },
+            {
+              "name": "Run actions/upload-artifact@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10
+            },
+            {
+              "name": "Remove this job's isolated Mongo fixture",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 21
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 22
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 23
+            }
+          ]
+        },
+        {
+          "id": 132482682747,
+          "name": "Operational Balance Frontend",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 43606645134,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Enable project Yarn version",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Install locked dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Run operational Web contracts",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Reject missing or skipped tests",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Run actions/upload-artifact@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 15
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 16
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 17
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 14118630593,
+          "name": "operational-worker-results",
+          "size_in_bytes": 747,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14118630593",
+          "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14118630593/zip",
+          "expired": false,
+          "created_at": "2026-11-14T14:48:31Z",
+          "expires_at": "2027-02-12T14:46:55Z",
+          "updated_at": "2026-11-14T14:48:31Z",
+          "digest": "sha256:89669990cee8a693018ab5eaf486c3053544d9d3d25f16b697bb65e3e3487a50",
+          "workflow_run": {
+            "id": 43606645134,
+            "repository_id": 1250664189,
+            "head_repository_id": 1250664189,
+            "head_branch": "codex/campaign-hover-profit-20261114",
+            "head_sha": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb"
+          }
+        },
+        {
+          "id": 14118601765,
+          "name": "operational-backend-results",
+          "size_in_bytes": 77518,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14118601765",
+          "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14118601765/zip",
+          "expired": false,
+          "created_at": "2026-11-14T14:51:33Z",
+          "expires_at": "2027-02-12T14:46:55Z",
+          "updated_at": "2026-11-14T14:51:33Z",
+          "digest": "sha256:20706d4c9451b20e99fd2e31db511793c8814da739539be75cf742ce6d3d09aa",
+          "workflow_run": {
+            "id": 43606645134,
+            "repository_id": 1250664189,
+            "head_repository_id": 1250664189,
+            "head_branch": "codex/campaign-hover-profit-20261114",
+            "head_sha": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb"
+          }
+        },
+        {
+          "id": 14118309494,
+          "name": "operational-frontend-results",
+          "size_in_bytes": 23642,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14118309494",
+          "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14118309494/zip",
+          "expired": false,
+          "created_at": "2026-11-14T14:48:23Z",
+          "expires_at": "2027-02-12T14:46:55Z",
+          "updated_at": "2026-11-14T14:48:23Z",
+          "digest": "sha256:fbc4712074e8c661a148152bcdcc866148ed8f083fbaa6df662adb7b170acd27",
+          "workflow_run": {
+            "id": 43606645134,
+            "repository_id": 1250664189,
+            "head_repository_id": 1250664189,
+            "head_branch": "codex/campaign-hover-profit-20261114",
+            "head_sha": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb"
+          }
+        },
+        {
+          "id": 14118284522,
+          "name": "operational-balances-browser-results",
+          "size_in_bytes": 497169,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14118284522",
+          "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14118284522/zip",
+          "expired": false,
+          "created_at": "2026-11-14T14:49:02Z",
+          "expires_at": "2027-02-12T14:46:55Z",
+          "updated_at": "2026-11-14T14:49:02Z",
+          "digest": "sha256:180c226cf39dece41134029f67d8abeed377c8fffe82c7a7d5df9db744945fc2",
+          "workflow_run": {
+            "id": 43606645134,
+            "repository_id": 1250664189,
+            "head_repository_id": 1250664189,
+            "head_branch": "codex/campaign-hover-profit-20261114",
+            "head_sha": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb"
+          }
+        }
+      ]
+    },
+    {
+      "id": 43606645215,
+      "name": "Operational Stock Eligibility",
+      "head_sha": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43606645215",
+      "jobs": [
+        {
+          "id": 132482686183,
+          "name": "Stock eligibility, reservation and consumption on isolated Mongo",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 43606645215,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Record exact tested source",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Install focused test dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Start ephemeral loopback-only Mongo fixtures",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Run all Eligibility acceptance suites with real transactions",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Require executed passing tests with no skips",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8
+            },
+            {
+              "name": "Retain Eligibility backend test evidence",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9
+            },
+            {
+              "name": "Remove only this job's ephemeral Mongo fixtures",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 19
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 20
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 21
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 14119190815,
+          "name": "eligibility-backend-2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
+          "size_in_bytes": 74929,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14119190815",
+          "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14119190815/zip",
+          "expired": false,
+          "created_at": "2026-11-14T14:54:36Z",
+          "expires_at": "2027-02-12T14:46:55Z",
+          "updated_at": "2026-11-14T14:54:36Z",
+          "digest": "sha256:11d0d35ec2a399b2d88c7f6500e1f86bcd9bdbbaec6bd233857c16ab3e6b9e01",
+          "workflow_run": {
+            "id": 43606645215,
+            "repository_id": 1250664189,
+            "head_repository_id": 1250664189,
+            "head_branch": "codex/campaign-hover-profit-20261114",
+            "head_sha": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb"
+          }
+        }
+      ]
+    }
+  ]
+}

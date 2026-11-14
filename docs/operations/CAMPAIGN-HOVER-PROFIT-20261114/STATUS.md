@@ -138,3 +138,12 @@ Read-only original `/app` preflight observed the separate active lease `codex-fi
 Next: finish exact-A stock gate, freeze validated intent-only B, pass exact-B gates/rehearsals. Wait for the existing owner to close its lease; fresh guard status must be inactive before merging our release and changing `/app`. Production changed by this task: **no**.
 
 This handoff branch is documentation-only and excluded from frozen A/B release ancestry.
+
+
+## Reviewed intent B — 2026-11-14 14:59:53 UTC
+
+All 12 exact-A workflows passed, including stock eligibility. Official A artifacts verify 4,672 operational backend cases and 4,481 eligibility cases with zero failures/errors/skips. Their retained summaries and provenance are in `verification/source-a-ci-readout.md` and `verification/source-a-ci-metadata.json`.
+
+Intent-only B is `dcb97791d6ef8ad394575542eb4048c6c867bbba`, tree `14dfe135d6633f72c92cb1cb359f4b9933ac176a`, direct parent A `2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb`. Root verified the sole changed path and exact candidate bytes. Independent official B loader, Git relation and frontend-manifest checks passed. Exact-B workflows are running, including both Host20/24 clean-clone adapter rehearsals in run43607551229.
+
+The other owner’s durable handoff reports authorized PR1919 publication started after its prepublish at14:52:07UTC and one click observed14:53:16UTC. Do not repeat or interfere with that action. Await its owner’s verification and inactive shared guard before our production merge/workspace changes. Production changed by this task: **no**.
