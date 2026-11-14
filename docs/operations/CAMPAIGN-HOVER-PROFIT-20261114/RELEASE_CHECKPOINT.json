@@ -1,6 +1,6 @@
 {
   "task": "CAMPAIGN-HOVER-PROFIT-20261114",
-  "updated_at_utc": "2026-11-14 15:55:38 UTC",
+  "updated_at_utc": "2026-11-14 15:56:08 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": 1920,
   "task_branch": "codex/campaign-hover-profit-20261114",
@@ -22,7 +22,7 @@
     "prior_ended_at": "2026-11-14T15:18:09.798861+00:00",
     "fresh_original_status": "inactive"
   },
-  "next": "Invoke frozen d072 gate verify once using actual UI event/time/version. Read actual exit0/checks3 exact A/M/runtime frontend source closure and inactive guard; perform live campaign acceptance. Do not repeat publish or completed phases.",
+  "next": "Await already-running frozen official verify (terminal3 python). Do not rerun/interrupt. Inspect actual result/checks3/identity/inactiveguard/preservation, complete live UI acceptance.",
   "B_conditional_skip": "TikTok Creator Release Candidate requires its dedicated codex/tiktok-content-ci-20261011 branch; not applicable here",
   "B_host_20_24_artifacts": "independently_verified",
   "original_runner_sha256": "7019b1b7f3fdc6bad77495cac3719c6c56f746d4afeb6239c9276c5ff7d915b0",
@@ -62,9 +62,10 @@
   "prepublish_finished_at": "2026-11-14T15:40:50.371166Z",
   "publish_clicks": 1,
   "publish_started_observed_at": "2026-11-14 15:41:50 UTC",
-  "verify": "not_started",
+  "verify": "invoked_once_running",
   "new_ui_version": "1b4c4f6",
   "ui_event_text": "Deployment finished Nov 14, 06:51 PM",
   "ui_finished_at": "2026-11-14T15:51:00Z",
-  "ui_event_observed_at": "2026-11-14 15:55:38 UTC"
+  "ui_event_observed_at": "2026-11-14 15:55:38 UTC",
+  "verify_invoked_observed_at": "2026-11-14 15:56:08 UTC"
 }

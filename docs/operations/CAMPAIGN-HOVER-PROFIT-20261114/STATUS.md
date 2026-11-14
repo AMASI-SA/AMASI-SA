@@ -215,3 +215,10 @@ Next: observe a newer explicit Deployment finished event and a new current publi
 - One Publish changes click only; no republish repeated.
 - Own prepared lease remains active pending official verify. Verify has not yet been invoked.
 - Next: execute frozen release gate d072 once with actual UI proof, then confirm official three live probes, exact identity/source closure and inactive guard; live card acceptance in parallel.
+
+
+## Official verify invoked once — 2026-11-14 15:56:08 UTC
+
+- Frozen gate `d072a7a0d92f8f6f79ade613094ebe0dda4c123563341b907f6134f85b8a9aff` invoked once in original `/app` terminal3 with phase `verify`, evidence `/tmp/mezan-pr1920-original-a_3qop92`, actual UI event `Deployment finished Nov 14, 06:51 PM`, timestamp `2026-11-14T15:51:00Z`, version `1b4c4f6`.
+- Terminal changed to running python; no final exit/result observed yet. This is start evidence, not verification success.
+- Do not repeat or interrupt the running verifier. Own lease remains owned pending completion. Live UI read-only acceptance proceeds in parallel.
