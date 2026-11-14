@@ -1,6 +1,6 @@
 {
-  "stage": "merged_original_build_verified_last_M_CodeQL_pending",
-  "updated_at": "2026-11-14T03:15:48.252Z",
+  "stage": "merged_CI_and_original_build_verified_ready_for_owned_prepare",
+  "updated_at": "2026-11-14T03:17:11.996Z",
   "repo": "AMASI-SA/AMASI-SA",
   "pr": 1916,
   "task_branch": "codex/operational-snapshot-load-fix-20261114",
@@ -78,7 +78,7 @@
     "sourceFrozenAt": "2026-11-14T02:50:23.902Z",
     "pr": 1916,
     "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1916",
-    "pr_body": "## Problem\nThe verified PR1915 release still falls back to the old financial snapshot. A controlled visible production attempt localized the85-second timeout to snapshot loading: native evidence completed in23.437s, then snapshot_load was cancelled after59.694s before source collection or reconciliation began. The snapshot reader revalidates authorization and renews its lease before and after every immutable audit page, amplifying metadata round trips as history grows.\n\n## Change\nFor the exact active visible-demand database and owner, group fresh authorization/lease gates around bounded groups of at most8 pages. Each page still uses its exact owner/_id find_one and is fully validated before the next read. Per-page workers remain request-owned, cancellable and joined. Ordinary readers and strict transaction/session wrappers retain their current behavior. The complete manifest, hashes, ordering, history and tail are retained; CAS and the existing85-second deadline stay intact.\n\nThe source change is17 added and2 removed lines in the archive reader, plus43 focused regression cases and the task status document. This does not include the separately measured reconciliation CPU optimization; production did not reach that phase in the captured attempt.\n\n## Verification\n- Pre-change regression fails only at the intended guard budget:136 checkpoints versus24 for64 synthetic archive pages, after full-state parity and64 exact page reads pass.\n-43 new cases pass; integrated adjacent selection106 passed (exit0). Independent review79 passed, including all43 new cases, with no blocking finding. These selections overlap.\n- Tests cover complete BSON/history parity, first corrupt page, manifest and owner/hash/count checks, permission revocation, lost lease/successor preservation, I/O and worker cancellation, deadline behavior, fresh revision/manifest on CAS retry, and actual strict session wrappers.\n- Independent exact-J negative control fails the same136-versus24 bound. Source/test hashes stayed unchanged during review; diff-check passed.\n- Three paired64-page synthetic runs with3ms simulated database-operation latency: median2399.883ms →665.631ms,136→24 checkpoints/renewals,64→64 page reads; full-result equality, unchanged inputs, zero nonlease writes and zero orphan tasks. This is not a measured production improvement.\n\n## Frozen source\n- J: `4860548f0b032e8e3beca18a4776413cd7e0368b`\n- A: `ff9f8b69b980acfda8dffd210feaf72e17e6727a`\n- A tree: `92ab66ab75d52285e34131f3c4ca60a6a5f8ecc5`\n- Archive source SHA256: `d382ab270474b68700f1672afd2871bb6d7eb0392dad539771536a90fe5082ce`\n- Test SHA256: `d0625c6477b6dae55d1d594bfbb66d95e08f47c97804320528af36f8cdf13d2d`\n- B: `bd9607ba2b21c4d4e3e2bc6bced7680bc9c6f287` (tree `c5bd7fb6c357e17c17104282d1d175676e95ed3e`), one parent A, only intent path changed.\n- Exact candidate artifact 14094887136 from readiness run43548544254; unmodified intent SHA256 `9c4374110d7cb7ad4107acd968b419982cbecd5be934c34ebe80ebe30cd2dd47`.\n- Official candidate and tracked-B loaders passed with actual exit0; R `rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db`.\n- All11 A workflows passed. Official JUnit contains all43 new cases passing in each Operational4073-case and Stock3882-case (+7subtests) suite.\n\n## Release status\nSource A and exact intent-only B are frozen and validated. B full checks are running, including actual Node20/24 adapter rehearsals. This follow-up is not merged or published. Required next gates: all B checks, normal merge with identical B/M tree, merge CI, actual original-operator build and preservation proof, own prepare/final prepublish, one Publish, explicit newer completion, official three-probe verification/normal lease closure, then visible fresh-as_of acceptance and its stage log.\n\n[Source status](https://github.com/AMASI-SA/AMASI-SA/blob/ff9f8b69b980acfda8dffd210feaf72e17e6727a/docs/operations/OPERATIONAL-SNAPSHOT-LOAD-REPAIR-20261114/STATUS.md). Prior live-stage evidence: [PR1915 continuation](https://github.com/AMASI-SA/AMASI-SA/pull/1915#issuecomment-6870287239). Documentation-only handoff branch: `codex/operational-snapshot-load-handoff-20261114`; never merge or deploy that branch.",
+    "pr_body": "## Problem\nThe verified PR1915 release still falls back to the old financial snapshot. A controlled visible production attempt localized the85-second timeout to snapshot loading: native evidence completed in23.437s, then snapshot_load was cancelled after59.694s before source collection or reconciliation began. The snapshot reader revalidates authorization and renews its lease before and after every immutable audit page, amplifying metadata round trips as history grows.\n\n## Change\nFor the exact active visible-demand database and owner, group fresh authorization/lease gates around bounded groups of at most8 pages. Each page still uses its exact owner/_id find_one and is fully validated before the next read. Per-page workers remain request-owned, cancellable and joined. Ordinary readers and strict transaction/session wrappers retain their current behavior. The complete manifest, hashes, ordering, history and tail are retained; CAS and the existing85-second deadline stay intact.\n\nThe source change is17 added and2 removed lines in the archive reader, plus43 focused regression cases and the task status document. This does not include the separately measured reconciliation CPU optimization; production did not reach that phase in the captured attempt.\n\n## Verification\n- Pre-change regression fails only at the intended guard budget:136 checkpoints versus24 for64 synthetic archive pages, after full-state parity and64 exact page reads pass.\n-43 new cases pass; integrated adjacent selection106 passed (exit0). Independent review79 passed, including all43 new cases, with no blocking finding. These selections overlap.\n- Tests cover complete BSON/history parity, first corrupt page, manifest and owner/hash/count checks, permission revocation, lost lease/successor preservation, I/O and worker cancellation, deadline behavior, fresh revision/manifest on CAS retry, and actual strict session wrappers.\n- Independent exact-J negative control fails the same136-versus24 bound. Source/test hashes stayed unchanged during review; diff-check passed.\n- Three paired64-page synthetic runs with3ms simulated database-operation latency: median2399.883ms →665.631ms,136→24 checkpoints/renewals,64→64 page reads; full-result equality, unchanged inputs, zero nonlease writes and zero orphan tasks. This is not a measured production improvement.\n\n## Frozen source\n- J: `4860548f0b032e8e3beca18a4776413cd7e0368b`\n- A: `ff9f8b69b980acfda8dffd210feaf72e17e6727a`\n- A tree: `92ab66ab75d52285e34131f3c4ca60a6a5f8ecc5`\n- Archive source SHA256: `d382ab270474b68700f1672afd2871bb6d7eb0392dad539771536a90fe5082ce`\n- Test SHA256: `d0625c6477b6dae55d1d594bfbb66d95e08f47c97804320528af36f8cdf13d2d`\n- B: `bd9607ba2b21c4d4e3e2bc6bced7680bc9c6f287` (tree `c5bd7fb6c357e17c17104282d1d175676e95ed3e`), one parent A, only intent path changed.\n- Exact candidate artifact 14094887136 from readiness run43548544254; unmodified intent SHA256 `9c4374110d7cb7ad4107acd968b419982cbecd5be934c34ebe80ebe30cd2dd47`.\n- Official candidate and tracked-B loaders passed with actual exit0; R `rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db`.\n- All11 A workflows passed. Official JUnit contains all43 new cases passing in each Operational4073-case and Stock3882-case (+7subtests) suite.\n\n## Release status\nMerged normally as `9c71435f4a19977c09f4331dee8fddbfa12a45eb`, ordered parents J/B, exact B/M tree. All29 B checks passed their expected gates, including actual Host20/24 adapters. The actual original-operator `/app/frontend yarn build` exited0 in69.693s, matched the reviewed runtime identity, preserved all120 untracked files with zero changed paths, left tracked/index clean and guard inactive. Unsaved Untitled-1 was left intact.\n\nM Security and Readiness passed; last Python CodeQL check is pending. PR1916 is not yet published. Required remaining gates: finish M CI, own prepare/final prepublish, one Publish, explicit new completion, official3-probe verification/normal lease closure, then visible fresh-as_of acceptance and its stage log. Previous PR1915 was published but still had old balances.\n\n[Source status](https://github.com/AMASI-SA/AMASI-SA/blob/ff9f8b69b980acfda8dffd210feaf72e17e6727a/docs/operations/OPERATIONAL-SNAPSHOT-LOAD-REPAIR-20261114/STATUS.md). Prior live-stage evidence: [PR1915 continuation](https://github.com/AMASI-SA/AMASI-SA/pull/1915#issuecomment-6870287239). Documentation-only handoff branch: `codex/operational-snapshot-load-handoff-20261114`; never merge or deploy that branch.",
     "R": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
     "intent_sha256": "9c4374110d7cb7ad4107acd968b419982cbecd5be934c34ebe80ebe30cd2dd47",
     "intent_bytes": 1301645,
@@ -457,16 +457,95 @@
       "submitted_at": "2026-11-14T03:11:54.677Z",
       "helper_sha256": "4dfb723a4ee134ef96b1add8a396927960193febec849e559e2f39cddffe0410",
       "unsaved_editor_buffer_observed": "Untitled-1; preserved, no tracked-file overlap"
-    }
+    },
+    "M_ci": {
+      "passed_at": "2026-11-14T03:16:36.842Z",
+      "checks": [
+        {
+          "name": "Emergent manual redeploy required",
+          "id": 132311418454,
+          "conclusion": "success"
+        },
+        {
+          "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+          "id": 132310762266,
+          "conclusion": "success"
+        },
+        {
+          "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+          "id": 132310762263,
+          "conclusion": "success"
+        },
+        {
+          "name": "Host Node 24.19.0 engine and dispatcher contract",
+          "id": 132310492917,
+          "conclusion": "success"
+        },
+        {
+          "name": "Backend preflight",
+          "id": 132310492866,
+          "conclusion": "success"
+        },
+        {
+          "name": "Host Node 20.20.2 engine and dispatcher contract",
+          "id": 132310492805,
+          "conclusion": "success"
+        },
+        {
+          "name": "Frontend build",
+          "id": 132310492682,
+          "conclusion": "success"
+        },
+        {
+          "name": "CodeQL (javascript-typescript)",
+          "id": 132310492653,
+          "conclusion": "success"
+        },
+        {
+          "name": "Frontend dependency and CSP checks",
+          "id": 132310492624,
+          "conclusion": "success"
+        },
+        {
+          "name": "CodeQL (python)",
+          "id": 132310492427,
+          "conclusion": "success"
+        },
+        {
+          "name": "Backend security contracts",
+          "id": 132310492415,
+          "conclusion": "success"
+        }
+      ],
+      "workflows": [
+        {
+          "id": 43550143068,
+          "name": "Security Gate",
+          "conclusion": "success"
+        },
+        {
+          "id": 43550143147,
+          "name": "CodeQL",
+          "conclusion": "success"
+        },
+        {
+          "id": 43550143114,
+          "name": "Mezan Release Readiness",
+          "conclusion": "success"
+        }
+      ],
+      "production_matches": true
+    },
+    "gate_helper_sha256": "135416b223c82a6d4b988ba21a3384037ffb124585bd746f2c82920697366a33",
+    "actor": "codex-operational-snapshot-rootfix-1916"
   },
   "production_changed_by_this_followup": false,
   "blockers": [],
   "next_actions": [
-    "Wait for final exact-M Python CodeQL success",
-    "Validate freshly owned prepare and final prepublish",
-    "One manual Publish and explicit newer completion",
-    "Official three-probe verification then fresh inactive guard",
-    "Visible financial refresh must advance as_of without warning"
+    "Owned prepare",
+    "Final prepublish immediately before one manual Publish",
+    "Explicit newer completion and official3-probe verification",
+    "Fresh inactive guard then visible financial as_of acceptance"
   ],
   "historical_prechange_test": {
     "observed_red_source_sha256": "b1858f3b050ba46925916e34f59c6b941f93f032e3be2f9313a07bde2b33eba4",
@@ -496,5 +575,10 @@
       "independent_review": "PASS read-only; not executed",
       "M_required_argument": "9c71435f4a19977c09f4331dee8fddbfa12a45eb"
     }
-  ]
+  ],
+  "gate_helper": {
+    "name": "pr1916_original_gate.py",
+    "sha256": "135416b223c82a6d4b988ba21a3384037ffb124585bd746f2c82920697366a33",
+    "bytes": 9213
+  }
 }
