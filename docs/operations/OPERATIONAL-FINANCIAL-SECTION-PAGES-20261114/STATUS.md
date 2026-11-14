@@ -218,3 +218,27 @@ Next: run the full operational frontend gate, inspect exact integrated CI and
 browser screenshots, fix any concrete failure, then freeze release sourceA.
 Original /app has not changed; the latest observed guard remains another
 actor's active lease and must be freshly inactive before release rehearsal.
+
+## Handoff verification after integrated checkpoint
+
+This documentation-only branch must not be merged into a frozen release lineage.
+Source/task branch remains codex/financial-section-pages-20261114 at
+0dd26a620a0acc4235d6fdfa0a3a8e714982fcae. Draft PR1921 is the review record.
+
+Root ran the complete Operational Balance Frontend workflow selection under
+governed Node22.23.2/Yarn1.22.22: actual exit0, 774 tests in52 suites passed,
+no failed/skipped/todo tests, Jest87.098s (Yarn89.59s). The final independent
+frontend rerun passed125/125 tests in5 suites,14.028s. All20 reviewed file hashes
+(11 frontend,7 scoped backend,2 diagnostic files) remained unchanged afterward.
+All identified attempt, auth, export-serialization and hide/offline races are
+closed; no optional test expansion or source change is requested by review.
+
+Exact integrated CI: Operational Balance Web run43614920574; browser acceptance
+job132507776425 is in progress. Its frontend and canonical-worker jobs passed;
+backend contract job is running. Local sandbox launch remains blocked before
+scenarios; the CI screenshots/workbooks must be inspected before a browser PASS.
+
+Current step: wait for and inspect exact integrated CI, then freeze A only if
+all gates pass. Recheck original /app guard before any release rehearsal or
+mutation. No new intent, lease, merge or publication exists. The existing global
+refresh408 and actual live section latency remain unverified for this change.
