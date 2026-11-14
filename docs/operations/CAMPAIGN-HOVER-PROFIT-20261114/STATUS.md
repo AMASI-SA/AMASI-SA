@@ -222,3 +222,13 @@ Next: observe a newer explicit Deployment finished event and a new current publi
 - Frozen gate `d072a7a0d92f8f6f79ade613094ebe0dda4c123563341b907f6134f85b8a9aff` invoked once in original `/app` terminal3 with phase `verify`, evidence `/tmp/mezan-pr1920-original-a_3qop92`, actual UI event `Deployment finished Nov 14, 06:51 PM`, timestamp `2026-11-14T15:51:00Z`, version `1b4c4f6`.
 - Terminal changed to running python; no final exit/result observed yet. This is start evidence, not verification success.
 - Do not repeat or interrupt the running verifier. Own lease remains owned pending completion. Live UI read-only acceptance proceeds in parallel.
+
+
+## Verification preflight stopped; official verifier not started — 2026-11-14 16:01:22 UTC
+
+- Actual frozen wrapper failed at `2026-11-14T15:55:57.683782Z` with `RuntimeError: Preservation baseline changed` before any `guard.started.json` was created. Prior running label was only wrapper launch evidence, not official verifier start.
+- Tracked M lineage/cleanliness checks passed. Same 120 untracked paths, no additions/removals, 119 metadata/content records unchanged. Only platform bookkeeping path `.emergent/stripped_env_names` appended bytes with same inode/mode.
+- Subsequent private read confirmed original 48,418-byte prefix hash still exact; size now 48,676 (258 appended), mtime15:59:53Z. No contents/environment names exposed. Cause is ongoing append-only bookkeeping; do not attribute it solely to publish.
+- Failed directory remains immutable. No rerun, republish, abort, lease clear or application source change. Own lease still pending official verification.
+- Live client after reload shows all nine card rows and numeric direct costs. Operating allocation and net are unknown in two existing campaign samples despite executive operating summary being present. This is not accepted as complete numeric feature proof; read-only causal diagnosis is in progress. No customer/order data retained here.
+- Safe recovery under independent review: distinct one-shot verifier receipt directory, retain failed evidence, enforce exact M/A/runtime and owned lease, permit only proven append-only bookkeeping file while retaining all other119 original records and preserving each observed prefix.

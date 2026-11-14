@@ -1,0 +1,21 @@
+{
+  "phase": "verify",
+  "finished_at": "2026-11-14T15:55:57.683782Z",
+  "exception": "RuntimeError: Preservation baseline changed",
+  "official_guard_started": false,
+  "before_count": 120,
+  "after_count": 120,
+  "added": [],
+  "removed": [],
+  "changed_path": ".emergent/stripped_env_names",
+  "initial_before_bytes": 48418,
+  "gate_observed_bytes": 48590,
+  "original_prefix_sha256": "041a33859b1bc209fce7c42a64d1c2210a3f3cb49ea4c78522bc5a6b4a7db3a8",
+  "gate_observed_sha256": "07d8050b846f6c552b49024b6fedfebd3c4f54ad340fd272066c852f7f4d3be1",
+  "later_observed_bytes": 48676,
+  "later_sha256": "1a715333f8f54e8fe579f3a9ed0ef1b742fe25ddad15053d2975afda430b9d05",
+  "later_original_prefix_unchanged": true,
+  "later_same_inode": true,
+  "later_same_mode": true,
+  "later_mtime_utc": "2026-11-14T15:59:53.538506+00:00"
+}
