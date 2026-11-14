@@ -1,0 +1,31 @@
+{
+  "result": {
+    "actual_exit": 0,
+    "problem": null,
+    "started_at": "2026-11-14T03:05:04.218849+00:00",
+    "ended_at": "2026-11-14T03:05:08.087379+00:00",
+    "elapsed_seconds": 3.868539420000161,
+    "stdout_sha256": "1a28032b5f7f45e4f1ddbdce54ed3843be1c8d31550222034b61c3cc374e4e20",
+    "stderr_sha256": "eef9df8ca834a592e23c4601f18b894ff4c2edeb5ba2f6f1b1190f22ac64b6c5",
+    "stderr_bytes": 181,
+    "prior_attempt_note": "Initial wrapper exited1 after official validation while summarizing a nonexistent frontend_artifact key. This wrapper only corrects that summary lookup to frontend_build; repository and candidate unchanged."
+  },
+  "validation": {
+    "validated": true,
+    "source_git_sha": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+    "source_base_git_sha": "4860548f0b032e8e3beca18a4776413cd7e0368b",
+    "deployment_git_sha": "bd9607ba2b21c4d4e3e2bc6bced7680bc9c6f287",
+    "release_id": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
+    "frontend_artifact_tree_sha256": "9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6"
+  },
+  "prior_result": {
+    "actual_exit": 1,
+    "problem": null,
+    "started_at": "2026-11-14T03:04:19.100082+00:00",
+    "ended_at": "2026-11-14T03:04:25.369756+00:00",
+    "elapsed_seconds": 6.269690076005645,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "62a575f45a12d6924e0d779e194cd4ccbecfc8c6c2681963001230960c54e964",
+    "stderr_bytes": 285
+  }
+}
