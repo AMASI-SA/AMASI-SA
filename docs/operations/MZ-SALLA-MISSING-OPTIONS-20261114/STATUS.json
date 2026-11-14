@@ -5,7 +5,7 @@
   "base_sha": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
   "previous_checkpoint_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
   "live_source_observed": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
-  "state": "all_final_b_gates_passed_waiting_existing_release_completion",
+  "state": "merged_exact_m_push_gates_running_original_rehearsal_next",
   "scope": "Explain and prevent missing incoming customer choices without manual Salla refresh.",
   "confirmed": [
     "Initial native and root choices empty at revision 1.",
@@ -33,7 +33,7 @@
   ],
   "reproduction_limit": "Synthetic source mechanisms, not full webhook/Mongo integration or a passing preventive-fix suite.",
   "access": "Official Production viewer connected through secure user authentication. Scoped reads; edit off; no credential extracted.",
-  "next_safe_action": "Wait for existing PR1924 operator's official completed verification/inactive receipt; do not infer release completion from absence of its lease during rehearsal. Then fresh bytecode-disabled guard and source/ref checks, ordinary tree-equivalent merge, pin reviewed runner, exact-M gates, original build, prepare/prepublish/one authorized publish/three-probe verify. No live order refresh or replay.",
+  "next_safe_action": "Wait exact-M push Readiness/Security/CodeQL success. Root then stages hash-verified pinned original runner outside /app, performs one guarded original rehearsal, records actual evidence, pins guard wrapper, prepare/prepublish immediately before one authorized UI publish, and official three-probe verify. Preserve all120 unrelated paths/unsaved buffer; no manual Salla order refresh.",
   "continuity": "PR1923, task status and archival branch are durable. Issue1006 body update acknowledged but fresh readback absent; not claimed persisted.",
   "diagnosis_base_sha": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
   "source_implementation_present": true,
@@ -61,7 +61,7 @@
     "final_b_artifact_sha256": "decef6273a9c4027007a89563fc23e9a6a9a42ff3c29ebab13435f783888e211"
   },
   "independent_review": "Source review and114-test run passed. Exact-A real Mongo and gates passed. Exact-B host artifacts independently validated; root directly compared all293 file bytes and modes.",
-  "release_state": "Other PR1924 publication completed; its one official verifier remains running per immutable owner handoff. No own merge, original build, lease or publication. Keep shared workspace unchanged until its verified/inactive receipt and fresh source/status agreement.",
+  "release_state": "PR1923 ordinarily merged as exact M after prior PR1924 official three-probe closure and fresh original guard inactive/current base/clean tracked/120 files. Root is preparing the original rehearsal; no own build, lease or publication yet. Exact-M push gates must pass before execution.",
   "archival_branch": "codex/salla-options-prelinear-checkpoint-20261114",
   "ancestry_repair": {
     "failed_source_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
@@ -83,7 +83,7 @@
     "release_id": "rg5-d2259549478abdd0e0879d65d1de0defce94f7545b1f62f473799779c9151c1c",
     "validation": "Root and independent official loader plus exact Git-derived backend/control manifest validation passed in clean clone.",
     "intent_b_sha": "ece0b24b0978c5064c4e605b577ad2722158f56a",
-    "merge_sha": null,
+    "merge_sha": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
     "intent_b_tree": "b5aba4c6ec2755fb27fe084c2b74f87f9d8fddf6",
     "final_b_readiness": {
       "run_id": 43621875102,
@@ -103,11 +103,12 @@
   },
   "runner": {
     "path": "docs/operations/MZ-SALLA-MISSING-OPTIONS-20261114/original_release_runner.py",
-    "disabled": true,
-    "merge_pin": "UNPINNED",
-    "review": "Root and independent static review passed. Receipt persistence now defers catchable signals through atomic/fsynced evidence; original release logic/pins unchanged. No execution. Exact merge pin remains required.",
+    "disabled": false,
+    "merge_pin": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+    "review": "Root and independent exact two-line enabling delta passed against immutable disabled operator at bc391fe312dd00381626b96ce4f0f55894864db3. Only PINS_REVIEWED and MERGE changed. No execution.",
     "disabled_sha256": "15735992d7a23e8e23e632a932a92a3056db65234adcfae0e7459c025c525932",
-    "previous_disabled_sha256": "381438420d6c47de4ec7de2c339007dd1fede38bf6cb5e723dd243ac6e89bb86"
+    "previous_disabled_sha256": "381438420d6c47de4ec7de2c339007dd1fede38bf6cb5e723dd243ac6e89bb86",
+    "enabled_sha256": "e4c575001dcfeeea4addd3bd836e3c7b89e486240f62ef7e8bb824cd9d5d6c6f"
   },
   "final_b_ci": {
     "applicable_workflow_types": 17,
@@ -115,7 +116,7 @@
     "expected_skip": "TikTok Creator Release Candidate branch condition",
     "remaining_gates": 0
   },
-  "other_release_handoff_observed": "7a6abe080775b3d154890f21ceae192f24e91d82",
+  "other_release_handoff_observed": "e38c40f21b0c5d84b047403e5a3823617f2d2f59",
   "other_release_published_version": "5a7a310",
   "guard_runner": {
     "path": "docs/operations/MZ-SALLA-MISSING-OPTIONS-20261114/guard_phase_runner.py",
@@ -124,5 +125,35 @@
     "merge_pin": "UNPINNED",
     "original_evidence_pins": "UNPINNED",
     "review": "Root and independent static review passed against official schemas. One explicit phase; no publication, abort or retry. Actual guard receipt persists independently of validation/postchecks. Verify1800s, other phases600s. No execution."
-  }
+  },
+  "original_premerge": {
+    "utc": "2026-11-14T18:20:03.296232+00:00",
+    "guard": {
+      "active": false
+    },
+    "head": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+    "branch": "hotfix/prod-snap-meta-final",
+    "tracked": "",
+    "untracked_count": 120,
+    "foreignClosure": "e38c40f21b0c5d84b047403e5a3823617f2d2f59"
+  },
+  "merge": {
+    "sha": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+    "parents": [
+      "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+      "ece0b24b0978c5064c4e605b577ad2722158f56a"
+    ],
+    "tree": "b5aba4c6ec2755fb27fe084c2b74f87f9d8fddf6",
+    "source_ancestor": true,
+    "source_to_merge": "intent-only",
+    "root_and_independent_review": "PASS",
+    "merged_at": "2026-11-14T18:21:03Z"
+  },
+  "exact_m_ci": {
+    "state": "running",
+    "readiness": 43626113115,
+    "security": 43626113059,
+    "codeql": 43626113134
+  },
+  "production_branch_changed_by_task": true
 }
