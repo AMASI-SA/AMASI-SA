@@ -112,3 +112,24 @@ rehearsal, tree-equivalent normal merge, original `/app` preservation checks and
 build, prepare/prepublish, explicit deployment success and official three-probe
 verification. Finally verify a fresh visible report calculation. Do not deploy
 this source candidate with PR #1918's old release intent.
+
+## Release continuation checkpoint — source A
+
+Source A is now remotely recoverable at `5f7fce4fcf1b81f3fbe1093d0983184c281ca733`, tree
+`b435301d907e20d8bd354cb48c83dec3959a999d`, with Draft PR #1919. The exact-A Mezan Release
+Readiness run [43604085043](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43604085043)
+passed. A clean local clone produced two matching builds, official verification
+and candidate freezing, all exit 0. Its intent is byte-for-byte identical to the
+CI candidate (1304956 bytes; SHA-256 `bb3fcbc5858d2c79c95aa55551a0ad2d0393467ce218fe3fa57984cebe001467`).
+The runtime identity is `rg5-9b6621b12a348a9d27542452b3d2040456e720478b9fd0dc3a2b82af27438605`.
+
+Exact-A operational frontend passed 733 tests / 51 suites; synthetic browser
+acceptance passed 9 scenarios; canonical-worker exclusion passed 4 tests.
+Backend real-Mongo, eligibility and the remaining applicable workflows are
+still pending. Source A has not been advanced to intent B. No Production change,
+original-workspace source change, lease or publication has occurred.
+
+This documentation-only continuation branch is separate from the release
+branch. Never merge it into the frozen release history. Follow RELEASE_CHECKPOINT.json
+for identities and next actions. The original /app has 120 untracked files and
+one unsaved editor buffer, which must remain preserved.

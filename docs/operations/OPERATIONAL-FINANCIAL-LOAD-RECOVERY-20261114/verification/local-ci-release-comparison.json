@@ -1,0 +1,52 @@
+{
+  "pass": true,
+  "source_git_sha": "5f7fce4fcf1b81f3fbe1093d0983184c281ca733",
+  "source_base_git_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+  "source_tree": "b435301d907e20d8bd354cb48c83dec3959a999d",
+  "release_id": "rg5-9b6621b12a348a9d27542452b3d2040456e720478b9fd0dc3a2b82af27438605",
+  "byte_equal_to_ci": true,
+  "semantic_equal_to_ci": true,
+  "candidate_bytes": 1304956,
+  "candidate_sha256": "bb3fcbc5858d2c79c95aa55551a0ad2d0393467ce218fe3fa57984cebe001467",
+  "frontend_artifact_tree_sha256": "4fe38becd5383760b7c392e20acca340daa2e92ef9c3d4b133f8f32aa703e019",
+  "build_meta_sha256": "9ddfe3e02cef3aa25539b2ecefd1c60fda16a623a2aec830dcef660b70f6165e",
+  "proof_file_sha256": "43cc29a215e474ff94dba963dd360916b8d7bb82de5137a1ba09ad68d72876c8",
+  "two_passes": [
+    {
+      "ordinal": 1,
+      "build_meta": {
+        "path": "build-meta.json",
+        "bytes": 473287,
+        "sha256": "9ddfe3e02cef3aa25539b2ecefd1c60fda16a623a2aec830dcef660b70f6165e"
+      },
+      "artifact_tree_sha256": "4fe38becd5383760b7c392e20acca340daa2e92ef9c3d4b133f8f32aa703e019"
+    },
+    {
+      "ordinal": 2,
+      "build_meta": {
+        "path": "build-meta.json",
+        "bytes": 473287,
+        "sha256": "9ddfe3e02cef3aa25539b2ecefd1c60fda16a623a2aec830dcef660b70f6165e"
+      },
+      "artifact_tree_sha256": "4fe38becd5383760b7c392e20acca340daa2e92ef9c3d4b133f8f32aa703e019"
+    }
+  ],
+  "frontend_source": {
+    "file_count": 1179,
+    "tree_sha256": "d3ed7b3ac20b028a13d1fdb6c100dacab60310603a8166e629ea47a401da99bf",
+    "git_tree_oid": "0c1d501e43b505c03dd72bfd0021595938479461"
+  },
+  "backend_runtime_source": {
+    "file_count": 1211,
+    "tree_sha256": "77d291de5a3bae9a1e047dc475d7cef7ff16f033390467a99668ae0a0be5aeef"
+  },
+  "release_control_source": {
+    "file_count": 291,
+    "tree_sha256": "c4a96fabeb7474fc54386fadaa98b03f0b58119f3aa3863b2cff1b1e032df822"
+  },
+  "guard": {
+    "active": false
+  },
+  "clean_worktree": true,
+  "local_repo": "/workspace/scratch/8e8e99ef94d4/release1919-prep/local-source-a"
+}

@@ -1,0 +1,29 @@
+{
+  "task_id": "OPERATIONAL-FINANCIAL-LOAD-RECOVERY-20261114",
+  "phase": "source-A-CI-in-progress",
+  "repository": "AMASI-SA/AMASI-SA",
+  "release_branch": "codex/financial-loading-resume-20261114",
+  "handoff_branch": "codex/financial-loading-release-handoff-20261114",
+  "pr": 1919,
+  "base_J": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+  "source_A": "5f7fce4fcf1b81f3fbe1093d0983184c281ca733",
+  "source_tree": "b435301d907e20d8bd354cb48c83dec3959a999d",
+  "runtime_release_id": "rg5-9b6621b12a348a9d27542452b3d2040456e720478b9fd0dc3a2b82af27438605",
+  "intent_sha256": "bb3fcbc5858d2c79c95aa55551a0ad2d0393467ce218fe3fa57984cebe001467",
+  "intent_bytes": 1304956,
+  "source_A_readiness_run": 43604085043,
+  "readiness": "success",
+  "local_builds": 2,
+  "local_CI_intent_exactly_equal": true,
+  "source_A_operational_run": 43604085026,
+  "source_A_stock_run": 43604084975,
+  "production_changed": false,
+  "lease_started": false,
+  "next": "Finish every applicable exact-A workflow and inspect deferred Mongo XML. Then commit only the reviewed intent as direct child B; pass exact-B CI and Node20/24 clone rehearsals; normal merge and original workspace release protocol; official verification and visible live report acceptance.",
+  "notes": [
+    "Issue1006 is full; this branch, task status and PR1919 carry continuation.",
+    "The handoff branch is documentation only and must never be merged into frozen release A/B.",
+    "Original /app has120 unrelated untracked files and1 unsaved buffer; preserve them.",
+    "No financial transaction or provider/source write as a test."
+  ]
+}
