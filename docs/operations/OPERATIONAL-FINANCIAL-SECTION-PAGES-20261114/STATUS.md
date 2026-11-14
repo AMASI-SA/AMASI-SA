@@ -242,3 +242,29 @@ Current step: wait for and inspect exact integrated CI, then freeze A only if
 all gates pass. Recheck original /app guard before any release rehearsal or
 mutation. No new intent, lease, merge or publication exists. The existing global
 refresh408 and actual live section latency remain unverified for this change.
+
+## Source candidate and browser verification
+
+Source candidateA is frozen at0dd26a620a0acc4235d6fdfa0a3a8e714982fcae,
+tree3b2205f13d26cf57014972ad940c715f62c541a9; source baseJ is
+29ec1e07eb7d1a23647cadff5bac26149accfa99, resolved by the actual adapter helper.
+No source edits are allowed without a new A and rebuilt identity.
+
+Exact CI browser job132507776425 in run43614920574 passed all14 cases on
+Chromium145 with sandbox enabled. Root downloaded artifact14121910716 and
+verified ZIP SHA256da30bfa23a3b9b31d77d33ae1502f60fbb35bfd5e24ae3798283f4d68b8868b9,
+exact A/tree, all20 source-manifest hashes and14 PASS records with no errors.
+Root visually inspected summary desktop and sidebar mobile: clear Arabic RTL
+layout, preserved unknown-data warnings, relevant tables and accessible navigation.
+The two real downloaded workbooks were produced by the CI export scenarios.
+
+Fresh original /app guard at2026-11-14T16:22:18.750951Z reports active:false,
+HEAD29ec1e07. The other release no longer blocks rehearsal. Original user files
+and Untitled-1 remain untouched; no /app mutation or publication for this task.
+
+Mezan Release Readiness run43614920615 on exactA passed and produced its
+candidate intent. Other exactA checks are still finishing. A clean no-hardlinks
+independent clone was verified at exactA with all generated outputs absent;
+governed locked dependency install is in progress. Next: local two-build proof,
+freeze external candidate, compare exact CI artifact, then intent-only B when
+all A checks and review gates pass. No lease is created during this preparation.
