@@ -96,6 +96,7 @@ def _notification_route_allowed(path: str, method: str, *, driver=False) -> bool
         rf"{root}/orders/{resource}/instructions/active", rf"{root}/evidence/{resource}",
         rf"{root}/instructions/{resource}/tasks/{resource}/comments", r"/api/operational-notifications/web-push-key"]
     common_post = [rf"{root}/notifications/{resource}/read", rf"{root}/instructions/{resource}/(?:acknowledge|evidence)",
+        rf"{root}/instructions/{resource}/conversation/(?:read|messages)",
         rf"{root}/instructions/{resource}/tasks/submit", rf"{root}/instructions/{resource}/tasks/{resource}/comments",
         r"/api/operational-notifications/devices/(?:register|unregister)"]
     if not driver:
@@ -238,3 +239,4 @@ __all__ = [
     "mobile_app_request_user",
     "required_mobile_permissions",
 ]
+

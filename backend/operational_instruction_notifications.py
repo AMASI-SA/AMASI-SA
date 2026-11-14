@@ -100,8 +100,14 @@ async def emit_instruction_notification(db, *, merchant_id, instruction, event_t
     # The sender is an authenticated event author, never a target/recipient.
     if sender_id is None and event_type in {"created", "assigned", "edit_sent", "approved", "rejected", "completed", "closed"}:
         sender_id = text(instruction.get("created_by"))
-    sender = await db["users"].find_one({"id": text(sender_id),
-        "$or": [{"id": merchant_id}, {"created_by": merchant_id}]}, {"_id": 0, "id": 1, "name": 1}) if sender_id else None
+    sender = await db["users"].find_one({"id": text(sender_id)},
+        {"_id": 0, "id": 1, "name": 1, "role": 1, "is_owner": 1, "created_by": 1}) if sender_id else None
+    if sender:
+        # Native employees may use the authoritative Employees V2 link rather
+        # than the legacy created_by field. Never borrow a foreign sender name.
+        from review_session_fence import merchant_for_actor
+        if await merchant_for_actor(db, sender) != merchant_id:
+            sender = None
     targets = set(recipient_ids) if recipient_ids is not None else await recipients(db, merchant_id, instruction)
     if recipient_ids is None and event_type in {"approved", "rejected", "completed"}:
         # Submitter needs the result even if the work has since changed hands.
@@ -114,6 +120,7 @@ async def emit_instruction_notification(db, *, merchant_id, instruction, event_t
         targets.update(text(task.get("assignee_id")) for task in tasks if text(task.get("assignee_id")))
     revision = str(instruction.get("notification_revision") or instruction.get("rejected_at") or instruction.get("submitted_at") or instruction.get("created_at") or "")
     now = datetime.now(timezone.utc)
+    conversation_sources = []
     for recipient in sorted(targets):
         assignment_key = await actor_assignment_key(db, merchant_id, instruction["id"], recipient)
         event_revision = revision + assignment_key if event_type == "assigned" else revision
@@ -123,11 +130,24 @@ async def emit_instruction_notification(db, *, merchant_id, instruction, event_t
             "sender_name": text(sender.get("name")) if sender else "تحديثات النظام",
             "instruction_id": instruction["id"], "order_number": text(instruction.get("order_number")),
             "event_type": event_type, "assignment_key": assignment_key, "title": LABELS[event_type],
+            "action_type": text(instruction.get("action_type")), "event_message_version": 1,
             "priority": instruction.get("priority", "normal"), "metadata": instruction.get("notification_metadata") or {},
             "message": text(instruction.get("rejection_note")) if event_type == "rejected" else text(instruction.get("note")),
-            "created_at": now, "read_at": None}
+            "created_at": now, "read_at": None, "conversation_pending": True,
+            "event_key": hashlib.sha256(f"{merchant_id}:{instruction['id']}:{event_type}:{event_revision}".encode()).hexdigest()}
         await db[NOTIFICATIONS].update_one({"_id": key}, {"$setOnInsert": row}, upsert=True)
+        conversation_sources.append(await db[NOTIFICATIONS].find_one({"_id": key}))
         await _enqueue(db, row)
+    if conversation_sources:
+        try:
+            from operational_instruction_conversations import capture_notifications
+            await capture_notifications(db, {**instruction, "user_id": merchant_id}, conversation_sources)
+            await db[NOTIFICATIONS].update_many({"id": {"$in": [row["id"] for row in conversation_sources]},
+                "merchant_id": merchant_id}, {"$set": {"conversation_pending": False}})
+        except Exception:
+            # Projection failure must never fail an existing business command.
+            # The existing notification worker retries the durable marker.
+            log.warning("Instruction conversation projection deferred", exc_info=False)
     return len(targets)
 
 async def refresh_actor_instructions(db, *, merchant_id, actor_id):
