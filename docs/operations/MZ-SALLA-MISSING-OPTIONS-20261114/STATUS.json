@@ -5,7 +5,7 @@
   "base_sha": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
   "previous_checkpoint_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
   "live_source_observed": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
-  "state": "merged_all_exact_m_gates_passed_original_rehearsal_ready",
+  "state": "original_rehearsal_running",
   "scope": "Explain and prevent missing incoming customer choices without manual Salla refresh.",
   "confirmed": [
     "Initial native and root choices empty at revision 1.",
@@ -33,7 +33,7 @@
   ],
   "reproduction_limit": "Synthetic source mechanisms, not full webhook/Mongo integration or a passing preventive-fix suite.",
   "access": "Official Production viewer connected through secure user authentication. Scoped reads; edit off; no credential extracted.",
-  "next_safe_action": "Execute the once-only pinned original runner /tmp/mezan-pr1923-operators-ofxm9kbl/original_runner.py through root-owned Terminal6 with Python-B/no-bytecode. Capture its actual evidence directory and exit; do not repeat after partial effects. Then pin guard evidence and finish authorized publication/verification.",
+  "next_safe_action": "Observe the already-started original runner and its evidence/exit; do not rerun. On actual success pin its summary/before hashes in the reviewed guard, then prepare/prepublish/one authorized UI publish/official three-probe verify.",
   "continuity": "PR1923, task status and archival branch are durable. Issue1006 body update acknowledged but fresh readback absent; not claimed persisted.",
   "diagnosis_base_sha": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
   "source_implementation_present": true,
@@ -61,7 +61,7 @@
     "final_b_artifact_sha256": "decef6273a9c4027007a89563fc23e9a6a9a42ff3c29ebab13435f783888e211"
   },
   "independent_review": "Source review and114-test run passed. Exact-A real Mongo and gates passed. Exact-B host artifacts independently validated; root directly compared all293 file bytes and modes.",
-  "release_state": "Exact-M push gates passed with root and independent verification. Pinned original operator staged outside /app; root is starting the original rehearsal next. No own lease or publication.",
+  "release_state": "Root invoked the pinned original runner once in Terminal6. Original source and frontend preflight both passed; the original build is in progress. No own lease or publication. Preserve this original workflow.",
   "archival_branch": "codex/salla-options-prelinear-checkpoint-20261114",
   "ancestry_repair": {
     "failed_source_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
@@ -161,6 +161,16 @@
     "directory": "/tmp/mezan-pr1923-operators-ofxm9kbl",
     "sha256": "e4c575001dcfeeea4addd3bd836e3c7b89e486240f62ef7e8bb824cd9d5d6c6f",
     "gitCheckpoint": "a3a37b3e2b8c83e8e1ca522f44ae3bff977bfae6",
-    "executed": false
+    "executed": true
+  },
+  "original_rehearsal": {
+    "state": "in_progress",
+    "evidence_directory": "/tmp/mezan-pr1923-original-5a1jqt_2",
+    "command": "PYTHONDONTWRITEBYTECODE=1 python -B /tmp/mezan-pr1923-operators-ofxm9kbl/original_runner.py",
+    "observed_preflight": {
+      "python_source_exit": 0,
+      "frontend_source_exit": 0
+    },
+    "runner_invocations": 1
   }
 }
