@@ -21,6 +21,9 @@ DEPLOYMENT = sys.argv[1]
 os.umask(0o077)
 EVIDENCE = Path(tempfile.mkdtemp(prefix='mezan-pr1920-original-', dir='/tmp'))
 ENV = dict(os.environ, PYTHONDONTWRITEBYTECODE='1', REACT_APP_BACKEND_URL='https://mezansalla.com')
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(ROOT))
+from scripts.production_release_guard import _release_operation_lock, LEASE_DIR, LEASE_PATH
 
 
 def run(name, argv, cwd=ROOT):
@@ -42,6 +45,12 @@ def git(*args):
 def inactive(name):
     result = json.loads(run(name, ['python', '-B', 'scripts/production_release_guard.py', 'status']))
     assert result.get('active') is False and not result.get('incomplete_lease_directory'), result
+
+
+def locked_inactive(name):
+    # The official operation mutex is already held; status() is not reentrant.
+    assert not LEASE_PATH.exists() and not LEASE_DIR.exists(), 'Active or incomplete release lease'
+    (EVIDENCE / (name + '.json')).write_text(json.dumps({'active': False, 'under_operation_lock': True}) + '\n')
 
 
 def preserved_files():
@@ -68,32 +77,34 @@ def preserved_files():
 
 print(f'EVIDENCE={EVIDENCE}', flush=True)
 inactive('01-guard-before')
-assert git('branch', '--show-current') == BRANCH
-assert git('rev-parse', 'HEAD') == BASE
-assert not git('status', '--porcelain', '--untracked-files=no')
-before = preserved_files()
-(EVIDENCE / 'untracked-before.json').write_text(json.dumps(before, indent=2) + '\n')
-run('02-fetch', ['git', 'fetch', 'origin', BRANCH])
-assert git('rev-parse', 'origin/' + BRANCH) == DEPLOYMENT
-assert git('rev-parse', DEPLOYMENT + '^{tree}') == TREE
-assert git('rev-list', '--parents', '-n', '1', DEPLOYMENT).split()[1:] == [BASE, 'dcb97791d6ef8ad394575542eb4048c6c867bbba']
-assert git('diff', '--name-only', SOURCE, DEPLOYMENT) == 'release/release-intent-v5.json'
-inactive('03-guard-before-fast-forward')
-run('04-fast-forward', ['git', 'merge', '--ff-only', DEPLOYMENT])
-assert not git('status', '--porcelain', '--untracked-files=no')
-assert preserved_files() == before
-inactive('05-guard-before-build')
-run('06-governed-adapter', ['yarn', 'build'], ROOT / 'frontend')
-run('07-package-proof', ['python', '-B', 'scripts/emergent_deployment_adapter.py', 'verify-packages'])
-intent = json.loads((ROOT / 'release/release-intent-v5.json').read_text())
-identity = json.loads((ROOT / 'backend/release_identity.json').read_text())
-assert identity == intent['runtime_identity']
-assert identity['source_git_sha'] == SOURCE and identity['release_id'] == RELEASE
-assert git('rev-parse', 'HEAD') == DEPLOYMENT and not git('status', '--porcelain', '--untracked-files=no')
-after = preserved_files()
-(EVIDENCE / 'untracked-after.json').write_text(json.dumps(after, indent=2) + '\n')
-assert after == before
-inactive('08-guard-after-build')
+with _release_operation_lock():
+    locked_inactive('01b-guard-under-lock')
+    assert git('branch', '--show-current') == BRANCH
+    assert git('rev-parse', 'HEAD') == BASE
+    assert not git('status', '--porcelain', '--untracked-files=no')
+    before = preserved_files()
+    (EVIDENCE / 'untracked-before.json').write_text(json.dumps(before, indent=2) + '\n')
+    run('02-fetch', ['git', 'fetch', 'origin', BRANCH])
+    assert git('rev-parse', 'origin/' + BRANCH) == DEPLOYMENT
+    assert git('rev-parse', DEPLOYMENT + '^{tree}') == TREE
+    assert git('rev-list', '--parents', '-n', '1', DEPLOYMENT).split()[1:] == [BASE, 'dcb97791d6ef8ad394575542eb4048c6c867bbba']
+    assert git('diff', '--name-only', SOURCE, DEPLOYMENT) == 'release/release-intent-v5.json'
+    locked_inactive('03-guard-before-fast-forward')
+    run('04-fast-forward', ['git', 'merge', '--ff-only', DEPLOYMENT])
+    assert not git('status', '--porcelain', '--untracked-files=no')
+    assert preserved_files() == before
+    locked_inactive('05-guard-before-build')
+    run('06-governed-adapter', ['yarn', 'build'], ROOT / 'frontend')
+    run('07-package-proof', ['python', '-B', 'scripts/emergent_deployment_adapter.py', 'verify-packages'])
+    intent = json.loads((ROOT / 'release/release-intent-v5.json').read_text())
+    identity = json.loads((ROOT / 'backend/release_identity.json').read_text())
+    assert identity == intent['runtime_identity']
+    assert identity['source_git_sha'] == SOURCE and identity['release_id'] == RELEASE
+    assert git('rev-parse', 'HEAD') == DEPLOYMENT and not git('status', '--porcelain', '--untracked-files=no')
+    after = preserved_files()
+    (EVIDENCE / 'untracked-after.json').write_text(json.dumps(after, indent=2) + '\n')
+    assert after == before
+    locked_inactive('08-guard-after-build')
 summary = {'source': SOURCE, 'deployment': DEPLOYMENT, 'tree': TREE, 'release_id': RELEASE,
            'adapter_exit': 0, 'package_proof_exit': 0, 'preserved_untracked_files': len(before),
            'guard_inactive': True, 'evidence': str(EVIDENCE)}

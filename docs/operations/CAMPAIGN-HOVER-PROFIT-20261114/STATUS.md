@@ -158,3 +158,14 @@ Live management UI shows the other owner's newly finished deployment a5eae68 (14
 The narrow `release-runners/original-build.py` is prepared for the eventual exact mergeM. It pins J/A/Btree/merge parents; requires inactive guard; preserves all unrelated nonignored untracked files including bytes, modes, inodes and timestamps; executes the official adapter and package proof with actual exit records; and creates no lease or publication. SHA256 `14e3df7d4e5b010707f00f294801eec259a5b4da24adb973854bf242763b38cb`. Independent static review is pending; the runner has not been executed.
 
 Production changed by this task: **no**. Next action remains the shared-lease coordination check, then ordinary exact-tree merge and the reviewed original build/own release sequence.
+
+
+## Continuation after environment interruption — original runner reviewed
+
+Recorded at 2026-11-14 15:23:07 UTC. The local execution environment and browser were restored, but the old scratch checkout was lost. Frozen source A, intent-only B, PR1920 and production J are unchanged on GitHub. The user restored the Emergent login; root visibly verified the signed-in Salla Analytics project. No merge, /app mutation, lease preparation or publication for PR1920 has occurred.
+
+The previously saved original-build runner (SHA256 14e3df7d4e5b010707f00f294801eec259a5b4da24adb973854bf242763b38cb) is superseded. Independent review found a gap where a concurrent prepare could occur after an inactive check. The corrected runner holds the official operation mutex through the fresh inactive assertion, preservation snapshot, fetch/fast-forward, original governed build, package/identity verification and final inactive/preservation checks. It creates no lease during rehearsal. The pre-lock CLI status remains outside; direct lease checks inside avoid recursive-lock deadlock. Independent review traced both build/package paths and found no same-lock reentry.
+
+The corrected bytes were recovered exactly from the durable baseline after the outage. Reviewed and restored SHA256: `7019b1b7f3fdc6bad77495cac3719c6c56f746d4afeb6239c9276c5ff7d915b0`, 5367 bytes; AST parse passed. This runner has NOT been executed. Never execute the superseded runner.
+
+Other release handoff now points to `42ee1e5a26b0fba5bcb97aff70f2a2fb2433a684`. It records completed publication `a5eae68`, but not the official verifier's final result or lease closure. Read the existing evidence `/tmp/mezan-pr1919-original-72x801fd/28-verify` first after reconnecting; do not repeat its verify, prepare or publication, and do not clear its lease. A fresh inactive guard remains required before our merge/rehearsal. All A/B applicable CI acceptance already passed; no code changes or additional test reruns are needed.
