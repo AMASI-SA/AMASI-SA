@@ -1,24 +1,13 @@
 {
-  "updated_at": "2026-11-14T01:29:03.843Z",
-  "stage": "merged_awaiting_operator_release_and_publication",
-  "production_source_branch_changed": true,
-  "rootfix_running_deployment_changed": false,
+  "updated_at": "2026-11-14T01:36:49.903Z",
+  "stage": "ready_for_original_operator_rehearsal",
   "J": "d6f246b4d3b14fd56ef2cbc574b99f08bb7d6fc1",
   "A": "a496dd428241b06d2292286de030c70d6241fcf0",
-  "A_tree": "03cc5b230acc660b4e56ba50227b93bbdc856930",
   "B": "30dc66ec09b371a6b990adbd167162254bfd77c6",
-  "B_tree": "9a98153a5b6b69bc6a282613a1b3e354e1fe75b9",
   "M": "4860548f0b032e8e3beca18a4776413cd7e0368b",
-  "M_tree": "9a98153a5b6b69bc6a282613a1b3e354e1fe75b9",
-  "parents": [
-    "d6f246b4d3b14fd56ef2cbc574b99f08bb7d6fc1",
-    "30dc66ec09b371a6b990adbd167162254bfd77c6"
-  ],
+  "tree": "9a98153a5b6b69bc6a282613a1b3e354e1fe75b9",
   "R": "rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e",
   "intent_sha256": "e27e2c508d0e402a344d4e9b40ef90d29910142aafd0db1e2c5255ddcd37cd4c",
-  "intent_git_blob": "d02ad5a7b1bc4fdd1645c3ebb4c2f36522eae494",
-  "candidate_artifact": 14090817522,
-  "candidate_run": 43538137202,
   "B_checks": [
     {
       "id": 132278590230,
@@ -195,15 +184,83 @@
       "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43539812300/job/132277479152"
     }
   ],
-  "M_runs": {
-    "readiness": 43540642587,
-    "security": 43540642589,
-    "codeql": 43540642578
+  "M_checks": [
+    {
+      "id": 132281133351,
+      "name": "Emergent manual redeploy required",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43540642587/job/132281133351"
+    },
+    {
+      "id": 132280453695,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43540642587/job/132280453695"
+    },
+    {
+      "id": 132280453658,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43540642587/job/132280453658"
+    },
+    {
+      "id": 132280143338,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43540642587/job/132280143338"
+    },
+    {
+      "id": 132280143243,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43540642587/job/132280143243"
+    },
+    {
+      "id": 132280143197,
+      "name": "Backend preflight",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43540642587/job/132280143197"
+    },
+    {
+      "id": 132280143040,
+      "name": "Backend security contracts",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43540642589/job/132280143040"
+    },
+    {
+      "id": 132280142955,
+      "name": "Frontend build",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43540642587/job/132280142955"
+    },
+    {
+      "id": 132280142878,
+      "name": "Frontend dependency and CSP checks",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43540642589/job/132280142878"
+    },
+    {
+      "id": 132280142670,
+      "name": "CodeQL (javascript-typescript)",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43540642578/job/132280142670"
+    },
+    {
+      "id": 132280142491,
+      "name": "CodeQL (python)",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43540642578/job/132280142491"
+    }
+  ],
+  "original_guard_last_observed": {
+    "active": false,
+    "observed_at": "2026-11-14T01:33:29.477224+00:00",
+    "actual_exit": 0
   },
-  "other_lease_last_observed": {
-    "active": true,
-    "actor": "codex-assembly-image-20261114",
-    "prepared_at": "2026-11-14T00:57:10.603194+00:00"
+  "platform_baseline": {
+    "version": "892c7f3",
+    "publish_number": 100,
+    "completed_display": "Nov 14, 04:08 AM UTC+3"
   },
-  "publication_started": false
+  "rootfix_publication_started": false
 }

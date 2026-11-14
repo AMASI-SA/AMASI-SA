@@ -1,3 +1,15 @@
+# Current stage — original operator rehearsal ready
+
+Updated 2026-11-14T01:36:49.903Z. Root fix #1915 is normally merged at `4860548f0b032e8e3beca18a4776413cd7e0368b`, with frozen B tree/ancestry preserved. **All 3 exact-M push workflows and all 11 checks passed**; both actual host adapter rehearsals again verified the exact A/R/artifact identity. Exact-B Operational/Stock evidence remains valid on the identical M tree.
+
+The previous #1914 owner completed official verification and closed its own lease normally. Root independently ran original `production_release_guard.py status` at **2026-11-14T01:33:29.477224+00:00**, actual exit0, exact result **`{"active":false}`**. Current Emergent baseline is published version `892c7f3` (100th publish), explicit platform completion November14 04:08 UTC+3. That is #1914, not this root fix.
+
+No root-fix Publish yet. Next: fresh inactive check, preserve original operator work, fast-forward exact M, actual `cd frontend; yarn build` adapter with canonical public origin and no GitHub spoofing, verify preservation and candidate identity, own prepare/prepublish, one Publish, newer platform completion, official 3-probe verification, and visible live financial calculation acceptance.
+
+---
+
+## Previous checkpoints
+
 # Latest checkpoint — normal merge complete
 
 Updated 2026-11-14T01:29:03.843Z. **PR #1915 is merged; this root fix is not yet published.** This handoff branch is documentation only and must never be merged or deployed.
