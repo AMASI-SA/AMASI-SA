@@ -58,3 +58,8 @@ Fresh source verification after this last correction: operational push, preview,
 Keep this branch/Draft PR recoverable. Issue1006 is full; a previous body update was accepted but did not appear on independent readback. Existing ledger content was preserved. Do not claim a new ledger entry is visible without readback; use the verified task branch, Draft PR and this status as the durable handoff.
 
 Next: finish independent integration review, run exact-head Mongo/native/mobile CI, remedy concrete findings and update this record with final immutable SHAs/results. When publication is later authorized, refresh the production base and follow the repository protocol-v5 source-A/intent-B handoff; deploy compatible backend before the new app. No release rehearsal or lease exists for this task.
+
+
+## Final source verification record
+
+Tested source `ec13c2c6a495b36cf5f70795428267d567634f86` passed all11 applicable workflows, including252 Mongo tests +61 subtests with zero skips. See [FINAL_VERIFICATION.md](./FINAL_VERIFICATION.md) for the exact immutable source, complete CI evidence, file manifest and next safe action. This documentation-only evidence branch is not a release intent. Production remains unchanged and publication remains held. The matching mobile native CI is still running at this backend-only checkpoint.
