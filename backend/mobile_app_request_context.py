@@ -176,15 +176,6 @@ async def mobile_app_request_user(
         return user
 
     required = required_mobile_permissions(path)
-    # Assembly renders an operational card's private image saved in review.
-    # Permit only this asset read, without granting the review page or its
-    # mutations; the asset route still enforces merchant ownership.
-    if (str(method or "").upper() == "GET" and re.fullmatch(
-        r"/api/order-reviews-v1/operational-images/[A-Za-z0-9_-]+/?", str(path or "")
-    )):
-        required = _permissions(
-            "app.page.pending_review", "app.page.reviewed_preparation", "app.page.assembly_shipping",
-        )
     if not required:
         raise HTTPException(
             status_code=403,
