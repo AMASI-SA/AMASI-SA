@@ -5,7 +5,7 @@
   "base_sha": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
   "previous_checkpoint_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
   "live_source_observed": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
-  "state": "own_fix_preserved_in_combined_pr1928_publication_in_progress",
+  "state": "combined_pr1928_published_identity_matched_official_verification_running",
   "scope": "Explain and prevent missing incoming customer choices without manual Salla refresh.",
   "confirmed": [
     "Initial native and root choices empty at revision 1.",
@@ -33,7 +33,7 @@
   ],
   "reproduction_limit": "Synthetic source mechanisms, not full webhook/Mongo integration or a passing preventive-fix suite.",
   "access": "Official Production viewer connected through secure user authentication. Scoped reads; edit off; no credential extracted.",
-  "next_safe_action": "Do not execute any old pinned operator or alter original /app. Current combined PR1928 owner has begun publication. Await newer explicit platform success, its official three consecutive identity/artifact probes and inactive guard; independently observe the live combined identity containing our unchanged options fix. No manual Salla refresh.",
+  "next_safe_action": "Await immutable combined-owner official verification: actual success, three matching live probes, fresh inactive guard and separate120-file preservation. Do not mutate /app or operate any release. Recheck visible order/card using saved-data page only, finalize sanitized evidence and report. No Salla refresh/replay.",
   "continuity": "PR1923, task status and archival branch are durable. Issue1006 body update acknowledged but fresh readback absent; not claimed persisted.",
   "diagnosis_base_sha": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
   "source_implementation_present": true,
@@ -61,7 +61,7 @@
     "final_b_artifact_sha256": "decef6273a9c4027007a89563fc23e9a6a9a42ff3c29ebab13435f783888e211"
   },
   "independent_review": "Source review and114-test run passed. Exact-A real Mongo and gates passed. Exact-B host artifacts independently validated; root directly compared all293 file bytes and modes.",
-  "release_state": "Our fix is merged. The original rehearsal succeeded, but before a lease was established production advanced through PR1928 (first parent our M). First actual official prepare refused the moved remote and post-status was inactive. Our older candidate release sequence is closed without publication. Do not execute its pinned operators again. PR1928 owner has begun the combined original rehearsal; preserve that workflow while independently verifying inclusion and eventual publication.",
+  "release_state": "Our unchanged Salla fix is live inside the authorized combined PR1928 publication. Root observed newer platform version3a22e2d and independently matched live sourceA2/runtime/backend/control/frontend identity. The combined owner has started official verification exactly once; its three probes, inactive guard and preservation receipt remain pending. Our older candidate/operators remain closed and must never be rerun.",
   "archival_branch": "codex/salla-options-prelinear-checkpoint-20261114",
   "ancestry_repair": {
     "failed_source_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
@@ -312,6 +312,55 @@
       "platform_started_display": "Nov 14, 09:58 PM",
       "platform_state": "Building your website",
       "root_clicked_publish": false
+    },
+    "platform_success": {
+      "version": "3a22e2d",
+      "previousVersion": "5a7a310",
+      "finishedDisplay": "Nov 14, 10:08 PM",
+      "observedAt": "2026-11-14 19:09:44 UTC",
+      "rootClickedPublish": false
+    },
+    "independent_live_health": {
+      "observedAt": "2026-11-14 19:10:24 UTC",
+      "url": "https://mezansalla.com/api/health",
+      "ok": true,
+      "releaseId": "rg5-12003f05673102a08c649a74e75e894372796da07bd75ada680a7f07aec65951",
+      "sourceGitSha": "d41cd73132793209d13758ef07b2eda4fcfe018a",
+      "sourceBaseGitSha": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+      "verifiedIdentityAvailable": true,
+      "backendRuntimeSourceVerified": true,
+      "releaseControlSourceBound": true,
+      "criticalFileHashesMatch": true,
+      "frontendBuildVerified": true,
+      "bootStartedAt": "2026-11-14T19:07:44.365578+00:00",
+      "scope": "One independent read-only live UI health observation; official three-probe verifier remains owner-controlled and pending."
+    },
+    "owner_publication_handoff_sha": "ffbe30bac4bf33b3dfe34598c5d47f9f7d9979b6",
+    "prepare": {
+      "exit": 0,
+      "completed_at": "2026-11-14T18:57:25.565951Z",
+      "preserved_count": 120
+    },
+    "prepublish": {
+      "exit": 0,
+      "completed_at": "2026-11-14T18:58:20.037505Z",
+      "preserved_count": 120
+    },
+    "official_verification": {
+      "state": "running",
+      "invocation_count": 1,
+      "evidence_path": "/tmp/mezan-pr1928-original-2e86crex/28-verify.result.json",
+      "do_not_interrupt": true
     }
+  },
+  "production_runtime_contains_task_fix": true,
+  "production_changed_by_task_scope": "No direct live order repair, own UI publication or own lease; effective runtime delivery is via the separate combined PR1928 owner.",
+  "live_ui_review": {
+    "option_blocks_visible": true,
+    "product_service_component_cost_complete": true,
+    "manual_provider_refresh": false,
+    "restoration_predated_this_release": true,
+    "existing_local_read_marker_permitted": true,
+    "transient_origin_response_during_publication_recovered": true
   }
 }
