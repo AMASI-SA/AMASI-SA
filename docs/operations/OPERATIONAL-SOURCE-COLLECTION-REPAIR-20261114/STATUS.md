@@ -155,3 +155,8 @@ Rehearsal helper independent source/AST review passed at SHA256 `3a38a680fcf5e76
 Actual original `cd /app/frontend && yarn build` returned exit 0, 2026-11-14T04:53:21.176154 to 04:54:34.540325 UTC (73.364187 seconds). Runtime identity matches A/R, original HEAD is M, tracked/index remain clean. All 120 unrelated untracked files are byte-for-byte preserved; no sidecar change. Fresh guard after build is inactive. Evidence directory: `/tmp/mezan-pr1917-original-jpg_gysb`.
 
 Build stdout SHA256 `f658e9084dc2d62187d2880aa67991514eaed4c849fdc32c74c2b099d4a18d43`. Detailed sanitized proof is evidence/original-build-proof.json. The prepare/prepublish helper has independent source/AST PASS, SHA256 `8bf5f7400c0d5ac444e9c4c74b01dc66f2ac73eddbf38d1ead8e3a588e8f5cb2`, with exclusive evidence and no automatic retries. No PR1917 lease or publish has occurred. M push Security and Readiness passed; CodeQL Python was still running at 04:55:41 (exact-B CodeQL already passed and M is tree-equivalent).
+
+
+## Prepared owned lease — 2026-11-14T04:57:32.378Z
+
+Official prepare actual exit 0, 04:56:55.601783–04:56:58.309692 UTC (2.707915 seconds), followed by fresh matching owned-active status. Actor `codex-operational-source-collection-rootfix-1917`; A/M/R match this release. Raw stdout SHA256 `073e3edc4bfd5def4d594e9132d46eabb0a1cadd6f693d7e4bdecede09789ef1`. Next: prepublish then one Publish changes. No platform publish has begun.
