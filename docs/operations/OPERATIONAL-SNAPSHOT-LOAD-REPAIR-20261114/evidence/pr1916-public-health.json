@@ -1,0 +1,13 @@
+{
+  "backend_runtime_source_verified": true,
+  "boot_started_at": "2026-11-14T03:29:57.465261+00:00",
+  "critical_file_hashes_match": true,
+  "frontend_build_verified": true,
+  "ok": true,
+  "release_id": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
+  "source_base_git_sha": "4860548f0b032e8e3beca18a4776413cd7e0368b",
+  "source_git_sha": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+  "verified_identity_available": true,
+  "observed_at": "2026-11-14T03:33:09.589Z",
+  "url": "https://mezansalla.com/api/health"
+}

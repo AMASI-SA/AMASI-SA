@@ -1,0 +1,10 @@
+{
+  "submitted_at": "2026-11-14T03:31:32.852Z",
+  "prefix": "/tmp/mezan-pr1916-original-fu9s2qng/28-verify",
+  "actor": "codex-operational-snapshot-rootfix-1916",
+  "observed_started": true,
+  "no_wrapper_timeout": true,
+  "source_git_sha": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+  "deployment_git_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+  "release_id": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db"
+}

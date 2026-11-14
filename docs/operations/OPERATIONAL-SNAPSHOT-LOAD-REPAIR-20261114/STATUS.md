@@ -1,13 +1,15 @@
-# Snapshot-load repair — publication in progress
+# Snapshot-load repair — published; official verification running
 
-Updated 2026-11-14T03:22:02.062Z. This branch is documentation-only; never merge or deploy it.
+Updated 2026-11-14T03:34:16.481Z. Documentation-only branch; never merge or deploy.
 
-PR[#1916](https://github.com/AMASI-SA/AMASI-SA/pull/1916) is merged as M `9c71435f4a19977c09f4331dee8fddbfa12a45eb`; source A `ff9f8b69b980acfda8dffd210feaf72e17e6727a`; intent-only B `bd9607ba2b21c4d4e3e2bc6bced7680bc9c6f287`; release `rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db`. All A/B/M gates passed. The original build exited0 in69.693s and preserved all120 untracked files and unsaved Untitled-1; exact reviewed runtime identity matched.
+PR[#1916](https://github.com/AMASI-SA/AMASI-SA/pull/1916) is merged as M `9c71435f4a19977c09f4331dee8fddbfa12a45eb`, source A `ff9f8b69b980acfda8dffd210feaf72e17e6727a`, intent-only B `bd9607ba2b21c4d4e3e2bc6bced7680bc9c6f287`, release `rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db`. All A/B/M gates and the actual original build passed, with120 unrelated files and unsaved Untitled-1 preserved.
 
-## Publication in progress — do not repeat
+## Observed production publication
 
-Owned prepare uses actor `codex-operational-snapshot-rootfix-1916` and evidence `/tmp/mezan-pr1916-original-fu9s2qng`. Final prepublish completed successfully at 2026-11-14T03:19:50.771689+00:00, actual exit0 and fresh same owned lease active. The Republish control opened the free publication dialog at 2026-11-14T03:20:15.330Z. The actual **Publish changes** button was clicked **once**, at 2026-11-14T03:20:34.103Z. UI showed Publishing (initial11percent), then `Deployment Started Nov 14, 06:20 AM` and Building your website. This is the new attempt; older completed deployment cards do not prove this publication completed.
+Publish changes was clicked once at 2026-11-14T03:20:34.103Z, after the final prepublish passed. The platform explicitly displayed **Deployment finished Nov14,06:30AMRiyadh**, observed at 2026-11-14T03:31:32.400Z; this is newer than the06:20AM start. The public /api/health DOM now reports exact A and R, with verified_identity_available, backend_runtime_source_verified, critical_file_hashes_match and frontend_build_verified alltrue. Boot started 2026-11-14T03:29:57.465261+00:00. The public identity JSON summary and an inspected screenshot are preserved under evidence/. No private business figures or runtime logs are included.
 
-No explicit newer completion or production verification has been observed yet. Never click Publish again merely because this operation takes time. Preserve the own lease; after newer explicit platform completion run the reviewed verification helper with this M, actor and evidence directory. The official verifier has no short wrapper timeout. Its actual exit and summary are saved under28-verify before assertions; inspect any existing evidence before a repeat. Successful official verification must yield3 matching probes and a fresh inactive status.
+## Official verification in progress
 
-Then visibly refresh the financial page once and require a new as_of instead of12Nov01:07, without a refresh warning or main error. Financial/provider/ads mutations are not test actions. The published release is not accepted merely because deployment succeeds.
+The reviewed verification helper was submitted once at 2026-11-14T03:31:32.852Z; its `phase:started` was observed. Prefix `/tmp/mezan-pr1916-original-fu9s2qng/28-verify`, actor `codex-operational-snapshot-rootfix-1916`, evidence `/tmp/mezan-pr1916-original-fu9s2qng`. It deliberately has no short wrapper timeout. Do not restart because the complete frontend probing takes time. Inspect existing28-verify results before any action if interrupted. The own lease must be closed by successful official verification, never manually cleared.
+
+Final official exit/three-probe result and fresh inactive status are still pending. Fresh financial acceptance has not yet been attempted on this release. Next require a visible new as_of (not just generated_at), no refresh-failure warning, then inspect table sections and pending-order dialog through local read-only controls. Never use delivery confirmation, settlement, provider or ads writes as tests.
