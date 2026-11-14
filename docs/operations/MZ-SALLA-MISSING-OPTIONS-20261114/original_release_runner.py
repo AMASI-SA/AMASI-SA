@@ -34,6 +34,28 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def write_json(path, value):
+    descriptor, name = tempfile.mkstemp(prefix="." + path.name + "-", dir=path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write((json.dumps(value, sort_keys=True, indent=2) + "\n").encode())
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+class RequestedSignal(BaseException):
+    pass
+
+
 def main():
     require(PINS_REVIEWED and len(MERGE) == 40, "Deployment pins have not been reviewed")
     require(ROOT.is_dir() and not ROOT.is_symlink(), "Unexpected workspace root")
@@ -56,53 +78,81 @@ def main():
         code = None
         termination = None
         cleanup_error = None
-        suppressed_signals = {}
-        with prefix.with_suffix(".stdout").open("wb") as stdout, prefix.with_suffix(".stderr").open("wb") as stderr:
-            try:
-                process = subprocess.Popen(argv, cwd=cwd, env=ENV, stdout=stdout, stderr=stderr,
-                                           start_new_session=True)
-                code = process.wait(timeout=timeout)
-            except BaseException as exc:
-                failure = exc
-                termination = type(exc).__name__
-                for sig in (signal.SIGINT, signal.SIGTERM):
-                    suppressed_signals[sig] = signal.signal(sig, signal.SIG_IGN)
-                try:
-                    if process is not None:
-                        try:
-                            os.killpg(process.pid, signal.SIGTERM)
-                        except ProcessLookupError:
-                            pass
-                        try:
-                            process.wait(timeout=10)
-                        except subprocess.TimeoutExpired:
-                            pass
-                        # This is the private group of the current invocation.
-                        # Stop descendants even when Yarn has already exited.
-                        try:
-                            os.killpg(process.pid, signal.SIGKILL)
-                        except ProcessLookupError:
-                            pass
-                        code = process.wait(timeout=10)
-                except BaseException as cleanup_exc:
-                    cleanup_error = type(cleanup_exc).__name__
-                finally:
-                    if process is not None:
-                        code = process.poll()
-        output = prefix.with_suffix(".stdout").read_bytes()
-        errors = prefix.with_suffix(".stderr").read_bytes()
-        receipt = {"argv": argv, "cwd": str(cwd), "exit_code": code, "termination": termination,
-                   "cleanup_error": cleanup_error,
-                   "elapsed_seconds": round(time.time() - started, 3),
-                   "stdout_sha256": sha(output), "stderr_sha256": sha(errors)}
+        deferred_signals = []
+
+        def defer(signum, _frame):
+            if signum not in deferred_signals:
+                deferred_signals.append(signum)
+
+        handlers = {sig: signal.signal(sig, defer) for sig in (signal.SIGINT, signal.SIGTERM)}
         try:
-            prefix.with_suffix(".json").write_text(json.dumps(receipt, indent=2) + "\n")
+            with prefix.with_suffix(".stdout").open("wb") as stdout, prefix.with_suffix(".stderr").open("wb") as stderr:
+                try:
+                    if deferred_signals:
+                        raise RequestedSignal()
+                    process = subprocess.Popen(argv, cwd=cwd, env=ENV, stdout=stdout, stderr=stderr,
+                                               start_new_session=True)
+                    deadline = time.monotonic() + timeout
+                    while True:
+                        if deferred_signals:
+                            raise RequestedSignal()
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise subprocess.TimeoutExpired(argv, timeout)
+                        try:
+                            code = process.wait(timeout=min(0.25, remaining))
+                            break
+                        except subprocess.TimeoutExpired:
+                            continue
+                except BaseException as exc:
+                    failure = exc
+                    termination = (signal.Signals(deferred_signals[0]).name
+                                   if isinstance(exc, RequestedSignal) else type(exc).__name__)
+                    try:
+                        if process is not None:
+                            try:
+                                os.killpg(process.pid, signal.SIGTERM)
+                            except ProcessLookupError:
+                                pass
+                            try:
+                                process.wait(timeout=10)
+                            except subprocess.TimeoutExpired:
+                                pass
+                            # This is the private group of the current invocation.
+                            # Stop descendants even when Yarn has already exited.
+                            try:
+                                os.killpg(process.pid, signal.SIGKILL)
+                            except ProcessLookupError:
+                                pass
+                            code = process.wait(timeout=10)
+                    except BaseException as cleanup_exc:
+                        cleanup_error = type(cleanup_exc).__name__
+                    finally:
+                        if process is not None:
+                            code = process.poll()
+                stdout.flush()
+                stderr.flush()
+                os.fsync(stdout.fileno())
+                os.fsync(stderr.fileno())
+            output = prefix.with_suffix(".stdout").read_bytes()
+            errors = prefix.with_suffix(".stderr").read_bytes()
+            receipt = {"argv": argv, "cwd": str(cwd), "exit_code": code, "termination": termination,
+                       "cleanup_error": cleanup_error,
+                       "signals_observed_before_receipt": [signal.Signals(sig).name for sig in deferred_signals],
+                       "elapsed_seconds": round(time.time() - started, 3),
+                       "stdout_sha256": sha(output), "stderr_sha256": sha(errors)}
+            write_json(prefix.with_suffix(".json"), receipt)
             print(json.dumps({"step": label, "exit_code": code, "termination": termination,
                               "cleanup_error": cleanup_error,
                               "elapsed_seconds": receipt["elapsed_seconds"]}), flush=True)
         finally:
-            for sig, handler in suppressed_signals.items():
+            for sig, handler in handlers.items():
                 signal.signal(sig, handler)
+        if deferred_signals:
+            signum = deferred_signals[0]
+            if callable(handlers[signum]):
+                handlers[signum](signum, None)
+            raise SystemExit(128 + signum)
         if failure is not None:
             raise RuntimeError(f"Step interrupted: {label}; retained evidence: {prefix}") from failure
         require(code == 0, f"Step failed: {label}; retained evidence: {prefix}")

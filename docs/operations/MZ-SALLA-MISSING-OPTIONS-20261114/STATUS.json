@@ -61,7 +61,7 @@
     "final_b_artifact_sha256": "decef6273a9c4027007a89563fc23e9a6a9a42ff3c29ebab13435f783888e211"
   },
   "independent_review": "Source review and114-test run passed. Exact-A real Mongo and gates passed. Exact-B host artifacts independently validated; root directly compared all293 file bytes and modes.",
-  "release_state": "Other PR1924 release is ongoing at its original-workspace rehearsal; no own merge, original build, lease or publication. Preserve that workflow even when no lease exists during rehearsal.",
+  "release_state": "Other PR1924 publication completed; its one official verifier remains running per immutable owner handoff. No own merge, original build, lease or publication. Keep shared workspace unchanged until its verified/inactive receipt and fresh source/status agreement.",
   "archival_branch": "codex/salla-options-prelinear-checkpoint-20261114",
   "ancestry_repair": {
     "failed_source_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
@@ -105,8 +105,9 @@
     "path": "docs/operations/MZ-SALLA-MISSING-OPTIONS-20261114/original_release_runner.py",
     "disabled": true,
     "merge_pin": "UNPINNED",
-    "review": "Independent final static review passed; no remaining concrete blocker. No execution. Pin exact merge and review the pin-only delta only after other release completes.",
-    "disabled_sha256": "381438420d6c47de4ec7de2c339007dd1fede38bf6cb5e723dd243ac6e89bb86"
+    "review": "Root and independent static review passed. Receipt persistence now defers catchable signals through atomic/fsynced evidence; original release logic/pins unchanged. No execution. Exact merge pin remains required.",
+    "disabled_sha256": "15735992d7a23e8e23e632a932a92a3056db65234adcfae0e7459c025c525932",
+    "previous_disabled_sha256": "381438420d6c47de4ec7de2c339007dd1fede38bf6cb5e723dd243ac6e89bb86"
   },
   "final_b_ci": {
     "applicable_workflow_types": 17,
@@ -114,5 +115,14 @@
     "expected_skip": "TikTok Creator Release Candidate branch condition",
     "remaining_gates": 0
   },
-  "other_release_handoff_observed": "d35d249b3cb1f2260e664f8d3e4607955b96a263"
+  "other_release_handoff_observed": "7a6abe080775b3d154890f21ceae192f24e91d82",
+  "other_release_published_version": "5a7a310",
+  "guard_runner": {
+    "path": "docs/operations/MZ-SALLA-MISSING-OPTIONS-20261114/guard_phase_runner.py",
+    "disabled": true,
+    "disabled_sha256": "2e86e5994e6015e99ae175c0ec195cbf6fc8da24472a049555b4f60061e6eac4",
+    "merge_pin": "UNPINNED",
+    "original_evidence_pins": "UNPINNED",
+    "review": "Root and independent static review passed against official schemas. One explicit phase; no publication, abort or retry. Actual guard receipt persists independently of validation/postchecks. Verify1800s, other phases600s. No execution."
+  }
 }
