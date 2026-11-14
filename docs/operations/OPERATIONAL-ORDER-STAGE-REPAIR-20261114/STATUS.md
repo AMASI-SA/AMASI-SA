@@ -45,3 +45,8 @@ Original/app advancednormally toM23cc06da003c18c0f3fc6c2e749aad1326666166; actua
 ## preserve passed M gate and owned release lease — 2026-11-14T06:32:04.349Z
 
 ExactM all3pushworkflows and11checks passed, includingactualHost20/24adapterrehearsals. Originalbuildpassed andpreserved120files. Officialprepare actualexit0 at06:31:18.048582–06:31:21.012193UTC; freshownedactivelease actorcodex-operational-order-stage-rootfix-1918, Ad70b42cda3d70a7f07c78c3efc5fde8331fdc877, M23cc06da003c18c0f3fc6c2e749aad1326666166, Rrg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f. Evidence/tmp/mezan-pr1918-original-6jyavqt4. NoUIpublish hasoccurred for1918 yet. Nextaction mustfreshprepublish thenoneauthorizedpublish, withleaseownership retained untilofficialverification. Do notclear/abortotherleases orrerunexistingstageevidence.
+
+
+## preserve authorized publish start after fresh prepublish — 2026-11-14T06:35:47.444Z
+
+Officialprepublish actualexit0 at06:32:35.194956–06:32:38.756641UTC, ready=true andfreshownedactivelease. UIconfirmed mezansalla.com andFree republishes. Rootclicked Publishchanges exactlyonce at06:33:51.345Z. UIshowsPublishing andexplicitDeploymentStarted Nov14,09:33AM; oldplatform120e0fa remainsbaseline. No completion orfinancialsuccessclaimed. KeepOverview open; do notopenruntimeLogs beforefirstpostverificationfinancialattempt toavoidcachedlogwindow. Ownedlease actorcodex-operational-order-stage-rootfix-1918, evidence/tmp/mezan-pr1918-original-6jyavqt4.

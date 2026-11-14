@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-ORDER-STAGE-REPAIR-20261114",
-  "stage": "prepared_owned_lease_prepublish_next",
+  "stage": "platform_publishing",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "2db0edc9edb315026eee4b6edd43b420a569c37d",
@@ -713,9 +713,76 @@
       "started_at": "2026-11-14T06:31:18.048582+00:00",
       "stdout_sha256": "3a010c334b72ef2d7372a763aa204960e1b39d2ea95aaaa12569b7d61e1e5f73",
       "tree": "9de141756a4c5dcfa8d1d4dfb6513178c406ac8e"
+    },
+    "prepublish": {
+      "actor": "codex-operational-order-stage-rootfix-1918",
+      "actual_exit": 0,
+      "branch": "hotfix/prod-snap-meta-final",
+      "completed": true,
+      "deployment_git_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "elapsed_seconds": 3.5616808909981046,
+      "ended_at": "2026-11-14T06:32:38.756641+00:00",
+      "fresh_owned_active": true,
+      "git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+      "intent_commit": "9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9",
+      "prefix": "/tmp/mezan-pr1918-original-6jyavqt4/27-prepublish",
+      "protocol_version": 5,
+      "ready_to_publish": true,
+      "release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+      "source_base_git_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+      "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+      "stage": "prepublish",
+      "started_at": "2026-11-14T06:32:35.194956+00:00",
+      "stdout_sha256": "72a2520e7a30c162d8a982291969aa3fca6141bdccef90cf04b09443e768d6b6",
+      "tree": "9de141756a4c5dcfa8d1d4dfb6513178c406ac8e"
+    },
+    "publish": {
+      "clicked_at": "2026-11-14T06:33:51.345Z",
+      "source_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+      "deployment_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+      "prepublish_ended_at": "2026-11-14T06:32:38.756641+00:00",
+      "prior_platform": "120e0fa",
+      "ui_label": "Publish changes",
+      "free_republish_observed": true,
+      "observed_at": "2026-11-14T06:34:21.708Z",
+      "status": {
+        "latestDeploymentEvents": [
+          {
+            "event": "Deployment finished",
+            "following": [
+              "Nov 14, 06:30 AM",
+              "Deployment finished"
+            ]
+          },
+          {
+            "event": "Deployment finished",
+            "following": [
+              "Nov 14, 08:09 AM",
+              "Deployment Started"
+            ]
+          },
+          {
+            "event": "Deployment Started",
+            "following": [
+              "Nov 14, 09:33 AM",
+              "Your website has severe performance issues"
+            ]
+          }
+        ],
+        "publishChangesPresent": false,
+        "publishing": [
+          {
+            "disabled": false
+          },
+          {
+            "disabled": true
+          }
+        ]
+      }
     }
   },
-  "production_changed_by_this_followup": "Git/original now M; owned release lease active; platform still PR1917.",
+  "production_changed_by_this_followup": "Manual platform publication in progress from original/app M.",
   "constraints": [
     "Original/app120untracked andunsavedUntitled-1 preserved",
     "Onlyroot mutatesGitHub/original/operator",
@@ -725,6 +792,6 @@
     "FrozenpreviousA/B untouched"
   ],
   "ledger_note": "Issue1006 reached2500commentlimit; use taskstatus+PRcontinuation",
-  "updated_at": "2026-11-14T06:32:04.349Z",
-  "next_action": "Run reviewedprepublish once; verifyready/ownedlease; clickRepublish/Publishchanges once; observeexplicitnewplatformcompletion; officialverify once withoutshorttimeout; freshinactive thenfinancialacceptance."
+  "updated_at": "2026-11-14T06:35:47.444Z",
+  "next_action": "Wait fornewexplicitplatformcompletion/newplatformID. Thenrunreviewedofficialverify helperonce withM/actor/evidence,nooverallshorttimeout; confirmexactA/M/R,3probes/frontendchecks andfreshinactive. Onlythenonevisiblefinancialrefresh andnewas_of/UIpagination/pendingmodalacceptance."
 }
