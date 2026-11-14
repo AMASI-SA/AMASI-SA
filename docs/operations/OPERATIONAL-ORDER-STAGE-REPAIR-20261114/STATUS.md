@@ -25,3 +25,8 @@ PR1918 freezes source A d70b42cda3d70a7f07c78c3efc5fde8331fdc877, tree 38b0dec1f
 ## freeze reviewed intent B after complete A gates — 2026-11-14T06:15:21.852Z
 
 All11exact-A workflows passed. Officialbackend XMLs: Operational4647, Stock4456+7subtests; all449required cases and17timings and4Mongo cases pass inboth. Candidate artifact14102091387 fromrun43564579813 matchespublished ZIPdigest; officialcandidate loader exit0; independentfullmanifest rederivation passes. B9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9 directchildA changesonlyintentblob542c547cb679e78d5050aa537bed370595f353f0; Btree9de141756a4c5dcfa8d1d4dfb6513178c406ac8e, runtimerg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f. TrackedB loader exit0. PR1918 markedready; exactB workflows includingactualHost20/24adapterrehearsals arepending. Originalread-onlypreflight foundHEADJ, trackedclean,120pending,inactiveguard,noGitHubmarkers andseparatelyobservedUntitled-1. Originalhasnotbeenadvanced,built,leasedorpublished for1918. Reviewedverificationhelper andpendingreviewrehearsalhelper savedbeforeexecution.
+
+
+## preserve independent operator rehearsal review — 2026-11-14T06:17:14.968Z
+
+Both original-operator helpers are now independently reviewed with exact identities and source hashes. The rehearsal retains the120file preservation contract, rejectsGitHubmarkers withoutremoval, requiresinactiveguard beforeFF/build and savesactualyarnbuildexit beforepostconditions. It createsno lease orpublish. ExactBchecks remaininprogress; nofailureobserved butpendingchecks/temporaryCodeQLneutral are notaccepted asPASS.

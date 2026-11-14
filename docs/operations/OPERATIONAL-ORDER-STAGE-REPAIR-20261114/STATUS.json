@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-ORDER-STAGE-REPAIR-20261114",
-  "stage": "intent_B_frozen_exact_CI_running",
+  "stage": "B_CI_running_operator_helpers_reviewed",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "2db0edc9edb315026eee4b6edd43b420a569c37d",
@@ -592,7 +592,8 @@
       "path": "/workspace/scratch/019fa8a18b3d/pr1918_original_rehearsal.py",
       "sha256": "52e67d80b4ad0445d6faf848cb5887db8e12039bb8f27f45c0808d92d784cc30",
       "bytes": 14892,
-      "review": "pending"
+      "review": "PASS",
+      "review_sha256": "4f935b59239d42a87e53fca3f08f9d6bcd2cde891698deadbd8d2ab5e9052705"
     },
     "operatorVerificationHelper": {
       "path": "/workspace/scratch/019fa8a18b3d/pr1918_original_verify.py",
@@ -612,6 +613,6 @@
     "FrozenpreviousA/B untouched"
   ],
   "ledger_note": "Issue1006 reached2500commentlimit; use taskstatus+PRcontinuation",
-  "updated_at": "2026-11-14T06:15:21.852Z",
-  "next_action": "Finish exact-B checks and rehearsal-helper review, normalmerge with expectedB, originalactualgovernedbuild; thenprepare/prepublish/publish/newplatformcompletion/officialverify/newvisibleasof. Preserve all originalfiles/buffers."
+  "updated_at": "2026-11-14T06:17:14.968Z",
+  "next_action": "Wait for final exactBsuccess including bothactualadapterrehearsals; thennormalmerge androot-onlyoriginalbuild. NooriginalFF/build/publishyet."
 }

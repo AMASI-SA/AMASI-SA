@@ -1,0 +1,118 @@
+{
+  "schema": "mezan_original_rehearsal_helper_review_v1",
+  "verdict": "PASS",
+  "blocking_findings": [],
+  "reviewer": "/root/screenshot_handoff",
+  "review_mode": "Read-only full source review, exact comparison and AST validation. Candidate was not imported or executed. No original /app, UI, DB, network or Git mutation. Only this scratch JSON was written.",
+  "candidate": {
+    "path": "/workspace/scratch/019fa8a18b3d/pr1918_original_rehearsal.py",
+    "bytes": 14892,
+    "sha256": "52e67d80b4ad0445d6faf848cb5887db8e12039bb8f27f45c0808d92d784cc30"
+  },
+  "previous_reviewed_template": {
+    "path": "/workspace/scratch/019fa8a18b3d/pr1917_original_rehearsal.py",
+    "sha256": "3a38a680fcf5e7696b510c5edd73de515b919bf5927f8759e64ee1361a596f4d"
+  },
+  "comparison": {
+    "only_expected_replacements": true,
+    "replacements": {
+      "8839d3aeb32b4bda2de2015efb0deca7fbb844a3": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+      "9c71435f4a19977c09f4331dee8fddbfa12a45eb": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+      "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+      "1469f4916715458b8374beb3bfddfc1f3c01f125": "9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9",
+      "9d8844f32f9db18cd036ff1b55edaec2c0dbe1b8": "9de141756a4c5dcfa8d1d4dfb6513178c406ac8e",
+      "PR1917": "PR1918",
+      "mezan-pr1917-original-": "mezan-pr1918-original-"
+    },
+    "behavioral_changes": false
+  },
+  "expected_constants": {
+    "BRANCH": "hotfix/prod-snap-meta-final",
+    "SOURCE": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+    "BASE": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+    "RELEASE": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+    "REVIEWED_INTENT_COMMIT": "9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9",
+    "REVIEWED_TREE": "9de141756a4c5dcfa8d1d4dfb6513178c406ac8e",
+    "EXPECTED_UNTRACKED_COUNT": 120,
+    "INTENT": "release/release-intent-v5.json",
+    "APPEND_ONLY": ".emergent/stripped_env_names"
+  },
+  "merge_input": "Final M is required as a complete lowercase SHA through --deployment-sha when --build is selected. No final M is guessed or embedded.",
+  "checks": [
+    {
+      "name": "inactive_and_clean_preconditions",
+      "result": "pass",
+      "evidence": "Official inactive status with no incomplete lease directory is checked initially, immediately before FF, immediately before build and after build. Tracked/index/submodule cleanliness and reviewed branch/head gates are enforced."
+    },
+    {
+      "name": "complete_reviewed_git_identity",
+      "result": "pass",
+      "evidence": "Checks fetched production equals supplied M, M and B tree equal reviewed tree, B parent exactly A, M parents exactly J and B, A ancestor and exact A-to-M intent-only path. Runtime intent must match A/R/protocol/branch."
+    },
+    {
+      "name": "preserve_120_untracked",
+      "result": "pass",
+      "evidence": "Snapshots every untracked path by kind/mode/content hash, rejects unsafe path/parent symlink and snapshot races, requires count 120, and checks conflicts with target tracked tree. Preservation checked before FF/build and after build; no cleanup/restore/quarantine/deletion commands."
+    },
+    {
+      "name": "append_only_sidecar",
+      "result": "pass",
+      "evidence": "Only .emergent/stripped_env_names may gain an appended suffix after build, preserving prior bytes, regular-file kind and mode. All other changes or deletions fail without restoration."
+    },
+    {
+      "name": "github_markers",
+      "result": "pass",
+      "evidence": "GITHUB_ACTIONS/GITHUB_SHA/GITHUB_WORKSPACE cause a stop with names-only evidence. They are never removed from the copied child environment."
+    },
+    {
+      "name": "actual_build",
+      "result": "pass",
+      "evidence": "Runs actual yarn build once in /app/frontend with timeout=None and public REACT_APP_BACKEND_URL=https://mezansalla.com. Saves stdout/stderr and actual child exit/timing before exit validation and before identity/preservation postconditions."
+    },
+    {
+      "name": "runtime_and_source_after_build",
+      "result": "pass",
+      "evidence": "Requires materialized release_identity JSON exactly equal to reviewed intent, unchanged M head, tracked cleanliness, preservation and fresh inactive guard before outcome ready=True."
+    },
+    {
+      "name": "no_lease_or_publication",
+      "result": "pass",
+      "evidence": "Only status is invoked through production_release_guard. No prepare/prepublish/verify/abort, publication, financial API or manual lease mutation is present."
+    },
+    {
+      "name": "no_bytecode_cleanup",
+      "result": "pass",
+      "evidence": "Child Python uses -B/PYTHONDONTWRITEBYTECODE. Ignored backend bytecode causes a stop for separate review; the script never deletes cache files."
+    },
+    {
+      "name": "evidence_and_buffers",
+      "result": "pass",
+      "evidence": "Evidence is created in a new private /tmp/mezan-pr1918-original-* directory with umask077. Filesystem hashes explicitly do not cover unsaved editor buffers; operator must inspect those separately."
+    }
+  ],
+  "provided_preflight": {
+    "path": "/workspace/shared/pr1918-original-preflight.json",
+    "sha256": "0a7f84f74a7109aed42ba0112b4a01285d9fbfba45cc142d72ab8fc21359eefe",
+    "provenance": "Root-recorded original-host/UI observations read from existing JSON; not independently repeated by reviewer.",
+    "record": {
+      "observed_at": "2026-11-14T06:11:03.619132+00:00",
+      "head": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+      "branch": "hotfix/prod-snap-meta-final",
+      "tracked_clean": true,
+      "untracked_count": 120,
+      "guard_active": false,
+      "incomplete_lease_directory": false,
+      "github_marker_names": [],
+      "unsaved_buffer_observed": "Untitled-1",
+      "unsaved_count": 1
+    }
+  },
+  "remaining_operator_gates": [
+    "B CI and final normal merge must complete before build; use the reviewed final M CLI value.",
+    "Fresh gates inside the helper must still pass when run; earlier preflight is not a substitute.",
+    "Preserve the observed Untitled-1 buffer; helper neither saves nor discards it.",
+    "A helper PASS is not a claim that build, publication or production acceptance has occurred."
+  ],
+  "ast_validation": "pass without importing/executing candidate",
+  "timestamp_policy": "Only the supplied preflight observation timestamp is retained; no helper execution timestamp is fabricated."
+}
