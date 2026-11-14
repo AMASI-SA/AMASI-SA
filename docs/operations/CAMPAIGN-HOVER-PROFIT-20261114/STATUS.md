@@ -206,3 +206,12 @@ Recorded at 2026-11-14 15:42:15 UTC. Reviewed prepublish completed once: actual 
 Immediately afterward root clicked Publish changes once in the already-open authorized Emergent dialog. UI closed the dialog and showed disabled Publishing..., confirming start. Observation recorded by15:41:50UTC. Do not click publish again. Current prior version remains a5eae68 until a newer completion is observed. New production outcome is pending; no successful new deployment or official verification is claimed. Keep this task's matching lease until the one official verify succeeds.
 
 Next: observe a newer explicit Deployment finished event and a new current published version, then run the frozen gate verify once using those actual UI values. Its output must pass3checks, exact identity, preservation and inactiveguard; then verify the new campaign rows on the live page. Do not alter A/B/M or rerun prepare/prepublish/build.
+
+
+## Publication finished — 2026-11-14 15:55:38 UTC
+
+- Emergent history after one ordinary page refresh now explicitly shows `Deployment finished Nov 14, 06:51 PM` (Riyadh; `2026-11-14T15:51:00Z`).
+- New current published UI version observed: `1b4c4f6`; prior `a5eae68` moved to previous version.
+- One Publish changes click only; no republish repeated.
+- Own prepared lease remains active pending official verify. Verify has not yet been invoked.
+- Next: execute frozen release gate d072 once with actual UI proof, then confirm official three live probes, exact identity/source closure and inactive guard; live card acceptance in parallel.
