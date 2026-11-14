@@ -21,6 +21,7 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from operational_balance_store import AUTHORIZATION_GUARD, fail
+from operational_source_diagnostics import source_failure_detail
 
 
 LEASES = "operational_balance_refresh_leases_v1"
@@ -73,6 +74,7 @@ class DemandRefreshContext:
         self.lease_attempted = False
         self.leased = False
         self.stage_timings = deque(maxlen=TIMING_LIMIT)
+        self.read_deadline = None
 
     def record_stage(self, stage, duration_ms, outcome):
         if (not isinstance(stage, str) or stage not in TIMING_STAGES
@@ -266,6 +268,7 @@ async def run_visible_refresh(request, db, owner, actor, verify, operation):
                 # Source/CPU work cannot outlive the short lease. This timer
                 # belongs to this request and is removed on exit. run_commit
                 # observes an already admitted atomic result even at deadline.
+                context.read_deadline = time.monotonic() + REQUEST_SECONDS
                 async with asyncio.timeout(REQUEST_SECONDS):
                     await context.acquire()
                     return await operation()
@@ -276,6 +279,18 @@ async def run_visible_refresh(request, db, owner, actor, verify, operation):
                     "message": "انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة",
                     "stage_timings": list(context.stage_timings),
                 })
+            except HTTPException as error:
+                detail = error.detail
+                # Only the canonical sanitized source error gains evidence.
+                # At this boundary all operation stages, including aggregate,
+                # have unwound. Unrelated errors retain their exact contract.
+                if (error.status_code == 409 and type(detail) is dict and len(detail) == 4
+                        and all(type(key) is str and type(value) is str
+                                for key, value in detail.items())
+                        and detail == source_failure_detail(detail.get("cause"), detail.get("source_collection"))):
+                    raise HTTPException(status_code=error.status_code, headers=error.headers,
+                                        detail={**detail, "stage_timings": list(context.stage_timings)}) from None
+                raise
 
         context.work = asyncio.create_task(work())
         context.listener = asyncio.create_task(context.listen())

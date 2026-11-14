@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from bson import BSON
 import pytest
+import pymongo
 
 import operational_balance_sources as sources
 from operational_balance_engine import reconcile
@@ -12,6 +13,7 @@ from operational_balance_service import report
 from operational_financial_position import build_financial_position
 from operational_read_runtime import SourceReadError, load_collections, source_read_budget
 from test_operational_balance_sources import HardBoundaryDB, NOW, START, order
+from test_operational_read_runtime import MotorSourceDB, ThreadedMotorCursor
 
 
 @pytest.fixture(autouse=True)
@@ -117,6 +119,76 @@ async def test_shared_order_reader_and_other_refresh_sources_keep_their_existing
     assert database.order_queries == [({'user_id': 'owner'}, None)]
     name = 'mezan_product_cost_profiles_v2'
     assert await sources.refresh_source_rows(database, 'owner', name) == database.data[name]
+
+
+@pytest.mark.asyncio
+async def test_ordinary_rows_only_adopts_motor_cursor_ownership_inside_bounded_read_scope():
+    document = {'user_id': 'owner', 'raw_by_source': {'retain': True}, 'ordinary_payload': 'keep'}
+    ordinary = ThreadedMotorCursor([], block=False)
+    ordinary_calls = []
+
+    async def ordinary_to_list(count):
+        ordinary_calls.append(count)
+        assert pymongo._csot.remaining() is None
+        return [deepcopy(document)]
+
+    ordinary.to_list = ordinary_to_list
+    outside = MotorSourceDB(ordinary)
+    assert await sources.rows(outside, 'owner', 'unified_orders') == [document]
+    assert ordinary_calls == [20001] and ordinary.close_calls == 0 and not ordinary.operations
+    assert outside.queries == [({'user_id': 'owner'}, None)]
+
+    bounded = ThreadedMotorCursor([[document]], block=False)
+    bounded.to_list = ordinary_to_list  # The owned path must not call this.
+    inside = MotorSourceDB(bounded)
+    assert await load_collections(inside, 'owner', ['unified_orders'], reader=sources.rows) == {
+        'unified_orders': [document]}
+    assert ordinary_calls == [20001] and bounded.close_calls == 1
+    assert bounded.driver_budgets[0] is not None and inside.queries == outside.queries
+    assert pymongo._csot.remaining() is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('count', [20000, 20001, 20002])
+async def test_actual_motor_refresh_retains_exact_row_cap_and_one_overflow_sentinel(count):
+    documents = [{'user_id': 'owner', 'raw_by_source': {'canonical': {'malformed': None}}}] * count
+    cursor = ThreadedMotorCursor([documents], block=False)
+    database = MotorSourceDB(cursor)
+    if count == 20000:
+        assert await load_collections(database, 'owner', ['unified_orders'],
+            reader=sources.refresh_source_rows) == {'unified_orders': documents}
+    else:
+        with pytest.raises(SourceReadError) as failure:
+            await load_collections(database, 'owner', ['unified_orders'], reader=sources.refresh_source_rows)
+        assert failure.value.code == 'operational_source_scope_too_large'
+    assert cursor.consumed == min(count, 20001)
+    assert len(cursor.operations) == cursor.close_calls == len(database.queries) == 1
+    assert not cursor.closed_during_read
+    assert database.queries[0] == ({'user_id': 'owner'}, {'_id': 0, **{key: 1 for key in sources.REFRESH_ORDER_FIELDS}})
+
+
+@pytest.mark.asyncio
+async def test_actual_motor_refresh_owner_mismatch_still_fails_closed_after_cursor_cleanup():
+    cursor = ThreadedMotorCursor([[{'user_id': 'owner'}, {'user_id': 'foreign'}]], block=False)
+    with pytest.raises(SourceReadError) as failure:
+        await load_collections(MotorSourceDB(cursor), 'owner', ['unified_orders'], reader=sources.refresh_source_rows)
+    assert (failure.value.code, failure.value.collection) == ('operational_source_owner_mismatch', 'unified_orders')
+    assert cursor.close_calls == 1 and not cursor.closed_during_read
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('collection', ['mezan_product_cost_profiles_v2', 'store_delivery_driver_earnings',
+                                      'store_delivery_driver_settlements'])
+async def test_non_order_primary_reads_use_owned_motor_iteration_with_existing_projection(collection):
+    from operational_shipping_fee_review import FIELDS
+    document = {'user_id': 'owner', 'proof': {'retain': True}}
+    cursor = ThreadedMotorCursor([[document]], block=False)
+    database = MotorSourceDB(cursor, collection=collection)
+    assert await load_collections(database, 'owner', [collection], reader=sources.refresh_source_rows) == {
+        collection: [document]}
+    projection = {'_id': 0, **{key: 1 for key in FIELDS[collection]}} if collection in FIELDS else None
+    assert database.queries == [({'user_id': 'owner'}, projection)]
+    assert cursor.close_calls == 1 and 0 < cursor.driver_budgets[0] <= 15
 
 
 @pytest.mark.asyncio

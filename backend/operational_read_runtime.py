@@ -9,14 +9,21 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
+import inspect
 from threading import Event
 import time
 
+from motor.core import AgnosticBaseCursor
+import pymongo
+from pymongo.errors import PyMongoError
+
+from operational_demand_refresh import demand_context
 from operational_financial_activity_runtime import (
     join_task, preparation_checkpoint, preparation_scope, wait_for_cleanup,
 )
 
 _DEADLINE = ContextVar('operational_source_read_deadline', default=None)
+_OWNED_SOURCE_READ = ContextVar('operational_owned_source_read', default=False)
 
 
 class SourceReadError(ValueError):
@@ -42,6 +49,62 @@ def _snapshot_session(db):
     return vars(db).get('session') is not None if hasattr(db, '__dict__') else False
 
 
+def source_read_is_owned():
+    return _OWNED_SOURCE_READ.get()
+
+
+async def read_source_cursor(cursor, count):
+    """Own Motor's active batch until it settles, then close the cursor.
+
+    Cancelling Motor's to_list Future does not join the executor read behind
+    it. Keep iteration shielded instead; cancellation requests a stop before
+    another advance and waits for the active read and sequential close.
+    """
+    if not isinstance(cursor, AgnosticBaseCursor):
+        # Deliberately non-Motor, coroutine-based adapters used by offline
+        # readers own their awaited work directly. Do not silently accept a
+        # Future-returning Motor proxy with the same cancellation gap.
+        to_list = getattr(cursor, 'to_list', None)
+        if not inspect.iscoroutinefunction(to_list):
+            raise ValueError('operational_source_cursor_unsupported')
+        return await to_list(count)
+    if not callable(getattr(cursor, '__anext__', None)) or not callable(getattr(cursor, 'close', None)):
+        raise ValueError('operational_source_cursor_unsupported')
+
+    stop = asyncio.Event()
+
+    async def consume():
+        result = []
+        try:
+            while len(result) < count and not stop.is_set():
+                try:
+                    row = await cursor.__anext__()
+                except StopAsyncIteration:
+                    break
+                if stop.is_set():
+                    break
+                result.append(row)
+                if len(result) % 256 == 0:
+                    # Buffered rows can be synchronous. Let request timeout
+                    # and disconnect callbacks run before advancing again.
+                    await asyncio.sleep(0)
+            return result
+        finally:
+            # Never race killCursors/session cleanup with an active getMore.
+            await cursor.close()
+
+    task = asyncio.create_task(consume())
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        stop.set()
+        try:
+            await join_task(task)
+        except (asyncio.CancelledError, Exception):
+            pass  # Preserve cancellation after observing the owned read.
+        raise
+
+
 async def load_collections(db, owner, names, *, reader, concurrency=4, per_read_timeout=15):
     names = tuple(names)
     if len(names) != len(set(names)):
@@ -54,14 +117,38 @@ async def load_collections(db, owner, names, *, reader, concurrency=4, per_read_
             remaining = per_read_timeout
             if _DEADLINE.get() is not None:
                 remaining = min(remaining, _DEADLINE.get() - time.monotonic())
+            context = demand_context()
+            if context is not None and context.read_deadline is not None:
+                remaining = min(remaining, context.read_deadline - time.monotonic())
             if remaining <= 0:
                 raise SourceReadError('operational_source_read_timeout', name)
             try:
-                result = await asyncio.wait_for(reader(db, owner, name), timeout=remaining)
+                # CSOT reaches Motor's executor and bounds server/socket work,
+                # not only its asyncio waiter. Its context ends before any
+                # calculation or financial write can inherit this read budget.
+                with pymongo.timeout(remaining):
+                    token = _OWNED_SOURCE_READ.set(True)
+                    try:
+                        task = asyncio.create_task(reader(db, owner, name))
+                        try:
+                            result = await asyncio.wait_for(asyncio.shield(task), timeout=remaining)
+                        finally:
+                            if not task.done():
+                                task.cancel()
+                            try:
+                                await join_task(task)
+                            except (asyncio.CancelledError, Exception):
+                                pass  # The original outcome owns error reporting.
+                    finally:
+                        _OWNED_SOURCE_READ.reset(token)
                 return name, result
             except asyncio.TimeoutError:
                 raise SourceReadError('operational_source_read_timeout', name) from None
             except SourceReadError:
+                raise
+            except PyMongoError as error:
+                if error.timeout:
+                    raise SourceReadError('operational_source_read_timeout', name) from None
                 raise
             except ValueError as error:
                 code = str(error)
@@ -73,13 +160,13 @@ async def load_collections(db, owner, names, *, reader, concurrency=4, per_read_
     try:
         return dict(await asyncio.gather(*tasks))
     finally:
-        # A failed read never leaves sibling DB reads running after the caller
-        # releases its session, budget, or authorization scope.
+        # Owned source cursors join the active Motor read before releasing the
+        # session, budget, or authorization scope, even on repeated cancellation.
         for task in tasks:
             if not task.done():
                 task.cancel()
         if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            await join_task(asyncio.gather(*tasks, return_exceptions=True))
 
 
 class SnapshotReadCache:

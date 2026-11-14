@@ -385,17 +385,22 @@ def usable(row):
             and not any(row.get(k) for k in ('archived', 'deleted', 'is_archived', 'is_deleted')))
 
 
-async def rows(db, owner, collection):
+def _source_cursor(db, owner, collection, *, refresh=False):
     if not owner or collection not in ALLOWED_COLLECTIONS or collection in {TXN_COLLECTION, DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'accounts', 'mz2_operational_bank_accounts'}:
         raise ValueError('operational_source_rejected')
+    if refresh and collection == 'unified_orders':
+        projection = {'_id': 0, **{key: 1 for key in REFRESH_ORDER_FIELDS}}
+        return db[collection].find({'user_id': owner}, projection)
     # Only native fee proof and payout state belong in the financial reader.
     # In particular never load receipt URLs, bank identifiers or note text here.
     if collection in {'store_delivery_driver_earnings', 'store_delivery_driver_settlements'}:
         from operational_shipping_fee_review import FIELDS
         projection = {'_id': 0, **{key: 1 for key in FIELDS[collection]}}
-        result = await db[collection].find({'user_id': owner}, projection).to_list(MAX_ROWS + 1)
-    else:
-        result = await db[collection].find({'user_id': owner}).to_list(MAX_ROWS + 1)
+        return db[collection].find({'user_id': owner}, projection)
+    return db[collection].find({'user_id': owner})
+
+
+def _checked_source_rows(result, owner):
     if len(result) > MAX_ROWS:
         raise ValueError('operational_source_scope_too_large')
     if any(r.get('user_id') != owner for r in result):
@@ -403,19 +408,19 @@ async def rows(db, owner, collection):
     return result
 
 
+async def rows(db, owner, collection):
+    from operational_read_runtime import read_source_cursor, source_read_is_owned
+    cursor = _source_cursor(db, owner, collection)
+    result = (await read_source_cursor(cursor, MAX_ROWS + 1) if source_read_is_owned()
+              else await cursor.to_list(MAX_ROWS + 1))
+    return _checked_source_rows(result, owner)
+
+
 async def refresh_source_rows(db, owner, collection):
-    """Trim only order DTO fields; retain the entire owner cohort and read cap."""
-    if collection != 'unified_orders':
-        return await rows(db, owner, collection)
-    if not owner or collection not in ALLOWED_COLLECTIONS:
-        raise ValueError('operational_source_rejected')
-    projection = {'_id': 0, **{key: 1 for key in REFRESH_ORDER_FIELDS}}
-    result = await db[collection].find({'user_id': owner}, projection).to_list(MAX_ROWS + 1)
-    if len(result) > MAX_ROWS:
-        raise ValueError('operational_source_scope_too_large')
-    if any(row.get('user_id') != owner for row in result):
-        raise ValueError('operational_source_owner_mismatch')
-    return result
+    """Own each primary read; preserve its cohort, proof projection and cap."""
+    from operational_read_runtime import read_source_cursor
+    cursor = _source_cursor(db, owner, collection, refresh=True)
+    return _checked_source_rows(await read_source_cursor(cursor, MAX_ROWS + 1), owner)
 
 
 async def entities(db, owner, kind, *, include_unready=False, operational_state=None):

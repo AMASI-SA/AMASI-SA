@@ -145,14 +145,18 @@ const REFRESH_TIMING_STAGES = new Set([
 
 // Local diagnostic evidence only. Nested stages overlap; their durations must
 // not be added. Reconstruct the fixed fields instead of logging response data.
-export function logOperationalRefreshTimeoutTimings(detail) {
+function logOperationalRefreshTimings(detail, label) {
     if (!Array.isArray(detail?.stage_timings)) return;
     const timings = detail.stage_timings.filter(row => row && REFRESH_TIMING_STAGES.has(row.stage)
         && typeof row.duration_ms === "number" && Number.isFinite(row.duration_ms)
         && row.duration_ms >= 0 && row.duration_ms <= 300000
         && ["complete", "cancelled", "failed"].includes(row.outcome))
         .slice(-64).map(({ stage, duration_ms, outcome }) => ({ stage, duration_ms, outcome }));
-    if (timings.length) console.info("operational_refresh_timeout_stage_timings", timings);
+    if (timings.length) console.info(label, timings);
+}
+
+export function logOperationalRefreshTimeoutTimings(detail) {
+    logOperationalRefreshTimings(detail, "operational_refresh_timeout_stage_timings");
 }
 
 export async function refreshVisibleSnapshot(api, config) {
@@ -171,6 +175,9 @@ export async function refreshVisibleSnapshot(api, config) {
             "operational_source_read_timeout", "operational_source_read_invalid", "operational_refresh_lease_lost"].includes(detail?.code);
         const refreshTimedOut = status === 408 && detail?.code === "operational_refresh_timeout";
         if (refreshTimedOut) logOperationalRefreshTimeoutTimings(detail);
+        if (status === 409 && detail?.code === "operational_source_setup_incomplete") {
+            logOperationalRefreshTimings(detail, "operational_refresh_source_stage_timings");
+        }
         if (refreshTimedOut || sourceFailure || status >= 500 || ["ECONNABORTED", "ETIMEDOUT", "ERR_NETWORK"].includes(error?.code)) {
             return {refresh_warning: "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. " + (detail?.message || "أعد التحديث عند الحاجة من الصفحة.")};
         }
