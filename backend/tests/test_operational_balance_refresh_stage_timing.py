@@ -1,16 +1,21 @@
 """Visible refresh diagnostics expose timings, never financial identities."""
 import asyncio
+from copy import deepcopy
+import json
 import logging
+import time
 
-from fastapi import HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException
+import httpx
 import pytest
 
 from operational_demand_refresh import (
-    LEASES, TIMING_LIMIT, DemandRefreshContext, demand_context,
+    LEASES, REQUEST_SECONDS, TIMING_LIMIT, DemandRefreshContext, demand_context,
     refresh_stage, run_visible_refresh,
 )
 from test_operational_balance_demand_refresh import DB, Request, allowed
 from test_operational_balance_demand_refresh_routes import post
+from operational_source_diagnostics import source_failure_detail
 
 
 def timing_messages(caplog):
@@ -32,6 +37,63 @@ def test_actual_visible_route_records_completed_read_and_commit_stages(monkeypat
         assert rows[0].endswith('outcome=complete')
         assert float(rows[0].split('duration_ms=')[1].split()[0]) >= 0
     assert database.data[LEASES] == {}
+
+
+def test_source_failure_http_response_contains_the_unwound_request_stages(monkeypatch, caplog):
+    from operational_balance_store import STATES
+    from operational_demand_refresh_routes import attach_demand_refresh_routes
+    from operational_read_runtime import SourceReadError
+    from test_operational_balance_source_diagnostics import setup_failing_refresh
+    import operational_balance_sources
+
+    caplog.set_level(logging.INFO, logger='operational_demand_refresh')
+    database = setup_failing_refresh(
+        monkeypatch, SourceReadError('operational_source_read_timeout', 'unified_orders'))
+    original_state = deepcopy(database.data[STATES])
+    assert DemandRefreshContext(Request(), database, 'owner', 'staff', allowed).read_deadline is None
+
+    async def fail_read(*args, **kwargs):
+        deadline = demand_context().read_deadline
+        assert type(deadline) is float and 0 < deadline - time.monotonic() <= REQUEST_SECONDS
+        with refresh_stage('source_primary_reads'):
+            raise SourceReadError('operational_source_read_timeout', 'unified_orders')
+
+    monkeypatch.setattr(operational_balance_sources, 'collect_sources', fail_read)
+
+    async def principal():
+        return {'id': 'actor-private-fixture'}
+
+    async def scope(db, user, permission):
+        assert db is database and permission == 'reports'
+        return user, 'owner', 'mezan2'
+
+    async def scenario():
+        router, app = APIRouter(prefix='/operational-balances'), FastAPI()
+        attach_demand_refresh_routes(router, database, principal, scope)
+        app.include_router(router, prefix='/api')
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url='http://isolated') as client:
+            response = await client.post('/api/operational-balances/refresh', json={'visible': True})
+        assert response.status_code == 409
+        detail = response.json()['detail']
+        expected = source_failure_detail('operational_source_read_timeout', 'unified_orders')
+        assert {key: value for key, value in detail.items() if key != 'stage_timings'} == expected
+        timings = detail['stage_timings']
+        assert [(row['stage'], row['outcome']) for row in timings[-3:]] == [
+            ('source_primary_reads', 'failed'), ('source_collection', 'failed'), ('aggregate', 'failed')]
+        assert any(row['stage'] == 'native_evidence' and row['outcome'] == 'complete' for row in timings)
+        assert any(row['stage'] == 'snapshot_load' and row['outcome'] == 'complete' for row in timings)
+        assert all(set(row) == {'stage', 'duration_ms', 'outcome'}
+                   and 0 <= row['duration_ms'] <= 300000 for row in timings)
+        assert database.data[STATES] == original_state and database.data[LEASES] == {}
+        assert all(row[0] == LEASES for row in database.writes)
+        assert demand_context() is None
+        assert not [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
+        for private in ('read_deadline', 'actor-private-fixture', '9182.37', '123.45', 'private-audit-fixture',
+                        'private-movement-fixture'):
+            assert private not in json.dumps(detail) and private not in caplog.text
+
+    asyncio.run(scenario())
 
 
 @pytest.mark.parametrize('payload,principal', [({'visible': False}, None),
@@ -123,7 +185,8 @@ def test_timeout_diagnostics_reject_unrecognized_or_malformed_values(stage, dura
     assert list(context.stage_timings) == []
 
 
-def test_timeout_diagnostics_keep_bounded_tail_and_terminal_cancelled_stage(monkeypatch):
+@pytest.mark.parametrize('failure_kind', ['deadline', 'source'])
+def test_timeout_diagnostics_keep_bounded_tail_and_terminal_cancelled_stage(monkeypatch, failure_kind):
     monkeypatch.setattr('operational_demand_refresh.REQUEST_SECONDS', 0.02)
 
     async def scenario():
@@ -137,14 +200,19 @@ def test_timeout_diagnostics_keep_bounded_tail_and_terminal_cancelled_stage(monk
                 # An unrecognized record is never put in the HTTP response.
                 demand_context().record_stage('private-owner-fixture', 1, 'complete')
                 with refresh_stage('source_orders'):
+                    if failure_kind == 'source':
+                        raise HTTPException(409, detail=source_failure_detail(
+                            'operational_source_read_timeout', 'unified_orders'))
                     await asyncio.Event().wait()
 
         with pytest.raises(HTTPException) as failure:
             await run_visible_refresh(Request(), database, 'owner', 'staff', allowed, operation)
         timings = failure.value.detail['stage_timings']
+        assert failure.value.status_code == (409 if failure_kind == 'source' else 408)
         assert len(timings) == TIMING_LIMIT
+        outcome = 'failed' if failure_kind == 'source' else 'cancelled'
         assert [(r['stage'], r['outcome']) for r in timings[-2:]] == [
-            ('source_orders', 'cancelled'), ('aggregate', 'cancelled')]
+            ('source_orders', outcome), ('aggregate', outcome)]
         assert 'private' not in str(failure.value.detail)
         assert database.data[LEASES] == {} and demand_context() is None
         return database.writes
@@ -153,7 +221,8 @@ def test_timeout_diagnostics_keep_bounded_tail_and_terminal_cancelled_stage(monk
     assert [row[1] for row in writes] == ['acquire', 'release']
 
 
-def test_concurrent_timeout_diagnostics_are_request_local(monkeypatch):
+@pytest.mark.parametrize('failure_kind', ['deadline', 'source'])
+def test_concurrent_timeout_diagnostics_are_request_local(monkeypatch, failure_kind):
     monkeypatch.setattr('operational_demand_refresh.REQUEST_SECONDS', 0.05)
 
     async def scenario():
@@ -168,6 +237,9 @@ def test_concurrent_timeout_diagnostics_are_request_local(monkeypatch):
                     if len(started) == 2:
                         both_started.set()
                     await both_started.wait()
+                    if failure_kind == 'source':
+                        raise HTTPException(409, detail=source_failure_detail(
+                            'operational_source_read_timeout', 'unified_orders'))
                     await asyncio.Event().wait()
 
             with pytest.raises(HTTPException) as failure:
@@ -179,6 +251,34 @@ def test_concurrent_timeout_diagnostics_are_request_local(monkeypatch):
         assert [row['stage'] for row in first] == ['source_orders']
         assert [row['stage'] for row in second] == ['profit_snapshot']
         assert not [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('status,changes', [
+    (403, {}), (500, {}),
+    (409, {'code': 'operational_refresh_in_progress'}),
+    (409, {'message': 'private arbitrary exception'}),
+    (409, {'owner_id': 'private-owner-fixture'}),
+    (409, {'cause': ['private-exception']}),
+])
+def test_source_timings_do_not_extend_unrelated_or_malformed_http_errors(status, changes):
+    async def scenario():
+        database = DB()
+        detail = {**source_failure_detail('operational_source_read_timeout', 'unified_orders'), **changes}
+        original = deepcopy(detail)
+        error = HTTPException(status, detail=detail, headers={'Retry-After': '3'})
+
+        async def operation():
+            with refresh_stage('source_primary_reads'):
+                raise error
+
+        with pytest.raises(HTTPException) as failure:
+            await run_visible_refresh(Request(), database, 'owner', 'staff', allowed, operation)
+        assert failure.value is error
+        assert failure.value.status_code == status and failure.value.detail == original
+        assert failure.value.headers == {'Retry-After': '3'}
+        assert database.data[LEASES] == {} and demand_context() is None
 
     asyncio.run(scenario())
 
