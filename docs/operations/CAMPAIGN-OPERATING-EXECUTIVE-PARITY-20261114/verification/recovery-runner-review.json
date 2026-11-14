@@ -1,0 +1,11 @@
+{
+  "reviewed_at": "2026-11-14 17:39:51 UTC",
+  "root": "PASS",
+  "independent": "PASS",
+  "original_runner": "152ccd5d4392a6ad7cc314aaae740b4877cfa42028e692c65d5c0e6bf685de68",
+  "gate_template": "5225581d9add88cf0a6dfde90f194b40b555153c73f76704c51d0a251d4e3bbb",
+  "gate_disabled": true,
+  "prior_failure_hash_count": 13,
+  "fresh_fetch": "under official mutex; exact M3 checked before quarantine; gate binds actual receipt",
+  "executed": false
+}

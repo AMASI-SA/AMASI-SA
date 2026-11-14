@@ -1,7 +1,7 @@
 {
   "task": "CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114",
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 17:30:51 UTC",
+  "updated_at_utc": "2026-11-14 17:39:51 UTC",
   "branch": "codex/campaign-operating-executive-parity-m94f6-20261114",
   "pr": 1924,
   "base_J3": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
@@ -145,7 +145,7 @@
     }
   },
   "production_changed_by_this_followup": true,
-  "next": "Review and freeze one-shot original-build continuation on exact M3. Preserve failed evidence, atomically quarantine only the two verified ignored bytecode files with their directory in the real same-device Git directory, preserve original 120-file prefix chain, then actual yarn build and package proof. No lease or publication until successful actual rehearsal. Final gate must consume explicit recovery provenance.",
+  "next": "Execute frozen reviewed original-build continuation once with exact M3; inspect actual result/06/07/preservation. Then pin and independently review final gate to actual recovery evidence and observed UI baseline ecb9679, prepare/prepublish/publish/official verify3/live numeric acceptance.",
   "static_review": "root plus independent source reuse/overlap PASS",
   "source_coverage": {
     "backend": 248,
@@ -334,8 +334,41 @@
       "after-fast-forward-untracked.json": "afa2bb953b571c446703ef1fdd4cb91d811068a09879800a6a5b72fc7f6c51bf",
       "after-fast-forward-bookkeeping-prefix-proof.json": "2ed7a572cd88f987c2f7e4ba79478d95c315e5ea7291ee75d7ff1751382035e4",
       "06-governed-adapter.stdout": "39e8c99b49f04709f92dd3dab437d25686d350f99bcbfbabb95451a36129ee5b",
-      "06-governed-adapter.stderr": "69b3ab66053b42d01223b2ca5f87ccb8c74b8454f952fecfcca8efb5fd4ae470"
-    }
+      "06-governed-adapter.stderr": "69b3ab66053b42d01223b2ca5f87ccb8c74b8454f952fecfcca8efb5fd4ae470",
+      "04-fast-forward.started.json": "fb7558076db30fed26dfcc259b55168a09173595cb0262aebd944751ce6db596",
+      "04-fast-forward.json": "d4b5fae6991a8d91c40d86a1c02abd924d11bd50b9041d91ae63e577c6e90cdb",
+      "04-fast-forward.stdout": "f4705d7a5c26fb1df234d827ac1cf9fda09564fadcc228d8a1e380877ba12322",
+      "04-fast-forward.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "git_directory": {
+      "path": "/app/.git",
+      "resolved": "/app/.git",
+      "mode": 16877,
+      "inode": 131136,
+      "dev": 66330,
+      "git_command_output": "/app/.git"
+    },
+    "fast_forward_receipt": {
+      "argv": [
+        "git",
+        "merge",
+        "--ff-only",
+        "77e4acf33e8f5432d97bda5d7208983f0fadc599"
+      ],
+      "cwd": "/app",
+      "started_at": "2026-11-14T17:24:04.025967Z",
+      "finished_at": "2026-11-14T17:24:04.066196Z",
+      "exit_code": 0,
+      "seconds": 0.040198670991230756,
+      "stdout_sha256": "f4705d7a5c26fb1df234d827ac1cf9fda09564fadcc228d8a1e380877ba12322",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "absent_after_failure": [
+      "07-package-proof.started.json",
+      "07-package-proof.json",
+      "08-guard-after-build.json",
+      "result.json"
+    ]
   },
   "ui_baseline": {
     "tab": "24",
@@ -344,5 +377,22 @@
     "ordinal": "100th publish",
     "finished_event": "Deployment finished Nov 14, 07:55 PM",
     "source": "root actual Manage UI observation"
+  },
+  "original_recovery": {
+    "runner_sha256": "152ccd5d4392a6ad7cc314aaae740b4877cfa42028e692c65d5c0e6bf685de68",
+    "runner_bytes": 30635,
+    "root_review": "PASS",
+    "independent_review": "PASS exact bytes including fresh fetch",
+    "executed": false,
+    "quarantine": "only two pinned ignored bytecode files, whole directory atomic rename to private same-device Git directory",
+    "failed_original_preserved": true
+  },
+  "recovery_gate_template": {
+    "sha256": "5225581d9add88cf0a6dfde90f194b40b555153c73f76704c51d0a251d4e3bbb",
+    "bytes": 42670,
+    "disabled": true,
+    "root_review": "PASS",
+    "independent_review": "PASS",
+    "original_evidence_unpinned": true
   }
 }

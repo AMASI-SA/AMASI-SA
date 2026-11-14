@@ -55,6 +55,39 @@
     "after-fast-forward-untracked.json": "afa2bb953b571c446703ef1fdd4cb91d811068a09879800a6a5b72fc7f6c51bf",
     "after-fast-forward-bookkeeping-prefix-proof.json": "2ed7a572cd88f987c2f7e4ba79478d95c315e5ea7291ee75d7ff1751382035e4",
     "06-governed-adapter.stdout": "39e8c99b49f04709f92dd3dab437d25686d350f99bcbfbabb95451a36129ee5b",
-    "06-governed-adapter.stderr": "69b3ab66053b42d01223b2ca5f87ccb8c74b8454f952fecfcca8efb5fd4ae470"
-  }
+    "06-governed-adapter.stderr": "69b3ab66053b42d01223b2ca5f87ccb8c74b8454f952fecfcca8efb5fd4ae470",
+    "04-fast-forward.started.json": "fb7558076db30fed26dfcc259b55168a09173595cb0262aebd944751ce6db596",
+    "04-fast-forward.json": "d4b5fae6991a8d91c40d86a1c02abd924d11bd50b9041d91ae63e577c6e90cdb",
+    "04-fast-forward.stdout": "f4705d7a5c26fb1df234d827ac1cf9fda09564fadcc228d8a1e380877ba12322",
+    "04-fast-forward.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "git_directory": {
+    "path": "/app/.git",
+    "resolved": "/app/.git",
+    "mode": 16877,
+    "inode": 131136,
+    "dev": 66330,
+    "git_command_output": "/app/.git"
+  },
+  "fast_forward_receipt": {
+    "argv": [
+      "git",
+      "merge",
+      "--ff-only",
+      "77e4acf33e8f5432d97bda5d7208983f0fadc599"
+    ],
+    "cwd": "/app",
+    "started_at": "2026-11-14T17:24:04.025967Z",
+    "finished_at": "2026-11-14T17:24:04.066196Z",
+    "exit_code": 0,
+    "seconds": 0.040198670991230756,
+    "stdout_sha256": "f4705d7a5c26fb1df234d827ac1cf9fda09564fadcc228d8a1e380877ba12322",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "absent_after_failure": [
+    "07-package-proof.started.json",
+    "07-package-proof.json",
+    "08-guard-after-build.json",
+    "result.json"
+  ]
 }
