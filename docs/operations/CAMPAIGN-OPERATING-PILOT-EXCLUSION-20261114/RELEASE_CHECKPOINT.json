@@ -2,7 +2,7 @@
   "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
   "round": 6,
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 19:10:21 UTC",
+  "updated_at_utc": "2026-11-14 19:15:30 UTC",
   "branch": "codex/campaign-operating-pilot-m3e9d-20261114",
   "pr": 1929,
   "base_J6": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
@@ -322,10 +322,16 @@
         "previous_version": "5a7a310",
         "own_click": false,
         "ui_button": "Republish"
+      },
+      "official_verify": {
+        "state": "in_progress",
+        "owner_record": "PR1928 updated19:10:19Z; STATUS ffbe30bac4bf33b3dfe34598c5d47f9f7d9979b6",
+        "evidence_directory": "/tmp/mezan-pr1928-original-2e86crex",
+        "calls": 1
       }
     }
   },
-  "next": "Verify B6 applicableCI and both declared host generated-package evidence; ready transition gates; normal merge and exactM push gates. Original writes require fresh official inactive and no foreign writer. Preserve first Stock failure. No own original build, lease or publication.",
+  "next": "Wait remaining B6 workflows, then readytransition gates. After fresh J6/head/checks, a GitHub-only normal merge is permitted while foreign verifier runs: review confirms it does not read remote refs and cloud publication already finished. Do not mutate /app or lease until foreign verification/preservation closure and fresh inactive. Then exactMCI, pinnedreviewedoperators, originalbuild, publish, verify3 andlive arithmetic.",
   "original_build": false,
   "lease": false,
   "published": false,
@@ -462,10 +468,267 @@
       "branch_head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
       "observed_at": "2026-11-14 19:10:21 UTC"
     },
-    "independent": "pending"
+    "independent": {
+      "result": "PASS",
+      "sole_parent": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "B": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+      "only_diff": "release/release-intent-v5.json",
+      "intent_blob": "84ab82046397eaac1e2e7b76adf6418e56d3bd4e",
+      "source_history_commits": 2
+    }
   },
   "intent_ci": {
-    "status": "pending",
-    "head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016"
+    "status": "8/11 applicable workflows successful; OperationalBalance, Stock, CodeQL still running; declared TikTok conditional skip.",
+    "readiness": 43630583846,
+    "coverage": 43630583946,
+    "backend_coverage": {
+      "job": 132556067786,
+      "passed": 253,
+      "warnings": 2,
+      "seconds": 7.32
+    },
+    "frontend_coverage": {
+      "job": 132556068080,
+      "suites": 9,
+      "passed": 50,
+      "seconds": 2.549
+    },
+    "host_review": {
+      "root": {
+        "accepted": true,
+        "source": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+        "base": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+        "intent_commit": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+        "intent_sha256": "0b46743398c032f7f8e151125e52e5360ba3061fd70434fa51ba257f5db90223",
+        "runtime_release": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2",
+        "identity_sha256": "bbae56b576d8ac89a878b0486ff63783a09b077cb9e19d77e2aec8aa37515554",
+        "jobs_json_sha256": "2ec4b0a702b5a484a65d667b41334f72f474795f987a5e318bc8cc9896d229bc",
+        "generated_paths_bytes_modes_identical": true,
+        "json_route_job_steps_passed": 2,
+        "hosts": {
+          "20.20.2": {
+            "inner_tar_sha256": "ae148499430b8fedde48d6eea4bcf07123c1ffe40ac9cd79778f15bcc57ec677",
+            "generated_files": 293,
+            "frontend_content_records": 289,
+            "identity_sha256": "bbae56b576d8ac89a878b0486ff63783a09b077cb9e19d77e2aec8aa37515554",
+            "identity_bytes": 437784,
+            "build_meta_sha256": "3061506eddf23d3b12a3044c8be68d8a719cb0505d3a641a433bcb0f0fe98175",
+            "proof_sha256": "e88056c1bf705a2721cf607db3613a387394ced97a26c67f79dad1191baaf98e",
+            "package_boundary_sha256": "a129f03a2cfb48439c8ff0a09a0d969e5cf2ef4162bc8308be2f5a264722ab83",
+            "backend_package_files": 1217,
+            "frontend_package_files": 1472,
+            "backend_package_tree_sha256": "a128259231911b5be2a90b8935b8bf41cdaf210d925daf999b77f1387e758b8b",
+            "frontend_package_tree_sha256": "07a29832618970100b866703f2d94c23b31e33cf76917bf06fd7a578f8346a3c",
+            "governed_node": "22.23.2",
+            "governed_yarn": "1.22.22",
+            "actual_adapter_built": true,
+            "generated_zip_sha256": "fc8a2053333ddc9802e4da8fd0f1683121838057735c72437d88ef2e15856d05",
+            "evidence_zip_sha256": "aa75b0ac7b483e3a41ac3c1c85646b595ec351350a043c95f1611b61dcec696e",
+            "ci": {
+              "job_id": 132556347263,
+              "run_id": 43630583846,
+              "head_sha": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+              "steps": [
+                {
+                  "name": "Invoke the Emergent package adapter under the selected Host Node",
+                  "number": 12,
+                  "started_at": "2026-11-14T19:11:34Z",
+                  "completed_at": "2026-11-14T19:12:23Z",
+                  "conclusion": "success"
+                },
+                {
+                  "name": "Verify artifact, proof, identity, and package boundaries",
+                  "number": 13,
+                  "started_at": "2026-11-14T19:12:23Z",
+                  "completed_at": "2026-11-14T19:12:25Z",
+                  "conclusion": "success"
+                },
+                {
+                  "name": "Prove the governed runtime returns build metadata as JSON",
+                  "number": 14,
+                  "started_at": "2026-11-14T19:12:25Z",
+                  "completed_at": "2026-11-14T19:12:26Z",
+                  "conclusion": "success"
+                }
+              ]
+            }
+          },
+          "24.19.0": {
+            "inner_tar_sha256": "ecdc0fba7927f4ecec8e955e131c2ce153bbc4884dbe53692c8d1eb208b74677",
+            "generated_files": 293,
+            "frontend_content_records": 289,
+            "identity_sha256": "bbae56b576d8ac89a878b0486ff63783a09b077cb9e19d77e2aec8aa37515554",
+            "identity_bytes": 437784,
+            "build_meta_sha256": "3061506eddf23d3b12a3044c8be68d8a719cb0505d3a641a433bcb0f0fe98175",
+            "proof_sha256": "e88056c1bf705a2721cf607db3613a387394ced97a26c67f79dad1191baaf98e",
+            "package_boundary_sha256": "a129f03a2cfb48439c8ff0a09a0d969e5cf2ef4162bc8308be2f5a264722ab83",
+            "backend_package_files": 1217,
+            "frontend_package_files": 1472,
+            "backend_package_tree_sha256": "a128259231911b5be2a90b8935b8bf41cdaf210d925daf999b77f1387e758b8b",
+            "frontend_package_tree_sha256": "07a29832618970100b866703f2d94c23b31e33cf76917bf06fd7a578f8346a3c",
+            "governed_node": "22.23.2",
+            "governed_yarn": "1.22.22",
+            "actual_adapter_built": true,
+            "generated_zip_sha256": "54299857361500cfff756a40bcbfe602cc17e98af6630558e2f189c6846d6d12",
+            "evidence_zip_sha256": "7870faec48342425ec692c7d8bca5cb120e4040b76a56865f0e951b295a4b88e",
+            "ci": {
+              "job_id": 132556347269,
+              "run_id": 43630583846,
+              "head_sha": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+              "steps": [
+                {
+                  "name": "Invoke the Emergent package adapter under the selected Host Node",
+                  "number": 12,
+                  "started_at": "2026-11-14T19:11:49Z",
+                  "completed_at": "2026-11-14T19:12:49Z",
+                  "conclusion": "success"
+                },
+                {
+                  "name": "Verify artifact, proof, identity, and package boundaries",
+                  "number": 13,
+                  "started_at": "2026-11-14T19:12:49Z",
+                  "completed_at": "2026-11-14T19:12:52Z",
+                  "conclusion": "success"
+                },
+                {
+                  "name": "Prove the governed runtime returns build metadata as JSON",
+                  "number": 14,
+                  "started_at": "2026-11-14T19:12:52Z",
+                  "completed_at": "2026-11-14T19:12:53Z",
+                  "conclusion": "success"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "independent": {
+        "result": "PASS",
+        "generated_files": 293,
+        "directories": 3,
+        "frontend_records": 289,
+        "all_generated_bytes_and_modes_identical": true,
+        "regular_mode": "0644",
+        "directory_mode": "0755",
+        "links_or_extra_members": false,
+        "identity_bytes": 437784,
+        "identity_sha256": "bbae56b576d8ac89a878b0486ff63783a09b077cb9e19d77e2aec8aa37515554",
+        "backend_package_files": 1217,
+        "frontend_package_files": 1472,
+        "backend_package_tree": "a128259231911b5be2a90b8935b8bf41cdaf210d925daf999b77f1387e758b8b",
+        "frontend_package_tree": "07a29832618970100b866703f2d94c23b31e33cf76917bf06fd7a578f8346a3c",
+        "package_boundary_sha256": "a129f03a2cfb48439c8ff0a09a0d969e5cf2ef4162bc8308be2f5a264722ab83",
+        "actual_json_route_steps": 2,
+        "independent_reconstruction": true
+      }
+    },
+    "artifacts": [
+      {
+        "id": 14128152596,
+        "name": "release-v5-clean-clone-evidence-host-20.20.2",
+        "size_in_bytes": 46017,
+        "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14128152596",
+        "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14128152596/zip",
+        "expired": false,
+        "created_at": "2026-11-14T19:12:28Z",
+        "expires_at": "2026-11-28T19:12:27Z",
+        "updated_at": "2026-11-14T19:12:28Z",
+        "digest": "sha256:aa75b0ac7b483e3a41ac3c1c85646b595ec351350a043c95f1611b61dcec696e",
+        "workflow_run": {
+          "id": 43630583846,
+          "repository_id": 1250664189,
+          "head_repository_id": 1250664189,
+          "head_branch": "codex/campaign-operating-pilot-m3e9d-20261114",
+          "head_sha": "93efe593ebe2c401763c5d8faa4ba8547a8a8016"
+        }
+      },
+      {
+        "id": 14127628470,
+        "name": "release-v5-generated-outputs-host-24.19.0",
+        "size_in_bytes": 2975487,
+        "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14127628470",
+        "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14127628470/zip",
+        "expired": false,
+        "created_at": "2026-11-14T19:12:55Z",
+        "expires_at": "2026-11-28T19:12:53Z",
+        "updated_at": "2026-11-14T19:12:55Z",
+        "digest": "sha256:54299857361500cfff756a40bcbfe602cc17e98af6630558e2f189c6846d6d12",
+        "workflow_run": {
+          "id": 43630583846,
+          "repository_id": 1250664189,
+          "head_repository_id": 1250664189,
+          "head_branch": "codex/campaign-operating-pilot-m3e9d-20261114",
+          "head_sha": "93efe593ebe2c401763c5d8faa4ba8547a8a8016"
+        }
+      },
+      {
+        "id": 14127588523,
+        "name": "release-v5-clean-clone-evidence-host-24.19.0",
+        "size_in_bytes": 46023,
+        "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14127588523",
+        "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14127588523/zip",
+        "expired": false,
+        "created_at": "2026-11-14T19:12:56Z",
+        "expires_at": "2026-11-28T19:12:55Z",
+        "updated_at": "2026-11-14T19:12:56Z",
+        "digest": "sha256:7870faec48342425ec692c7d8bca5cb120e4040b76a56865f0e951b295a4b88e",
+        "workflow_run": {
+          "id": 43630583846,
+          "repository_id": 1250664189,
+          "head_repository_id": 1250664189,
+          "head_branch": "codex/campaign-operating-pilot-m3e9d-20261114",
+          "head_sha": "93efe593ebe2c401763c5d8faa4ba8547a8a8016"
+        }
+      },
+      {
+        "id": 14127394131,
+        "name": "release-v5-generated-outputs-host-20.20.2",
+        "size_in_bytes": 2975700,
+        "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14127394131",
+        "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14127394131/zip",
+        "expired": false,
+        "created_at": "2026-11-14T19:12:27Z",
+        "expires_at": "2026-11-28T19:12:26Z",
+        "updated_at": "2026-11-14T19:12:27Z",
+        "digest": "sha256:fc8a2053333ddc9802e4da8fd0f1683121838057735c72437d88ef2e15856d05",
+        "workflow_run": {
+          "id": 43630583846,
+          "repository_id": 1250664189,
+          "head_repository_id": 1250664189,
+          "head_branch": "codex/campaign-operating-pilot-m3e9d-20261114",
+          "head_sha": "93efe593ebe2c401763c5d8faa4ba8547a8a8016"
+        }
+      }
+    ],
+    "host_log_review": {
+      "result": "PASS",
+      "actual_emitted_output_checked": true,
+      "isolated_backend_no_git_or_sibling_frontend": true,
+      "frontend_isolation": true
+    }
+  },
+  "merge_concurrency_review": {
+    "result": "PASS for GitHub-only merge after gates",
+    "root_reviewed": true,
+    "independent_reviewed": true,
+    "foreign_source": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+    "foreign_helper_checkpoint": "abff26067a8f926c4c903829b330fa516347c6d7",
+    "foreign_completed_ui": {
+      "observed_at": "2026-11-14 19:09:22 UTC",
+      "tab": 24,
+      "event_text": "Deployment finished Nov 14, 10:08 PM",
+      "published_version": "3a22e2d",
+      "previous_version": "5a7a310",
+      "own_click": false,
+      "ui_button": "Republish"
+    },
+    "foreign_verify_entered": "PR1928 updated19:10:19Z and STATUS ffbe30bac4bf33b3dfe34598c5d47f9f7d9979b6",
+    "evidence": [
+      "AGENTS gates original /app changes and release rehearsal on inactive status, not GitHub-only merge.",
+      "Actual foreign verify wrapper/guard/preservation do not fetch or compare remote refs; prepare and prepublish already completed.",
+      "Readiness push workflow only reports manual deployment and does not deploy or create lease.",
+      "Original /app, artifacts, actor and active lease remain untouched until owner verification/preservation closure and fresh inactive."
+    ],
+    "original_actions_allowed": false
   }
 }

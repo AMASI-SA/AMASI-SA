@@ -28,3 +28,9 @@ PR1927 andPR1926 remain closed/superseded and fully recoverable; neverresume the
 Complete B6 applicableCI and bothhost generated-package/JSON-route evidence; readytransitionchecks; ordinary tree-equivalentmerge and exactM pushchecks. Pin and independently review/freeze the disabled1929 operators only once all actual values exist. After fresh guardinactive, perform original governed build/packageproof; then official prepare/prepublish, one authorized UI publish, explicitnewcompletion, one official3-probeverify, live arithmetic acceptance and tooltip evidence. Never repeat a completed phase or modify another owner's lease.
 
 Complete machine-readable evidence is in RELEASE_CHECKPOINT.json. No private identifiers or financial values are archived. Issue1006 is full; this status, PR1929 and continuation branch are the durable ledger.
+
+## B6 host evidence accepted
+
+Root comparator and independent archive reconstruction both passed all293 generated files/3directories, exactidentity/meta/proof, 289 frontend records and backend1217/frontend1472 isolated package records. Both actualhost JSON-route steps passed in readiness43630583846. Independentactual emittedlog review also passed. B6 integration/CodeQL runs remain pending.
+
+Root and independent review of current officialguard and foreign1928 frozen verify/preservation wrappers confirmed no origin fetch/refcomparison during verify or afterpreservation. The foreigncloud deployment explicitly completed and its officialverify is running. Therefore GitHub-only merge after allown gates may proceed without changing its /app orlease; originalwork still waits verifiedclosure/preservation and freshinactive. The readiness push workflow performs no automatic publication orlease action. This replaces the older conservative premerge-wait plan; no protocol requirement is bypassed.

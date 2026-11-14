@@ -1,0 +1,129 @@
+{
+  "root": {
+    "accepted": true,
+    "source": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+    "base": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+    "intent_commit": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+    "intent_sha256": "0b46743398c032f7f8e151125e52e5360ba3061fd70434fa51ba257f5db90223",
+    "runtime_release": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2",
+    "identity_sha256": "bbae56b576d8ac89a878b0486ff63783a09b077cb9e19d77e2aec8aa37515554",
+    "jobs_json_sha256": "2ec4b0a702b5a484a65d667b41334f72f474795f987a5e318bc8cc9896d229bc",
+    "generated_paths_bytes_modes_identical": true,
+    "json_route_job_steps_passed": 2,
+    "hosts": {
+      "20.20.2": {
+        "inner_tar_sha256": "ae148499430b8fedde48d6eea4bcf07123c1ffe40ac9cd79778f15bcc57ec677",
+        "generated_files": 293,
+        "frontend_content_records": 289,
+        "identity_sha256": "bbae56b576d8ac89a878b0486ff63783a09b077cb9e19d77e2aec8aa37515554",
+        "identity_bytes": 437784,
+        "build_meta_sha256": "3061506eddf23d3b12a3044c8be68d8a719cb0505d3a641a433bcb0f0fe98175",
+        "proof_sha256": "e88056c1bf705a2721cf607db3613a387394ced97a26c67f79dad1191baaf98e",
+        "package_boundary_sha256": "a129f03a2cfb48439c8ff0a09a0d969e5cf2ef4162bc8308be2f5a264722ab83",
+        "backend_package_files": 1217,
+        "frontend_package_files": 1472,
+        "backend_package_tree_sha256": "a128259231911b5be2a90b8935b8bf41cdaf210d925daf999b77f1387e758b8b",
+        "frontend_package_tree_sha256": "07a29832618970100b866703f2d94c23b31e33cf76917bf06fd7a578f8346a3c",
+        "governed_node": "22.23.2",
+        "governed_yarn": "1.22.22",
+        "actual_adapter_built": true,
+        "generated_zip_sha256": "fc8a2053333ddc9802e4da8fd0f1683121838057735c72437d88ef2e15856d05",
+        "evidence_zip_sha256": "aa75b0ac7b483e3a41ac3c1c85646b595ec351350a043c95f1611b61dcec696e",
+        "ci": {
+          "job_id": 132556347263,
+          "run_id": 43630583846,
+          "head_sha": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+          "steps": [
+            {
+              "name": "Invoke the Emergent package adapter under the selected Host Node",
+              "number": 12,
+              "started_at": "2026-11-14T19:11:34Z",
+              "completed_at": "2026-11-14T19:12:23Z",
+              "conclusion": "success"
+            },
+            {
+              "name": "Verify artifact, proof, identity, and package boundaries",
+              "number": 13,
+              "started_at": "2026-11-14T19:12:23Z",
+              "completed_at": "2026-11-14T19:12:25Z",
+              "conclusion": "success"
+            },
+            {
+              "name": "Prove the governed runtime returns build metadata as JSON",
+              "number": 14,
+              "started_at": "2026-11-14T19:12:25Z",
+              "completed_at": "2026-11-14T19:12:26Z",
+              "conclusion": "success"
+            }
+          ]
+        }
+      },
+      "24.19.0": {
+        "inner_tar_sha256": "ecdc0fba7927f4ecec8e955e131c2ce153bbc4884dbe53692c8d1eb208b74677",
+        "generated_files": 293,
+        "frontend_content_records": 289,
+        "identity_sha256": "bbae56b576d8ac89a878b0486ff63783a09b077cb9e19d77e2aec8aa37515554",
+        "identity_bytes": 437784,
+        "build_meta_sha256": "3061506eddf23d3b12a3044c8be68d8a719cb0505d3a641a433bcb0f0fe98175",
+        "proof_sha256": "e88056c1bf705a2721cf607db3613a387394ced97a26c67f79dad1191baaf98e",
+        "package_boundary_sha256": "a129f03a2cfb48439c8ff0a09a0d969e5cf2ef4162bc8308be2f5a264722ab83",
+        "backend_package_files": 1217,
+        "frontend_package_files": 1472,
+        "backend_package_tree_sha256": "a128259231911b5be2a90b8935b8bf41cdaf210d925daf999b77f1387e758b8b",
+        "frontend_package_tree_sha256": "07a29832618970100b866703f2d94c23b31e33cf76917bf06fd7a578f8346a3c",
+        "governed_node": "22.23.2",
+        "governed_yarn": "1.22.22",
+        "actual_adapter_built": true,
+        "generated_zip_sha256": "54299857361500cfff756a40bcbfe602cc17e98af6630558e2f189c6846d6d12",
+        "evidence_zip_sha256": "7870faec48342425ec692c7d8bca5cb120e4040b76a56865f0e951b295a4b88e",
+        "ci": {
+          "job_id": 132556347269,
+          "run_id": 43630583846,
+          "head_sha": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+          "steps": [
+            {
+              "name": "Invoke the Emergent package adapter under the selected Host Node",
+              "number": 12,
+              "started_at": "2026-11-14T19:11:49Z",
+              "completed_at": "2026-11-14T19:12:49Z",
+              "conclusion": "success"
+            },
+            {
+              "name": "Verify artifact, proof, identity, and package boundaries",
+              "number": 13,
+              "started_at": "2026-11-14T19:12:49Z",
+              "completed_at": "2026-11-14T19:12:52Z",
+              "conclusion": "success"
+            },
+            {
+              "name": "Prove the governed runtime returns build metadata as JSON",
+              "number": 14,
+              "started_at": "2026-11-14T19:12:52Z",
+              "completed_at": "2026-11-14T19:12:53Z",
+              "conclusion": "success"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "independent": {
+    "result": "PASS",
+    "generated_files": 293,
+    "directories": 3,
+    "frontend_records": 289,
+    "all_generated_bytes_and_modes_identical": true,
+    "regular_mode": "0644",
+    "directory_mode": "0755",
+    "links_or_extra_members": false,
+    "identity_bytes": 437784,
+    "identity_sha256": "bbae56b576d8ac89a878b0486ff63783a09b077cb9e19d77e2aec8aa37515554",
+    "backend_package_files": 1217,
+    "frontend_package_files": 1472,
+    "backend_package_tree": "a128259231911b5be2a90b8935b8bf41cdaf210d925daf999b77f1387e758b8b",
+    "frontend_package_tree": "07a29832618970100b866703f2d94c23b31e33cf76917bf06fd7a578f8346a3c",
+    "package_boundary_sha256": "a129f03a2cfb48439c8ff0a09a0d969e5cf2ef4162bc8308be2f5a264722ab83",
+    "actual_json_route_steps": 2,
+    "independent_reconstruction": true
+  }
+}

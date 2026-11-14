@@ -1,0 +1,24 @@
+{
+  "result": "PASS for GitHub-only merge after gates",
+  "root_reviewed": true,
+  "independent_reviewed": true,
+  "foreign_source": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+  "foreign_helper_checkpoint": "abff26067a8f926c4c903829b330fa516347c6d7",
+  "foreign_completed_ui": {
+    "observed_at": "2026-11-14 19:09:22 UTC",
+    "tab": 24,
+    "event_text": "Deployment finished Nov 14, 10:08 PM",
+    "published_version": "3a22e2d",
+    "previous_version": "5a7a310",
+    "own_click": false,
+    "ui_button": "Republish"
+  },
+  "foreign_verify_entered": "PR1928 updated19:10:19Z and STATUS ffbe30bac4bf33b3dfe34598c5d47f9f7d9979b6",
+  "evidence": [
+    "AGENTS gates original /app changes and release rehearsal on inactive status, not GitHub-only merge.",
+    "Actual foreign verify wrapper/guard/preservation do not fetch or compare remote refs; prepare and prepublish already completed.",
+    "Readiness push workflow only reports manual deployment and does not deploy or create lease.",
+    "Original /app, artifacts, actor and active lease remain untouched until owner verification/preservation closure and fresh inactive."
+  ],
+  "original_actions_allowed": false
+}
