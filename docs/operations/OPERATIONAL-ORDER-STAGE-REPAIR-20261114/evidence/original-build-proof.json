@@ -1,0 +1,46 @@
+{
+  "outcome": {
+    "phase": "build",
+    "ready": true,
+    "source_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+    "deployment_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+    "intent_commit": "9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9",
+    "tree": "9de141756a4c5dcfa8d1d4dfb6513178c406ac8e",
+    "release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+    "untracked_count": 120,
+    "lease_created": false,
+    "evidence_dir": "/tmp/mezan-pr1918-original-6jyavqt4",
+    "finished_at": "2026-11-14T06:24:46.483261+00:00"
+  },
+  "build": {
+    "command": [
+      "yarn",
+      "build"
+    ],
+    "cwd": "/app/frontend",
+    "started_at": "2026-11-14T06:23:34.369860+00:00",
+    "ended_at": "2026-11-14T06:24:46.289322+00:00",
+    "elapsed_seconds": 71.91947509301826,
+    "actual_exit": 0,
+    "problem": null,
+    "stdout": "/tmp/mezan-pr1918-original-6jyavqt4/22-build.stdout",
+    "stderr": "/tmp/mezan-pr1918-original-6jyavqt4/22-build.stderr"
+  },
+  "identity": {
+    "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+    "release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+    "matches_reviewed_intent": true,
+    "identity_sha256": "f2a92be21dab24deb14a813de108425d101779be27459aee415e7172d0bb3aec"
+  },
+  "preservation": {
+    "before_count": 120,
+    "after_count": 120,
+    "changed_paths": [],
+    "append_allowed": true,
+    "preserved": true
+  },
+  "actual_changed_count": 0,
+  "guard_active": false,
+  "stdout_sha256": "41425dd5a671264bc84f4d60c2980aab94c3d72284c45a60a307d1d7dfecc07c",
+  "stderr_sha256": "f9de9a5c904514893fea046115f3a8ce6346639f86ce2fae7c20dd6ea7532633"
+}

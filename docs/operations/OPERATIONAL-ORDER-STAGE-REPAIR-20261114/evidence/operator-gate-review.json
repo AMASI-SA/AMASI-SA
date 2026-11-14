@@ -1,0 +1,85 @@
+{
+  "schema": "mezan_original_prepare_prepublish_review_v1",
+  "verdict": "PASS",
+  "blocking_findings": [],
+  "reviewer": "/root/screenshot_handoff",
+  "candidate": {
+    "path": "/workspace/scratch/019fa8a18b3d/pr1918_original_gate.py",
+    "sha256": "62d2d0b146729268a626e87905b9d768a1e3ee8bfb0c355a89d55a8af4840b1c",
+    "bytes": 9216
+  },
+  "previous_template": {
+    "path": "/workspace/scratch/019fa8a18b3d/pr1917_original_gate.py",
+    "sha256": "8bf5f7400c0d5ac444e9c4c74b01dc66f2ac73eddbf38d1ead8e3a588e8f5cb2"
+  },
+  "review_mode": "Read-only complete source comparison and AST validation. Candidate was neither imported nor executed. No original /app, browser, GitHub, API, DB or Git mutation.",
+  "identity": {
+    "EVIDENCE": "/tmp/mezan-pr1918-original-6jyavqt4",
+    "SOURCE": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+    "BASE": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+    "INTENT_COMMIT": "9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9",
+    "MERGE": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+    "TREE": "9de141756a4c5dcfa8d1d4dfb6513178c406ac8e",
+    "RELEASE": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+    "ACTOR": "codex-operational-order-stage-rootfix-1918"
+  },
+  "comparison": {
+    "only_expected_assignments_and_PR_label_changed": true,
+    "AST_equivalence_after_expected_per_assignment_replacement": true,
+    "BASE_and_MERGE_collision_avoided": true,
+    "behavioral_change": false
+  },
+  "checks": [
+    {
+      "name": "actual_build_and_provenance",
+      "result": "pass",
+      "evidence": "Before any guard call, strictly typed outcome must match build/ready/A/M/B/tree/R/evidence_dir/120-untracked/no-lease. Requires exact yarn build command, /app/frontend cwd, integer actual_exit0 and problemNone; saved parent evidence must be M=[J,B] and B=[A]."
+    },
+    {
+      "name": "prepare_fresh_inactive",
+      "result": "pass",
+      "evidence": "Fresh official status must be exactly {active:false}, with no extra incomplete-lease field. Only then calls official prepare once with exact actor, requires A/J/M/R/protocol/branch/actor and exact owned active status afterward."
+    },
+    {
+      "name": "prepublish_saved_and_live_lease",
+      "result": "pass",
+      "evidence": "Requires successful prepare summary and actual exit, verifies raw prepare stdout digest and exact identity, validates saved after status, then requires fresh active lease equal to the saved prepare payload before official prepublish."
+    },
+    {
+      "name": "prepublish_output",
+      "result": "pass",
+      "evidence": "Official response must have strictly typed ready_to_publish=True and exact A/M/R/protocol; fresh after-status must equal the same saved prepare payload plus active=True."
+    },
+    {
+      "name": "evidence_before_interpretation",
+      "result": "pass",
+      "evidence": "Child flushes/fsyncs stdout/stderr and writes actual_exit/problem/command/cwd/timing before nonzero rejection or JSON parsing. Stage summaries retain raw stdout SHA256."
+    },
+    {
+      "name": "exclusive_no_rerun",
+      "result": "pass",
+      "evidence": "Private owned non-symlink evidence directory is required. Separate 26-prepare and 27-prepublish prefixes; existing prefix blocks entry. Exclusive started claim, stdout/stderr xb and result/summary x prevent automatic retry or overwriting prior evidence."
+    },
+    {
+      "name": "no_short_wrapper_timeout",
+      "result": "pass",
+      "evidence": "prepare/prepublish child calls omit timeout and use default None; only read-only status calls have timeout15."
+    },
+    {
+      "name": "no_abort_publish_source_mutation",
+      "result": "pass",
+      "evidence": "Only official status/prepare/prepublish commands are reachable. No abort, lease clear, manual /app write, cleanup, UI publish or financial request. Child uses -B/PYTHONDONTWRITEBYTECODE."
+    }
+  ],
+  "runtime_state_boundary": {
+    "original_rehearsal_status": "Root reports rehearsal currently running in the exact evidence directory; no completed outcome was inspected by this reviewer.",
+    "required_before_execution": [
+      "Root must observe successful actual build and passing required M CI before invoking prepare.",
+      "Helper intentionally stops and consumes its evidence prefix if invoked before prerequisites; do not auto-retry.",
+      "UI publication remains a separate root action after successful prepublish."
+    ],
+    "no_live_success_claim": true
+  },
+  "ast_validation": "pass without executing candidate",
+  "timestamp_policy": "No helper execution timestamp or original-host state was fabricated."
+}
