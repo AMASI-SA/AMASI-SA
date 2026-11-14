@@ -1,4 +1,4 @@
-"""Account-bound operational push outbox. Payloads contain no customer data.
+"""Account-bound operational push outbox with scoped native message previews.
 
 Delivery is at-least-once; event IDs let clients collapse repeats. Provider
 acceptance is recorded separately from Expo's downstream delivery receipt.
@@ -251,11 +251,16 @@ async def send_to_provider(device, payload, *, ticket=None):
                 if not result:
                     return {"status": "receipt_pending"}
             else:
-                response = await client.post("https://exp.host/--/api/v2/push/send", headers=headers, json={
+                message = {
                     "to": device["token"], "title": payload["title"], "body": payload["body"],
                     "data": payload, "sound": "default", "channelId": "operational-instructions", "ttl": 3600,
                     "priority": "high" if payload.get("priority") == "urgent" else "default",
-                })
+                }
+                # Includes duplicated title/body in data and UTF-8 identifiers.
+                # Leave headroom below the provider's 4 KiB payload boundary.
+                if len(json.dumps(message, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) > 4000:
+                    return {"status": "failed", "error": "payload_too_large"}
+                response = await client.post("https://exp.host/--/api/v2/push/send", headers=headers, json=message)
                 response.raise_for_status()
                 result = response.json().get("data") or {}
             if result.get("status") == "ok":
@@ -292,8 +297,28 @@ async def deliver_one(db, sender=send_to_provider):
     result = {"status": "discarded"}
     if await device_is_active(db, device):
         try:
-            result = await sender(device, {"title": "أماسي — تنبيه مستعجل" if job.get("priority") == "urgent" else "أماسي — تعليمات الطلب", "body": "لديك تحديث على مهمة. افتح التطبيق للاطلاع والتأكيد.",
-                "event_id": job["event_id"], "instruction_id": job["instruction_id"], "priority": job.get("priority", "normal")}, ticket=job.get("ticket"))
+            payload = {"title": "أماسي — تنبيه مستعجل" if job.get("priority") == "urgent" else "أماسي — تعليمات الطلب", "body": "لديك تحديث على مهمة. افتح التطبيق للاطلاع والتأكيد.",
+                "event_id": job["event_id"], "instruction_id": job["instruction_id"], "priority": job.get("priority", "normal")}
+            if device["kind"] == "expo" and not job.get("ticket"):
+                from operational_push_preview import native_notification_payload
+                generic_payload = payload
+                payload = await native_notification_payload(db, device, job, generic_payload)
+                if payload is not None and payload is not generic_payload:
+                    # Hydration awaits can overlap an account switch/logout.
+                    # Recheck the same binding immediately before a rich send;
+                    # a provider submission already in flight cannot be recalled.
+                    current = await db[DEVICES].find_one({
+                        "_id": job["device_id"], "generation": job["generation"],
+                        "actor_id": device["actor_id"], "merchant_id": device["merchant_id"],
+                        "session_id": device["session_id"], "kind": device["kind"],
+                        "installation_id": device.get("installation_id"), "token": device.get("token"),
+                    })
+                    if await device_is_active(db, current):
+                        device = current
+                    else:
+                        payload = None
+            if payload is not None:
+                result = await sender(device, payload, ticket=job.get("ticket"))
         except Exception:
             # Provider exception text can contain device credentials; never log it.
             result = {"status": "retry", "error": "transport_error"}
