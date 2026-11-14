@@ -2,7 +2,7 @@
   "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
   "round": 6,
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 19:36:27 UTC",
+  "updated_at_utc": "2026-11-14 19:43:00 UTC",
   "branch": "codex/campaign-operating-pilot-m3e9d-20261114",
   "pr": 1929,
   "base_J6": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
@@ -1116,7 +1116,26 @@
       "all_witnessed_prefixes_preserved": true,
       "status_after_active": true,
       "guard_receipt_sha256": "069128413091441d9bbc6e5d0717368511dc598c597d81bfd540db9ac88fccc1",
-      "evidence": "/tmp/mezan-operating-followup-original-5dp0ykxf/release-gate/prepare"
+      "evidence": "/tmp/mezan-operating-followup-original-5dp0ykxf/release-gate/prepare",
+      "actual_guard_receipt": {
+        "cwd": "/app",
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "argv": [
+          "python",
+          "-B",
+          "scripts/production_release_guard.py",
+          "prepare",
+          "--actor",
+          "codex-campaign-operating-pilot-1929"
+        ],
+        "started_at": "2026-11-14T19:31:30.096294Z",
+        "finished_at": "2026-11-14T19:31:32.844344Z",
+        "seconds": 2.7480046220007353,
+        "stdout_sha256": "78bee3b4ac41573ad65d474a1d751321066c502c225cf90cc2daf4f30ff1abd3"
+      },
+      "prepared_at": "2026-11-14T19:31:31.792463+00:00",
+      "postcheck_errors": []
     },
     "prepublish": {
       "calls": 1,
@@ -1137,7 +1156,24 @@
       "after_bookkeeping_bytes": 50052,
       "all_witnessed_prefixes_preserved": true,
       "status_after_active": true,
-      "guard_receipt_sha256": "ef16d40cea8fb69aa41de01c8b644825563eb100eda1b881082e20b73aa35f55"
+      "guard_receipt_sha256": "ef16d40cea8fb69aa41de01c8b644825563eb100eda1b881082e20b73aa35f55",
+      "actual_guard_receipt": {
+        "cwd": "/app",
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "argv": [
+          "python",
+          "-B",
+          "scripts/production_release_guard.py",
+          "prepublish"
+        ],
+        "started_at": "2026-11-14T19:32:36.729590Z",
+        "finished_at": "2026-11-14T19:32:40.091714Z",
+        "seconds": 3.3620128339971416,
+        "stdout_sha256": "1800af6146b07ea5b981cc2474dd3fce822f3aedbb083e6388045ad7d21914a3"
+      },
+      "ready_to_publish": true,
+      "postcheck_errors": []
     }
   },
   "publication": {
@@ -1147,6 +1183,12 @@
     "free_republishes_confirmed": true,
     "ui_state": "Publishing…",
     "baseline_version": "3a22e2d",
-    "deployment_git_sha": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9"
+    "deployment_git_sha": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+    "ui_started_text": "Deployment Started Nov 14, 10:36 PM",
+    "latest_observed_progress": {
+      "text": "Workspace ready; Changes packaged; Building your website...",
+      "elapsed": "6m 33s",
+      "complete": false
+    }
   }
 }
