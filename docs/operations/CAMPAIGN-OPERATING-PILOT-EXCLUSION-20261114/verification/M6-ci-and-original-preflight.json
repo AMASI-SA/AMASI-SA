@@ -1,0 +1,67 @@
+{
+  "ci": {
+    "observed_at": "2026-11-14 19:24:11 UTC",
+    "production": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+    "runs": [
+      {
+        "id": 43631333754,
+        "name": "Security Gate",
+        "head": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+        "event": "push",
+        "conclusion": "success",
+        "attempt": 1,
+        "updated_at": "2026-11-14T19:21:08Z"
+      },
+      {
+        "id": 43631333866,
+        "name": "Mezan Release Readiness",
+        "head": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+        "event": "push",
+        "conclusion": "success",
+        "attempt": 1,
+        "updated_at": "2026-11-14T19:21:22Z"
+      },
+      {
+        "id": 43631333690,
+        "name": "CodeQL",
+        "head": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+        "event": "push",
+        "conclusion": "success",
+        "attempt": 1,
+        "updated_at": "2026-11-14T19:23:38Z"
+      }
+    ],
+    "root": "PASS",
+    "independent": "PASS including actual build/host/source bindings",
+    "status": "all_success",
+    "host_log_review": "PASS, both actual Host logs bind exactA6/J6/M6, 19checks perHost and actualJSONroute, no reruns"
+  },
+  "foreign_verify": {
+    "state": "completed",
+    "calls": 1,
+    "actual_exit": 0,
+    "started_at": "2026-11-14T19:09:52.434557+00:00",
+    "ended_at": "2026-11-14T19:22:36.992638+00:00",
+    "elapsed_seconds": 764.5580886940006,
+    "checks": 3,
+    "fresh_guard_inactive": true,
+    "source": "d41cd73132793209d13758ef07b2eda4fcfe018a",
+    "deployment": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+    "evidence_directory": "/tmp/mezan-pr1928-original-2e86crex",
+    "root_direct_read_at": "2026-11-14T19:24:46.998438+00:00"
+  },
+  "foreign_preservation": {
+    "preserved": true,
+    "untracked_count": 120,
+    "finished_at": "2026-11-14T19:23:29.109552+00:00",
+    "root_direct_read": true
+  },
+  "original_preflight": {
+    "observed_at": "2026-11-14T19:25:26.701912+00:00",
+    "guard": {
+      "active": false
+    },
+    "head": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+    "tracked_clean": true
+  }
+}

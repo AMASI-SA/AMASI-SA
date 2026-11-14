@@ -1,4 +1,4 @@
-# Campaign operating pilot exclusion — PR1929 merged; not yet published
+# Campaign operating pilot exclusion — PR1929 ready for original build; not yet published
 
 Updated 2026-11-14 19:19:48 UTC.
 
@@ -26,11 +26,11 @@ Both actualHost20/24 adapter packages and JSON-route jobs passed. Root and indep
 
 ## Outstanding exact-M6 checks
 
-Push Readiness43631333866, Security43631333754, CodeQL43631333690 are running. Do not substitute historical results for their actual exits.
+All three exact-M6 push workflows passed attempt1: Readiness43631333866, Security43631333754, CodeQL43631333690. Root freshcheck19:24:11UTC confirmed currentproductionM6 and success; independentactualhost/output review also passed.
 
 ## Original release coordination
 
-ForeignPR1928 cloudpublication explicitly completed (Nov14,10:08PM, platformversion3a22e2d) and its official verifier started once. Latestownerrecord is ffbe30bac4bf33b3dfe34598c5d47f9f7d9979b6; closure/preservation not yet observed. Original /app and activelease were not changed by this task. Root/independent inspection of the actual verify/preservation code proved no remote-ref comparison after publication, permitting this GitHub-only merge. Originalwrites still require foreignverifiedclosure/preservation and freshofficialinactive.
+ForeignPR1928 cloudpublication explicitly completed (Nov14,10:08PM, platformversion3a22e2d) and its official verifier started once. Root directly read actual officialverify exit0/checks3 on19:24:46UTC: started19:09:52.434557, ended19:22:36.992638,764.558088694s. Freshinactive was true; afterverify preservation passed120files at19:23:29.109552UTC. Subsequent root officialstatus at19:25:26.701912UTC was inactive, HEADJ6, trackedclean. Original /app and activelease were not changed by this task. Root/independent inspection of the actual verify/preservation code proved no remote-ref comparison after publication, permitting this GitHub-only merge. Originalwrites still require foreignverifiedclosure/preservation and freshofficialinactive.
 
 The original-build operator at operators/original-build-1929.py is pinned to actualA6/B6/M6,15488bytes,SHA25601263d94478e74075a5833fe9700d263c9e3a56263bedb9c563945a46d519e69. Root and independent fullstatic/AST reviews passed. It has not been executed. The release-gate template remains disabled because the actual original evidence directory does not yet exist.
 
@@ -39,3 +39,7 @@ The original-build operator at operators/original-build-1929.py is pinned to act
 Finish exactM6 pushchecks and foreignverification/preservation. Read official status fresh; only inactive/noincompletelease permits originalwork. Confirm originalHEADJ6/trackedclean, stage the frozen operator from this handoff and verifyitsSHA. Run the one-shot originalbuild for exactM6, inspect actualbuild/packageproof/identity/preservation receipts, then pin/review/freeze finalguard with actualevidencedir and currentUIbaseline. Only then officialprepare/prepublish, one authorizedfreeUIpublish, explicitnewUIcompletion, officialverifyonce3checks, inactive/preservation, livecampaign arithmetic andcroppedtooltip evidence.
 
 GitHubproductionbranch changed: yes, normalmergeM6. Ownlivepublication/originalbuild/lease: no. PR1926/1927 are closed/superseded; neverresumeoldoperators. PR1924 was verifiedclosed; PR1923 oldJ5release closedunpublished. PR1930 hasexplicitownerhold and isunrelated. Issue1006 isfull; thisbranch/taskSTATUS/PR aredurablecontinuation. No private identifiers orfinancialvalues arearchived.
+
+## Current next action
+
+All prerequisites are satisfied as of19:25:26UTC. Stage the exact reviewed original-build operator under the official mutex while inactive, verify its frozenSHA, then execute it once for M6. No own originalbuild orlease has yet run. The operator itself repeats inactive/clean/ref/lineage checks and preserves120 files. Do not execute the disabled release-gate template; fill its actualevidence path only after successful build.
