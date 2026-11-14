@@ -1,0 +1,23 @@
+{
+  "kind": "mezan_diagnostic_release_verification_summary",
+  "derived_from": "observed original official production_release_guard verify output and wrapper result",
+  "pr": 1913,
+  "deployment_git_sha": "6012ceb480bf9dc0f51ec6cc64c054e5e0db3846",
+  "source_git_sha": "54184a6c3725067eda2e9ac56345f578425cf3f0",
+  "release_id": "rg5-51a27cab964259844260959047effc778bbe1aa204c5da13133af9e0628fcaaa",
+  "exit_code": 0,
+  "verified": true,
+  "checks": 3,
+  "frontend_requests_per_probe": 582,
+  "started_at": "2026-11-14T00:43:15.339262+00:00",
+  "finished_at": "2026-11-14T00:52:43.781431+00:00",
+  "elapsed_seconds": 568.44,
+  "boot_started_at": "2026-11-14T00:41:14.133815+00:00",
+  "frontend_artifact_tree_sha256": "9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6",
+  "original_verification_json_sha256": "869ff0747755360f74e0b4c5c41ad9799c829cab49a0ad865c2c7e6fa74430c9",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "post_verify_guard": {
+    "active": false
+  },
+  "application_acceptance": "failed: unified_orders read timeout; last successful as_of unchanged"
+}
