@@ -51,7 +51,7 @@ jobs:
       - name: Install public backend test dependencies
         run: |
           sed '/^emergentintegrations==/d' requirements.txt \
-            | python -m pip install -q -r /dev/stdin pytest-asyncio
+            | python -m pip install -q -r /dev/stdin pytest-asyncio mongomock==4.3.0 mongomock-motor==0.0.36
       - name: Compile Snapchat V2 connector
         run: |
           python -m compileall -q integrations_control_center

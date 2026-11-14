@@ -70,7 +70,7 @@ jobs:
           cache: pip
       - name: Install public test dependencies
         run: |
-          sed '/^emergentintegrations==/d' requirements.txt | python -m pip install -q -r /dev/stdin pytest-asyncio
+          sed '/^emergentintegrations==/d' requirements.txt | python -m pip install -q -r /dev/stdin pytest-asyncio mongomock==4.3.0 mongomock-motor==0.0.36
       - name: Test provider response coverage and independent Salla metrics
         run: >-
           python -m pytest -q --tb=short

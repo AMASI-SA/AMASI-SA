@@ -110,8 +110,18 @@ of this task. Paid Emergent chat is not used.
 Issue #1006 has reached its comment limit. This document and the dedicated task
 PR are the continuation ledger; do not repeatedly try to append there.
 
-Next safe action: preserve this verified source A checkpoint in the task branch
-and create its PR. After all applicable A gates pass, independently validate
+First source checkpoint: `2c26dea8487bf6779a6eb01a65771f175e83b0f4`, PR #1920.
+Its governed candidate built and independently validated, but two CI jobs found
+the new shared financial test fixtures require `mongomock-motor`, which their
+old install commands did not include. The campaign and Snapchat workflows now
+install the repository's existing pinned mock packages (`mongomock==4.3.0`,
+`mongomock-motor==0.0.36`). No test was skipped, removed or weakened; no production
+dependency or runtime source changed for this correction. The first candidate
+must not be used after this new source checkpoint; a fresh exact-source build is
+required. Other CI results remain evidence for their precise source only.
+
+Next safe action: push the CI dependency correction as the new source A on PR
+#1920, then wait for all applicable exact-A gates. Independently validate
 the governed candidate intent, create intent-only B, pass exact-B gates, ordinary
 merge with B's exact tree, and follow the authorized v5 deployment protocol. Do
 not deploy this feature using the inherited PR #1919 intent.
