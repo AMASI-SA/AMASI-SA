@@ -531,7 +531,8 @@ async def refresh(db, owner, *, clock=None):
         try:
             from operational_balance_inventory import assert_no_source_collision
             with refresh_stage("source_collection"):
-                await assert_no_source_collision(db, owner, state)
+                with refresh_stage("source_collision"):
+                    await assert_no_source_collision(db, owner, state)
                 sources = await collect_sources(db, owner, state["started_at"], stamp, baselines=state.get("source_baselines"), operational_state=state)
             await checkpoint()
         except ValueError as exc:
