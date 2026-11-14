@@ -465,9 +465,9 @@
   },
   "new_lease": null,
   "publication": null,
-  "next": "Fresh inactive original preflight, fetch this evidence-only operator by immutable commit, verify SHA256 and execute original build once for M7; no lease until original result passes.",
+  "next": "Inspect original evidence result/failed and actual command receipts before any next action; never rerun the build assuming old HEAD. Gate prepare requires successful original result and independently reviewed gate bytes.",
   "continuity": "Issue1006 full; PR1932 and dedicated handoff branch.",
-  "updated_at_utc": "2026-11-14 22:06:34 UTC",
+  "updated_at_utc": "2026-11-14 22:08:18 UTC",
   "handoff_branch": "codex/campaign-operating-period-handoff-20261115",
   "dashboard_cadence_ci": {
     "run_id": 43643266121,
@@ -894,7 +894,27 @@
     "sha256": "88c17d513c5549b797f06840465572ad285ce31a3b1d4ec25f31d633895de4b2",
     "bytes": 15520,
     "independent_review": "PASS",
-    "executed": false,
+    "executed": true,
     "review_evidence": "checks/pinned-original-backend-review.json"
+  },
+  "original_build": {
+    "status": "running",
+    "evidence": "/tmp/mezan-operating-period-original-iljwu1fd",
+    "runner": "/tmp/mezan-operating-period-build-1932.py",
+    "preflight": {
+      "observed_at": "2026-11-14T22:07:26.754537+00:00",
+      "guard": {
+        "active": false
+      },
+      "head": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+      "untracked": 120
+    }
+  },
+  "gate_operator": {
+    "path": "operators/campaign-operating-release-gate-1932.py",
+    "sha256": "ffe7b11e43ad618d1b995d9afb2c33311cbb0ec35642795ad673373f996320fb",
+    "bytes": 29142,
+    "independent_review": "pending",
+    "executed_phases": []
   }
 }

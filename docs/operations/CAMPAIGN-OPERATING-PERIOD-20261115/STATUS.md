@@ -19,3 +19,11 @@ Issue1006has reached its commentlimit; this STATUS/checkpoint/PR1932are continua
 ## Ready for original governed build
 
 All three exact-M7 push gates passed on attempt 1. The final original-build operator has passed independent byte, AST, ancestry and artifact-pin review. Its SHA256 is 88c17d513c5549b797f06840465572ad285ce31a3b1d4ec25f31d633895de4b2 (15,520 bytes). No original build, lease or publication has started. Next: a fresh inactive status and expected M6/clean/preservation checks, then execute this pinned operator once against M7. The operator performs its own locked checks and records actual exits.
+
+## Original build started
+
+At 22:07:26 UTC the fresh preflight passed: inactive guard, expected M6, clean tracked tree, and 120 unrelated untracked paths. The reviewed original-build operator was fetched by immutable H commit and verified against its exact bytes/hash before its one invocation.
+
+The original build is running in Terminal 4. Evidence directory: `/tmp/mezan-operating-period-original-iljwu1fd`. Do not assume HEAD remains M6 and do not rerun the invocation. Inspect `result.json`, `failed.json` and actual audit command receipts first. No lease or publication has started.
+
+A gate operator is now pinned to that exact evidence directory, M7 identity and observed UI baseline 75ee080. Independent final-byte review is pending. Its code is saved for continuity, not authorization to execute before original success.
