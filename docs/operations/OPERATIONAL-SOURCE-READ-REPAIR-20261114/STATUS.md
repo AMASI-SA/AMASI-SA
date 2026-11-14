@@ -1,3 +1,39 @@
+# Current root-fix release checkpoint
+
+Updated 2026-11-14T01:22:13.608Z. This documentation-only branch must never be merged or published; source A and intent-only B remain frozen on PR #1915.
+
+## Current status
+
+The live diagnostic release #1913 was successfully published and verified, and identified `unified_orders / operational_source_read_timeout`. The actual repair is implemented on PR #1915 but is **not yet merged or published**. It projects the financial refresh's unified order read onto 21 required root fields while retaining whole canonical evidence containers, all owner orders, existing caps/deadlines/cancellation, and unchanged shared readers. No production financial mutations were used as tests.
+
+- Base J: `d6f246b4d3b14fd56ef2cbc574b99f08bb7d6fc1`
+- Source A: `a496dd428241b06d2292286de030c70d6241fcf0`, tree `03cc5b230acc660b4e56ba50227b93bbdc856930`
+- Intent-only B: `30dc66ec09b371a6b990adbd167162254bfd77c6`, tree `9a98153a5b6b69bc6a282613a1b3e354e1fe75b9`
+- Runtime R: `rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e`
+- Intent SHA-256: `e27e2c508d0e402a344d4e9b40ef90d29910142aafd0db1e2c5255ddcd37cd4c`
+- Intent Git blob: `d02ad5a7b1bc4fdd1645c3ebb4c2f36522eae494`; exact artifact bytes: 1,301,645.
+- Exact-A readiness run: 43538137202; candidate artifact: 14090817522.
+- Candidate ZIP SHA-256: `ffe23c042dc9e05fa7531ed98afc14abcf9a0a5c78f6eb8c8eaf799877af58e8`.
+- B changes only `release/release-intent-v5.json` over A. Both real host adapter rehearsals and all exact-B gates must pass before normal merge.
+
+## Source-A test evidence
+
+All 11 workflows passed. All 27 check runs completed: 21 success, 6 expected source-role/path skips, no failures/pending/neutral.
+
+Independent review verified official artifact ZIP hashes, embedded source identity or exact-source job identity, XML counts, and every expected projection testcase name. All 49 new projection cases passed in both suites without skips. Operational Balance run 43538137368 has 4,030 testcases; Stock run 43538137259 has 3,839 testcases plus 7 passing subtests. No failures/errors/skips. The 13 local environment-blocked neighboring cases all passed by name in both CI reports. Shipping contracts separately passed 16 cases plus 18 subtests. The full verification JSON is preserved beside this file.
+
+Local red/green and an independent negative control proved the new heavy-payload assertion fails under the old reader. Synthetic BSON evidence changed 526,192 to 1,684 bytes while retaining all 4 fixture orders; this is a fixture result, not a measured production compression ratio. Shared `rows` AST remained unchanged. Review found no missing required evidence fields.
+
+## Operator coordination and remaining work
+
+A temporary execution/browser outage recovered. A read-only official guard status after recovery returned active=true for **another conversation**, actor `codex-assembly-image-20261114`, prepared_at `2026-11-14T00:57:10.603194+00:00`, source `f91eb6c43d2faeb2f7da174ecdc67a455ac0ec2c`. Do not clear, reuse, or verify that owner's lease. No PR1915 operator mutation, preparation or publication has happened.
+
+Remaining: pass exact-B CI including real Node20/24 host adapter rehearsals; prove official B git/intent validation; reread production/base and normal-merge B; verify M tree/parents; wait for the other owner to finish and obtain fresh official inactive status; preserve all current /app local work; fast-forward exact M; actual package adapter build outside GitHub with canonical public origin; own prepare/prepublish; one Publish; explicit newer deployment completion; full official three-probe verification and inactive status; finally one visible page-owned calculation with a newly advanced as_of. Deployment alone is not evidence that the stale-balance symptom is resolved.
+
+---
+
+## Frozen source checkpoint preserved for history
+
 # Operational source-read repair — 14 November 2026
 
 ## Current task and authority
