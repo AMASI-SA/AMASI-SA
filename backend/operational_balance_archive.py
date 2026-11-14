@@ -25,6 +25,7 @@ SNAPSHOT_MARK = {"stored_in_financial_snapshot_v1": True}
 SNAPSHOT_FIELDS = frozenset({"facts", "obligations", "provider_fee_inputs", "provider_reports",
     "cod_reports", "order_versions", "profit_snapshot", "customer_tender_coverage"})
 MAX_SNAPSHOT_BSON = 64 * 1024 * 1024
+VISIBLE_AUDIT_GATE_PAGES = 8
 
 
 class ArchiveError(ValueError):
@@ -232,14 +233,28 @@ async def unpack(db, owner, state):
             return state
         raise ArchiveError("missing reconciliation audit manifest")
     meta, tail = await _prepare_read(_audit_metadata, state)
+    from operational_demand_refresh import checkpoint, demand_context
+    from operational_financial_activity_runtime import prepare_in_thread
+    context = demand_context()
+    visible = context is not None and context.db is db and context.owner == owner
+    # Only this exact request/owner may group fresh authorization gates. Keep
+    # every page read sequential and validate it before reading the next one.
+    # The joined worker still observes cancellation for each page; ordinary
+    # readers and other database/session capabilities retain their old gates.
+    prepare_page = prepare_in_thread if visible else _prepare_read
     events = []
-    for ref in meta["pages"]:
+    refs = meta["pages"]
+    for index, ref in enumerate(refs):
+        if visible and index % VISIBLE_AUDIT_GATE_PAGES == 0:
+            await checkpoint()
         _checkpoint()
         if (not isinstance(ref, dict) or set(ref) != {"id", "count"}
                 or not isinstance(ref["id"], str) or type(ref["count"]) is not int or ref["count"] <= 0):
             raise ArchiveError("invalid reconciliation audit reference")
         page = await db[AUDIT_PAGES].find_one({"_id": ref["id"], "owner_id": owner})
-        events.extend(await _prepare_read(validated_events, page, owner, len(events), ref))
+        events.extend(await prepare_page(validated_events, page, owner, len(events), ref))
+        if visible and ((index + 1) % VISIBLE_AUDIT_GATE_PAGES == 0 or index + 1 == len(refs)):
+            await checkpoint()
     if len(events) != meta["count"]:
         raise ArchiveError("incomplete reconciliation audit")
     return await _prepare_read(_restore_audit, state, events, tail)
