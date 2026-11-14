@@ -1,3 +1,13 @@
+# Current stage — platform completed; official verification next
+
+Emergent explicitly changed the same deployment event to **Deployment finished Nov14,04:57AM UTC+3** and shows new published version **`effdd19`**, replacing baseline `892c7f3`. Exactly one Publish was clicked after successful final prepublish. Do not use the UI's rolling ordinal as identity; the new version and completion event are the observed evidence.
+
+The published target remains A `a496dd428241b06d2292286de030c70d6241fcf0`, M `4860548f0b032e8e3beca18a4776413cd7e0368b`, R `rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e`, with our actor `codex-operational-source-rootfix-1915`. **Official verification and financial acceptance are pending.** The next action is the preserved original-operator verifier, prefix `/tmp/mezan-pr1915-original-qqo8fwy9/28-verify`, followed by a fresh inactive guard and one visible page-owned calculation. Do not repeat Publish, rebuild, or clear the lease.
+
+---
+
+## Earlier checkpoints
+
 # Current checkpoint — Publish still building; verifier ready
 
 The one Publish is still in the platform build stage; no completion observed yet. The independently prepared and root-reviewed verification wrapper is preserved beside this document, SHA-256 `fb9f399b81f682b45f2b2135b5333704ec8f9356ec60083c65787525688a87d2`, 5884 bytes. **It has not been executed.** It checks our exact lease owner/A/M/R, invokes the official verify without a short artificial timeout, records the actual child outcome before parsing, requires the three-probe identity/artifact result, and then requires fresh inactive status. It refuses to overwrite existing verification evidence.
