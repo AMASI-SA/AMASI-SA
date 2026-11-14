@@ -1,7 +1,7 @@
 {
   "task": "CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114",
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 17:16:14 UTC",
+  "updated_at_utc": "2026-11-14 17:30:51 UTC",
   "branch": "codex/campaign-operating-executive-parity-m94f6-20261114",
   "pr": 1924,
   "base_J3": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
@@ -20,14 +20,11 @@
   "merge_M3": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
   "runtime_release_id": "rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33",
   "original_workspace_observation": {
-    "observed_at": "2026-11-14T16:41:25.665266+00:00",
-    "status_exit": 0,
-    "status_sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e",
-    "guard": {
-      "active": false
-    },
-    "head": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
-    "tracked_status": ""
+    "head": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+    "tracked_status": "",
+    "guard_active": false,
+    "guard_observed_at": "2026-11-14T17:27:04.183387Z",
+    "untracked_paths_preserved_to_fast_forward": 120
   },
   "coordination": {
     "other_pr": 1921,
@@ -148,7 +145,7 @@
     }
   },
   "production_changed_by_this_followup": true,
-  "next": "Require all3exactM3push gates. Use reviewed frozen originalbuildrunner afterfreshinactive; beforebuildpreserve120files withnewappend baseline. No ownlease untiloriginalbuild/packageproof matches reviewedintent. Prepare finalgate only after actualoriginalevidence andfreshUIbaseline.",
+  "next": "Review and freeze one-shot original-build continuation on exact M3. Preserve failed evidence, atomically quarantine only the two verified ignored bytecode files with their directory in the real same-device Git directory, preserve original 120-file prefix chain, then actual yarn build and package proof. No lease or publication until successful actual rehearsal. Final gate must consume explicit recovery provenance.",
   "static_review": "root plus independent source reuse/overlap PASS",
   "source_coverage": {
     "backend": 248,
@@ -270,12 +267,82 @@
     "readiness": 43619968433,
     "security": 43619968483,
     "codeql": 43619968456,
-    "state": "running"
+    "state": "all3SUCCESS attempt1",
+    "independent_review": "PASS"
   },
   "original_build_runner": {
     "sha256": "7bef5ecff3a1c2b717c92633d135f94b1d8f44981498f864dbbb1be7405386d9",
     "bytes": 15364,
     "independent_exact_byte_review": "PASS",
-    "executed": false
+    "executed": true
+  },
+  "original_build": {
+    "state": "failed preserved",
+    "evidence": "/tmp/mezan-pr1924-original-a4ssl2aq",
+    "runner": "/tmp/mezan-pr1924-runners-r7me6cho/original-build-1924.py",
+    "runner_sha256": "7bef5ecff3a1c2b717c92633d135f94b1d8f44981498f864dbbb1be7405386d9",
+    "started_at": "2026-11-14T17:24:03.082090Z",
+    "command": {
+      "argv": [
+        "yarn",
+        "build"
+      ],
+      "cwd": "/app/frontend",
+      "started_at": "2026-11-14T17:24:04.101246Z",
+      "finished_at": "2026-11-14T17:24:05.726777Z",
+      "seconds": 1.6254009220283478,
+      "exit_code": 1,
+      "stdout_sha256": "39e8c99b49f04709f92dd3dab437d25686d350f99bcbfbabb95451a36129ee5b",
+      "stderr_sha256": "69b3ab66053b42d01223b2ca5f87ccb8c74b8454f952fecfcca8efb5fd4ae470"
+    },
+    "head": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+    "tracked_status": "",
+    "guard_inactive_at": "2026-11-14T17:27:04.183387Z",
+    "failure": "EMERGENT_DEPLOYMENT_REFUSED: release source manifests are invalid: Backend runtime source contains prepackaged bytecode: __pycache__",
+    "cache_directory": {
+      "path": "/app/backend/__pycache__",
+      "mode": 16877,
+      "inode": 138593,
+      "dev": 66330,
+      "mtime_ns": "1794676010955506489"
+    },
+    "tmp_device": 2097393,
+    "cache_files": [
+      {
+        "name": "frontend_build_identity.cpython-311.pyc",
+        "bytes": 39622,
+        "mode": 33188,
+        "inode": 138597,
+        "mtime_ns": "1794676010944506489",
+        "sha256": "489ba93d9df88a1e4f9a7e703f5ab838f93cf60e5f6f60fe10b7eee45361b67b"
+      },
+      {
+        "name": "release_protocol_v5.cpython-311.pyc",
+        "bytes": 80941,
+        "mode": 33188,
+        "inode": 138598,
+        "mtime_ns": "1794676010955506489",
+        "sha256": "c1c09df55f54c1692c24af99f4001907d6717ff06f72b95c21ec58209962143d"
+      }
+    ],
+    "evidence_hashes": {
+      "started.json": "0696f9d594578cebd45c4b7e649906c8aaad0590d4cd8ef3fe5046453d86eb70",
+      "failed.json": "44ccdc9f459a76cadc40d9afdbdfe4bdf02d99e8146ecdfb83d199b461756ce1",
+      "06-governed-adapter.json": "066d8d48957828b8b60cdfe95544fdbf5e099b6e204bd88dfaa56ebca862629b",
+      "before-untracked.json": "afa2bb953b571c446703ef1fdd4cb91d811068a09879800a6a5b72fc7f6c51bf",
+      "before-bookkeeping-prefix-proof.json": "76be36839561a0aff35b7d109bc7881afd6b5d2bda12cd34162bc95de8f7fc7c",
+      "after-fast-forward-untracked.json": "afa2bb953b571c446703ef1fdd4cb91d811068a09879800a6a5b72fc7f6c51bf",
+      "after-fast-forward-bookkeeping-prefix-proof.json": "2ed7a572cd88f987c2f7e4ba79478d95c315e5ea7291ee75d7ff1751382035e4",
+      "06-governed-adapter.stdout": "39e8c99b49f04709f92dd3dab437d25686d350f99bcbfbabb95451a36129ee5b",
+      "06-governed-adapter.stderr": "69b3ab66053b42d01223b2ca5f87ccb8c74b8454f952fecfcca8efb5fd4ae470"
+    }
+  },
+  "ui_baseline": {
+    "tab": "24",
+    "url": "https://app.emergent.sh/chat",
+    "version": "ecb9679",
+    "ordinal": "100th publish",
+    "finished_event": "Deployment finished Nov 14, 07:55 PM",
+    "source": "root actual Manage UI observation"
   }
 }

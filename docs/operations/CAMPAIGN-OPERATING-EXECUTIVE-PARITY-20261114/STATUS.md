@@ -90,3 +90,12 @@ The candidate has not been merged, built in original /app, prepared or published
 - Rootfreshoriginalstatus17:13:16.210034UTC:exit0,inactive,HEADJ3,trackedclean,120untracked. FreshremoteproductionandPRheadalso matchedJ3/B3.
 - OrdinaryPR1924mergeM3 `77e4acf33e8f5432d97bda5d7208983f0fadc599` hasorderedparentsJ3/B3 andexactB3tree `b48a0eefb368ba655c8370f6b2e4435e07612790`. RootandindependentlineagechecksPASS; A3ancestor andintent-onlydiff retained. Gitproductionbranchadvanced; livepublicationbythisfollowup hasnotoccurred.
 - ExactM3push Readiness43619968433/Security43619968483/CodeQL43619968456 running. Finaloriginalbuildrunner exactSHA `7bef5ecff3a1c2b717c92633d135f94b1d8f44981498f864dbbb1be7405386d9` (15364bytes), independentstaticreviewPASS; noexecution. Frozenhere forimmutableoriginalstaging. Finalgateremainsdisabledpendingactualoriginalevidence/UIbaseline.
+
+
+## Original-workspace build blocker — 2026-11-14 17:31 UTC
+
+All three exact-M3 push workflows completed successfully on attempt 1, including both governed host adapters and JSON route checks. Original `/app` was fast-forwarded from J3 to M3 with the 120-file preservation proof intact. The actual original `yarn build` attempt exited 1 in 1.625 seconds because the strict backend source manifest rejected `backend/__pycache__`; the failed receipt and streams remain intact at `/tmp/mezan-pr1924-original-a4ssl2aq`. No package-proof phase, release lease, prepublish, or publication occurred.
+
+Read-only inspection found exactly two ignored, untracked regular `.pyc` files. Their writer is not attributed. Source inspection confirms that the missing runtime identity message is part of the clean-build sequence; identity must be newly produced by the official build, never restored manually. The whole cache directory must leave the governed source root, even if empty. `/tmp` is on a different device; a private atomic quarantine under the verified real Git directory is being reviewed, with no changes to Git refs, index, configuration, hooks, or objects. No source, intent, or validation rule is changed.
+
+The release UI was recovered in a fresh tab. Root directly observed the existing published version `ecb9679` (100th publish) under Manage. The next step is a separately reviewed, one-shot continuation from exact M3 with immutable first-failure provenance and the original preservation chain, followed by actual build and package verification. Publication remains pending.
