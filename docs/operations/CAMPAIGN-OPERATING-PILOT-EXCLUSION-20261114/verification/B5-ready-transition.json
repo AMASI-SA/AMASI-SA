@@ -1,0 +1,25 @@
+{
+  "at": "2026-11-14 18:42:14 UTC",
+  "runs": [
+    {
+      "id": 43627961239,
+      "name": "Snapchat Direct Active Publication",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-11-14T18:41:01Z",
+      "updated": "2026-11-14T18:41:15Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627961239"
+    },
+    {
+      "id": 43627961281,
+      "name": "Snapchat Settings Management V2",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-11-14T18:41:01Z",
+      "updated": "2026-11-14T18:41:13Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627961281"
+    }
+  ],
+  "all13_success": true,
+  "expected_tiktok_skip": true
+}

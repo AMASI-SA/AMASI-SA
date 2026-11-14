@@ -2,7 +2,7 @@
   "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
   "round": 5,
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 18:41:37 UTC",
+  "updated_at_utc": "2026-11-14 18:43:32 UTC",
   "branch": "codex/campaign-operating-pilot-maf9-20261114",
   "pr": 1927,
   "base_J5": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
@@ -182,20 +182,19 @@
     "intent_B": "ece0b24b0978c5064c4e605b577ad2722158f56a",
     "state": "Merged; owner preparing original rehearsal at last observed PR update. Root must read current guard before original actions and wait for the owner's successful verification/inactive receipt if a lease is active.",
     "last_guard_read": {
-      "at": "2026-11-14T18:32:37.219498+00:00",
-      "guard_exit": 0,
-      "guard": {
-        "active": false
-      },
-      "head": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
-      "tracked_clean": true,
-      "scope": "Root read-only Terminal3; no original mutation."
+      "at": "2026-11-14T18:42:04.537832+00:00",
+      "active": false,
+      "incomplete_lease_directory": null,
+      "scope": "Root read-only Terminal3; no ownership assumption or original mutation."
     },
     "latest_durable_state": {
-      "checkpoint": "45f81be0a2df7a5fea0aeef4610ac4f7c50495cd",
-      "at": "2026-11-14T18:35:31Z",
-      "state": "original_rehearsal_passed_guard_pinned",
-      "own_release_phases_not_yet_recorded": true
+      "checkpoint": "97e671537969525bacf0968dcdf326c453e8d111",
+      "at": "2026-11-14T18:41:26Z",
+      "state": "original_build_passed_guard_wrapper_precheck_blocked_on_bookkeeping_append",
+      "failed_wrapper_finished_at": "2026-11-14T18:36:42.215163Z",
+      "guard_invoked": false,
+      "official_prepare_invocations": 0,
+      "next_owner_action": "Owner reviews a narrow append-only bookkeeping operator R2, preserving the successful build and precheck failure; no source/intent/official guard mutation."
     }
   },
   "superseded_pr1926": {
@@ -204,7 +203,7 @@
     "B4": "8351754572cfd82833b9901e794275f6598f79f1",
     "reason": "Production advanced immediately after the pre-B4 ref check; frozen B4 cannot merge against the new intent/source base."
   },
-  "next": "Pass ready-transition repeated checks; wait for PR1923 owner's explicit publication and actual official three-probe success/inactive closure. Re-read Production HEAD J5 and exact PR1927 B5 checks immediately before ordinary merge; never alter or bypass the foreign release.",
+  "next": "All PR1927 A/B/host/ready-transition gates are complete. Wait for PR1923 owner's separate release to finish and record actual official three-probe success/inactive closure; then fresh Production J5/PR B5/guard/ownership check before ordinary merge. Never reuse/alter foreign phases or infer abandonment from time.",
   "coordination": "Issue1006 is full; task status, PR body and handoff branch preserve checkpoints.",
   "intent_B5": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
   "intent_tree": "d199c053cc3f3c3aad55ca1e96dde7c1fde44926",
@@ -633,6 +632,30 @@
   "ready_for_review": {
     "at": "2026-11-14T18:40:58Z",
     "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
-    "repeat_scope_checks": "pending"
+    "repeat_scope_checks": {
+      "at": "2026-11-14 18:42:14 UTC",
+      "runs": [
+        {
+          "id": 43627961239,
+          "name": "Snapchat Direct Active Publication",
+          "conclusion": "success",
+          "attempt": 1,
+          "created": "2026-11-14T18:41:01Z",
+          "updated": "2026-11-14T18:41:15Z",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627961239"
+        },
+        {
+          "id": 43627961281,
+          "name": "Snapchat Settings Management V2",
+          "conclusion": "success",
+          "attempt": 1,
+          "created": "2026-11-14T18:41:01Z",
+          "updated": "2026-11-14T18:41:13Z",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627961281"
+        }
+      ],
+      "all13_success": true,
+      "expected_tiktok_skip": true
+    }
   }
 }
