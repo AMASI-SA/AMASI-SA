@@ -1,6 +1,6 @@
 {
   "task": "CAMPAIGN-HOVER-PROFIT-20261114",
-  "updated_at_utc": "2026-11-14 14:59:53 UTC",
+  "updated_at_utc": "2026-11-14 15:09:05 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": 1920,
   "task_branch": "codex/campaign-hover-profit-20261114",
@@ -11,7 +11,7 @@
   "intent_tree": "14dfe135d6633f72c92cb1cb359f4b9933ac176a",
   "runtime_release_id": "rg5-5c3980b0f83f3859023070ef846486e877849ca7ca848367a181995ca32c1d5e",
   "A_all_12_workflows_passed": true,
-  "B_checks": "in_progress",
+  "B_checks": "all_12_applicable_success",
   "B_readiness_run": 43607551229,
   "production_changed_by_this_task": false,
   "shared_lease_last_observation": {
@@ -19,5 +19,7 @@
     "actor": "codex-financial-loading-recovery-1919",
     "deployment": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7"
   },
-  "next": "Pass all applicable exact-B gates and both adapter artifacts; wait for other owner to finish and guard inactive before production merge; then exact-tree merge, original build, own prepare/prepublish, authorized UI publish, newer success, official verify 3/3, inactive guard, live card acceptance."
+  "next": "Wait for the existing PR1919 owner to close its active lease; pending read-only status is waiting for its guard operation. Then fresh inactive status, unchanged production J/clean B gates, ordinary merge with exact B tree, original build runner after independent review, own prepare/prepublish and authorized UI publish, newer success, official 3-probe verify, inactive guard and live card acceptance.",
+  "B_conditional_skip": "TikTok Creator Release Candidate requires its dedicated codex/tiktok-content-ci-20261011 branch; not applicable here",
+  "B_host_20_24_artifacts": "independently_verified"
 }

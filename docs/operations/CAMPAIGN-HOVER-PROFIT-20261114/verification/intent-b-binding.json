@@ -1,0 +1,19 @@
+{
+  "result": "PASS",
+  "command": "load_release_intent + verify_release_intent_git + exact candidate/Git blob/frontend manifest comparisons",
+  "source_git_sha": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
+  "source_base_git_sha": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+  "deployment_git_sha": "dcb97791d6ef8ad394575542eb4048c6c867bbba",
+  "deployment_tree": "14dfe135d6633f72c92cb1cb359f4b9933ac176a",
+  "intent_sha256": "9980404a8cd44b0b9a687923202e428bbb2ccec7482e0c4a411ffe75fd68d02b",
+  "intent_git_blob": "16d916c910d02c5e2bf5fdafec5b89b6c417ede2",
+  "runtime_release_id": "rg5-5c3980b0f83f3859023070ef846486e877849ca7ca848367a181995ca32c1d5e",
+  "frontend_artifact_tree_sha256": "2fcfaa59c69093dda0175cedf0b2aa18e3d1c1a79c7033d8c9a98d2c81d71401",
+  "build_meta_sha256": "62a0defcd380a81a521ca92ad8155a39bdd35d6dc01351383a0a8c0f0b2f9378",
+  "proof_file_sha256": "415c7982ef0d88aad4972d1c72446f1336fd0588339316e98145a521b31fcc90",
+  "frontend_file_count": 1180,
+  "backend_file_count": 1213,
+  "control_file_count": 291,
+  "source_intent_baseline_unchanged": true,
+  "worktree_clean_after": true
+}

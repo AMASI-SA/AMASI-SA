@@ -147,3 +147,14 @@ All 12 exact-A workflows passed, including stock eligibility. Official A artifac
 Intent-only B is `dcb97791d6ef8ad394575542eb4048c6c867bbba`, tree `14dfe135d6633f72c92cb1cb359f4b9933ac176a`, direct parent A `2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb`. Root verified the sole changed path and exact candidate bytes. Independent official B loader, Git relation and frontend-manifest checks passed. Exact-B workflows are running, including both Host20/24 clean-clone adapter rehearsals in run43607551229.
 
 The other owner’s durable handoff reports authorized PR1919 publication started after its prepublish at14:52:07UTC and one click observed14:53:16UTC. Do not repeat or interfere with that action. Await its owner’s verification and inactive shared guard before our production merge/workspace changes. Production changed by this task: **no**.
+
+
+## Exact B fully accepted — 2026-11-14 15:09:05 UTC
+
+Every applicable exact-B workflow passed. The sole skipped TikTok candidate job has an explicit dedicated-branch condition and is not applicable to this branch; no applicable test gate was waived. Independent official B artifacts reconfirm 4,672 operational and 4,481 eligibility cases with zero failures/errors/skips, plus frontend733/51, browser9/9 and worker4/4. Host20.20.2 and24.19.0 generated293 identical files; official readers validated them against the intent, including both isolated package digests. Reports are in `verification/intent-b-*.json` and `intent-b-ci-readout.md`.
+
+Live management UI shows the other owner's newly finished deployment a5eae68 (14November,18:02Asia/Riyadh). Its guard lease has not yet been observed inactive; the latest read-only status command is waiting behind the guard operation lock. Do not interrupt or close the foreign release, advance Production, or modify `/app` until its owner completes verification.
+
+The narrow `release-runners/original-build.py` is prepared for the eventual exact mergeM. It pins J/A/Btree/merge parents; requires inactive guard; preserves all unrelated nonignored untracked files including bytes, modes, inodes and timestamps; executes the official adapter and package proof with actual exit records; and creates no lease or publication. SHA256 `14e3df7d4e5b010707f00f294801eec259a5b4da24adb973854bf242763b38cb`. Independent static review is pending; the runner has not been executed.
+
+Production changed by this task: **no**. Next action remains the shared-lease coordination check, then ordinary exact-tree merge and the reviewed original build/own release sequence.

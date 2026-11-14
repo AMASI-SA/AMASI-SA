@@ -1,0 +1,1081 @@
+{
+  "verified_at": "2026-11-14T15:05:01.593626+00:00",
+  "source": "dcb97791d6ef8ad394575542eb4048c6c867bbba",
+  "source_a": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
+  "tree": "14dfe135d6633f72c92cb1cb359f4b9933ac176a",
+  "intent_only_changes": [
+    "release/release-intent-v5.json"
+  ],
+  "runs": [
+    {
+      "run": {
+        "id": 43607551281,
+        "name": "Operational Balance Web",
+        "node_id": "WFR_kwLOSoue_c8AAAAKJzZtMQ",
+        "head_branch": "codex/campaign-hover-profit-20261114",
+        "head_sha": "dcb97791d6ef8ad394575542eb4048c6c867bbba",
+        "path": ".github/workflows/operational-balance-web.yml",
+        "display_title": "Add campaign costs and profit with proportional operating expenses",
+        "run_number": 1734,
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "workflow_id": 375747544,
+        "check_suite_id": 118073777037,
+        "check_suite_node_id": "CS_kwDOSoue_c8AAAAbfb7bjQ",
+        "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/43607551281",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43607551281",
+        "pull_requests": [
+          {
+            "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/pulls/1920",
+            "id": 5312445711,
+            "number": 1920,
+            "head": {
+              "ref": "codex/campaign-hover-profit-20261114",
+              "sha": "dcb97791d6ef8ad394575542eb4048c6c867bbba",
+              "repo": {
+                "id": 1250664189,
+                "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA",
+                "name": "AMASI-SA"
+              }
+            },
+            "base": {
+              "ref": "hotfix/prod-snap-meta-final",
+              "sha": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+              "repo": {
+                "id": 1250664189,
+                "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA",
+                "name": "AMASI-SA"
+              }
+            }
+          }
+        ],
+        "created_at": "2026-11-14T14:57:31Z",
+        "updated_at": "2026-11-14T15:02:30Z",
+        "actor": {
+          "login": "AMASI-SA",
+          "id": 288137316,
+          "node_id": "U_kgDOESygZA",
+          "avatar_url": "https://avatars.githubusercontent.com/u/288137316?v=4",
+          "gravatar_id": "",
+          "url": "https://api.github.com/users/AMASI-SA",
+          "html_url": "https://github.com/AMASI-SA",
+          "followers_url": "https://api.github.com/users/AMASI-SA/followers",
+          "following_url": "https://api.github.com/users/AMASI-SA/following{/other_user}",
+          "gists_url": "https://api.github.com/users/AMASI-SA/gists{/gist_id}",
+          "starred_url": "https://api.github.com/users/AMASI-SA/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/AMASI-SA/subscriptions",
+          "organizations_url": "https://api.github.com/users/AMASI-SA/orgs",
+          "repos_url": "https://api.github.com/users/AMASI-SA/repos",
+          "events_url": "https://api.github.com/users/AMASI-SA/events{/privacy}",
+          "received_events_url": "https://api.github.com/users/AMASI-SA/received_events",
+          "type": "User",
+          "user_view_type": "public",
+          "site_admin": false
+        },
+        "run_attempt": 1,
+        "referenced_workflows": [],
+        "run_started_at": "2026-11-14T14:57:31Z",
+        "triggering_actor": {
+          "login": "AMASI-SA",
+          "id": 288137316,
+          "node_id": "U_kgDOESygZA",
+          "avatar_url": "https://avatars.githubusercontent.com/u/288137316?v=4",
+          "gravatar_id": "",
+          "url": "https://api.github.com/users/AMASI-SA",
+          "html_url": "https://github.com/AMASI-SA",
+          "followers_url": "https://api.github.com/users/AMASI-SA/followers",
+          "following_url": "https://api.github.com/users/AMASI-SA/following{/other_user}",
+          "gists_url": "https://api.github.com/users/AMASI-SA/gists{/gist_id}",
+          "starred_url": "https://api.github.com/users/AMASI-SA/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/AMASI-SA/subscriptions",
+          "organizations_url": "https://api.github.com/users/AMASI-SA/orgs",
+          "repos_url": "https://api.github.com/users/AMASI-SA/repos",
+          "events_url": "https://api.github.com/users/AMASI-SA/events{/privacy}",
+          "received_events_url": "https://api.github.com/users/AMASI-SA/received_events",
+          "type": "User",
+          "user_view_type": "public",
+          "site_admin": false
+        },
+        "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/43607551281/jobs",
+        "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/43607551281/logs",
+        "check_suite_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-suites/118073777037",
+        "artifacts_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/43607551281/artifacts",
+        "cancel_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/43607551281/cancel",
+        "rerun_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/43607551281/rerun",
+        "previous_attempt_url": null,
+        "workflow_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/workflows/375747544",
+        "head_commit": {
+          "id": "dcb97791d6ef8ad394575542eb4048c6c867bbba",
+          "tree_id": "14dfe135d6633f72c92cb1cb359f4b9933ac176a",
+          "message": "Freeze reviewed campaign profit release intent under protocol v5",
+          "timestamp": "2026-11-14T14:57:25Z",
+          "author": {
+            "name": "mezan",
+            "email": "amasi.jewelery@gmail.com"
+          },
+          "committer": {
+            "name": "mezan",
+            "email": "amasi.jewelery@gmail.com"
+          }
+        },
+        "repository": {
+          "id": 1250664189,
+          "node_id": "R_kgDOSoue_Q",
+          "name": "AMASI-SA",
+          "full_name": "AMASI-SA/AMASI-SA",
+          "private": false,
+          "owner": {
+            "login": "AMASI-SA",
+            "id": 288137316,
+            "node_id": "U_kgDOESygZA",
+            "avatar_url": "https://avatars.githubusercontent.com/u/288137316?v=4",
+            "gravatar_id": "",
+            "url": "https://api.github.com/users/AMASI-SA",
+            "html_url": "https://github.com/AMASI-SA",
+            "followers_url": "https://api.github.com/users/AMASI-SA/followers",
+            "following_url": "https://api.github.com/users/AMASI-SA/following{/other_user}",
+            "gists_url": "https://api.github.com/users/AMASI-SA/gists{/gist_id}",
+            "starred_url": "https://api.github.com/users/AMASI-SA/starred{/owner}{/repo}",
+            "subscriptions_url": "https://api.github.com/users/AMASI-SA/subscriptions",
+            "organizations_url": "https://api.github.com/users/AMASI-SA/orgs",
+            "repos_url": "https://api.github.com/users/AMASI-SA/repos",
+            "events_url": "https://api.github.com/users/AMASI-SA/events{/privacy}",
+            "received_events_url": "https://api.github.com/users/AMASI-SA/received_events",
+            "type": "User",
+            "user_view_type": "public",
+            "site_admin": false
+          },
+          "html_url": "https://github.com/AMASI-SA/AMASI-SA",
+          "description": null,
+          "fork": false,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA",
+          "forks_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/forks",
+          "keys_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/keys{/key_id}",
+          "collaborators_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/collaborators{/collaborator}",
+          "teams_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/teams",
+          "hooks_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/hooks",
+          "issue_events_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/issues/events{/number}",
+          "events_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/events",
+          "assignees_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/assignees{/user}",
+          "branches_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/branches{/branch}",
+          "tags_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/tags",
+          "blobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/blobs{/sha}",
+          "git_tags_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/tags{/sha}",
+          "git_refs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/refs{/sha}",
+          "trees_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/trees{/sha}",
+          "statuses_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/statuses/{sha}",
+          "languages_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/languages",
+          "stargazers_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/stargazers",
+          "contributors_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/contributors",
+          "subscribers_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/subscribers",
+          "subscription_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/subscription",
+          "commits_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/commits{/sha}",
+          "git_commits_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/commits{/sha}",
+          "comments_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/comments{/number}",
+          "issue_comment_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/issues/comments{/number}",
+          "contents_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/contents/{+path}",
+          "compare_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/compare/{base}...{head}",
+          "merges_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/merges",
+          "archive_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/{archive_format}{/ref}",
+          "downloads_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/downloads",
+          "issues_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/issues{/number}",
+          "pulls_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/pulls{/number}",
+          "milestones_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/milestones{/number}",
+          "notifications_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/notifications{?since,all,participating}",
+          "labels_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/labels{/name}",
+          "releases_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/releases{/id}",
+          "deployments_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/deployments"
+        },
+        "head_repository": {
+          "id": 1250664189,
+          "node_id": "R_kgDOSoue_Q",
+          "name": "AMASI-SA",
+          "full_name": "AMASI-SA/AMASI-SA",
+          "private": false,
+          "owner": {
+            "login": "AMASI-SA",
+            "id": 288137316,
+            "node_id": "U_kgDOESygZA",
+            "avatar_url": "https://avatars.githubusercontent.com/u/288137316?v=4",
+            "gravatar_id": "",
+            "url": "https://api.github.com/users/AMASI-SA",
+            "html_url": "https://github.com/AMASI-SA",
+            "followers_url": "https://api.github.com/users/AMASI-SA/followers",
+            "following_url": "https://api.github.com/users/AMASI-SA/following{/other_user}",
+            "gists_url": "https://api.github.com/users/AMASI-SA/gists{/gist_id}",
+            "starred_url": "https://api.github.com/users/AMASI-SA/starred{/owner}{/repo}",
+            "subscriptions_url": "https://api.github.com/users/AMASI-SA/subscriptions",
+            "organizations_url": "https://api.github.com/users/AMASI-SA/orgs",
+            "repos_url": "https://api.github.com/users/AMASI-SA/repos",
+            "events_url": "https://api.github.com/users/AMASI-SA/events{/privacy}",
+            "received_events_url": "https://api.github.com/users/AMASI-SA/received_events",
+            "type": "User",
+            "user_view_type": "public",
+            "site_admin": false
+          },
+          "html_url": "https://github.com/AMASI-SA/AMASI-SA",
+          "description": null,
+          "fork": false,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA",
+          "forks_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/forks",
+          "keys_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/keys{/key_id}",
+          "collaborators_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/collaborators{/collaborator}",
+          "teams_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/teams",
+          "hooks_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/hooks",
+          "issue_events_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/issues/events{/number}",
+          "events_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/events",
+          "assignees_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/assignees{/user}",
+          "branches_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/branches{/branch}",
+          "tags_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/tags",
+          "blobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/blobs{/sha}",
+          "git_tags_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/tags{/sha}",
+          "git_refs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/refs{/sha}",
+          "trees_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/trees{/sha}",
+          "statuses_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/statuses/{sha}",
+          "languages_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/languages",
+          "stargazers_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/stargazers",
+          "contributors_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/contributors",
+          "subscribers_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/subscribers",
+          "subscription_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/subscription",
+          "commits_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/commits{/sha}",
+          "git_commits_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/commits{/sha}",
+          "comments_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/comments{/number}",
+          "issue_comment_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/issues/comments{/number}",
+          "contents_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/contents/{+path}",
+          "compare_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/compare/{base}...{head}",
+          "merges_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/merges",
+          "archive_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/{archive_format}{/ref}",
+          "downloads_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/downloads",
+          "issues_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/issues{/number}",
+          "pulls_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/pulls{/number}",
+          "milestones_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/milestones{/number}",
+          "notifications_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/notifications{?since,all,participating}",
+          "labels_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/labels{/name}",
+          "releases_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/releases{/id}",
+          "deployments_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/deployments"
+        }
+      },
+      "jobs": [
+        {
+          "id": 132485374378,
+          "name": "Canonical worker excludes operational balance jobs",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 43607551281,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Install the canonical runtime public dependency closure",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Start this job's isolated empty Mongo replica set",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Prove the exact source's canonical child boots and drains",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Run actions/upload-artifact@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Remove only this job's isolated Mongo fixture",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 15
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 16
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 17
+            }
+          ]
+        },
+        {
+          "id": 132485374548,
+          "name": "Operational Balance Frontend",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 43607551281,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Enable project Yarn version",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Install locked dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Run operational Web contracts",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Reject missing or skipped tests",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Run actions/upload-artifact@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 15
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 16
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 17
+            }
+          ]
+        },
+        {
+          "id": 132485374605,
+          "name": "Operational Balance Backend",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 43607551281,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Install isolated test dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Start isolated projection Replica Set",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Record exact tested source",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Run operational contracts",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Preserve shipping summary and calculator contracts",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8
+            },
+            {
+              "name": "Reject missing or skipped tests",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9
+            },
+            {
+              "name": "Run actions/upload-artifact@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10
+            },
+            {
+              "name": "Remove this job's isolated Mongo fixture",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 11
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 21
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 22
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 23
+            }
+          ]
+        },
+        {
+          "id": 132485374665,
+          "name": "Operational balances browser, mobile and visibility acceptance",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 43607551281,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Install synthetic report and locked component dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Run the real report and pending-order dialog in sandboxed Chromium",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Run actions/upload-artifact@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 12
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 14
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 15
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 14119122235,
+          "name": "operational-backend-results",
+          "size_in_bytes": 77782,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14119122235",
+          "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14119122235/zip",
+          "expired": false,
+          "created_at": "2026-11-14T15:02:27Z",
+          "expires_at": "2027-02-12T14:57:32Z",
+          "updated_at": "2026-11-14T15:02:27Z",
+          "digest": "sha256:e034d55e3451caf25ae72f8cbc049f1b9d500315d10c3758f472cb54c859a228",
+          "workflow_run": {
+            "id": 43607551281,
+            "repository_id": 1250664189,
+            "head_repository_id": 1250664189,
+            "head_branch": "codex/campaign-hover-profit-20261114",
+            "head_sha": "dcb97791d6ef8ad394575542eb4048c6c867bbba"
+          }
+        },
+        {
+          "id": 14119066682,
+          "name": "operational-worker-results",
+          "size_in_bytes": 745,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14119066682",
+          "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14119066682/zip",
+          "expired": false,
+          "created_at": "2026-11-14T14:58:40Z",
+          "expires_at": "2027-02-12T14:57:32Z",
+          "updated_at": "2026-11-14T14:58:40Z",
+          "digest": "sha256:a2e4e0f99c4e493cb169b9e713492acb1e7938e282112614d5766cae4f44d978",
+          "workflow_run": {
+            "id": 43607551281,
+            "repository_id": 1250664189,
+            "head_repository_id": 1250664189,
+            "head_branch": "codex/campaign-hover-profit-20261114",
+            "head_sha": "dcb97791d6ef8ad394575542eb4048c6c867bbba"
+          }
+        },
+        {
+          "id": 14118787292,
+          "name": "operational-frontend-results",
+          "size_in_bytes": 23637,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14118787292",
+          "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14118787292/zip",
+          "expired": false,
+          "created_at": "2026-11-14T14:58:50Z",
+          "expires_at": "2027-02-12T14:57:32Z",
+          "updated_at": "2026-11-14T14:58:50Z",
+          "digest": "sha256:25374046ccaf02755a8f8fb4c3101c1fa1ed24b4d5cbc0eef1c9a803e98c1b2d",
+          "workflow_run": {
+            "id": 43607551281,
+            "repository_id": 1250664189,
+            "head_repository_id": 1250664189,
+            "head_branch": "codex/campaign-hover-profit-20261114",
+            "head_sha": "dcb97791d6ef8ad394575542eb4048c6c867bbba"
+          }
+        },
+        {
+          "id": 14118692672,
+          "name": "operational-balances-browser-results",
+          "size_in_bytes": 497168,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14118692672",
+          "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14118692672/zip",
+          "expired": false,
+          "created_at": "2026-11-14T14:59:04Z",
+          "expires_at": "2027-02-12T14:57:32Z",
+          "updated_at": "2026-11-14T14:59:04Z",
+          "digest": "sha256:711801b120810b81eeab6a5e355770882f4a4cfca458a6adbe4692f7d9f61e6d",
+          "workflow_run": {
+            "id": 43607551281,
+            "repository_id": 1250664189,
+            "head_repository_id": 1250664189,
+            "head_branch": "codex/campaign-hover-profit-20261114",
+            "head_sha": "dcb97791d6ef8ad394575542eb4048c6c867bbba"
+          }
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 43607551295,
+        "name": "Operational Stock Eligibility",
+        "node_id": "WFR_kwLOSoue_c8AAAAKJzZtPw",
+        "head_branch": "codex/campaign-hover-profit-20261114",
+        "head_sha": "dcb97791d6ef8ad394575542eb4048c6c867bbba",
+        "path": ".github/workflows/operational-stock-eligibility.yml",
+        "display_title": "Add campaign costs and profit with proportional operating expenses",
+        "run_number": 1656,
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "workflow_id": 380812173,
+        "check_suite_id": 118073777082,
+        "check_suite_node_id": "CS_kwDOSoue_c8AAAAbfb7bug",
+        "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/43607551295",
+        "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43607551295",
+        "pull_requests": [
+          {
+            "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/pulls/1920",
+            "id": 5312445711,
+            "number": 1920,
+            "head": {
+              "ref": "codex/campaign-hover-profit-20261114",
+              "sha": "dcb97791d6ef8ad394575542eb4048c6c867bbba",
+              "repo": {
+                "id": 1250664189,
+                "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA",
+                "name": "AMASI-SA"
+              }
+            },
+            "base": {
+              "ref": "hotfix/prod-snap-meta-final",
+              "sha": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+              "repo": {
+                "id": 1250664189,
+                "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA",
+                "name": "AMASI-SA"
+              }
+            }
+          }
+        ],
+        "created_at": "2026-11-14T14:57:31Z",
+        "updated_at": "2026-11-14T15:04:10Z",
+        "actor": {
+          "login": "AMASI-SA",
+          "id": 288137316,
+          "node_id": "U_kgDOESygZA",
+          "avatar_url": "https://avatars.githubusercontent.com/u/288137316?v=4",
+          "gravatar_id": "",
+          "url": "https://api.github.com/users/AMASI-SA",
+          "html_url": "https://github.com/AMASI-SA",
+          "followers_url": "https://api.github.com/users/AMASI-SA/followers",
+          "following_url": "https://api.github.com/users/AMASI-SA/following{/other_user}",
+          "gists_url": "https://api.github.com/users/AMASI-SA/gists{/gist_id}",
+          "starred_url": "https://api.github.com/users/AMASI-SA/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/AMASI-SA/subscriptions",
+          "organizations_url": "https://api.github.com/users/AMASI-SA/orgs",
+          "repos_url": "https://api.github.com/users/AMASI-SA/repos",
+          "events_url": "https://api.github.com/users/AMASI-SA/events{/privacy}",
+          "received_events_url": "https://api.github.com/users/AMASI-SA/received_events",
+          "type": "User",
+          "user_view_type": "public",
+          "site_admin": false
+        },
+        "run_attempt": 1,
+        "referenced_workflows": [],
+        "run_started_at": "2026-11-14T14:57:31Z",
+        "triggering_actor": {
+          "login": "AMASI-SA",
+          "id": 288137316,
+          "node_id": "U_kgDOESygZA",
+          "avatar_url": "https://avatars.githubusercontent.com/u/288137316?v=4",
+          "gravatar_id": "",
+          "url": "https://api.github.com/users/AMASI-SA",
+          "html_url": "https://github.com/AMASI-SA",
+          "followers_url": "https://api.github.com/users/AMASI-SA/followers",
+          "following_url": "https://api.github.com/users/AMASI-SA/following{/other_user}",
+          "gists_url": "https://api.github.com/users/AMASI-SA/gists{/gist_id}",
+          "starred_url": "https://api.github.com/users/AMASI-SA/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/AMASI-SA/subscriptions",
+          "organizations_url": "https://api.github.com/users/AMASI-SA/orgs",
+          "repos_url": "https://api.github.com/users/AMASI-SA/repos",
+          "events_url": "https://api.github.com/users/AMASI-SA/events{/privacy}",
+          "received_events_url": "https://api.github.com/users/AMASI-SA/received_events",
+          "type": "User",
+          "user_view_type": "public",
+          "site_admin": false
+        },
+        "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/43607551295/jobs",
+        "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/43607551295/logs",
+        "check_suite_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-suites/118073777082",
+        "artifacts_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/43607551295/artifacts",
+        "cancel_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/43607551295/cancel",
+        "rerun_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/43607551295/rerun",
+        "previous_attempt_url": null,
+        "workflow_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/workflows/380812173",
+        "head_commit": {
+          "id": "dcb97791d6ef8ad394575542eb4048c6c867bbba",
+          "tree_id": "14dfe135d6633f72c92cb1cb359f4b9933ac176a",
+          "message": "Freeze reviewed campaign profit release intent under protocol v5",
+          "timestamp": "2026-11-14T14:57:25Z",
+          "author": {
+            "name": "mezan",
+            "email": "amasi.jewelery@gmail.com"
+          },
+          "committer": {
+            "name": "mezan",
+            "email": "amasi.jewelery@gmail.com"
+          }
+        },
+        "repository": {
+          "id": 1250664189,
+          "node_id": "R_kgDOSoue_Q",
+          "name": "AMASI-SA",
+          "full_name": "AMASI-SA/AMASI-SA",
+          "private": false,
+          "owner": {
+            "login": "AMASI-SA",
+            "id": 288137316,
+            "node_id": "U_kgDOESygZA",
+            "avatar_url": "https://avatars.githubusercontent.com/u/288137316?v=4",
+            "gravatar_id": "",
+            "url": "https://api.github.com/users/AMASI-SA",
+            "html_url": "https://github.com/AMASI-SA",
+            "followers_url": "https://api.github.com/users/AMASI-SA/followers",
+            "following_url": "https://api.github.com/users/AMASI-SA/following{/other_user}",
+            "gists_url": "https://api.github.com/users/AMASI-SA/gists{/gist_id}",
+            "starred_url": "https://api.github.com/users/AMASI-SA/starred{/owner}{/repo}",
+            "subscriptions_url": "https://api.github.com/users/AMASI-SA/subscriptions",
+            "organizations_url": "https://api.github.com/users/AMASI-SA/orgs",
+            "repos_url": "https://api.github.com/users/AMASI-SA/repos",
+            "events_url": "https://api.github.com/users/AMASI-SA/events{/privacy}",
+            "received_events_url": "https://api.github.com/users/AMASI-SA/received_events",
+            "type": "User",
+            "user_view_type": "public",
+            "site_admin": false
+          },
+          "html_url": "https://github.com/AMASI-SA/AMASI-SA",
+          "description": null,
+          "fork": false,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA",
+          "forks_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/forks",
+          "keys_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/keys{/key_id}",
+          "collaborators_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/collaborators{/collaborator}",
+          "teams_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/teams",
+          "hooks_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/hooks",
+          "issue_events_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/issues/events{/number}",
+          "events_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/events",
+          "assignees_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/assignees{/user}",
+          "branches_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/branches{/branch}",
+          "tags_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/tags",
+          "blobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/blobs{/sha}",
+          "git_tags_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/tags{/sha}",
+          "git_refs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/refs{/sha}",
+          "trees_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/trees{/sha}",
+          "statuses_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/statuses/{sha}",
+          "languages_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/languages",
+          "stargazers_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/stargazers",
+          "contributors_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/contributors",
+          "subscribers_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/subscribers",
+          "subscription_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/subscription",
+          "commits_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/commits{/sha}",
+          "git_commits_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/commits{/sha}",
+          "comments_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/comments{/number}",
+          "issue_comment_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/issues/comments{/number}",
+          "contents_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/contents/{+path}",
+          "compare_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/compare/{base}...{head}",
+          "merges_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/merges",
+          "archive_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/{archive_format}{/ref}",
+          "downloads_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/downloads",
+          "issues_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/issues{/number}",
+          "pulls_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/pulls{/number}",
+          "milestones_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/milestones{/number}",
+          "notifications_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/notifications{?since,all,participating}",
+          "labels_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/labels{/name}",
+          "releases_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/releases{/id}",
+          "deployments_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/deployments"
+        },
+        "head_repository": {
+          "id": 1250664189,
+          "node_id": "R_kgDOSoue_Q",
+          "name": "AMASI-SA",
+          "full_name": "AMASI-SA/AMASI-SA",
+          "private": false,
+          "owner": {
+            "login": "AMASI-SA",
+            "id": 288137316,
+            "node_id": "U_kgDOESygZA",
+            "avatar_url": "https://avatars.githubusercontent.com/u/288137316?v=4",
+            "gravatar_id": "",
+            "url": "https://api.github.com/users/AMASI-SA",
+            "html_url": "https://github.com/AMASI-SA",
+            "followers_url": "https://api.github.com/users/AMASI-SA/followers",
+            "following_url": "https://api.github.com/users/AMASI-SA/following{/other_user}",
+            "gists_url": "https://api.github.com/users/AMASI-SA/gists{/gist_id}",
+            "starred_url": "https://api.github.com/users/AMASI-SA/starred{/owner}{/repo}",
+            "subscriptions_url": "https://api.github.com/users/AMASI-SA/subscriptions",
+            "organizations_url": "https://api.github.com/users/AMASI-SA/orgs",
+            "repos_url": "https://api.github.com/users/AMASI-SA/repos",
+            "events_url": "https://api.github.com/users/AMASI-SA/events{/privacy}",
+            "received_events_url": "https://api.github.com/users/AMASI-SA/received_events",
+            "type": "User",
+            "user_view_type": "public",
+            "site_admin": false
+          },
+          "html_url": "https://github.com/AMASI-SA/AMASI-SA",
+          "description": null,
+          "fork": false,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA",
+          "forks_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/forks",
+          "keys_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/keys{/key_id}",
+          "collaborators_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/collaborators{/collaborator}",
+          "teams_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/teams",
+          "hooks_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/hooks",
+          "issue_events_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/issues/events{/number}",
+          "events_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/events",
+          "assignees_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/assignees{/user}",
+          "branches_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/branches{/branch}",
+          "tags_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/tags",
+          "blobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/blobs{/sha}",
+          "git_tags_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/tags{/sha}",
+          "git_refs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/refs{/sha}",
+          "trees_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/trees{/sha}",
+          "statuses_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/statuses/{sha}",
+          "languages_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/languages",
+          "stargazers_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/stargazers",
+          "contributors_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/contributors",
+          "subscribers_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/subscribers",
+          "subscription_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/subscription",
+          "commits_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/commits{/sha}",
+          "git_commits_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/git/commits{/sha}",
+          "comments_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/comments{/number}",
+          "issue_comment_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/issues/comments{/number}",
+          "contents_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/contents/{+path}",
+          "compare_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/compare/{base}...{head}",
+          "merges_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/merges",
+          "archive_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/{archive_format}{/ref}",
+          "downloads_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/downloads",
+          "issues_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/issues{/number}",
+          "pulls_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/pulls{/number}",
+          "milestones_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/milestones{/number}",
+          "notifications_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/notifications{?since,all,participating}",
+          "labels_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/labels{/name}",
+          "releases_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/releases{/id}",
+          "deployments_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/deployments"
+        }
+      },
+      "jobs": [
+        {
+          "id": 132485374796,
+          "name": "Stock eligibility, reservation and consumption on isolated Mongo",
+          "status": "completed",
+          "conclusion": "success",
+          "run_id": 43607551295,
+          "logs_url": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2
+            },
+            {
+              "name": "Record exact tested source",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 4
+            },
+            {
+              "name": "Install focused test dependencies",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 5
+            },
+            {
+              "name": "Start ephemeral loopback-only Mongo fixtures",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6
+            },
+            {
+              "name": "Run all Eligibility acceptance suites with real transactions",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 7
+            },
+            {
+              "name": "Require executed passing tests with no skips",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8
+            },
+            {
+              "name": "Retain Eligibility backend test evidence",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 9
+            },
+            {
+              "name": "Remove only this job's ephemeral Mongo fixtures",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 10
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 19
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 20
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 21
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 14118552535,
+          "name": "eligibility-backend-dcb97791d6ef8ad394575542eb4048c6c867bbba",
+          "size_in_bytes": 74554,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14118552535",
+          "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14118552535/zip",
+          "expired": false,
+          "created_at": "2026-11-14T15:04:05Z",
+          "expires_at": "2027-02-12T14:57:32Z",
+          "updated_at": "2026-11-14T15:04:05Z",
+          "digest": "sha256:469a7e6ff07c0a8a520b7d882c05314bff95ed8e142467bafcd59d8b54f05a93",
+          "workflow_run": {
+            "id": 43607551295,
+            "repository_id": 1250664189,
+            "head_repository_id": 1250664189,
+            "head_branch": "codex/campaign-hover-profit-20261114",
+            "head_sha": "dcb97791d6ef8ad394575542eb4048c6c867bbba"
+          }
+        }
+      ]
+    }
+  ],
+  "coverage_note": "These official Operational and Stock regression gates provide real ephemeral Mongo fixtures for their selected suites; this does not imply that every case uses Mongo. They do not collect campaign hover financial suites. Campaign acceptance separately uses committed mock fixtures and real shared calculators.",
+  "coverage": {
+    "operational-backend.xml": {
+      "source": "dcb97791d6ef8ad394575542eb4048c6c867bbba",
+      "tree": "14dfe135d6633f72c92cb1cb359f4b9933ac176a",
+      "cases": 4672,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "campaign_hover_cases": 0,
+      "distinct_classes": 187,
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "0",
+          "skipped": "0",
+          "tests": "4672",
+          "time": "259.246",
+          "timestamp": "2026-11-14T14:58:04.361530+00:00",
+          "hostname": "runnervmccnms"
+        }
+      ],
+      "declared_test_modules_observed": 185,
+      "declared_test_modules_missing": [],
+      "artifact_id": 14119122235,
+      "artifact_sha256": "e034d55e3451caf25ae72f8cbc049f1b9d500315d10c3758f472cb54c859a228",
+      "artifact_digest_verified": true
+    },
+    "eligibility-backend.xml": {
+      "source": "dcb97791d6ef8ad394575542eb4048c6c867bbba",
+      "tree": "14dfe135d6633f72c92cb1cb359f4b9933ac176a",
+      "cases": 4481,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "campaign_hover_cases": 0,
+      "distinct_classes": 182,
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "0",
+          "skipped": "0",
+          "tests": "4488",
+          "time": "356.371",
+          "timestamp": "2026-11-14T14:58:05.534722+00:00",
+          "hostname": "runnervmccnms"
+        }
+      ],
+      "declared_test_modules_observed": 179,
+      "declared_test_modules_missing": [],
+      "artifact_id": 14118552535,
+      "artifact_sha256": "469a7e6ff07c0a8a520b7d882c05314bff95ed8e142467bafcd59d8b54f05a93",
+      "artifact_digest_verified": true
+    }
+  }
+}

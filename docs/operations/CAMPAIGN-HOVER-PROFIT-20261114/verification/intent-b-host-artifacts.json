@@ -1,0 +1,149 @@
+{
+  "result": "PASS",
+  "workflow_run_id": 43607551229,
+  "deployment_git_sha": "dcb97791d6ef8ad394575542eb4048c6c867bbba",
+  "source_git_sha": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
+  "source_base_git_sha": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+  "runtime_release_id": "rg5-5c3980b0f83f3859023070ef846486e877849ca7ca848367a181995ca32c1d5e",
+  "all_host_generated_file_bytes_identical": true,
+  "verified_generated_regular_files": 293,
+  "hosts": {
+    "20.20.2": {
+      "result": "PASS",
+      "host_node": "v20.20.2",
+      "host_yarn": "1.22.22",
+      "governed_toolchain": {
+        "node": "22.23.2",
+        "yarn": "1.22.22",
+        "vite": "8.2.4"
+      },
+      "source_git_sha": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
+      "source_base_git_sha": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+      "runtime_release_id": "rg5-5c3980b0f83f3859023070ef846486e877849ca7ca848367a181995ca32c1d5e",
+      "intent_sha256": "9980404a8cd44b0b9a687923202e428bbb2ccec7482e0c4a411ffe75fd68d02b",
+      "frontend_artifact_tree_sha256": "2fcfaa59c69093dda0175cedf0b2aa18e3d1c1a79c7033d8c9a98d2c81d71401",
+      "build_meta_sha256": "62a0defcd380a81a521ca92ad8155a39bdd35d6dc01351383a0a8c0f0b2f9378",
+      "proof_file_sha256": "415c7982ef0d88aad4972d1c72446f1336fd0588339316e98145a521b31fcc90",
+      "backend_identity_sha256": "dccfab7d9d59cc5670969744606dcc2f97f1351401b9b60c0a4563aba6eb622c",
+      "frontend_package_file_count": 1470,
+      "frontend_package_tree_sha256": "e7256c5aea6ab40947e17fa6863aff80020028fa8d260ed7df2691624b7fe250",
+      "backend_package_file_count": 1214,
+      "backend_package_tree_sha256": "a141b46ffc3ab4398ca6c500e6c84a230f469f62c7cda82696b119ba1366841f",
+      "generated_regular_files": 293,
+      "adapter_git_metadata_absent": true,
+      "isolated_backend_health_verified": true,
+      "extracted_root": "/workspace/scratch/a7d75184af2d/campaign-profit-readiness-b-43607551229/host-20.20.2/generated"
+    },
+    "24.19.0": {
+      "result": "PASS",
+      "host_node": "v24.19.0",
+      "host_yarn": "1.22.22",
+      "governed_toolchain": {
+        "node": "22.23.2",
+        "yarn": "1.22.22",
+        "vite": "8.2.4"
+      },
+      "source_git_sha": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
+      "source_base_git_sha": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+      "runtime_release_id": "rg5-5c3980b0f83f3859023070ef846486e877849ca7ca848367a181995ca32c1d5e",
+      "intent_sha256": "9980404a8cd44b0b9a687923202e428bbb2ccec7482e0c4a411ffe75fd68d02b",
+      "frontend_artifact_tree_sha256": "2fcfaa59c69093dda0175cedf0b2aa18e3d1c1a79c7033d8c9a98d2c81d71401",
+      "build_meta_sha256": "62a0defcd380a81a521ca92ad8155a39bdd35d6dc01351383a0a8c0f0b2f9378",
+      "proof_file_sha256": "415c7982ef0d88aad4972d1c72446f1336fd0588339316e98145a521b31fcc90",
+      "backend_identity_sha256": "dccfab7d9d59cc5670969744606dcc2f97f1351401b9b60c0a4563aba6eb622c",
+      "frontend_package_file_count": 1470,
+      "frontend_package_tree_sha256": "e7256c5aea6ab40947e17fa6863aff80020028fa8d260ed7df2691624b7fe250",
+      "backend_package_file_count": 1214,
+      "backend_package_tree_sha256": "a141b46ffc3ab4398ca6c500e6c84a230f469f62c7cda82696b119ba1366841f",
+      "generated_regular_files": 293,
+      "adapter_git_metadata_absent": true,
+      "isolated_backend_health_verified": true,
+      "extracted_root": "/workspace/scratch/a7d75184af2d/campaign-profit-readiness-b-43607551229/host-24.19.0/generated"
+    }
+  },
+  "worktree_clean_after": true,
+  "scope": "Archived CI adapter outputs and package evidence; no live deployment verification",
+  "literal_cross_host_byte_comparison_files": 293,
+  "host_ci_jobs": [
+    {
+      "id": 132485610353,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success",
+      "verification_steps": [
+        {
+          "name": "Create a clean tracked-source clone",
+          "conclusion": "success"
+        },
+        {
+          "name": "Prove generated release inputs are absent",
+          "conclusion": "success"
+        },
+        {
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "conclusion": "success"
+        },
+        {
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "conclusion": "success"
+        },
+        {
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "conclusion": "success"
+        },
+        {
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "conclusion": "success"
+        },
+        {
+          "name": "Archive verified generated release outputs",
+          "conclusion": "success"
+        },
+        {
+          "name": "Retain verified generated release outputs",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 132485610422,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success",
+      "verification_steps": [
+        {
+          "name": "Create a clean tracked-source clone",
+          "conclusion": "success"
+        },
+        {
+          "name": "Prove generated release inputs are absent",
+          "conclusion": "success"
+        },
+        {
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "conclusion": "success"
+        },
+        {
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "conclusion": "success"
+        },
+        {
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "conclusion": "success"
+        },
+        {
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "conclusion": "success"
+        },
+        {
+          "name": "Archive verified generated release outputs",
+          "conclusion": "success"
+        },
+        {
+          "name": "Retain verified generated release outputs",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ]
+}
