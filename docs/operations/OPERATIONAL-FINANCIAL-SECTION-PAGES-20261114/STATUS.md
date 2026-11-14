@@ -46,9 +46,12 @@ Root will coordinate by rechecking the official guard before release work.
    summary, providers, couriers, drivers, employees/custody, banks/cash,
    suppliers, advertising, wallets/other parties, and open orders/expectations.
    Unassigned details remain explicitly reachable.
-6. Opening/navigating/currency changes issue GET-only section reads. One explicit
-   manual button performs shared POSTrefresh; preserve cancellation, scope
-   guards and the single bounded visible-attempt contract. No prefetch/timer.
+6. Opening/navigating/currency changes issue GET-only section reads. The explicit
+   manual button performs shared POSTrefresh. Existing explicit saved financial
+   confirmations retain their one bounded, permission-checked POST+GET follow-up
+   where needed to apply the confirmed effect. Hidden/unmounted attempts are
+   consumed, never replayed on return. Preserve cancellation, scope guards and
+   the single bounded visible-attempt contract. No prefetch/timer.
 7. Label current-page print/export clearly and preserve explicit full-report
    export. Never silently relabel a partial export as complete.
 
@@ -72,9 +75,44 @@ reconciliation candidates without evidence.
 ## Ownership and next safe step
 
 Root owns integration, task documentation, GitHub mutations and deployment.
-Implementation write surfaces will be assigned explicitly; agents must not
+Implementation write surfaces are assigned explicitly; agents must not
 commit, change branch, install dependencies, touch live UI or write outside
-their assigned files. No source changes yet at this checkpoint.
+their assigned files.
 
-Next: finalize shared response/view contract and assign backend/frontend owners,
-then deliver the saved-summary vertical slice with focused regression evidence.
+## Backend WIP checkpoint
+
+The scoped route, saved-state reader and report builders are implemented and
+frozen for independent review. Full/default `all` still uses the original full
+audit reader. Scoped reads validate owner and packed financial/issue packets,
+omit historical audit page materialization, and retain global arithmetic and
+driver approval/effect conflicts. Forecast and optionally full export are
+bound to revision/as_of/started_at before and after their reads.
+
+Changed backend files: operational_balance_routes.py,
+operational_financial_position.py, operational_financial_position_core.py,
+operational_financial_position_state.py, operational_financial_position_views.py;
+new tests: test_operational_financial_position_state.py and
+test_operational_financial_position_views.py.
+
+Verified with Python3.12 in financial-sections-venv, PYTHONPATH=backend:backend/tests,
+pytest --noconftest -p no:cacheprovider -q --tb=short against the two new suites and
+existing financial_position, financial_position_routes, driver_review_report,
+visible_report_reads and archive_read_lifetime suites: actual exit0, 148 tests
+passed in19.14s. The initial summary regression first failed on the prior route
+calling the live cost reader. Backend diff whitespace check passed.
+
+Frontend implementation and independent review are still in progress. Root is
+adding bounded request-local stage timings to the existing refresh408 response
+for direct diagnosis when the platform log viewer is stale; this adds no reads,
+timers or background work. Neither this diagnostic nor unfinished frontend work
+is included in this backend-only WIP checkpoint.
+
+Production changed by this task: no. No new PR, release intent, lease or publish.
+The separate campaign release was publicly observed at15:52:38Z with verified
+identity source2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb; its guard completion
+remains unobserved. Issue1006 is full (2500 comments); durable task/PR records
+replace further attempts to append there.
+
+Next: independently review the frozen backend slice; finish and test frontend
+navigation, forecast binding and guarded exports, then run integrated checks.
+Recheck the official original /app guard before any release work.

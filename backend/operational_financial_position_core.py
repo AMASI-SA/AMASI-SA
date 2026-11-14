@@ -157,19 +157,23 @@ def _balance_origin(parties, obligations, complete):
     return breakdown
 
 
-def _actual_tables(parties, complete):
+def _actual_tables(parties, complete, *, table_ids=None):
     tables = []
-    columns = [_column("name", "الحساب", "text"), _column("available", "المتاح", role="neutral"),
-               _column("unsettled", "بانتظار التسوية", role="receivable")]
-    banks = [{"id": _party_id(row), "name": _name(row),
-              "available": row["actual"] if row["party_type"] == "bank" else "0.00",
-              "unsettled": row["outstanding_receivable"] if row["party_type"] == "pos_receivable" else "0.00"}
-             for row in parties if row["party_type"] in {"bank", "pos_receivable"}]
-    tables.append(_table("banks_network", "البنوك وأجهزة الشبكة", "actual", columns, banks, complete=complete,
-                         notes=["تسويات أجهزة الشبكة حقوق لنا؛ لا تدخل ضمن النقد المتاح ولا تربط ببنك بالاسم."]))
+    selected = lambda identity: table_ids is None or identity in table_ids
+    if selected("banks_network"):
+        columns = [_column("name", "الحساب", "text"), _column("available", "المتاح", role="neutral"),
+                   _column("unsettled", "بانتظار التسوية", role="receivable")]
+        banks = [{"id": _party_id(row), "name": _name(row),
+                  "available": row["actual"] if row["party_type"] == "bank" else "0.00",
+                  "unsettled": row["outstanding_receivable"] if row["party_type"] == "pos_receivable" else "0.00"}
+                 for row in parties if row["party_type"] in {"bank", "pos_receivable"}]
+        tables.append(_table("banks_network", "البنوك وأجهزة الشبكة", "actual", columns, banks, complete=complete,
+                             notes=["تسويات أجهزة الشبكة حقوق لنا؛ لا تدخل ضمن النقد المتاح ولا تربط ببنك بالاسم."]))
     for kind, identity, title in (("cash", "cash", "الصناديق"),
                                   ("employee_custody", "employee_custody", "العهد لدى الموظفين")):
         preparation_checkpoint()
+        if not selected(identity):
+            continue
         key = "custody_remaining" if kind == "employee_custody" else "actual"
         rows = [{"id": _party_id(row), "name": _name(row), "available": row[key]}
                 for row in parties if row["party_type"] == kind]
@@ -180,7 +184,7 @@ def _actual_tables(parties, complete):
                     _column("payable", "علينا", role="payable")]
     for kind, identity, title, section in PARTIES:
         preparation_checkpoint()
-        if kind in {"provider", "customer_wallet"}:
+        if kind in {"provider", "customer_wallet"} or not selected(identity):
             continue
         rows = [{"id": _party_id(row), "name": _name(row),
                  "receivable": row["outstanding_receivable"], "payable": row["outstanding_payable"]}
@@ -195,7 +199,7 @@ def _actual_tables(parties, complete):
     for row in parties:
         preparation_checkpoint()
         valuation = row.get("ad_sar_valuation")
-        if row["party_type"] != "ad_account" or not valuation:
+        if not selected("ads_currency_conversion") or row["party_type"] != "ad_account" or not valuation:
             continue
         native = row["native_balance"]
         converted_ads.append({"id": _party_id(row), "name": _name(row),
@@ -212,14 +216,15 @@ def _actual_tables(parties, complete):
             _column("payable", "علينا بالريال شامل الرسوم", role="payable")], converted_ads, complete=complete,
             notes=["سعر الصرف والعمولة من الإعداد المحفوظ لكل حساب. ضريبة العمولة 15٪ من العمولة البنكية على المبلغ المتبقي علينا.",
                    "المبلغ الموجب يمثل المستحق علينا، والسالب يمثل الرصيد الإعلاني المقدم لنا. تُعرض قيمة الرصيد المقدم أيضًا ضمن أرصدة الإعلانات."]))
-    ads = [{"id": _party_id(row), "name": _name(row), "prepaid": row["ad_wallet_balance"],
-            "payable": row["outstanding_payable"]} for row in parties if row["party_type"] == "ad_account"]
-    tables.append(_table("ads", "حسابات الإعلانات", "actual", [_column("name", "الحساب", "text"),
-                         _column("prepaid", "الرصيد المقدم المتبقي"), _column("payable", "علينا", role="payable")],
-                         ads, complete=complete, notes=["الرصيد الإعلاني المقدم منفصل عن النقد والديون القابلة للتحصيل."]))
+    if selected("ads"):
+        ads = [{"id": _party_id(row), "name": _name(row), "prepaid": row["ad_wallet_balance"],
+                "payable": row["outstanding_payable"]} for row in parties if row["party_type"] == "ad_account"]
+        tables.append(_table("ads", "حسابات الإعلانات", "actual", [_column("name", "الحساب", "text"),
+                             _column("prepaid", "الرصيد المقدم المتبقي"), _column("payable", "علينا", role="payable")],
+                             ads, complete=complete, notes=["الرصيد الإعلاني المقدم منفصل عن النقد والديون القابلة للتحصيل."]))
     covered = {kind for kind, *_ in PARTIES} | {"pos_receivable", "ad_account"}
     other = [{"id": _party_id(row), "name": _name(row), "receivable": row["outstanding_receivable"],
-              "payable": row["outstanding_payable"]} for row in parties if row["party_type"] not in covered
+              "payable": row["outstanding_payable"]} for row in parties if selected("other_balances") and row["party_type"] not in covered
              and any((_number(row[key]) or ZERO) != ZERO for key in ("outstanding_receivable", "outstanding_payable"))]
     if other:
         tables.append(_table("other_balances", "حقوق والتزامات أخرى مسجلة", "actual", debt_columns,
@@ -655,9 +660,11 @@ def _profit_rows(recorded_salary):
     return rows
 
 
-def build_financial_position(state, *, cost_exposure=None, generated_at=None):
+def build_financial_position(state, *, cost_exposure=None, generated_at=None,
+                             include_forecast=True, include_delivery_details=True, detail_tables=None):
     """Build JSON v1 from one saved operational snapshot without side effects."""
     preparation_checkpoint()
+    include_table = lambda identity: detail_tables is None or identity in detail_tables
     projection = annotate_report_coverage(report(state, provider_balances_sar=True, ad_balances_sar=True, provider_balances_net=True))
     result = {"schema_version": 1, "authority": "operational_balance_report", "status": projection["status"],
               "started_at": projection["started_at"], "as_of": projection["as_of"],
@@ -666,16 +673,17 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     if projection["status"] != "active":
         return result
     delivery_coverage = delivery_coverage_diagnostics(state, projection)
-    cod_coverage = cod_forecast_coverage(cost_exposure, projection["started_at"], projection["as_of"],
+    cod_coverage = (cod_forecast_coverage(cost_exposure, projection["started_at"], projection["as_of"],
         [*projection["issues"], *(cost_exposure.get("issues", []) if isinstance(cost_exposure, dict) else [])])
+        if include_forecast else None)
     profit_source = valid_snapshot(state)
-    cost_ready = isinstance(cost_exposure, dict) and cost_exposure.get("status") == "preview"
+    cost_ready = include_forecast and isinstance(cost_exposure, dict) and cost_exposure.get("status") == "preview"
     result["dependencies"] = [
-        {"code": "open_cost_exposure", "status": "ready" if cost_ready and cost_exposure.get("complete") is True else "incomplete" if cost_ready else "unavailable",
+        *([{"code": "open_cost_exposure", "status": "ready" if cost_ready and cost_exposure.get("complete") is True else "incomplete" if cost_ready else "unavailable",
          "message": "تقديرات مراحل الطلبات المفتوحة من مصدرها التشغيلي." if cost_ready else UNKNOWN + "مصدر تكاليف الطلبات المفتوحة غير متاح بعد."},
         {"code": "complete_collection_forecast", "status": "ready" if cod_coverage["complete"] else "incomplete",
          "message": "تغطية مصادر التحصيل المتوقع للفترة المعروضة." if cod_coverage["complete"] else UNKNOWN + COD_SCOPE,
-         "reason_codes": cod_coverage["reason_codes"]},
+         "reason_codes": cod_coverage["reason_codes"]}] if include_forecast else []),
         {"code": "profit_period_coverage", "status": "incomplete" if profit_source else "unavailable",
          "message": "مصادر الربح محفوظة لنفس الفترة؛ يظهر كل عنصر معلوم مع حالة اكتماله." if profit_source else UNKNOWN + "مصادر الربح الكامل لنفس فترة المبيعات لم تكتمل."},
         *delivery_coverage["dependencies"],
@@ -684,9 +692,10 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
     if cost_ready:
         result["issues"].extend(_source_issue(row) for row in cost_exposure.get("issues", []))
     currencies = {row["currency"] for row in projection["parties"]}
-    prestart_cod = snapshot_cod_preview(cost_exposure, projection["started_at"], projection["as_of"])
+    prestart_cod = snapshot_cod_preview(cost_exposure, projection["started_at"], projection["as_of"]) if include_forecast else {}
     currencies.update(prestart_cod)
-    customer_cod = snapshot_cod_preview(cost_exposure, projection["started_at"], projection["as_of"], "open_customer_cod")
+    customer_cod = (snapshot_cod_preview(cost_exposure, projection["started_at"], projection["as_of"], "open_customer_cod")
+                    if include_forecast else {})
     currencies.update(customer_cod)
     page_payments = projection["details"]["provider_order_payments"]
     paid_totals = projection["details"]["provider_paid_totals"]
@@ -713,11 +722,15 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         parties = sorted((row for row in projection["parties"] if row["currency"] == currency), key=_party_id)
         obligations = [row for row in projection["obligations"] if row.get("currency") == currency]
         actual_complete = bool(projection["as_of"]) and not any(row.get("currency") in {None, currency} for row in projection["issues"])
-        tables = _actual_tables(parties, actual_complete)
-        tables.append(_provider_table(projection["details"]["provider_balances"].get(currency, []),
-                                      [row for row in projection["issues"] if row.get("currency") in {None, currency}]))
+        # Other recorded debts still contribute to the complete summary, even
+        # when their detail table belongs to a different visible page.
+        actual_ids = None if detail_tables is None else set(detail_tables) | {"other_balances"}
+        tables = _actual_tables(parties, actual_complete, table_ids=actual_ids)
+        if include_table("providers"):
+            tables.append(_provider_table(projection["details"]["provider_balances"].get(currency, []),
+                                          [row for row in projection["issues"] if row.get("currency") in {None, currency}]))
         wallet = customer_wallets.get(currency)
-        if wallet is not None:
+        if wallet is not None and include_table("customer_wallets"):
             wallet_table = _table("customer_wallets", "محافظ العملاء المستحقة علينا", "actual", [
                 _column("name", "الجهة", "text"), _column("remaining", "الرصيد المستحق للعملاء", role="payable"),
                 _column("as_of", "تاريخ كشف سلة", "text"), _column("source_reference", "مرجع الكشف", "text")],
@@ -725,10 +738,11 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
                 notes=["الرصيد الختامي التزام علينا بتاريخ كشف سلة المحفوظ. يشمل الاستخدامات المثبتة فيه، وتحتفظ التحديثات التشغيلية بتاريخ هذا الكشف."])
             wallet_table.update(show_totals=False, totals={})
             tables.append(wallet_table)
-        tables.append(_balance_origin(parties, obligations, actual_complete))
+        if include_table("balance_origin"):
+            tables.append(_balance_origin(parties, obligations, actual_complete))
         apply_table_coverage(tables, parties, obligations, projection["issues"], projection["details"].get("facts", {}),
                              currency=currency, as_of=projection["as_of"])
-        if other_tenders.get(currency):
+        if other_tenders.get(currency) and include_table("customer_other_tenders"):
             rows = [{"id": row["method"], **row} for row in other_tenders[currency]]
             for row in rows:
                 preparation_checkpoint()
@@ -800,12 +814,16 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
             next(row for row in current_rows if row["id"] == "monetary_position")["known_subtotal"] = _money(known_position)
             next(row for row in current_rows if row["id"] == "displayed_position")["known_subtotal"] = _money(
                 known_position + prepaid + custody if known_position is not None and prepaid is not None and custody is not None else None)
-        costs = _cost_tables(cost_exposure, currency, obligations)
-        currency_issues = [row for row in projection["issues"] if row.get("currency") in {None, currency}]
-        provider_future = _provider_collection_table(obligations, projection["details"], currency_issues)
-        cod = _cod_table(obligations, projection["details"], prestart_cod.get(currency), customer_cod.get(currency), coverage=cod_coverage)
-        tables.extend([costs[-1], *costs[:-1], cod, provider_future])
-        forecast = project_forecast(tables, current_position=_money(position), actual_complete=actual_complete)
+        if include_forecast:
+            costs = _cost_tables(cost_exposure, currency, obligations)
+            currency_issues = [row for row in projection["issues"] if row.get("currency") in {None, currency}]
+            provider_future = _provider_collection_table(obligations, projection["details"], currency_issues)
+            cod = _cod_table(obligations, projection["details"], prestart_cod.get(currency), customer_cod.get(currency), coverage=cod_coverage)
+            tables.extend([costs[-1], *costs[:-1], cod, provider_future])
+            forecast = project_forecast(tables, current_position=_money(position), actual_complete=actual_complete)
+        else:
+            forecast = {"rows": [], "forecast_change": None, "forecast_monetary_position": None,
+                        "complete": False, "scope": "listed_order_work_only"}
         profit = project_profit(state, currency)
         result["currencies"][currency] = {
             "tables": tables, "debt_rows": debt_rows,
@@ -826,7 +844,11 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
                       "الربح لا يستنتج من الأرصدة أو التمويل أو سحب المالك أو مجرد اعتماد فاتورة مورد."],
             "deliveries": _deliveries(obligations, projection["details"], currency, names, projection["issues"],
                 coverage_note=(delivery_coverage["event_note"] if currency == "SAR" else
-                    "تغطية تسليم الطلبات السابقة لبدء التشغيل بهذه العملة غير مثبتة؛ لا تحويل أو إعادة تسمية لمبالغ الشحن.")),
+                    "تغطية تسليم الطلبات السابقة لبدء التشغيل بهذه العملة غير مثبتة؛ لا تحويل أو إعادة تسمية لمبالغ الشحن."))
+                if include_delivery_details else {"rows": [], "notes": [], "complete": False},
         }
+        if detail_tables is not None:
+            result["currencies"][currency]["_unassigned_order_details"] = (
+                projection.get("unassigned_order_details", {}).get(currency, {}))
     preparation_checkpoint()
     return result

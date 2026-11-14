@@ -3,11 +3,15 @@ from operational_financial_activity_runtime import preparation_checkpoint
 from operational_financial_position_core import build_financial_position as project_balances
 from operational_driver_review_report import link_review_destinations
 from operational_balance_completeness import reason_for
+from operational_financial_position_views import DETAIL_VIEWS, FORECAST_VIEWS, TABLES, scope_financial_position
 
 
-def build_financial_position(state, *, cost_exposure=None, generated_at=None):
+def build_financial_position(state, *, cost_exposure=None, generated_at=None, view="all"):
     preparation_checkpoint()
-    result = project_balances(state, cost_exposure=cost_exposure, generated_at=generated_at)
+    result = project_balances(state, cost_exposure=cost_exposure, generated_at=generated_at,
+        include_forecast=view in FORECAST_VIEWS,
+        include_delivery_details=view in DETAIL_VIEWS or bool(state.get("driver_payment_review_facts")),
+        detail_tables=None if view == "all" else TABLES[view])
     for currency, data in result["currencies"].items():
         preparation_checkpoint()
         if currency != "SAR":
@@ -15,7 +19,8 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         # Source candidates have their own nonposting table, never part of debt, cash or COD.
         data["driver_fee_review"] = [{**row["driver_fee_review"], "reason": row["code"],
                                       "required_action": row["required_action"]}
-            for row in state.get("engine", {}).get("issues", []) if row.get("driver_fee_review")]
+            for row in state.get("engine", {}).get("issues", []) if row.get("driver_fee_review")
+            and view in {"all", "drivers"}]
         # An undated shipment may precede startup; never assign an amount/date.
         # Group these potentially historical warnings to avoid giant order tables.
         groups = {}
@@ -24,7 +29,7 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
         for issue in state.get("engine", {}).get("issues", []):
             preparation_checkpoint()
             cand = issue.get("courier_fee_review") or {}
-            if not cand or cand.get("currency") not in (None, "SAR"):
+            if view not in {"all", "couriers"} or not cand or cand.get("currency") not in (None, "SAR"):
                 continue
             n = str(cand["order_number"])
             candidates.setdefault(n, {"order_number": n, "name": cand["party_name"]})
@@ -91,4 +96,4 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
                 if row["id"] == "forecast_monetary_position":
                     row.update(amount=None, complete=False, reason=reason)
     preparation_checkpoint()
-    return result
+    return scope_financial_position(result, state, view)
