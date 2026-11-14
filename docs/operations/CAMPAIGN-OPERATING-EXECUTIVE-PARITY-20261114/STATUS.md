@@ -29,3 +29,12 @@ The candidate has not been merged, built in original /app, prepared or published
 - Prior source `22832941d5d61d77ed5c6acb2b3a6565423ce675` source-coverage/readiness passed; those results do not certify the final A2. All required tests/CI must run on `0f5bca7427fed7851008d0f7d64e23414746bdc1` before freezing B2.
 - Preceding PR1920 official production verification succeeded three probes at16:22:18.751950UTC, fresh guardinactive16:23:12.874031UTC. Its publication/verification must not be repeated.
 - No follow-up original build, lease, merge or publication yet. Next: exact-sourceCI and its reviewed-intent artifact; then intent-onlyB2 with fullCI/hostrehearsal evidence.
+
+
+## Exact source passed; immutable intent frozen — 2026-11-14 16:35:12 UTC
+
+- All11 applicable exact-A2 workflows passed. Source coverage actual logs:248 backend cases (2 warnings,4.27s),50 frontend tests/9 suites (1.978s). Root and independent R2 static review passed.
+- B2 `afe6ff699e0de1601b37d2fd81e4291cb69dc75f`, tree `b7e5e6dc359cea6d2ab654fde3a67d8580f963fe`, is the sole intent-only child of A2. Independent GitHub lineage/diff review passed. The source remains A2 `0f5bca7427fed7851008d0f7d64e23414746bdc1`.
+- Candidate artifact14121569773 from successful readiness43615534811 was downloaded and exact bytes checked:ZIP73fcba744bb0d5c87ad800d5d7cfd6c355cca56d349b82c5d22c3f0a1ea76cf6; JSONfeab3c376faf8154c9e74a4df88315ab4321aa0cc4f7b36b32dcabd02c4d68ad; Gitblob2eb12801b61c5c62a97c68d278555116bf12b23c. Upload returned the same Gitblob. Source/base, changed backend hashes, reviewed origin/toolchain and runtime/component bindings were validated.
+- New deterministic runtime `rg5-fbb9058e74d33e0a4f8d9f1fe58f80be54f02fea3721efab400d41e876ec75b4`. Exact-B2 CI and both host rehearsal artifacts remain pending.
+- Disabled new build/gate templates archived here for review. They preserve119 records exactly plus the proven single append-only bookkeeping file, and retain actual official receipts independently of postchecks. They containUNPINNED values andPINS_REVIEWED=False; do not execute these templates.

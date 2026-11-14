@@ -1,0 +1,135 @@
+{
+  "task": "CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114",
+  "source_A2": "0f5bca7427fed7851008d0f7d64e23414746bdc1",
+  "base_J2": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
+  "intent_B2": "afe6ff699e0de1601b37d2fd81e4291cb69dc75f",
+  "intent_tree": "b7e5e6dc359cea6d2ab654fde3a67d8580f963fe",
+  "candidate": {
+    "run": 43615534811,
+    "artifact": 14121569773,
+    "zip_sha256": "73fcba744bb0d5c87ad800d5d7cfd6c355cca56d349b82c5d22c3f0a1ea76cf6",
+    "json_sha256": "feab3c376faf8154c9e74a4df88315ab4321aa0cc4f7b36b32dcabd02c4d68ad",
+    "git_blob_sha": "2eb12801b61c5c62a97c68d278555116bf12b23c",
+    "content_bindings_verified": true
+  },
+  "content_verification": {
+    "chars": 1306362,
+    "bytes": 1306362,
+    "json_sha256": "feab3c376faf8154c9e74a4df88315ab4321aa0cc4f7b36b32dcabd02c4d68ad",
+    "git_blob_sha": "2eb12801b61c5c62a97c68d278555116bf12b23c",
+    "release_id": "rg5-fbb9058e74d33e0a4f8d9f1fe58f80be54f02fea3721efab400d41e876ec75b4",
+    "frontend_artifact_tree_sha256": "2fcfaa59c69093dda0175cedf0b2aa18e3d1c1a79c7033d8c9a98d2c81d71401",
+    "backend_manifest_files": 1213,
+    "changed_source_hashes": {
+      "order_engine/campaign_hover_operating.py": "165b719bb2d617f50517a82bb3ad190c66666d4816cf5ed519939c99a22d3e2b",
+      "order_engine/campaign_hover_profit.py": "332f3b8d96a31baabec2cb1ca4556296bd09cfc06707b8c8fbff25c10e7a8f92"
+    },
+    "client_environment_verified": true,
+    "toolchain_verified": true,
+    "runtime_component_bindings_verified": true
+  },
+  "ci": [
+    {
+      "id": 43615534772,
+      "name": "Snapchat Direct Active Publication",
+      "head_sha": "0f5bca7427fed7851008d0f7d64e23414746bdc1",
+      "status": "completed",
+      "conclusion": "success",
+      "updated_at": "2026-11-14T16:25:48Z"
+    },
+    {
+      "id": 43615534776,
+      "name": "Snapchat Settings Management V2",
+      "head_sha": "0f5bca7427fed7851008d0f7d64e23414746bdc1",
+      "status": "completed",
+      "conclusion": "success",
+      "updated_at": "2026-11-14T16:25:47Z"
+    },
+    {
+      "id": 43615534764,
+      "name": "Qoyod Payment Freshness",
+      "head_sha": "0f5bca7427fed7851008d0f7d64e23414746bdc1",
+      "status": "completed",
+      "conclusion": "success",
+      "updated_at": "2026-11-14T16:26:00Z"
+    },
+    {
+      "id": 43615534778,
+      "name": "Security Gate",
+      "head_sha": "0f5bca7427fed7851008d0f7d64e23414746bdc1",
+      "status": "completed",
+      "conclusion": "success",
+      "updated_at": "2026-11-14T16:28:01Z"
+    },
+    {
+      "id": 43615534819,
+      "name": "Campaign hover source coverage",
+      "head_sha": "0f5bca7427fed7851008d0f7d64e23414746bdc1",
+      "status": "completed",
+      "conclusion": "success",
+      "updated_at": "2026-11-14T16:26:15Z"
+    },
+    {
+      "id": 43615534811,
+      "name": "Mezan Release Readiness",
+      "head_sha": "0f5bca7427fed7851008d0f7d64e23414746bdc1",
+      "status": "completed",
+      "conclusion": "success",
+      "updated_at": "2026-11-14T16:26:46Z"
+    },
+    {
+      "id": 43615534818,
+      "name": "G47 Focused Integration",
+      "head_sha": "0f5bca7427fed7851008d0f7d64e23414746bdc1",
+      "status": "completed",
+      "conclusion": "success",
+      "updated_at": "2026-11-14T16:29:40Z"
+    },
+    {
+      "id": 43615535014,
+      "name": "Operational Balance Web",
+      "head_sha": "0f5bca7427fed7851008d0f7d64e23414746bdc1",
+      "status": "completed",
+      "conclusion": "success",
+      "updated_at": "2026-11-14T16:30:19Z"
+    },
+    {
+      "id": 43615534768,
+      "name": "MZ2 Track F native shipping",
+      "head_sha": "0f5bca7427fed7851008d0f7d64e23414746bdc1",
+      "status": "completed",
+      "conclusion": "success",
+      "updated_at": "2026-11-14T16:30:26Z"
+    },
+    {
+      "id": 43615534832,
+      "name": "CodeQL",
+      "head_sha": "0f5bca7427fed7851008d0f7d64e23414746bdc1",
+      "status": "completed",
+      "conclusion": "success",
+      "updated_at": "2026-11-14T16:31:15Z"
+    },
+    {
+      "id": 43615534771,
+      "name": "Operational Stock Eligibility",
+      "head_sha": "0f5bca7427fed7851008d0f7d64e23414746bdc1",
+      "status": "completed",
+      "conclusion": "success",
+      "updated_at": "2026-11-14T16:32:59Z"
+    }
+  ],
+  "coverage": {
+    "backend": {
+      "job": 132509636542,
+      "passed": 248,
+      "warnings": 2,
+      "seconds": 4.27
+    },
+    "frontend": {
+      "job": 132509636799,
+      "passed": 50,
+      "suites": 9,
+      "seconds": 1.978
+    }
+  }
+}

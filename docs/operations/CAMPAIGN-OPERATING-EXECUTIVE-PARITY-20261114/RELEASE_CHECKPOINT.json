@@ -1,6 +1,6 @@
 {
   "task": "CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114",
-  "updated_at_utc": "2026-11-14 16:28:20 UTC",
+  "updated_at_utc": "2026-11-14 16:35:12 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/campaign-operating-executive-parity-20261114",
   "pr": 1922,
@@ -17,10 +17,10 @@
   ],
   "inherited_intent_unchanged": true,
   "static_review": "root and independent R2 PASS",
-  "repository_ci": "pending exact final A2",
-  "intent_B2": null,
+  "repository_ci": "all11 exactA2 workflows successful",
+  "intent_B2": "afe6ff699e0de1601b37d2fd81e4291cb69dc75f",
   "merge_M2": null,
-  "runtime_release_id": null,
+  "runtime_release_id": "rg5-fbb9058e74d33e0a4f8d9f1fe58f80be54f02fea3721efab400d41e876ec75b4",
   "production_changed_by_followup": false,
   "preceding_release": {
     "pr": 1920,
@@ -32,7 +32,30 @@
     "fresh_guard_inactive_at": "2026-11-14T16:23:12.874031Z",
     "do_not_repeat_publish_or_verify": true
   },
-  "next": "Require all11 triggered finalA2 PR workflows successful. Download exactA2 readiness candidate, validate artifact/provenance/fullsourcebindings, freeze intent-onlyB2 withoutchangingA2, requireB2 gates+twohostproofs, thenfreshinactive/latestbase check beforeordinarymerge/app work.",
+  "next": "Require exactB2 gates and bothhost20/24 artifact/proof validation. Templates disabled untilM2/identityhashes/actor/UIbaseline pinned+reviewed. Freshinactive/latestJ2 beforeordinaryM2merge; thenM2pushgates andoriginalbuild. Do not repeatPR1920completedrelease.",
   "live_cause_attribution": "unproven; fixes are source-proven discrepancies from requested executive authority",
-  "writes": "no customer/order/accounting/provider/ad writes; no new polling/sync"
+  "writes": "no customer/order/accounting/provider/ad writes; no new polling/sync",
+  "A2_source_coverage": {
+    "backend": 248,
+    "frontend": 50,
+    "frontend_suites": 9
+  },
+  "intent_tree": "b7e5e6dc359cea6d2ab654fde3a67d8580f963fe",
+  "B2_lineage": "independently verified one intent-only child",
+  "B2_ci": "pending 11 applicable plus explicitTikTokbranchskip",
+  "candidate": {
+    "run": 43615534811,
+    "artifact": 14121569773,
+    "zip_sha256": "73fcba744bb0d5c87ad800d5d7cfd6c355cca56d349b82c5d22c3f0a1ea76cf6",
+    "json_sha256": "feab3c376faf8154c9e74a4df88315ab4321aa0cc4f7b36b32dcabd02c4d68ad",
+    "git_blob_sha": "2eb12801b61c5c62a97c68d278555116bf12b23c",
+    "content_bindings_verified": true
+  },
+  "templates": {
+    "build_sha256": "bd548bca9a101b8fec0141d14751d4eb05e36f80523bb5e23fdf86c01a374182",
+    "gate_sha256": "5bbcbbb35f3cb26486f2d9f255c6cf43004f400872c7562531c504827559cebe",
+    "disabled": true,
+    "independent_review": "in progress",
+    "execution": "none"
+  }
 }
