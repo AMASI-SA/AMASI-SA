@@ -218,3 +218,30 @@ The updated #1912 handoff confirms its scoped rollback B_R is fully prepared, pa
 A refreshed Emergent page now explicitly shows **Deployment Started Nov 14, 02:39 AM** (UTC+3), with Workspace ready and Changes packaged complete and Building your website active. The publishing control is disabled while that operation proceeds. This is a newer authorized publication attempt by the Ready release owner; it includes the campaign fixes. It is not yet Deployment Succeeded or official runtime acceptance.
 
 The campaign continuation is observing that publication and preparing read-only dashboard/OrdersV2 examples for post-deployment acceptance. No duplicate Publish, shared-source/build mutation, foreign-lease operation, provider sync or business-data write has occurred. Wait for the owner's official three-probe verification and final inactive guard, then finish campaign UI acceptance. Production acceptance remains pending; do not describe the old or partial runtime as the completed new release.
+
+## New release observed live; campaign UI acceptance — 2026-11-14 00:00:54 UTC
+
+A fresh Emergent view displayed the explicit **Deployment successful** notification after the new 02:39 AM deployment. This campaign continuation did not click another Publish.
+
+An independent read-only production health response now matches the combined reviewed release:
+
+- `source_git_sha=cdf175841376d2f68605d66c1979273d23aed70d`
+- `source_base_git_sha=5d158f6006b63ac7663c293696d501f595ce8754`
+- `release_id=rg5-3e41b3f0b14d180f45cd3b242798ea348797b06e8edc770592130ac87b2a9cb0`
+- `boot_started_at=2026-11-13T23:49:03.001376+00:00`
+- `ok`, `verified_identity_available`, `backend_runtime_source_verified`, `release_control_source_bound`, `critical_file_hashes_match` and `frontend_build_verified`: all true.
+- Build metadata SHA256 `12630fc66d1c95a2a9db36f7f9286fddb7623f72c79428b950ca7bdd37728f50`.
+- Reproducibility proof SHA256 `6ce34a0f8e5db937529b257ed4b309df696b2e942cb6620b8eab2e1f1d3d86aa`.
+
+Readback evidence in the shared workspace: `/tmp/mezan-campaign-combined-live-readback.json`. This is an independent health observation, not a substitute for the owner's official three-probe verification.
+
+After reloading the actual production dashboard and OrdersV2, read-only UI acceptance observed:
+
+1. A Snapchat card which previously rejected Riyadh-day spend now reads the valid native account-day spend for `America/Los_Angeles`, displays orders/pieces/sales, CPA and ROAS, and truthfully retains the incomplete-hours/initial-evidence advisory.
+2. A TikTok Salla tracking-label example now displays its readable name, explicit store-day `Asia/Riyadh`, commerce counts and sales, and the label-only/unlinked-advertising warning. Spend, CPA and ROAS remain unavailable without verified advertising identity.
+3. A Google generic-click example lacking a trustworthy campaign ID/name remains unavailable with the explicit explanation that generic click-source metadata cannot identify a campaign. No guessed campaign mapping or spend was introduced. This does not claim all Google attribution records are now linked.
+4. The same-campaign 30→31 behavior is covered by the passed automated regression. No synthetic live order was created, and no specific new same-campaign arrival after loading this version is claimed as a separately witnessed live regression.
+
+Cropped card screenshots were captured privately for the user's review; no customer/business screenshots or metric values were uploaded to GitHub. No order, advertising, accounting or provider-sync write was performed.
+
+The Ready owner's matching lease is preserved. A read-only process observation confirms its official `production_release_guard.py verify` command is running; the campaign task's read-only `status` waits for that serialized operation. Final three-probe success and inactive-lease readback are still pending. Do not rerun or interrupt the owner's verification, close its lease, or republish the already-live candidate.
