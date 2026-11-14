@@ -1,3 +1,19 @@
+# Current stage — release verified; live freshness acceptance FAILED
+
+PR1915 is merged, published as **effdd19**, and officially verified (exit0, three probes, exact A/M/R, fresh inactive guard). **The stale-balance symptom is NOT resolved.** The existing visible financial page settled after browser reconnection with the old `as_of` **12/11/2026,01:07**, report present, and the warning:
+
+> تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة
+
+This maps to the existing whole-refresh `operational_refresh_timeout` (HTTP408,85-second request deadline), rather than the earlier uniquely named source-read error. The warning alone does not prove which stage timed out or that the order read is now fast. There was one page-open action and no manual Refresh click; browser connection recovery interrupted observation, so do not claim a measured request duration or an exact backend attempt count.
+
+**Do not repeat refresh as diagnosis.** Continue by reading existing stage logs and reviewing the bounded request path. Preserve the frozen PR1915 A/B/M/R. Any further source repair requires a new reviewed source/intent/normal-merge release. Production ref was still M `4860548f0b032e8e3beca18a4776413cd7e0368b` at02:18:28UTC; no competing active release was evidenced in current GitHub coordination records. Root owns live-operator checks and all writes.
+
+No private financial values, customer/order identifiers, or business counts are included in this checkpoint. General hosting resource warnings are not yet correlated with this request.
+
+---
+
+## Earlier checkpoints
+
 # Current stage — official production verification passed; financial acceptance running
 
 The original official verifier exited **0** after **571.59 seconds**, started `2026-11-14T01:59:31.583329+00:00`, finished `2026-11-14T02:09:03.178132+00:00`. It returned `verified:true`, **checks:3**, exact A `a496dd428241b06d2292286de030c70d6241fcf0`, M `4860548f0b032e8e3beca18a4776413cd7e0368b`, R `rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e`, and **582 frontend checked requests per probe**. The wrapper then obtained a fresh official `active:false` guard result; the matching lease closed normally. Verification stdout SHA-256: `308de6a11d0d5293f6fbdd4b0364d063c63da9dd21faa33ed77aa0e40800d7be`. Evidence prefix: `/tmp/mezan-pr1915-original-qqo8fwy9/28-verify`.

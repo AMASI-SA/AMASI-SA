@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-11-14T02:15:14.114Z",
-  "stage": "official_verified_financial_acceptance_running",
+  "updated_at": "2026-11-14T02:21:39.062Z",
+  "stage": "release_verified_live_freshness_failed",
   "J": "d6f246b4d3b14fd56ef2cbc574b99f08bb7d6fc1",
   "A": "a496dd428241b06d2292286de030c70d6241fcf0",
   "B": "30dc66ec09b371a6b990adbd167162254bfd77c6",
@@ -340,7 +340,16 @@
     "manualRefreshClicks": 0,
     "browserRecovered": true,
     "tab": "62",
-    "stage": "visible_loading",
-    "observed_at": "2026-11-14T02:15:14.114Z"
-  }
+    "stage": "failed_stale_snapshot",
+    "observed_at": "2026-11-14T02:15:14.114Z",
+    "settled_before": "2026-11-14T02:18:28Z",
+    "loading": false,
+    "report_present": true,
+    "as_of_text": "12/11/2026, 01:07",
+    "refresh_warning": "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة",
+    "main_error": null,
+    "observed_result": "whole refresh timeout; not accepted",
+    "repeat_refresh_prohibited_until_diagnosis": true
+  },
+  "next_step": "Read existing stage logs; diagnose before any further visible calculation. Preserve frozen release chain."
 }
