@@ -2,7 +2,7 @@
 
 ## Current status
 
-The safe diagnostic stage is implemented, independently reviewed, fully verified on A/B/M in CI, and merged as PR #1913. It repairs the loss of the source/cause in the visible warning, but **does not yet repair the underlying production source-read failure**. The original operator checkout is at the exact reviewed merge M; no publication or lease by this task has occurred. The first operator package build stopped safely because preexisting ignored Python bytecode was present. This documentation-only handoff branch must not be merged or published. The user explicitly authorized fixing, merging and publishing. The accepted behavior remains page-owned computation: refresh only while visible and cancel/join work on hide or exit. No background calculation, polling, financial confirmation, settlement or payout is authorized as a test.
+The safe diagnostic stage is implemented, independently reviewed, fully verified on A/B/M in CI, and merged as PR #1913. It repairs the loss of the source/cause in the visible warning, but **does not yet repair the underlying production source-read failure**. The original operator checkout is at the exact reviewed merge M; no publication or lease by this task has occurred. The first operator package build stopped safely because preexisting ignored Python bytecode was present. The generated cache was reversibly preserved outside /app and the actual configured adapter retry succeeded; its runtime identity matches the reviewed intent exactly. This documentation-only handoff branch must not be merged or published. The user explicitly authorized fixing, merging and publishing. The accepted behavior remains page-owned computation: refresh only while visible and cancel/join work on hide or exit. No background calculation, polling, financial confirmation, settlement or payout is authorized as a test.
 
 ## Continuity and current base
 
@@ -94,11 +94,19 @@ This handoff is on `codex/operational-source-release-handoff-20261114`, branched
 
 ## Next safe action
 
-1. Read fresh original guard status; proceed only if inactive. Reversibly quarantine the observed ignored bytecode with manifest/hash preservation, then rerun the exact package adapter on M with a new log prefix and `PYTHONDONTWRITEBYTECODE=1`.
-2. Verify actual build exit0, intended A/runtime identity, tracked cleanliness and preserved original untracked-file manifest. Check current remote production head before preparing a unique own lease.
+1. Completed: ignored cache was preserved outside /app; exact package adapter on M succeeded, with Python bytecode writing disabled.
+2. Completed: actual adapter exit0, exact intended A/runtime identity and clean tracked files verified. All 120 original untracked files retain their original bytes; one platform metadata file has an append-only addition, preserved in place. Fresh guard inactive and remote production head M rechecked. Prepare a unique own lease.
 3. Run own `prepare`, then `prepublish` immediately before one authorized normal Emergent publish. Preserve a newer explicit platform success and run the full official three-probe verification. Require exit0 and inactive guard afterward.
 4. Reproduce one visible financial-page attempt to obtain the source/cause. Implement the demonstrated root fix with regression tests and independent review, then new A/B/merge/release and fresh successful calculation timestamp. Diagnostic instrumentation alone is not completion.
 
 Keep the existing owner scope, full financial evidence and cancellation guarantees. No background calculation or financial mutation as a test. No credentials, customer identifiers or financial payloads are included in this record.
 
 Production source branch changed by this task: **YES**, normal M merge above. Production runtime changed by this task: **NO** at this checkpoint; no own prepare/prepublish/Publish/verify.
+
+## Build recovery passed
+
+The observed ignored backend cache (two files,120563 bytes) was moved to `/tmp/mezan-pr1913-preserved-bytecode-6012ceb4/backend/__pycache__`; per-file SHA256, size and mode matched after the move. No file was deleted and no reviewed source/intent was changed.
+
+The real `cd /app/frontend; yarn build` adapter returned0 and completed in61.64s. The wrapper then stopped at its stricter whole-untracked-manifest assertion, because `.emergent/stripped_env_names` had grown by86 bytes. Subsequent bounded audit proved the original45236-byte prefix still has exactly the original SHA256; all119 other files are unchanged, no files were added/removed, tracked/index clean, and the generated runtime identity equals the complete tracked intent runtime identity. The sidecar was left untouched. Adapter exit0 is supported by the wrapper entering the post-returncode==0 branch and Yarn's successful completion; wrapper exit1 is retained honestly, not described as a successful wrapper.
+
+Evidence: `/tmp/mezan-pr1913-6012ceb4-build-retry1.log`, `.err`, and `-audit.json` on the original operator. Fresh official guard returned `active:false` after the audit. No own lease or Publish yet. Next: own prepare/prepublish, one normal authorized Publish, explicit new platform success, then full official live verification.
