@@ -2,7 +2,89 @@
 // timer, polling, or work survives cleanup. A completed read stays completed.
 export const canReadOperationalPage = () => document.visibilityState !== "hidden" && navigator.onLine !== false;
 
-export function visibleOperationalRead(read, { onStart, onData, onError, onEnd } = {}, lane = {}) {
+// Opt-in for a costly report load: one visible intent has one deadline,
+// including any wait for the previous physical request. Losing visibility
+// consumes the intent; only an explicit user retry may start another one.
+function singleVisibleAttempt(read, callbacks, lane, { singleAttemptTimeoutMs, deferUntilVisible = true }) {
+    const controller = new AbortController();
+    let done = false, started = false, timer = null, deadlineAt = null, operation = null, waitingFor = null;
+    const detach = () => {
+        if (timer !== null) { clearTimeout(timer); timer = null; }
+        document.removeEventListener("visibilitychange", activity);
+        window.removeEventListener("online", activity);
+        window.removeEventListener("offline", activity);
+    };
+    const finish = (kind, value) => {
+        if (done) return;
+        done = true; detach();
+        if (kind === "paused" || kind === "timeout") controller.abort();
+        try {
+            if (kind === "data") {
+                try { callbacks.onData?.(value); } catch (error) { callbacks.onError?.(error); }
+            } else if (kind === "paused") callbacks.onPaused?.();
+            else {
+                const error = kind === "timeout" ? Object.assign(new Error("operational_visible_read_timeout"), {
+                    code: "OPERATIONAL_VISIBLE_READ_TIMEOUT",
+                }) : value;
+                callbacks.onError?.(error);
+            }
+        } finally { callbacks.onEnd?.(); }
+    };
+    const run = () => {
+        if (done || operation) return;
+        if (!canReadOperationalPage()) {
+            if (started || !deferUntilVisible) finish("paused");
+            return;
+        }
+        if (!started) {
+            started = true;
+            deadlineAt = Date.now() + singleAttemptTimeoutMs;
+            timer = setTimeout(() => finish("timeout"), singleAttemptTimeoutMs);
+            callbacks.onStart?.();
+        }
+        if (lane.pending) {
+            if (waitingFor !== lane.pending) {
+                waitingFor = lane.pending;
+                waitingFor.then(run, run);
+            }
+            return;
+        }
+        operation = Promise.resolve().then(() => {
+            if (done || controller.signal.aborted || !canReadOperationalPage()) throw new DOMException("Page is not active", "AbortError");
+            return read({ signal: controller.signal, _mezanAuthDeadlineAt: deadlineAt });
+        });
+        // A presentation timeout does not prove the physical request finished.
+        // Register its release before publishing the lane to waiting readers.
+        const release = () => { if (lane.pending === operation) lane.pending = null; };
+        operation.then(release, release);
+        lane.pending = operation;
+        operation.then(result => {
+            if (done) return;
+            if (!canReadOperationalPage()) finish("paused");
+            else finish("data", result);
+        }, error => {
+            if (done) return;
+            if (!canReadOperationalPage()) finish("paused");
+            else finish("error", error);
+        });
+    };
+    const activity = () => {
+        if (!canReadOperationalPage()) {
+            if (started || !deferUntilVisible) finish("paused");
+        } else run();
+    };
+    document.addEventListener("visibilitychange", activity);
+    window.addEventListener("online", activity);
+    window.addEventListener("offline", activity);
+    run();
+    return () => { done = true; detach(); controller.abort(); };
+}
+
+export function visibleOperationalRead(read, callbacks = {}, lane = {}, policy = {}) {
+    if (Number.isFinite(policy.singleAttemptTimeoutMs) && policy.singleAttemptTimeoutMs > 0) {
+        return singleVisibleAttempt(read, callbacks, lane, policy);
+    }
+    const { onStart, onData, onError, onEnd } = callbacks;
     let alive = true, pending = false, queued = true, waiting = false, controller = null;
     const run = async () => {
         if (!alive || pending || !queued || !canReadOperationalPage()) return;
