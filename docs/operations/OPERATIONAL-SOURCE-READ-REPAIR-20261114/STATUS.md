@@ -1,3 +1,9 @@
+# Rehearsal command checkpoint
+
+The original-operator wrapper has been reviewed independently and by the release owner. SHA-256 `112eeeb9f2d4a9656966fcbacd65423fa6cbe9552a314532985bfe03d424d67a`, 11809 bytes; preserved beside this status file. It rechecks inactive status, exact Git identities and original work preservation, runs the actual package adapter, and records the child result before postconditions. It creates no release lease and performs no Publish. Last read-only operator preflight: HEAD J, tracked/index clean, 120 untracked files, zero Backend bytecode files. All exact-M gates are green. Rehearsal is the next action; no root-fix Publish yet.
+
+---
+
 # Current stage — original operator rehearsal ready
 
 Updated 2026-11-14T01:36:49.903Z. Root fix #1915 is normally merged at `4860548f0b032e8e3beca18a4776413cd7e0368b`, with frozen B tree/ancestry preserved. **All 3 exact-M push workflows and all 11 checks passed**; both actual host adapter rehearsals again verified the exact A/R/artifact identity. Exact-B Operational/Stock evidence remains valid on the identical M tree.

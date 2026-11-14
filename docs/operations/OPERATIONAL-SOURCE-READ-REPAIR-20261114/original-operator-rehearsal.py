@@ -1,0 +1,248 @@
+#!/usr/bin/env python3
+"""Original /app rehearsal only. Default: preflight; --build: fetch/FF/build.
+
+No lease, publication, cleanup, quarantine, or restoration is performed.
+Evidence stays in a private /tmp directory. Do not paste log/file contents.
+"""
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import signal
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+from datetime import datetime, timezone
+
+APP = Path('/app')
+BRANCH = 'hotfix/prod-snap-meta-final'
+SOURCE = 'a496dd428241b06d2292286de030c70d6241fcf0'
+MERGE = '4860548f0b032e8e3beca18a4776413cd7e0368b'
+TREE = '9a98153a5b6b69bc6a282613a1b3e354e1fe75b9'
+INTENT = 'release/release-intent-v5.json'
+APPEND_ONLY = '.emergent/stripped_env_names'
+
+
+class Stop(Exception):
+    pass
+
+
+def utc():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def write_json(path, value):
+    temporary = path.with_name(path.name + '.tmp')
+    with temporary.open('w', encoding='utf-8') as handle:
+        json.dump(value, handle, ensure_ascii=True, indent=2)
+        handle.write('\n')
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)
+
+
+def run(label, argv, *, cwd=APP, timeout=30, allowed=(0,), stdin_data=None):
+    """Persist actual child result before evaluating its exit or any postcondition."""
+    started, clock = utc(), time.monotonic()
+    output, error = EVIDENCE / (label + '.stdout'), EVIDENCE / (label + '.stderr')
+    proc, code, problem = None, None, None
+    with output.open('wb') as stdout, error.open('wb') as stderr:
+        try:
+            proc = subprocess.Popen(argv, cwd=cwd, env=CHILD_ENV,
+                                    stdin=subprocess.PIPE if stdin_data is not None else subprocess.DEVNULL,
+                                    stdout=stdout, stderr=stderr, start_new_session=True)
+            proc.communicate(input=stdin_data, timeout=timeout)
+            code = proc.returncode
+        except (subprocess.TimeoutExpired, KeyboardInterrupt) as exc:
+            problem = type(exc).__name__
+            if proc is not None:
+                try:
+                    os.killpg(proc.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                try:
+                    code = proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    code = proc.wait()
+        except OSError as exc:
+            problem = type(exc).__name__
+        ended, elapsed = utc(), time.monotonic() - clock
+        stdout.flush(); stderr.flush()
+        os.fsync(stdout.fileno()); os.fsync(stderr.fileno())
+    result = {'command': argv, 'cwd': str(cwd), 'started_at': started,
+              'ended_at': ended, 'elapsed_seconds': elapsed, 'actual_exit': code,
+              'problem': problem, 'stdout': str(output), 'stderr': str(error)}
+    write_json(EVIDENCE / (label + '.result.json'), result)
+    if problem or code not in allowed:
+        raise Stop(label + '_failed_see_private_result')
+    return output.read_bytes()
+
+
+def git(label, *args, allowed=(0,), timeout=30, stdin_data=None):
+    return run(label, ['git', *args], allowed=allowed, timeout=timeout, stdin_data=stdin_data)
+
+
+def inactive(label):
+    raw = run(label, [sys.executable, '-B', 'scripts/production_release_guard.py', 'status'], timeout=15)
+    if (EVIDENCE / (label + '.stderr')).stat().st_size:
+        raise Stop(label + '_unexpected_stderr')
+    state = json.loads(raw)
+    if not isinstance(state, dict) or state.get('active') is not False:
+        raise Stop(label + '_not_inactive')
+    if state.get('incomplete_lease_directory'):
+        raise Stop(label + '_incomplete_lease_directory')
+
+
+def clean(label):
+    if git(label, 'status', '--porcelain=v1', '-z', '--untracked-files=no', '--ignore-submodules=none'):
+        raise Stop(label + '_tracked_or_index_dirty')
+
+
+def snapshot(label):
+    paths = git(label + '-paths', 'ls-files', '--others', '--exclude-standard', '-z').split(b'\0')
+    manifest, prefix = {}, None
+    for raw in sorted(path for path in paths if path):
+        relative = os.fsdecode(raw)
+        parts = PurePosixPath(relative).parts
+        if PurePosixPath(relative).is_absolute() or '..' in parts:
+            raise Stop('unsafe_untracked_path')
+        path = APP / relative
+        if any((APP.joinpath(*parts[:index])).is_symlink() for index in range(1, len(parts))):
+            raise Stop('untracked_parent_is_symlink')
+        before = path.lstat()
+        digest = hashlib.sha256()
+        size, saved = 0, []
+        if stat.S_ISREG(before.st_mode):
+            kind = 'file'
+            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(descriptor, 'rb') as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+                    digest.update(chunk); size += len(chunk)
+                    if relative == APPEND_ONLY:
+                        saved.append(chunk)
+        elif stat.S_ISLNK(before.st_mode):
+            kind = 'symlink'
+            data = os.fsencode(os.readlink(path))
+            digest.update(data); size = len(data)
+        else:
+            raise Stop('unsupported_untracked_file_type')
+        after = path.lstat()
+        fields = ('st_dev', 'st_ino', 'st_mode', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
+        if any(getattr(before, field) != getattr(after, field) for field in fields):
+            raise Stop('untracked_changed_during_snapshot')
+        manifest[relative] = {'kind': kind, 'mode': stat.S_IMODE(before.st_mode),
+                              'size': size, 'sha256': digest.hexdigest()}
+        if relative == APPEND_ONLY:
+            if kind != 'file':
+                raise Stop('append_sidecar_is_not_regular_file')
+            prefix = b''.join(saved)
+    write_json(EVIDENCE / (label + '.manifest.json'), manifest)
+    if prefix is not None:
+        (EVIDENCE / (label + '.stripped-env.bin')).write_bytes(prefix)
+    return manifest, prefix
+
+
+def preserved(label, baseline, old_prefix, *, allow_append):
+    current, prefix = snapshot(label)
+    changed = sorted(path for path in baseline.keys() | current.keys()
+                     if baseline.get(path) != current.get(path))
+    if allow_append and APPEND_ONLY in changed and old_prefix is not None and prefix is not None:
+        old, new = baseline[APPEND_ONLY], current[APPEND_ONLY]
+        if old['kind'] == new['kind'] == 'file' and old['mode'] == new['mode'] and prefix.startswith(old_prefix):
+            changed.remove(APPEND_ONLY)
+    write_json(EVIDENCE / (label + '.preservation.json'),
+               {'before_count': len(baseline), 'after_count': len(current), 'changed_paths': changed,
+                'append_allowed': allow_append, 'preserved': not changed})
+    if changed:
+        raise Stop(label + '_untracked_changed_no_restoration_attempted')
+
+
+def no_ignored_backend_cache(label):
+    candidates = []
+    for directory, subdirs, files in os.walk(APP / 'backend', followlinks=False):
+        for name in list(subdirs):
+            if name == '__pycache__':
+                candidates.append(str((Path(directory) / name).relative_to(APP)) + '/')
+                subdirs.remove(name)
+        candidates.extend(str((Path(directory) / name).relative_to(APP))
+                          for name in files if name.endswith(('.pyc', '.pyo')))
+    ignored = []
+    if candidates:
+        raw = git(label + '-ignored', 'check-ignore', '--stdin', '-z', allowed=(0, 1),
+                  stdin_data=b'\0'.join(os.fsencode(path) for path in candidates) + b'\0')
+        ignored = [os.fsdecode(path) for path in raw.split(b'\0') if path]
+    write_json(EVIDENCE / (label + '.json'), {'ignored_backend_cache_paths': ignored})
+    if ignored:
+        raise Stop('ignored_backend_pycache_requires_separate_review_no_files_changed')
+
+
+def main():
+    inactive('01-guard-initial')
+    clean('02-clean-initial')
+    if git('03-branch', 'branch', '--show-current').decode().strip() != BRANCH:
+        raise Stop('original_operator_branch_mismatch')
+    markers = [name for name in ('GITHUB_ACTIONS', 'GITHUB_SHA', 'GITHUB_WORKSPACE') if name in CHILD_ENV]
+    if markers:
+        write_json(EVIDENCE / 'github-markers-present.json', {'names_only': markers})
+        raise Stop('github_markers_present_explanation_required_not_removed')
+    baseline, prefix = snapshot('04-before')
+    no_ignored_backend_cache('05-cache-preflight')
+    if sys.argv[1:] == []:
+        return {'phase': 'preflight', 'ready': True, 'untracked_count': len(baseline)}
+    git('06-fetch', 'fetch', '--no-tags', '--no-recurse-submodules', 'origin',
+        f'refs/heads/{BRANCH}:refs/remotes/origin/{BRANCH}', timeout=120)
+    if git('07-remote', 'rev-parse', f'origin/{BRANCH}').decode().strip() != MERGE:
+        raise Stop('production_moved_from_reviewed_merge')
+    if git('08-tree', 'rev-parse', MERGE + '^{tree}').decode().strip() != TREE:
+        raise Stop('merge_tree_differs_from_reviewed_B_tree')
+    git('09-source-ancestor', 'merge-base', '--is-ancestor', SOURCE, MERGE)
+    if git('10-intent-only', 'diff', '--name-only', '-z', SOURCE, MERGE) != os.fsencode(INTENT) + b'\0':
+        raise Stop('A_to_M_is_not_exact_intent_only')
+    intent = json.loads(git('11-intent', 'show', MERGE + ':' + INTENT))
+    if intent.get('source_git_sha') != SOURCE:
+        raise Stop('intent_source_mismatch')
+    target_paths = [os.fsdecode(path) for path in git('12-target-paths', 'ls-tree', '-r', '--name-only', '-z', MERGE).split(b'\0') if path]
+    if any(a == b or a.startswith(b + '/') or b.startswith(a + '/') for a in baseline for b in target_paths):
+        raise Stop('untracked_path_conflicts_with_target_tree')
+    inactive('13-guard-before-ff')
+    clean('14-clean-before-ff')
+    preserved('15-preserved-before-ff', baseline, prefix, allow_append=False)
+    git('16-fast-forward', 'merge', '--ff-only', '--no-edit', MERGE, timeout=120)
+    if git('17-head', 'rev-parse', 'HEAD').decode().strip() != MERGE:
+        raise Stop('post_ff_head_mismatch')
+    clean('18-clean-before-build')
+    preserved('19-preserved-before-build', baseline, prefix, allow_append=False)
+    no_ignored_backend_cache('20-cache-before-build')
+    inactive('21-guard-before-build')
+    run('22-build', ['yarn', 'build'], cwd=APP / 'frontend', timeout=None)
+    # 22-build.result.json already contains the actual child exit and timings.
+    clean('23-clean-after-build')
+    preserved('24-after-build', baseline, prefix, allow_append=True)
+    inactive('25-guard-after-build')
+    return {'phase': 'build', 'ready': True, 'source_sha': SOURCE, 'deployment_sha': MERGE,
+            'tree': TREE, 'untracked_count': len(baseline), 'lease_created': False}
+
+
+if __name__ == '__main__':
+    if sys.argv[1:] not in ([], ['--build']):
+        raise SystemExit('Usage: python -B script.py [--build]')
+    os.umask(0o077)
+    EVIDENCE = Path(tempfile.mkdtemp(prefix='mezan-pr1915-original-', dir='/tmp'))
+    print(json.dumps({'phase': 'started', 'evidence_dir': str(EVIDENCE)}), flush=True)
+    CHILD_ENV = os.environ.copy()
+    CHILD_ENV['PYTHONDONTWRITEBYTECODE'] = '1'
+    CHILD_ENV['REACT_APP_BACKEND_URL'] = 'https://mezansalla.com'
+    try:
+        outcome = main()
+        outcome.update(evidence_dir=str(EVIDENCE), finished_at=utc())
+        write_json(EVIDENCE / 'outcome.json', outcome)
+        print(json.dumps(outcome, ensure_ascii=True))
+    except BaseException as exc:
+        outcome = {'ready': False, 'reason': str(exc) if isinstance(exc, Stop) else type(exc).__name__,
+                   'evidence_dir': str(EVIDENCE), 'finished_at': utc()}
+        write_json(EVIDENCE / 'outcome.json', outcome)
+        print(json.dumps(outcome, ensure_ascii=True))
+        raise SystemExit(1)
