@@ -1,6 +1,6 @@
 {
-  "stage": "intent_only_B_verified_full_CI_running",
-  "updated_at": "2026-11-14T03:05:56.499Z",
+  "stage": "merged_M_verified_push_CI_pending_before_original_build",
+  "updated_at": "2026-11-14T03:10:36.593Z",
   "repo": "AMASI-SA/AMASI-SA",
   "pr": 1916,
   "task_branch": "codex/operational-snapshot-load-fix-20261114",
@@ -78,7 +78,7 @@
     "sourceFrozenAt": "2026-11-14T02:50:23.902Z",
     "pr": 1916,
     "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1916",
-    "pr_body": "## Problem\nThe verified PR1915 release still falls back to the old financial snapshot. A controlled visible production attempt localized the85-second timeout to snapshot loading: native evidence completed in23.437s, then snapshot_load was cancelled after59.694s before source collection or reconciliation began. The snapshot reader revalidates authorization and renews its lease before and after every immutable audit page, amplifying metadata round trips as history grows.\n\n## Change\nFor the exact active visible-demand database and owner, group fresh authorization/lease gates around bounded groups of at most8 pages. Each page still uses its exact owner/_id find_one and is fully validated before the next read. Per-page workers remain request-owned, cancellable and joined. Ordinary readers and strict transaction/session wrappers retain their current behavior. The complete manifest, hashes, ordering, history and tail are retained; CAS and the existing85-second deadline stay intact.\n\nThe source change is17 added and2 removed lines in the archive reader, plus43 focused regression cases and the task status document. This does not include the separately measured reconciliation CPU optimization; production did not reach that phase in the captured attempt.\n\n## Verification\n- Pre-change regression fails only at the intended guard budget:136 checkpoints versus24 for64 synthetic archive pages, after full-state parity and64 exact page reads pass.\n-43 new cases pass; integrated adjacent selection106 passed (exit0). Independent review79 passed, including all43 new cases, with no blocking finding. These selections overlap.\n- Tests cover complete BSON/history parity, first corrupt page, manifest and owner/hash/count checks, permission revocation, lost lease/successor preservation, I/O and worker cancellation, deadline behavior, fresh revision/manifest on CAS retry, and actual strict session wrappers.\n- Independent exact-J negative control fails the same136-versus24 bound. Source/test hashes stayed unchanged during review; diff-check passed.\n- Three paired64-page synthetic runs with3ms simulated database-operation latency: median2399.883ms →665.631ms,136→24 checkpoints/renewals,64→64 page reads; full-result equality, unchanged inputs, zero nonlease writes and zero orphan tasks. This is not a measured production improvement.\n\n## Frozen source\n- J: `4860548f0b032e8e3beca18a4776413cd7e0368b`\n- A: `ff9f8b69b980acfda8dffd210feaf72e17e6727a`\n- A tree: `92ab66ab75d52285e34131f3c4ca60a6a5f8ecc5`\n- Archive source SHA256: `d382ab270474b68700f1672afd2871bb6d7eb0392dad539771536a90fe5082ce`\n- Test SHA256: `d0625c6477b6dae55d1d594bfbb66d95e08f47c97804320528af36f8cdf13d2d`\n- A inherits the existing tracked intent unchanged. Exact-A candidate artifact and intent-only B are pending; preserve reviewed source ancestry through a normal merge.\n\n## Release status\nSource A is frozen for CI. This follow-up is not merged or published. Required next gates: exact-A CI including real Mongo, exact reviewed intent artifact/loader, intent-only B and its full checks, normal merge with identical B/M tree, actual original-operator build and preservation proof, own prepare/final prepublish, one Publish, explicit newer completion, official three-probe verification/normal lease closure, then visible fresh-as_of acceptance and its stage log.\n\n[Source status](https://github.com/AMASI-SA/AMASI-SA/blob/ff9f8b69b980acfda8dffd210feaf72e17e6727a/docs/operations/OPERATIONAL-SNAPSHOT-LOAD-REPAIR-20261114/STATUS.md). Prior live-stage evidence: [PR1915 continuation](https://github.com/AMASI-SA/AMASI-SA/pull/1915#issuecomment-6870287239). Documentation-only handoff branch: `codex/operational-snapshot-load-handoff-20261114`; never merge or deploy that branch.",
+    "pr_body": "## Problem\nThe verified PR1915 release still falls back to the old financial snapshot. A controlled visible production attempt localized the85-second timeout to snapshot loading: native evidence completed in23.437s, then snapshot_load was cancelled after59.694s before source collection or reconciliation began. The snapshot reader revalidates authorization and renews its lease before and after every immutable audit page, amplifying metadata round trips as history grows.\n\n## Change\nFor the exact active visible-demand database and owner, group fresh authorization/lease gates around bounded groups of at most8 pages. Each page still uses its exact owner/_id find_one and is fully validated before the next read. Per-page workers remain request-owned, cancellable and joined. Ordinary readers and strict transaction/session wrappers retain their current behavior. The complete manifest, hashes, ordering, history and tail are retained; CAS and the existing85-second deadline stay intact.\n\nThe source change is17 added and2 removed lines in the archive reader, plus43 focused regression cases and the task status document. This does not include the separately measured reconciliation CPU optimization; production did not reach that phase in the captured attempt.\n\n## Verification\n- Pre-change regression fails only at the intended guard budget:136 checkpoints versus24 for64 synthetic archive pages, after full-state parity and64 exact page reads pass.\n-43 new cases pass; integrated adjacent selection106 passed (exit0). Independent review79 passed, including all43 new cases, with no blocking finding. These selections overlap.\n- Tests cover complete BSON/history parity, first corrupt page, manifest and owner/hash/count checks, permission revocation, lost lease/successor preservation, I/O and worker cancellation, deadline behavior, fresh revision/manifest on CAS retry, and actual strict session wrappers.\n- Independent exact-J negative control fails the same136-versus24 bound. Source/test hashes stayed unchanged during review; diff-check passed.\n- Three paired64-page synthetic runs with3ms simulated database-operation latency: median2399.883ms →665.631ms,136→24 checkpoints/renewals,64→64 page reads; full-result equality, unchanged inputs, zero nonlease writes and zero orphan tasks. This is not a measured production improvement.\n\n## Frozen source\n- J: `4860548f0b032e8e3beca18a4776413cd7e0368b`\n- A: `ff9f8b69b980acfda8dffd210feaf72e17e6727a`\n- A tree: `92ab66ab75d52285e34131f3c4ca60a6a5f8ecc5`\n- Archive source SHA256: `d382ab270474b68700f1672afd2871bb6d7eb0392dad539771536a90fe5082ce`\n- Test SHA256: `d0625c6477b6dae55d1d594bfbb66d95e08f47c97804320528af36f8cdf13d2d`\n- B: `bd9607ba2b21c4d4e3e2bc6bced7680bc9c6f287` (tree `c5bd7fb6c357e17c17104282d1d175676e95ed3e`), one parent A, only intent path changed.\n- Exact candidate artifact 14094887136 from readiness run43548544254; unmodified intent SHA256 `9c4374110d7cb7ad4107acd968b419982cbecd5be934c34ebe80ebe30cd2dd47`.\n- Official candidate and tracked-B loaders passed with actual exit0; R `rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db`.\n- All11 A workflows passed. Official JUnit contains all43 new cases passing in each Operational4073-case and Stock3882-case (+7subtests) suite.\n\n## Release status\nSource A and exact intent-only B are frozen and validated. B full checks are running, including actual Node20/24 adapter rehearsals. This follow-up is not merged or published. Required next gates: all B checks, normal merge with identical B/M tree, merge CI, actual original-operator build and preservation proof, own prepare/final prepublish, one Publish, explicit newer completion, official three-probe verification/normal lease closure, then visible fresh-as_of acceptance and its stage log.\n\n[Source status](https://github.com/AMASI-SA/AMASI-SA/blob/ff9f8b69b980acfda8dffd210feaf72e17e6727a/docs/operations/OPERATIONAL-SNAPSHOT-LOAD-REPAIR-20261114/STATUS.md). Prior live-stage evidence: [PR1915 continuation](https://github.com/AMASI-SA/AMASI-SA/pull/1915#issuecomment-6870287239). Documentation-only handoff branch: `codex/operational-snapshot-load-handoff-20261114`; never merge or deploy that branch.",
     "R": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
     "intent_sha256": "9c4374110d7cb7ad4107acd968b419982cbecd5be934c34ebe80ebe30cd2dd47",
     "intent_bytes": 1301645,
@@ -305,17 +305,113 @@
         "stderr_sha256": "62a575f45a12d6924e0d779e194cd4ccbecfc8c6c2681963001230960c54e964",
         "stderr_bytes": 285
       }
-    }
+    },
+    "B_ci": {
+      "read_at": "2026-11-14T03:09:29.387Z",
+      "total_checks": 29,
+      "success": 23,
+      "expected_skipped": [
+        "Emergent manual redeploy required",
+        "Publication backend and existing write guards",
+        "Publication frontend and existing media flow",
+        "Frontend Snapchat settings tests and build",
+        "Backend settings and zero-write regressions",
+        "reviewed-candidate"
+      ],
+      "workflows": [
+        {
+          "id": 43549551860,
+          "name": "Snapchat Settings Management V2",
+          "conclusion": "success"
+        },
+        {
+          "id": 43549551795,
+          "name": "Qoyod Payment Freshness",
+          "conclusion": "success"
+        },
+        {
+          "id": 43549551788,
+          "name": "Mobile Order Tracking",
+          "conclusion": "success"
+        },
+        {
+          "id": 43549551851,
+          "name": "MZ2 Employee Salary and Password",
+          "conclusion": "success"
+        },
+        {
+          "id": 43549551803,
+          "name": "Security Gate",
+          "conclusion": "success"
+        },
+        {
+          "id": 43549551855,
+          "name": "Mezan Release Readiness",
+          "conclusion": "success"
+        },
+        {
+          "id": 43549551910,
+          "name": "G47 Focused Integration",
+          "conclusion": "success"
+        },
+        {
+          "id": 43549551896,
+          "name": "Operational Balance Web",
+          "conclusion": "success"
+        },
+        {
+          "id": 43549551856,
+          "name": "Operational Stock Eligibility",
+          "conclusion": "success"
+        },
+        {
+          "id": 43549551719,
+          "name": "Snapchat Direct Active Publication",
+          "conclusion": "success"
+        },
+        {
+          "id": 43549551763,
+          "name": "TikTok Creator Release Candidate",
+          "conclusion": "skipped"
+        },
+        {
+          "id": 43549551714,
+          "name": "CodeQL",
+          "conclusion": "success"
+        }
+      ],
+      "adapters": [
+        {
+          "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+          "id": 132308844262,
+          "conclusion": "success",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43549551855/job/132308844262"
+        },
+        {
+          "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+          "id": 132308844258,
+          "conclusion": "success",
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43549551855/job/132308844258"
+        }
+      ]
+    },
+    "M": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+    "mergedAt": "2026-11-14T03:09:33.095Z",
+    "Mtree": "c5bd7fb6c357e17c17104282d1d175676e95ed3e",
+    "Mparents": [
+      "4860548f0b032e8e3beca18a4776413cd7e0368b",
+      "bd9607ba2b21c4d4e3e2bc6bced7680bc9c6f287"
+    ],
+    "normal_merge_verified": true
   },
   "production_changed_by_this_followup": false,
   "blockers": [],
   "next_actions": [
-    "Freeze exact reviewed intent as B, only release/release-intent-v5.json changes",
-    "Validate B and run full CI including actual Node20/24 adapters",
-    "Normal merge preserving source ancestry; verify M tree equals B",
-    "Build in original operator preserving unrelated work; own prepare and final prepublish",
-    "Publish once; explicit completion; official verification and normal lease closure",
-    "Visible financial refresh must advance as_of without warning; capture stage evidence"
+    "Finish exact-M push CI",
+    "Fresh original guard inactive and actual build using reviewed helper, M argument",
+    "Preserve all120 untracked files and Untitled-1 buffer",
+    "Owned prepare, final prepublish, one Publish, explicit newer completion",
+    "Official3-probe verification, fresh inactive guard, visible fresh financial as_of acceptance"
   ],
   "historical_prechange_test": {
     "observed_red_source_sha256": "b1858f3b050ba46925916e34f59c6b941f93f032e3be2f9313a07bde2b33eba4",
@@ -329,5 +425,21 @@
     "tracked_file_overlap": false,
     "pending_changes_count": 120,
     "action": "read-only UI; no save, close or discard"
-  }
+  },
+  "operator_helpers": [
+    {
+      "name": "pr1916_original_rehearsal.py",
+      "bytes": 14892,
+      "sha256": "4dfb723a4ee134ef96b1add8a396927960193febec849e559e2f39cddffe0410",
+      "independent_review": "PASS read-only; not executed",
+      "M_required_argument": "9c71435f4a19977c09f4331dee8fddbfa12a45eb"
+    },
+    {
+      "name": "pr1916_original_verify.py",
+      "bytes": 8119,
+      "sha256": "cafdbc1af1c493fb711466e5159af1fdd32ccbbd0bcb6410efaed7e0f30182b9",
+      "independent_review": "PASS read-only; not executed",
+      "M_required_argument": "9c71435f4a19977c09f4331dee8fddbfa12a45eb"
+    }
+  ]
 }
