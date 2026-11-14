@@ -1,77 +1,79 @@
 # Operational source-read repair — 14 November 2026
 
-## Current status
+## Current task and authority
 
-The safe diagnostic stage is implemented and locally verified. It repairs the loss of the source/cause in the visible warning, but **does not yet repair the underlying production source-read failure**. No release intent, merge or publication by this task exists at this checkpoint. The user explicitly authorized fixing, merging and publishing. The accepted behavior remains page-owned computation: refresh only while visible and cancel/join work on hide or exit. No background calculation, polling, financial confirmation, settlement or payout is authorized as a test.
+The user explicitly authorized fixing, merging and publishing. The diagnostic stage is merged, published and officially verified. One visible live attempt proves the failed first-batch source is **unified_orders / operational_source_read_timeout**. The root fix is implemented, independently reviewed and locally verified; it is ready for exact-source CI and a new A/B release. Diagnostics alone did not repair the stale calculation.
 
-## Continuity and current base
+Keep computation page-owned: refresh only while visible, cancel/join on hide/exit, and no polling, detached financial work, financial confirmation, settlement, payout, provider sync or advertising mutation as a test. Do not use paid Emergent agent/chat/Copilot. Never expose credentials, customer identifiers, private business counts, financial payloads or environment values in public records.
 
-- Task branch: `codex/operational-source-read-repair-20261114`.
-- Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1913.
-- Initial remote checkpoint: `a1497e7ff7e2cdec60be4e3c34d516a1441d2346`.
-- Production base read: `304e8793a15fd3269fd6f6d4cfba903d1760e285` (PR #1912), including the prior campaign changes from #1911.
-- Previous balances release #1906 is already merged and officially verified. Its later live application check failed; do not republish that source/intent.
-- Previous handoff: [STATUS](https://github.com/AMASI-SA/AMASI-SA/blob/a496614da4a569817fd1e959b25989ae62cbe31b/docs/operations/OPERATIONAL-BALANCES-FOLLOWUP-20261113/STATUS.md).
-- Issue #1006 has reached its comment cap; #1902/#1906 are balances continuation threads.
-- No coordinator marker or repository trigger exists. Root owns this isolated branch and integration. One scoped child implemented the three diagnostic files; a separate child independently reviews them. Root owns all release operations.
+## Proved live result
 
-## Proved application result and remaining gap
+After exact live diagnostic identity confirmation, a new financial page remained explicitly `document.visibilityState=visible` from loading through completion. At about00:47UTC it displayed:
 
-At 2026-11-13T22:30:18.040Z, the visible financial page settled with the source-read failure warning and retained `as_of=12 November 2026 01:07` (UTC+3). Its newer report-render timestamp did not demonstrate a successful calculation. The exact message maps to the SourceReadError handler in `source_collection`, inferred from source rather than a captured HTTP response. Current code preserves cause/collection in HTTP409 details, but the UI discards these fields and the failure exits before state/audit persistence. The exact failing collection and cause remain unproved.
+> تعذر تحديث الطلبات: انتهت مهلة قراءة هذا المصدر.
 
-Independent current-source review maps this error to the first 32-source batch. It reads owner-only records with an exact post-read owner check, a 20,000-row ceiling and a 15-second per-read deadline. There is no evidence yet justifying changing those safeguards or dropping historical orders. Earlier orders can still generate post-opening delivery, custody and shipping evidence.
+Saved calculation: **12/11/2026,01:07 UTC+3**. Report generation: **14/11/2026,03:47 UTC+3**. Rendering a newer report is not fresh computation. No repeated refresh or financial confirmation was performed.
 
-## Work completed in this continuation
+The unique fixed diagnostic mapping establishes `unified_orders` / `operational_source_read_timeout`. Source inspection shows complete owner-scoped documents are read with a20,000-row ceiling and15-second per-read deadline. An earlier ordinary owner-only GET established a count below the ceiling; the private count is omitted. Production payload size was not measured. Payload-transfer/decoding cost as the timing bottleneck is an inference; live acceptance after the fix remains necessary.
 
-- Read latest repository instructions, previous handoff and relevant release records.
-- Fetched production and created a clean isolated task branch from current base.
-- Restored browser/operator UI and verified signed-in account role using ordinary authenticated GET; no cookies/tokens were extracted.
-- Fresh original `/app` guard returned `active:false`; `/app` HEAD was `304e8793a15fd3269fd6f6d4cfba903d1760e285`, with empty tracked/index diffs. This is an observation, not a retained lease or authorization to interfere with another task.
-- A bounded read-only diagnostic on the configured operator DB verified the owner role, but found no matching aggregate. It stopped before all source counts (checked=0), without reads of financial payloads or writes. This DB cannot establish the production cause. No connection strings, environment values, cookies or tokens were exposed or copied.
-- The official database viewer opened through the existing Emergent account. Its Preview view is available; its Production view requires separate connection configuration. No production connection credential was extracted and no production DB query was run there.
-- One ordinary authenticated `GET /api/orders?limit=1&page=1`, after source review proved its exact owner-only predicate and absence of side effects, returned a total below the existing 20,000-row limit. Only count/pagination metadata was read into the diagnostic output; no order payload was printed. This rules out a current orders row-cap breach, not an orders read timeout or a failure in the other 31 sources. The business count is not included in this public record.
-- Another Ready release owner began publication at 14 November 02:39 UTC+3, observed in the normal Emergent management UI. Do not change its source, artifacts, lease or active work. Fresh status and production head are required before any later operator mutation.
+## Diagnostic release — PR1913
 
-## Diagnostic change
+- PR: https://github.com/AMASI-SA/AMASI-SA/pull/1913
+- A: `54184a6c3725067eda2e9ac56345f578425cf3f0`
+- B: `b2feb7d4b2f8bbd58e28644733a09205b2da4a05`
+- Normal M: `6012ceb480bf9dc0f51ec6cc64c054e5e0db3846`
+- B/M tree: `2b6e4d1da108350b3d0f8637000e7de09fb3bd7b`
+- Runtime: `rg5-51a27cab964259844260959047effc778bbe1aa204c5da13133af9e0628fcaaa`
+- Intent SHA256: `43f7acd0c0c2217087029cec6ca656d64bddd6f5454f1a3fb2f1a1b46e6ad315`
 
-The existing SourceReadError catch retains HTTP409 and the same machine fields for all five known causes and 32 first-batch sources. A fixed allowlist maps them to distinct Arabic source/reason text in the existing `message` field, which the deployed frontend already displays. The old saved-snapshot warning remains explicit. Unknown values become fixed `unknown` markers; arbitrary objects/string subclasses are never formatted or echoed.
+Verification:179 new diagnostics;271 integrated local cases; seven independent refresh/preservation/cancellation cases. Exact A and B Operational artifacts each contain3981cases with zero failures/errors/skips. A frontend721tests/51suites, worker4/4, browser9/9. Both B host adapter rehearsals ran. All11 M checks passed.
 
-One warning event records only a fixed stage/outcome and the allowlisted cause/collection. No exception text, stack, owner, order, monetary value, query or credential is logged. No additional reads, writes, timers, retries, calculations or frontend changes are introduced. The existing source cap, deadlines, owner checks, error status, preserved snapshot/audit and cancellation behavior remain unchanged.
+Original operator package adapter returned0 in61.64s after two generated ignored bytecode files were reversibly preserved outside /app. The wrapper subsequently rejected a strict untracked manifest change. A separate hash audit proved all120 original files retain their original bytes; one platform sidecar gained86 bytes, preserved in place. Tracked/index clean and complete runtime identity exactly equal reviewed intent. No source/intent validation was weakened.
 
-Files: `backend/operational_balance_service.py`, `backend/operational_source_diagnostics.py`, `backend/tests/test_operational_balance_source_diagnostics.py`. The test name deliberately matches the existing Operational Balance CI glob; no workflow or expected baseline was weakened.
+Own actor `codex-operational-source-diagnostics-1913` prepared `2026-11-14T00:27:41.517247+00:00`. Prepare and final prepublish exited0. One normal Publish was submitted; UI explicitly records **Deployment finished Nov14,03:41AM UTC+3**, entry `164bf90`. Public health matches A/runtime with all backend/control/critical/frontend flags true; boot `2026-11-14T00:41:14.133815+00:00`. One prior health navigation returned520 before an ordinary reload succeeded; its transient cause is unproved.
 
-## Local verification
+Full official verifier started `2026-11-14T00:43:15.339262+00:00` and **finished successfully at2026-11-14T00:52:43.781431+00:00**, actual exit0 in568.44seconds. All3 probes passed, each checking582 frontend requests, including canonical/cache-busted JSON MIME and exact artifacts. Frontend artifact tree SHA256: `9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6`. Verification JSON SHA256: `869ff0747755360f74e0b4c5c41ad9799c829cab49a0ad865c2c7e6fa74430c9`; stderr was empty. Evidence prefix `/tmp/mezan-pr1913-6012ceb4-verify`. The guard closed its matching lease, and fresh official status returned exactly `{"active":false}`. Do not repeat this successful release or reuse its lease.
 
-- Baseline at the initial checkpoint: 92 passed in 6.64 seconds.
-- A new refresh-level regression ran against the original handler and failed for the intended reason: source visible, reason visible, diagnostic log count were `(False, False, 0)` instead of `(True, True, 1)`. HTTP409, saved snapshot/audit and no writes already passed.
-- Corrected integrated run: **271 passed in 6.78 seconds, exit0**, including 179 diagnostic cases plus the 92 read/runtime/demand/route/stage cases. Tests cover known causes/sources, untrusted values/log injection, exact HTTP409 fields, preserved saved aggregate/audit, one safe log and cancellation without conversion or writes.
-- Test dependencies are isolated and constrained by the backend runtime lock; Python3.12.14 locally. The exact-source prescribed CI uses Python3.11 and must still pass. Initial missing local dependencies were installed to their locked versions; no product failures were dismissed.
-- `git diff --check` passed. Root and a separate independent reviewer approved the complete diagnostic application diff. The reviewer intercepted the actual first-batch call before DB I/O and proved all 32 source keys match exactly, checked the five causes and safe formatting boundary, and independently ran the seven refresh/preservation/hostile-field/cancellation cases (7 passed in 1.54 seconds).
+Full chronology is on documentation-only branch `codex/operational-source-release-handoff-20261114`, completed-verification checkpoint `d9b60097b8054e50dbb15241df0bd0dcbac27982`. Never merge/publish that branch. Issue1006 reached its comment cap; PR1913 and prior1902/1906 threads carry continuation. The root-fix PR/comment will record this source commit's exact SHA after creation; no self-referential source SHA is embedded here.
+
+## Root fix
+
+Task branch `codex/operational-source-fix-20261114`, now based on reviewed J `d6f246b4d3b14fd56ef2cbc574b99f08bb7d6fc1`; worktree `/workspace/scratch/019fa8a18b3d/mezan-source-fix`. One implementer owns backend code and focused tests; another independently reviews every field/proof dependency and completed diff. Root owns this status file, integration, checkpoints and release operations.
+
+Implemented change: a dedicated first-batch reader projects unified orders to21 required root fields, preserving whole `raw_by_source`, canonical snapshot/shipping/SAR evidence, order/merchant/shipment aliases and status freshness. Other consumers of shared `rows` are unchanged; AST comparison independently proved the old function identical. Exact owner predicate, all old/future/cancelled orders, MAX_ROWS+1, cap, owner validation,15-second deadline, overall request deadline and cancellation/join are preserved. No date/status predicate, deduplication, cap/deadline increase, retry or background work.
+
+Before-change regression failed as intended: four owner orders (including old/future/cancelled), correct20001 ceiling and no source mutation, but526192 returned bytes because projection was absent. Exit1 was the payload assertion, not an import/environment failure. With the projection the same fixture returned1684bytes and retained all4 owner orders. These are synthetic measurements, not a production byte-reduction claim.
+
+The49 new projection-aware cases passed in4.08s, exit0, zero failure/error/skip. Independent rerun:49passed in3.99s, exit0. Independent negative control replaced the reader only in a separate process's memory with the original unprojected reader; the payload case failed as expected in1.69s, exit1. Both reviewers approved the complete implementation and tests with no blocking finding. `git diff --check` passed; no backend bytecode was created.
+
+The tests apply the actual root projection at the DB boundary and compare complete sources, reconciliation state including audit/seal, reports and financial position across11 fixtures. They also exercise complete owner cohort, cap/owner rejection, cancellation/deadline cleanup, malformed canonical containers, all7 shipment aliases with present-null/malformed values, merchant contradictions, source freshness and valid/conflicting/absent SAR proof. Receipt time is fixed in tests so full audit/seal comparison is deterministic; no evidence fields are removed from comparison.
+
+A separate neighboring-suite run recorded717passed and13 environment failures: two require a local Mongo service that was absent and11 fail during setup import because reportlab is absent locally. That run is not described as fully passing, and many older fixtures ignore projection. Exact-A/B CI must run the actual Mongo/setup gates; only the49 new projection-aware cases establish the projection behavior locally.
+
+| Changed file | SHA256 |
+| --- | --- |
+| backend/operational_balance_sources.py | `ed56061f536c49f7b54e8edbb3826ee7d8f9c4f10a40ac4d79e7646cd4d4b4f7` |
+| backend/tests/test_operational_balance_order_source_projection.py | `23d609ce92c64699e1e304eefe1b682bda96a299cd1e9dcf0bf1caa46bd43367` |
 
 Reproduction from repository root:
 
 ```bash
-PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 \
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 \
 /workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python -B -m pytest \
-  --noconftest -q --asyncio-mode=auto --tb=short \
-  backend/tests/test_operational_balance_source_diagnostics.py \
-  backend/tests/test_operational_read_runtime.py \
-  backend/tests/test_operational_balance_sources.py \
-  backend/tests/test_operational_balance_demand_refresh.py \
-  backend/tests/test_operational_balance_demand_refresh_routes.py \
-  backend/tests/test_operational_balance_refresh_stage_timing.py
+  --noconftest -q backend/tests/test_operational_balance_order_source_projection.py \
+  --asyncio-mode=auto --tb=line
 ```
 
-| File | SHA256 |
-| --- | --- |
-| operational_balance_service.py | `94419f6cd928f3df14a44e8ad2faf3d7b0d2e4f2b1e8dfea90d5676c9b205e68` |
-| operational_source_diagnostics.py | `8ede8a7cb44cbc04c68b0a22a99f0cc0d0bacc7295fe9925c064b47526615fa4` |
-| test_operational_balance_source_diagnostics.py | `51e400012e491dd3c6bc6578932f025c5ddb41a8cf0d3359ded48d28c2ce9210` |
+The test filename matches the existing `test_operational_balance*.py` glob, so the Operational Balance Backend and isolated-Mongo stock suites collect it without workflow changes. Exact-source CI is pending at this source checkpoint.
 
-## Next safe action
+## Concurrent release and next actions
 
-Run exact-source CI and freeze a new diagnostic intent only after it passes. Any further proven existing authenticated GET count may supply narrower evidence without a new refresh; do not invent endpoints or bypass browser restrictions. If it does not identify the blocker, publish the diagnostic stage through the full guarded protocol after the concurrent release closes, reproduce one visible attempt, and fix the demonstrated cause. An instrumentation-only release is not completion.
+PR1914, a separately reviewed operational-image permission fix, normal-merged at00:53:17UTC after our lease closed. New production J is `d6f246b4d3b14fd56ef2cbc574b99f08bb7d6fc1`, tree `84fdb6d5ac2ff520ee78fc2ff294dc62f519889b`, ordered parents diagnostic M then B `c9c24270766eb59f9a0e42b84f5f38883af7fccf`; its source A is `f91eb6c43d2faeb2f7da174ecdc67a455ac0ec2c`. Tree equals B, with zero B-to-M file changes. Root fetched and fast-forwarded this isolated worktree to J while both agents paused; the reader, new test and status content hashes were unchanged. The new source A must inherit this J's exact intent unchanged, then freeze its own B. Re-read production before source freeze/merge, and respect any subsequent operator owner's lease.
 
-Keep the existing owner scope, full financial evidence and cancellation guarantees. Add cause-specific regression coverage and obtain independent review. Freeze a new source A and intent-only B under protocol v5, preserve both with normal merge, then publish through the original adapter and complete official verification plus a fresh visible-page acceptance check.
+1. Completed: source, meaningful red/green and same-output proof for financial evidence/conflict fixtures, plus independent review.
+2. Completed: official diagnostic verifier passed and closed its lease. Respect any subsequent release owner's lease.
+3. Preserve root fix remotely/Draft PR, run exact-A CI, obtain and validate official candidate artifact, freeze intent-only B.
+4. After exact-B gates and base verification, normal merge; original operator requires inactive guard, safe fast-forward, preserved unrelated work and actual configured adapter.
+5. Own prepare/prepublish, one authorized Publish, new explicit platform completion and full three-probe verification. Require a fresh visible calculation timestamp and inspect report without financial confirmation.
 
-Production changed by this task: **NO**. No customer data, account identifiers, order identifiers, financial amounts or credentials are included in this record.
+Production source/runtime changed by diagnostics: **YES**, identities above. Root-fix production changes: **NO**. Fresh successful financial calculation: **NOT YET PROVED**.
