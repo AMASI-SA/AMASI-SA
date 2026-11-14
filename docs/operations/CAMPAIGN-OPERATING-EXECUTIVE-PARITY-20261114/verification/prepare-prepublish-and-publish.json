@@ -1,0 +1,81 @@
+{
+  "phases": {
+    "prepare": {
+      "source_git_sha": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "git_sha": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "source_base_git_sha": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+      "intent_git_sha": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "deployment_git_sha": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+      "release_id": "rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33",
+      "protocol_version": 5,
+      "actor": "codex-campaign-operating-parity-1924",
+      "success": true,
+      "receipt": {
+        "argv": [
+          "python",
+          "-B",
+          "scripts/production_release_guard.py",
+          "prepare",
+          "--actor",
+          "codex-campaign-operating-parity-1924"
+        ],
+        "cwd": "/app",
+        "started_at": "2026-11-14T17:50:29.217214Z",
+        "finished_at": "2026-11-14T17:50:31.970789Z",
+        "exit_code": 0,
+        "seconds": 2.7535187019966543,
+        "stdout_sha256": "b81b08cc302193a96ee3df8de727eec84aece1d1c66d6c7ca28f85ff537af395",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "prepared_at": "2026-11-14T17:50:30.932050+00:00",
+      "finished_at": "2026-11-14T17:50:32.134410Z",
+      "status_after_active": true,
+      "preserved_untracked_files": 120,
+      "result_sha256": "7f9df2d3cb42e87c32a83f8e43080c5e498ea02f1565adcf3a51cd222fbbff37",
+      "guard_receipt_sha256": "5824e29e1a256dd1d52edd12f0f9fce56c17d72ce24306ed949d16421705b533"
+    },
+    "prepublish": {
+      "source_git_sha": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "git_sha": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "source_base_git_sha": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+      "intent_git_sha": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "deployment_git_sha": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+      "release_id": "rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33",
+      "protocol_version": 5,
+      "actor": "codex-campaign-operating-parity-1924",
+      "success": true,
+      "receipt": {
+        "argv": [
+          "python",
+          "-B",
+          "scripts/production_release_guard.py",
+          "prepublish"
+        ],
+        "cwd": "/app",
+        "started_at": "2026-11-14T17:50:47.172596Z",
+        "finished_at": "2026-11-14T17:50:50.574653Z",
+        "exit_code": 0,
+        "seconds": 3.401948469982017,
+        "stdout_sha256": "f48b0d120e6ba4e21fb12169345781d4ed3187243c16af6fccad02a5653ebac5",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "ready_to_publish": true,
+      "finished_at": "2026-11-14T17:50:50.745517Z",
+      "status_after_active": true,
+      "preserved_untracked_files": 120,
+      "result_sha256": "4f281fb49dd283d0d1e90fc39a71593fa5a3213e0dd1dfd927d29f7b842048c8",
+      "guard_receipt_sha256": "de7364e33714a4ca515e9a64b84ce7940843718d94d89a707d608e63b276192f"
+    }
+  },
+  "publication": {
+    "ui_clicked_at": "2026-11-14T17:51:29.572Z",
+    "clicks": 1,
+    "button": "Publish changes",
+    "billing": "Free republishes",
+    "ui_state": "Publishing...",
+    "baseline_version": "ecb9679",
+    "new_version": null,
+    "finished": false,
+    "official_verify_started": false
+  }
+}

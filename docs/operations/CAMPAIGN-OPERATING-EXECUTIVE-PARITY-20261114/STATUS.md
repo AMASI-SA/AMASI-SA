@@ -120,3 +120,10 @@ Root then exercised the corrected read-only command on the installed Git: `git c
 The actual R2 original build succeeded: `yarn build` ran in `/app/frontend` from 17:46:20.473021Z to 17:47:23.480252Z (exit 0); package verification ran from 17:47:23.481310Z to 17:47:25.673834Z (exit 0). Runtime identity and intent bytes match the reviewed release, the full 120-file preservation chain passed, and both earlier failure directories remained unchanged. The two cache files and their directory remain intact in the private same-device quarantine. No fast-forward was repeated. Guard was inactive after the build.
 
 The final gate `15f47c312bec26684c55be53d67f81a3d5a71c814f0c5b213bb5781697e94839` is pinned to the actual successful evidence `/tmp/mezan-pr1924-original-recovery-jxtvm4fn`, actor `codex-campaign-operating-parity-1924`, and root-observed UI baseline `ecb9679` at 17:47:56.490Z. Independent review verified that only the four intended operational pins/header changed from the reviewed disabled R2 template; functional AST is identical. Prepare, prepublish, publication, official verification and final live acceptance are still pending at this checkpoint.
+
+
+## Owned release publication underway — 2026-11-14 17:52:24 UTC
+
+The actual official prepare and prepublish commands both exited 0, with all wrapper identity/preservation checks successful. Prepare finished 17:50:32.134410Z; prepublish finished 17:50:50.745517Z and reported `ready_to_publish=true`. The active lease belongs to `codex-campaign-operating-parity-1924`, exact M3/runtime above. The 120-path preservation chain remains valid.
+
+Root clicked the free `Publish changes` control exactly once at 17:51:29.572Z. The live UI changed to `Publishing...`. Existing baseline version is `ecb9679`; no new completed version is claimed yet. Do not rerun prepare, prepublish, build, or the publish action. Keep the original workspace unchanged until the new UI completion and the one official verifier finish. Final live numeric acceptance remains pending.
