@@ -160,3 +160,12 @@ Build stdout SHA256 `f658e9084dc2d62187d2880aa67991514eaed4c849fdc32c74c2b099d4a
 ## Prepared owned lease — 2026-11-14T04:57:32.378Z
 
 Official prepare actual exit 0, 04:56:55.601783–04:56:58.309692 UTC (2.707915 seconds), followed by fresh matching owned-active status. Actor `codex-operational-source-collection-rootfix-1917`; A/M/R match this release. Raw stdout SHA256 `073e3edc4bfd5def4d594e9132d46eabb0a1cadd6f693d7e4bdecede09789ef1`. Next: prepublish then one Publish changes. No platform publish has begun.
+
+
+## Publication started — 2026-11-14T05:00:37.090Z
+
+Official prepublish actual exit 0, 04:57:50.401881–04:57:53.818431 UTC (3.416560 seconds), ready_to_publish:true and matching fresh owned lease. M push gate independently passed all 3 workflows and 11 checks at04:59:07UTC.
+
+The first UI input attempt at04:58:28.704Z timed out at Input.dispatchMouseEvent. A fresh screenshot and DOM showed the same enabled Publish changes dialog, with no deployment start. After this state check the semantic button action succeeded at04:59:59.550Z: the platform explicitly displayed **Deployment Started Nov14,08:00AM** and **Publishing...**. No duplicate in-progress publication was initiated. Previous live platform remains bfa6a5f, whose actual UI label is100thpublish (earlier1916 notes called it99th).
+
+Do not click Publish again. Wait a newer explicit completion, then official verification and fresh inactive. Do not open Logs during publish/verification; preserve an uncached first runtime-log window for the visible financial acceptance if it remains slow. No PR1917 financial refresh has occurred.
