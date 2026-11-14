@@ -1,6 +1,6 @@
 {
   "task": "CAMPAIGN-HOVER-PROFIT-20261114",
-  "updated_at_utc": "2026-11-14 16:01:22 UTC",
+  "updated_at_utc": "2026-11-14 16:09:22 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": 1920,
   "task_branch": "codex/campaign-hover-profit-20261114",
@@ -22,7 +22,7 @@
     "prior_ended_at": "2026-11-14T15:18:09.798861+00:00",
     "fresh_original_status": "inactive"
   },
-  "next": "Preserve failed verify directory and own active lease. Independently review append-only metadata recovery; no repeat publish/prepare/prepublish/frozen verify. Diagnose operating basis unknown read-only before claiming functional acceptance.",
+  "next": "Execute distinct verify-after-bookkeeping-review runner once from real outside-/app file after pinned download. Preserve originalfailedphase. Exact same authorized official verify; only proved append-only metadata exception; all119otherfiles exact. Continuefunctionaloperatingdiagnosis.",
   "B_conditional_skip": "TikTok Creator Release Candidate requires its dedicated codex/tiktok-content-ci-20261011 branch; not applicable here",
   "B_host_20_24_artifacts": "independently_verified",
   "original_runner_sha256": "7019b1b7f3fdc6bad77495cac3719c6c56f746d4afeb6239c9276c5ff7d915b0",
@@ -62,7 +62,7 @@
   "prepublish_finished_at": "2026-11-14T15:40:50.371166Z",
   "publish_clicks": 1,
   "publish_started_observed_at": "2026-11-14 15:41:50 UTC",
-  "verify": "preflight_failed_official_verify_not_started",
+  "verify": "original_preflight_failed_official_verify_not_started",
   "new_ui_version": "1b4c4f6",
   "ui_event_text": "Deployment finished Nov 14, 06:51 PM",
   "ui_finished_at": "2026-11-14T15:51:00Z",
@@ -89,5 +89,7 @@
     "later_same_mode": true,
     "later_mtime_utc": "2026-11-14T15:59:53.538506+00:00"
   },
-  "live_card_acceptance": "new_rows_visible_direct_costs_numeric_operating_and_net_unknown_in_two_samples"
+  "live_card_acceptance": "new_rows_visible_direct_costs_numeric_operating_and_net_unknown_in_two_samples",
+  "recovery_runner_sha256": "f3eef7ec485f47e3c1bd301efd941acb0921d484ba81c93e46a639d333d85a61",
+  "recovery_review": "root and independent static PASS; not executed"
 }

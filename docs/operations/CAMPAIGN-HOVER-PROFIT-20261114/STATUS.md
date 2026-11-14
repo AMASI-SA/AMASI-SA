@@ -232,3 +232,12 @@ Next: observe a newer explicit Deployment finished event and a new current publi
 - Failed directory remains immutable. No rerun, republish, abort, lease clear or application source change. Own lease still pending official verification.
 - Live client after reload shows all nine card rows and numeric direct costs. Operating allocation and net are unknown in two existing campaign samples despite executive operating summary being present. This is not accepted as complete numeric feature proof; read-only causal diagnosis is in progress. No customer/order data retained here.
 - Safe recovery under independent review: distinct one-shot verifier receipt directory, retain failed evidence, enforce exact M/A/runtime and owned lease, permit only proven append-only bookkeeping file while retaining all other119 original records and preserving each observed prefix.
+
+
+## Narrow verification continuation reviewed — 2026-11-14 16:09:22 UTC
+
+- Root and independent review approved a distinct verify-only wrapper, SHA256 `f3eef7ec485f47e3c1bd301efd941acb0921d484ba81c93e46a639d333d85a61`, without changing frozen source M, original gate d072 or any old receipt.
+- It requires the exact observed failed `python -c` start receipt and proves the official verifier never started. Its pinned gate file is an explicitly new reference copy outside `/app`; no old source-file path is invented.
+- Every witnessed bookkeeping prefix is retained (48,418;48,590;48,676 bytes), with same regular-file inode/mode, plus the whole new before-verify prefix afterward. All other119 preservation records remain exact; paths count120.
+- All original lineage/runtime/intent, completed prepare/prepublish, exact owned lease, actual UI completion, official three-probe and inactive post-status checks remain. Actual official receipt is saved before postchecks; no failure can trigger an automatic verification rerun.
+- Not yet executed. Next is one official verify attempt through this separate reviewed receipt path. No repeat publish, prepare, prepublish, abort or source modification.
