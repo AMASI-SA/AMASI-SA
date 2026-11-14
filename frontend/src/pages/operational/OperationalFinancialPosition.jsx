@@ -28,40 +28,9 @@ const inactiveMessages = {
     accounting_active: "بدأ النظام المحاسبي؛ التقرير التشغيلي الحالي غير متاح ضمن هذه المرحلة.",
 };
 
-// A saved confirmation authorizes one visible follow-up. Leaving the page
-// consumes it; returning later must not start another refresh automatically.
-function readConfirmationOnce(read, { onData, onError, onPaused }, lane) {
-    const controller = new AbortController();
-    let alive = true, done = false;
-    const pause = () => {
-        if (!alive || done) return;
-        done = true; controller.abort(); onPaused();
-    };
-    const activity = () => { if (!canReadOperationalPage()) pause(); };
-    document.addEventListener("visibilitychange", activity);
-    window.addEventListener("offline", activity);
-    const run = async () => {
-        if (lane.pending) { try { await lane.pending; } catch { /* The previous read owns its error. */ } }
-        if (!alive || done) return;
-        if (!canReadOperationalPage()) { pause(); return; }
-        const operation = read({ signal: controller.signal });
-        lane.pending = operation;
-        try {
-            const result = await operation;
-            if (alive && !done && !controller.signal.aborted && canReadOperationalPage()) { done = true; onData(result); }
-        } catch (error) {
-            if (alive && !done && !controller.signal.aborted) { done = true; onError(error); }
-        } finally {
-            if (lane.pending === operation) lane.pending = null;
-        }
-    };
-    run();
-    return () => {
-        alive = false; done = true; controller.abort();
-        document.removeEventListener("visibilitychange", activity);
-        window.removeEventListener("offline", activity);
-    };
-}
+// The refresh and permission-scoped report share one visible load budget.
+// Retrying authentication or waiting for cancellation cannot extend it.
+const REPORT_LOAD_TIMEOUT_MS = 150000;
 
 function Money({ value, role = "neutral" }) {
     const text = formatPositionMoney(value);
@@ -232,17 +201,23 @@ export default function OperationalFinancialPosition() {
             onError: error => {
                 const status = error?.response?.status;
                 const denied = status === 401 || status === 403;
-                setState({ scope, phase: denied ? "denied" : "error", report: null, error: status === 403
+                const timedOut = error?.code === "OPERATIONAL_VISIBLE_READ_TIMEOUT";
+                setState({ scope, phase: denied ? "denied" : timedOut ? "timed_out" : "error", report: null, error: timedOut
+                    ? "لم يكتمل تحميل التقرير خلال المهلة المحددة. أعد التحديث عند الحاجة."
+                    : status === 403
                     ? "ليست لديك صلاحية عرض التقرير المالي التشغيلي."
                     : status === 401 ? "انتهت الجلسة؛ سجّل الدخول لعرض التقرير."
                         : error?.response?.data?.detail?.message || "تعذر تحميل التقرير الحالي. أعد المحاولة لتحديث البيانات." });
             },
+            onPaused: () => setState({ scope, phase: "paused", report: null,
+                error: "توقفت متابعة تحميل التقرير عند مغادرة الصفحة أو انقطاع الاتصال. أعد التحديث عند الحاجة." }),
         };
-        if (followUp?.scope === scope) return readConfirmationOnce(read, { ...callbacks, onPaused: () => {
-            setState({ scope, phase: "error", report: null,
-                error: "توقف تحديث الأرصدة عند مغادرة الصفحة أو انقطاع الاتصال؛ حدّث التقرير عند الحاجة." });
-        } }, readLane.current);
-        return visibleOperationalRead(read, callbacks, readLane.current);
+        return visibleOperationalRead(read, callbacks, readLane.current, {
+            singleAttemptTimeoutMs: REPORT_LOAD_TIMEOUT_MS,
+            // A saved confirmation grants one immediate follow-up; hiding it
+            // consumes that grant instead of deferring it until the next visit.
+            deferUntilVisible: followUp?.scope !== scope,
+        });
     }, [scope, authLoading, authMissing, revision]);
 
     useEffect(() => { setFilters(emptyFilters()); setCurrency(""); setPrinting(false); }, [scope]);

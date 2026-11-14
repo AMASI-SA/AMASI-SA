@@ -336,6 +336,91 @@ test("loading cannot expose balances or enable print/export before the permissio
     expect(button("تصدير Excel").disabled).toBe(false);
 });
 
+test.each(["refresh", "report"])("hiding during %s ends loading and requires an explicit retry without restarting on return", async stage => {
+    const visibility = jest.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    const pendingApi = stage === "refresh" ? operationalApi.refreshBalances : operationalApi.financialPosition;
+    pendingApi.mockImplementationOnce(({signal}) => new Promise((resolve, reject) => {
+        signal.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")), {once: true});
+    }));
+    await render();
+    const signal = pendingApi.mock.calls[0][0].signal;
+    await act(async () => {
+        visibility.mockReturnValue("hidden"); document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(signal.aborted).toBe(true);
+    expect(host.textContent).toContain("توقفت متابعة تحميل التقرير");
+    expect(host.textContent).not.toContain("جارٍ تحميل التقرير المالي التشغيلي");
+    expect(button("تحديث التقرير").disabled).toBe(false);
+    expect(button("طباعة التقرير").disabled).toBe(true);
+    expect(button("تصدير Excel").disabled).toBe(true);
+    await act(async () => {
+        for (let index = 0; index < 30; index += 1) {
+            visibility.mockReturnValue("visible"); document.dispatchEvent(new Event("visibilitychange"));
+            window.dispatchEvent(new Event("online")); window.dispatchEvent(new Event("focus"));
+        }
+    });
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(1);
+    expect(operationalApi.financialPosition).toHaveBeenCalledTimes(stage === "refresh" ? 0 : 1);
+    expect(host.querySelector('[data-testid="financial-position-content"]')).toBeNull();
+    await click("تحديث التقرير");
+    expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(2);
+    expect(operationalApi.financialPosition).toHaveBeenCalledTimes(stage === "refresh" ? 1 : 2);
+    expect(host.textContent).toContain("مورد التجربة");
+});
+
+test("refresh and report reading share a single deadline and ignore a late report", async () => {
+    jest.useFakeTimers();
+    let refreshDone, reportDone;
+    operationalApi.refreshBalances.mockReturnValueOnce(new Promise(resolve => { refreshDone = resolve; }));
+    operationalApi.financialPosition.mockReturnValueOnce(new Promise(resolve => { reportDone = resolve; }));
+    try {
+        await render();
+        await act(async () => { jest.advanceTimersByTime(80000); refreshDone({status: "refreshed"}); });
+        expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
+        const signal = operationalApi.refreshBalances.mock.calls[0][0].signal;
+        expect(operationalApi.financialPosition.mock.calls[0][0].signal).toBe(signal);
+        await act(async () => jest.advanceTimersByTime(69999));
+        expect(host.textContent).toContain("جارٍ تحميل التقرير المالي التشغيلي");
+        await act(async () => jest.advanceTimersByTime(1));
+        expect(signal.aborted).toBe(true);
+        expect(host.textContent).toContain("لم يكتمل تحميل التقرير خلال المهلة المحددة");
+        expect(host.textContent).not.toContain("جارٍ تحميل التقرير المالي التشغيلي");
+        expect(button("تحديث التقرير").disabled).toBe(false);
+        await act(async () => reportDone(fixture()));
+        expect(host.querySelector('[data-testid="financial-position-content"]')).toBeNull();
+        expect(button("طباعة التقرير").disabled).toBe(true);
+        expect(button("تصدير Excel").disabled).toBe(true);
+        await click("تحديث التقرير");
+        expect(host.textContent).toContain("مورد التجربة");
+    } finally { jest.useRealTimers(); }
+});
+
+test("timed-out physical work keeps its lane while manual retries have a bounded wait", async () => {
+    jest.useFakeTimers();
+    let refreshDone;
+    operationalApi.refreshBalances.mockReturnValueOnce(new Promise(resolve => { refreshDone = resolve; }));
+    try {
+        await render();
+        await act(async () => jest.advanceTimersByTime(150000));
+        expect(host.textContent).toContain("لم يكتمل تحميل التقرير خلال المهلة المحددة");
+        expect(button("تحديث التقرير").disabled).toBe(false);
+        expect(operationalApi.refreshBalances.mock.calls[0][0].signal.aborted).toBe(true);
+        await click("تحديث التقرير");
+        expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(1);
+        await act(async () => jest.advanceTimersByTime(150000));
+        expect(host.textContent).toContain("لم يكتمل تحميل التقرير خلال المهلة المحددة");
+        expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(1);
+        expect(operationalApi.financialPosition).not.toHaveBeenCalled();
+        await act(async () => refreshDone({status: "refreshed"}));
+        expect(operationalApi.financialPosition).not.toHaveBeenCalled();
+        expect(host.querySelector('[data-testid="financial-position-content"]')).toBeNull();
+        await click("تحديث التقرير");
+        expect(operationalApi.refreshBalances).toHaveBeenCalledTimes(2);
+        expect(operationalApi.financialPosition).toHaveBeenCalledTimes(1);
+        expect(host.textContent).toContain("مورد التجربة");
+    } finally { jest.useRealTimers(); }
+});
+
 test("all three sections use server values, exact cents, and explicit missing-source reasons", async () => {
     await render();
     expect(host.textContent).toContain("الأرصدة الفعلية والحسابات");
