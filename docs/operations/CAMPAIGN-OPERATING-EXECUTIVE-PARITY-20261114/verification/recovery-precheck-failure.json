@@ -1,0 +1,43 @@
+{
+  "evidence": "/tmp/mezan-pr1924-original-recovery-wj_jnfqk",
+  "started_at": "2026-11-14T17:40:25.783820Z",
+  "finished_at": "2026-11-14T17:40:26.481163Z",
+  "exit_code": 128,
+  "command": {
+    "argv": [
+      "git",
+      "check-ignore",
+      "-z",
+      "--",
+      "backend/__pycache__/frontend_build_identity.cpython-311.pyc",
+      "backend/__pycache__/release_protocol_v5.cpython-311.pyc"
+    ],
+    "cwd": "/app",
+    "started_at": "2026-11-14T17:40:26.477587Z",
+    "finished_at": "2026-11-14T17:40:26.480789Z",
+    "seconds": 0.0031368930358439684,
+    "exit_code": 128,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "88a0ee28adbccb290edd11de80a0accf81781ed38f603946697dbdd6ca532bb2"
+  },
+  "stderr": "fatal: -z only makes sense with --stdin\n",
+  "hashes": {
+    "started.json": "a87116dbbd6ae504d4a3545a1da74db44d560dbfb099868ddc298d37f5c796bb",
+    "failed.json": "960e15c04f30f59f8aaec74df65de3708f6314248b344e439567fbde58e0d92a",
+    "cache-ignored-files.json": "a58cee215d7e0073b7de301d35d6eef23d735c1024e91cbfbd545eef90459083",
+    "cache-ignored-files.stderr": "88a0ee28adbccb290edd11de80a0accf81781ed38f603946697dbdd6ca532bb2",
+    "before-untracked.json": "afa2bb953b571c446703ef1fdd4cb91d811068a09879800a6a5b72fc7f6c51bf",
+    "before-bookkeeping-prefix-proof.json": "080189dbb1d2bd3c4a171bc7f100c785045a6e31861f799317ba708613acf15e",
+    "09-recovery-guard-on-exit.json": "270c941b71cef2ca1197cf65e191b5a53dedb3e4569bbc653b23277dfd0bc38a"
+  },
+  "absent": [
+    "quarantine-started.json",
+    "quarantine.json",
+    "06-governed-adapter.started.json",
+    "07-package-proof.started.json",
+    "result.json"
+  ],
+  "guard_inactive_under_lock": true,
+  "cache_source_exists": true,
+  "full_before_snapshot_identical_to_original_baseline": true
+}

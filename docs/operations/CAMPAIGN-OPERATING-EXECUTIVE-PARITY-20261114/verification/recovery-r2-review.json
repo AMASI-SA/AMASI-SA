@@ -1,0 +1,26 @@
+{
+  "reviewed_at": "2026-11-14 17:45:49 UTC",
+  "root": "PASS",
+  "independent": "PASS",
+  "runner_sha256": "8dfd20d1febea9fddf923373ad648aeeb332777ba369bf3d8e72f8052a2faa21",
+  "gate_template_sha256": "cf1588e260688bc5cd6f423a7a28f6353bc8dd6935530df32935ef5ca79a8c99",
+  "diff_sha256": "78187932adcd38e211c284a3ad81e90b0b67cfc59b49ad6f58eb40b7620c2dd0",
+  "corrected_command": {
+    "observed_at": "2026-11-14 17:43:52 UTC",
+    "argv": [
+      "git",
+      "check-ignore",
+      "--",
+      "backend/__pycache__/frontend_build_identity.cpython-311.pyc",
+      "backend/__pycache__/release_protocol_v5.cpython-311.pyc"
+    ],
+    "cwd": "/app",
+    "exit_code": 0,
+    "stderr_empty": true,
+    "exact_two_paths": true,
+    "comparison": "os.fsdecode(stdout).splitlines() set equals the two pinned literal paths",
+    "read_only": true,
+    "stdout_order": "frontend_build_identity.cpython-311.pyc then release_protocol_v5.cpython-311.pyc"
+  },
+  "executed": false
+}
