@@ -1,81 +1,290 @@
 {
-  "updated_at": "2026-11-14T02:42:59.890Z",
-  "stage": "implementation_in_progress_prechange_regression_failed_as_expected",
-  "base_J": "4860548f0b032e8e3beca18a4776413cd7e0368b",
-  "base_tree": "9a98153a5b6b69bc6a282613a1b3e354e1fe75b9",
-  "source_branch": "codex/operational-snapshot-load-fix-20261114",
-  "source_committed": false,
-  "production_changed_by_followup": false,
-  "previous_release_verified": {
-    "phase": "verified",
-    "source_git_sha": "a496dd428241b06d2292286de030c70d6241fcf0",
-    "deployment_git_sha": "4860548f0b032e8e3beca18a4776413cd7e0368b",
-    "release_id": "rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e",
-    "checks": 3,
-    "frontend_checked_request_count": 582,
-    "fresh_guard_inactive": true,
-    "actual_exit": 0,
-    "elapsed_seconds": 571.5948063230026,
-    "started_at": "2026-11-14T01:59:31.583329+00:00",
-    "ended_at": "2026-11-14T02:09:03.178132+00:00",
-    "stdout_sha256": "308de6a11d0d5293f6fbdd4b0364d063c63da9dd21faa33ed77aa0e40800d7be",
-    "prefix": "/tmp/mezan-pr1915-original-qqo8fwy9/28-verify"
-  },
-  "live_diagnostic": {
-    "started_at": "2026-11-14T02:30:17.361Z",
-    "manual_refresh_clicks": 1,
-    "visibility_confirmed": true,
-    "reason": "Production runtime logs became accessible but only retain100 visible lines. Existing attempt had rotated out. One bounded visible reproduction will capture the actual cancelled stage.",
-    "logs_target_at": "2026-11-14T02:31:47Z",
-    "financial_mutations": "No confirmations, settlements, or provider writes requested by the operator.",
-    "log_capture_at": "2026-11-14T02:31:52.895Z",
-    "source": "Current effdd19 production runtime Logs UI, most recent100lines",
-    "log_window": [
-      "2026-11-14T02:30:38.108Z",
-      "2026-11-14T02:31:47.405Z"
-    ],
-    "stages": [
+  "stage": "source_A_and_candidate_verified_ready_for_intent_only_B",
+  "updated_at": "2026-11-14T03:01:42.945Z",
+  "repo": "AMASI-SA/AMASI-SA",
+  "pr": 1916,
+  "task_branch": "codex/operational-snapshot-load-fix-20261114",
+  "handoff_branch": "codex/operational-snapshot-load-handoff-20261114",
+  "source": {
+    "J": "4860548f0b032e8e3beca18a4776413cd7e0368b",
+    "Jtree": "9a98153a5b6b69bc6a282613a1b3e354e1fe75b9",
+    "source_branch": "codex/operational-snapshot-load-fix-20261114",
+    "worktree": "/workspace/scratch/019fa8a18b3d/mezan-snapshot-load-fix",
+    "live_diagnostic": {
+      "started_at": "2026-11-14T02:30:17.361Z",
+      "manual_refresh_clicks": 1,
+      "visibility_confirmed": true,
+      "reason": "Production runtime logs became accessible but only retain100 visible lines. Existing attempt had rotated out. One bounded visible reproduction will capture the actual cancelled stage.",
+      "logs_target_at": "2026-11-14T02:31:47Z",
+      "financial_mutations": "No confirmations, settlements, or provider writes requested by the operator.",
+      "log_capture_at": "2026-11-14T02:31:52.895Z",
+      "source": "Current effdd19 production runtime Logs UI, most recent100lines",
+      "log_window": [
+        "2026-11-14T02:30:38.108Z",
+        "2026-11-14T02:31:47.405Z"
+      ],
+      "stages": [
+        {
+          "timestamp": "2026-11-14T02:30:44.060Z",
+          "stage": "native_evidence",
+          "duration_ms": 23437.488,
+          "outcome": "complete"
+        },
+        {
+          "timestamp": "2026-11-14T02:31:43.920Z",
+          "stage": "snapshot_load",
+          "duration_ms": 59693.907,
+          "outcome": "cancelled"
+        },
+        {
+          "timestamp": "2026-11-14T02:31:43.921Z",
+          "stage": "aggregate",
+          "duration_ms": 59860.253,
+          "outcome": "cancelled"
+        }
+      ],
+      "request": {
+        "timestamp": "2026-11-14T02:31:43.925Z",
+        "method": "POST",
+        "route": "/api/operational-balances/refresh",
+        "status": 408,
+        "duration_ms": 85793.467,
+        "outcome": "4xx"
+      },
+      "post_capture_visibility": "visible",
+      "as_of_text": "12/11/2026, 01:07",
+      "refresh_warning": "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة",
+      "conclusion": "Snapshot loading was cancelled by the total request deadline before source collection or reconciliation."
+    },
+    "A": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+    "Atree": "92ab66ab75d52285e34131f3c4ca60a6a5f8ecc5",
+    "source_files": [
       {
-        "timestamp": "2026-11-14T02:30:44.060Z",
-        "stage": "native_evidence",
-        "duration_ms": 23437.488,
-        "outcome": "complete"
+        "path": "backend/operational_balance_archive.py",
+        "bytes": 14821,
+        "sha256": "d382ab270474b68700f1672afd2871bb6d7eb0392dad539771536a90fe5082ce"
       },
       {
-        "timestamp": "2026-11-14T02:31:43.920Z",
-        "stage": "snapshot_load",
-        "duration_ms": 59693.907,
-        "outcome": "cancelled"
+        "path": "backend/tests/test_operational_balance_archive_visible_batches.py",
+        "bytes": 19394,
+        "sha256": "d0625c6477b6dae55d1d594bfbb66d95e08f47c97804320528af36f8cdf13d2d"
       },
       {
-        "timestamp": "2026-11-14T02:31:43.921Z",
-        "stage": "aggregate",
-        "duration_ms": 59860.253,
-        "outcome": "cancelled"
+        "path": "docs/operations/OPERATIONAL-SNAPSHOT-LOAD-REPAIR-20261114/STATUS.md",
+        "bytes": 10146,
+        "sha256": "cd459cfaa28fbb353b25a4b7c329c67df213ff0995a4f7592b598a6a5227641e"
       }
     ],
-    "request": {
-      "timestamp": "2026-11-14T02:31:43.925Z",
-      "method": "POST",
-      "route": "/api/operational-balances/refresh",
-      "status": 408,
-      "duration_ms": 85793.467,
-      "outcome": "4xx"
+    "sourceFrozenAt": "2026-11-14T02:50:23.902Z",
+    "pr": 1916,
+    "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1916",
+    "pr_body": "## Problem\nThe verified PR1915 release still falls back to the old financial snapshot. A controlled visible production attempt localized the85-second timeout to snapshot loading: native evidence completed in23.437s, then snapshot_load was cancelled after59.694s before source collection or reconciliation began. The snapshot reader revalidates authorization and renews its lease before and after every immutable audit page, amplifying metadata round trips as history grows.\n\n## Change\nFor the exact active visible-demand database and owner, group fresh authorization/lease gates around bounded groups of at most8 pages. Each page still uses its exact owner/_id find_one and is fully validated before the next read. Per-page workers remain request-owned, cancellable and joined. Ordinary readers and strict transaction/session wrappers retain their current behavior. The complete manifest, hashes, ordering, history and tail are retained; CAS and the existing85-second deadline stay intact.\n\nThe source change is17 added and2 removed lines in the archive reader, plus43 focused regression cases and the task status document. This does not include the separately measured reconciliation CPU optimization; production did not reach that phase in the captured attempt.\n\n## Verification\n- Pre-change regression fails only at the intended guard budget:136 checkpoints versus24 for64 synthetic archive pages, after full-state parity and64 exact page reads pass.\n-43 new cases pass; integrated adjacent selection106 passed (exit0). Independent review79 passed, including all43 new cases, with no blocking finding. These selections overlap.\n- Tests cover complete BSON/history parity, first corrupt page, manifest and owner/hash/count checks, permission revocation, lost lease/successor preservation, I/O and worker cancellation, deadline behavior, fresh revision/manifest on CAS retry, and actual strict session wrappers.\n- Independent exact-J negative control fails the same136-versus24 bound. Source/test hashes stayed unchanged during review; diff-check passed.\n- Three paired64-page synthetic runs with3ms simulated database-operation latency: median2399.883ms →665.631ms,136→24 checkpoints/renewals,64→64 page reads; full-result equality, unchanged inputs, zero nonlease writes and zero orphan tasks. This is not a measured production improvement.\n\n## Frozen source\n- J: `4860548f0b032e8e3beca18a4776413cd7e0368b`\n- A: `ff9f8b69b980acfda8dffd210feaf72e17e6727a`\n- A tree: `92ab66ab75d52285e34131f3c4ca60a6a5f8ecc5`\n- Archive source SHA256: `d382ab270474b68700f1672afd2871bb6d7eb0392dad539771536a90fe5082ce`\n- Test SHA256: `d0625c6477b6dae55d1d594bfbb66d95e08f47c97804320528af36f8cdf13d2d`\n- A inherits the existing tracked intent unchanged. Exact-A candidate artifact and intent-only B are pending; preserve reviewed source ancestry through a normal merge.\n\n## Release status\nSource A is frozen for CI. This follow-up is not merged or published. Required next gates: exact-A CI including real Mongo, exact reviewed intent artifact/loader, intent-only B and its full checks, normal merge with identical B/M tree, actual original-operator build and preservation proof, own prepare/final prepublish, one Publish, explicit newer completion, official three-probe verification/normal lease closure, then visible fresh-as_of acceptance and its stage log.\n\n[Source status](https://github.com/AMASI-SA/AMASI-SA/blob/ff9f8b69b980acfda8dffd210feaf72e17e6727a/docs/operations/OPERATIONAL-SNAPSHOT-LOAD-REPAIR-20261114/STATUS.md). Prior live-stage evidence: [PR1915 continuation](https://github.com/AMASI-SA/AMASI-SA/pull/1915#issuecomment-6870287239). Documentation-only handoff branch: `codex/operational-snapshot-load-handoff-20261114`; never merge or deploy that branch.",
+    "R": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
+    "intent_sha256": "9c4374110d7cb7ad4107acd968b419982cbecd5be934c34ebe80ebe30cd2dd47",
+    "intent_bytes": 1301645,
+    "candidate_artifact": 14094887136,
+    "candidate_run": 43548544254,
+    "candidate_zip_sha256": "292052e41d49917462181ee1c09d88f966cf83f7754a585a5bfefce94bf33a44",
+    "candidate_validation": {
+      "actual_exit": 0,
+      "problem": null,
+      "started_at": "2026-11-14T02:56:19.557844+00:00",
+      "ended_at": "2026-11-14T02:56:23.113604+00:00",
+      "elapsed_seconds": 3.55576994700823,
+      "stdout_sha256": "235b4c23dae14650881390ef275b47cf240be41385d88055a0c8afd3e7b3174b",
+      "stderr_sha256": "eef9df8ca834a592e23c4601f18b894ff4c2edeb5ba2f6f1b1190f22ac64b6c5",
+      "stderr_bytes": 181,
+      "validated": true,
+      "source_git_sha": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+      "source_base_git_sha": "4860548f0b032e8e3beca18a4776413cd7e0368b",
+      "release_id": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
+      "frontend_artifact_tree_sha256": "9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6"
     },
-    "post_capture_visibility": "visible",
-    "as_of_text": "12/11/2026, 01:07",
-    "refresh_warning": "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة",
-    "conclusion": "Snapshot loading was cancelled by the total request deadline before source collection or reconciliation."
+    "A_checks_summary": {
+      "total": 27,
+      "success": 21,
+      "expected_skipped": 6,
+      "all_terminal": true,
+      "read_at": "2026-11-14T03:01:12Z"
+    },
+    "exact_A_CI": {
+      "artifacts": {
+        "operational": {
+          "artifact_id": 14095252537,
+          "artifact_name": "operational-backend-results",
+          "bad_case_counts": {
+            "error": 0,
+            "failure": 0,
+            "skipped": 0
+          },
+          "case_names": [
+            "test_archive_structure_and_completeness_checks_remain_mandatory[duplicate]",
+            "test_archive_structure_and_completeness_checks_remain_mandatory[manifest_hash]",
+            "test_archive_structure_and_completeness_checks_remain_mandatory[ref_shape]",
+            "test_archive_structure_and_completeness_checks_remain_mandatory[ref_type]",
+            "test_archive_structure_and_completeness_checks_remain_mandatory[tail]",
+            "test_archive_structure_and_completeness_checks_remain_mandatory[total]",
+            "test_cas_retry_reloads_new_revision_manifest_and_complete_history",
+            "test_disconnect_cancels_page_io_without_reading_more_or_exposing_state[5]",
+            "test_disconnect_cancels_page_io_without_reading_more_or_exposing_state[9]",
+            "test_disconnect_joins_page_validation_worker_before_returning",
+            "test_fresh_boundary_authorization_blocks_revoked_reader_before_more_io_or_output[16]",
+            "test_fresh_boundary_authorization_blocks_revoked_reader_before_more_io_or_output[8]",
+            "test_fresh_boundary_authorization_blocks_revoked_reader_before_more_io_or_output[9]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[content-0]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[content-8]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[count-0]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[count-8]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[id-0]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[id-8]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[missing-0]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[missing-8]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[owner-0]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[owner-8]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[ref_count-0]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[ref_count-8]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[start-0]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[start-8]",
+            "test_lost_lease_at_batch_boundary_prevents_more_reads_and_preserves_successor",
+            "test_ordinary_and_strict_session_readers_keep_exact_sequential_capabilities[ordinary]",
+            "test_ordinary_and_strict_session_readers_keep_exact_sequential_capabilities[review]",
+            "test_ordinary_and_strict_session_readers_keep_exact_sequential_capabilities[snapshot]",
+            "test_request_deadline_cancels_inflight_page_and_keeps_saved_snapshot",
+            "test_unrelated_demand_context_retains_per_page_authorization[database]",
+            "test_unrelated_demand_context_retains_per_page_authorization[owner]",
+            "test_visible_batches_preserve_complete_bson_history_tail_and_manifest_order[False-16]",
+            "test_visible_batches_preserve_complete_bson_history_tail_and_manifest_order[False-1]",
+            "test_visible_batches_preserve_complete_bson_history_tail_and_manifest_order[False-8]",
+            "test_visible_batches_preserve_complete_bson_history_tail_and_manifest_order[False-9]",
+            "test_visible_batches_preserve_complete_bson_history_tail_and_manifest_order[True-16]",
+            "test_visible_batches_preserve_complete_bson_history_tail_and_manifest_order[True-1]",
+            "test_visible_batches_preserve_complete_bson_history_tail_and_manifest_order[True-8]",
+            "test_visible_batches_preserve_complete_bson_history_tail_and_manifest_order[True-9]",
+            "test_visible_snapshot_load_bounds_authorization_round_trips_without_losing_history"
+          ],
+          "exact_new_names_match": true,
+          "job_id": 132305409992,
+          "junit_tests_header": 4073,
+          "new_testcase_count": 43,
+          "pytest_seconds": 207.54,
+          "recorded_identity": {
+            "method": "artifact embedded source SHA and tree",
+            "values": {
+              "operational-source-sha.txt": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+              "operational-source-tree.txt": "92ab66ab75d52285e34131f3c4ca60a6a5f8ecc5"
+            }
+          },
+          "run_id": 43548544393,
+          "separate_shipping_passed": 16,
+          "separate_shipping_subtests_passed": 18,
+          "testcase_nodes": 4073,
+          "xml_member": "operational-backend.xml",
+          "xml_sha256": "1a86a596c1606c51dea3e3c86efa7ce0c73c9ef06d3e6b214a3bb3b72da41eb2",
+          "zip_sha256": "7fd4fdb8dc4cc56093ac0181d5a518d4d522c46c0e7f3bd7a142a43b8f418076"
+        },
+        "stock": {
+          "artifact_id": 14094578434,
+          "artifact_name": "eligibility-backend-ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+          "bad_case_counts": {
+            "error": 0,
+            "failure": 0,
+            "skipped": 0
+          },
+          "case_names": [
+            "test_archive_structure_and_completeness_checks_remain_mandatory[duplicate]",
+            "test_archive_structure_and_completeness_checks_remain_mandatory[manifest_hash]",
+            "test_archive_structure_and_completeness_checks_remain_mandatory[ref_shape]",
+            "test_archive_structure_and_completeness_checks_remain_mandatory[ref_type]",
+            "test_archive_structure_and_completeness_checks_remain_mandatory[tail]",
+            "test_archive_structure_and_completeness_checks_remain_mandatory[total]",
+            "test_cas_retry_reloads_new_revision_manifest_and_complete_history",
+            "test_disconnect_cancels_page_io_without_reading_more_or_exposing_state[5]",
+            "test_disconnect_cancels_page_io_without_reading_more_or_exposing_state[9]",
+            "test_disconnect_joins_page_validation_worker_before_returning",
+            "test_fresh_boundary_authorization_blocks_revoked_reader_before_more_io_or_output[16]",
+            "test_fresh_boundary_authorization_blocks_revoked_reader_before_more_io_or_output[8]",
+            "test_fresh_boundary_authorization_blocks_revoked_reader_before_more_io_or_output[9]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[content-0]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[content-8]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[count-0]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[count-8]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[id-0]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[id-8]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[missing-0]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[missing-8]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[owner-0]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[owner-8]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[ref_count-0]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[ref_count-8]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[start-0]",
+            "test_invalid_page_stops_before_the_next_read_and_before_returning_state[start-8]",
+            "test_lost_lease_at_batch_boundary_prevents_more_reads_and_preserves_successor",
+            "test_ordinary_and_strict_session_readers_keep_exact_sequential_capabilities[ordinary]",
+            "test_ordinary_and_strict_session_readers_keep_exact_sequential_capabilities[review]",
+            "test_ordinary_and_strict_session_readers_keep_exact_sequential_capabilities[snapshot]",
+            "test_request_deadline_cancels_inflight_page_and_keeps_saved_snapshot",
+            "test_unrelated_demand_context_retains_per_page_authorization[database]",
+            "test_unrelated_demand_context_retains_per_page_authorization[owner]",
+            "test_visible_batches_preserve_complete_bson_history_tail_and_manifest_order[False-16]",
+            "test_visible_batches_preserve_complete_bson_history_tail_and_manifest_order[False-1]",
+            "test_visible_batches_preserve_complete_bson_history_tail_and_manifest_order[False-8]",
+            "test_visible_batches_preserve_complete_bson_history_tail_and_manifest_order[False-9]",
+            "test_visible_batches_preserve_complete_bson_history_tail_and_manifest_order[True-16]",
+            "test_visible_batches_preserve_complete_bson_history_tail_and_manifest_order[True-1]",
+            "test_visible_batches_preserve_complete_bson_history_tail_and_manifest_order[True-8]",
+            "test_visible_batches_preserve_complete_bson_history_tail_and_manifest_order[True-9]",
+            "test_visible_snapshot_load_bounds_authorization_round_trips_without_losing_history"
+          ],
+          "exact_new_names_match": true,
+          "header_minus_testcase_nodes": 7,
+          "job_id": 132305409557,
+          "junit_tests_header": 3889,
+          "new_testcase_count": 43,
+          "passed_subtests": 7,
+          "pytest_seconds": 278.32,
+          "recorded_identity": {
+            "method": "official artifact workflow_run head SHA plus exact-source job log SHA and tree",
+            "sha": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+            "tree": "92ab66ab75d52285e34131f3c4ca60a6a5f8ecc5"
+          },
+          "run_id": 43548544268,
+          "testcase_nodes": 3882,
+          "xml_member": "eligibility-backend.xml",
+          "xml_sha256": "1efa04fc8d2f22aaaf031181bc0509dd9ebae9fded589e627cdf925ffebe3b49",
+          "zip_sha256": "7cbda76cd032e742a3b30bfd8636df3bf81ce1be6c245c17603d79e8e9137ef3"
+        }
+      },
+      "expected_case_count": 43,
+      "expected_cases_json_sha256": "833b9f6b55289bd1db0edf49164b7ebf666941dc8297a5a401a290bd68c52278",
+      "limitations": [
+        "CI confirms the exact source and test semantics in isolated fixtures; fresh production financial refresh and new as_of remain release acceptance requirements.",
+        "Stock JUnit tests header includes seven passed subtests; 3882 explicit testcase nodes, not 3889 separate test functions."
+      ],
+      "local_focused_junit_sha256": "ff237f014466b3a37c54654640b204caf322f814091d600fe454f5928a191e82",
+      "source_hashes": {
+        "backend/operational_balance_archive.py": "d382ab270474b68700f1672afd2871bb6d7eb0392dad539771536a90fe5082ce",
+        "backend/tests/test_operational_balance_archive_visible_batches.py": "d0625c6477b6dae55d1d594bfbb66d95e08f47c97804320528af36f8cdf13d2d"
+      },
+      "source_parent": "4860548f0b032e8e3beca18a4776413cd7e0368b",
+      "source_sha": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+      "source_tree": "92ab66ab75d52285e34131f3c4ca60a6a5f8ecc5",
+      "status": "PASS"
+    }
   },
-  "red_test": {
-    "result": "failed as expected on guard amplification only",
-    "actual_exit": 1,
-    "failed": 1,
-    "elapsed_seconds": 1.21,
-    "checkpoint_count": 136,
-    "target_max": 24,
-    "snapshot_sha256": "57e27c41552496aef327d518f6fd0beb44bbe51ac1225363b4e5a2a83e3fbe31",
-    "snapshot_bytes": 16267
-  },
-  "next_safe_action": "Finish confined visible archive guard batching, focused tests, independent review; do not change or repeat existing publication."
+  "production_changed_by_this_followup": false,
+  "blockers": [],
+  "next_actions": [
+    "Freeze exact reviewed intent as B, only release/release-intent-v5.json changes",
+    "Validate B and run full CI including actual Node20/24 adapters",
+    "Normal merge preserving source ancestry; verify M tree equals B",
+    "Build in original operator preserving unrelated work; own prepare and final prepublish",
+    "Publish once; explicit completion; official verification and normal lease closure",
+    "Visible financial refresh must advance as_of without warning; capture stage evidence"
+  ],
+  "historical_prechange_test": {
+    "observed_red_source_sha256": "b1858f3b050ba46925916e34f59c6b941f93f032e3be2f9313a07bde2b33eba4",
+    "checkpoint_wip_sha256": "57e27c41552496aef327d518f6fd0beb44bbe51ac1225363b4e5a2a83e3fbe31",
+    "final_frozen_test_sha256": "d0625c6477b6dae55d1d594bfbb66d95e08f47c97804320528af36f8cdf13d2d",
+    "clarification": "The earlier prechange_regression_test.py checkpoint was an intermediate expanding WIP snapshot, not the exact executed RED file. Final source A and independent exact-J negative control are authoritative."
+  }
 }

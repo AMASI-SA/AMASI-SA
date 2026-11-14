@@ -1,0 +1,15 @@
+{
+  "actual_exit": 0,
+  "problem": null,
+  "started_at": "2026-11-14T02:56:19.557844+00:00",
+  "ended_at": "2026-11-14T02:56:23.113604+00:00",
+  "elapsed_seconds": 3.55576994700823,
+  "stdout_sha256": "235b4c23dae14650881390ef275b47cf240be41385d88055a0c8afd3e7b3174b",
+  "stderr_sha256": "eef9df8ca834a592e23c4601f18b894ff4c2edeb5ba2f6f1b1190f22ac64b6c5",
+  "stderr_bytes": 181,
+  "validated": true,
+  "source_git_sha": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+  "source_base_git_sha": "4860548f0b032e8e3beca18a4776413cd7e0368b",
+  "release_id": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
+  "frontend_artifact_tree_sha256": "9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6"
+}

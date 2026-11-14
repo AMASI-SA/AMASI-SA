@@ -1,0 +1,28 @@
+{
+  "base_git_sha": "4860548f0b032e8e3beca18a4776413cd7e0368b",
+  "worktree": "/workspace/scratch/019fa8a18b3d/mezan-snapshot-load-fix",
+  "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend:backend/tests /workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python -B /workspace/scratch/019fa8a18b3d/snapshot-load-benchmark.py",
+  "exit_code": 0,
+  "synthetic_pages": 64,
+  "simulated_database_operation_ms": 3,
+  "immutable_base": {
+    "snapshot_ms": [2469.165, 2395.412, 2399.883],
+    "median_snapshot_ms": 2399.883,
+    "snapshot_verify_calls": 136,
+    "snapshot_lease_renewals": 136,
+    "audit_page_reads": 64
+  },
+  "current_source": {
+    "snapshot_ms": [610.852, 665.631, 673.341],
+    "median_snapshot_ms": 665.631,
+    "snapshot_verify_calls": 24,
+    "snapshot_lease_renewals": 24,
+    "audit_page_reads": 64
+  },
+  "simulated_speedup": 3.605,
+  "all_runs_full_result_equal": true,
+  "all_runs_input_unchanged": true,
+  "all_runs_nonlease_writes": 0,
+  "all_runs_orphan_tasks": 0,
+  "production_latency_or_audit_size_measured": false
+}
