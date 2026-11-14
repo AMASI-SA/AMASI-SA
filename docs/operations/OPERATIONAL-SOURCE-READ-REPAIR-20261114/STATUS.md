@@ -1,3 +1,25 @@
+# Latest checkpoint — normal merge complete
+
+Updated 2026-11-14T01:29:03.843Z. **PR #1915 is merged; this root fix is not yet published.** This handoff branch is documentation only and must never be merged or deployed.
+
+- M: `4860548f0b032e8e3beca18a4776413cd7e0368b`
+- Exact M tree: `9a98153a5b6b69bc6a282613a1b3e354e1fe75b9`, identical to frozen B.
+- Ordered parents: `d6f246b4d3b14fd56ef2cbc574b99f08bb7d6fc1`, `30dc66ec09b371a6b990adbd167162254bfd77c6`.
+- Source A: `a496dd428241b06d2292286de030c70d6241fcf0`; runtime R: `rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e`.
+- All exact-B gates passed: 29 completed checks = 23 success + 6 expected skips; 11 successful workflows plus the branch-inapplicable TikTok workflow skip. No pending/failure/neutral.
+- Both actual adapter rehearsals passed in readiness run 43539812353: Node20 job132277822540 and Node24 job132277822535. They both verified A/R, deterministic artifact tree `9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6`, package boundaries and runtime JSON routes.
+- Official tracked-B loader and Git verifier both exited 0 in a clean full clone. A→B diff is only the release intent; exact bytes/hash were unchanged.
+- Exact-B Operational Backend reran 4,030 cases successfully plus 16 shipping cases/18 subtests. Artifact14092095882 SHA-256 `311ad41f516129560f69ad6d21c76be78d8c0b8b643f7df2ab13f19836b191f0`.
+- Push CI on M is running: readiness43540642587, security43540642589, CodeQL43540642578. Operational/Stock workflow triggers do not run on this production push; their evidence is exact-B CI on the identical tree.
+
+Production **source branch changed: yes**, by normal merge. Production **running root-fix deployment changed: no**. The browser/execution environment has disconnected and recovered twice; current browser access is being checked. The latest completed live guard read was active for another owner, `codex-assembly-image-20261114`, prepared_at00:57:10.603194UTC. No PR1915 /app mutation, lease creation, adapter rehearsal, Publish, or live financial recalculation has occurred. The other owner's lease must close normally; it must not be cleared, reused, or verified here.
+
+Next safe step: complete M CI, obtain fresh official inactive guard on the original operator, preserve its current tracked/untracked state, fast-forward exact M, run the actual canonical-origin package adapter outside GitHub, then own prepare/prepublish, one Publish, explicit newer platform completion, official three-probe verification and inactive status. Finally verify a visible page-owned financial calculation advances as_of. Never equate merge/deployment with resolution of the stale-balance symptom.
+
+---
+
+# Earlier checkpoint history
+
 # Current root-fix release checkpoint
 
 Updated 2026-11-14T01:22:13.608Z. This documentation-only branch must never be merged or published; source A and intent-only B remain frozen on PR #1915.
