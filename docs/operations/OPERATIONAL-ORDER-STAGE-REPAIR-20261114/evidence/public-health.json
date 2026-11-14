@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "release": {
+    "backend_runtime_source_verified": true,
+    "boot_started_at": "2026-11-14T06:43:26.598544+00:00",
+    "branch": "hotfix/prod-snap-meta-final",
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true,
+    "identity_schema_version": 2,
+    "protocol_version": 5,
+    "release_control_source_bound": true,
+    "release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+    "source_base_git_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+    "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+    "verified_identity_available": true
+  },
+  "observed_at": "2026-11-14T06:46:23.538Z"
+}

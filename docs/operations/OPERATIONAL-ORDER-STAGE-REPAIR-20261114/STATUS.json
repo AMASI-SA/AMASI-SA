@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-ORDER-STAGE-REPAIR-20261114",
-  "stage": "platform_publishing",
+  "stage": "new_platform_complete_official_verify_running",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "2db0edc9edb315026eee4b6edd43b420a569c37d",
@@ -328,7 +328,7 @@
         "sha": "9f96b7ac42ac3870d8af179e779a302632cdb19a"
       }
     ],
-    "pr_body": "## Problem\nThe verified PR1917 deployment still returns the old financial snapshot. Its single visible attempt cancelled in `source_orders` after 61.803 seconds and returned HTTP 408. Four independent synthetic measurements reproduce repeated whole-cohort work inside that stage. They do not establish each helper's production share.\n\n## Change\nBuild attempt-local indexes for delivery assignments, courier hold history and cost catalogues through the existing joined preparation worker. Add an owned diagnostic-membership index while preserving full-dictionary equality and metadata enrichment. Preserve original ordering, duplicate and identity semantics, lazy Decimal evaluation, fallback errors, and unchanged default callers. Every collector invocation and CAS retry rebuilds its indexes.\n\nAdd fixed timing labels for index preparation and the existing bank-catalogue read. No additional database read, financial write, cross-request cache, cap change, deadline extension or authorization change.\n\n## Verification\n- Final combined local selection: **1,467 passed, actual exit 0**, with the exact source manifest unchanged during the run. Four real-Mongo cases are deferred to exact-A CI because the local replica set is unavailable; the initial connection-refused result is retained.\n- Focused suites: assignment130, cost113, hold177, diagnostics21; these overlap the combined selection.\n- Negative controls for assignment, cost and diagnostics fail the intended repeated-work assertion when indexing is disabled. Construction is included in growth measurements.\n- Independent reviews cover collector/reconcile/report parity, duplicate/order and first-error behavior, immutable inputs, Decimal flags, new attempts, cancellation, worker joining and lease cleanup.\n- Exact-source CI must execute all four new suites, four additional timing cases and all four deferred Mongo cases in both official backend XML artifacts.\n\n## Exact-A CI and candidate\nAll11 exact-A workflows passed (21success checks,6 expected skips). Official Operational Balance XML: **4,647 passing cases**. Official Stock Eligibility XML: **4,456 passing cases plus7passing subtests**. Both include all449 specifically reviewed cases, all17source-timing cases and all4locally deferred Mongo cases, with no failure/error/skip. Independent candidate review re-derived the full backend/control manifests from Git A/J and verified all4new module records. Official candidate loader returned actualexit0.\n\n## Frozen source\nJ: `2db0edc9edb315026eee4b6edd43b420a569c37d`  \nA: `d70b42cda3d70a7f07c78c3efc5fde8331fdc877`  \nA tree: `38b0dec1fc53cb9bd1ba36236bcc730f0e1d0367`\n\n## Frozen deployment intent\nB: `9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9`  \nB tree: `9de141756a4c5dcfa8d1d4dfb6513178c406ac8e`  \nRuntime: `rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f`\n\nB is the direct child of A and changes only `release/release-intent-v5.json`, using exact reviewed artifact bytes (Git blob `542c547cb679e78d5050aa537bed370595f353f0`).\n\n## Remaining gates\nExact-B checks, normal merge, the original operator's governed build, guarded publish, official production verification and a new visible report **as_of**. Production is unchanged by this follow-up so far; live financial acceptance is not yet established.\n\n[Handoff and evidence](https://github.com/AMASI-SA/AMASI-SA/blob/codex/operational-order-stage-handoff-20261114/docs/operations/OPERATIONAL-ORDER-STAGE-REPAIR-20261114/STATUS.md). The handoff branch is documentation only and must not be merged or deployed. Original /app120 pending files and the unsaved editor buffer remain preserved.",
+    "pr_body": "## Problem\nThe verified PR1917 deployment still returns the old financial snapshot. Its single visible attempt cancelled in `source_orders` after 61.803 seconds and returned HTTP 408. Four independent synthetic measurements reproduce repeated whole-cohort work inside that stage. They do not establish each helper's production share.\n\n## Change\nBuild attempt-local indexes for delivery assignments, courier hold history and cost catalogues through the existing joined preparation worker. Add an owned diagnostic-membership index while preserving full-dictionary equality and metadata enrichment. Preserve original ordering, duplicate and identity semantics, lazy Decimal evaluation, fallback errors, and unchanged default callers. Every collector invocation and CAS retry rebuilds its indexes.\n\nAdd fixed timing labels for index preparation and the existing bank-catalogue read. No additional database read, financial write, cross-request cache, cap change, deadline extension or authorization change.\n\n## Verification\n- Final combined local selection: **1,467 passed, actual exit 0**, with the exact source manifest unchanged during the run. Four real-Mongo cases are deferred to exact-A CI because the local replica set is unavailable; the initial connection-refused result is retained.\n- Focused suites: assignment130, cost113, hold177, diagnostics21; these overlap the combined selection.\n- Negative controls for assignment, cost and diagnostics fail the intended repeated-work assertion when indexing is disabled. Construction is included in growth measurements.\n- Independent reviews cover collector/reconcile/report parity, duplicate/order and first-error behavior, immutable inputs, Decimal flags, new attempts, cancellation, worker joining and lease cleanup.\n- Exact-source CI must execute all four new suites, four additional timing cases and all four deferred Mongo cases in both official backend XML artifacts.\n\n## Exact-A CI and candidate\nAll11 exact-A workflows passed (21success checks,6 expected skips). Official Operational Balance XML: **4,647 passing cases**. Official Stock Eligibility XML: **4,456 passing cases plus7passing subtests**. Both include all449 specifically reviewed cases, all17source-timing cases and all4locally deferred Mongo cases, with no failure/error/skip. Independent candidate review re-derived the full backend/control manifests from Git A/J and verified all4new module records. Official candidate loader returned actualexit0.\n\n## Frozen source\nJ: `2db0edc9edb315026eee4b6edd43b420a569c37d`  \nA: `d70b42cda3d70a7f07c78c3efc5fde8331fdc877`  \nA tree: `38b0dec1fc53cb9bd1ba36236bcc730f0e1d0367`\n\n## Frozen deployment intent\nB: `9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9`  \nB tree: `9de141756a4c5dcfa8d1d4dfb6513178c406ac8e`  \nRuntime: `rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f`\n\nB is the direct child of A and changes only `release/release-intent-v5.json`, using exact reviewed artifact bytes (Git blob `542c547cb679e78d5050aa537bed370595f353f0`).\n\n## Remaining gates\nExact-B checks, normal merge, the original operator's governed build, guarded publish, official production verification and a new visible report **as_of**. Production is unchanged by this follow-up so far; live financial acceptance is not yet established.\n\n[Handoff and evidence](https://github.com/AMASI-SA/AMASI-SA/blob/codex/operational-order-stage-handoff-20261114/docs/operations/OPERATIONAL-ORDER-STAGE-REPAIR-20261114/STATUS.md). The handoff branch is documentation only and must not be merged or deployed. Original /app120 pending files and the unsaved editor buffer remain preserved.\n\n## Deployment progress\nNormal-merged as `23cc06da003c18c0f3fc6c2e749aad1326666166` with parents J/B and tree exactly B. All3 exact-M push workflows and11checks passed. Original `/app/frontend yarn build` passed with actualexit0 in71.919seconds; all120pending files stayed byte-identical and the unsaved editor buffer was preserved. Officialprepare/prepublish passed. Authorized free manual publication started2026-11-14 06:33:51UTC; the platform currently shows Publishing. Platform completion, officialverification and freshfinancialas_of remain pending.\n",
     "pr": 1918,
     "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1918",
     "validation": {
@@ -780,9 +780,58 @@
           }
         ]
       }
+    },
+    "platform": {
+      "latest_events": [
+        {
+          "date": "Nov 14, 06:30 AM",
+          "event": "Deployment finished"
+        },
+        {
+          "date": "Nov 14, 08:09 AM",
+          "event": "Deployment finished"
+        },
+        {
+          "date": "Nov 14, 09:44 AM",
+          "event": "Deployment finished"
+        }
+      ],
+      "log_buttons": [
+        "overview-panel-view-logs-btn-279b7a3c-11fa-4f20-a6fe-7bad268127b2"
+      ],
+      "publish_label": "Republish",
+      "observed_at": "2026-11-14T06:44:36.254Z",
+      "platform_id": "279b7a3c-11fa-4f20-a6fe-7bad268127b2"
+    },
+    "verificationStart": {
+      "observed_start": "2026-11-14T06:44:36.257Z",
+      "evidence_dir": "/tmp/mezan-pr1918-original-6jyavqt4",
+      "source_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+      "deployment_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+      "actor": "codex-operational-order-stage-rootfix-1918",
+      "platform": "279b7a3c-11fa-4f20-a6fe-7bad268127b2"
+    },
+    "publicHealth": {
+      "ok": true,
+      "release": {
+        "backend_runtime_source_verified": true,
+        "boot_started_at": "2026-11-14T06:43:26.598544+00:00",
+        "branch": "hotfix/prod-snap-meta-final",
+        "critical_file_hashes_match": true,
+        "frontend_build_verified": true,
+        "identity_schema_version": 2,
+        "protocol_version": 5,
+        "release_control_source_bound": true,
+        "release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+        "source_base_git_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+        "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+        "verified_identity_available": true
+      },
+      "observed_at": "2026-11-14T06:46:23.538Z"
     }
   },
-  "production_changed_by_this_followup": "Manual platform publication in progress from original/app M.",
+  "production_changed_by_this_followup": "New platform279b7a3 is live and exact public identity verified; comprehensive official verification is running.",
   "constraints": [
     "Original/app120untracked andunsavedUntitled-1 preserved",
     "Onlyroot mutatesGitHub/original/operator",
@@ -792,6 +841,6 @@
     "FrozenpreviousA/B untouched"
   ],
   "ledger_note": "Issue1006 reached2500commentlimit; use taskstatus+PRcontinuation",
-  "updated_at": "2026-11-14T06:35:47.444Z",
-  "next_action": "Wait fornewexplicitplatformcompletion/newplatformID. Thenrunreviewedofficialverify helperonce withM/actor/evidence,nooverallshorttimeout; confirmexactA/M/R,3probes/frontendchecks andfreshinactive. Onlythenonevisiblefinancialrefresh andnewas_of/UIpagination/pendingmodalacceptance."
+  "updated_at": "2026-11-14T06:46:42.313Z",
+  "next_action": "Await one officialverify outcome. Onsuccesssaveactualexit/timing/3probe/requestcount andfreshinactive. Thennewvisiblefinancialtab once; require newreportas_of vsold12Nov01:07; verifytables/pendingmodalread-only; capturewhitelistedruntimeevents ifneeded withoutcachedupdates."
 }

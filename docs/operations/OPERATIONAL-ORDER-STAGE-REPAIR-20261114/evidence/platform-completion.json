@@ -1,0 +1,22 @@
+{
+  "latest_events": [
+    {
+      "date": "Nov 14, 06:30 AM",
+      "event": "Deployment finished"
+    },
+    {
+      "date": "Nov 14, 08:09 AM",
+      "event": "Deployment finished"
+    },
+    {
+      "date": "Nov 14, 09:44 AM",
+      "event": "Deployment finished"
+    }
+  ],
+  "log_buttons": [
+    "overview-panel-view-logs-btn-279b7a3c-11fa-4f20-a6fe-7bad268127b2"
+  ],
+  "publish_label": "Republish",
+  "observed_at": "2026-11-14T06:44:36.254Z",
+  "platform_id": "279b7a3c-11fa-4f20-a6fe-7bad268127b2"
+}
