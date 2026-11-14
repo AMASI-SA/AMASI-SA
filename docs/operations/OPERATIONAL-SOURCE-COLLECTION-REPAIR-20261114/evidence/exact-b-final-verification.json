@@ -1,0 +1,643 @@
+{
+  "verified_at": "2026-11-14T04:52:44.768504+00:00",
+  "verdict": "PASS exact-B CI and actual Host20/Host24 release rehearsal",
+  "source_provenance": {
+    "checked_at": "2026-11-14T04:45:41.625Z",
+    "source_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+    "deployment_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+    "deployment_tree": "9d8844f32f9db18cd036ff1b55edaec2c0dbe1b8",
+    "source_base_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+    "parents": [
+      "8839d3aeb32b4bda2de2015efb0deca7fbb844a3"
+    ],
+    "changed_files": [
+      {
+        "filename": "release/release-intent-v5.json",
+        "status": "modified",
+        "sha": "cc47829c141bb997089a05baac832207f3a1537f"
+      }
+    ],
+    "candidate_intent_sha256": "512e8d5b4c459ad664f9c33abd8f8e127896bf54e64e058840383e55cc59a53c",
+    "expected_release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4"
+  },
+  "final_ci": {
+    "observed_at": "2026-11-14T04:52:00.115Z",
+    "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+    "head_tree": "9d8844f32f9db18cd036ff1b55edaec2c0dbe1b8",
+    "pr": {
+      "number": 1917,
+      "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+      "base_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+      "draft": false,
+      "mergeable": true
+    },
+    "production_ref_observed_at": "2026-11-14T04:52:43.401Z",
+    "production_head": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+    "workflow_run_count": 14,
+    "successful_workflow_runs": 13,
+    "expected_skipped_workflow_runs": 1,
+    "check_count": 35,
+    "success_checks": 25,
+    "expected_skipped_checks": 10,
+    "pending_checks": 0,
+    "failed_checks": 0,
+    "neutral_checks": 0,
+    "ready_for_review_runs_included": [
+      43558647631,
+      43558647590
+    ],
+    "workflows": [
+      {
+        "id": 43558647631,
+        "name": "Snapchat Settings Management V2",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "event": "pull_request",
+        "conclusion": "success",
+        "run_attempt": 1,
+        "created_at": "2026-11-14T04:50:53Z",
+        "updated_at": "2026-11-14T04:51:08Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558647631"
+      },
+      {
+        "id": 43558647590,
+        "name": "Snapchat Direct Active Publication",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "event": "pull_request",
+        "conclusion": "success",
+        "run_attempt": 1,
+        "created_at": "2026-11-14T04:50:53Z",
+        "updated_at": "2026-11-14T04:51:07Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558647590"
+      },
+      {
+        "id": 43558145778,
+        "name": "TikTok Creator Release Candidate",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "event": "pull_request",
+        "conclusion": "skipped",
+        "run_attempt": 1,
+        "created_at": "2026-11-14T04:44:40Z",
+        "updated_at": "2026-11-14T04:44:41Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145778"
+      },
+      {
+        "id": 43558145671,
+        "name": "Qoyod Payment Freshness",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "event": "pull_request",
+        "conclusion": "success",
+        "run_attempt": 1,
+        "created_at": "2026-11-14T04:44:40Z",
+        "updated_at": "2026-11-14T04:45:10Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145671"
+      },
+      {
+        "id": 43558145738,
+        "name": "Snapchat Settings Management V2",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "event": "pull_request",
+        "conclusion": "success",
+        "run_attempt": 1,
+        "created_at": "2026-11-14T04:44:40Z",
+        "updated_at": "2026-11-14T04:44:51Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145738"
+      },
+      {
+        "id": 43558145699,
+        "name": "Snapchat Direct Active Publication",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "event": "pull_request",
+        "conclusion": "success",
+        "run_attempt": 1,
+        "created_at": "2026-11-14T04:44:40Z",
+        "updated_at": "2026-11-14T04:44:55Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145699"
+      },
+      {
+        "id": 43558145704,
+        "name": "Mobile Order Tracking",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "event": "pull_request",
+        "conclusion": "success",
+        "run_attempt": 1,
+        "created_at": "2026-11-14T04:44:40Z",
+        "updated_at": "2026-11-14T04:45:29Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145704"
+      },
+      {
+        "id": 43558146474,
+        "name": "Security Gate",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "event": "pull_request",
+        "conclusion": "success",
+        "run_attempt": 1,
+        "created_at": "2026-11-14T04:44:40Z",
+        "updated_at": "2026-11-14T04:46:49Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558146474"
+      },
+      {
+        "id": 43558145712,
+        "name": "MZ2 Employee Salary and Password",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "event": "pull_request",
+        "conclusion": "success",
+        "run_attempt": 1,
+        "created_at": "2026-11-14T04:44:40Z",
+        "updated_at": "2026-11-14T04:47:13Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145712"
+      },
+      {
+        "id": 43558145690,
+        "name": "Mezan Release Readiness",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "event": "pull_request",
+        "conclusion": "success",
+        "run_attempt": 1,
+        "created_at": "2026-11-14T04:44:40Z",
+        "updated_at": "2026-11-14T04:47:52Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145690"
+      },
+      {
+        "id": 43558145711,
+        "name": "Operational Balance Web",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "event": "pull_request",
+        "conclusion": "success",
+        "run_attempt": 1,
+        "created_at": "2026-11-14T04:44:40Z",
+        "updated_at": "2026-11-14T04:48:58Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145711"
+      },
+      {
+        "id": 43558145668,
+        "name": "G47 Focused Integration",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "event": "pull_request",
+        "conclusion": "success",
+        "run_attempt": 1,
+        "created_at": "2026-11-14T04:44:40Z",
+        "updated_at": "2026-11-14T04:48:50Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145668"
+      },
+      {
+        "id": 43558145713,
+        "name": "Operational Stock Eligibility",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "event": "pull_request",
+        "conclusion": "success",
+        "run_attempt": 1,
+        "created_at": "2026-11-14T04:44:40Z",
+        "updated_at": "2026-11-14T04:50:34Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145713"
+      },
+      {
+        "id": 43558145710,
+        "name": "CodeQL",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "event": "pull_request",
+        "conclusion": "success",
+        "run_attempt": 1,
+        "created_at": "2026-11-14T04:44:40Z",
+        "updated_at": "2026-11-14T04:51:23Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145710"
+      }
+    ],
+    "checks": [
+      {
+        "id": 132337192151,
+        "name": "Frontend Snapchat settings tests and build",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "skipped",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558647631/job/132337192151"
+      },
+      {
+        "id": 132337191826,
+        "name": "Backend settings and zero-write regressions",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "skipped",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558647631/job/132337191826"
+      },
+      {
+        "id": 132337187826,
+        "name": "Publication backend and existing write guards",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "skipped",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558647590/job/132337187826"
+      },
+      {
+        "id": 132337187475,
+        "name": "Publication frontend and existing media flow",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "skipped",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558647590/job/132337187475"
+      },
+      {
+        "id": 132337132710,
+        "name": "Fail-closed settings and multi-account scope guard",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558647631/job/132337132710"
+      },
+      {
+        "id": 132337132678,
+        "name": "scope",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558647590/job/132337132678"
+      },
+      {
+        "id": 132336380052,
+        "name": "Emergent manual redeploy required",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "skipped",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145690/job/132336380052"
+      },
+      {
+        "id": 132336103591,
+        "name": "CodeQL",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/runs/132336103591"
+      },
+      {
+        "id": 132335795413,
+        "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145690/job/132335795413"
+      },
+      {
+        "id": 132335795271,
+        "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145690/job/132335795271"
+      },
+      {
+        "id": 132335639472,
+        "name": "Publication frontend and existing media flow",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "skipped",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145699/job/132335639472"
+      },
+      {
+        "id": 132335639437,
+        "name": "Publication backend and existing write guards",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "skipped",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145699/job/132335639437"
+      },
+      {
+        "id": 132335621165,
+        "name": "Frontend Snapchat settings tests and build",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "skipped",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145738/job/132335621165"
+      },
+      {
+        "id": 132335621150,
+        "name": "Backend settings and zero-write regressions",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "skipped",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145738/job/132335621150"
+      },
+      {
+        "id": 132335580794,
+        "name": "Backend security contracts",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558146474/job/132335580794"
+      },
+      {
+        "id": 132335580626,
+        "name": "Frontend dependency and CSP checks",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558146474/job/132335580626"
+      },
+      {
+        "id": 132335579083,
+        "name": "reviewed-candidate",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "skipped",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145778/job/132335579083"
+      },
+      {
+        "id": 132335578562,
+        "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145668/job/132335578562"
+      },
+      {
+        "id": 132335578309,
+        "name": "G47 purchase and receiving UI tests and build",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145668/job/132335578309"
+      },
+      {
+        "id": 132335578284,
+        "name": "Operational Balance Backend",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145711/job/132335578284"
+      },
+      {
+        "id": 132335578275,
+        "name": "Operational Balance Frontend",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145711/job/132335578275"
+      },
+      {
+        "id": 132335578261,
+        "name": "Host Node 20.20.2 engine and dispatcher contract",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145690/job/132335578261"
+      },
+      {
+        "id": 132335578252,
+        "name": "Canonical worker excludes operational balance jobs",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145711/job/132335578252"
+      },
+      {
+        "id": 132335578196,
+        "name": "Host Node 24.19.0 engine and dispatcher contract",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145690/job/132335578196"
+      },
+      {
+        "id": 132335578176,
+        "name": "Frontend build",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145690/job/132335578176"
+      },
+      {
+        "id": 132335578170,
+        "name": "Stock eligibility, reservation and consumption on isolated Mongo",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145713/job/132335578170"
+      },
+      {
+        "id": 132335578136,
+        "name": "Fail-closed settings and multi-account scope guard",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145738/job/132335578136"
+      },
+      {
+        "id": 132335578024,
+        "name": "scope",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145699/job/132335578024"
+      },
+      {
+        "id": 132335578011,
+        "name": "Backend preflight",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145690/job/132335578011"
+      },
+      {
+        "id": 132335577992,
+        "name": "Operational balances browser, mobile and visibility acceptance",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145711/job/132335577992"
+      },
+      {
+        "id": 132335577972,
+        "name": "CodeQL (javascript-typescript)",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145710/job/132335577972"
+      },
+      {
+        "id": 132335577889,
+        "name": "employee-contract",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145712/job/132335577889"
+      },
+      {
+        "id": 132335577825,
+        "name": "backend-unit",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145671/job/132335577825"
+      },
+      {
+        "id": 132335577768,
+        "name": "CodeQL (python)",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145710/job/132335577768"
+      },
+      {
+        "id": 132335577740,
+        "name": "real-mongo-tracking",
+        "head_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "conclusion": "success",
+        "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145704/job/132335577740"
+      }
+    ],
+    "codeql_note": "Initial aggregator neutral warning cleared after successful Python analysis; final check and workflow are success."
+  },
+  "host_rehearsals": {
+    "verified_at": "2026-11-14T04:49:49.487660+00:00",
+    "verdict": "PASS",
+    "source_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+    "deployment_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+    "source_base_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+    "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+    "host_package_boundaries_identical": true,
+    "hosts": [
+      {
+        "host_node": "20.20.2",
+        "run_id": 43558145690,
+        "job_id": 132335795413,
+        "job_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145690/job/132335795413",
+        "job_started_at": "2026-11-14T04:45:33Z",
+        "job_completed_at": "2026-11-14T04:47:51Z",
+        "artifact_id": 14098924649,
+        "archive_bytes": 46017,
+        "archive_sha256": "1da45de658a1c55e991ea1e639379dd082529937b73480efd7b6d59ba07e8489",
+        "required_steps": {
+          "Create a clean tracked-source clone": "success",
+          "Prove generated release inputs are absent": "success",
+          "Record sanitized Host adapter evidence": "success",
+          "Rehearse a conservative outer Host frozen install": "success",
+          "Emulate a Cloud Build checkout without Git metadata": "success",
+          "Invoke the Emergent package adapter under the selected Host Node": "success",
+          "Verify artifact, proof, identity, and package boundaries": "success",
+          "Prove the governed runtime returns build metadata as JSON": "success",
+          "Archive verified generated release outputs": "success",
+          "Retain verified generated release outputs": "success",
+          "Retain sanitized rehearsal evidence": "success"
+        },
+        "source_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+        "source_base_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+        "deployment_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+        "actual_adapter_built": true,
+        "actual_adapter_had_no_git_metadata": true,
+        "materialized_identity_matches_frozen_intent_bytes": true,
+        "runtime_json_route_step_success": true,
+        "package_boundary": {
+          "backend": {
+            "file_count": 1207,
+            "git_directory_present": false,
+            "health_verified": true,
+            "identity": {
+              "bytes": 435063,
+              "path": "release_identity.json",
+              "sha256": "3fe8f9fb02d22013260d766e25998788aca82044a374501e09ea9725aca308b8"
+            },
+            "isolated_verified": true,
+            "package_tree_sha256": "d88fc7102861c3cbbcb21ac3250916dae984ecd54cd86b0940730d32f068cc4e",
+            "runtime_root": "backend",
+            "sibling_frontend_present": false
+          },
+          "frontend": {
+            "artifact_tree_sha256": "9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6",
+            "build_meta": {
+              "bytes": 473286,
+              "path": "build/build-meta.json",
+              "sha256": "fa99f87d05657b2f6cfb9fe8b29e8892017eacad8e3288283e7fe675a66896d9"
+            },
+            "content_type_contract": "application/json",
+            "file_count": 1469,
+            "isolated_runtime_artifact_verified": true,
+            "package_tree_sha256": "f341deaf8667af5a19f20b3b62d8175e8d846a6913641496d4d3d1d4b52248d1",
+            "runtime_root": "frontend",
+            "static_root": "frontend/build"
+          },
+          "kind": "mezan_release_package_boundary_proof_v1",
+          "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+          "schema_version": 1,
+          "source_git_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3"
+        },
+        "evidence_files": [
+          {
+            "path": "mezan-adapter-build-v5.log",
+            "bytes": 164932,
+            "sha256": "2faaf69a52818a42bb5a0ba4b18fdbb9d77fc6d4ecfdb8a88b9f50d532d41c9b"
+          },
+          {
+            "path": "mezan-adapter-environment-v5.json",
+            "bytes": 1102,
+            "sha256": "822bbedb438190c66b3eba5b11884ab30ad30516b272795e7b5053f3d3626891"
+          },
+          {
+            "path": "mezan-governed-runtime.log",
+            "bytes": 517,
+            "sha256": "336562df58f0f2118f3c711e80f810df4061108a8f5b44fd03fba614cc241bc6"
+          },
+          {
+            "path": "mezan-package-boundary-v5.json",
+            "bytes": 1278,
+            "sha256": "af0b528eb2eedc822ff8094a80a3871650f0d2ceaf4bc0e5c3561fd867c8fbe5"
+          }
+        ]
+      },
+      {
+        "host_node": "24.19.0",
+        "run_id": 43558145690,
+        "job_id": 132335795271,
+        "job_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145690/job/132335795271",
+        "job_started_at": "2026-11-14T04:45:33Z",
+        "job_completed_at": "2026-11-14T04:47:15Z",
+        "artifact_id": 14099945069,
+        "archive_bytes": 46016,
+        "archive_sha256": "4c33bde65f5348d715e0477abdf4ea2200aeb69396467f1ae481b0103749def8",
+        "required_steps": {
+          "Create a clean tracked-source clone": "success",
+          "Prove generated release inputs are absent": "success",
+          "Record sanitized Host adapter evidence": "success",
+          "Rehearse a conservative outer Host frozen install": "success",
+          "Emulate a Cloud Build checkout without Git metadata": "success",
+          "Invoke the Emergent package adapter under the selected Host Node": "success",
+          "Verify artifact, proof, identity, and package boundaries": "success",
+          "Prove the governed runtime returns build metadata as JSON": "success",
+          "Archive verified generated release outputs": "success",
+          "Retain verified generated release outputs": "success",
+          "Retain sanitized rehearsal evidence": "success"
+        },
+        "source_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+        "source_base_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+        "deployment_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+        "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+        "actual_adapter_built": true,
+        "actual_adapter_had_no_git_metadata": true,
+        "materialized_identity_matches_frozen_intent_bytes": true,
+        "runtime_json_route_step_success": true,
+        "package_boundary": {
+          "backend": {
+            "file_count": 1207,
+            "git_directory_present": false,
+            "health_verified": true,
+            "identity": {
+              "bytes": 435063,
+              "path": "release_identity.json",
+              "sha256": "3fe8f9fb02d22013260d766e25998788aca82044a374501e09ea9725aca308b8"
+            },
+            "isolated_verified": true,
+            "package_tree_sha256": "d88fc7102861c3cbbcb21ac3250916dae984ecd54cd86b0940730d32f068cc4e",
+            "runtime_root": "backend",
+            "sibling_frontend_present": false
+          },
+          "frontend": {
+            "artifact_tree_sha256": "9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6",
+            "build_meta": {
+              "bytes": 473286,
+              "path": "build/build-meta.json",
+              "sha256": "fa99f87d05657b2f6cfb9fe8b29e8892017eacad8e3288283e7fe675a66896d9"
+            },
+            "content_type_contract": "application/json",
+            "file_count": 1469,
+            "isolated_runtime_artifact_verified": true,
+            "package_tree_sha256": "f341deaf8667af5a19f20b3b62d8175e8d846a6913641496d4d3d1d4b52248d1",
+            "runtime_root": "frontend",
+            "static_root": "frontend/build"
+          },
+          "kind": "mezan_release_package_boundary_proof_v1",
+          "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+          "schema_version": 1,
+          "source_git_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3"
+        },
+        "evidence_files": [
+          {
+            "path": "mezan-adapter-build-v5.log",
+            "bytes": 164929,
+            "sha256": "c2b5c03f3073c073285e4b2b6a752c11f08d89a58a1f7795ebd511a41a0a6316"
+          },
+          {
+            "path": "mezan-adapter-environment-v5.json",
+            "bytes": 1102,
+            "sha256": "60397d12a5da9fee97664f68278b6077c64ade4de80f39d61d8ed36e2c8488d7"
+          },
+          {
+            "path": "mezan-governed-runtime.log",
+            "bytes": 518,
+            "sha256": "eeb8efe2e25c2ccc6682f4207751ee8bf64933500fce80183a689fe4bb010692"
+          },
+          {
+            "path": "mezan-package-boundary-v5.json",
+            "bytes": 1278,
+            "sha256": "af0b528eb2eedc822ff8094a80a3871650f0d2ceaf4bc0e5c3561fd867c8fbe5"
+          }
+        ]
+      }
+    ]
+  },
+  "production_actions_performed_by_reviewer": false,
+  "workflow_mutations_or_retries_performed_by_reviewer": false
+}

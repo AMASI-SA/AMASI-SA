@@ -148,3 +148,10 @@ B final gate passed: 35 checks = 25 success + 10 expected skips, no pending/fail
 Normal merge M is `2db0edc9edb315026eee4b6edd43b420a569c37d`, parents [J,B] in that order, tree `9d8844f32f9db18cd036ff1b55edaec2c0dbe1b8` identical to B. No source differences were introduced by merge. Original preflight finished 2026-11-14T04:47:47.678319+00:00 with active:false, tracked/index clean and all 120 unrelated untracked files. Unsaved Untitled-1 was separately observed in UI.
 
 Rehearsal helper independent source/AST review passed at SHA256 `3a38a680fcf5e7696b510c5edd73de515b919bf5927f8759e64ee1361a596f4d`. Next run it once with --build --deployment-sha 2db0edc9edb315026eee4b6edd43b420a569c37d. It performs fresh inactive checks before FF/build and preserves all existing files. No PR1917 build, lease or publish has begun yet. Actor planned: codex-operational-source-collection-rootfix-1917.
+
+
+## Original build passed — 2026-11-14T04:56:33.495Z
+
+Actual original `cd /app/frontend && yarn build` returned exit 0, 2026-11-14T04:53:21.176154 to 04:54:34.540325 UTC (73.364187 seconds). Runtime identity matches A/R, original HEAD is M, tracked/index remain clean. All 120 unrelated untracked files are byte-for-byte preserved; no sidecar change. Fresh guard after build is inactive. Evidence directory: `/tmp/mezan-pr1917-original-jpg_gysb`.
+
+Build stdout SHA256 `f658e9084dc2d62187d2880aa67991514eaed4c849fdc32c74c2b099d4a18d43`. Detailed sanitized proof is evidence/original-build-proof.json. The prepare/prepublish helper has independent source/AST PASS, SHA256 `8bf5f7400c0d5ac444e9c4c74b01dc66f2ac73eddbf38d1ead8e3a588e8f5cb2`, with exclusive evidence and no automatic retries. No PR1917 lease or publish has occurred. M push Security and Readiness passed; CodeQL Python was still running at 04:55:41 (exact-B CodeQL already passed and M is tree-equivalent).

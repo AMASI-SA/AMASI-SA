@@ -1,0 +1,39 @@
+{
+  "outcome": {
+    "phase": "build",
+    "ready": true,
+    "source_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+    "deployment_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+    "intent_commit": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+    "tree": "9d8844f32f9db18cd036ff1b55edaec2c0dbe1b8",
+    "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+    "untracked_count": 120,
+    "lease_created": false,
+    "evidence_dir": "/tmp/mezan-pr1917-original-jpg_gysb",
+    "finished_at": "2026-11-14T04:54:34.716924+00:00"
+  },
+  "build": {
+    "command": [
+      "yarn",
+      "build"
+    ],
+    "cwd": "/app/frontend",
+    "started_at": "2026-11-14T04:53:21.176154+00:00",
+    "ended_at": "2026-11-14T04:54:34.540325+00:00",
+    "elapsed_seconds": 73.36418706199038,
+    "actual_exit": 0,
+    "problem": null
+  },
+  "stdout_sha256": "f658e9084dc2d62187d2880aa67991514eaed4c849fdc32c74c2b099d4a18d43",
+  "stderr_sha256": "f9de9a5c904514893fea046115f3a8ce6346639f86ce2fae7c20dd6ea7532633",
+  "preservation": {
+    "before_count": 120,
+    "after_count": 120,
+    "changed_paths": [],
+    "append_allowed": true,
+    "preserved": true
+  },
+  "guard_after": {
+    "active": false
+  }
+}
