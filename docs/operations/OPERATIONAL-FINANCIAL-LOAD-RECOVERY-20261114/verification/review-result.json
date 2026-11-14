@@ -1,0 +1,125 @@
+{
+  "baseline": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+  "candidate_sha": "b60c94fa4fb9683240883c45bfc891febf90a106",
+  "source_hashes": {
+    "backend/operational_balance_engine.py": "d6550cc8a420514f3c3c640f75784164d025d2978fae26f7f0e97e931ccdeb94",
+    "backend/operational_reconciliation_state.py": "78d015f68512ab5e9a2fb863a9eb74c3df8a1d8fe974d3768a9f549452268ab9",
+    "backend/operational_order_page_payment.py": "242c0dd410c7d30974659446e0864592dbd32370ea357b5f420c3022146cf98c"
+  },
+  "parity_cases": 303,
+  "checks": [
+    "complete value",
+    "recursive insertion order",
+    "exception type/message",
+    "Decimal flags",
+    "input immutability"
+  ],
+  "scaling": [
+    {
+      "orders": 50,
+      "baseline": {
+        "median_ms": 8.90845998947043,
+        "copied_dict_entries": 17500,
+        "string_prefix_checks": 8300
+      },
+      "candidate": {
+        "median_ms": 10.010124009568244,
+        "copied_dict_entries": 0,
+        "string_prefix_checks": 1000
+      }
+    },
+    {
+      "orders": 100,
+      "baseline": {
+        "median_ms": 22.37137699557934,
+        "copied_dict_entries": 70000,
+        "string_prefix_checks": 31600
+      },
+      "candidate": {
+        "median_ms": 28.697194007690996,
+        "copied_dict_entries": 0,
+        "string_prefix_checks": 2000
+      }
+    },
+    {
+      "orders": 200,
+      "baseline": {
+        "median_ms": 68.40820399520453,
+        "copied_dict_entries": 280000,
+        "string_prefix_checks": 123200
+      },
+      "candidate": {
+        "median_ms": 102.11922599410173,
+        "copied_dict_entries": 0,
+        "string_prefix_checks": 4000
+      }
+    },
+    {
+      "orders": 400,
+      "baseline": {
+        "median_ms": 170.99942300410476,
+        "copied_dict_entries": 1120000,
+        "string_prefix_checks": 486400
+      },
+      "candidate": {
+        "median_ms": 103.27284500817768,
+        "copied_dict_entries": 0,
+        "string_prefix_checks": 8000
+      }
+    }
+  ],
+  "page_scaling": [
+    {
+      "orders": 50,
+      "baseline": {
+        "median_ms": 11.109052997198887,
+        "copied_dict_entries": 17500,
+        "string_prefix_checks": 13350
+      },
+      "candidate": {
+        "median_ms": 11.180927001987584,
+        "copied_dict_entries": 0,
+        "string_prefix_checks": 1150
+      }
+    },
+    {
+      "orders": 100,
+      "baseline": {
+        "median_ms": 37.69640599784907,
+        "copied_dict_entries": 70000,
+        "string_prefix_checks": 51700
+      },
+      "candidate": {
+        "median_ms": 24.649835002492182,
+        "copied_dict_entries": 0,
+        "string_prefix_checks": 2300
+      }
+    },
+    {
+      "orders": 200,
+      "baseline": {
+        "median_ms": 62.44192100712098,
+        "copied_dict_entries": 280000,
+        "string_prefix_checks": 203400
+      },
+      "candidate": {
+        "median_ms": 47.50772500119638,
+        "copied_dict_entries": 0,
+        "string_prefix_checks": 4600
+      }
+    },
+    {
+      "orders": 400,
+      "baseline": {
+        "median_ms": 160.4611049988307,
+        "copied_dict_entries": 1120000,
+        "string_prefix_checks": 806800
+      },
+      "candidate": {
+        "median_ms": 97.87644199968781,
+        "copied_dict_entries": 0,
+        "string_prefix_checks": 9200
+      }
+    }
+  ]
+}

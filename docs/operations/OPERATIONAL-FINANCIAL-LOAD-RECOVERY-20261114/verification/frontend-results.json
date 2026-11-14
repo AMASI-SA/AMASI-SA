@@ -1,0 +1,57 @@
+{
+  "recorded_at": "2026-11-14T14:06:51.566587+00:00",
+  "source_head": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+  "branch": "codex/financial-loading-resume-20261114",
+  "source_hashes": {
+    "frontend/src/pages/operational/OperationalFinancialPosition.jsx": "0e9b51ba832b36b8755127d464193ffa8932baba2a6127658a940f6e77c27774",
+    "frontend/src/pages/operational/OperationalFinancialPosition.test.jsx": "fb9f304ded6ddb67760cbbf261be0fb141aa3c30ec1f59aab5b376021f3fee06",
+    "frontend/src/pages/operational/visibleOperationalRead.js": "dc8021e8525fd20fe696bc0fe7730fc6dfaca4241ae407c9d3c002fe2c53d926",
+    "frontend/src/pages/operational/visibleOperationalRead.test.js": "f6bc7bbc1a64c9d6c43a42ed196c88793c03a3d7f31f6a12e58205568e8b9951",
+    "frontend/package.json": "62a5d5bb28e0fc529a16b3d47b1f107e19ae40af8e0482d14d73b04400c7b32b",
+    "frontend/yarn.lock": "ade3795ddac57d89c236de42f3946160e04aa72abc87356b3b361954e06fefdc"
+  },
+  "toolchain": {
+    "node": "v22.23.2",
+    "yarn": "1.22.22",
+    "verification": "scripts/frontend_release_toolchain.py ensure: warm_verified"
+  },
+  "dependencies": {
+    "method": "Isolated copy of existing exact-package-and-lock dependency tree, after incomplete offline cache install",
+    "integrity_check": "python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend check --integrity --offline",
+    "integrity_exit": 0,
+    "package_and_lock_unchanged": true
+  },
+  "checks": {
+    "focused": {
+      "exit": 0,
+      "success": true,
+      "numPassedTests": 77,
+      "numPassedTestSuites": 3,
+      "numFailedTests": 0,
+      "numFailedTestSuites": 0,
+      "numPendingTests": 0,
+      "numPendingTestSuites": 0,
+      "numTodoTests": 0,
+      "results_file": "focused-results.json",
+      "results_sha256": "e14d1ff1ca9f3291c17ab17b51c777dd3ba551c106a0689dbedfb14e5984e9cf"
+    },
+    "integrated": {
+      "exit": 0,
+      "success": true,
+      "numPassedTests": 733,
+      "numPassedTestSuites": 51,
+      "numFailedTests": 0,
+      "numFailedTestSuites": 0,
+      "numPendingTests": 0,
+      "numPendingTestSuites": 0,
+      "numTodoTests": 0,
+      "results_file": "integrated-results.json",
+      "results_sha256": "2b1ada659e6f2be1844ef1168d9acd7e0ca152cbca1d45895359311f1b845c72"
+    }
+  },
+  "tracked_changes_by_reviewer": false,
+  "limitations": [
+    "Unit/component tests mock network and do not establish live report calculation latency.",
+    "Exact source CI, governed build and live acceptance remain root-owned."
+  ]
+}

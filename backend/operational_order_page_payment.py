@@ -22,7 +22,7 @@ def corroborated_refund_basis(previous, payment, facts, order_id):
     return bool(records) and sum(records.values(), Decimal(0)) == _amount(previous["paid"], currency)
 
 
-def observed_balance(page, payment, order, state, *, now, start):
+def observed_balance(page, payment, order, state, *, now, start, fact_items=None):
     """Return one current observation, or withhold it without changing any ledger object."""
     facts = state.get("engine", {}).get("facts", {})
     oid = str(order["id"])
@@ -53,7 +53,9 @@ def observed_balance(page, payment, order, state, *, now, start):
         raise ValueError("provider_capture_identity_conflict")
     known = _amount(claim.get("confirmed", 0), currency)
     captures = {}
-    for fact_key, fact in facts.items():
+    # Reconciliation may provide its ordered, request-local capture/refund
+    # index. Standalone callers keep the original complete-map traversal.
+    for fact_key, fact in (facts.items() if fact_items is None else fact_items):
         if fact_key.startswith("refund:") and fact.get("order_id") == oid:
             raise ValueError("provider_refund_execution_evidence_required")
         if fact_key.startswith("capture:") and fact.get("order_id") == oid:

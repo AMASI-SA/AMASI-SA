@@ -1,0 +1,25 @@
+{
+  "source_hashes": {
+    "backend/operational_balance_engine.py": "d6550cc8a420514f3c3c640f75784164d025d2978fae26f7f0e97e931ccdeb94",
+    "backend/operational_reconciliation_state.py": "78d015f68512ab5e9a2fb863a9eb74c3df8a1d8fe974d3768a9f549452268ab9",
+    "backend/operational_order_page_payment.py": "242c0dd410c7d30974659446e0864592dbd32370ea357b5f420c3022146cf98c"
+  },
+  "journal_operations_checked": 10000,
+  "cancellation": {
+    "baseline": {
+      "checkpoints": 803,
+      "cancelled_cases": 5
+    },
+    "candidate": {
+      "checkpoints": 806,
+      "cancelled_cases": 5
+    }
+  },
+  "targeted_cancellation": {
+    "__init__:1": "cancelled",
+    "rollback:1": "cancelled",
+    "rollback:2": "cancelled"
+  },
+  "plain_output_maps": true,
+  "analytical_totals_and_no_bank_movement": true
+}
