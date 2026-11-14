@@ -184,15 +184,67 @@ def test_missing_order_fx_keeps_denominator_unknown():
     asyncio.run(check())
 
 
-def test_active_utility_without_invoice_or_estimate_is_unknown_cost():
+@pytest.mark.parametrize("basis", ["last_invoice", "last_3_invoices"])
+@pytest.mark.parametrize("amount", [None, 0])
+def test_valid_unpriced_utility_keeps_the_executive_zero_contribution(basis, amount):
+    async def check():
+        from recurring_obligations_routes import ObligationCreate, compute_recurring_obligations_for_range
+
+        db = await fixture_db(sale("sale"))
+        # This is accepted source configuration, including no historic invoices.
+        ObligationCreate(title="Water", expense_type="water", entity_type="business",
+            entity_name="Store", cycle="monthly", start_date="2026-11-01",
+            period_amount=amount, estimation_basis=basis)
+        await db.operating_recurring_obligations_v2.insert_many([
+            obligation("rent"),
+            obligation("water", expense_type="water", period_amount=amount, estimation_basis=basis)])
+        await add_salary(db)
+        day = datetime.fromisoformat(DAY).date()
+        executive = await compute_recurring_obligations_for_range(db, OWNER, day, day)
+        result = await operating.read_operating_basis(ReadDB(db), OWNER, NOW)
+        # Rent 3,000/30 = 100; the canonical water contribution is zero. Salary
+        # adds 3,000/30 = 100. The campaign uses this same executive total/1,000.
+        assert executive["total"] == 100 and executive["utilities_total"] == 0
+        assert result["complete"] is True and result["reasons"] == []
+        assert result["expenses_sar"] == 100 + executive["total"] == 200
+        assert result["ratio"] == result["expenses_sar"] / 1000 == .2
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("amount", [-1, float("nan"), float("inf"), "invalid"])
+@pytest.mark.parametrize("expense_type", ["rent", "water", "electricity"])
+def test_invalid_recurring_amount_does_not_become_known_zero(amount, expense_type):
     async def check():
         db = await fixture_db(sale("sale"))
-        await db.operating_recurring_obligations_v2.insert_one(
-            obligation("water", expense_type="water", period_amount=None, estimation_basis="last_3_invoices"))
+        await db.operating_recurring_obligations_v2.insert_one(obligation("invalid",
+            expense_type=expense_type, period_amount=amount, estimation_basis="last_3_invoices"))
         result = await operating.read_operating_basis(ReadDB(db), OWNER, NOW)
         assert result["complete"] is False and result["ratio"] is None
         assert result["expenses_sar"] is None
-        assert "operating_basis_cost_missing" in result["reasons"]
+        assert result["reasons"]
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("amount", [-1, float("nan"), float("inf"), "invalid"])
+@pytest.mark.parametrize("invoice_kind", ["actual", "historical"])
+def test_positive_utility_invoice_does_not_use_an_invalid_configured_estimate(amount, invoice_kind):
+    async def check():
+        from recurring_obligations_routes import compute_recurring_obligations_for_range
+
+        db = await fixture_db(sale("sale"))
+        await db.operating_recurring_obligations_v2.insert_one(obligation("water",
+            expense_type="water", period_amount=amount, estimation_basis="last_invoice"))
+        invoice = ({"amount": 600, "period_start": "2026-11-01", "period_end": "2026-11-30"}
+            if invoice_kind == "actual" else
+            {"amount": 620, "period_start": "2026-10-01", "period_end": "2026-10-31"})
+        await db.operating_recurring_invoices_v2.insert_one({"user_id": OWNER,
+            "obligation_id": "water", **invoice})
+        day = datetime.fromisoformat(DAY).date()
+        executive = await compute_recurring_obligations_for_range(db, OWNER, day, day)
+        result = await operating.read_operating_basis(ReadDB(db), OWNER, NOW)
+        assert executive["total"] == executive["utilities_total"] == 20
+        assert result["complete"] and result["reasons"] == []
+        assert result["expenses_sar"] == executive["total"] and result["ratio"] == .02
     asyncio.run(check())
 
 
@@ -242,4 +294,142 @@ def test_deadline_cancels_pending_reads_and_returns_unknown(monkeypatch):
         assert result["complete"] is False and result["ratio"] is None
         assert result["reasons"] == ["operating_basis_timeout"]
         assert ended.is_set()
+    asyncio.run(check())
+
+
+def extra_salary(scope, invalid):
+    employee = {"user_id": OWNER, "id": "extra-employee", "status": "active",
+        "hire_date": "2026-11-01"}
+    contract = {"user_id": OWNER, "id": "extra-contract", "employee_id": "extra-employee",
+        "currency": "SAR", "monthly_amount": 9000, "effective_from": "2026-11-01"}
+    if scope in {"archived", "is_archived", "deleted", "is_deleted"}:
+        employee[scope] = True
+    elif scope == "orphan":
+        employee = None
+    elif scope == "stopped":
+        employee.update(status="inactive", updated_at="2026-11-13T12:00:00Z")
+    elif scope in {"unpaid_leave", "returned"}:
+        employee["status"] = "unpaid_leave" if scope == "unpaid_leave" else "active"
+        contract["suspension_periods"] = [{"started_on": "2026-11-12",
+            "returned_on": None if scope == "unpaid_leave" else DAY}]
+    elif scope == "future_start":
+        contract["effective_from"] = "2026-11-15"
+    elif scope == "hire_day":
+        employee["hire_date"] = DAY
+    elif scope == "ended":
+        contract["effective_to"] = "2026-11-13"
+    if invalid == "missing_amount":
+        contract["monthly_amount"] = None
+    elif invalid == "invalid_history":
+        contract["salary_revisions"] = [{"effective_from": "invalid", "monthly_amount": 9000}]
+    elif invalid == "foreign_currency":
+        contract["currency"] = "USD"
+    return employee, contract
+
+
+@pytest.mark.parametrize("scope", ["archived", "is_archived", "deleted", "is_deleted", "orphan",
+    "stopped", "unpaid_leave", "future_start", "hire_day", "ended"])
+@pytest.mark.parametrize("invalid", ["missing_amount", "invalid_history", "foreign_currency"])
+def test_noncontributing_employee_contract_cannot_invalidate_known_daily_basis(scope, invalid):
+    async def check():
+        db = await fixture_db(sale("sale"))
+        await add_salary(db)
+        employee, contract = extra_salary(scope, invalid)
+        if employee is not None:
+            await db.mezan_employees_v2.insert_one(employee)
+        await db.mezan_employee_salary_contracts_v2.insert_one(contract)
+        before = await db.mezan_employee_salary_contracts_v2.find({}).to_list(10)
+        readonly = ReadDB(db)
+        result = await operating.read_operating_basis(readonly, OWNER, NOW)
+        # One contributing employee earns 3,000 / 30 days; the other contributes
+        # nothing by identity or calendar, irrespective of its monetary fields.
+        assert result == {"complete": True, "ratio": .1, "expenses_sar": 100.0,
+            "sales_sar": 1000.0, "date": DAY, "timezone": "Asia/Riyadh", "reasons": []}
+        assert all(count == 1 for count in Counter(c["collection"] for c in readonly.calls).values())
+        assert await db.mezan_employee_salary_contracts_v2.find({}).to_list(10) == before
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("invalid", ["missing_amount", "invalid_history", "foreign_currency"])
+def test_contributing_employee_cost_gap_still_invalidates_daily_basis(invalid):
+    async def check():
+        db = await fixture_db(sale("sale"))
+        await add_salary(db)
+        employee, contract = extra_salary("active", invalid)
+        await db.mezan_employees_v2.insert_one(employee)
+        await db.mezan_employee_salary_contracts_v2.insert_one(contract)
+        result = await operating.read_operating_basis(ReadDB(db), OWNER, NOW)
+        assert result["complete"] is False and result["ratio"] is None
+        assert result["expenses_sar"] is None and result["reasons"]
+    asyncio.run(check())
+
+
+def test_returned_employee_cost_gap_is_required_on_first_paid_day():
+    async def check():
+        db = await fixture_db(sale("sale"))
+        await add_salary(db)
+        employee, contract = extra_salary("returned", "missing_amount")
+        await db.mezan_employees_v2.insert_one(employee)
+        await db.mezan_employee_salary_contracts_v2.insert_one(contract)
+        result = await operating.read_operating_basis(ReadDB(db), OWNER, NOW)
+        assert result["complete"] is False and result["ratio"] is None
+        assert result["expenses_sar"] is None
+    asyncio.run(check())
+
+
+def test_revision_derived_future_start_is_excluded_before_currency_validation():
+    async def check():
+        db = await fixture_db(sale("sale"))
+        await add_salary(db)
+        await db.mezan_employees_v2.insert_one({"user_id": OWNER, "id": "future", "status": "active"})
+        await db.mezan_employee_salary_contracts_v2.insert_one({"user_id": OWNER, "id": "future-contract",
+            "employee_id": "future", "currency": "USD",
+            "salary_revisions": [{"effective_from": "2026-11-15", "monthly_amount": 9000}]})
+        result = await operating.read_operating_basis(ReadDB(db), OWNER, NOW)
+        assert result["complete"] and result["expenses_sar"] == 100 and result["ratio"] == .1
+    asyncio.run(check())
+
+
+def test_duplicate_employee_contracts_remain_ambiguous_even_when_one_has_ended():
+    async def check():
+        db = await fixture_db(sale("sale"))
+        await add_salary(db)
+        await db.mezan_employee_salary_contracts_v2.insert_one({"user_id": OWNER,
+            "id": "duplicate", "employee_id": "employee", "monthly_amount": None,
+            "effective_from": "2026-11-01", "effective_to": "2026-11-13"})
+        result = await operating.read_operating_basis(ReadDB(db), OWNER, NOW)
+        assert result["complete"] is False and result["ratio"] is None
+        assert result["expenses_sar"] is None
+    asyncio.run(check())
+
+
+def test_profit_enrichment_preserves_the_real_operating_deadline_reason(monkeypatch):
+    from order_engine import campaign_hover_profit as profit
+
+    async def check():
+        ended = asyncio.Event()
+
+        async def slow_read(*args):
+            try:
+                await asyncio.sleep(.2)
+                return []
+            finally:
+                ended.set()
+
+        # Separate durations deterministically expose the old outer wrapper's
+        # cancellation. The real operating reader still owns and handles its
+        # own deadline; its result is not replaced by an external fake.
+        monkeypatch.setattr(profit, "COST_TIMEOUT_SECONDS", .001)
+        monkeypatch.setattr(operating, "BASIS_TIMEOUT_SECONDS", .02)
+        monkeypatch.setattr(operating, "_read", slow_read)
+        db = await fixture_db()
+        row = {**profit.blank_profit_fields(), "orders": 0, "sales_sar": 0,
+            "spend_sar": 0, "provider": "snapchat", "account_id": "account"}
+        await asyncio.wait_for(profit.enrich_campaign_profit(db, OWNER,
+            {"campaign": row}, {"campaign": []}, NOW), timeout=2)
+        assert ended.is_set()
+        assert row["operating_basis"]["reasons"] == ["operating_basis_timeout"]
+        assert row["operating_basis"]["complete"] is False
+        assert row["operating_expenses_sar"] is None and row["operating_expenses_ratio"] is None
+        assert row["net_profit_available"] is False and row["net_profit_sar"] is None
     asyncio.run(check())
