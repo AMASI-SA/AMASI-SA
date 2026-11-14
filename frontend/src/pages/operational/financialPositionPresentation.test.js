@@ -160,6 +160,27 @@ test("export refuses inactive, unauthorized, foreign-currency and invalid contra
     expect(() => buildFinancialPositionWorkbook({ ...payload, authority: "another_source" }, "SAR")).toThrow("report_unavailable");
 });
 
+test("a scoped workbook includes its page identity and omits unrelated summary and delivery sheets", () => {
+    const payload = report();
+    delete payload.currencies.SAR.deliveries;
+    const workbook = buildFinancialPositionWorkbook(payload, "SAR", {}, { view: "suppliers", title: "الموردون" });
+    expect(workbook.worksheets.map(sheet => sheet.name)).toEqual(["معلومات التقرير", "1 الموردون"]);
+    expect(JSON.stringify(workbook.getWorksheet("معلومات التقرير").getSheetValues())).toContain("الموردون · SAR");
+    expect(JSON.stringify(workbook.getWorksheet("1 الموردون").getSheetValues())).toContain("9007199254740993.25");
+});
+
+test("a pending summary export labels forecast as unavailable and keeps four saved results without substituting zero", () => {
+    const payload = report(); payload.forecast_pending = true;
+    payload.currencies.SAR.tables = []; delete payload.currencies.SAR.deliveries;
+    payload.currencies.SAR.forecast_rows = [];
+    const workbook = buildFinancialPositionWorkbook(payload, "SAR", {}, { view: "summary", title: "الملخص المالي" });
+    expect(workbook.worksheets.map(sheet => sheet.name)).toEqual(["معلومات التقرير", "الإجماليات والمركز"]);
+    const rows = workbook.getWorksheet("الإجماليات والمركز").getSheetValues().filter(Boolean);
+    expect(rows.find(row => row[1] === "صافي السيولة والمستحقات المتوقع")[2]).toBe("غير متاح");
+    expect(JSON.stringify(rows)).toContain("42.07");
+    expect(JSON.stringify(rows)).toContain("لم تكتمل قراءة التوقعات لهذه اللقطة");
+});
+
 test("unproven order number uses a separately labeled identifier and exports separate columns", () => {
     const payload = report();
     const row = payload.currencies.SAR.deliveries.rows[0];

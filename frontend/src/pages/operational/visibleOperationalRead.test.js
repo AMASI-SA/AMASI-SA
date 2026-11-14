@@ -1,4 +1,4 @@
-import {visibleOperationalRead, refreshVisibleSnapshot} from './visibleOperationalRead';
+import {visibleOperationalRead, refreshVisibleSnapshot, logOperationalRefreshTimeoutTimings} from './visibleOperationalRead';
 
 const flush = async () => { for (let index = 0; index < 8; index += 1) await Promise.resolve(); };
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => {resolve = a; reject = b;}); return {promise, resolve, reject}; };
@@ -66,6 +66,59 @@ test('abort during refresh blocks any subsequent report fetch', async () => {
   const result = refreshVisibleSnapshot(api, {signal: controller.signal});
   controller.abort(); pending.resolve({status: 'refreshed'});
   await expect(result).rejects.toHaveProperty('name', 'AbortError');
+});
+
+test('refresh timeout evidence logs only allowed finite stage fields, once for that request', async () => {
+  const info = jest.spyOn(console, 'info').mockImplementation(() => {});
+  const timings = [{stage: 'source_orders', duration_ms: 12.345, outcome: 'complete', owner_id: 'PRIVATE-OWNER'},
+    {stage: 'aggregate', duration_ms: 85000, outcome: 'cancelled', message: 'PRIVATE-MESSAGE'},
+    ...[true, null, '12', -1, NaN, Infinity, 300001].map(duration_ms => ({stage: 'snapshot_load', duration_ms, outcome: 'complete'})),
+    {stage: 'PRIVATE-STAGE', duration_ms: 12, outcome: 'complete'}, {stage: 'aggregate', duration_ms: 12, outcome: 'PRIVATE-OUTCOME'}, null];
+  const api = {refreshBalances: jest.fn().mockRejectedValue({response: {status: 408, data: {detail: {
+    code: 'operational_refresh_timeout', stage_timings: timings, secret: 'PRIVATE-DETAIL'}}}, config: {headers: {Authorization: 'PRIVATE-TOKEN'}}})};
+  expect((await refreshVisibleSnapshot(api, {})).refresh_warning).toBeTruthy();
+  expect(info).toHaveBeenCalledTimes(1);
+  expect(info).toHaveBeenCalledWith('operational_refresh_timeout_stage_timings', [
+    {stage: 'source_orders', duration_ms: 12.345, outcome: 'complete'},
+    {stage: 'aggregate', duration_ms: 85000, outcome: 'cancelled'},
+  ]);
+  expect(JSON.stringify(info.mock.calls)).not.toContain('PRIVATE');
+  window.dispatchEvent(new Event('focus')); window.dispatchEvent(new Event('online')); await flush();
+  expect(info).toHaveBeenCalledTimes(1);
+  expect(api.refreshBalances).toHaveBeenCalledTimes(1);
+});
+
+test('timing evidence keeps at most the final 64 valid stages, including terminal cancellation', () => {
+  const info = jest.spyOn(console, 'info').mockImplementation(() => {});
+  const stage_timings = Array.from({length: 70}, (_, index) => ({stage: 'source_orders', duration_ms: index, outcome: 'complete'}));
+  stage_timings.push({stage: 'aggregate', duration_ms: 300000, outcome: 'cancelled'});
+  logOperationalRefreshTimeoutTimings({stage_timings});
+  expect(info.mock.calls[0][1]).toHaveLength(64);
+  expect(info.mock.calls[0][1][0].duration_ms).toBe(7);
+  expect(info.mock.calls[0][1].at(-1)).toEqual({stage: 'aggregate', duration_ms: 300000, outcome: 'cancelled'});
+  info.mockClear();
+  [undefined, {}, {stage_timings: {}}, {stage_timings: [null, {stage: 'private'}]}].forEach(logOperationalRefreshTimeoutTimings);
+  expect(info).not.toHaveBeenCalled();
+});
+
+test.each([[500, 'operational_refresh_timeout'], [408, 'operational_source_read_timeout']])('status %s and code %s do not log refresh timing evidence', async (status, code) => {
+  const info = jest.spyOn(console, 'info').mockImplementation(() => {});
+  const api = {refreshBalances: jest.fn().mockRejectedValue({response: {status, data: {detail: {code,
+    stage_timings: [{stage: 'aggregate', duration_ms: 1, outcome: 'cancelled'}]}}}})};
+  await refreshVisibleSnapshot(api, {});
+  expect(info).not.toHaveBeenCalled();
+});
+
+test.each(['hidden', 'aborted'])('late timeout after %s is not logged or converted to saved-read permission', async cause => {
+  const info = jest.spyOn(console, 'info').mockImplementation(() => {}), controller = new AbortController(), pending = deferred();
+  const api = {refreshBalances: jest.fn().mockReturnValue(pending.promise)};
+  const result = refreshVisibleSnapshot(api, {signal: controller.signal});
+  if (cause === 'hidden') visibility.mockReturnValue('hidden'); else controller.abort();
+  const failure = {response: {status: 408, data: {detail: {code: 'operational_refresh_timeout',
+    stage_timings: [{stage: 'aggregate', duration_ms: 1, outcome: 'cancelled'}]}}}};
+  pending.reject(failure);
+  await expect(result).rejects.toBe(failure);
+  expect(info).not.toHaveBeenCalled();
 });
 
 describe('a bounded financial read owns only one visible attempt', () => {

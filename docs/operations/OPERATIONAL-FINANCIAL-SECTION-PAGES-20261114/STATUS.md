@@ -46,7 +46,8 @@ Root will coordinate by rechecking the official guard before release work.
    summary, providers, couriers, drivers, employees/custody, banks/cash,
    suppliers, advertising, wallets/other parties, and open orders/expectations.
    Unassigned details remain explicitly reachable.
-6. Opening/navigating/currency changes issue GET-only section reads. The explicit
+6. Opening/navigating issue GET-only section reads; currency changes use already
+   read currency data and do not refresh sources. The explicit
    manual button performs shared POSTrefresh. Existing explicit saved financial
    confirmations retain their one bounded, permission-checked POST+GET follow-up
    where needed to apply the confirmed effect. Hidden/unmounted attempts are
@@ -138,3 +139,82 @@ backend cases and requires their counts; it also requires all20 stage tests.
 
 Next: finish frontend and synthetic browser regressions, independently review
 the complete patch, and persist the integrated source before release rehearsal.
+
+## Independent backend review
+
+The frozen seven-file backend slice passed independent review and a fresh148
+test rerun (21.79s). Immutable29ec1e07 baseline wrapper/core modules were loaded
+separately with import-identity assertions:20 old/full report outputs matched
+after removing only additive view/revision/forecast_pending fields, and220 view
+saved-money comparisons matched. Cases included multicurrency, wallets,
+advertising, amounts above2^53 cents, valid/duplicate/awaiting driver approvals,
+unknown sources, coverage gaps, uncaptured providers and inactive states.
+Every prior table ID and balance-origin row remains reachable. No required
+saved-projection error was swallowed; nine nonforecast views did zero cost
+reads. Owner/query isolation and known-timeout/unknown-forecast behavior passed.
+
+The narrow diagnostic amendment separately passed independent review and67
+focused tests in12.86s. Backend runtime hash:
+9d7d729760960168c226a331069c62a3c00c67644b4d66997010f836a5181878.
+No stage diagnostics change source/commit/lease behavior. Remote diagnostic
+checkpoint:5c44fa61abdfa455080e2ae79812739c99376a22.
+
+Frontend review identified and is closing two concrete lifetime boundaries:
+consume a manual refresh grant across auth-loading/scope effect restarts, and
+fence an asynchronous full export through actual workbook serialization and
+download, including auth transition and unmount. These are not yet claimed
+verified at this checkpoint. No new source intent is frozen.
+
+## Integrated candidate preparation
+
+The synthetic fixture/harness now covers14 scenarios and generates36 actual
+projections (12 views across saved/pending/applied states), with real confirmation
+proofs and SAR/USD. Python fixture generation, the governed component build,
+syntax checks and scoped whitespace checks passed. Local Chromium could not
+start its sandbox: socket() failed with Operation not permitted before any
+scenario. No flags were weakened or escalation attempted. Exact CI browser
+execution, screenshots and downloads remain required; none are claimed locally.
+
+The workflow now requires all14 scenarios, the existing proof images plus
+summary/sidebar images and page/full workbooks, and the new spreadsheet
+serialization tests. Existing task backend/diagnostic checkpoint5c44fa61 passed
+Operational Balance Web (run43613751873), including real-Mongo backend and prior
+browser cases; that is not evidence for the unfinished integrated frontend.
+
+The first frontend run exposed a real old-ready-state/new-intent forecast race;
+accepted attempt identity was added. The following focused run passed120 tests
+in5 suites. A final hide/return-during-serialization race is being closed before
+the next frozen rerun. Retaining the saved report also retains an already-open
+pending-order dialog; synthetic cases now explicitly inspect, close and reopen
+that dialog while preserving exact confirmation/refresh counts.
+
+## Integrated WIP freeze
+
+Frontend is frozen after125 tests in5 focused suites passed with no skips,
+actual exit0. Scope: OperationalFinancialPosition, financialPositionViews,
+financialPositionPresentation, visibleOperationalRead, financialPosition.css,
+their component/API/presentation/lifetime tests, and the optional guarded
+safeSpreadsheet download callback and its tests. Auth changes, accepted-attempt
+ordering, consumed manual grants, and permanent export invalidation on hide or
+offline through deferred serialization are covered. Existing callers without
+the optional callback retain their behavior.
+
+Focused command: CI=true python scripts/frontend_release_toolchain.py exec --
+yarn --cwd frontend test --watchAll=false --runInBand --resetMocks=false
+--runTestsByPath src/pages/operational/OperationalFinancialPosition.test.jsx
+src/pages/operational/financialPositionPresentation.test.js
+src/pages/operational/financialPositionApi.test.js
+src/pages/operational/visibleOperationalRead.test.js src/lib/safeSpreadsheet.test.js.
+Frontend whitespace check passed. Component SHA256:
+a7274641dc993ef5052d96774ebeffa9494e01bd28eebf2706344068d72b705f.
+
+The three synthetic harness files are also frozen; browser SHA256:
+c6bbdfb968fc5e689fcd40ed2c806b96e3a67d8992f8a41f78b5780db2fd8d66.
+Workflow YAML parses and the complete whitespace check passes. This checkpoint
+is integrated WIP, not frozen release sourceA. Full frontend gate, final
+independent frontend review and exact CI browser execution remain pending.
+
+Next: run the full operational frontend gate, inspect exact integrated CI and
+browser screenshots, fix any concrete failure, then freeze release sourceA.
+Original /app has not changed; the latest observed guard remains another
+actor's active lease and must be freshly inactive before release rehearsal.

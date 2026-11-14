@@ -13,8 +13,12 @@ const utils = {
     },
 };
 
-const writeFile = async (workbook, filename) => {
+const writeFile = async (workbook, filename, { shouldContinue } = {}) => {
+    if (shouldContinue && !shouldContinue()) return false;
     const buffer = await workbook.xlsx.writeBuffer();
+    // Serialization is asynchronous. A scoped caller can revoke the download
+    // before any object URL or anchor is created, even after data was accepted.
+    if (shouldContinue && !shouldContinue()) return false;
     const blob = new Blob(
         [buffer],
         {

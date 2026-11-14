@@ -186,6 +186,7 @@ jobs:
           '**/OperationalSupplierAccount.test.jsx'
           '**/mezanSuppliersV2.test.js'
           '**/SupplierPaymentWorkspace.test.jsx'
+          '**/src/lib/safeSpreadsheet.test.js'
           --json --outputFile=operational-frontend.json
       - name: Reject missing or skipped tests
         run: |
@@ -198,7 +199,8 @@ jobs:
                                 'OperationalFinancialPosition.test.jsx', 'DriverPaymentReview.test.jsx',
                                 'NativePurchaseReview.test.jsx', 'nativePurchaseLinkApi.test.js',
                                 'ExternalOperationControls.test.jsx', 'ProviderFeeSetup.test.jsx',
-                                'ProviderFeeCompleteness.test.jsx', 'OrderDetailsV2.shippingIdentity.test.jsx']) {
+                                'ProviderFeeCompleteness.test.jsx', 'OrderDetailsV2.shippingIdentity.test.jsx',
+                                'safeSpreadsheet.test.js']) {
             const suite = r.testResults.find(s => s.name.endsWith('/' + suffix));
             if (!suite || !suite.assertionResults.length || suite.assertionResults.some(t => t.status !== 'passed'))
               throw Error('Combined UI suite missing or incomplete: ' + suffix);
@@ -332,12 +334,14 @@ jobs:
           const path = require('node:path');
           const out = process.env.OPERATIONAL_BALANCE_UAT_OUTPUT;
           const evidence = JSON.parse(fs.readFileSync(path.join(out, 'browser-evidence.json')));
-          if (evidence.synthetic_only !== true || evidence.results.length !== 9 ||
+          if (evidence.synthetic_only !== true || evidence.results.length !== 14 ||
               evidence.results.some(result => result.status !== 'PASS') || evidence.errors.length) {
-            throw Error('All nine browser acceptance scenarios must execute and pass');
+            throw Error('All fourteen browser acceptance scenarios must execute and pass');
           }
           for (const file of ['source-manifest.json', 'pending-orders-desktop.png', 'pending-orders-mobile.png',
-                              'manual-confirmation-desktop.png', 'manual-confirmation-pending.png']) {
+                              'manual-confirmation-desktop.png', 'manual-confirmation-pending.png',
+                              'financial-summary-desktop.png', 'financial-sidebar-mobile.png',
+                              'financial-page-report.xlsx', 'financial-full-report.xlsx', 'fixture-manifest.json']) {
             if (!fs.statSync(path.join(out, file)).size) throw Error('Missing browser evidence: ' + file);
           }
           JS
@@ -354,4 +358,9 @@ jobs:
             ${{ runner.temp }}/operational-balances-browser/pending-orders-mobile.png
             ${{ runner.temp }}/operational-balances-browser/manual-confirmation-desktop.png
             ${{ runner.temp }}/operational-balances-browser/manual-confirmation-pending.png
+            ${{ runner.temp }}/operational-balances-browser/financial-summary-desktop.png
+            ${{ runner.temp }}/operational-balances-browser/financial-sidebar-mobile.png
+            ${{ runner.temp }}/operational-balances-browser/financial-page-report.xlsx
+            ${{ runner.temp }}/operational-balances-browser/financial-full-report.xlsx
+            ${{ runner.temp }}/operational-balances-browser/fixture-manifest.json
           if-no-files-found: error

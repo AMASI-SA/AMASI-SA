@@ -149,7 +149,7 @@ const filterDescription = (filters, rows) => [
     `الدفع: ${filters.payment ? paymentLabel(filters.payment) : "كل الطرق"}`,
 ].join(" · ");
 
-export function buildFinancialPositionWorkbook(report, currency, filters = {}) {
+export function buildFinancialPositionWorkbook(report, currency, filters = {}, { view = "all", title = "جميع أقسام التقرير" } = {}) {
     if (!isPositionContract(report) || report.status !== "active" || report.permissions?.reports !== true
         || !currencyCodes(report).includes(currency)) throw new Error("report_unavailable");
     const data = report.currencies[currency];
@@ -162,8 +162,9 @@ export function buildFinancialPositionWorkbook(report, currency, filters = {}) {
         ["آخر احتساب — الرياض", asOf],
         ["بدء التشغيل — الرياض", formatRiyadhDateTime(report.started_at)],
         ["وقت إعداد التقرير — الرياض", formatRiyadhDateTime(report.generated_at)],
+        ["نطاق الملف", `${title} · ${currency}`],
         ["الأرصدة الفعلية", data.completeness?.actual === true ? "مكتملة" : "غير مكتملة"],
-        ["التوقعات", data.completeness?.forecast === true ? "مكتملة" : "غير مكتملة"],
+        ["التوقعات", report.forecast_pending ? "لم تكتمل قراءة التوقعات لهذه اللقطة" : data.completeness?.forecast === true ? "مكتملة" : "غير مكتملة"],
         ["الربح المتوقع", data.completeness?.profit === true ? "مكتمل" : "غير مكتمل"],
         ["نطاق تفاصيل الطلبات", filterDescription(filters, deliveries)],
         ["نطاق الإجماليات", "فلاتر تفاصيل الطلبات لا تغيّر إجماليات التقرير."],
@@ -204,33 +205,38 @@ export function buildFinancialPositionWorkbook(report, currency, filters = {}) {
     }
     if (exceptions.length) appendSheet(workbook, "طلبات تحتاج مراجعة", [["القسم", "الجهة", "رقم الطلب", "معرف الطلب", "أسباب عدم التأكد"], ...exceptions], [30, 30, 24, 32, 85]);
 
-    const summaries = [["الإجماليات والمركز والربح", currency], [], ["إجمالي الديون والمستحقات", data.completeness?.actual === true ? "مكتملة" : "الأرصدة المسجّلة فقط"], ["الجهة", "لنا", "علينا"],
-        ...(data.debt_rows || []).map(row => [positionText(row.name), exportValue(row.receivable, "money"), exportValue(row.payable, "money")]),
-        ["الإجمالي", exportValue(data.debt_totals?.receivable, "money"), exportValue(data.debt_totals?.payable, "money")]];
-    [["صافي الأرصدة الحالية", data.current_rows], ["التغير المتوقع من الطلبات المفتوحة", data.forecast_rows], ["حساب الربح المتوقع", data.profit_rows]].forEach(([title, rows]) => {
-        summaries.push([], [title], ["البند", "المبلغ", "ملاحظات", "المجموع المعلوم عند نقص البيانات"]);
-        (rows || []).forEach(row => summaries.push([positionText(row.label), exportValue(row.amount, "money"), row.reason || "",
-            row.known_subtotal == null ? "" : exportValue(row.known_subtotal, "money")]));
-    });
-    summaries.push([], ["صافي السيولة والمستحقات المتوقع", exportValue(data.metrics?.forecast_monetary_position, "money")],
-        ["صافي الربح المتوقع", exportValue(data.metrics?.net_profit, "money")]);
-    appendSheet(workbook, "الإجماليات والمركز", summaries, [48, 26, 75, 30]);
+    if (["all", "summary", "forecast"].includes(view)) {
+        const summaries = [["الإجماليات والمركز والربح", currency], [], ["إجمالي الديون والمستحقات", data.completeness?.actual === true ? "مكتملة" : "الأرصدة المسجّلة فقط"], ["الجهة", "لنا", "علينا"],
+            ...(data.debt_rows || []).map(row => [positionText(row.name), exportValue(row.receivable, "money"), exportValue(row.payable, "money")]),
+            ["الإجمالي", exportValue(data.debt_totals?.receivable, "money"), exportValue(data.debt_totals?.payable, "money")]];
+        [["صافي الأرصدة الحالية", data.current_rows], ["التغير المتوقع من الطلبات المفتوحة", data.forecast_rows], ["حساب الربح المتوقع", data.profit_rows]].forEach(([title, rows]) => {
+            summaries.push([], [title], ["البند", "المبلغ", "ملاحظات", "المجموع المعلوم عند نقص البيانات"]);
+            (rows || []).forEach(row => summaries.push([positionText(row.label), exportValue(row.amount, "money"), row.reason || "",
+                row.known_subtotal == null ? "" : exportValue(row.known_subtotal, "money")]));
+        });
+        summaries.push([], ["صافي السيولة والمستحقات المتوقع", exportValue(data.metrics?.forecast_monetary_position, "money")],
+            ["صافي الربح المتوقع", exportValue(data.metrics?.net_profit, "money")]);
+        if (report.forecast_pending) summaries.push(["التوقعات", "لم تكتمل قراءة التوقعات لهذه اللقطة؛ المبلغ غير متاح ولا يُعرض كصفر."]);
+        appendSheet(workbook, "الإجماليات والمركز", summaries, [48, 26, 75, 30]);
+    }
 
-    const orderRows = filterDeliveries(deliveries, filters);
-    appendSheet(workbook, "تفاصيل الطلبات", [
-        ["تفاصيل الشحن والتحصيل لكل طلب", currency],
-        ["الفلاتر", filterDescription(filters, deliveries)],
-        ["حالة البيانات", data.deliveries?.complete === true ? "مكتملة" : "غير مكتملة"],
-        ...readableMessages([DELIVERY_SCOPE_NOTE, ...(data.deliveries?.notes || [])]).map(note => [note]),
-        [],
-        ["رقم الطلب", "معرف الطلب", "جهة التنفيذ", "نوع المنفذ", "تاريخ التسليم — الرياض", "وقت التسجيل — الرياض", "طريقة الدفع", "جهة التحصيل", "حالة التحصيل",
-            "أساس احتساب أجرة الشحن", "تاريخ التنفيذ — الرياض", "صندوق خصم الأجرة", ...DELIVERY_MONEY_COLUMNS.map(column => column.label)],
-        ...orderRows.map(row => [positionText(row.order_number), positionText(row.order_id), positionText(row.party_name), PARTY_LABELS[row.party_type] || UNAVAILABLE,
-            row.delivered_at ? formatRiyadhDateTime(row.delivered_at) : UNAVAILABLE,
-            row.recorded_at ? formatRiyadhDateTime(row.recorded_at) : UNAVAILABLE, paymentLabel(row.payment_method),
-            [destinationLabel(row.collection_destination), row.destination_name].filter(Boolean).join(" · "), collectionLabel(row.collection_status),
-            shippingRecognitionLabel(row), row.completed_at ? formatRiyadhDateTime(row.completed_at) : UNAVAILABLE, positionText(row.cash_account_name),
-            ...DELIVERY_MONEY_COLUMNS.map(column => exportValue(row[column.key], "money"))]),
-    ], [24, 38, 32, 24, 26, 26, 24, 52, 32, 34, 26, 32, ...DELIVERY_MONEY_COLUMNS.map(() => 26)]);
+    if (view === "all" || data.deliveries) {
+        const orderRows = filterDeliveries(deliveries, filters);
+        appendSheet(workbook, "تفاصيل الطلبات", [
+            ["تفاصيل الشحن والتحصيل لكل طلب", currency],
+            ["الفلاتر", filterDescription(filters, deliveries)],
+            ["حالة البيانات", data.deliveries?.complete === true ? "مكتملة" : "غير مكتملة"],
+            ...readableMessages([DELIVERY_SCOPE_NOTE, ...(data.deliveries?.notes || [])]).map(note => [note]),
+            [],
+            ["رقم الطلب", "معرف الطلب", "جهة التنفيذ", "نوع المنفذ", "تاريخ التسليم — الرياض", "وقت التسجيل — الرياض", "طريقة الدفع", "جهة التحصيل", "حالة التحصيل",
+                "أساس احتساب أجرة الشحن", "تاريخ التنفيذ — الرياض", "صندوق خصم الأجرة", ...DELIVERY_MONEY_COLUMNS.map(column => column.label)],
+            ...orderRows.map(row => [positionText(row.order_number), positionText(row.order_id), positionText(row.party_name), PARTY_LABELS[row.party_type] || UNAVAILABLE,
+                row.delivered_at ? formatRiyadhDateTime(row.delivered_at) : UNAVAILABLE,
+                row.recorded_at ? formatRiyadhDateTime(row.recorded_at) : UNAVAILABLE, paymentLabel(row.payment_method),
+                [destinationLabel(row.collection_destination), row.destination_name].filter(Boolean).join(" · "), collectionLabel(row.collection_status),
+                shippingRecognitionLabel(row), row.completed_at ? formatRiyadhDateTime(row.completed_at) : UNAVAILABLE, positionText(row.cash_account_name),
+                ...DELIVERY_MONEY_COLUMNS.map(column => exportValue(row[column.key], "money"))]),
+        ], [24, 38, 32, 24, 26, 26, 24, 52, 32, 34, 26, 32, ...DELIVERY_MONEY_COLUMNS.map(() => 26)]);
+    }
     return workbook;
 }
