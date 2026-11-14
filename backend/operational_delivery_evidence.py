@@ -425,7 +425,8 @@ def recorded_courier_fee(state, order_id):
 
 
 def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at, as_of, history=(), shipment_conflicts=(),
-                           frozen_event=None, frozen_shipping=None, recorded_fee=False, owner_confirmation=None):
+                           frozen_event=None, frozen_shipping=None, recorded_fee=False, owner_confirmation=None,
+                           assignment_index=None):
     """Return a proved post-start event, None outside scope, or an exact issue.
 
     The caller retains normal order eligibility independently and quotes a
@@ -436,7 +437,8 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
     if owner_confirmation is not None:
         from operational_delivery_confirmation import confirmed_event
         return confirmed_event(owner_confirmation, raw, source=source, owner=owner, assignments=assignments,
-            setup=setup, started_at=started_at, as_of=as_of, history=history, shipment_conflicts=shipment_conflicts)
+            setup=setup, started_at=started_at, as_of=as_of, history=history, shipment_conflicts=shipment_conflicts,
+            **({'assignment_index': assignment_index} if assignment_index is not None else {}))
     if not _text(owner) or not isinstance(source, dict) or source.get("user_id") != owner:
         _fail("owner_mismatch")
     if not isinstance(raw, dict):
@@ -461,7 +463,11 @@ def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at
     created = _instant(raw.get("date") or raw.get("created_at") or raw.get("order_date"))
     if created > end:
         _fail("order_in_future")
-    assignment = _driver_assignment(assignments, owner, order_id, number)
+    if assignment_index is None:
+        assignment = _driver_assignment(assignments, owner, order_id, number)
+    else:
+        from operational_delivery_assignment_index import indexed_driver_assignment
+        assignment = indexed_driver_assignment(assignments, owner, order_id, number, assignment_index=assignment_index)
     base = {"schema": "operational_delivery_event_v1", "order_id": order_id, "order_number": number,
             "order_created_at": created.isoformat()}
     status_eligible = created_after_start_delivery(raw, start, end)

@@ -10,6 +10,7 @@ from decimal import Decimal, InvalidOperation
 
 from operational_delivery_evidence import STATUS_BASIS, _instant, _text, delivery_time_matches, status_delivery
 from operational_delivery_confirmation import BASIS as OWNER_DELIVERY_BASIS
+from operational_issue_index import append_issue, update_issue
 
 NATIVE = "store_delivery_operational"
 PENDING = "pending_mz2_driver_balance_link"
@@ -270,9 +271,9 @@ def courier_issue(out, code, raw, source, *, carrier=None, event=None, setup=Non
              "courier_fee_review":info, "required_action":msg}
     previous = out["issues"][-1] if out["issues"] else {}
     if previous.get("code") == code and previous.get("source_id") == oid:
-        previous.update(entry)
+        update_issue(out, previous, entry)
     else:
-        out["issues"].append(entry)
+        append_issue(out, entry)
 
 
 def hold_prior_courier_event(state, event, carrier):
@@ -354,7 +355,7 @@ async def hold_native_fee_overlaps(db, owner, out, state, *, max_rows):
             info = {k: event[k] for k in ("order_id", "order_number", "party_type", "party_id", "delivered_at")}
             info.update(currency=carrier.get("currency"), party_name=event.get("source_carrier_key") or event["party_id"],
                         candidate_amount=carrier.get("cost"))
-        out["issues"].append({"code": code, "source_id": order["id"], "status": "incomplete",
+        append_issue(out, {"code": code, "source_id": order["id"], "status": "incomplete",
                               "component": "shipping_fee", "recognition_state": "confirmed",
                               field: info, "required_action": reason})
         carrier.update(cost=None, fee_complete=False, fee_recognition_held=True)

@@ -82,7 +82,7 @@ def applied_metadata(facts, order_id, party_type, party_id):
 
 
 def candidate_event(raw, *, source, owner, assignments, setup, started_at, as_of, history=(),
-                    shipment_conflicts=(), recorded_at=None):
+                    shipment_conflicts=(), recorded_at=None, assignment_index=None):
     """Check the date gap and exact executor; never quote a fee or collect cash.
 
     Once a proof exists, later supplied real dates may agree with its bound.
@@ -119,7 +119,11 @@ def candidate_event(raw, *, source, owner, assignments, setup, started_at, as_of
         raise ValueError('operational_delivery_confirmation_not_required')
     order_at = order_delivery_time(raw, source, history, end, allow_undated=True, undated_before=recorded_at)
     times = [order_at] if order_at is not None else []
-    assignment = _driver_assignment(assignments, owner, oid, number)
+    if assignment_index is None:
+        assignment = _driver_assignment(assignments, owner, oid, number)
+    else:
+        from operational_delivery_assignment_index import indexed_driver_assignment
+        assignment = indexed_driver_assignment(assignments, owner, oid, number, assignment_index=assignment_index)
     event = {'schema': EVENT_SCHEMA, 'recognition_basis': BASIS, 'order_id': oid,
              'order_number': number, 'order_created_at': created.isoformat(), 'delivered_at': None,
              'recorded_at': boundary.isoformat()}
@@ -197,7 +201,7 @@ def annotate_pending(details, *, party_type, party_id, facts):
                                                        'party_type': party_type, 'party_id': party_id}
 
 
-def date_gap_identity(out, code, raw, assignments, owner, *, record=None, started_at=None):
+def date_gap_identity(out, code, raw, assignments, owner, *, record=None, started_at=None, assignment_index=None):
     """Keep a driver's date-only issue attached to its exact native assignment."""
     if record is not None:
         try:
@@ -214,13 +218,18 @@ def date_gap_identity(out, code, raw, assignments, owner, *, record=None, starte
         kind, identity, number = record['party_type'], record['party_id'], record['order_number']
     else:
         try:
-            assignment = _driver_assignment(assignments, owner, oid, number)
+            if assignment_index is None:
+                assignment = _driver_assignment(assignments, owner, oid, number)
+            else:
+                from operational_delivery_assignment_index import indexed_driver_assignment
+                assignment = indexed_driver_assignment(assignments, owner, oid, number, assignment_index=assignment_index)
         except (ValueError, TypeError, KeyError):
             return
         if not assignment:
             return
         kind, identity = 'store_driver', assignment['driver_id']
-    for issue in out['issues']:
+    from operational_issue_index import issues_for_identity
+    for issue in issues_for_identity(out, code, oid):
         if issue.get('code') == code and str(issue.get('source_id')) == oid:
             issue.pop('courier_fee_review', None)
             issue.pop('driver_fee_review', None)

@@ -7,6 +7,7 @@ from copy import deepcopy
 
 from operational_completed_shipping_admission import recorded_base_fee
 from operational_financial_activity_runtime import prepare_in_thread
+from operational_issue_index import append_unique_issue
 
 
 def public_candidate(event):
@@ -30,8 +31,7 @@ def completion_issue(out, code, event, *, required_action=None):
              'component': 'shipping_fee', 'currency': event.get('currency'),
              'completed_shipping_review': summary,
              'required_action': required_action or 'راجع افتتاح الشركة والسدادات السابقة ثم اعتمد أجرة هذا الطلب من مراجعة أجور تم التنفيذ.'}
-    if entry not in out['issues']:
-        out['issues'].append(entry)
+    append_unique_issue(out, entry)
 
 
 def _values(value):
