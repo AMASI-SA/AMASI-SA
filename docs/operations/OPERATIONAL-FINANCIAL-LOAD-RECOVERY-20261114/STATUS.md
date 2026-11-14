@@ -152,3 +152,19 @@ both Host20/24 clean-clone adapter rehearsals. Production remains unchanged,
 with no release lease or publication. The unsaved editor buffer is Untitled-1;
 its dirty indicator remains present. The unrelated missing PR1906 temporary
 JSON editor tab was left as found.
+
+## Release continuation checkpoint — merged M
+
+All applicable exact-B workflows passed, including CodeQL and both clean-clone
+adapter rehearsals. The independent audit is `verification/intentB-ci-independent.json`.
+PR #1919 was merged normally as `4c623c640fb63ac3c138fa4a9cabb20e2b39dca7`.
+Root and the independent reviewer verified ordered parents J/B, exact B/M tree
+`14626f7c528626d422d6098800ac109bcba2984b`, A ancestry and intent-only A..M diff.
+
+Exact-M Readiness 43605488046, Security 43605488095 and CodeQL 43605488109 are
+running. The original /app preflight at 14:31:46 UTC showed HEAD J, tracked clean,
+120 nonignored untracked paths and inactive guard. Untitled-1 remains dirty.
+Filled release runners are preserved in `release-runners/`; the gate deliberately
+still needs the successful rehearsal's private evidence directory. The original
+rehearsal may proceed in parallel with M checks, with no lease/publication until
+all applicable M checks pass. Live Production remains on the previous release.

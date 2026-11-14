@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-FINANCIAL-LOAD-RECOVERY-20261114",
-  "phase": "intent-B-CI-in-progress",
+  "phase": "merged-M-rehearsal-and-CI-pending",
   "repository": "AMASI-SA/AMASI-SA",
   "release_branch": "codex/financial-loading-resume-20261114",
   "handoff_branch": "codex/financial-loading-release-handoff-20261114",
@@ -19,7 +19,7 @@
   "source_A_stock_run": 43604084975,
   "production_changed": false,
   "lease_started": false,
-  "next": "Wait for exact-B applicable CI and independent Host20/24 adapter evidence. Then normal merge with exact B tree; exact-M applicable CI; fresh original /app guard/preservation/rehearsal; prepare/prepublish; explicit platform success; official verification and live financial report acceptance.",
+  "next": "Stage reviewed runners from this handoff branch outside /app. Original rehearsal can run while exact-M checks complete; no lease/publish until M gates succeed. Fill gate evidence_dir only from actual successful original build outcome, then prepare/prepublish and authorized UI publication, explicit success, official verify and visible live acceptance.",
   "notes": [
     "Issue1006 is full; this branch, task status and PR1919 carry continuation.",
     "The handoff branch is documentation only and must never be merged into frozen release A/B.",
@@ -36,5 +36,19 @@
   "all_25_new_reconciliation_cases_passed": true,
   "intent_B_readiness_run": 43604791836,
   "intent_B_operational_run": 43604791530,
-  "intent_B_stock_run": 43604791701
+  "intent_B_stock_run": 43604791701,
+  "merge_M": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+  "merge_M_tree": "14626f7c528626d422d6098800ac109bcba2984b",
+  "intent_B_all_applicable_workflows_passed": true,
+  "intent_B_independent_audit": "PASS",
+  "merge_M_readiness_run": 43605488046,
+  "merge_M_security_run": 43605488095,
+  "merge_M_codeql_run": 43605488109,
+  "live_production_changed": false,
+  "original_app_preflight_utc": "2026-11-14T14:31:46.889739+00:00",
+  "original_app_head": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+  "original_app_tracked_clean": true,
+  "original_app_guard_active": false,
+  "original_app_untracked_count": 120,
+  "original_editor_dirty_buffer": "Untitled-1"
 }

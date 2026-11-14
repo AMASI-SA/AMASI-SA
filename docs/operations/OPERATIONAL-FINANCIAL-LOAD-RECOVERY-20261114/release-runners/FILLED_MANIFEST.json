@@ -1,0 +1,22 @@
+{
+  "pr1919_original_rehearsal.py": {
+    "bytes": 16604,
+    "sha256": "44e120f42f69d7b996c5422d41386b54b6c4843dfaefb2d9b898ac1c0e226cd4",
+    "remaining_placeholder": null
+  },
+  "pr1919_original_gate.py": {
+    "bytes": 11203,
+    "sha256": "eb1b4b6789ed8d3d91f15bc7a5353172b75e981183459689bb13e97c14ddd0fd",
+    "remaining_placeholder": "evidence_dir"
+  },
+  "pr1919_original_verify.py": {
+    "bytes": 11509,
+    "sha256": "5af29358edf007e07091373c952435d6a1af3accc389bd0ca5b71c099647c6f1",
+    "remaining_placeholder": null
+  },
+  "pr1919_preserve_untracked.py": {
+    "bytes": 5348,
+    "sha256": "3c0c19680521017765f62ca200dffcf603d1b36cccc689c0e444d6248a45fded",
+    "remaining_placeholder": null
+  }
+}
