@@ -1,0 +1,1109 @@
+{
+  "round5": {
+    "branch": "codex/campaign-operating-pilot-maf9-20261114",
+    "base": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+    "base_tree": "b5aba4c6ec2755fb27fe084c2b74f87f9d8fddf6",
+    "A": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+    "A_tree": "d0990feaa0514cf06fd09eb601051c116bb8be46",
+    "files": [
+      {
+        "path": "backend/order_engine/campaign_hover_operating.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "b0576e365eb2a5b4f1e105e2a1be17f1d2393655"
+      },
+      {
+        "path": "backend/tests/test_campaign_hover_operating.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "5ec985aa2307f07d05b87486f59c9fb764205ed7"
+      },
+      {
+        "path": "docs/operations/CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114/STATUS.md",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "87ae08883b1c55923ab038b9ebc7fc027bc2b4d2"
+      }
+    ],
+    "status": "superseded_by_current_base",
+    "inherited_intent_blob": "f44168176bc3a995776f71e4aa61ea4ee9509366",
+    "same_code_test_blobs_as_A4": true,
+    "superseded_pr": 1926,
+    "pr": 1927,
+    "pr_result": {
+      "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1927",
+      "number": 1927,
+      "state": "open",
+      "merged": false,
+      "mergeable": false,
+      "draft": true,
+      "body": "## Problem and change\n\nLive campaign acceptance after PR1924 identified an explicitly disabled pilot salary contract excluded by the executive salary reader but incorrectly treated as missing payroll cost by the campaign reader. Project the three existing policy fields and exclude only empty normalized salary history with `status=pilot_only`, `payroll_enabled is False` and `accrual_policy=disabled_during_pilot`.\n\nValid salary history and a valid legacy baseline still contribute despite obsolete markers. Contributing contracts with missing costs remain incomplete. The operating allocation formula, currency checks, query limits, deadlines, recurring costs, direct costs, profit calculation and frontend remain unchanged.\n\n## Current production base\n\nThis supersedes PR1926 without altering its frozen A4/B4 commits. Production advanced to PR1923 merge `af9caabb3119aeb9cf450af0a8b89d376cef8c74` just after the pre-B4 ref check, making B4 unmergeable; no B4 workflows or publication occurred. Independent source/tree review confirms the reviewed pilot source and tests can be reused byte for byte on this new base, including its Salla change.\n\n- J5/base: `af9caabb3119aeb9cf450af0a8b89d376cef8c74`\n- New source A5: `3545ef861c17f1411d6258efb5db4a5aaf52f577`\n- A5 tree: `d0990feaa0514cf06fd09eb601051c116bb8be46`\n- Inherited J5 intent blob remains `f44168176bc3a995776f71e4aa61ea4ee9509366` throughout source history.\n- Source/test blobs: `b0576e365eb2a5b4f1e105e2a1be17f1d2393655` / `5ec985aa2307f07d05b87486f59c9fb764205ed7`.\n\n## Validation and remaining gates\n\nIndependent narrow patch and new-base compatibility reviews passed. The actual-helper offline probe improves from 46 passed / 1 failed to 47 passed / 0 failed. All11 A4 workflows previously passed, including253 backend and50 frontend tests/9suites. Five added synthetic pytest cases preserve canonical cohort parity and contributing-cost protections. Those previous results do not replace exact-A5 CI, which is pending.\n\nWait for all A5 workflows and a newly generated, independently reviewed A5/J5 intent; create intent-only B5 and pass both host adapter/runtime-route proofs and all B5 gates. Then require an ordinary tree-equivalent merge, exact-merge push gates, fresh original guard/ownership checks and the complete official release protocol. PR1923's separate original release belongs to its owner and remains untouched. Final success requires live operating/net-profit arithmetic, not CI alone.\n\nNo private identifiers, salary values or business metrics are included. No business-data writes, sync jobs or paid agent actions. Durable task record: `docs/operations/CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114/STATUS.md`; continuation branch: `codex/campaign-hover-profit-release-handoff-20261114`. Issue1006 is full; use this task record and PR for continuity.\n",
+      "title": "Fix campaign operating basis for disabled pilot payroll on current base",
+      "base": "hotfix/prod-snap-meta-final",
+      "base_sha": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+      "head": "codex/campaign-operating-pilot-maf9-20261114",
+      "head_sha": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+      "head_repo_id": 1250664189,
+      "head_repo_full_name": "AMASI-SA/AMASI-SA",
+      "merge_commit_sha": null,
+      "user": {
+        "login": "AMASI-SA",
+        "name": "AMASI-SA",
+        "email": null,
+        "avatar_url": "https://avatars.githubusercontent.com/u/288137316?v=4",
+        "id": 288137316
+      },
+      "requested_reviewers": null,
+      "requested_team_reviewers": null,
+      "diff": null,
+      "comments": null,
+      "created_at": "2026-11-14T18:25:32Z",
+      "updated_at": "2026-11-14T18:25:32Z",
+      "closed_at": null,
+      "merged_at": null,
+      "commits": 1,
+      "changed_files": 3,
+      "additions": 109,
+      "deletions": 1,
+      "display_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1927",
+      "display_title": "Fix campaign operating basis for disabled pilot payroll on current base"
+    },
+    "pr_body": "> **Superseded — do not merge or deploy this frozen candidate.** Production advanced to PR1928 merge `3e9dc3b25e41c663e001822a666323c802e5ec5a` at18:47:59UTC while this candidate waited for the separate release. Replacement PR: #1929 — https://github.com/AMASI-SA/AMASI-SA/pull/1929. Fresh source A6 `fcb827f556c40bebd843d8c9d85fedc0b60cf8fa` preserves the exact reviewed pilot source/test blobs on the new base. All A5/B5/source/host/ready evidence remains immutable; no PR1927 merge, original build, lease or publication occurred.\n\n## Problem and change\n\nCampaign operating cost incorrectly treated an explicitly disabled pilot payroll contract as a missing contributing cost. Match the executive salary reader by excluding only empty normalized history with all three explicit disabled-pilot fields. Valid salary history or a valid legacy baseline continues to contribute; actual missing costs remain incomplete.\n\nThe operating allocation formula, currency checks, deadlines/query limits, recurring/direct costs, net profit and frontend are unchanged. No business-data writes, provider sync, new worker or paid agent action.\n\n## Verified candidate\n\n| Identity | SHA |\n| --- | --- |\n| Base J5 | `af9caabb3119aeb9cf450af0a8b89d376cef8c74` |\n| Source A5 | `3545ef861c17f1411d6258efb5db4a5aaf52f577` |\n| Intent-only B5 | `0a79480d2246d4ad748ed82b0a3510a4c0c0123c` |\n| B5 tree | `d199c053cc3f3c3aad55ca1e96dde7c1fde44926` |\n\nAll11 applicable workflows passed on exact A5 and B5, attempt1; B5 also has the expected TikTok branch skip. Actual campaign coverage:253 backend tests and50 frontend tests/9suites. Root and independent source, manifest and intent-only lineage reviews passed.\n\nBoth host20.20.2/24.19.0 rehearsals actually built, verified isolated packages and passed the JSON metadata route test in [readiness43627233700](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233700). Root and independent review confirmed293 identical generated files/modes, exact A5 intent/runtime/proof/metadata, and independently reconstructed backend1217/frontend1472 package digests.\n\n## Release state\n\nMarked ready at18:40:58UTC; both ready-transition scope checks passed (runs43627961281 and43627961239), root-confirmed18:42:14UTC. **No PR1927 original build, lease or publication.** PR1923 owns the preceding original release and has recorded its successful rehearsal. This release waits for its explicit publication and actual official three-probe success/inactive closure before fresh final merge and original checks. Then ordinary tree-equivalent merge, exact-M push gates and the complete official release protocol are still required.\n\n[Durable verified-candidate checkpoint](https://github.com/AMASI-SA/AMASI-SA/commit/066547caab88256479159e257bd16165c15bdbb2). Continuation: `codex/campaign-hover-profit-release-handoff-20261114`; task: `docs/operations/CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114/STATUS.md`. Issue1006 is full.\n\nPR1926 remains closed and immutable after the Production base advanced; its A4/B4 identity must not be reused. The reviewed source/test blobs are unchanged on the current base. Final acceptance requires live operating allocation/net-profit arithmetic, not CI alone. Private identifiers and financial values are absent from all records.\n\nLatest coordination: [checkpointc78ba8e9473e36639d953362141840953463c82e](https://github.com/AMASI-SA/AMASI-SA/commit/c78ba8e9473e36639d953362141840953463c82e) records all candidate gates complete and a wait for PR1923's owner. Their current durable checkpoint97e671... records a preservation precheck block before official prepare; they are reviewing a narrow operator correction. No PR1927 merge or original action has occurred; time/silence does not transfer ownership.\n",
+    "B": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+    "B_tree": "d199c053cc3f3c3aad55ca1e96dde7c1fde44926",
+    "superseded_by_pr": 1929
+  },
+  "checkpoint": {
+    "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
+    "round": 5,
+    "repository": "AMASI-SA/AMASI-SA",
+    "updated_at_utc": "2026-11-14 18:43:32 UTC",
+    "branch": "codex/campaign-operating-pilot-maf9-20261114",
+    "pr": 1927,
+    "base_J5": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+    "base_tree": "b5aba4c6ec2755fb27fe084c2b74f87f9d8fddf6",
+    "source_A5": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+    "source_tree": "d0990feaa0514cf06fd09eb601051c116bb8be46",
+    "source_files": [
+      {
+        "path": "backend/order_engine/campaign_hover_operating.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "b0576e365eb2a5b4f1e105e2a1be17f1d2393655"
+      },
+      {
+        "path": "backend/tests/test_campaign_hover_operating.py",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "5ec985aa2307f07d05b87486f59c9fb764205ed7"
+      },
+      {
+        "path": "docs/operations/CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114/STATUS.md",
+        "mode": "100644",
+        "type": "blob",
+        "sha": "87ae08883b1c55923ab038b9ebc7fc027bc2b4d2"
+      }
+    ],
+    "source_history": {
+      "sole_parent": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+      "changed_files": 3,
+      "inherited_intent_blob": "f44168176bc3a995776f71e4aa61ea4ee9509366",
+      "independent_result": "PASS"
+    },
+    "source_review": {
+      "same_code_and_tests_as_reviewed_A4": true,
+      "operating_blob": "b0576e365eb2a5b4f1e105e2a1be17f1d2393655",
+      "tests_blob": "5ec985aa2307f07d05b87486f59c9fb764205ed7",
+      "independent_patch_review": "PASS",
+      "independent_new_base_compatibility_review": "PASS"
+    },
+    "diagnosis": {
+      "recorded_at_utc": "2026-11-14 18:09:58 UTC",
+      "source_commit": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+      "runtime_source": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "observation_type": "Authorized owner-scoped read-only rendered JSON, no database or business-data writes.",
+      "reason": "operating_basis_cost_missing",
+      "noncontributor_shape": {
+        "employee_status": "active",
+        "status": "pilot_only",
+        "payroll_enabled": false,
+        "accrual_policy": "disabled_during_pilot",
+        "currency": "SAR",
+        "monthly_amount_positive_finite": true,
+        "normalized_salary_revisions_empty": true,
+        "effective_from_absent": true,
+        "effective_to_absent": true,
+        "hire_date_absent": true,
+        "first_accrual_date_absent": true,
+        "scheduled_salary_revisions_empty": true,
+        "suspension_periods_empty": true
+      },
+      "canonical_membership_confirmed_absent": true,
+      "canonical_identity_fields_used_in_memory_only": [
+        "employee_v2_id",
+        "contract_id"
+      ],
+      "other_salary_amounts_positive_finite": true,
+      "recurring_configured_and_displayed_daily_amounts_positive_finite": true,
+      "private_identifiers_and_values_not_collected_for_evidence": true,
+      "fix_scope": "Add projected non-payroll policy fields; ignore explicit disabled-pilot contract only when canonical normalized history is empty; keep all contributing missing-cost protections."
+    },
+    "source_ci": {
+      "status": "all_11_success",
+      "at": "2026-11-14 18:32:56 UTC",
+      "independent": "PASS",
+      "runs": [
+        {
+          "id": 43626531323,
+          "name": "Snapchat Settings Management V2",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531323",
+          "updated": "2026-11-14T18:25:49Z"
+        },
+        {
+          "id": 43626531194,
+          "name": "Snapchat Direct Active Publication",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531194",
+          "updated": "2026-11-14T18:25:48Z"
+        },
+        {
+          "id": 43626531444,
+          "name": "Qoyod Payment Freshness",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531444",
+          "updated": "2026-11-14T18:26:03Z"
+        },
+        {
+          "id": 43626531408,
+          "name": "Campaign hover source coverage",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531408",
+          "updated": "2026-11-14T18:26:31Z"
+        },
+        {
+          "id": 43626531393,
+          "name": "Mezan Release Readiness",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531393",
+          "updated": "2026-11-14T18:26:41Z"
+        },
+        {
+          "id": 43626531297,
+          "name": "Security Gate",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531297",
+          "updated": "2026-11-14T18:28:44Z"
+        },
+        {
+          "id": 43626531528,
+          "name": "G47 Focused Integration",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531528",
+          "updated": "2026-11-14T18:29:07Z"
+        },
+        {
+          "id": 43626531318,
+          "name": "MZ2 Track F native shipping",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531318",
+          "updated": "2026-11-14T18:30:02Z"
+        },
+        {
+          "id": 43626531313,
+          "name": "Operational Balance Web",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531313",
+          "updated": "2026-11-14T18:31:06Z"
+        },
+        {
+          "id": 43626531441,
+          "name": "CodeQL",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531441",
+          "updated": "2026-11-14T18:31:00Z"
+        },
+        {
+          "id": 43626531304,
+          "name": "Operational Stock Eligibility",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531304",
+          "updated": "2026-11-14T18:32:12Z"
+        }
+      ]
+    },
+    "predecessor_own_release": {
+      "pr": 1924,
+      "official_verify_success": true,
+      "checks": 3,
+      "lease_closed_at": "2026-11-14T18:14:07.202705Z",
+      "evidence_checkpoint": "e38c40f21b0c5d84b047403e5a3823617f2d2f59"
+    },
+    "foreign_release": {
+      "pr": 1923,
+      "deployment": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+      "source_A": "7944a567fef519b3a1f9eb933fc463fbdd0c8575",
+      "intent_B": "ece0b24b0978c5064c4e605b577ad2722158f56a",
+      "state": "Merged; owner preparing original rehearsal at last observed PR update. Root must read current guard before original actions and wait for the owner's successful verification/inactive receipt if a lease is active.",
+      "last_guard_read": {
+        "at": "2026-11-14T18:42:04.537832+00:00",
+        "active": false,
+        "incomplete_lease_directory": null,
+        "scope": "Root read-only Terminal3; no ownership assumption or original mutation."
+      },
+      "latest_durable_state": {
+        "checkpoint": "97e671537969525bacf0968dcdf326c453e8d111",
+        "at": "2026-11-14T18:41:26Z",
+        "state": "original_build_passed_guard_wrapper_precheck_blocked_on_bookkeeping_append",
+        "failed_wrapper_finished_at": "2026-11-14T18:36:42.215163Z",
+        "guard_invoked": false,
+        "official_prepare_invocations": 0,
+        "next_owner_action": "Owner reviews a narrow append-only bookkeeping operator R2, preserving the successful build and precheck failure; no source/intent/official guard mutation."
+      }
+    },
+    "superseded_pr1926": {
+      "artifact": "verification/superseded-pr1926.json",
+      "A4": "1140a3fec8ef77f81fdd0cf768f9a89fb2db4ab0",
+      "B4": "8351754572cfd82833b9901e794275f6598f79f1",
+      "reason": "Production advanced immediately after the pre-B4 ref check; frozen B4 cannot merge against the new intent/source base."
+    },
+    "next": "All PR1927 A/B/host/ready-transition gates are complete. Wait for PR1923 owner's separate release to finish and record actual official three-probe success/inactive closure; then fresh Production J5/PR B5/guard/ownership check before ordinary merge. Never reuse/alter foreign phases or infer abandonment from time.",
+    "coordination": "Issue1006 is full; task status, PR body and handoff branch preserve checkpoints.",
+    "intent_B5": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+    "intent_tree": "d199c053cc3f3c3aad55ca1e96dde7c1fde44926",
+    "intent_candidate": {
+      "path": "/workspace/scratch/a7d75184af2d/campaign-operating-intent-a5/release-intent-v5.json",
+      "zip_bytes": 378226,
+      "zip_sha256": "28439ee348937530e9fc26623c3f5ee625929d908499d293aae36a364811f217",
+      "intent_bytes": 1308607,
+      "intent_sha256": "e5223937d883ce8ce2d02e524e079d78658be47b289ddc2c174d452c5ca1aebf",
+      "intent_git_blob": "d4a50b97e17522430479fe16f3927f47c56a520c",
+      "source": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+      "base": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+      "runtime_release_id": "rg5-a80ea84875fa69d3a23cec8f7bb90bfafb5dbab2f78e594197c02d1d8ff370b3",
+      "runtime_identity_bytes": 437783,
+      "runtime_identity_sha256": "06a7579dab38387c81c17c71bdb689e56e1d521f8a2628cb575d9f8ac16423c9",
+      "frontend_source_tree": "ea3a91a417ada4226cd1614fb1de928351da3ebf",
+      "frontend_source_file_count": 1182,
+      "frontend_artifact_tree": "8b55f9ab1883c764826c27dd77b504fa55599bf0d84875f156565a9d8eaba5f4",
+      "frontend_build_meta": {
+        "bytes": 474116,
+        "path": "build-meta.json",
+        "sha256": "5b84999ee406f9e3f51cec5c3ffabb193dd36fa5430b95cfcdc2cd0b791c6bbc"
+      },
+      "frontend_proof": {
+        "bytes": 1521,
+        "path": "frontend/.release/reproducible-build.json",
+        "sha256": "b3385c9255f6b64f6f683a45613b1cb1995239c5480a1dadf3e6255739f02d17"
+      },
+      "toolchain": {
+        "node": "22.23.2",
+        "vite": "8.2.4",
+        "yarn": "1.22.22"
+      },
+      "backend": {
+        "added_count": 0,
+        "deleted_count": 0,
+        "file_count": 1216,
+        "manifest_sha256": "0f4b06ac8fe58befd686304e188b4337ead5feaa2ea9270747730324ee3f88ab",
+        "modified_count": 1,
+        "projection_tree_oid": "c1946e5479b2da4cf44c82ffb9284b02b088eb35",
+        "scope": "backend_runtime_package_v1",
+        "scope_tree_oid": "5e5df1dc56f39a5e63f49c8b58404c6cc7d8cedd",
+        "source_base_git_sha": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+        "source_base_root_tree_oid": "b5aba4c6ec2755fb27fe084c2b74f87f9d8fddf6",
+        "source_base_scope_tree_oid": "3d49971b92d94db7a32a0ffa989e098d253558f8",
+        "source_git_sha": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+        "source_root_tree_oid": "d0990feaa0514cf06fd09eb601051c116bb8be46",
+        "tombstone_count": 0,
+        "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "tree_sha256": "80f73d29109d1810d3df7a7de7c4a2444e04bc5e15a9680a1fdc36b56a2e0357"
+      },
+      "control": {
+        "added_count": 0,
+        "deleted_count": 0,
+        "file_count": 291,
+        "manifest_sha256": "95dff713de138cd3236da67cf04bb1d8e1662a7d095ebd7acfceb98af7c6f038",
+        "modified_count": 0,
+        "projection_tree_oid": "f439e50ce2dd9755cbfba633a7a3fee982fbbda7",
+        "scope": "release_control_source_v1",
+        "scope_tree_oid": "f439e50ce2dd9755cbfba633a7a3fee982fbbda7",
+        "source_base_git_sha": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+        "source_base_root_tree_oid": "b5aba4c6ec2755fb27fe084c2b74f87f9d8fddf6",
+        "source_base_scope_tree_oid": "f439e50ce2dd9755cbfba633a7a3fee982fbbda7",
+        "source_git_sha": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+        "source_root_tree_oid": "d0990feaa0514cf06fd09eb601051c116bb8be46",
+        "tombstone_count": 0,
+        "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "tree_sha256": "70d8d5e49a3c89d1620bde2c8fa35e27a2c23f983be546ad20725a39c2a2be10"
+      },
+      "root_initial_bindings": "PASS",
+      "independent_review": "PASS",
+      "source_readiness_run": 43626531393,
+      "source_artifact": 14126221258,
+      "independent_scope_records": 2689
+    },
+    "intent_freeze_review": {
+      "result": "PASS",
+      "base": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+      "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+      "files": [
+        {
+          "filename": "release/release-intent-v5.json",
+          "sha": "d4a50b97e17522430479fe16f3927f47c56a520c",
+          "status": "modified"
+        }
+      ],
+      "independent": "PASS",
+      "sole_parent": "3545ef861c17f1411d6258efb5db4a5aaf52f577"
+    },
+    "intent_ci": {
+      "at": "2026-11-14 18:40:58 UTC",
+      "applicable": 11,
+      "expected_tiktok_skip": true,
+      "runs": [
+        {
+          "id": 43627233676,
+          "name": "TikTok Creator Release Candidate",
+          "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+          "conclusion": "skipped",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233676",
+          "updated": "2026-11-14T18:33:12Z"
+        },
+        {
+          "id": 43627233751,
+          "name": "Snapchat Settings Management V2",
+          "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233751",
+          "updated": "2026-11-14T18:33:23Z"
+        },
+        {
+          "id": 43627233645,
+          "name": "Snapchat Direct Active Publication",
+          "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233645",
+          "updated": "2026-11-14T18:33:25Z"
+        },
+        {
+          "id": 43627233651,
+          "name": "Qoyod Payment Freshness",
+          "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233651",
+          "updated": "2026-11-14T18:33:37Z"
+        },
+        {
+          "id": 43627233670,
+          "name": "Campaign hover source coverage",
+          "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233670",
+          "updated": "2026-11-14T18:33:54Z"
+        },
+        {
+          "id": 43627233809,
+          "name": "Security Gate",
+          "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233809",
+          "updated": "2026-11-14T18:35:20Z"
+        },
+        {
+          "id": 43627233649,
+          "name": "G47 Focused Integration",
+          "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233649",
+          "updated": "2026-11-14T18:36:58Z"
+        },
+        {
+          "id": 43627233700,
+          "name": "Mezan Release Readiness",
+          "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233700",
+          "updated": "2026-11-14T18:36:50Z"
+        },
+        {
+          "id": 43627233646,
+          "name": "MZ2 Track F native shipping",
+          "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233646",
+          "updated": "2026-11-14T18:37:34Z"
+        },
+        {
+          "id": 43627233653,
+          "name": "Operational Balance Web",
+          "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233653",
+          "updated": "2026-11-14T18:38:43Z"
+        },
+        {
+          "id": 43627233744,
+          "name": "CodeQL",
+          "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233744",
+          "updated": "2026-11-14T18:40:38Z"
+        },
+        {
+          "id": 43627233850,
+          "name": "Operational Stock Eligibility",
+          "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+          "conclusion": "success",
+          "attempt": 1,
+          "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233850",
+          "updated": "2026-11-14T18:40:19Z"
+        }
+      ]
+    },
+    "disabled_runner_templates": {
+      "original_build": {
+        "path": "operators/original-build-1927.template.py",
+        "sha256": "4c394d8fb0a6f5a2ca6d3fd19bd0e89f74dc6033058bd23f96df6a5045c85bed"
+      },
+      "release_gate": {
+        "path": "operators/release-gate-1927.template.py",
+        "sha256": "7be8c2f7cae81d8c9cf0dcaa01007c36524c31b53be622d289993195e8ca09bc"
+      },
+      "root_review": "PASS; disabled PINS_REVIEWED=False; unknown pins remain UNPINNED. No execution."
+    },
+    "host_rehearsals": {
+      "root": {
+        "accepted": true,
+        "source": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+        "base": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+        "intent_commit": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+        "intent_sha256": "e5223937d883ce8ce2d02e524e079d78658be47b289ddc2c174d452c5ca1aebf",
+        "runtime_release": "rg5-a80ea84875fa69d3a23cec8f7bb90bfafb5dbab2f78e594197c02d1d8ff370b3",
+        "identity_sha256": "06a7579dab38387c81c17c71bdb689e56e1d521f8a2628cb575d9f8ac16423c9",
+        "jobs_json_sha256": "07f7392780caf39a5bceea43d9a45262d6074071b13460904a7fcfaa5b46d0c0",
+        "generated_paths_bytes_modes_identical": true,
+        "json_route_job_steps_passed": 2,
+        "hosts": {
+          "20.20.2": {
+            "inner_tar_sha256": "24d1357977fe5ed8575ee3421c6df21080b04d9e3f618f14c1b1df67e00c9f1a",
+            "generated_files": 293,
+            "frontend_content_records": 289,
+            "identity_sha256": "06a7579dab38387c81c17c71bdb689e56e1d521f8a2628cb575d9f8ac16423c9",
+            "identity_bytes": 437783,
+            "build_meta_sha256": "5b84999ee406f9e3f51cec5c3ffabb193dd36fa5430b95cfcdc2cd0b791c6bbc",
+            "proof_sha256": "b3385c9255f6b64f6f683a45613b1cb1995239c5480a1dadf3e6255739f02d17",
+            "package_boundary_sha256": "aa04c75de90e60978cff8143430da8db67ab451ce7ada2de841607109b5bf1a1",
+            "backend_package_files": 1217,
+            "frontend_package_files": 1472,
+            "backend_package_tree_sha256": "8bbd32b6cc3ecb4fdfe4d925fed0bb79ea1de56b6ee97e66fa33d394153d8022",
+            "frontend_package_tree_sha256": "91358213a43dc6d6b902f9ecc7bff22a31bdaafe46a41064f4a2d71281568218",
+            "governed_node": "22.23.2",
+            "governed_yarn": "1.22.22",
+            "actual_adapter_built": true,
+            "generated_zip_sha256": "62dcfee1a1ee8b9f9b26ba1418fc540bc6ce6c55ce23a2460cf1d19258e0b84a",
+            "evidence_zip_sha256": "d2a75a08e40942d8cf2719eb86c97d09ba9b041007e7d1418017816d037dee38",
+            "ci": {
+              "job_id": 132546148748,
+              "run_id": 43627233700,
+              "head_sha": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+              "steps": [
+                {
+                  "name": "Invoke the Emergent package adapter under the selected Host Node",
+                  "number": 12,
+                  "started_at": "2026-11-14T18:35:38Z",
+                  "completed_at": "2026-11-14T18:36:36Z",
+                  "conclusion": "success"
+                },
+                {
+                  "name": "Verify artifact, proof, identity, and package boundaries",
+                  "number": 13,
+                  "started_at": "2026-11-14T18:36:36Z",
+                  "completed_at": "2026-11-14T18:36:39Z",
+                  "conclusion": "success"
+                },
+                {
+                  "name": "Prove the governed runtime returns build metadata as JSON",
+                  "number": 14,
+                  "started_at": "2026-11-14T18:36:39Z",
+                  "completed_at": "2026-11-14T18:36:39Z",
+                  "conclusion": "success"
+                }
+              ]
+            }
+          },
+          "24.19.0": {
+            "inner_tar_sha256": "18153552a64e864878ea07d7add104cd15101e0056f5322f4988cfb5b7c581bc",
+            "generated_files": 293,
+            "frontend_content_records": 289,
+            "identity_sha256": "06a7579dab38387c81c17c71bdb689e56e1d521f8a2628cb575d9f8ac16423c9",
+            "identity_bytes": 437783,
+            "build_meta_sha256": "5b84999ee406f9e3f51cec5c3ffabb193dd36fa5430b95cfcdc2cd0b791c6bbc",
+            "proof_sha256": "b3385c9255f6b64f6f683a45613b1cb1995239c5480a1dadf3e6255739f02d17",
+            "package_boundary_sha256": "aa04c75de90e60978cff8143430da8db67ab451ce7ada2de841607109b5bf1a1",
+            "backend_package_files": 1217,
+            "frontend_package_files": 1472,
+            "backend_package_tree_sha256": "8bbd32b6cc3ecb4fdfe4d925fed0bb79ea1de56b6ee97e66fa33d394153d8022",
+            "frontend_package_tree_sha256": "91358213a43dc6d6b902f9ecc7bff22a31bdaafe46a41064f4a2d71281568218",
+            "governed_node": "22.23.2",
+            "governed_yarn": "1.22.22",
+            "actual_adapter_built": true,
+            "generated_zip_sha256": "9ff03c85c1fde109e3dbc85b035c796c5319bcc4f81b519a8ea454644d7ed38f",
+            "evidence_zip_sha256": "2a678cf16f929c196529546265d9b3f388acb4990a76cf0388177ef66ca1d790",
+            "ci": {
+              "job_id": 132546148767,
+              "run_id": 43627233700,
+              "head_sha": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+              "steps": [
+                {
+                  "name": "Invoke the Emergent package adapter under the selected Host Node",
+                  "number": 12,
+                  "started_at": "2026-11-14T18:35:28Z",
+                  "completed_at": "2026-11-14T18:36:27Z",
+                  "conclusion": "success"
+                },
+                {
+                  "name": "Verify artifact, proof, identity, and package boundaries",
+                  "number": 13,
+                  "started_at": "2026-11-14T18:36:27Z",
+                  "completed_at": "2026-11-14T18:36:30Z",
+                  "conclusion": "success"
+                },
+                {
+                  "name": "Prove the governed runtime returns build metadata as JSON",
+                  "number": 14,
+                  "started_at": "2026-11-14T18:36:30Z",
+                  "completed_at": "2026-11-14T18:36:31Z",
+                  "conclusion": "success"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "independent": {
+        "result": "PASS",
+        "provenance": "Official readiness 43627233700 success attempt1 / head B5; all four artifact IDs and ZIP digests rechecked.",
+        "generated_files": 293,
+        "directories": 3,
+        "identical_records_including_modes": 296,
+        "files_mode": "0644",
+        "directories_mode": "0755",
+        "frontend_content_records": 289,
+        "package_digests_reconstructed": true,
+        "backend_package_files": 1217,
+        "frontend_package_files": 1472,
+        "backend_package_tree": "8bbd32b6cc3ecb4fdfe4d925fed0bb79ea1de56b6ee97e66fa33d394153d8022",
+        "frontend_package_tree": "91358213a43dc6d6b902f9ecc7bff22a31bdaafe46a41064f4a2d71281568218",
+        "package_boundary_sha256": "aa04c75de90e60978cff8143430da8db67ab451ce7ada2de841607109b5bf1a1",
+        "actual_JSON_route_jobs": [
+          132546148748,
+          132546148767
+        ],
+        "workflow_source_review": "Actual metadata byte and application/json checks with query/Accept/Host; not inferred from log existence",
+        "limit": "CI rehearsal only; original build, publication and live acceptance not yet performed."
+      },
+      "artifacts": [
+        {
+          "id": 14127051812,
+          "name": "release-v5-clean-clone-evidence-host-20.20.2",
+          "size_in_bytes": 46069,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14127051812",
+          "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14127051812/zip",
+          "expired": false,
+          "created_at": "2026-11-14T18:36:41Z",
+          "expires_at": "2026-11-28T18:36:41Z",
+          "updated_at": "2026-11-14T18:36:41Z",
+          "digest": "sha256:d2a75a08e40942d8cf2719eb86c97d09ba9b041007e7d1418017816d037dee38",
+          "workflow_run": {
+            "id": 43627233700,
+            "repository_id": 1250664189,
+            "head_repository_id": 1250664189,
+            "head_branch": "codex/campaign-operating-pilot-maf9-20261114",
+            "head_sha": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c"
+          }
+        },
+        {
+          "id": 14126801400,
+          "name": "release-v5-clean-clone-evidence-host-24.19.0",
+          "size_in_bytes": 46078,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14126801400",
+          "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14126801400/zip",
+          "expired": false,
+          "created_at": "2026-11-14T18:36:34Z",
+          "expires_at": "2026-11-28T18:36:33Z",
+          "updated_at": "2026-11-14T18:36:34Z",
+          "digest": "sha256:2a678cf16f929c196529546265d9b3f388acb4990a76cf0388177ef66ca1d790",
+          "workflow_run": {
+            "id": 43627233700,
+            "repository_id": 1250664189,
+            "head_repository_id": 1250664189,
+            "head_branch": "codex/campaign-operating-pilot-maf9-20261114",
+            "head_sha": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c"
+          }
+        },
+        {
+          "id": 14126672670,
+          "name": "release-v5-generated-outputs-host-20.20.2",
+          "size_in_bytes": 2977982,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14126672670",
+          "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14126672670/zip",
+          "expired": false,
+          "created_at": "2026-11-14T18:36:40Z",
+          "expires_at": "2026-11-28T18:36:40Z",
+          "updated_at": "2026-11-14T18:36:40Z",
+          "digest": "sha256:62dcfee1a1ee8b9f9b26ba1418fc540bc6ce6c55ce23a2460cf1d19258e0b84a",
+          "workflow_run": {
+            "id": 43627233700,
+            "repository_id": 1250664189,
+            "head_repository_id": 1250664189,
+            "head_branch": "codex/campaign-operating-pilot-maf9-20261114",
+            "head_sha": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c"
+          }
+        },
+        {
+          "id": 14126322280,
+          "name": "release-v5-generated-outputs-host-24.19.0",
+          "size_in_bytes": 2978183,
+          "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14126322280",
+          "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14126322280/zip",
+          "expired": false,
+          "created_at": "2026-11-14T18:36:33Z",
+          "expires_at": "2026-11-28T18:36:32Z",
+          "updated_at": "2026-11-14T18:36:33Z",
+          "digest": "sha256:9ff03c85c1fde109e3dbc85b035c796c5319bcc4f81b519a8ea454644d7ed38f",
+          "workflow_run": {
+            "id": 43627233700,
+            "repository_id": 1250664189,
+            "head_repository_id": 1250664189,
+            "head_branch": "codex/campaign-operating-pilot-maf9-20261114",
+            "head_sha": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c"
+          }
+        }
+      ]
+    },
+    "ready_for_review": {
+      "at": "2026-11-14T18:40:58Z",
+      "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+      "repeat_scope_checks": {
+        "at": "2026-11-14 18:42:14 UTC",
+        "runs": [
+          {
+            "id": 43627961239,
+            "name": "Snapchat Direct Active Publication",
+            "conclusion": "success",
+            "attempt": 1,
+            "created": "2026-11-14T18:41:01Z",
+            "updated": "2026-11-14T18:41:15Z",
+            "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627961239"
+          },
+          {
+            "id": 43627961281,
+            "name": "Snapchat Settings Management V2",
+            "conclusion": "success",
+            "attempt": 1,
+            "created": "2026-11-14T18:41:01Z",
+            "updated": "2026-11-14T18:41:13Z",
+            "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627961281"
+          }
+        ],
+        "all13_success": true,
+        "expected_tiktok_skip": true
+      }
+    }
+  },
+  "A5ci": {
+    "at": "2026-11-14 18:32:56 UTC",
+    "independent": "PASS",
+    "runs": [
+      {
+        "id": 43626531323,
+        "name": "Snapchat Settings Management V2",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531323",
+        "updated": "2026-11-14T18:25:49Z"
+      },
+      {
+        "id": 43626531194,
+        "name": "Snapchat Direct Active Publication",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531194",
+        "updated": "2026-11-14T18:25:48Z"
+      },
+      {
+        "id": 43626531444,
+        "name": "Qoyod Payment Freshness",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531444",
+        "updated": "2026-11-14T18:26:03Z"
+      },
+      {
+        "id": 43626531408,
+        "name": "Campaign hover source coverage",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531408",
+        "updated": "2026-11-14T18:26:31Z"
+      },
+      {
+        "id": 43626531393,
+        "name": "Mezan Release Readiness",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531393",
+        "updated": "2026-11-14T18:26:41Z"
+      },
+      {
+        "id": 43626531297,
+        "name": "Security Gate",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531297",
+        "updated": "2026-11-14T18:28:44Z"
+      },
+      {
+        "id": 43626531528,
+        "name": "G47 Focused Integration",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531528",
+        "updated": "2026-11-14T18:29:07Z"
+      },
+      {
+        "id": 43626531318,
+        "name": "MZ2 Track F native shipping",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531318",
+        "updated": "2026-11-14T18:30:02Z"
+      },
+      {
+        "id": 43626531313,
+        "name": "Operational Balance Web",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531313",
+        "updated": "2026-11-14T18:31:06Z"
+      },
+      {
+        "id": 43626531441,
+        "name": "CodeQL",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531441",
+        "updated": "2026-11-14T18:31:00Z"
+      },
+      {
+        "id": 43626531304,
+        "name": "Operational Stock Eligibility",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531304",
+        "updated": "2026-11-14T18:32:12Z"
+      }
+    ]
+  },
+  "B5ci": {
+    "at": "2026-11-14 18:40:58 UTC",
+    "applicable": 11,
+    "expected_tiktok_skip": true,
+    "runs": [
+      {
+        "id": 43627233676,
+        "name": "TikTok Creator Release Candidate",
+        "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+        "conclusion": "skipped",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233676",
+        "updated": "2026-11-14T18:33:12Z"
+      },
+      {
+        "id": 43627233751,
+        "name": "Snapchat Settings Management V2",
+        "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233751",
+        "updated": "2026-11-14T18:33:23Z"
+      },
+      {
+        "id": 43627233645,
+        "name": "Snapchat Direct Active Publication",
+        "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233645",
+        "updated": "2026-11-14T18:33:25Z"
+      },
+      {
+        "id": 43627233651,
+        "name": "Qoyod Payment Freshness",
+        "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233651",
+        "updated": "2026-11-14T18:33:37Z"
+      },
+      {
+        "id": 43627233670,
+        "name": "Campaign hover source coverage",
+        "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233670",
+        "updated": "2026-11-14T18:33:54Z"
+      },
+      {
+        "id": 43627233809,
+        "name": "Security Gate",
+        "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233809",
+        "updated": "2026-11-14T18:35:20Z"
+      },
+      {
+        "id": 43627233649,
+        "name": "G47 Focused Integration",
+        "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233649",
+        "updated": "2026-11-14T18:36:58Z"
+      },
+      {
+        "id": 43627233700,
+        "name": "Mezan Release Readiness",
+        "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233700",
+        "updated": "2026-11-14T18:36:50Z"
+      },
+      {
+        "id": 43627233646,
+        "name": "MZ2 Track F native shipping",
+        "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233646",
+        "updated": "2026-11-14T18:37:34Z"
+      },
+      {
+        "id": 43627233653,
+        "name": "Operational Balance Web",
+        "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233653",
+        "updated": "2026-11-14T18:38:43Z"
+      },
+      {
+        "id": 43627233744,
+        "name": "CodeQL",
+        "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233744",
+        "updated": "2026-11-14T18:40:38Z"
+      },
+      {
+        "id": 43627233850,
+        "name": "Operational Stock Eligibility",
+        "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233850",
+        "updated": "2026-11-14T18:40:19Z"
+      }
+    ]
+  },
+  "B5ready": {
+    "at": "2026-11-14 18:42:14 UTC",
+    "runs": [
+      {
+        "id": 43627961239,
+        "name": "Snapchat Direct Active Publication",
+        "conclusion": "success",
+        "attempt": 1,
+        "created": "2026-11-14T18:41:01Z",
+        "updated": "2026-11-14T18:41:15Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627961239"
+      },
+      {
+        "id": 43627961281,
+        "name": "Snapchat Settings Management V2",
+        "conclusion": "success",
+        "attempt": 1,
+        "created": "2026-11-14T18:41:01Z",
+        "updated": "2026-11-14T18:41:13Z",
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627961281"
+      }
+    ],
+    "all13_success": true,
+    "expected_tiktok_skip": true
+  },
+  "B5hosts": {
+    "root": {
+      "accepted": true,
+      "source": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+      "base": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+      "intent_commit": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+      "intent_sha256": "e5223937d883ce8ce2d02e524e079d78658be47b289ddc2c174d452c5ca1aebf",
+      "runtime_release": "rg5-a80ea84875fa69d3a23cec8f7bb90bfafb5dbab2f78e594197c02d1d8ff370b3",
+      "identity_sha256": "06a7579dab38387c81c17c71bdb689e56e1d521f8a2628cb575d9f8ac16423c9",
+      "jobs_json_sha256": "07f7392780caf39a5bceea43d9a45262d6074071b13460904a7fcfaa5b46d0c0",
+      "generated_paths_bytes_modes_identical": true,
+      "json_route_job_steps_passed": 2,
+      "hosts": {
+        "20.20.2": {
+          "inner_tar_sha256": "24d1357977fe5ed8575ee3421c6df21080b04d9e3f618f14c1b1df67e00c9f1a",
+          "generated_files": 293,
+          "frontend_content_records": 289,
+          "identity_sha256": "06a7579dab38387c81c17c71bdb689e56e1d521f8a2628cb575d9f8ac16423c9",
+          "identity_bytes": 437783,
+          "build_meta_sha256": "5b84999ee406f9e3f51cec5c3ffabb193dd36fa5430b95cfcdc2cd0b791c6bbc",
+          "proof_sha256": "b3385c9255f6b64f6f683a45613b1cb1995239c5480a1dadf3e6255739f02d17",
+          "package_boundary_sha256": "aa04c75de90e60978cff8143430da8db67ab451ce7ada2de841607109b5bf1a1",
+          "backend_package_files": 1217,
+          "frontend_package_files": 1472,
+          "backend_package_tree_sha256": "8bbd32b6cc3ecb4fdfe4d925fed0bb79ea1de56b6ee97e66fa33d394153d8022",
+          "frontend_package_tree_sha256": "91358213a43dc6d6b902f9ecc7bff22a31bdaafe46a41064f4a2d71281568218",
+          "governed_node": "22.23.2",
+          "governed_yarn": "1.22.22",
+          "actual_adapter_built": true,
+          "generated_zip_sha256": "62dcfee1a1ee8b9f9b26ba1418fc540bc6ce6c55ce23a2460cf1d19258e0b84a",
+          "evidence_zip_sha256": "d2a75a08e40942d8cf2719eb86c97d09ba9b041007e7d1418017816d037dee38",
+          "ci": {
+            "job_id": 132546148748,
+            "run_id": 43627233700,
+            "head_sha": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+            "steps": [
+              {
+                "name": "Invoke the Emergent package adapter under the selected Host Node",
+                "number": 12,
+                "started_at": "2026-11-14T18:35:38Z",
+                "completed_at": "2026-11-14T18:36:36Z",
+                "conclusion": "success"
+              },
+              {
+                "name": "Verify artifact, proof, identity, and package boundaries",
+                "number": 13,
+                "started_at": "2026-11-14T18:36:36Z",
+                "completed_at": "2026-11-14T18:36:39Z",
+                "conclusion": "success"
+              },
+              {
+                "name": "Prove the governed runtime returns build metadata as JSON",
+                "number": 14,
+                "started_at": "2026-11-14T18:36:39Z",
+                "completed_at": "2026-11-14T18:36:39Z",
+                "conclusion": "success"
+              }
+            ]
+          }
+        },
+        "24.19.0": {
+          "inner_tar_sha256": "18153552a64e864878ea07d7add104cd15101e0056f5322f4988cfb5b7c581bc",
+          "generated_files": 293,
+          "frontend_content_records": 289,
+          "identity_sha256": "06a7579dab38387c81c17c71bdb689e56e1d521f8a2628cb575d9f8ac16423c9",
+          "identity_bytes": 437783,
+          "build_meta_sha256": "5b84999ee406f9e3f51cec5c3ffabb193dd36fa5430b95cfcdc2cd0b791c6bbc",
+          "proof_sha256": "b3385c9255f6b64f6f683a45613b1cb1995239c5480a1dadf3e6255739f02d17",
+          "package_boundary_sha256": "aa04c75de90e60978cff8143430da8db67ab451ce7ada2de841607109b5bf1a1",
+          "backend_package_files": 1217,
+          "frontend_package_files": 1472,
+          "backend_package_tree_sha256": "8bbd32b6cc3ecb4fdfe4d925fed0bb79ea1de56b6ee97e66fa33d394153d8022",
+          "frontend_package_tree_sha256": "91358213a43dc6d6b902f9ecc7bff22a31bdaafe46a41064f4a2d71281568218",
+          "governed_node": "22.23.2",
+          "governed_yarn": "1.22.22",
+          "actual_adapter_built": true,
+          "generated_zip_sha256": "9ff03c85c1fde109e3dbc85b035c796c5319bcc4f81b519a8ea454644d7ed38f",
+          "evidence_zip_sha256": "2a678cf16f929c196529546265d9b3f388acb4990a76cf0388177ef66ca1d790",
+          "ci": {
+            "job_id": 132546148767,
+            "run_id": 43627233700,
+            "head_sha": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+            "steps": [
+              {
+                "name": "Invoke the Emergent package adapter under the selected Host Node",
+                "number": 12,
+                "started_at": "2026-11-14T18:35:28Z",
+                "completed_at": "2026-11-14T18:36:27Z",
+                "conclusion": "success"
+              },
+              {
+                "name": "Verify artifact, proof, identity, and package boundaries",
+                "number": 13,
+                "started_at": "2026-11-14T18:36:27Z",
+                "completed_at": "2026-11-14T18:36:30Z",
+                "conclusion": "success"
+              },
+              {
+                "name": "Prove the governed runtime returns build metadata as JSON",
+                "number": 14,
+                "started_at": "2026-11-14T18:36:30Z",
+                "completed_at": "2026-11-14T18:36:31Z",
+                "conclusion": "success"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "independent": {
+      "result": "PASS",
+      "provenance": "Official readiness 43627233700 success attempt1 / head B5; all four artifact IDs and ZIP digests rechecked.",
+      "generated_files": 293,
+      "directories": 3,
+      "identical_records_including_modes": 296,
+      "files_mode": "0644",
+      "directories_mode": "0755",
+      "frontend_content_records": 289,
+      "package_digests_reconstructed": true,
+      "backend_package_files": 1217,
+      "frontend_package_files": 1472,
+      "backend_package_tree": "8bbd32b6cc3ecb4fdfe4d925fed0bb79ea1de56b6ee97e66fa33d394153d8022",
+      "frontend_package_tree": "91358213a43dc6d6b902f9ecc7bff22a31bdaafe46a41064f4a2d71281568218",
+      "package_boundary_sha256": "aa04c75de90e60978cff8143430da8db67ab451ce7ada2de841607109b5bf1a1",
+      "actual_JSON_route_jobs": [
+        132546148748,
+        132546148767
+      ],
+      "workflow_source_review": "Actual metadata byte and application/json checks with query/Accept/Host; not inferred from log existence",
+      "limit": "CI rehearsal only; original build, publication and live acceptance not yet performed."
+    }
+  },
+  "superseded_by": {
+    "pr": 1929,
+    "A6": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+    "base": "3e9dc3b25e41c663e001822a666323c802e5ec5a"
+  },
+  "no_original_actions_for_PR1927": true
+}

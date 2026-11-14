@@ -1,33 +1,29 @@
-# Campaign operating disabled pilot follow-up — PR1927
+# Campaign operating disabled pilot follow-up — PR1929
 
-Updated: 2026-11-14 18:41:37 UTC
+Updated: 2026-11-14 18:55:21 UTC
 
-## Ready candidate; original release not yet started
+## Current source
 
-Source A5 `3545ef861c17f1411d6258efb5db4a5aaf52f577` on J5 `af9caabb3119aeb9cf450af0a8b89d376cef8c74` passed all11 exact-source workflows on attempt1. Intent-only B5 `0a79480d2246d4ad748ed82b0a3510a4c0c0123c` / tree `d199c053cc3f3c3aad55ca1e96dde7c1fde44926` passed all11 applicable workflows on attempt1, with the expected TikTok branch skip. Actual source coverage on both heads:253 backend tests and50 frontend tests/9suites. Root fresh all-B5 confirmation:2026-11-14 18:40:58UTC. PR1927 was marked ready then; both ready-transition scope checks passed at18:41:13Z and18:41:15Z, independently reviewed and root-confirmed18:42:14UTC.
+PR1929 source A6 `fcb827f556c40bebd843d8c9d85fedc0b60cf8fa` / tree `4fa115690990990c5dc10436f163fd68ad5b64d9` has sole parent J6 `3e9dc3b25e41c663e001822a666323c802e5ec5a`. Root and independent source/history/compatibility reviews PASS. Exactly three source files change: the two byte-identical reviewed pilot module/test blobs and task STATUS. Inherited J6 intent blob097b7fa75d0ab840d1c8396d98ccfb279e64f777 remains untouched throughout source history. Frontend tree9bf60f1803daf069d3d74bcbfa48fc029868a16e matches J6; old A5 frontend hashes are obsolete.
 
-Root and independent review accepted A5 history, all2689 source manifest records, canonical intent/runtime identity and the sole intent change in B5. Readiness43627233700 performed actual adapter rehearsals under Host Node20.20.2 and24.19.0. Both builds, package verification and JSON route checks succeeded. Root and independent archive review verified293 identical generated files,296 path/mode/type records,289 frontend content records and exact intent/runtime/proof/metadata bytes. Independently reconstructed package digests match actual backend1217/frontend1472-file proofs. Detailed sanitized receipts are in verification/B5-host-acceptance.json and RELEASE_CHECKPOINT.json.
+Exact-A6 CI is running: readiness43629148670 and source coverage43629148717 among11 applicable workflows. No new intent B6 exists. No PR1929 original build, lease or publication has occurred.
 
-## Ownership and remaining publication
+## Why this replacement exists
 
-PR1924's earlier own three-probe closure remains complete. PR1923's owner has separately completed its original rehearsal and pinned its guard at checkpoint45f81be0a2df7a5fea0aeef4610ac4f7c50495cd (18:35:31UTC); actual publication and official closure were not yet recorded there. Root's last read-only original observation at18:32:37UTC found HEAD J5, tracked clean and guard inactive. Do not treat this stale inactive observation as ownership of their release. Wait for the owner's actual successful closure and a fresh original status before this task's merge/original steps.
+Production advanced through PR1928 at18:47:59UTC while PR1927 waited on the preceding release. PR1927 is now closed with a link to1929. Its A5/B5 history, all11 source/intent gate passes, both actual host proofs and ready-transition passes remain immutable in verification/superseded-pr1927.json. Its reviewed code/test bytes are reused, but its intent cannot merge against current Production. Prior PR1926 is also preserved and closed.
 
-No PR1927 original build, lease or publication has occurred. The archived original/release templates remain disabled with UNPINNED values. Final M/runtime pins, root and independent review and remote freeze precede execution. No source or intent mutation is allowed after B5.
+The new-base11-file delta changes operational source cancellation/timing and its frontend diagnostics. Root and independent review confirmed no overlap with the pilot module/tests or shared salary/recurring/currency policies. Hover reads remain independent of the operational CSOT/owned-cursor path. New source and frontend manifests must still be verified by fresh CI.
 
-## Scope and preserved work
+## Current original-release ownership
 
-Exclude only explicitly disabled pilot payroll with empty canonical history, matching the executive salary cohort. Valid history/legacy baseline still contribute and genuinely missing costs stay unknown. No formula, frontend, provider, sync, payroll data or business-data write. Preserve120 unrelated original paths, the editor buffer and all foreign leases. Private employee/campaign values are absent from all task evidence. Closed PR1926 A4/B4 history remains preserved and must not be resumed.
+PR1923 checkpoint6a4a8345a70303384c5e756f30f1bc512bac8848 (18:53:58UTC) explicitly closed its old J5 release sequence without publication after official prepare rejected the advanced production ref. One official prepare returned exit2 at18:50:09.595492Z and status was inactive then. Never resume those J5 operators. This is an owner declaration, not proof of current global inactivity.
 
-## Next safe action
+PR1928's newer body18:51:51UTC records an original rehearsal beginning after staging/status18:50:51UTC. Its actual publication and official closure are not yet observed. Root alone may read current original status and must not interfere with active leases or writers.
 
-Pass ready-transition repeated checks; wait for PR1923 owner's explicit publication and actual official three-probe success/inactive closure. Re-read Production HEAD J5 and exact PR1927 B5 checks immediately before ordinary merge; never alter or bypass the foreign release.
+## Scope and next action
 
-After the ordinary tree-equivalent merge, pass exact-M push gates, then one original adapter rehearsal with preservation proof, official prepare/prepublish, one free UI publish and official three-probe verification. Complete the user's request only after live campaign operating amount/ratio and net-profit arithmetic are verified. Issue1006 is full; this task document, PR and continuation branch carry the ledger.
+The source correction excludes only explicitly disabled pilot payroll with empty canonical history. Valid history and legacy baseline contribute; actual missing costs stay unknown. Formula, direct costs, campaign UI and business data remain unchanged. No private identifiers, names, salaries or campaign figures are in this ledger.
 
-## Latest release coordination — 2026-11-14 18:43:32 UTC
+Wait exact-A6 all gates and independently verify its newly generated A6/J6 intent. Then freeze a new intent-only B6 and pass all host/gate checks. Before original mutations inspect current official guard and respect every active lease/writer; read the latest PR1928 release record. Do not reuse old intents or pinned operators.
 
-All ready-transition checks are complete: Settings43627961281 and DirectActivePublication43627961239. The CI candidate is fully verified; no further B5 reruns are needed.
-
-Foreign PR1923 checkpoint97e671537969525bacf0968dcdf326c453e8d111 records a wrapper precheck failure before official prepare (guard_invoked=false, zero official prepare calls). Its successful original build remains valid; its owner is reviewing narrow append-only bookkeeping handling. Root's actual18:42:04UTC status was inactive/no incomplete lease. Do not infer abandoned ownership from this; wait for the owner's closure. No PR1927 merge/original build/lease/publication has occurred.
-
-Next: All PR1927 A/B/host/ready-transition gates are complete. Wait for PR1923 owner's separate release to finish and record actual official three-probe success/inactive closure; then fresh Production J5/PR B5/guard/ownership check before ordinary merge. Never reuse/alter foreign phases or infer abandonment from time.
+After the normal merge, exact-M gates, reviewed original rehearsal and official prepare/prepublish/publication/three-probe verification remain required. Final success requires actual live operating amount/ratio and net-profit arithmetic. Preserve all unrelated original paths and the unsaved editor buffer. Issue1006 is full; this status, PR1929 and the continuation branch carry the record.
