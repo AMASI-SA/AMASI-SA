@@ -26,7 +26,7 @@ ACTOR = 'private-source-stage-actor'
 SOURCE_STAGES = (
     'source_primary_reads', 'source_fee_settings', 'source_setup', 'source_statements',
     'source_delivery_history', 'source_transactions', 'source_native_links',
-    'source_bundles', 'source_option_catalog', 'source_orders', 'source_invoices',
+    'source_bundles', 'source_option_catalog', 'source_order_indexes', 'source_orders', 'source_invoices',
     'source_other_sources', 'source_native_overlaps', 'source_finalize',
 )
 LOG = logging.getLogger('operational_demand_refresh')
@@ -222,11 +222,12 @@ def test_real_source_read_exit_is_identified_and_joined(monkeypatch, caplog, sta
 
 
 @pytest.mark.parametrize('outcome', ['cancelled', 'failed'])
-def test_real_order_loop_exit_is_identified_without_saving_or_continuing(monkeypatch, caplog, outcome):
+@pytest.mark.parametrize('stage', ['source_orders', 'source_order_indexes', 'source_bank_catalog'])
+def test_real_order_loop_exit_is_identified_without_saving_or_continuing(monkeypatch, caplog, outcome, stage):
     caplog.set_level(logging.INFO, logger='operational_demand_refresh')
     reached = False
 
-    def stop_at_payment(*args, **kwargs):
+    def stop_at_boundary(*args, **kwargs):
         nonlocal reached
         reached = True
         assert demand_context() is not None
@@ -235,10 +236,20 @@ def test_real_order_loop_exit_is_identified_without_saving_or_continuing(monkeyp
         demand_context().cancel(disconnected=True)
         calculation_checkpoint()
 
-    monkeypatch.setattr(sources, 'normalize_operational_payment', stop_at_payment)
+    if stage == 'source_orders':
+        monkeypatch.setattr(sources, 'normalize_operational_payment', stop_at_boundary)
+    elif stage == 'source_order_indexes':
+        monkeypatch.setattr(sources, 'build_delivery_assignment_index', stop_at_boundary)
+    else:
+        async def stop_at_bank(*args, **kwargs):
+            stop_at_boundary()
+        monkeypatch.setattr('operational_bank_catalog.bank_identities', stop_at_bank)
 
     async def scenario():
         database = DB()
+        if stage == 'source_bank_catalog':
+            from test_operational_balance_bank_orders import native_bank_order
+            database.sources.data['unified_orders'] = [native_bank_order('private-source-stage-number')]
         original_state, original_sources = deepcopy(database.data[STATES]), deepcopy(database.sources.data)
         if outcome == 'cancelled':
             with pytest.raises(HTTPException) as caught:
@@ -256,7 +267,9 @@ def test_real_order_loop_exit_is_identified_without_saving_or_continuing(monkeyp
         await assert_request_finished(database)
 
     asyncio.run(scenario())
-    assert_failed_tail(caplog, 'source_orders', outcome)
+    assert_failed_tail(caplog, stage, outcome)
+    if stage != 'source_orders':
+        assert_failed_tail(caplog, 'source_orders', outcome)
     assert not any('stage=source_invoices ' in message for message in timing_messages(caplog))
 
 
