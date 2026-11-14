@@ -36,3 +36,7 @@ Source-A CI, independent integrated review, a fresh reviewed intent-only B, exac
 No financial, payroll, order, advertising/budget/bid, provider-sync or paid agent actions. Preserve unrelated original files, unsaved buffers and other owners' leases.
 
 Issue 1006 is full; PR 1932, this task branch and a separate continuation branch/checkpoint are the durable fallback. Next: integrate the frozen implementation, run exact-source CI and resolve concrete failures before freezing a fresh intent.
+
+## Source checkpoint
+
+Immutable source candidate: `af36682ec95e578764242001dccd16ef9e61c07b`, tree `218fa9d21d863783405dc227793ad7f9bbd1b7a5`. All 18 remote changed paths match the frozen source snapshot. Twenty-four exact-source workflow families have started. No intent has been frozen. This continuation branch is evidence only and must not be deployed.

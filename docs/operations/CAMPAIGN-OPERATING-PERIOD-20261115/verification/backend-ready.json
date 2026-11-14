@@ -1,0 +1,88 @@
+{
+  "base": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+  "changed_files": [
+    {
+      "path": "backend/order_engine/campaign_hover.py",
+      "sha256": "65a4fefe59fb54324155d21d5bccb28151ca796d0a9cf4dd9b3735eca0025623",
+      "git_blob_sha": "725446ab1eb75ae75656a0c5713cc6dde39d6f8c",
+      "base_git_blob_sha": "c30c300c04f839c8c15c924bdb022fe97eb06b5d"
+    },
+    {
+      "path": "backend/order_engine/campaign_hover_operating.py",
+      "sha256": "c8ff747b1f7b6dd5e3e4ffbcf4b1439553a70e2acfab655c524f81f15e0de2c0",
+      "git_blob_sha": "4a2c9397edc8933b35aeff74c82e95df33c8d962",
+      "base_git_blob_sha": "b0576e365eb2a5b4f1e105e2a1be17f1d2393655"
+    },
+    {
+      "path": "backend/order_engine/campaign_hover_profit.py",
+      "sha256": "fa72613ba6a4934750cf3f27aad6a31c9082e0f9f68d0a021efbb8d85d2afcb9",
+      "git_blob_sha": "e58d0eed610471f328f75eef99203f857513001d",
+      "base_git_blob_sha": "42cb8b371174ff1cad06abf7830be8100aae9fa9"
+    },
+    {
+      "path": "backend/order_engine/campaign_hover_scope.py",
+      "sha256": "62c4dedb54607ee3b00032eba166f2a5be00f269e32f7bd111feb46e66e4b22d",
+      "git_blob_sha": "721202c17cc5bcb32012a355faa81ab9207bade8",
+      "base_git_blob_sha": null
+    },
+    {
+      "path": "backend/tests/test_campaign_hover_operating.py",
+      "sha256": "84eff9cf0f6ed5fce418842d8a0626a7085a2b07f6f997798a874c96445afb91",
+      "git_blob_sha": "7063817ad49fe2b124f9e6a67b9679f0f14c2f4b",
+      "base_git_blob_sha": "5ec985aa2307f07d05b87486f59c9fb764205ed7"
+    },
+    {
+      "path": "backend/tests/test_campaign_hover_operating_context.py",
+      "sha256": "ba1942ca857aa7acb235730a5284ecd50058e6b388fd58b31146b251ec07ddb3",
+      "git_blob_sha": "5886b1a0613503b3f1e1dc8c828d0d7def2d7624",
+      "base_git_blob_sha": null
+    },
+    {
+      "path": "backend/tests/test_campaign_hover_refresh.py",
+      "sha256": "8bb95225d065d7cef7a8f297449f593ee84213617d1df8be5d567869c62898fa",
+      "git_blob_sha": "636978ced48cf0529d4c75b6af65329c12eadd65",
+      "base_git_blob_sha": "960eb73091effc6186b81ee359b621973d313f5f"
+    }
+  ],
+  "patch_sha256": "b5fa313cd08db42e028d884c2752c3f0446caaeab2a033d683eecc68aa55afc9",
+  "harness_sha256": "2203352d3d0bdd2889a44d5108322b55f035f26d8fd8edbe55baccf8efb87f35",
+  "syntax": "all candidate backend Python parsed",
+  "verification": [
+    {
+      "command": [
+        "python",
+        "-B",
+        "campaign-operating-period-20261115/checks/backend_scope_probe.py",
+        "--variant",
+        "candidate"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 1.277063,
+      "total": 103,
+      "passed": 103,
+      "failed": 0
+    },
+    {
+      "command": [
+        "python",
+        "-B",
+        "campaign-operating-period-20261115/checks/backend_scope_probe.py",
+        "--variant",
+        "baseline"
+      ],
+      "exit_code": 1,
+      "duration_seconds": 1.117096,
+      "total": 1,
+      "passed": 0,
+      "failed": 1
+    }
+  ],
+  "limitations": [
+    "Isolated runner, not pytest; synthetic in-memory Mongo fixture.",
+    "Unrelated direct product pricing seams are sealed/stubbed for public scope regression.",
+    "Full repository source acceptance pytest remains required in CI."
+  ],
+  "initial_probe_notes": [
+    "First isolated run: 98/103 passed; 4 missing ObligationCreate harness imports fixed by loading its actual source class; 1 new fractional-month fixture started employee payroll on Nov1 and correctly excluded first day, fixed fixture to start Oct31. No production-source change was needed for those failures."
+  ]
+}

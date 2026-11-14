@@ -1,0 +1,53 @@
+{
+  "ref": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+  "files": [
+    {
+      "path": "backend/dashboard_cpu_budget.py",
+      "git_blob_sha": "8af0d1b12076f308b351452a0f4cd9f707e06ea6"
+    },
+    {
+      "path": "backend/employee_payroll_status.py",
+      "git_blob_sha": "8dea65bacdf349bb6a5efcdd1a20db034b63d813"
+    },
+    {
+      "path": "backend/order_currency.py",
+      "git_blob_sha": "61f6f7a7c179632b32b622371ac8b6137b267dd4"
+    },
+    {
+      "path": "backend/salla_marketing_attribution.py",
+      "git_blob_sha": "5df0bf29e8be2b4a429444a3fa44fd29187a4451"
+    },
+    {
+      "path": "backend/salla_integration/abandoned_carts.py",
+      "git_blob_sha": "5e4c34cbedf54bb26dd48a4d3fa5caa7ca24f579"
+    },
+    {
+      "path": "backend/order_engine/campaign_hover_native_sources.py",
+      "git_blob_sha": "f14b95f9aaa264192fb243b53ac8854aada43dfb"
+    },
+    {
+      "path": "backend/marketing_report_costs.py",
+      "git_blob_sha": "ef88e5009040e3e1f5bfc7a51c74863c3897e320"
+    },
+    {
+      "path": "backend/dashboard_v2_routes.py",
+      "git_blob_sha": "e17cb58b4ed57e8bfaab8d1449ccd0d6e436a7fd"
+    },
+    {
+      "path": "backend/expenses_routes.py",
+      "git_blob_sha": "b7d4286db484ddf2e38d12956048ec4193105010"
+    },
+    {
+      "path": "backend/recurring_obligations_routes.py",
+      "git_blob_sha": "0863e2ff18bf5c93ab13daf928ff460a1e181db6"
+    },
+    {
+      "path": "backend/sold_products_report_v2.py",
+      "git_blob_sha": "79181e2b15098bd6b026e17cdea33bc93f093e30"
+    },
+    {
+      "path": "backend/sold_financial_report.py",
+      "git_blob_sha": "c7c0dc894ddd290eb360003b4059ff3719711efd"
+    }
+  ]
+}

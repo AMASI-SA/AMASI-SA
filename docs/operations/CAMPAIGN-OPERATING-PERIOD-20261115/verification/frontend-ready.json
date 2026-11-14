@@ -1,0 +1,114 @@
+{
+  "base_commit": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+  "owner": "rollover_frontend",
+  "candidate_frozen": true,
+  "created_at": "2026-11-14T21:29:56.303991+00:00",
+  "changed_paths": [
+    "frontend/src/hooks/useCampaignHover.js",
+    "frontend/src/services/campaignHover.js",
+    "frontend/src/components/CampaignHoverBadge.jsx",
+    "frontend/src/pages/AdvancedDashboard.jsx",
+    "frontend/src/hooks/useCampaignHover.test.jsx",
+    "frontend/src/services/campaignHover.test.js",
+    "frontend/src/components/CampaignHoverProfit.test.jsx",
+    "frontend/src/pages/AdvancedDashboard.campaignHover.test.js",
+    "frontend/src/pages/AdvancedDashboard.cardRefresh.test.jsx"
+  ],
+  "files": [
+    {
+      "path": "frontend/src/hooks/useCampaignHover.js",
+      "base_blob_sha1": "c21463a9019be7700d18515d5129f1f721312dd4",
+      "base_sha256": "fd2710a67740a2fec95ae2942a227bf162349dd38d3227d44d27b96d5cd9a91b",
+      "candidate_blob_sha1": "7f7ab0cf7cca224bded44b35a91e0f8a01d2ec5c",
+      "candidate_sha256": "49572648b9493ab526266395562dd5926c2d22ad806a11f5a04490a51c5c85b7",
+      "added_lines": 30,
+      "removed_lines": 11
+    },
+    {
+      "path": "frontend/src/services/campaignHover.js",
+      "base_blob_sha1": "e031f9eb3b8a5ddc1a59178fa59c402022e81bfe",
+      "base_sha256": "e06d6aa977e2ac59f7737f5bd879d5efbd674fb8d5aeff2cfb3d49ac05293083",
+      "candidate_blob_sha1": "f7a9d796b741c48434c7a9308f22d9dfb039ca41",
+      "candidate_sha256": "e556b4f41ea7cf8cf7d3a0121ba01f67dfbeeaac0a04106ca7ec1ff05138c784",
+      "added_lines": 8,
+      "removed_lines": 1
+    },
+    {
+      "path": "frontend/src/components/CampaignHoverBadge.jsx",
+      "base_blob_sha1": "103234467259bce80c16a42f9f9da17f9aa24bcd",
+      "base_sha256": "fbc6be63ed5ad5f51175e4f6a72bd01184237923918014b866a2c2a4b5e37f28",
+      "candidate_blob_sha1": "4af01e870eaa722eff25e6747c00d5a4df41fb91",
+      "candidate_sha256": "2c65e1e5d4275dbcb380f411843231f9de1c146e317d5fc15bd557bc1c4c7c7e",
+      "added_lines": 6,
+      "removed_lines": 3
+    },
+    {
+      "path": "frontend/src/pages/AdvancedDashboard.jsx",
+      "base_blob_sha1": "b333e05abefbb1820beacf2630a954b148a06f37",
+      "base_sha256": "8d8b5aca7ad1e34f27e86a4cf899b7d8fa8440b4f7b6c1f8bc65f3f27007a4a1",
+      "candidate_blob_sha1": "889163d6acd3d9c7f534778f763d5fc2ba89712f",
+      "candidate_sha256": "84e9b10996ffb5bbcdbc0222c482b6d70e9d4a8210173a7e87a98ca2bd9a3d23",
+      "added_lines": 3,
+      "removed_lines": 3
+    },
+    {
+      "path": "frontend/src/hooks/useCampaignHover.test.jsx",
+      "base_blob_sha1": "84dbc3e9f204deb06030dbaafc9d60fcb2490ebb",
+      "base_sha256": "c83136b1c648492998d1228aecc1ad6c9eb685adce4dada8d131cd42c2f29358",
+      "candidate_blob_sha1": "85ee8ef62150a9271278987a451c00af7a35ddbb",
+      "candidate_sha256": "4b1974ee0f394ad6f381b0aac631a4633640ba6e5f4135fe2168a9e18c82b556",
+      "added_lines": 118,
+      "removed_lines": 2
+    },
+    {
+      "path": "frontend/src/services/campaignHover.test.js",
+      "base_blob_sha1": "b32cd9d6290b4811c8a9e02d9a394e3915b9de15",
+      "base_sha256": "32058687aa100fbde4c49a5823753ef46edbe16c6bee8726cc9b9066e79969ea",
+      "candidate_blob_sha1": "9b62b20d420852ba5321f7131fe7c14ae88b918b",
+      "candidate_sha256": "03d34f9af608096aad2dcf43ad69eea3083d5ece0444f357d4fd4fba2bffefd8",
+      "added_lines": 27,
+      "removed_lines": 0
+    },
+    {
+      "path": "frontend/src/components/CampaignHoverProfit.test.jsx",
+      "base_blob_sha1": "3d84391a85b29fc8bef9a6cca7df24e8aa9afbd4",
+      "base_sha256": "f5d349a27371cf7eb1495a22820dcc254563894034fc4ca240a85e2318fa93cc",
+      "candidate_blob_sha1": "dfa9c9cd20cb00a043fd5d243b87bcc257a3b962",
+      "candidate_sha256": "b7c3118b1da8cca5266d5ffcfa2da37f1a3c8466223bf04de6474c478cd2d337",
+      "added_lines": 34,
+      "removed_lines": 0
+    },
+    {
+      "path": "frontend/src/pages/AdvancedDashboard.campaignHover.test.js",
+      "base_blob_sha1": "1cd26c5fcd3cd6f7f6a05bb3ffd785c852aee19c",
+      "base_sha256": "4039a3c27f7c2f09748474026f9a0aa30c124f44f40f1a33e2463d0ff0cb3115",
+      "candidate_blob_sha1": "12eb6ab57d1242851c62006ea924737f35322f71",
+      "candidate_sha256": "5c60b7dd67a498062094bf210ff08cb4e5244c72352a1d0e13436a6844dd23e3",
+      "added_lines": 2,
+      "removed_lines": 1
+    },
+    {
+      "path": "frontend/src/pages/AdvancedDashboard.cardRefresh.test.jsx",
+      "base_blob_sha1": "88dfc73b6bf1df4fa3f2920769f005fee2c1e2c8",
+      "base_sha256": "3782d75cd3527465fc724853a2b8660dde23758c8ee12e1f018cb1fbd630727a",
+      "candidate_blob_sha1": "98b042147f60393c17696cf6741b35754b28edab",
+      "candidate_sha256": "598a4b6e6225335f6d7df7fdf6c3e4c3e0b925143fe72394ad174bc41e4e3381",
+      "added_lines": 139,
+      "removed_lines": 1
+    }
+  ],
+  "parser": {
+    "command": "node <<'JS_FRONTEND_PARSE'\nconst fs=require('fs');\nconst path=require('path');\nconst {babelParse}=require('/opt/codex/runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/lib/transform/babelBundle.js');\nconst root='/workspace/scratch/a7d75184af2d/campaign-operating-period-20261115/candidate';\nconst files=[\"frontend/src/hooks/useCampaignHover.js\",\"frontend/src/services/campaignHover.js\",\"frontend/src/components/CampaignHoverBadge.jsx\",\"frontend/src/pages/AdvancedDashboard.jsx\",\"frontend/src/hooks/useCampaignHover.test.jsx\",\"frontend/src/services/campaignHover.test.js\",\"frontend/src/components/CampaignHoverProfit.test.jsx\",\"frontend/src/pages/AdvancedDashboard.campaignHover.test.js\",\"frontend/src/pages/AdvancedDashboard.cardRefresh.test.jsx\"];\nfor(const file of files){const p=path.join(root,file);const ast=babelParse(fs.readFileSync(p,'utf8'),p,true);if(!ast)throw Error('No AST: '+file);}\nconsole.log(JSON.stringify({babel_parsed_files:files.length,status:'passed'}));\nJS_FRONTEND_PARSE",
+    "cwd": "/workspace/scratch/a7d75184af2d",
+    "exit_code": 0,
+    "output": "{\"babel_parsed_files\":9,\"status\":\"passed\"}\n"
+  },
+  "mounted_tests": {
+    "status": "not_run_locally",
+    "reason": "No local React/Jest dependencies; exact-source remote CI owned by root",
+    "new_mounted_regressions": 4,
+    "suite": "frontend/src/pages/AdvancedDashboard.cardRefresh.test.jsx"
+  },
+  "standalone_policy": "Undefined context observes the current Riyadh day only on already-delivered orders/totals refresh; explicit dashboard selection stays fixed and null stays pending.",
+  "production_changed": false
+}

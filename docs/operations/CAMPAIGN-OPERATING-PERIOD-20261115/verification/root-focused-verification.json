@@ -1,0 +1,36 @@
+{
+  "backend": {
+    "candidate": {
+      "command": "python -B campaign-operating-period-20261115/checks/backend_scope_probe.py --variant candidate",
+      "exit_code": 0,
+      "seconds": 1.677994656,
+      "total": 103,
+      "passed": 103,
+      "failed": 0
+    },
+    "baseline": {
+      "command": "python -B campaign-operating-period-20261115/checks/backend_scope_probe.py --variant baseline",
+      "exit_code": 1,
+      "seconds": 1.290073003,
+      "failed": 1,
+      "expected": "actual published allocation changes [20.0, 2000.0] for fixed selected day"
+    },
+    "limitation": "Isolated synthetic harness, not pytest; exact-source CI required."
+  },
+  "frontend": {
+    "chunk_id": "43b5f3",
+    "wall_time_seconds": 0.766176279,
+    "exit_code": 0,
+    "original_token_count": 11,
+    "output": "{\"babel_parsed_files\":9,\"status\":\"passed\"}\n"
+  },
+  "independent_review": {
+    "result": "PASS",
+    "backend_files": 7,
+    "frontend_files": 9,
+    "workflow_blob": "c60cb095f5810d4f05285585520e47f2098bc710",
+    "full_suite_status": "pending exact source CI",
+    "standalone_semantics": "current Riyadh day observed only on existing orders/totals refresh",
+    "remaining_source_findings": []
+  }
+}

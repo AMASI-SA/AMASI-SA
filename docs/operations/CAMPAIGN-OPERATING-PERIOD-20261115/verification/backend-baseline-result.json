@@ -1,0 +1,28 @@
+{
+  "command": [
+    "python",
+    "-B",
+    "campaign-operating-period-20261115/checks/backend_scope_probe.py",
+    "--variant",
+    "baseline"
+  ],
+  "exit_code": 1,
+  "duration_seconds": 1.117096,
+  "result": {
+    "variant": "baseline",
+    "synthetic_only": true,
+    "runner": "isolated-not-pytest",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failures": [
+      {
+        "test": "tests.test_campaign_hover_operating_context.test_public_selected_day_stays_fixed_across_riyadh_midnight_and_keeps_account_day[0]",
+        "status": "failed",
+        "error": "AssertionError: [20.0, 2000.0]",
+        "traceback": "Traceback (most recent call last):\n  File \"/workspace/scratch/a7d75184af2d/campaign-operating-period-20261115/checks/backend_scope_probe.py\", line 315, in run\n    asyncio.run(outcome)\n  File \"/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py\", line 195, in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\n  File \"/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py\", line 691, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/a7d75184af2d/campaign-operating-period-20261115/candidate/backend/tests/test_campaign_hover_operating_context.py\", line 116, in test_public_selected_day_stays_fixed_across_riyadh_midnight_and_keeps_account_day\n    assert allocations == [20, 20], allocations\n           ^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: [20.0, 2000.0]\n"
+      }
+    ]
+  },
+  "stderr": ""
+}

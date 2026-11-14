@@ -1,0 +1,37 @@
+{
+  "ref": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+  "files": [
+    {
+      "path": "backend/order_engine/campaign_hover.py",
+      "git_blob_sha": "c30c300c04f839c8c15c924bdb022fe97eb06b5d"
+    },
+    {
+      "path": "backend/order_engine/campaign_hover_profit.py",
+      "git_blob_sha": "42cb8b371174ff1cad06abf7830be8100aae9fa9"
+    },
+    {
+      "path": "backend/order_engine/campaign_hover_operating.py",
+      "git_blob_sha": "b0576e365eb2a5b4f1e105e2a1be17f1d2393655"
+    },
+    {
+      "path": "backend/tests/test_campaign_hover_operating.py",
+      "git_blob_sha": "5ec985aa2307f07d05b87486f59c9fb764205ed7"
+    },
+    {
+      "path": "backend/tests/test_campaign_hover_refresh.py",
+      "git_blob_sha": "960eb73091effc6186b81ee359b621973d313f5f"
+    },
+    {
+      "path": "backend/tests/test_campaign_hover_daily.py",
+      "git_blob_sha": "d247e4db21f2f1fa205ec3711d59ae4345b0a624"
+    },
+    {
+      "path": "backend/tests/test_campaign_hover_native_sources.py",
+      "git_blob_sha": "be47bbe8a329a55d633e0e99a1d548cd22f93d87"
+    },
+    {
+      "path": "backend/tests/test_campaign_hover_profit.py",
+      "git_blob_sha": "b147a604b7fc502a5b5ba2d671d1d664483287c1"
+    }
+  ]
+}

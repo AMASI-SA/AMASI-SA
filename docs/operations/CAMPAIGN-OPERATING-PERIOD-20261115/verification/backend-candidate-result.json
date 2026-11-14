@@ -1,0 +1,21 @@
+{
+  "command": [
+    "python",
+    "-B",
+    "campaign-operating-period-20261115/checks/backend_scope_probe.py",
+    "--variant",
+    "candidate"
+  ],
+  "exit_code": 0,
+  "duration_seconds": 1.277063,
+  "result": {
+    "variant": "candidate",
+    "synthetic_only": true,
+    "runner": "isolated-not-pytest",
+    "total": 103,
+    "passed": 103,
+    "failed": 0,
+    "failures": []
+  },
+  "stderr": ""
+}
