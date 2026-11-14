@@ -188,3 +188,12 @@ Browser inventory no longer contains old financial65/health64 tabs; original46 a
 Official verify actual exit0, 05:11:23.675001–05:23:12.911592UTC,709.236593seconds. All3probes,582frontendcheckedrequests,exactA/M/R passed. Fresh guard after verification is inactive. RawstdoutSHA256b159d43d60abf596a063242b0735765aad69dbebdd10c2ce3afd76553aeed87f. Owned lease closed normally by official verify. No PR1917 financial attempt has occurred yet.
 
 Next one new visible financial-position tab. Its mount is the only firstrefresh. Keep visible/online and inspect stored report.as_of, rootfailurewarnings, tablepagination and localpendingordersdialog. RuntimeLogs remainunopened; capture fresh fixedstage timing if requestremainslong. See acceptance-checklist.md.
+
+
+## record1917 live source_orders timeout for next narrow repair — 2026-11-14T05:31:19.302Z
+
+PR1917 is merged,published(platform120e0fa),and officially verified(actualexit0,3probes,582requests,freshinactive). It is NOT financial acceptance. One visible mount started05:24:14.504Z. Whitelisted runtime records show source_bundles complete5121.961ms at05:24:39; source_option_catalog complete514.373ms at05:24:40; source_orders cancelled61803.392ms at05:25:42; source_collection cancelled77356.104ms andaggregate cancelled84086.423ms at05:25:42. POSTrefresh returned408,93152.823ms,at05:25:49.
+
+The final visible UI at05:27:31.762Z still shows as_of12/11/2026,01:07 with fallbackwarning and no mainloaderror. Onlyonefinancialattempt occurred; page remainedvisible. The initial broad timestamp regex accidentally matched dates inside unrelated logpayloads; the saved diagnostic now cites only timestamps on fixed stage/api_timing lines, not a claimed fullwindowbound.
+
+Remaining work is within source_orders, not snapshotload. Read-only reviewers are measuring repeated assignment/history/cost scans and growing diagnostic-list membership. No extra productionrefresh or code edit has occurred. Next isolated repair should branch fromM2db0edc9edb315026eee4b6edd43b420a569c37d and preserve completehistory/financialsemantics, then repeat governedrelease and freshasofacceptance.
