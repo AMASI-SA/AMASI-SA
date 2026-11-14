@@ -122,7 +122,7 @@
     "backend_files": 7,
     "frontend_files": 9,
     "workflow_blob": "c60cb095f5810d4f05285585520e47f2098bc710",
-    "full_suite_status": "pending exact source CI",
+    "full_suite_status": "all 24 workflows PASS at exact source A, first attempts",
     "standalone_semantics": "current Riyadh day observed only on existing orders/totals refresh",
     "remaining_source_findings": []
   },
@@ -142,12 +142,26 @@
       "failed": 1,
       "expected": "actual published allocation changes [20.0, 2000.0] for fixed selected day"
     },
-    "limitation": "Isolated synthetic harness, not pytest; exact-source CI required."
+    "limitation": "Isolated synthetic harness, not pytest; exact-source CI required.",
+    "actual_source_ci": {
+      "run_id": 43643266059,
+      "job_id": 132595279609,
+      "tests": 272,
+      "exit_code": 0,
+      "duration_seconds": 4.43
+    }
   },
   "frontend_verification": {
     "babel_files": 9,
     "exit": 0,
-    "actual_mounted_execution": "pending exact source CI"
+    "actual_mounted_execution": {
+      "run_id": 43643266059,
+      "job_id": 132595279424,
+      "suites": 10,
+      "tests": 88,
+      "exit_code": 0,
+      "duration_seconds": 5.451
+    }
   },
   "expected_workflow_families": [
     "background-workers-qoyod-two-hour",
@@ -176,199 +190,9 @@
     "supplier-embroidery-profit-layout"
   ],
   "source_ci": {
-    "status": "in_progress",
+    "status": "PASS",
     "expected_families": 24,
     "runs": [
-      {
-        "id": 43643266022,
-        "name": "G47 Focused Integration",
-        "path": ".github/workflows/g47-focused-integration.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "queued",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643266059,
-        "name": "Campaign hover source coverage",
-        "path": ".github/workflows/campaign-hover-source-acceptance.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "in_progress",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643265911,
-        "name": "Supplier embroidery and profit layout acceptance (PR only)",
-        "path": ".github/workflows/supplier-embroidery-profit-layout.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "in_progress",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643265909,
-        "name": "Operational Stock Eligibility",
-        "path": ".github/workflows/operational-stock-eligibility.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "in_progress",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643266121,
-        "name": "Dashboard card cadence and catalogue admission",
-        "path": ".github/workflows/dashboard-card-cadence.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "queued",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643266000,
-        "name": "Production Dashboard Profit Date Race V1",
-        "path": ".github/workflows/prod-dashboard-profit-date-race-v1.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "in_progress",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643265984,
-        "name": "Snapchat Reporting V2 Shadow",
-        "path": ".github/workflows/snapchat-reporting-v2.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "queued",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643266046,
-        "name": "Operational Balance Web",
-        "path": ".github/workflows/operational-balance-web.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "queued",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643266073,
-        "name": "Production Dashboard Executive Four Platform Date V1",
-        "path": ".github/workflows/prod-dashboard-executive-four-platform-date-v1.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "queued",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643266125,
-        "name": "Production Campaign AI Decision V3 Extended",
-        "path": ".github/workflows/prod-campaign-ai-decision-v3-extended.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "queued",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643265926,
-        "name": "Security Gate",
-        "path": ".github/workflows/security-gate.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "queued",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643266049,
-        "name": "Production Dashboard V2 Salla Ads Executive",
-        "path": ".github/workflows/prod-dashboard-v2-salla-ads-executive.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "queued",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643266057,
-        "name": "Production Dashboard V2 Ad FX And Payment Fees",
-        "path": ".github/workflows/prod-dashboard-v2-ad-fx-payment-fees.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "queued",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643265906,
-        "name": "Page and operational read performance",
-        "path": ".github/workflows/page-performance-regressions.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "in_progress",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643265894,
-        "name": "CodeQL",
-        "path": ".github/workflows/codeql.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "in_progress",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643265931,
-        "name": "Mezan Release Readiness",
-        "path": ".github/workflows/mezan-production-release.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "in_progress",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643266276,
-        "name": "Sold product cost details",
-        "path": ".github/workflows/sold-product-cost-details.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "queued",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643265907,
-        "name": "Google Ads full management",
-        "path": ".github/workflows/google-ads-full-management.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "in_progress",
-        "conclusion": null,
-        "attempt": 1
-      },
-      {
-        "id": 43643266118,
-        "name": "Qoyod Payment Freshness",
-        "path": ".github/workflows/qoyod-payment-freshness.yml",
-        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
-        "event": "pull_request",
-        "status": "in_progress",
-        "conclusion": null,
-        "attempt": 1
-      },
       {
         "id": 43643265905,
         "name": "Production Campaign AI Decision Intelligence V3",
@@ -380,19 +204,59 @@
         "attempt": 1
       },
       {
-        "id": 43643265900,
-        "name": "Background workers and two-hour Qoyod cycles",
-        "path": ".github/workflows/background-workers-qoyod-two-hour.yml",
+        "id": 43643266059,
+        "name": "Campaign hover source coverage",
+        "path": ".github/workflows/campaign-hover-source-acceptance.yml",
         "head": "af36682ec95e578764242001dccd16ef9e61c07b",
         "event": "pull_request",
-        "status": "in_progress",
-        "conclusion": null,
+        "status": "completed",
+        "conclusion": "success",
         "attempt": 1
       },
       {
-        "id": 43643266240,
-        "name": "Snapchat Settings Management V2",
-        "path": ".github/workflows/snapchat-settings-management-v2.yml",
+        "id": 43643265907,
+        "name": "Google Ads full management",
+        "path": ".github/workflows/google-ads-full-management.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643265906,
+        "name": "Page and operational read performance",
+        "path": ".github/workflows/page-performance-regressions.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643266125,
+        "name": "Production Campaign AI Decision V3 Extended",
+        "path": ".github/workflows/prod-campaign-ai-decision-v3-extended.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643265984,
+        "name": "Snapchat Reporting V2 Shadow",
+        "path": ".github/workflows/snapchat-reporting-v2.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643266118,
+        "name": "Qoyod Payment Freshness",
+        "path": ".github/workflows/qoyod-payment-freshness.yml",
         "head": "af36682ec95e578764242001dccd16ef9e61c07b",
         "event": "pull_request",
         "status": "completed",
@@ -410,13 +274,163 @@
         "attempt": 1
       },
       {
+        "id": 43643266240,
+        "name": "Snapchat Settings Management V2",
+        "path": ".github/workflows/snapchat-settings-management-v2.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643265911,
+        "name": "Supplier embroidery and profit layout acceptance (PR only)",
+        "path": ".github/workflows/supplier-embroidery-profit-layout.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643266000,
+        "name": "Production Dashboard Profit Date Race V1",
+        "path": ".github/workflows/prod-dashboard-profit-date-race-v1.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643265931,
+        "name": "Mezan Release Readiness",
+        "path": ".github/workflows/mezan-production-release.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643265900,
+        "name": "Background workers and two-hour Qoyod cycles",
+        "path": ".github/workflows/background-workers-qoyod-two-hour.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643266057,
+        "name": "Production Dashboard V2 Ad FX And Payment Fees",
+        "path": ".github/workflows/prod-dashboard-v2-ad-fx-payment-fees.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643266073,
+        "name": "Production Dashboard Executive Four Platform Date V1",
+        "path": ".github/workflows/prod-dashboard-executive-four-platform-date-v1.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643266049,
+        "name": "Production Dashboard V2 Salla Ads Executive",
+        "path": ".github/workflows/prod-dashboard-v2-salla-ads-executive.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643266022,
+        "name": "G47 Focused Integration",
+        "path": ".github/workflows/g47-focused-integration.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643266121,
+        "name": "Dashboard card cadence and catalogue admission",
+        "path": ".github/workflows/dashboard-card-cadence.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643266276,
+        "name": "Sold product cost details",
+        "path": ".github/workflows/sold-product-cost-details.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643265926,
+        "name": "Security Gate",
+        "path": ".github/workflows/security-gate.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643266046,
+        "name": "Operational Balance Web",
+        "path": ".github/workflows/operational-balance-web.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
         "id": 43643266062,
         "name": "MZ2 Track F native shipping",
         "path": ".github/workflows/mz2-track-f-contract.yml",
         "head": "af36682ec95e578764242001dccd16ef9e61c07b",
         "event": "pull_request",
-        "status": "in_progress",
-        "conclusion": null,
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643265894,
+        "name": "CodeQL",
+        "path": ".github/workflows/codeql.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43643265909,
+        "name": "Operational Stock Eligibility",
+        "path": ".github/workflows/operational-stock-eligibility.yml",
+        "head": "af36682ec95e578764242001dccd16ef9e61c07b",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
         "attempt": 1
       }
     ]
@@ -445,8 +459,34 @@
   "new_intent": null,
   "new_lease": null,
   "publication": null,
-  "next": "Finish exact source CI; diagnose concrete failures; review a fresh immutable source artifact before any intent freeze.",
+  "next": "Await independent intent review, freeze exact intent-only B; run B matrix and inspect both host artifacts before merge.",
   "continuity": "Issue1006 full; PR1932 and dedicated handoff branch.",
-  "updated_at_utc": "2026-11-14 21:32:34 UTC",
-  "handoff_branch": "codex/campaign-operating-period-handoff-20261115"
+  "updated_at_utc": "2026-11-14 21:40:41 UTC",
+  "handoff_branch": "codex/campaign-operating-period-handoff-20261115",
+  "dashboard_cadence_ci": {
+    "run_id": 43643266121,
+    "frontend": {
+      "job_id": 132595279954,
+      "suites": 20,
+      "tests": 251,
+      "duration_seconds": 6.813
+    },
+    "backend": {
+      "job_id": 132595279644,
+      "tests": 269,
+      "subtests": 5,
+      "duration_seconds": 10.67
+    }
+  },
+  "intent_review": {
+    "root": "PASS",
+    "independent": "pending",
+    "intent_sha256": "e971d2ce2f801e531f7541bb31cbbf963635584369c0c1208092a389d8ac1bb2",
+    "intent_git_blob": "62defd44cdfd7abc6104e05766ff4e0724e357d7",
+    "runtime_id": "rg5-3c726702879630f436b0b615a4e2d1dd85ff5889c45b43b1be477f84cb3043fe",
+    "identity_bytes": 438055,
+    "identity_sha256": "0662d49ed6abfc16074d1033667e19df182f7189698c285689cb431ea1a05ed3",
+    "manifest_records": 2690,
+    "verifier_corrections": "Root verifier initially compared public subset to full artifact tree, then omitted a required canonical helper scope argument. These were verifier-only errors, fixed without changing source or intent. Actual full generated bytes deferred to B archives."
+  }
 }

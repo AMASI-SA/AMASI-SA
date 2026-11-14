@@ -1,0 +1,39 @@
+{
+  "result": "PASS",
+  "source": "af36682ec95e578764242001dccd16ef9e61c07b",
+  "base": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+  "source_tree": "218fa9d21d863783405dc227793ad7f9bbd1b7a5",
+  "intent_bytes": 1309166,
+  "intent_sha256": "e971d2ce2f801e531f7541bb31cbbf963635584369c0c1208092a389d8ac1bb2",
+  "intent_git_blob": "62defd44cdfd7abc6104e05766ff4e0724e357d7",
+  "runtime_release_id": "rg5-3c726702879630f436b0b615a4e2d1dd85ff5889c45b43b1be477f84cb3043fe",
+  "runtime_identity_bytes": 438055,
+  "runtime_identity_sha256": "0662d49ed6abfc16074d1033667e19df182f7189698c285689cb431ea1a05ed3",
+  "frontend_source_git_tree": "a47d8aac3d9057b755ec7f7f1aa89a936820acd5",
+  "frontend_artifact_tree": "46124201d595e2b24e8c8abcfbedc57de464adec3f814f55ecf31a752c41499d",
+  "frontend_content_records": 287,
+  "toolchain": {
+    "node": "22.23.2",
+    "yarn": "1.22.22",
+    "vite": "8.2.4"
+  },
+  "scopes": {
+    "backend_runtime_source": {
+      "records": 1217,
+      "git_membership_blob_mode_size": "PASS",
+      "manifest_canonical_hash": "PASS"
+    },
+    "frontend_source": {
+      "records": 1182,
+      "git_membership_blob_mode_size": "PASS",
+      "manifest_canonical_hash": "PASS"
+    },
+    "release_control_source": {
+      "records": 291,
+      "git_membership_blob_mode_size": "PASS",
+      "manifest_canonical_hash": "PASS"
+    }
+  },
+  "records": 2690,
+  "limitation": "Source tree membership and canonical contracts verified here; actual generated package bytes and routes require B host artifacts."
+}
