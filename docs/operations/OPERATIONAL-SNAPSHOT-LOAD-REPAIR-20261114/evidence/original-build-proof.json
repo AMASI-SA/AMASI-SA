@@ -1,0 +1,44 @@
+{
+  "outcome": {
+    "phase": "build",
+    "ready": true,
+    "source_sha": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+    "deployment_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+    "intent_commit": "bd9607ba2b21c4d4e3e2bc6bced7680bc9c6f287",
+    "tree": "c5bd7fb6c357e17c17104282d1d175676e95ed3e",
+    "release_id": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
+    "untracked_count": 120,
+    "lease_created": false,
+    "evidence_dir": "/tmp/mezan-pr1916-original-fu9s2qng",
+    "finished_at": "2026-11-14T03:13:07.008386+00:00"
+  },
+  "build_execution": {
+    "actual_exit": 0,
+    "problem": null,
+    "started_at": "2026-11-14T03:11:57.124355+00:00",
+    "ended_at": "2026-11-14T03:13:06.817747+00:00",
+    "elapsed_seconds": 69.6933987950033
+  },
+  "preservation": {
+    "before_count": 120,
+    "after_count": 120,
+    "changed_paths": [],
+    "append_allowed": true,
+    "preserved": true
+  },
+  "identity": {
+    "source_git_sha": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+    "release_id": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
+    "matches_reviewed_intent": true,
+    "identity_sha256": "27e71362761e8079321a54ad4ecdbf03d62eed1dbc481d5e478efc2b023cfea0"
+  },
+  "guard_initial_inactive": true,
+  "guard_after_inactive": true,
+  "ignored_backend_cache_count": 0,
+  "tracked_index_clean_after_build": true,
+  "sidecar_bytes_added": 0,
+  "build_stdout_sha256": "c96c0e98ae3005143d2b2a03c416ca4c96bbb2e71c84d8bc708215a87a415055",
+  "submitted_at": "2026-11-14T03:11:54.677Z",
+  "helper_sha256": "4dfb723a4ee134ef96b1add8a396927960193febec849e559e2f39cddffe0410",
+  "unsaved_editor_buffer_observed": "Untitled-1; preserved, no tracked-file overlap"
+}
