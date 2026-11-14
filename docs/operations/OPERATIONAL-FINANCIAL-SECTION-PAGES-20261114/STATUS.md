@@ -450,3 +450,27 @@ separate pendingforecast; existing unknown-data warnings remain explicit.
 Root visually inspected the actual summary/sidebar. No financial numbers or
 customer records are included in this public handoff. Official verifier is
 still running; original Terminal2 must not be interrupted or reused yet.
+
+## Official live verification PASSED
+
+The one official verifier completed with actualexit0,problem:null andphaseverified.
+Start2026-11-14T16:57:44.772152Z,end17:10:13.373818Z,elapsed748.601671s.
+All3probes matched sourceA0dd26a62,deploymentM94f6dfb8,runtime rg5-5a1f26fa.
+Frontendcheckedrequestcount582 (officialresultfirst-observation list); prepared
+frontendtree8b55f9ab1883c764826c27dd77b504fa55599bf0d84875f156565a9d8eaba5f4.
+RawstdoutSHA256518093cbd480b75c6e0b56d0b552a159dd957ccd907060c1a1f02fe0ebfda737.
+Root separately verified actual result, exact identities/tree and stdoutdigest.
+The ownedlease closed; fresh status atfinalcheckreportedactive:false.
+
+Post-verification preservation passed at17:10:44.989006Z,count120,nochangedpaths.
+OriginalHEADM,trackedclean. Separate UI still1unsavedUntitled-1/120pendingchanges.
+Temporarymonitoring shells4/5/6 were closed; originalterminals1/2werepreserved.
+No process interruption or rerun occurred. Native terminal-list row centers can
+hit the Split button; use observed .label-name targets when selecting a row.
+
+Summaryforecastlaterfinishedwith7renderedrows andno forecastpending notice.
+All requested pages are live and tested. Oneexplicitmanualrefresh was started
+at17:11:12.018Z in Mezan tab21 after officialverification. Before it, the filtered
+new timeouttiming consolelog countwas0. Afterclick,refreshbuttondisabled,
+manualrefreshnoticepresent,savedreportstillvisible withas_of18:22Riyadh.
+Its outcomeisnotyetknown. Keepthispagevisible anddo not repeat the refresh.
