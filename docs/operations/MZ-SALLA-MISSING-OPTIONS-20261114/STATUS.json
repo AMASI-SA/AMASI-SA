@@ -5,7 +5,7 @@
   "base_sha": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
   "previous_checkpoint_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
   "live_source_observed": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
-  "state": "original_rehearsal_passed_guard_pinned",
+  "state": "original_build_passed_guard_wrapper_precheck_blocked_on_bookkeeping_append",
   "scope": "Explain and prevent missing incoming customer choices without manual Salla refresh.",
   "confirmed": [
     "Initial native and root choices empty at revision 1.",
@@ -33,7 +33,7 @@
   ],
   "reproduction_limit": "Synthetic source mechanisms, not full webhook/Mongo integration or a passing preventive-fix suite.",
   "access": "Official Production viewer connected through secure user authentication. Scoped reads; edit off; no credential extracted.",
-  "next_safe_action": "Stage exact hash-verified guard outside /app. Invoke prepare once, inspect direct result/postchecks; prepublish immediately before one authorized free Publish changes action; observe newer explicit successful deployment then run verify once with pinned root UI/prepublish receipt. Do not repeat successful build or guard phases.",
+  "next_safe_action": "Preserve the successful original build and failed precheck evidence. Independently review new operator R2 allowing only the proven bookkeeping path to append while protecting original and phase-entry bytes; all other119 entries/set/type/mode remain exact. Stage hash-verified R2 after review; first actual official prepare remains pending. No source/intent/official guard changes or rebuild.",
   "continuity": "PR1923, task status and archival branch are durable. Issue1006 body update acknowledged but fresh readback absent; not claimed persisted.",
   "diagnosis_base_sha": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
   "source_implementation_present": true,
@@ -61,7 +61,7 @@
     "final_b_artifact_sha256": "decef6273a9c4027007a89563fc23e9a6a9a42ff3c29ebab13435f783888e211"
   },
   "independent_review": "Source review and114-test run passed. Exact-A real Mongo and gates passed. Exact-B host artifacts independently validated; root directly compared all293 file bytes and modes.",
-  "release_state": "One original rehearsal succeeded on exact M, actual runner exit0 and host yarn build exit0. Exact reviewed identity and all120 unchanged paths passed. Reviewed guard now pinned to actual success evidence. Prepare/prepublish/own publication/verify not yet executed.",
+  "release_state": "Original build remains successful and exact. The first prepare wrapper stopped in preservation prechecks before invoking the official guard, so no own lease/prepublish/publication occurred. Root is reviewing a narrow append-preservation correction in a new operator artifact; source, intent, official guard and build stay unchanged.",
   "archival_branch": "codex/salla-options-prelinear-checkpoint-20261114",
   "ancestry_repair": {
     "failed_source_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
@@ -189,5 +189,32 @@
     "version": "5a7a310",
     "observed_at": "2026-11-14T18:35:13.811Z",
     "evidence": "Root CUA tab36 Manage and Deployment finished Nov14 09:01PM history"
+  },
+  "failed_prepare_wrapper": {
+    "evidence_directory": "/tmp/mezan-pr1923-prepare-gfvmibt0",
+    "summary_sha256": "be9d9a10419bace3b56afa779cbd91fa690abbacd24dc557999e6d882397e568",
+    "completed_at": "2026-11-14T18:36:42.215163+00:00",
+    "guard_invoked": false,
+    "failure_stage": "prechecks",
+    "failure_type": "RuntimeError",
+    "reason": "preserved_files_changed",
+    "official_prepare_invocations": 0
+  },
+  "preservation_diagnosis": {
+    "missing": 0,
+    "added": 0,
+    "original_count": 120,
+    "current_count": 120,
+    "exact_other_entries": 119,
+    "only_changed_path": ".emergent/stripped_env_names",
+    "kind": "file",
+    "mode": 420,
+    "before_bytes": 49622,
+    "after_bytes": 49708,
+    "before_sha256": "b0a1afed4ffb0c91d2164ce0bd788039668a4e88e5d27e273794dd0b37c08544",
+    "after_sha256": "07710e8371cc1e5123a36f0f5a793a80e856dcc8af389123e2ff3f7937e50d96",
+    "original_bytes_preserved_as_prefix": true,
+    "writer": "not attributed",
+    "contents_logged": false
   }
 }
