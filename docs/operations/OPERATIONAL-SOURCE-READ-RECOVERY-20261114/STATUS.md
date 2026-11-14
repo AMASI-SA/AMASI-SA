@@ -37,8 +37,9 @@ HEAD77e4acf33e8f5432d97bda5d7208983f0fadc599, correct production branch,
 tracked clean,10 nonignored untracked entries, release guard active:false.
 The original editor still has one unsaved Untitled-1. A separate temporary
 Terminal3 was created for this task; original terminals1/2 were left untouched.
-The new count10 differs from the prior release's120; this continuation has not
-changed those files. Re-capture a complete manifest before any future /app work.
+The count10 here is grouped porcelain entries, not the complete file count.
+A later full git ls-files inventory confirms120 files remain; this continuation
+has not changed those files. Re-capture a complete manifest before /app work.
 
 ## Current investigation
 
@@ -218,3 +219,108 @@ documentation checkpoint branch as needed.
 Production changed by this task: **no**.
 Status: **integrated source locally verified; exact CI/release/live recovery
 pending**.
+
+## Reviewed source A and intent B
+
+PR: https://github.com/AMASI-SA/AMASI-SA/pull/1925 (Draft at this checkpoint).
+Frozen source A:616db2a06344027020fafc00c938f71c1e2b1874.
+Source tree:e9292edd6f82592e3480d9f06336d080fcc79ee7.
+Reviewed base J:77e4acf33e8f5432d97bda5d7208983f0fadc599.
+Intent-only B:bafaebb4a002aea275854b7862d192c8eeb7b441.
+B tree:b992134c7ec89bd9d56fa7eca8ccc214cdf51d5a.
+Intent blob:282d38874c40e5f8e933bc4f4c20bbf5b351c254.
+Intent byte SHA256:b41dff04a3c8227ab788a51469fe8254e32123d1a7057643569ff1b06e0284dd.
+Runtime:rg5-ff873fd1a7abfb3822d1febfaccb4a4c8a063baaca1ed4b23218f245f71d3c87.
+Frontend artifact tree:d6bd189f78c5bb7467fa0b0c7a8edc2e0c36f8d22f6b5ab23242b0a9a0dc25bd.
+
+All exact-A GitHub check-runs settled:27 total,21 successes,6 conditional skips,
+zero pending/failure. Root independently re-fetched and checked every head SHA.
+The skipped jobs are the candidate-A clean-clone/manual-redeploy jobs and four
+unrelated scoped Snapchat/publication jobs, not skipped tests. The reviewed-B
+clean-clone matrix must execute before merge.
+
+Operational run43624962345, exact sourceA:
+
+- Backend4799 passed,8 warnings in222.84s; separate shipping16 tests and18
+  subtests passed. The full operational JUnit no-skips/no-failures gate passed.
+  This job installed production-pinned Motor3.7.1/PyMongo4.18.3.
+- Frontend783 tests/52 suites passed in19.638s.
+- Browser/mobile/visibility acceptance: all14 scenarios passed, including
+  scoped sidebar GETs, saved-value retention on explicit source failure,
+  hidden-page cancellation and separately guarded exports.
+- Canonical background-worker exclusion gate passed.
+
+Release Readiness run43624962313 passed sourceA preflight, both host contracts
+and governed two-build/candidate freeze. The candidate artifact14125354026
+ZIP digest b1018243b59cc1138443e4bfa067991d83dad7298af256f7d06ab2336ea766ef
+was verified before extraction. It contains only release-intent-v5.json.
+Other independent gates passed, including CodeQL, security, employee, tracking,
+G47 and stock. Stock's4513 tests/7 subtests use its separate4.18.1 dependency;
+they are compatibility evidence, not the4.18.3 driver-boundary proof.
+
+Root's local governed A/B build completed with actualexit0 at18:17:06.372749Z,
+elapsed49.663188s. It used Node22.23.2/Yarn1.22.22, the exact reviewed public
+origin, and the documented MEZAN_RELEASE_BOOTSTRAP_INTENT=1 candidate-A mode.
+The first local invocation omitted that candidate flag and correctly rejected
+new source against the old tracked intent; no source or guard was weakened.
+After the official candidate-source checks, the corrected invocation completed
+both clean builds. Retained proof SHA256:
+e830373d93cf42a27d034ca8ff75c07ae049463fa6825e7a4d65ac4c3731e0cf.
+Official frontend verification and candidate freeze/load validation exited0.
+The local1,308,037-byte intent matches CI bytes exactly. The source-A loader
+reported the expected absence of ignored backend/release_identity.json; actual
+identity materialization remains part of the forthcoming adapter rehearsal.
+
+B was created through the GitHub connector as A's direct child changing only
+release/release-intent-v5.json. Local fetched tree/intent-byte verification and
+compare-and-swap alignment preserve the reviewed A/B contract. No amend,
+squash, rebase or force push is allowed after this freeze.
+
+## Original environment and prepared helpers
+
+The previously running other publication displayed Deploymentfinished Nov14,
+21:01Riyadh. The queued original guard status returned active:false; it was not
+interrupted. A fresh subsequent check at2026-11-14T18:15:29.387202Z confirmed
+HEAD77e4acf33e8f5432d97bda5d7208983f0fadc599, tracked clean,120 full nonignored
+untracked files and active:false. The earlier10 is directory-grouped status,
+not evidence of file removal. Original terminals1/2 and unsaved Untitled-1
+remain untouched. This task only used its separate Terminal3 for read-only
+status and inventory checks.
+
+Four adapted release helper templates live beside this status in release-runners.
+Their sourceA/baseJ/actor are fixed for PR1925; B/M/runtime/intent digest/fresh
+count/evidence parameters remain unfilled until the final configured review.
+They retain fresh complete manifest capture, preservation of mode/bytes/paths,
+inactive guard checks, exact A/B/M ancestry and intent-only diff checks,
+governed adapter build, exact identity materialization and actual child exits.
+The official verification wrapper has no timeout and now ignores Ctrl-C while
+joining its verifier; it never interrupts or detaches that child. Other guard
+status probes retain existing bounded behavior.
+
+Templates passed AST/compile/whitespace checks without execution or import,
+and independent static comparison found no concrete defect. SHA256:
+
+- rehearsal:21ea2d6d4871656964034e2788118ccb4728953a7960db1d5d38c9ee6dd5b36e
+- gate:0c3935a36448c32370de93618592804c78bb2123215084b35b7f81481a511039
+- verify:c6e65308005f43109f19cf86d49dee7db3f171696280de10c85ff74d04bfddd5
+- preserve:fa97282f13f57ea758fb628ba0e93c681e35e94f5a6473dd7cf294ce9f10e695
+
+These templates are not evidence of rehearsal, a lease or publication. They
+must be filled consistently, independently rechecked, and fetched by exact
+reviewed commit/bytes before any original-environment execution.
+
+This separate documentation branch is
+codex/financial-source-read-handoff-20261114, starting at sourceA. It is not a
+release branch and must not be merged into frozen A/B. The task PR carries its
+exact checkpoint SHA once persisted. Issue1006 remains full.
+
+Next: inspect every exact-B gate, including both clean-clone adapter jobs;
+fresh-check baseJ, then normal merge preserving B's tree. Fill/review/persist
+the release helpers with actual mergeM and a fresh inventory, run the original
+guarded adapter rehearsal, then authorized prepare/prepublish/publish and the
+official verifier. Only then perform the single visible manual refresh and
+inspect the sanitized failure stages or successful advanced saved timestamp.
+
+Production changed by this task: **no**. No original /app source edit, merge,
+lease or publication has occurred. Status: **A verified, B frozen; B CI and
+live release/recovery pending**.
