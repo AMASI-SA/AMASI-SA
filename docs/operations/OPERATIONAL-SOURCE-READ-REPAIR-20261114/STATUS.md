@@ -1,3 +1,15 @@
+# Current stage — one Publish in progress
+
+Official prepublish exited **0 in3.57s**, finished **2026-11-14T01:47:08.477403+00:00**, for our exact actor/A/M/R. Root then clicked **Publish changes once**. UI changed to Publishing and explicitly recorded **Deployment Started Nov14,04:47AM UTC+3**, event `76a1f54a-3fff-5b3b-8764-400a0403f2e0`. Expanded progress shows Workspace ready, Changes packaged, and Building your website. The baseline prior version is `892c7f3`.
+
+**Publish is in progress, not yet verified. Do not click Publish again, rebuild, alter /app, or clear this active lease.** Own actor: `codex-operational-source-rootfix-1915`, prepared_at `2026-11-14T01:44:54.230670+00:00`; A `a496dd428241b06d2292286de030c70d6241fcf0`; M `4860548f0b032e8e3beca18a4776413cd7e0368b`; R `rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e`.
+
+Next: wait for a newer explicit platform completion, then run the official verify command once on this matching lease, capture its actual exit and three-probe evidence, and confirm fresh inactive status. After that, open the financial page visibly for one page-owned refresh and require a newly advanced as_of with no saved-stale refresh warning. All source/intent/merge CI and original rehearsal have already passed.
+
+---
+
+## Earlier checkpoints
+
 # Current stage — original build passed, own release prepared
 
 Actual original-operator package adapter exited **0 in 64.04 seconds**, from 2026-11-14T01:40:57.492168+00:00 to 01:42:01.531349+00:00. /app is exact M `4860548f0b032e8e3beca18a4776413cd7e0368b`. The complete materialized runtime identity equals the reviewed intent. All 120 preexisting untracked files are preserved byte-for-byte/mode, including zero appended sidecar bytes; tracked/index remain clean. The wrapper ended ready=true without creating a lease. Evidence directory: `/tmp/mezan-pr1915-original-qqo8fwy9`; sanitized proof is preserved in the machine-readable status.

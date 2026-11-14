@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-11-14T01:46:12.525Z",
-  "stage": "prepared_awaiting_single_publish",
+  "updated_at": "2026-11-14T01:49:50.026Z",
+  "stage": "publish_in_progress",
   "J": "d6f246b4d3b14fd56ef2cbc574b99f08bb7d6fc1",
   "A": "a496dd428241b06d2292286de030c70d6241fcf0",
   "B": "30dc66ec09b371a6b990adbd167162254bfd77c6",
@@ -262,7 +262,7 @@
     "publish_number": 100,
     "completed_display": "Nov 14, 04:08 AM UTC+3"
   },
-  "rootfix_publication_started": false,
+  "rootfix_publication_started": true,
   "original_operator_build": {
     "build_exit": 0,
     "build_seconds": 64.04,
@@ -289,5 +289,23 @@
     "prepare_exit": 0,
     "prepare_seconds": 2.72
   },
-  "original_evidence_dir": "/tmp/mezan-pr1915-original-qqo8fwy9"
+  "original_evidence_dir": "/tmp/mezan-pr1915-original-qqo8fwy9",
+  "prepublish": {
+    "actual_exit": 0,
+    "elapsed_seconds": 3.57,
+    "started_at": "2026-11-14T01:47:04.906469+00:00",
+    "finished_at": "2026-11-14T01:47:08.477403+00:00",
+    "actor": "codex-operational-source-rootfix-1915",
+    "source_git_sha": "a496dd428241b06d2292286de030c70d6241fcf0",
+    "deployment_git_sha": "4860548f0b032e8e3beca18a4776413cd7e0368b",
+    "release_id": "rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e"
+  },
+  "publication": {
+    "clicks": 1,
+    "started_display": "Nov 14, 04:47 AM UTC+3",
+    "event_id": "76a1f54a-3fff-5b3b-8764-400a0403f2e0",
+    "baseline_version": "892c7f3",
+    "observed_phase": "Building your website",
+    "completion_observed": false
+  }
 }
