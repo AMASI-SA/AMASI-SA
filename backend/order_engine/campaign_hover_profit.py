@@ -294,7 +294,8 @@ async def enrich_campaign_profit(db, owner, records, cohorts, now):
     priced, settings, basis = await asyncio.gather(
         _bounded(_price_orders(readonly, owner, list(distinct.values()))),
         _bounded(_ad_settings(readonly, owner)),
-        _bounded(read_operating_basis(db, owner, now)),
+        # This reader owns its 3s deadline and returns a structured timeout.
+        read_operating_basis(db, owner, now),
     )
     for cid, record in eligible.items():
         selected = [priced.get(str(order["order_number"])) for order in cohorts[cid]] if priced is not None else None

@@ -18,8 +18,8 @@ from zoneinfo import ZoneInfo
 from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
 from dashboard_v2_routes import _matches_any
 from employee_payroll_status import (
-    EMPLOYEES_COLLECTION, SALARY_CONTRACTS_COLLECTION, employee_salary_rows,
-    normalized_salary_revisions, salary_amount_on,
+    EMPLOYEES_COLLECTION, SALARY_CONTRACTS_COLLECTION, contract_salary_row,
+    salary_amount_on,
 )
 from expenses_routes import _daily_from_monthly, _salary_active_on
 from order_currency import (
@@ -89,45 +89,50 @@ async def _gather(*reads):
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-class _SalaryCursor:
-    def __init__(self, view, name, query):
-        self.view, self.name, self.query = view, name, query
-
-    async def to_list(self, length):
-        rows = await _read(self.view.db, self.name, self.query,
-            SALARY_PROJECTIONS[self.name], min(length, MAX_PAYROLL_ROWS))
-        if self.name == SALARY_CONTRACTS_COLLECTION:
-            for row in rows:
-                if (str(row.get("currency") or "SAR").upper() != "SAR"
-                        or not normalized_salary_revisions(row)):
-                    raise _Unavailable("operating_basis_cost_missing")
-        return rows
-
-
-class _SalaryCollection:
-    def __init__(self, view, name):
-        self.view, self.name = view, name
-
-    def find(self, query, projection):
-        if query.get("user_id") != self.view.owner:
-            raise _Unavailable("operating_basis_owner_invalid")
-        return _SalaryCursor(self.view, self.name, query)
-
-
-class _SalaryReadView:
-    """Keep the shared payroll reader's identity/history rules with hard caps."""
-    def __init__(self, db, owner):
-        self.db, self.owner = db, owner
-
-    def __getitem__(self, name):
-        if name not in SALARY_PROJECTIONS:
-            raise _Unavailable("operating_basis_source_invalid")
-        return _SalaryCollection(self, name)
+async def _employee_salary_rows_on(db, owner, day, budget):
+    """Apply the shared employee identity/calendar policy before cost validation."""
+    contracts = await _read(db, SALARY_CONTRACTS_COLLECTION, {"user_id": owner},
+        SALARY_PROJECTIONS[SALARY_CONTRACTS_COLLECTION], MAX_PAYROLL_ROWS)
+    employee_ids = [str(row.get("employee_id") or "").strip() for row in contracts
+        if str(row.get("employee_id") or "").strip()]
+    if not employee_ids:
+        return []
+    employees = await _read(db, EMPLOYEES_COLLECTION,
+        {"user_id": owner, "id": {"$in": employee_ids}}, SALARY_PROJECTIONS[EMPLOYEES_COLLECTION],
+        min(len(employee_ids), MAX_PAYROLL_ROWS))
+    employees_by_id = {str(row.get("id") or "").strip(): row for row in employees
+        if str(row.get("id") or "").strip()
+        and not any(row.get(flag) for flag in ("archived", "is_archived", "deleted", "is_deleted"))}
+    seen, salaries = set(), []
+    for contract in contracts:
+        await budget.checkpoint()
+        employee_id = str(contract.get("employee_id") or "").strip()
+        if not employee_id or employee_id not in employees_by_id:
+            continue
+        if employee_id in seen:
+            raise ValueError("employee_salary_multiple_contracts")
+        seen.add(employee_id)
+        employee = employees_by_id[employee_id]
+        # Explicit hire/stop/leave dates can prove a contract contributes nothing
+        # before malformed monetary history is inspected. The untouched contract
+        # below still supplies revision-derived start dates and all actual amounts.
+        calendar_row = contract_salary_row({**contract, "monthly_amount": None,
+            "salary_revisions": []}, employee)
+        if not _salary_active_on(calendar_row, day):
+            continue
+        salary = contract_salary_row(contract, employee)
+        if not _salary_active_on(salary, day):
+            continue
+        if (str(contract.get("currency") or "SAR").upper() != "SAR"
+                or not salary["salary_revisions"]):
+            raise _Unavailable("operating_basis_cost_missing")
+        salaries.append(salary)
+    return salaries
 
 
 async def _salary_total(db, owner, day, budget):
     employee_rows, other_rows = await _gather(
-        employee_salary_rows(_SalaryReadView(db, owner), owner),
+        _employee_salary_rows_on(db, owner, day, budget),
         _read(db, "operating_salaries", {"user_id": owner,
             "category": {"$in": ["household", "charity"]}},
             {"_id": 0, "category": 1, "status": 1, "start_date": 1, "monthly_amount": 1},
@@ -166,10 +171,13 @@ async def _recurring_total(db, owner, day, budget):
             continue
         daily = _number(obligation_daily_amount(row,
             by_obligation.get(str(row.get("id") or "").strip(), []), day))
-        # An active utility without an invoice/estimate has no known price.
-        # The dashboard's permissive zero must not certify a campaign profit.
-        if daily is None or daily <= 0:
+        # The executive calculator gives valid utilities without an invoice or
+        # configured estimate a zero contribution. Allocate that same reported
+        # operating total; do not add a separate completeness rule here.
+        if daily is None or daily < 0:
             raise _Unavailable("operating_basis_cost_missing")
+        if daily == 0:
+            continue
         totals[str(row.get("expense_type") or "other").strip()] += daily
     return round(sum(totals.values()), 2)
 
