@@ -1,7 +1,7 @@
 {
   "task_id": "OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114",
-  "stage": "official_verification_running_live_health_identity_pass",
-  "updated_at": "2026-11-14T05:13:25.912Z",
+  "stage": "official_verification_passed_fresh_inactive_financial_acceptance_next",
+  "updated_at": "2026-11-14T05:24:00.871Z",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
@@ -563,9 +563,24 @@
       "source_git_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
       "verified_identity_available": true,
       "observed_at": "2026-11-14T05:12:42.092Z"
+    },
+    "officialVerification": {
+      "phase": "verified",
+      "source_git_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+      "deployment_git_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+      "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+      "checks": 3,
+      "frontend_checked_request_count": 582,
+      "fresh_guard_inactive": true,
+      "actual_exit": 0,
+      "elapsed_seconds": 709.2365926579805,
+      "started_at": "2026-11-14T05:11:23.675001+00:00",
+      "ended_at": "2026-11-14T05:23:12.911592+00:00",
+      "stdout_sha256": "b159d43d60abf596a063242b0735765aad69dbebdd10c2ce3afd76553aeed87f",
+      "prefix": "/tmp/mezan-pr1917-original-jpg_gysb/28-verify"
     }
   },
-  "production_changed_by_this_followup": "yes: M merged and platform120e0fa completed; official verification and fresh financial acceptance pending",
+  "production_changed_by_this_followup": "yes: platform120e0fa officialverifyPASS; freshfinancialacceptancepending",
   "verified_scope": "Live source_collection cancelled after72942.769ms; snapshot_load completed9084.282ms; no reconciliation started.",
   "constraints": [
     "Full owner history and all financial evidence remain required",
@@ -580,7 +595,7 @@
     "Collision preflight and secondary reads are not localized by current stage logs",
     "Repeated fee/assignment/cost scans exist inside source_collection; bounded synthetic measurement is running"
   ],
-  "next_action": "Wait originalTerminal4 for actual verify completion (about10min expected). Preserve own active lease, do not run status concurrently or repeat verify. Require actualexit0/threeprobes/exactA-M-R/freshinactive. Then one new visible financial page mount, capturing freshasof or exactsource substage failure; runtimeLogs stay unopened untilthatattempt.",
+  "next_action": "Open one new visible financial-position tab after thischeckpoint; do notclickrefresh/reload. Capture requeststart/visibility and pollreport. At~87s ifpending capturefreshLogs, otherwiseoncompletion. Requirecurrentasof instead of12/11/2026,01:07. Preservefinancialdata; neverconfirm/settle/save.",
   "ledger_note": "Issue1006 has2500 comments; latest ledger explicitly documents new-comment limit. Task-specific STATUS and forthcoming PR carry continuation.",
   "prechange_measurements": {
     "synthetic_only": true,

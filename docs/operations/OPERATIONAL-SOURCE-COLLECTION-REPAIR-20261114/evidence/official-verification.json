@@ -1,0 +1,15 @@
+{
+  "phase": "verified",
+  "source_git_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+  "deployment_git_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+  "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+  "checks": 3,
+  "frontend_checked_request_count": 582,
+  "fresh_guard_inactive": true,
+  "actual_exit": 0,
+  "elapsed_seconds": 709.2365926579805,
+  "started_at": "2026-11-14T05:11:23.675001+00:00",
+  "ended_at": "2026-11-14T05:23:12.911592+00:00",
+  "stdout_sha256": "b159d43d60abf596a063242b0735765aad69dbebdd10c2ce3afd76553aeed87f",
+  "prefix": "/tmp/mezan-pr1917-original-jpg_gysb/28-verify"
+}

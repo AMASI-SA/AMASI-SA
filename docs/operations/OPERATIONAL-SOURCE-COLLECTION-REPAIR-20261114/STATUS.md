@@ -181,3 +181,10 @@ Platform now explicitly shows Deployment finished Nov14,08:09AM and new platform
 Official verify helper was invoked once and terminal explicitly displayed phase:started with prefix /tmp/mezan-pr1917-original-jpg_gysb/28-verify. Do not interrupt or rerun. A fresh browser GET of public health at05:12:42.092Z confirms exact A/R, protocol5, backend_runtime_source_verified, release_control_source_bound, critical_file_hashes_match and frontend_build_verified all true. Boot05:09:28.080185UTC. This does not replace the official three-probe/static-file verification currently running.
 
 Browser inventory no longer contains old financial65/health64 tabs; original46 and platform59 remain. A new public-health tab was opened; no financial page has been opened. After verify/freshinactive, opening a new visible financial-position page will itself be the single fresh financial attempt. Do not add a second manual refresh.
+
+
+## checkpoint official1917 verification PASS before financial acceptance — 2026-11-14T05:24:00.871Z
+
+Official verify actual exit0, 05:11:23.675001–05:23:12.911592UTC,709.236593seconds. All3probes,582frontendcheckedrequests,exactA/M/R passed. Fresh guard after verification is inactive. RawstdoutSHA256b159d43d60abf596a063242b0735765aad69dbebdd10c2ce3afd76553aeed87f. Owned lease closed normally by official verify. No PR1917 financial attempt has occurred yet.
+
+Next one new visible financial-position tab. Its mount is the only firstrefresh. Keep visible/online and inspect stored report.as_of, rootfailurewarnings, tablepagination and localpendingordersdialog. RuntimeLogs remainunopened; capture fresh fixedstage timing if requestremainslong. See acceptance-checklist.md.
