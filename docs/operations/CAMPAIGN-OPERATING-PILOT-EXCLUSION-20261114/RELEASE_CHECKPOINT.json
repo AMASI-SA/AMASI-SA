@@ -2,7 +2,7 @@
   "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
   "round": 6,
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 19:32:04 UTC",
+  "updated_at_utc": "2026-11-14 19:36:27 UTC",
   "branch": "codex/campaign-operating-pilot-m3e9d-20261114",
   "pr": 1929,
   "base_J6": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
@@ -345,7 +345,7 @@
       }
     }
   },
-  "next": "Prepare completed successfully; do not repeat it. Run reviewed prepublish once, inspect actual receipts/status, then immediately click authorizedfreeRepublish once. Await explicitnewUIcompletion/version before verify once. Do not alter /app or ownedlease while active.",
+  "next": "UI publication is running after one Republish menu click and one free Publish changes click. Do not republish or repeat completed prepare/prepublish/build. Await explicit new Deployment finished UI and new version, then invoke reviewed verify once with actual UI evidence. Live numeric arithmetic and cropped tooltip acceptance remain.",
   "original_build": {
     "state": "success",
     "result": {
@@ -1117,6 +1117,36 @@
       "status_after_active": true,
       "guard_receipt_sha256": "069128413091441d9bbc6e5d0717368511dc598c597d81bfd540db9ac88fccc1",
       "evidence": "/tmp/mezan-operating-followup-original-5dp0ykxf/release-gate/prepare"
+    },
+    "prepublish": {
+      "calls": 1,
+      "success": true,
+      "phase": "prepublish",
+      "finished_at": "2026-11-14T19:32:40.261221Z",
+      "original_evidence": "/tmp/mezan-operating-followup-original-5dp0ykxf",
+      "source_git_sha": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "source_base_git_sha": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+      "intent_git_sha": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+      "deployment_git_sha": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+      "tree": "c2d683827c54574fcd60ee4102c9de7c163f5ef8",
+      "release_id": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2",
+      "actor": "codex-campaign-operating-pilot-1929",
+      "preserved_untracked_files": 120,
+      "exact_original_records": 119,
+      "before_bookkeeping_bytes": 50052,
+      "after_bookkeeping_bytes": 50052,
+      "all_witnessed_prefixes_preserved": true,
+      "status_after_active": true,
+      "guard_receipt_sha256": "ef16d40cea8fb69aa41de01c8b644825563eb100eda1b881082e20b73aa35f55"
     }
+  },
+  "publication": {
+    "observed_at": "2026-11-14 19:36:27 UTC",
+    "republish_menu_clicks": 1,
+    "publish_changes_clicks": 1,
+    "free_republishes_confirmed": true,
+    "ui_state": "Publishing…",
+    "baseline_version": "3a22e2d",
+    "deployment_git_sha": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9"
   }
 }

@@ -1,3 +1,11 @@
+# Current release — PR1929 publishing; verification pending
+
+Updated 2026-11-14 19:36:27 UTC. Both official prepare and prepublish completed successfully once, with exact A6/J6/B6/M6/runtime bindings. Root observed prepublish result19:32:40.261221UTC, ready for publication. All120untrackedfiles remain preserved (119exact, append-only bookkeeping50052→50052, everyprefixverified); ownedlease active actorcodex-campaign-operating-pilot-1929.
+
+Root opened Republish once, confirmed the visible Free republishes option and clicked Publish changes once. Publishing… observed19:36:27UTC; priorplatformversion3a22e2d. Do not repeat this action. Next: explicitnewDeploymentfinished event/version, reviewedverifyonce3checks, inactive/finalpreservation and live numeric arithmetic/tooltipacceptance. No privatecustomer/employee/financialvalues inthishandoff.
+
+## Earlier provenance and milestones
+
 # Campaign operating pilot exclusion — PR1929 ready for original build; not yet published
 
 Updated 2026-11-14 19:19:48 UTC.
