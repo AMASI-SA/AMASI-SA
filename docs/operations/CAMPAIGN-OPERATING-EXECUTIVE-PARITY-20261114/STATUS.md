@@ -38,3 +38,11 @@ The candidate has not been merged, built in original /app, prepared or published
 - Candidate artifact14121569773 from successful readiness43615534811 was downloaded and exact bytes checked:ZIP73fcba744bb0d5c87ad800d5d7cfd6c355cca56d349b82c5d22c3f0a1ea76cf6; JSONfeab3c376faf8154c9e74a4df88315ab4321aa0cc4f7b36b32dcabd02c4d68ad; Gitblob2eb12801b61c5c62a97c68d278555116bf12b23c. Upload returned the same Gitblob. Source/base, changed backend hashes, reviewed origin/toolchain and runtime/component bindings were validated.
 - New deterministic runtime `rg5-fbb9058e74d33e0a4f8d9f1fe58f80be54f02fea3721efab400d41e876ec75b4`. Exact-B2 CI and both host rehearsal artifacts remain pending.
 - Disabled new build/gate templates archived here for review. They preserve119 records exactly plus the proven single append-only bookkeeping file, and retain actual official receipts independently of postchecks. They containUNPINNED values andPINS_REVIEWED=False; do not execute these templates.
+
+
+## Production advanced; fresh candidate on preserved upstream — 2026-11-14 16:44:27 UTC
+
+- PR1921 merged current production J3 `94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894`; original /app independently observed at J3, tracked clean, guard inactive at16:41:25.665266UTC. PR1921's separate operator is running its original build (checkpoint19d6fdb6ea7dcbd488ad73de177ec5becab7a723). Do not interfere with that workspace/release or clear its lease.
+- PR1922 B2 completed all11 applicable workflows and bothhostrehearsals. Root and independent archive validation passed:293 generatedfiles byte-identical, exactintent andruntimeidentity links. B2's base is superseded; it was never merged,builtoriginally,prepared orpublished. ClosedPR1922 in favor ofPR1924; frozenbranch and artifacts preserved.
+- New sourceA3 `c484b549e8bca017627ce80749c7895198f04bf8`, tree `1afab9057e574c8db551f98411febaeaced5feb4`, ordinaryparentJ3 on `codex/campaign-operating-executive-parity-m94f6-20261114`, draftPR1924. Exactlythree reviewedbackend/testblobs retained plus newtaskSTATUS; allupstreamfinancial-centerchanges retained and inheritedJ3intent unchanged. Exactcompare confirmedfourfiles/onecommit.
+- NewA3CI and newintent/hostproofs required; oldB2proofs are not permission to deploy againstJ3. Disabled1922runners must not be used fornewlineage. No follow-up publication orlease.

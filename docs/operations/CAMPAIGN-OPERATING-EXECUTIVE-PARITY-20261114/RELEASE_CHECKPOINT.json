@@ -1,61 +1,142 @@
 {
   "task": "CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114",
-  "updated_at_utc": "2026-11-14 16:35:12 UTC",
   "repository": "AMASI-SA/AMASI-SA",
-  "branch": "codex/campaign-operating-executive-parity-20261114",
-  "pr": 1922,
-  "base_J2": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
-  "source_A2": "0f5bca7427fed7851008d0f7d64e23414746bdc1",
-  "source_tree": "01ef389fd3b167e602fe8a889210641d7b148d4c",
-  "initial_source": "22832941d5d61d77ed5c6acb2b3a6565423ce675",
-  "source_commits_after_base": 2,
+  "updated_at_utc": "2026-11-14 16:44:27 UTC",
+  "branch": "codex/campaign-operating-executive-parity-m94f6-20261114",
+  "pr": 1924,
+  "base_J3": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+  "source_A3": "c484b549e8bca017627ce80749c7895198f04bf8",
+  "source_tree": "1afab9057e574c8db551f98411febaeaced5feb4",
   "changed_files": [
     "backend/order_engine/campaign_hover_operating.py",
     "backend/order_engine/campaign_hover_profit.py",
     "backend/tests/test_campaign_hover_operating.py",
     "docs/operations/CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114/STATUS.md"
   ],
-  "inherited_intent_unchanged": true,
-  "static_review": "root and independent R2 PASS",
-  "repository_ci": "all11 exactA2 workflows successful",
-  "intent_B2": "afe6ff699e0de1601b37d2fd81e4291cb69dc75f",
-  "merge_M2": null,
-  "runtime_release_id": "rg5-fbb9058e74d33e0a4f8d9f1fe58f80be54f02fea3721efab400d41e876ec75b4",
-  "production_changed_by_followup": false,
-  "preceding_release": {
-    "pr": 1920,
-    "deployment": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
-    "published_version": "1b4c4f6",
-    "official_verify_exit": 0,
-    "official_verify_checks": 3,
-    "verified_at": "2026-11-14T16:22:18.751950Z",
-    "fresh_guard_inactive_at": "2026-11-14T16:23:12.874031Z",
-    "do_not_repeat_publish_or_verify": true
+  "same_three_backend_test_blobs_as_A2": true,
+  "inherited_J3_intent_unchanged": true,
+  "source_ci": "pending",
+  "intent_B3": null,
+  "merge_M3": null,
+  "runtime_release_id": null,
+  "original_workspace_observation": {
+    "observed_at": "2026-11-14T16:41:25.665266+00:00",
+    "status_exit": 0,
+    "status_sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e",
+    "guard": {
+      "active": false
+    },
+    "head": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+    "tracked_status": ""
   },
-  "next": "Require exactB2 gates and bothhost20/24 artifact/proof validation. Templates disabled untilM2/identityhashes/actor/UIbaseline pinned+reviewed. Freshinactive/latestJ2 beforeordinaryM2merge; thenM2pushgates andoriginalbuild. Do not repeatPR1920completedrelease.",
-  "live_cause_attribution": "unproven; fixes are source-proven discrepancies from requested executive authority",
-  "writes": "no customer/order/accounting/provider/ad writes; no new polling/sync",
-  "A2_source_coverage": {
-    "backend": 248,
-    "frontend": 50,
-    "frontend_suites": 9
+  "coordination": {
+    "other_pr": 1921,
+    "other_merge": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+    "other_handoff_branch": "codex/financial-section-pages-handoff-20261114",
+    "other_checkpoint": "19d6fdb6ea7dcbd488ad73de177ec5becab7a723",
+    "state_at_checkpoint": "original build started once in Terminal2, nolease yet",
+    "must_wait_for_other_owner_release_and_fresh_inactive": true
   },
-  "intent_tree": "b7e5e6dc359cea6d2ab654fde3a67d8580f963fe",
-  "B2_lineage": "independently verified one intent-only child",
-  "B2_ci": "pending 11 applicable plus explicitTikTokbranchskip",
-  "candidate": {
-    "run": 43615534811,
-    "artifact": 14121569773,
-    "zip_sha256": "73fcba744bb0d5c87ad800d5d7cfd6c355cca56d349b82c5d22c3f0a1ea76cf6",
-    "json_sha256": "feab3c376faf8154c9e74a4df88315ab4321aa0cc4f7b36b32dcabd02c4d68ad",
-    "git_blob_sha": "2eb12801b61c5c62a97c68d278555116bf12b23c",
-    "content_bindings_verified": true
+  "superseded_pr1922": {
+    "task": "CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114",
+    "updated_at_utc": "2026-11-14 16:44:27 UTC",
+    "repository": "AMASI-SA/AMASI-SA",
+    "branch": "codex/campaign-operating-executive-parity-20261114",
+    "pr": 1922,
+    "base_J2": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
+    "source_A2": "0f5bca7427fed7851008d0f7d64e23414746bdc1",
+    "source_tree": "01ef389fd3b167e602fe8a889210641d7b148d4c",
+    "initial_source": "22832941d5d61d77ed5c6acb2b3a6565423ce675",
+    "source_commits_after_base": 2,
+    "changed_files": [
+      "backend/order_engine/campaign_hover_operating.py",
+      "backend/order_engine/campaign_hover_profit.py",
+      "backend/tests/test_campaign_hover_operating.py",
+      "docs/operations/CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114/STATUS.md"
+    ],
+    "inherited_intent_unchanged": true,
+    "static_review": "root and independent R2 PASS",
+    "repository_ci": "all11 exactA2 workflows successful",
+    "intent_B2": "afe6ff699e0de1601b37d2fd81e4291cb69dc75f",
+    "merge_M2": null,
+    "runtime_release_id": "rg5-fbb9058e74d33e0a4f8d9f1fe58f80be54f02fea3721efab400d41e876ec75b4",
+    "production_changed_by_followup": false,
+    "preceding_release": {
+      "pr": 1920,
+      "deployment": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
+      "published_version": "1b4c4f6",
+      "official_verify_exit": 0,
+      "official_verify_checks": 3,
+      "verified_at": "2026-11-14T16:22:18.751950Z",
+      "fresh_guard_inactive_at": "2026-11-14T16:23:12.874031Z",
+      "do_not_repeat_publish_or_verify": true
+    },
+    "next": "Require exactB2 gates and bothhost20/24 artifact/proof validation. Templates disabled untilM2/identityhashes/actor/UIbaseline pinned+reviewed. Freshinactive/latestJ2 beforeordinaryM2merge; thenM2pushgates andoriginalbuild. Do not repeatPR1920completedrelease.",
+    "live_cause_attribution": "unproven; fixes are source-proven discrepancies from requested executive authority",
+    "writes": "no customer/order/accounting/provider/ad writes; no new polling/sync",
+    "A2_source_coverage": {
+      "backend": 248,
+      "frontend": 50,
+      "frontend_suites": 9
+    },
+    "intent_tree": "b7e5e6dc359cea6d2ab654fde3a67d8580f963fe",
+    "B2_lineage": "independently verified one intent-only child",
+    "B2_ci": "all11 applicable success; TikTok exactbranch expectedskip",
+    "candidate": {
+      "run": 43615534811,
+      "artifact": 14121569773,
+      "zip_sha256": "73fcba744bb0d5c87ad800d5d7cfd6c355cca56d349b82c5d22c3f0a1ea76cf6",
+      "json_sha256": "feab3c376faf8154c9e74a4df88315ab4321aa0cc4f7b36b32dcabd02c4d68ad",
+      "git_blob_sha": "2eb12801b61c5c62a97c68d278555116bf12b23c",
+      "content_bindings_verified": true
+    },
+    "templates": {
+      "build_sha256": "bd548bca9a101b8fec0141d14751d4eb05e36f80523bb5e23fdf86c01a374182",
+      "gate_sha256": "5bbcbbb35f3cb26486f2d9f255c6cf43004f400872c7562531c504827559cebe",
+      "disabled": true,
+      "independent_review": "PASS static; remain disabled",
+      "execution": "none"
+    },
+    "superseded_by": {
+      "pr": 1924,
+      "source_A3": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "base_J3": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+      "reason": "PR1921 advanced production before follow-up merge"
+    },
+    "merge_allowed": false,
+    "original_build": null,
+    "B2_hosts": {
+      "both_passed": true,
+      "all_generated_files_identical": 293,
+      "runtime_identity_sha256": "9aa099482ce7749bf2dec081577150990080a5aea74d091998357853953bbae5",
+      "artifacts": [
+        {
+          "id": 14122686775,
+          "name": "release-v5-generated-outputs-host-20.20.2",
+          "digest": "sha256:548f7d6f6ba2dc70c43bc4b64ba31a3a2ba9c553d0eabc23a181359b761b24e7",
+          "head": "afe6ff699e0de1601b37d2fd81e4291cb69dc75f"
+        },
+        {
+          "id": 14122342514,
+          "name": "release-v5-clean-clone-evidence-host-20.20.2",
+          "digest": "sha256:2478d01738132e3010ccdf0283c2e85ce05aec2f56a3e36f59575e45d3d5e793",
+          "head": "afe6ff699e0de1601b37d2fd81e4291cb69dc75f"
+        },
+        {
+          "id": 14121793077,
+          "name": "release-v5-generated-outputs-host-24.19.0",
+          "digest": "sha256:d8379dfb176f58a5ef3ca079ecc78e6e741c1c7b6b5b01d3cf5ad98be96699db",
+          "head": "afe6ff699e0de1601b37d2fd81e4291cb69dc75f"
+        },
+        {
+          "id": 14121668656,
+          "name": "release-v5-clean-clone-evidence-host-24.19.0",
+          "digest": "sha256:d3fcb30aa2195cc0d5f49789f3b31085569a49e6baaed746c131edcafbe26712",
+          "head": "afe6ff699e0de1601b37d2fd81e4291cb69dc75f"
+        }
+      ]
+    }
   },
-  "templates": {
-    "build_sha256": "bd548bca9a101b8fec0141d14751d4eb05e36f80523bb5e23fdf86c01a374182",
-    "gate_sha256": "5bbcbbb35f3cb26486f2d9f255c6cf43004f400872c7562531c504827559cebe",
-    "disabled": true,
-    "independent_review": "in progress",
-    "execution": "none"
-  }
+  "production_changed_by_this_followup": false,
+  "next": "Complete exactA3 CI and its new candidate artifact. Freeze only new intentB3 then fullgates/hosts. Preserve other's active original build/release. After ownready and othercomplete, freshinactive/latestbase before ordinary merge and originalrehearsal."
 }
