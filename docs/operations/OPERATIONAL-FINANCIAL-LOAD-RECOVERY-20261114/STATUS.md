@@ -263,3 +263,39 @@ terminal printed `phase=started`, prefix `28-verify`. It has no wrapper timeout.
 Do not repeat it while running. No final verifier result or live fresh financial
 report acceptance has been observed at this checkpoint. Preserve the current
 owned lease and all original evidence until official verification closes it.
+
+## Environment interruption — resume existing verifier, do not repeat release
+
+Recorded at 2026-11-14T15:13:47.636Z. The browser transport failed while root was observing
+the running official verifier. The platform then marked the execution environment
+unavailable and removed the CUA tool. A subsequent harmless local pwd request
+reported that no usable execution environment is available. This is an inspection
+environment failure; it is not evidence that the published application failed.
+
+The last successful browser observation still showed Terminal 3 running the
+original verifier and its phase=started marker. No completion, exit status,
+three-probe result or inactive-lease result was received. The process may have
+continued independently. Do not infer either success or failure, and do not
+start another verifier. No live financial page reload/acceptance has been done
+on the new release. Public health last successfully observed at 15:05:39Z matched
+A/runtime with all selected identity flags true. A later search-tool attempt to
+read the health URL was inaccessible and provides no newer health evidence.
+
+### Exact resumption
+
+1. Reconnect to the existing original code-server /app and inspect the existing
+   evidence prefix `/tmp/mezan-pr1919-original-72x801fd/28-verify` first.
+2. Require actual_exit=0/problem=null, verified=true/checks=3, exact A/J/M/runtime,
+   frontend tree and nonempty checked request list, matching stdout digest, and
+   fresh guard inactive. Inspect result, stdout, after.stdout and summary.json.
+3. Only after that, run the already-reviewed preservation helper once with
+   `--evidence-dir /tmp/mezan-pr1919-original-72x801fd --label after-verify`.
+   Require 120 entries preserved, no changed paths, and separately retain the
+   unsaved Untitled-1 buffer and ignored quarantine payload.
+4. Reload the existing financial position tab once while visible. Observe the
+   automatic mount refresh, a newer as_of and no timeout/saved-snapshot fallback.
+   Capture actual timing and outcome. The UI calculation acceptance remains open.
+
+Do not publish again, create another lease, clear the current lease, reset /app,
+restore/delete quarantined cache, or touch the unrelated unsaved editor buffer.
+Frozen release lineage and the published version a5eae68 remain unchanged.
