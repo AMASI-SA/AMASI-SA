@@ -1,0 +1,21 @@
+{
+  "label": "fee_direct-20000-20000-timing",
+  "argv": [
+    "/workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python",
+    "-B",
+    "/workspace/scratch/019fa8a18b3d/pr1916-source-cpu-benchmark/bench.py",
+    "--case",
+    "fee_direct",
+    "--rows",
+    "20000",
+    "--calls",
+    "20000"
+  ],
+  "started_at": "2026-11-14T04:12:54.617009+00:00",
+  "elapsed_seconds": 6.829892072011717,
+  "actual_exit": 0,
+  "timeout_seconds": 35,
+  "timed_out": false,
+  "stdout_sha256": "a0977711f2ba013f2976a072efbb8eb005682f53c29d0a84346829def1e91ba1",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

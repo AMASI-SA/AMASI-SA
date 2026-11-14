@@ -1,7 +1,7 @@
 {
   "task_id": "OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114",
-  "stage": "diagnosis_in_progress",
-  "updated_at": "2026-11-14T04:08:57.390Z",
+  "stage": "proven_quadratic_fee_scan_implementation_in_progress",
+  "updated_at": "2026-11-14T04:17:10.803Z",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
@@ -90,5 +90,72 @@
     "Repeated fee/assignment/cost scans exist inside source_collection; bounded synthetic measurement is running"
   ],
   "next_action": "Measure actual source_collection CPU helpers offline; select narrow evidence-backed improvement, add fixed safe substage timings if needed, test and independently review before freezing A.",
-  "ledger_note": "Issue1006 has2500 comments; latest ledger explicitly documents new-comment limit. Task-specific STATUS and forthcoming PR carry continuation."
+  "ledger_note": "Issue1006 has2500 comments; latest ledger explicitly documents new-comment limit. Task-specific STATUS and forthcoming PR carry continuation.",
+  "prechange_measurements": {
+    "synthetic_only": true,
+    "all_actual_exits": 0,
+    "source_commit": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+    "operation_counts": {
+      "at64": 4096,
+      "at128": 16384
+    },
+    "files": [
+      {
+        "path": "evidence/prechange-fee/bench.py",
+        "sha256": "3f9b2bb6447c24420f76d49ab64d35899dc7342d1c0cd51c1a11feed4eb58ccf"
+      },
+      {
+        "path": "evidence/prechange-fee/fee-identity.json",
+        "sha256": "241fc916b8898cc174c71afe2e3e3eb262a95284a6822544aaa9f8483a4e8113"
+      },
+      {
+        "path": "evidence/prechange-fee/fee_absent-1000-1000-timing.result.json",
+        "sha256": "232d9d27a7b6978f9c244842b75bd167586056969cd3752103d15dc75c42cad2"
+      },
+      {
+        "path": "evidence/prechange-fee/fee_absent-128-128-counts.result.json",
+        "sha256": "569cbf0e046d116b36ceca2618b9c64a205be8575f68a9c5efce9412ee1166ee"
+      },
+      {
+        "path": "evidence/prechange-fee/fee_absent-20000-250-timing.result.json",
+        "sha256": "54d7837e39a2b4a7f41a85a47a0c77cab8ce93afc8d6d316853f8cdaebf23204"
+      },
+      {
+        "path": "evidence/prechange-fee/fee_absent-4000-4000-timing.result.json",
+        "sha256": "d8f802c005f2fbd8700b0ddf749e9d17e191e8e7218c9e1f064e7470ed45425e"
+      },
+      {
+        "path": "evidence/prechange-fee/fee_absent-64-64-counts.result.json",
+        "sha256": "68394a15f769aab0c4ce638c97eddb0e0ea894d4341926f4554e107ffd2fecd9"
+      },
+      {
+        "path": "evidence/prechange-fee/fee_direct-20000-20000-timing.result.json",
+        "sha256": "cf70fe857bfbd7b7cf2895a677ea1255c776ef83d0abc2b481b47c578ae4b5f0"
+      },
+      {
+        "path": "evidence/prechange-fee/fee_absent-1000-1000-timing.stdout",
+        "sha256": "8c1507dae599dbe801ba4cb517a3cf3c5f45b62832a8a83f4eded8c97225bf4b"
+      },
+      {
+        "path": "evidence/prechange-fee/fee_absent-128-128-counts.stdout",
+        "sha256": "a76e2974f1d163fc669a2ab359c419d5d2e82c92592bb062a2124f41d42b4ff5"
+      },
+      {
+        "path": "evidence/prechange-fee/fee_absent-20000-250-timing.stdout",
+        "sha256": "54789486c75b3edb3f76a6753c0607ac14003243122b98b2ffb02b96b4e81218"
+      },
+      {
+        "path": "evidence/prechange-fee/fee_absent-4000-4000-timing.stdout",
+        "sha256": "2d0984c273944bb8dcde704bfd83744a9bd96a548b77b26355932ea3f4d20385"
+      },
+      {
+        "path": "evidence/prechange-fee/fee_absent-64-64-counts.stdout",
+        "sha256": "ea976bd650e537fd61380c55a2c07d692e272d719752ebf9804a523b57f78090"
+      },
+      {
+        "path": "evidence/prechange-fee/fee_direct-20000-20000-timing.stdout",
+        "sha256": "a0977711f2ba013f2976a072efbb8eb005682f53c29d0a84346829def1e91ba1"
+      }
+    ]
+  }
 }

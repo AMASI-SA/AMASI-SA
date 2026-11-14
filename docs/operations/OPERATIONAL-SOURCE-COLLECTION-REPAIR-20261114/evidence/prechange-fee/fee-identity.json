@@ -1,0 +1,11 @@
+{
+  "expected_commit": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+  "head": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+  "tree": "c5bd7fb6c357e17c17104282d1d175676e95ed3e",
+  "source_hashes": {
+    "backend/operational_delivery_evidence.py": "0a64e6a27dcf9e49afe23b0240c15f0ba4bd74c3ea79aafe6b6f5e056c7eabcc",
+    "backend/operational_balance_sources.py": "ed56061f536c49f7b54e8edbb3826ee7d8f9c4f10a40ac4d79e7646cd4d4b4f7",
+    "backend/operational_product_cost_policy.py": "15ce8f61049ea3b642ec86bc0843b919a3bee925464d88dfb418c437349ea1e1"
+  },
+  "benchmark_sha256": "3f9b2bb6447c24420f76d49ab64d35899dc7342d1c0cd51c1a11feed4eb58ccf"
+}
