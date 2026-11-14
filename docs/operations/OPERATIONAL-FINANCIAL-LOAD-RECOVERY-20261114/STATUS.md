@@ -299,3 +299,25 @@ read the health URL was inaccessible and provides no newer health evidence.
 Do not publish again, create another lease, clear the current lease, reset /app,
 restore/delete quarantined cache, or touch the unrelated unsaved editor buffer.
 Frozen release lineage and the published version a5eae68 remain unchanged.
+
+## Connection restored; official verification and preservation passed
+
+After secure reauthentication, the original terminal showed the same verifier
+had finished independently at 2026-11-14T15:18:09.798861Z. Root read its actual
+result, stdout, summary and after-status: exit0/problem=null, verified=true,
+checks=3, protocol5, exact A/J/M/runtime, exact frontend tree and582 checked
+requests. Elapsed734.6524644409656seconds. Raw stdout SHA256
+`47ab092fc2372fac8e979b957d821e181c05a145c46a2e7210f521112c12aca2`
+matches the saved summary. The guard after-status is active=false.
+No publication or verification was repeated.
+
+The reviewed after-verify preservation helper ran once and passed at
+15:29:06.002564Z. Root inspected its comparison: before_count120,
+after_count120, changed_paths[], preserved=true. The UI still shows one unsaved
+Untitled-1 buffer. The new browser session restored the original terminal as
+Terminal2; the existing evidence path is unchanged.
+
+The financial position page was then opened once and showed authenticated UI
+with its automatic visible load in progress. That attempt's result is pending.
+The separate public health observation at15:21:25Z also matched the intended
+source/runtime and all identity flags. Full live acceptance is still required.
