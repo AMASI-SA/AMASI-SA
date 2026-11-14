@@ -1,4 +1,4 @@
-# Campaign operating period correction — intent B frozen; host verification pending
+# Campaign operating period correction — B host artifacts passed; timing gates awaiting one retry
 
 Task: CAMPAIGN-OPERATING-PERIOD-20261115
 
@@ -16,3 +16,11 @@ The read-only verifier initially used a public subset where the contract hashes 
 Next: all B CI and both real host artifact archives. All 25 expected workflow families are scheduled; TikTok is correctly skipped and the other 24 require success. Never deploy this evidence branch.
 
 Issue #1006 has reached its comment limit; this STATUS, checkpoint and PR #1932 form the continuation record. Preserve the 120 unrelated original workspace untracked files, original terminals and unsaved editor buffer; original read-only guard status was inactive. Disabled operator templates must be freshly pinned and independently reviewed before execution.
+
+## B host acceptance and remaining CI gate
+
+Root accepted both actual generated output and evidence ZIPs, bound to GitHub digests and jobs 132598858283/132598858252 of Readiness43644190870. All 293 generated files, modes, full metadata/proof/identity bytes and package boundaries match across hosts; both actual JSON route steps passed. Independent archive acceptance is pending.
+
+Two B workflows failed only the same unchanged process-CPU ratio benchmark after equality passed: Stock43644190839 (4512passed+7subtests, onefailure), Balance43644190930 (4798passed, onefailure). The affected test and runtime blobs are unchanged from passing source A and baseline. This is a timing-performance failure; no infrastructure outage is claimed. One bounded failed-job retry each was requested at21:52UTC. No threshold/code change or gate waiver. If either repeats, stop merge and investigate.
+
+The three fresh ready-for-review Snapchat gates passed. PR is ready for review but not merged. Production unchanged; no original mutation/lease/publication. Next: independent host PASS and both exact-B retry outcomes, then fresh refs/guard and normal merge when all gates pass.
