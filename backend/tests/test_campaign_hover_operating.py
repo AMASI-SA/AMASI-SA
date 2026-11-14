@@ -212,14 +212,39 @@ def test_valid_unpriced_utility_keeps_the_executive_zero_contribution(basis, amo
 
 
 @pytest.mark.parametrize("amount", [-1, float("nan"), float("inf"), "invalid"])
-def test_invalid_recurring_amount_does_not_become_known_zero(amount):
+@pytest.mark.parametrize("expense_type", ["rent", "water", "electricity"])
+def test_invalid_recurring_amount_does_not_become_known_zero(amount, expense_type):
     async def check():
         db = await fixture_db(sale("sale"))
-        await db.operating_recurring_obligations_v2.insert_one(obligation("invalid", period_amount=amount))
+        await db.operating_recurring_obligations_v2.insert_one(obligation("invalid",
+            expense_type=expense_type, period_amount=amount, estimation_basis="last_3_invoices"))
         result = await operating.read_operating_basis(ReadDB(db), OWNER, NOW)
         assert result["complete"] is False and result["ratio"] is None
         assert result["expenses_sar"] is None
         assert result["reasons"]
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("amount", [-1, float("nan"), float("inf"), "invalid"])
+@pytest.mark.parametrize("invoice_kind", ["actual", "historical"])
+def test_positive_utility_invoice_does_not_use_an_invalid_configured_estimate(amount, invoice_kind):
+    async def check():
+        from recurring_obligations_routes import compute_recurring_obligations_for_range
+
+        db = await fixture_db(sale("sale"))
+        await db.operating_recurring_obligations_v2.insert_one(obligation("water",
+            expense_type="water", period_amount=amount, estimation_basis="last_invoice"))
+        invoice = ({"amount": 600, "period_start": "2026-11-01", "period_end": "2026-11-30"}
+            if invoice_kind == "actual" else
+            {"amount": 620, "period_start": "2026-10-01", "period_end": "2026-10-31"})
+        await db.operating_recurring_invoices_v2.insert_one({"user_id": OWNER,
+            "obligation_id": "water", **invoice})
+        day = datetime.fromisoformat(DAY).date()
+        executive = await compute_recurring_obligations_for_range(db, OWNER, day, day)
+        result = await operating.read_operating_basis(ReadDB(db), OWNER, NOW)
+        assert executive["total"] == executive["utilities_total"] == 20
+        assert result["complete"] and result["reasons"] == []
+        assert result["expenses_sar"] == executive["total"] and result["ratio"] == .02
     asyncio.run(check())
 
 

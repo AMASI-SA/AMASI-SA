@@ -177,6 +177,14 @@ async def _recurring_total(db, owner, day, budget):
         if daily is None or daily < 0:
             raise _Unavailable("operating_basis_cost_missing")
         if daily == 0:
+            # The shared utility fallback also maps invalid nonpositive/NaN
+            # estimates to zero. Accept only absent or valid configured values
+            # here; a positive invoice contribution never consults this fallback.
+            configured = row.get("period_amount")
+            if configured is not None:
+                estimate = _number(configured)
+                if estimate is None or estimate < 0:
+                    raise _Unavailable("operating_basis_cost_missing")
             continue
         totals[str(row.get("expense_type") or "other").strip()] += daily
     return round(sum(totals.values()), 2)
