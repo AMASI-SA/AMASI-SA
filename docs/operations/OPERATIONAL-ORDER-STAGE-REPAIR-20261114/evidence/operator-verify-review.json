@@ -1,0 +1,99 @@
+{
+  "schema": "mezan_original_verify_helper_review_v1",
+  "verdict": "PASS",
+  "blocking_findings": [],
+  "reviewer": "/root/screenshot_handoff",
+  "review_mode": "Read-only source comparison and AST validation. Helper was not imported or executed. No browser, original /app, production API, DB, GitHub or repository mutation.",
+  "candidate": {
+    "path": "/workspace/scratch/019fa8a18b3d/pr1918_original_verify.py",
+    "bytes": 8119,
+    "sha256": "bb7a021f0f4012c2b364f639b85a223a5ddf291acf8f8394e519e01602399920"
+  },
+  "previous_reviewed_template": {
+    "path": "/workspace/scratch/019fa8a18b3d/pr1917_original_verify.py",
+    "sha256": "93211e2f6a8d3aeb04cd10141bd90cdffd0efd2247c369dc61c70e589b8a2263"
+  },
+  "comparison": {
+    "only_expected_replacements": true,
+    "replacements": {
+      "8839d3aeb32b4bda2de2015efb0deca7fbb844a3": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+      "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+      "PR1916": "PR1918",
+      "mezan-pr1917-original-": "mezan-pr1918-original-"
+    },
+    "behavioral_changes": false
+  },
+  "expected_identity": {
+    "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+    "release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+    "url": "https://mezansalla.com",
+    "deployment_sha": "Required CLI input: complete lowercase 40-character merge SHA; not guessed.",
+    "actor": "Required safe CLI input, checked against the fresh active lease."
+  },
+  "checks": [
+    {
+      "name": "private_evidence_and_no_repeat",
+      "result": "pass",
+      "evidence": "Requires an existing owned/private non-symlink /tmp/mezan-pr1918-original-* directory; rejects any 28-verify* file before main. Child stdout/stderr use exclusive xb creation, and there is exactly one verify invocation."
+    },
+    {
+      "name": "actual_build_and_identity",
+      "result": "pass",
+      "evidence": "Requires outcome.json build/ready/source/M/release/untracked_count=120/lease_created=False and actual integer 0 exit with no problem in 22-build.result.json before any guard command."
+    },
+    {
+      "name": "fresh_owned_lease",
+      "result": "pass",
+      "evidence": "First official status must be active=True and match actor, A, M, R and protocol 5. No prepare, prepublish, abort or manual lease-clear command exists in helper."
+    },
+    {
+      "name": "actual_exit_before_parse",
+      "result": "pass",
+      "evidence": "Waits for child, flushes/fsyncs raw stdout/stderr, atomically saves result with actual_exit/timing/problem, then rejects nonzero and only then parses JSON."
+    },
+    {
+      "name": "no_overall_verify_timeout",
+      "result": "pass",
+      "evidence": "child timeout defaults to None; verify call has no timeout keyword. Only the two bounded status commands use 15 seconds."
+    },
+    {
+      "name": "three_probes_and_frontend",
+      "result": "pass",
+      "evidence": "Requires verified=True, exact integer checks=3, A/M/R/protocol/url identity, nonempty frontend_checked_requests and frontend artifact tree equal to prepared lease. Inspected official guard runs health plus frontend verification in each of three observations."
+    },
+    {
+      "name": "safe_official_lease_completion",
+      "result": "pass",
+      "evidence": "Helper delegates successful completion only to official verifier. That verifier holds the release mutex and rereads/fences the exact observed lease before its own removal; helper never directly removes a lease."
+    },
+    {
+      "name": "fresh_final_inactive",
+      "result": "pass",
+      "evidence": "After verify succeeds and identities match, a new official status must have active is False and no incomplete lease directory before verified summary is written."
+    },
+    {
+      "name": "source_and_evidence_safety",
+      "result": "pass",
+      "evidence": "Helper has no source/build mutation or financial action. Child runs existing original /app guard with -B and PYTHONDONTWRITEBYTECODE=1. Writes are confined to private evidence; successful official verifier performs its prescribed lease close."
+    }
+  ],
+  "official_contract_inspected": {
+    "path": "/workspace/scratch/019fa8a18b3d/mezan-order-stage-fix/scripts/production_release_guard.py",
+    "sha256": "4e56f1f60f5f79931658b8f95a0aeb2269471025ca84f7e5b651cd284806349a",
+    "functions": [
+      "status",
+      "verify",
+      "_verify_locked",
+      "_assert_active_lease_unchanged",
+      "_remove_active_lease"
+    ]
+  },
+  "operator_requirements": [
+    "Run only after explicit successful platform publication of this release.",
+    "Supply the reviewed merge SHA, exact lease actor, and actual successful rehearsal evidence directory.",
+    "The script uses the rehearsal preservation evidence; it does not independently hash current untracked files or inspect unsaved UI buffers.",
+    "The local review does not assert current /app, lease, build, publication or public-health state."
+  ],
+  "ast_validation": "pass without executing helper",
+  "timestamp_policy": "No execution or original-host observation is claimed."
+}

@@ -1,0 +1,251 @@
+{
+  "created_at": "2026-11-14T06:13:12.781825+00:00",
+  "result": "PASS",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pr_number": 1918,
+  "source_A": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+  "source_tree": "38b0dec1fc53cb9bd1ba36236bcc730f0e1d0367",
+  "source_parent": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+  "workflow_observed_at": "2026-11-14T06:11:01.221Z",
+  "workflows": {
+    "total": 11,
+    "success": 11,
+    "attempts": "All attempt 1; no dispatch/rerun performed."
+  },
+  "check_runs": {
+    "total": 27,
+    "success": 21,
+    "conditional_skips": 6,
+    "pending": 0,
+    "failure": 0,
+    "neutral": 0,
+    "skipped_names": [
+      "Emergent manual redeploy required",
+      "Emergent Host Node ${{ matrix.host-node }} clean-clone adapter rehearsal",
+      "Publication backend and existing write guards",
+      "Publication frontend and existing media flow",
+      "Backend settings and zero-write regressions",
+      "Frontend Snapchat settings tests and build"
+    ]
+  },
+  "legacy_commit_status_context_count": 0,
+  "test_artifacts": {
+    "operational": {
+      "artifact_id": 14101333974,
+      "artifact_name": "operational-backend-results",
+      "run_id": 43564579706,
+      "artifact_api_digest": "sha256:d6012a61135dcaab926d0b940c4cafa72410684601ef418fc2f3e93d0586b973",
+      "zip_sha256": "d6012a61135dcaab926d0b940c4cafa72410684601ef418fc2f3e93d0586b973",
+      "zip_bytes": 77099,
+      "xml_test_cases": 4647,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "new_file_case_counts": {
+        "test_operational_balance_delivery_assignment_index.py": 130,
+        "test_operational_balance_cost_catalog_index.py": 113,
+        "test_operational_balance_courier_hold_history.py": 177,
+        "test_operational_balance_issue_index.py": 21
+      },
+      "members": {
+        "operational-source-sha.txt": {
+          "bytes": 41,
+          "sha256": "218ac715cce707703375c60d1b2cbfc7e233a0c8c7c88ca1921e4413dafe2f27"
+        },
+        "operational-backend.xml": {
+          "bytes": 844095,
+          "sha256": "9d92a9d815ec835c1a1a73b31ca2d91b178dc11f9f32f416ea2b57f7e857ac8d"
+        },
+        "operational-source-tree.txt": {
+          "bytes": 41,
+          "sha256": "a89a7b7ee702a9d521d83194f4566b6be1d5aca378b193fd8504d76737e0f287"
+        }
+      }
+    },
+    "stock": {
+      "artifact_id": 14101439673,
+      "artifact_name": "eligibility-backend-d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+      "run_id": 43564579763,
+      "artifact_api_digest": "sha256:491e96e2c6dd1e8dce3360f13ef38fa316fe0c7881f1926de1d5e5be5b42cd68",
+      "zip_sha256": "491e96e2c6dd1e8dce3360f13ef38fa316fe0c7881f1926de1d5e5be5b42cd68",
+      "zip_bytes": 73921,
+      "xml_test_cases": 4456,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "new_file_case_counts": {
+        "test_operational_balance_delivery_assignment_index.py": 130,
+        "test_operational_balance_cost_catalog_index.py": 113,
+        "test_operational_balance_courier_hold_history.py": 177,
+        "test_operational_balance_issue_index.py": 21
+      },
+      "members": {
+        "eligibility-backend.xml": {
+          "bytes": 774053,
+          "sha256": "a1a7a0417166047cecac91ce7f42a6fe85f29a72ac91b2e714526c542f38d4aa"
+        }
+      }
+    }
+  },
+  "required_449_each_artifact": "Every required ID occurs exactly once and passes in each official XML. No missing/duplicate/failure/error/skipped expected cases.",
+  "source_timing_each_artifact": "All 17 current source-stage timing cases occur exactly once and pass.",
+  "deferred_mongo_each_artifact": "All four cases deferred locally execute and pass in both official isolated Mongo suites.",
+  "source_identity": {
+    "operational": "Exact A and tree embedded in artifact text members; API artifact/run identity also matches.",
+    "stock": {
+      "artifact_name_and_api_head_match": true,
+      "official_job_id": 132355498007,
+      "record_exact_tested_source_step": "success",
+      "source_output_line": "2026-11-14T06:05:10.8420886Z d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+      "tree_output_line": "2026-11-14T06:05:10.8434956Z 38b0dec1fc53cb9bd1ba36236bcc730f0e1d0367"
+    }
+  },
+  "exact_A_expected_test_file_sha256": {
+    "backend/tests/test_operational_balance_delivery_assignment_index.py": "00ef94a220182d5be2432cb900485c337efdc886e8252b511006ce23bb5ae873",
+    "backend/tests/test_operational_balance_cost_catalog_index.py": "dc2348f91909f8620eec81f3f71f68c2183e1c9f535983d6087a56255365bebc",
+    "backend/tests/test_operational_balance_courier_hold_history.py": "51bc28fd4cd95dc7aecb0e33578c5c63352a0009a027e9e49e163d709598222f",
+    "backend/tests/test_operational_balance_issue_index.py": "6b959ce5c9defb09931ec107658bed5ace72a4d041958d57ad47db83ecc8eaf6",
+    "backend/tests/test_operational_balance_source_stage_timing.py": "1e4dd88f1984e9398ba4c6b5942ad8b49c74d292ace8a7029643a2b449209b6a",
+    "backend/tests/test_operational_balance_courier_order_transition.py": "f95aad0ca214f74cb7dfd621aedb94fecafe5bf39200122a3177a4f15715f8b6",
+    "backend/tests/test_operational_balance_delivery_cutover.py": "db458031ec59233c8c2181d3342952e63d650393e6002d6284c3b5ecbb7ab10f",
+    "backend/tests/test_operational_balance_delivery_start_rule.py": "7b732f93fb52b9bbb4e3dfcefcd9ce314bd8841f3aee364d17483d05b07782ba"
+  },
+  "expected_manifest": {
+    "path": "/workspace/scratch/019fa8a18b3d/assignment-index-review/expected-ci-cases.json",
+    "sha256": "48259bfa49a54ad0d666ebbc5d4abf10593d693fed9211dab316a91d1433b4d2",
+    "mandatory_case_count": 449
+  },
+  "separate_shipping_log_result": "Operational Backend official log: 16 passed, 18 subtests passed in 0.38s. This separate command has no JUnit artifact in this workflow.",
+  "stock_log_subtests": "Official Stock log reports 7 subtests passed in addition to 4456 main cases.",
+  "scope_limitations": [
+    "This proves exact-A CI execution and artifact identity. It does not replace future B/M checks or original adapter/release guard steps.",
+    "Synthetic CI passing does not prove that the production financial refresh obtains a fresh stored as_of; live acceptance remains required."
+  ],
+  "artifact_files": {
+    "final-checks.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/final-checks.json",
+      "bytes": 15673,
+      "sha256": "7a28236d20140c2c6603f4dbfe0f56343f2447b8607c42360edab6a9d42a2994"
+    },
+    "initial-snapshot.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/initial-snapshot.json",
+      "bytes": 14412,
+      "sha256": "49b48674e44a06292da7d925254b394de326e29b0746ab54dec53f51504c6fc1"
+    },
+    "inspect_artifact.py": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/inspect_artifact.py",
+      "bytes": 5337,
+      "sha256": "f3260da2ddc0c4190df02b0295894ecb4536f5024ba53f5102a96c763f3132ff"
+    },
+    "official-job-steps.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/official-job-steps.json",
+      "bytes": 11055,
+      "sha256": "994e28fd29c14dd3a5c4c180a0480336b92b4acef293528aff2cbe771592cccf"
+    },
+    "operational-artifact.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/operational-artifact.json",
+      "bytes": 809,
+      "sha256": "e46c9630c17a40ee8c568871cc63c45420152cfd487691764b0a2b2a8762b2c0"
+    },
+    "operational-download.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/operational-download.json",
+      "bytes": 134,
+      "sha256": "4419d5c87acf3cdb86e8de3e57d32e876b85161255c3f1f4187f0114d02c2be2"
+    },
+    "operational-inspect.result.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/operational-inspect.result.json",
+      "bytes": 433,
+      "sha256": "f8fb02943d80b6cd42fdcb140e8e98c3ee5b6684081bb2bd91e81f5c2272a609"
+    },
+    "operational-inspect.stderr": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/operational-inspect.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "operational-inspect.stdout": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/operational-inspect.stdout",
+      "bytes": 541,
+      "sha256": "d69faeaf06ae6074e2440408192f249504c68a3380f9961f6c2c0d20dc6f8e59"
+    },
+    "operational-inspection.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/operational-inspection.json",
+      "bytes": 77328,
+      "sha256": "cfb25addb788ec31bfc9c3449b0bb73ae37c83e5bab895f8d28e2ebc5d651f9a"
+    },
+    "operational-job-excerpts.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/operational-job-excerpts.json",
+      "bytes": 613,
+      "sha256": "e4200005839bcdfa0134b14f2b85893498f3eb09fc5f3e1ff4032a26de6b0f5c"
+    },
+    "operational-operational-backend.xml": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/operational-operational-backend.xml",
+      "bytes": 844095,
+      "sha256": "9d92a9d815ec835c1a1a73b31ca2d91b178dc11f9f32f416ea2b57f7e857ac8d"
+    },
+    "operational-operational-source-sha.txt": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/operational-operational-source-sha.txt",
+      "bytes": 41,
+      "sha256": "218ac715cce707703375c60d1b2cbfc7e233a0c8c7c88ca1921e4413dafe2f27"
+    },
+    "operational-operational-source-tree.txt": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/operational-operational-source-tree.txt",
+      "bytes": 41,
+      "sha256": "a89a7b7ee702a9d521d83194f4566b6be1d5aca378b193fd8504d76737e0f287"
+    },
+    "operational.zip": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/operational.zip",
+      "bytes": 77099,
+      "sha256": "d6012a61135dcaab926d0b940c4cafa72410684601ef418fc2f3e93d0586b973"
+    },
+    "snapshots.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/snapshots.json",
+      "bytes": 79255,
+      "sha256": "de6d529b24cb628fc8473514c495f9d50444c54d6c76927b74588aecf634a646"
+    },
+    "stock-artifact.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/stock-artifact.json",
+      "bytes": 842,
+      "sha256": "cb2dee1fca0b0e494d600d1edf3afe54b19679ab650ac861b18a4ee149f91f16"
+    },
+    "stock-download.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/stock-download.json",
+      "bytes": 135,
+      "sha256": "f3e5b767281d1495462e9d8549463917105b20e9150b47fd9a16ed21c94651f8"
+    },
+    "stock-eligibility-backend.xml": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/stock-eligibility-backend.xml",
+      "bytes": 774053,
+      "sha256": "a1a7a0417166047cecac91ce7f42a6fe85f29a72ac91b2e714526c542f38d4aa"
+    },
+    "stock-inspect.result.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/stock-inspect.result.json",
+      "bytes": 427,
+      "sha256": "a04c6f3aca698b7e090d9327c5ceb1d9dc3ae0a56a5b11484859337c9a5f62c6"
+    },
+    "stock-inspect.stderr": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/stock-inspect.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "stock-inspect.stdout": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/stock-inspect.stdout",
+      "bytes": 535,
+      "sha256": "ffe8b6b5b3ee2e6efa731fdf00f2afaabe4e528503cc2576271885e0aab50bbc"
+    },
+    "stock-inspection.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/stock-inspection.json",
+      "bytes": 76621,
+      "sha256": "fa1a836b50dab943365e02e37418395eca73cf46906681a89eebd2966375385d"
+    },
+    "stock-job-excerpts.json": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/stock-job-excerpts.json",
+      "bytes": 1284,
+      "sha256": "e9ba33362700371138a64c7fed3ada6549e585612d835d96317bf226347375ba"
+    },
+    "stock.zip": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918-exact-a-ci/stock.zip",
+      "bytes": 73921,
+      "sha256": "491e96e2c6dd1e8dce3360f13ef38fa316fe0c7881f1926de1d5e5be5b42cd68"
+    }
+  }
+}

@@ -1,0 +1,264 @@
+{
+  "branch": "codex/operational-order-stage-fix-20261114",
+  "candidate_manifest_review": "pending local candidate supplied by release owner",
+  "changed_path_count": 15,
+  "critical_subset_members": [
+    "server.py",
+    "release_identity.py",
+    "release_protocol_v5.py",
+    "frontend_build_identity.py",
+    "integrations/qoyod_manual/routes.py",
+    "integrations/qoyod_manual/send.py"
+  ],
+  "files": [
+    {
+      "additions": 43,
+      "bytes": 149617,
+      "deletions": 26,
+      "git_blob": "9f010c4220c715b8be0344eaf0e93037ca63f550",
+      "mode": "100644",
+      "path": "backend/operational_balance_sources.py",
+      "sha256": "e5aa59de263c24a5f3dc831da474c1c1f6115f9b256cec6d4d7f32792f0998e5",
+      "status": "modified"
+    },
+    {
+      "additions": 2,
+      "bytes": 8709,
+      "deletions": 2,
+      "git_blob": "7a234b9cb1949554227a92725a04d56db9cbbc0d",
+      "mode": "100644",
+      "path": "backend/operational_completed_shipping_sources.py",
+      "sha256": "a4aae7ac0d64f75bbebff39ecdb3156a2862539f14e5c6924e3e6f829e034733",
+      "status": "modified"
+    },
+    {
+      "additions": 97,
+      "bytes": 3571,
+      "deletions": 0,
+      "git_blob": "61d2eee8233fb3886b7d42b9c6c1557bacc52eb3",
+      "mode": "100644",
+      "path": "backend/operational_cost_catalog_index.py",
+      "sha256": "1d3b93a1f24fb047232ef102bfcf73d459f58af7c193cb3e1ee3c0255810affb",
+      "status": "added"
+    },
+    {
+      "additions": 158,
+      "bytes": 6843,
+      "deletions": 0,
+      "git_blob": "85a67f830fff00b298da65fa52cee9c050ca0333",
+      "mode": "100644",
+      "path": "backend/operational_courier_hold_history.py",
+      "sha256": "ba1321862700a005b57eaeca66d2f70a781a5536df71fe835ec19b11af8d61e9",
+      "status": "added"
+    },
+    {
+      "additions": 120,
+      "bytes": 5841,
+      "deletions": 0,
+      "git_blob": "fe71998444eed5acf6e3e7cc1c51daa254a95f91",
+      "mode": "100644",
+      "path": "backend/operational_delivery_assignment_index.py",
+      "sha256": "9fa319a0c1b13bfeb55d587713da634f8c46f65276edb627843c26171d2763d4",
+      "status": "added"
+    },
+    {
+      "additions": 14,
+      "bytes": 14333,
+      "deletions": 5,
+      "git_blob": "9583b757e0744af2bd322a799f4183703383d7e5",
+      "mode": "100644",
+      "path": "backend/operational_delivery_confirmation.py",
+      "sha256": "1bd80af7a3d06dae1647d71079579adfd5661b84aa22a340d213340de67e0b56",
+      "status": "modified"
+    },
+    {
+      "additions": 9,
+      "bytes": 32392,
+      "deletions": 3,
+      "git_blob": "813859d25c3104e0aeb463915015564aa2758f06",
+      "mode": "100644",
+      "path": "backend/operational_delivery_evidence.py",
+      "sha256": "f0903effb9f616c8a1a2ee17b34d43ce9c64ce3d025bd41969fd700ce75c94ac",
+      "status": "modified"
+    },
+    {
+      "additions": 153,
+      "bytes": 4757,
+      "deletions": 0,
+      "git_blob": "872611390c2b4ae3cee4a84cd55e7aac9a9c9ab5",
+      "mode": "100644",
+      "path": "backend/operational_issue_index.py",
+      "sha256": "bed1e3ad3bb345c11ba2b2582a4cb54c942fb514bdc91316f897985c75d6644b",
+      "status": "added"
+    },
+    {
+      "additions": 4,
+      "bytes": 24550,
+      "deletions": 3,
+      "git_blob": "c100b82944574f79ab47800440ef05082feb2ed3",
+      "mode": "100644",
+      "path": "backend/operational_shipping_fee_review.py",
+      "sha256": "bbd637b0a10c7cd12fa257bb7ef8a42698494fb28d3cdeff3e8a2ce3514908d8",
+      "status": "modified"
+    },
+    {
+      "additions": 453,
+      "bytes": 21350,
+      "deletions": 0,
+      "git_blob": "ec8e73de31aa15c0b1f755b659b29720e8f8252a",
+      "mode": "100644",
+      "path": "backend/tests/test_operational_balance_cost_catalog_index.py",
+      "sha256": "dc2348f91909f8620eec81f3f71f68c2183e1c9f535983d6087a56255365bebc",
+      "status": "added"
+    },
+    {
+      "additions": 451,
+      "bytes": 21693,
+      "deletions": 0,
+      "git_blob": "8f858c5143b86d701ef863a4c8c94a2c3fa97f0a",
+      "mode": "100644",
+      "path": "backend/tests/test_operational_balance_courier_hold_history.py",
+      "sha256": "51bc28fd4cd95dc7aecb0e33578c5c63352a0009a027e9e49e163d709598222f",
+      "status": "added"
+    },
+    {
+      "additions": 474,
+      "bytes": 23999,
+      "deletions": 0,
+      "git_blob": "1e9b806dd64efa7d564742ac557640aa47c1015e",
+      "mode": "100644",
+      "path": "backend/tests/test_operational_balance_delivery_assignment_index.py",
+      "sha256": "00ef94a220182d5be2432cb900485c337efdc886e8252b511006ce23bb5ae873",
+      "status": "added"
+    },
+    {
+      "additions": 245,
+      "bytes": 10659,
+      "deletions": 0,
+      "git_blob": "12bd98a39b1d91b67feff7c592d828cef794f73d",
+      "mode": "100644",
+      "path": "backend/tests/test_operational_balance_issue_index.py",
+      "sha256": "6b959ce5c9defb09931ec107658bed5ace72a4d041958d57ad47db83ecc8eaf6",
+      "status": "added"
+    },
+    {
+      "additions": 18,
+      "bytes": 12508,
+      "deletions": 5,
+      "git_blob": "2df4486153afd6f3c2dce65ddb2def475daef835",
+      "mode": "100644",
+      "path": "backend/tests/test_operational_balance_source_stage_timing.py",
+      "sha256": "1e4dd88f1984e9398ba4c6b5942ad8b49c74d292ace8a7029643a2b449209b6a",
+      "status": "modified"
+    },
+    {
+      "additions": 34,
+      "bytes": 4344,
+      "deletions": 0,
+      "git_blob": "9f96b7ac42ac3870d8af179e779a302632cdb19a",
+      "mode": "100644",
+      "path": "docs/operations/OPERATIONAL-ORDER-STAGE-REPAIR-20261114/STATUS.md",
+      "sha256": "04a803208c670fbdbbbf121203f7fca83e1d8c77fab4e79920edbf5d8277a625",
+      "status": "added"
+    }
+  ],
+  "limitations": [
+    "This scope review is not a CI or production acceptance claim.",
+    "Exact-A XML coverage belongs to independent source_read_review and is not duplicated here."
+  ],
+  "module_policy": "All four new modules are included by complete backend_runtime_source policy; static critical subset remains unchanged. Tests excluded from runtime, included by both operational globs.",
+  "new_backend_modules": [
+    {
+      "additions": 97,
+      "bytes": 3571,
+      "deletions": 0,
+      "git_blob": "61d2eee8233fb3886b7d42b9c6c1557bacc52eb3",
+      "mode": "100644",
+      "path": "backend/operational_cost_catalog_index.py",
+      "sha256": "1d3b93a1f24fb047232ef102bfcf73d459f58af7c193cb3e1ee3c0255810affb",
+      "status": "added"
+    },
+    {
+      "additions": 158,
+      "bytes": 6843,
+      "deletions": 0,
+      "git_blob": "85a67f830fff00b298da65fa52cee9c050ca0333",
+      "mode": "100644",
+      "path": "backend/operational_courier_hold_history.py",
+      "sha256": "ba1321862700a005b57eaeca66d2f70a781a5536df71fe835ec19b11af8d61e9",
+      "status": "added"
+    },
+    {
+      "additions": 120,
+      "bytes": 5841,
+      "deletions": 0,
+      "git_blob": "fe71998444eed5acf6e3e7cc1c51daa254a95f91",
+      "mode": "100644",
+      "path": "backend/operational_delivery_assignment_index.py",
+      "sha256": "9fa319a0c1b13bfeb55d587713da634f8c46f65276edb627843c26171d2763d4",
+      "status": "added"
+    },
+    {
+      "additions": 153,
+      "bytes": 4757,
+      "deletions": 0,
+      "git_blob": "872611390c2b4ae3cee4a84cd55e7aac9a9c9ab5",
+      "mode": "100644",
+      "path": "backend/operational_issue_index.py",
+      "sha256": "bed1e3ad3bb345c11ba2b2582a4cb54c942fb514bdc91316f897985c75d6644b",
+      "status": "added"
+    }
+  ],
+  "new_official_glob_test_files": [
+    "backend/tests/test_operational_balance_cost_catalog_index.py",
+    "backend/tests/test_operational_balance_courier_hold_history.py",
+    "backend/tests/test_operational_balance_delivery_assignment_index.py",
+    "backend/tests/test_operational_balance_issue_index.py"
+  ],
+  "observed_at_utc": "2026-11-14T06:07:58.062365+00:00",
+  "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1918",
+  "protected_paths_unchanged": [
+    ".github/workflows",
+    "scripts",
+    "backend/release_protocol_v5.py",
+    "backend/release_identity.py",
+    "frontend",
+    "release/release-intent-v5.json",
+    "backend/operational_demand_refresh.py",
+    "backend/operational_financial_activity_runtime.py",
+    "backend/operational_balance_store.py",
+    "backend/operational_balance_archive.py",
+    "backend/operational_balance_engine.py",
+    "backend/operational_balance_service.py"
+  ],
+  "release_workflow": "Unchanged candidate on A, intent-only B, actual Host20/24 clean-clone adapter rehearsals on reviewed B; no workflow changes.",
+  "remote_commit_and_local_object_agree": true,
+  "remote_production_still_J_at_observation": true,
+  "schema": "pr1918_frozen_scope_manifest_review_v1",
+  "scope_pass": true,
+  "source_base_git_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+  "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+  "source_tree": "38b0dec1fc53cb9bd1ba36236bcc730f0e1d0367",
+  "unchanged_policy_files": {
+    ".github/workflows/mezan-production-release.yml": {
+      "sha256": "68ec9e4760b56a40d36aacc82f4ff3842b690d28b4c80b61e5b7164671f8306c",
+      "unchanged_from_J": true
+    },
+    ".github/workflows/operational-balance-web.yml": {
+      "sha256": "439ed68ef21987d783683deb6a6a32d5f5ca368aa45b633814ba51b511f31b68",
+      "unchanged_from_J": true
+    },
+    ".github/workflows/operational-stock-eligibility.yml": {
+      "sha256": "06eeb4a430e2e16f4f4c513fb73d13ee2bc2d8e33668b20bd2dd439e8892a9ac",
+      "unchanged_from_J": true
+    },
+    "backend/release_protocol_v5.py": {
+      "sha256": "1961ac18a5363ec425ceec4f98f96f611d378b09e19380d4756bd6776987d8ef",
+      "unchanged_from_J": true
+    },
+    "scripts/emergent_deployment_adapter.py": {
+      "sha256": "2e09999684b329045af3cb15290e3bee3b615b8e1d9a378e903977ba9f1a8287",
+      "unchanged_from_J": true
+    }
+  }
+}

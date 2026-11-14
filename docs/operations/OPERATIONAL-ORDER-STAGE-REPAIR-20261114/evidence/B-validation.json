@@ -1,0 +1,13 @@
+{
+  "started_at": "2026-11-14T06:14:04.059073+00:00",
+  "ended_at": "2026-11-14T06:14:06.505036+00:00",
+  "elapsed_seconds": 2.4459680959989782,
+  "actual_exit": 0,
+  "stdout_sha256": "0ba41a57771f116105b50f8648d041bca7121d4e983343242d532c8f39fb2415",
+  "stderr_sha256": "c0ae638da7114d3f5975cd7995c5726026cc874a2be7715c7986a0c2a5d76374",
+  "stderr_bytes": 179,
+  "B": "9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9",
+  "Btree": "9de141756a4c5dcfa8d1d4dfb6513178c406ac8e",
+  "parent": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+  "only_changed_path": "release/release-intent-v5.json"
+}

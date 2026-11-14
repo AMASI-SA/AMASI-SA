@@ -1,0 +1,22 @@
+{
+  "artifact_id": 14102091387,
+  "run_id": 43564579813,
+  "zip_path": "/workspace/scratch/019fa8a18b3d/mezan-pr1918-A-candidate.zip",
+  "zip_sha256": "e6da059ec55cfda9941ad57bd74c0f42a51599c371699c9b54404d91e10eaa2f",
+  "zip_bytes": 376971,
+  "members": [
+    "release-intent-v5.json"
+  ],
+  "intent_path": "/workspace/scratch/019fa8a18b3d/mezan-pr1918-A-intent.json",
+  "intent_bytes": 1304401,
+  "intent_sha256": "b6cbb46c323197410aae8c585bec51dcdce825864141ae8ef083710eae5d85f0",
+  "intent_git_blob": "542c547cb679e78d5050aa537bed370595f353f0",
+  "runtime_identity": {
+    "release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+    "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+    "source_base_git_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d"
+  },
+  "frontend_build": {
+    "artifact_tree_sha256": "9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6"
+  }
+}

@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-ORDER-STAGE-REPAIR-20261114",
-  "stage": "source_A_frozen_exact_CI_running",
+  "stage": "intent_B_frozen_exact_CI_running",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "2db0edc9edb315026eee4b6edd43b420a569c37d",
@@ -328,7 +328,7 @@
         "sha": "9f96b7ac42ac3870d8af179e779a302632cdb19a"
       }
     ],
-    "pr_body": "## Problem\nThe verified PR1917 deployment still returns the old financial snapshot. Its single visible attempt cancelled in `source_orders` after 61.803 seconds and returned HTTP 408. Four independent synthetic measurements reproduce repeated whole-cohort work inside that stage. They do not establish each helper's production share.\n\n## Change\nBuild attempt-local indexes for delivery assignments, courier hold history and cost catalogues through the existing joined preparation worker. Add an owned diagnostic-membership index while preserving full-dictionary equality and metadata enrichment. Preserve original ordering, duplicate and identity semantics, lazy Decimal evaluation, fallback errors, and unchanged default callers. Every collector invocation and CAS retry rebuilds its indexes.\n\nAdd fixed timing labels for index preparation and the existing bank-catalogue read. No additional database read, financial write, cross-request cache, cap change, deadline extension or authorization change.\n\n## Verification\n- Final combined local selection: **1,467 passed, actual exit 0**, with the exact source manifest unchanged during the run. Four real-Mongo cases are deferred to exact-A CI because the local replica set is unavailable; the initial connection-refused result is retained.\n- Focused suites: assignment130, cost113, hold177, diagnostics21; these overlap the combined selection.\n- Negative controls for assignment, cost and diagnostics fail the intended repeated-work assertion when indexing is disabled. Construction is included in growth measurements.\n- Independent reviews cover collector/reconcile/report parity, duplicate/order and first-error behavior, immutable inputs, Decimal flags, new attempts, cancellation, worker joining and lease cleanup.\n- Exact-source CI must execute all four new suites, four additional timing cases and all four deferred Mongo cases in both official backend XML artifacts.\n\n## Frozen source\nJ: `2db0edc9edb315026eee4b6edd43b420a569c37d`  \nA: `d70b42cda3d70a7f07c78c3efc5fde8331fdc877`  \nA tree: `38b0dec1fc53cb9bd1ba36236bcc730f0e1d0367`\n\n## Remaining gates\nExact-A checks and reviewed candidate artifact, then intent-only B and exact-B checks, normal merge, the original operator's governed build, guarded publish, official production verification and a new visible report **as_of**. Production is unchanged by this follow-up so far; live financial acceptance is not yet established.\n\n[Handoff and evidence](https://github.com/AMASI-SA/AMASI-SA/blob/codex/operational-order-stage-handoff-20261114/docs/operations/OPERATIONAL-ORDER-STAGE-REPAIR-20261114/STATUS.md). The handoff branch is documentation only and must not be merged or deployed. Original /app120 pending files and the unsaved editor buffer remain preserved.",
+    "pr_body": "## Problem\nThe verified PR1917 deployment still returns the old financial snapshot. Its single visible attempt cancelled in `source_orders` after 61.803 seconds and returned HTTP 408. Four independent synthetic measurements reproduce repeated whole-cohort work inside that stage. They do not establish each helper's production share.\n\n## Change\nBuild attempt-local indexes for delivery assignments, courier hold history and cost catalogues through the existing joined preparation worker. Add an owned diagnostic-membership index while preserving full-dictionary equality and metadata enrichment. Preserve original ordering, duplicate and identity semantics, lazy Decimal evaluation, fallback errors, and unchanged default callers. Every collector invocation and CAS retry rebuilds its indexes.\n\nAdd fixed timing labels for index preparation and the existing bank-catalogue read. No additional database read, financial write, cross-request cache, cap change, deadline extension or authorization change.\n\n## Verification\n- Final combined local selection: **1,467 passed, actual exit 0**, with the exact source manifest unchanged during the run. Four real-Mongo cases are deferred to exact-A CI because the local replica set is unavailable; the initial connection-refused result is retained.\n- Focused suites: assignment130, cost113, hold177, diagnostics21; these overlap the combined selection.\n- Negative controls for assignment, cost and diagnostics fail the intended repeated-work assertion when indexing is disabled. Construction is included in growth measurements.\n- Independent reviews cover collector/reconcile/report parity, duplicate/order and first-error behavior, immutable inputs, Decimal flags, new attempts, cancellation, worker joining and lease cleanup.\n- Exact-source CI must execute all four new suites, four additional timing cases and all four deferred Mongo cases in both official backend XML artifacts.\n\n## Exact-A CI and candidate\nAll11 exact-A workflows passed (21success checks,6 expected skips). Official Operational Balance XML: **4,647 passing cases**. Official Stock Eligibility XML: **4,456 passing cases plus7passing subtests**. Both include all449 specifically reviewed cases, all17source-timing cases and all4locally deferred Mongo cases, with no failure/error/skip. Independent candidate review re-derived the full backend/control manifests from Git A/J and verified all4new module records. Official candidate loader returned actualexit0.\n\n## Frozen source\nJ: `2db0edc9edb315026eee4b6edd43b420a569c37d`  \nA: `d70b42cda3d70a7f07c78c3efc5fde8331fdc877`  \nA tree: `38b0dec1fc53cb9bd1ba36236bcc730f0e1d0367`\n\n## Frozen deployment intent\nB: `9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9`  \nB tree: `9de141756a4c5dcfa8d1d4dfb6513178c406ac8e`  \nRuntime: `rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f`\n\nB is the direct child of A and changes only `release/release-intent-v5.json`, using exact reviewed artifact bytes (Git blob `542c547cb679e78d5050aa537bed370595f353f0`).\n\n## Remaining gates\nExact-B checks, normal merge, the original operator's governed build, guarded publish, official production verification and a new visible report **as_of**. Production is unchanged by this follow-up so far; live financial acceptance is not yet established.\n\n[Handoff and evidence](https://github.com/AMASI-SA/AMASI-SA/blob/codex/operational-order-stage-handoff-20261114/docs/operations/OPERATIONAL-ORDER-STAGE-REPAIR-20261114/STATUS.md). The handoff branch is documentation only and must not be merged or deployed. Original /app120 pending files and the unsaved editor buffer remain preserved.",
     "pr": 1918,
     "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1918",
     "validation": {
@@ -390,6 +390,216 @@
       ],
       "independent_review": "PASS_SOURCE_REVIEW",
       "mandatory_exact_ci_cases": 449
+    },
+    "candidate": {
+      "artifact_id": 14102091387,
+      "run_id": 43564579813,
+      "zip_path": "/workspace/scratch/019fa8a18b3d/mezan-pr1918-A-candidate.zip",
+      "zip_sha256": "e6da059ec55cfda9941ad57bd74c0f42a51599c371699c9b54404d91e10eaa2f",
+      "zip_bytes": 376971,
+      "members": [
+        "release-intent-v5.json"
+      ],
+      "intent_path": "/workspace/scratch/019fa8a18b3d/mezan-pr1918-A-intent.json",
+      "intent_bytes": 1304401,
+      "intent_sha256": "b6cbb46c323197410aae8c585bec51dcdce825864141ae8ef083710eae5d85f0",
+      "intent_git_blob": "542c547cb679e78d5050aa537bed370595f353f0",
+      "runtime_identity": {
+        "release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+        "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+        "source_base_git_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d"
+      },
+      "frontend_build": {
+        "artifact_tree_sha256": "9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6"
+      }
+    },
+    "R": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+    "candidateValidation": {
+      "result": {
+        "actual_exit": 0,
+        "started_at": "2026-11-14T06:08:32.725239+00:00",
+        "ended_at": "2026-11-14T06:08:35.222644+00:00",
+        "elapsed_seconds": 2.497409934992902,
+        "stdout_sha256": "341763dbbeeecc2f8645841d0aa4216a692caffb68350b95f00a08eb8571484a",
+        "stderr_sha256": "c0ae638da7114d3f5975cd7995c5726026cc874a2be7715c7986a0c2a5d76374",
+        "stderr_bytes": 179
+      },
+      "validated": {
+        "validated": true,
+        "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+        "source_base_git_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+        "release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+        "frontend_artifact_tree_sha256": "9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6"
+      },
+      "module_review": {
+        "artifact_api_metadata": {
+          "created_at": "2026-11-14T06:06:05Z",
+          "digest": "sha256:e6da059ec55cfda9941ad57bd74c0f42a51599c371699c9b54404d91e10eaa2f",
+          "expired": false,
+          "expires_at": "2026-11-16T06:06:03Z",
+          "id": 14102091387,
+          "name": "release-v5-reviewed-intent-candidate",
+          "size_in_bytes": 376971,
+          "workflow_run": {
+            "head_branch": "codex/operational-order-stage-fix-20261114",
+            "head_repository_id": 1250664189,
+            "head_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+            "id": 43564579813,
+            "repository_id": 1250664189
+          }
+        },
+        "artifact_download_performed_by_this_review": false,
+        "candidate_bytes": 1304401,
+        "candidate_git_blob": "542c547cb679e78d5050aa537bed370595f353f0",
+        "candidate_loader_repeated": false,
+        "candidate_path": "/workspace/scratch/019fa8a18b3d/mezan-pr1918-A-intent.json",
+        "candidate_sha256": "b6cbb46c323197410aae8c585bec51dcdce825864141ae8ef083710eae5d85f0",
+        "critical_file_count": 6,
+        "critical_file_hashes_match_frozen_A": true,
+        "four_new_module_records": [
+          {
+            "bytes": 3571,
+            "git_blob": "61d2eee8233fb3886b7d42b9c6c1557bacc52eb3",
+            "mode": "100644",
+            "path": "operational_cost_catalog_index.py",
+            "sha256": "1d3b93a1f24fb047232ef102bfcf73d459f58af7c193cb3e1ee3c0255810affb"
+          },
+          {
+            "bytes": 6843,
+            "git_blob": "85a67f830fff00b298da65fa52cee9c050ca0333",
+            "mode": "100644",
+            "path": "operational_courier_hold_history.py",
+            "sha256": "ba1321862700a005b57eaeca66d2f70a781a5536df71fe835ec19b11af8d61e9"
+          },
+          {
+            "bytes": 5841,
+            "git_blob": "fe71998444eed5acf6e3e7cc1c51daa254a95f91",
+            "mode": "100644",
+            "path": "operational_delivery_assignment_index.py",
+            "sha256": "9fa319a0c1b13bfeb55d587713da634f8c46f65276edb627843c26171d2763d4"
+          },
+          {
+            "bytes": 4757,
+            "git_blob": "872611390c2b4ae3cee4a84cd55e7aac9a9c9ab5",
+            "mode": "100644",
+            "path": "operational_issue_index.py",
+            "sha256": "bed1e3ad3bb345c11ba2b2582a4cb54c942fb514bdc91316f897985c75d6644b"
+          }
+        ],
+        "limitations": [
+          "Root owns independent candidate ZIP verification and official loader; this review used exact supplied local JSON bytes and independently fetched artifact API metadata.",
+          "This is a source/candidate review, not final B/M CI or production acceptance."
+        ],
+        "manifest_proofs": {
+          "backend_runtime_source": {
+            "added_count": 4,
+            "deleted_count": 0,
+            "file_count": 1210,
+            "full_git_projection_exact": true,
+            "identity_binding_exact": true,
+            "identity_binding_form": "full_manifest",
+            "manifest_sha256": "f73790519b442d0227cb04f5ae18bdbfd45df5a66090a607c35681cfdf2251d8",
+            "modified_count": 5,
+            "projection_tree_oid": "218ec54c9c416e2ceb5aca5fd7b4857f1e00e292",
+            "scope": "backend_runtime_package_v1",
+            "scope_tree_oid": "aeeab468772c04c1af634f2390a38c3fa26f1af3",
+            "source_base_git_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+            "source_base_root_tree_oid": "9d8844f32f9db18cd036ff1b55edaec2c0dbe1b8",
+            "source_base_scope_tree_oid": "e6d4854b11d7276f73431603b4892b530757692c",
+            "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+            "source_root_tree_oid": "38b0dec1fc53cb9bd1ba36236bcc730f0e1d0367",
+            "tombstone_count": 0,
+            "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "tree_sha256": "39476883759f8cafbdaf41b33c5b15a57b5180ffb66e9f8527d1d9606efac809"
+          },
+          "release_control_source": {
+            "added_count": 0,
+            "deleted_count": 0,
+            "file_count": 291,
+            "full_git_projection_exact": true,
+            "identity_binding_exact": true,
+            "identity_binding_form": "canonical_summary",
+            "manifest_sha256": "b23032b8248367155fbacfb3a14c721a759f539b6d382be9dd749dc10ed52a74",
+            "modified_count": 0,
+            "projection_tree_oid": "1415b6a2998429167e22e5f22ea9ebbfda7330e0",
+            "scope": "release_control_source_v1",
+            "scope_tree_oid": "1415b6a2998429167e22e5f22ea9ebbfda7330e0",
+            "source_base_git_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+            "source_base_root_tree_oid": "9d8844f32f9db18cd036ff1b55edaec2c0dbe1b8",
+            "source_base_scope_tree_oid": "1415b6a2998429167e22e5f22ea9ebbfda7330e0",
+            "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+            "source_root_tree_oid": "38b0dec1fc53cb9bd1ba36236bcc730f0e1d0367",
+            "tombstone_count": 0,
+            "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "tree_sha256": "c4a96fabeb7474fc54386fadaa98b03f0b58119f3aa3863b2cff1b1e032df822"
+          }
+        },
+        "new_modules_covered_by_complete_runtime_manifest": true,
+        "observed_at_utc": "2026-11-14T06:12:43.705129+00:00",
+        "pass": true,
+        "projection_derivation": "Official read-only _git_source_manifest for both complete Git projections; backend identity embeds full manifest and release-control identity binds canonical source_manifest_summary.",
+        "runtime_identity_id_recomputed": true,
+        "runtime_release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+        "schema": "pr1918_candidate_projection_review_v1",
+        "scope_review_sha256": "4d18929a6b27d9878a81c83781d266b60caa7b1525ee7f8fa18ab6eec9cc6964",
+        "source_base_git_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+        "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+        "source_tree": "38b0dec1fc53cb9bd1ba36236bcc730f0e1d0367"
+      }
+    },
+    "ACI": {
+      "status": "all_passed",
+      "workflows": 11,
+      "checks": 27,
+      "success": 21,
+      "expected_skipped": 6,
+      "observed_at": "2026-11-14T06:12:41.482Z",
+      "proof": "pr1918-exact-a-ci/exact-A-proof.json",
+      "proof_sha256": "59d689437dea928f763b960c5c66c65e37c67f8c69e7db3fce4213355d57c74d"
+    },
+    "originalPreflight": {
+      "observed_at": "2026-11-14T06:11:03.619132+00:00",
+      "head": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+      "branch": "hotfix/prod-snap-meta-final",
+      "tracked_clean": true,
+      "untracked_count": 120,
+      "guard_active": false,
+      "incomplete_lease_directory": false,
+      "github_marker_names": [],
+      "unsaved_buffer_observed": "Untitled-1",
+      "unsaved_count": 1
+    },
+    "B": "9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9",
+    "Btree": "9de141756a4c5dcfa8d1d4dfb6513178c406ac8e",
+    "intentBlob": "542c547cb679e78d5050aa537bed370595f353f0",
+    "BFrozenAt": "2026-11-14T06:13:36.554Z",
+    "BValidation": {
+      "started_at": "2026-11-14T06:14:04.059073+00:00",
+      "ended_at": "2026-11-14T06:14:06.505036+00:00",
+      "elapsed_seconds": 2.4459680959989782,
+      "actual_exit": 0,
+      "stdout_sha256": "0ba41a57771f116105b50f8648d041bca7121d4e983343242d532c8f39fb2415",
+      "stderr_sha256": "c0ae638da7114d3f5975cd7995c5726026cc874a2be7715c7986a0c2a5d76374",
+      "stderr_bytes": 179,
+      "B": "9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9",
+      "Btree": "9de141756a4c5dcfa8d1d4dfb6513178c406ac8e",
+      "parent": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+      "only_changed_path": "release/release-intent-v5.json"
+    },
+    "actor": "codex-operational-order-stage-rootfix-1918",
+    "readyForReviewAt": "2026-11-14T06:14:33.995Z",
+    "operatorRehearsalHelper": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918_original_rehearsal.py",
+      "sha256": "52e67d80b4ad0445d6faf848cb5887db8e12039bb8f27f45c0808d92d784cc30",
+      "bytes": 14892,
+      "review": "pending"
+    },
+    "operatorVerificationHelper": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1918_original_verify.py",
+      "sha256": "bb7a021f0f4012c2b364f639b85a223a5ddf291acf8f8394e519e01602399920",
+      "bytes": 8119,
+      "review": "PASS",
+      "review_sha256": "8866961a00ab908f18dbd3d4a5876b3d3ebfa42fa5cee78b278a1094fdfeb1b5"
     }
   },
   "production_changed_by_this_followup": false,
@@ -402,6 +612,6 @@
     "FrozenpreviousA/B untouched"
   ],
   "ledger_note": "Issue1006 reached2500commentlimit; use taskstatus+PRcontinuation",
-  "updated_at": "2026-11-14T06:06:51.089Z",
-  "next_action": "Verify exact-A CI and complete candidate provenance, then intent-only B, exact-B checks, normal merge, originalbuild, guarded publish, officialverify and fresh visible as_of."
+  "updated_at": "2026-11-14T06:15:21.852Z",
+  "next_action": "Finish exact-B checks and rehearsal-helper review, normalmerge with expectedB, originalactualgovernedbuild; thenprepare/prepublish/publish/newplatformcompletion/officialverify/newvisibleasof. Preserve all originalfiles/buffers."
 }

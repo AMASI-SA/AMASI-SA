@@ -1,0 +1,12 @@
+{
+  "observed_at": "2026-11-14T06:11:03.619132+00:00",
+  "head": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+  "branch": "hotfix/prod-snap-meta-final",
+  "tracked_clean": true,
+  "untracked_count": 120,
+  "guard_active": false,
+  "incomplete_lease_directory": false,
+  "github_marker_names": [],
+  "unsaved_buffer_observed": "Untitled-1",
+  "unsaved_count": 1
+}
