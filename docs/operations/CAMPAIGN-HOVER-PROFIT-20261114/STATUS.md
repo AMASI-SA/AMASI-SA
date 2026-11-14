@@ -197,3 +197,12 @@ No release phase has run yet at this checkpoint. Emergent management shows prior
 Recorded at 2026-11-14 15:40:35 UTC. Reviewed gate prepare completed once at15:39:38.341084UTC. Root read actual official prepare receipt: exit0 in2.6583157920395024seconds, stdout SHA256 `20d5b57fe2faf3213a50ed1d5dae6725d5a318cc7b4ffce48d250a71d0fa1694`; empty stderr. The matching active lease belongs to `codex-campaign-hover-profit-1920`, prepared_at15:39:37.177675UTC, exact A/M/runtime. Postchecks preserve all120 files and tracked clean M. Evidence: `/tmp/mezan-pr1920-original-a_3qop92/release-gate/prepare`.
 
 Do not duplicate prepare or clear this lease. Prepublish has not run and Publish changes has not been clicked. Next action is reviewed gate prepublish once, read successful ready_to_publish/owned lease receipt, then immediately click the already-authorized Publish changes in the open Emergent dialog. Wait for a newer actual Deployment finished event and new current version before verify.
+
+
+## Authorized publication started once
+
+Recorded at 2026-11-14 15:42:15 UTC. Reviewed prepublish completed once: actual official exit0 in3.5445305380271748seconds, finished15:40:50.371166UTC, ready_to_publish=true, exact A/M/runtime and owned lease retained,120-file preservation passed. Root read its actual receipt/stdout; SHA256 `e405edb4c8bf68a8e8f0d3db93b4d1ddc71e6cd3fc7a817729f5b0efa22386f9`.
+
+Immediately afterward root clicked Publish changes once in the already-open authorized Emergent dialog. UI closed the dialog and showed disabled Publishing..., confirming start. Observation recorded by15:41:50UTC. Do not click publish again. Current prior version remains a5eae68 until a newer completion is observed. New production outcome is pending; no successful new deployment or official verification is claimed. Keep this task's matching lease until the one official verify succeeds.
+
+Next: observe a newer explicit Deployment finished event and a new current published version, then run the frozen gate verify once using those actual UI values. Its output must pass3checks, exact identity, preservation and inactiveguard; then verify the new campaign rows on the live page. Do not alter A/B/M or rerun prepare/prepublish/build.
