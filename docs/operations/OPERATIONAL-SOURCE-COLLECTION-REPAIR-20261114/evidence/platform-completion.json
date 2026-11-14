@@ -1,0 +1,11 @@
+{
+  "observed_at": "2026-11-14T05:10:58.235Z",
+  "completion_text": "Deployment finished Nov 14, 08:09 AM",
+  "platform_id": "120e0fa",
+  "previous_platform_id": "bfa6a5f",
+  "source_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+  "deployment_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+  "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+  "completion_is_newer_than_publish_start": true,
+  "runtime_logs_not_opened_since_previous_release": true
+}

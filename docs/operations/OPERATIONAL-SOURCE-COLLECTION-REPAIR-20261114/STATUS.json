@@ -1,7 +1,7 @@
 {
   "task_id": "OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114",
-  "stage": "publishing_wait_explicit_new_platform_completion",
-  "updated_at": "2026-11-14T05:00:37.090Z",
+  "stage": "platform_complete_official_verification_next",
+  "updated_at": "2026-11-14T05:11:08.373Z",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
@@ -496,9 +496,20 @@
       "checks": 11,
       "all_success": true,
       "proof_sha256": "364f6476cf44d8962a23dc5b676b572af5b5951370901f7a5c03ff902bec8360"
+    },
+    "platform": {
+      "observed_at": "2026-11-14T05:10:58.235Z",
+      "completion_text": "Deployment finished Nov 14, 08:09 AM",
+      "platform_id": "120e0fa",
+      "previous_platform_id": "bfa6a5f",
+      "source_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+      "deployment_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+      "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+      "completion_is_newer_than_publish_start": true,
+      "runtime_logs_not_opened_since_previous_release": true
     }
   },
-  "production_changed_by_this_followup": "yes: normal merge M; one new platform publication is in progress",
+  "production_changed_by_this_followup": "yes: M merged and platform120e0fa completed; official verification and fresh financial acceptance pending",
   "verified_scope": "Live source_collection cancelled after72942.769ms; snapshot_load completed9084.282ms; no reconciliation started.",
   "constraints": [
     "Full owner history and all financial evidence remain required",
@@ -513,7 +524,7 @@
     "Collision preflight and secondary reads are not localized by current stage logs",
     "Repeated fee/assignment/cost scans exist inside source_collection; bounded synthetic measurement is running"
   ],
-  "next_action": "Do NOT click Publish again. Platform displays Deployment Started Nov14,08:00AM and Publishing. Wait newer explicit Deployment finished and new platform ID. Do not open View Logs before financial acceptance. Then run reviewed official verify helper once (expect~10min quiet), require actual exit0/3probes/exactA-M-R/freshinactive; only then one visible financial refresh and inspect fresh as_of.",
+  "next_action": "Run shared reviewed pr1917_original_verify.py once with evidence-dir /tmp/mezan-pr1917-original-jpg_gysb, deployment-sha2db0edc9edb315026eee4b6edd43b420a569c37d, actorcodex-operational-source-collection-rootfix-1917. Expect roughly10min without terminal output; do not interrupt/retry. Require actual exit0, threeprobes, frontendchecks and freshinactive before a visible financialrefresh.",
   "ledger_note": "Issue1006 has2500 comments; latest ledger explicitly documents new-comment limit. Task-specific STATUS and forthcoming PR carry continuation.",
   "prechange_measurements": {
     "synthetic_only": true,
