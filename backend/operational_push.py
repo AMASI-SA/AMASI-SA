@@ -333,6 +333,12 @@ async def deliver_one(db, sender=send_to_provider):
                         generic_payload = payload
                         payload = await native_notification_payload(db, device, job, payload)
                         rich_content = payload is not None and payload is not generic_payload
+                        if payload is generic_payload:
+                            # A genuinely missing legacy notice has no saved
+                            # conversation context. Preserve its instruction-only
+                            # tap; never emit a reference the detail route rejects.
+                            payload.pop("notice_id", None)
+                            payload.pop("conversation_id", None)
                         if rich_content and device.get("notification_presentation") == ANDROID_RTL_PRESENTATION:
                             from operational_instruction_conversations import EVENTS, conversation_unread_count
                             # The same scoped active-conversation count as the

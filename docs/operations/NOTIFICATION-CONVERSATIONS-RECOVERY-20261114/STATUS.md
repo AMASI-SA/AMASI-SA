@@ -45,6 +45,14 @@ Fresh local focused preview/presentation/snapshot suite: **47 passed,43 subtests
 
 This second checkpoint includes those source/test fixes. Final combined-source CI and native Android compilation remain pending; no release approval is implied.
 
+## Exact Mongo result and final tap compatibility correction
+
+Second candidate `d7abbc832587c4c40cd8acc6fc9f7021ffee14f8` passed [run43636274633](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43636274633): **252 tests plus61 subtests, no skips**, with the no-skips guard passing (40.08s test execution). All11 applicable repository workflows completed successfully on that exact source.
+
+Final cross-repository tap review found that the mobile handler dropped the server's scoped notice/conversation references. The mobile candidate now forwards validated references with warm/cold-start, duplicate and session-revision tests. A genuinely missing legacy snapshot previously carried an unresolvable notice reference; its existing regression was extended and failed on that exact condition. This candidate drops only notice_id/conversation_id when the preview function returns the exact legacy generic fallback object. It retains instruction_id/event_id and all existing delivery policy. Read/foreign/mismatched rows do not gain a fallback, and receipt polling is unchanged.
+
+Fresh source verification after this last correction: operational push, preview, presentation and saved-snapshot suites **69 passed plus45 subtests, exit0** (7.88s). The previous252-case CI is evidence for its immutable source, not this final small delta. The next exact-head isolated Mongo CI must pass again; publication remains held.
+
 ## Continuity and next safe action
 
 Keep this branch/Draft PR recoverable. Issue1006 is full; a previous body update was accepted but did not appear on independent readback. Existing ledger content was preserved. Do not claim a new ledger entry is visible without readback; use the verified task branch, Draft PR and this status as the durable handoff.

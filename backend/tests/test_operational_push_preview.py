@@ -285,6 +285,11 @@ class PushPreviewTests(unittest.IsolatedAsyncioTestCase):
         await self.deliver()
         payload = self.sent[0]["payload"]
         self.assertEqual(payload["body"], "لديك تحديث على مهمة. افتح التطبيق للاطلاع والتأكيد.")
+        # A missing saved notice cannot authorize conversation-context lookup.
+        # Keep the original instruction-only legacy tap instead of a dead link.
+        self.assertEqual(payload["instruction_id"], "instruction")
+        self.assertNotIn("notice_id", payload)
+        self.assertNotIn("conversation_id", payload)
         self.assertNotIn("TEST-501", json.dumps(payload))
         self.assertEqual(self.db.raw[NOTIFICATIONS].count_documents({}), 0)
 
