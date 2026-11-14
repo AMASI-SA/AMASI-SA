@@ -1,0 +1,135 @@
+{
+  "task_id": "OPERATIONAL-FINANCIAL-LOAD-RECOVERY-20261114",
+  "stage": "reproduced-current-timeout-repair-in-progress",
+  "repo": "AMASI-SA/AMASI-SA",
+  "source": {
+    "task_id": "OPERATIONAL-FINANCIAL-LOAD-RECOVERY-20261114",
+    "repo": "AMASI-SA/AMASI-SA",
+    "J": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+    "Jtree": "9de141756a4c5dcfa8d1d4dfb6513178c406ac8e",
+    "prior_pr": 1918,
+    "prior_handoff": "29220859145e0448405d93534716e9bbb082b2e0",
+    "source_branch": "codex/financial-loading-recovery-20261114",
+    "handoff_branch": "codex/financial-loading-handoff-20261114",
+    "worktree": "/workspace/scratch/019fa8a18b3d/mezan-financial-loading-recovery",
+    "prefix": "docs/operations/OPERATIONAL-FINANCIAL-LOAD-RECOVERY-20261114/",
+    "started_at": "2026-11-14T13:48:34.642Z",
+    "authorization": "User reported recurrence after previous explicit fix/merge/publish authorization; root continues same repair with that authorization.",
+    "recurrence": {
+      "observed_at": "2026-11-14T13:47:42.740Z",
+      "user_report": "Financial position stayed loading approximately 30 minutes; attached screenshot shows loading.",
+      "current_release": {
+        "backend_runtime_source_verified": true,
+        "boot_started_at": "2026-11-14T09:55:38.370065+00:00",
+        "critical_file_hashes_match": true,
+        "frontend_build_verified": true,
+        "ok": true,
+        "release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+        "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877"
+      },
+      "initial_observation": {
+        "observed_at": "2026-11-14T13:41:26.343Z",
+        "as_of": "14/11/2026, 12:51",
+        "error": null,
+        "fallback": "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة",
+        "loading": null,
+        "report_present": true,
+        "root_present": true,
+        "visibility": "visible",
+        "visible_headers": [
+          "المركز المالي التشغيلي"
+        ]
+      },
+      "attempt": {
+        "started_at": "2026-11-14T13:43:49.901Z",
+        "trigger": "one manual visible refresh",
+        "baseline_as_of": "14/11/2026, 12:51"
+      },
+      "runtime": {
+        "observed_at": "2026-11-14T13:46:16.729Z",
+        "events": [
+          {
+            "duration_ms": "43589.479",
+            "kind": "api",
+            "method": "GET",
+            "route": "/api/operational-balances/financial-position",
+            "status": "200",
+            "timestamp": "2026-11-14 13:45:59"
+          },
+          {
+            "duration_ms": "1180.941",
+            "kind": "api",
+            "method": "POST",
+            "route": "/api/operational-balances/refresh",
+            "status": "499",
+            "timestamp": "2026-11-14 13:45:53"
+          },
+          {
+            "duration_ms": "85140.921",
+            "kind": "api",
+            "method": "POST",
+            "route": "/api/operational-balances/refresh",
+            "status": "408",
+            "timestamp": "2026-11-14 13:45:15"
+          },
+          {
+            "duration_ms": 78625.751,
+            "kind": "stage",
+            "outcome": "cancelled",
+            "stage": "aggregate",
+            "timestamp": "2026-11-14 13:45:15"
+          },
+          {
+            "duration_ms": 34098.679,
+            "kind": "stage",
+            "outcome": "cancelled",
+            "stage": "reconciliation",
+            "timestamp": "2026-11-14 13:45:15"
+          }
+        ],
+        "line_count": 100,
+        "log_box_found": true
+      },
+      "final_observation": {
+        "as_of": "14/11/2026, 12:51",
+        "error": null,
+        "fallback": "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة",
+        "loading": false,
+        "report_present": true,
+        "visibility": "visible"
+      },
+      "limitations": [
+        "Only one manual refresh initiated in this follow-up; a separate POST499 in platform logs is not attributed to this attempt.",
+        "The last100 runtime lines omit earlier source/native stages.",
+        "Current visible timeout does not alone explain user-reported 30 minutes; frontend interruption restart mechanism reproduced separately."
+      ]
+    },
+    "ownership": {
+      "root": "integration, GitHub mutations, original /app and UI/release",
+      "financial_loading_state": [
+        "frontend/src/pages/operational/visibleOperationalRead.js",
+        "frontend/src/pages/operational/visibleOperationalRead.test.js",
+        "frontend/src/pages/operational/OperationalFinancialPosition.jsx",
+        "frontend/src/pages/operational/OperationalFinancialPosition.test.jsx"
+      ],
+      "financial_server_wait": [
+        "backend/operational_balance_engine.py",
+        "backend/operational_reconciliation_state.py",
+        "backend/tests/test_operational_balance_reconciliation_state.py"
+      ],
+      "financial_http_path": "ignored dependency installation and later independent review only"
+    },
+    "contract": [
+      "Do not allow indefinite spinner after hide/offline or a non-settling operation.",
+      "One mount/manual click is one visible load intent; no automatic recalculation restart after interruption.",
+      "Bound complete intent including queued lane without releasing actual pending write.",
+      "Remove measured repeated reconciliation work with exact accounting/rollback/order/error semantics.",
+      "Preserve source caps, request deadlines, authorization, user data, original untracked files and unsaved buffer.",
+      "No financial confirmation/settlement/provider writes as tests; no background recalculation."
+    ],
+    "production_changed": false
+  },
+  "updated_at": "2026-11-14T13:48:35.510Z",
+  "production_changed_by_this_followup": false,
+  "next_action": "Implement measured reconciliation optimization and opt-in bounded financial-page lifecycle, run regressions and independent review before freezing source A."
+}
