@@ -1,0 +1,9 @@
+{
+  "A": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+  "parent": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+  "tree": "492727ceae6b6cada3894e7a450f837186f9a962",
+  "file_bytes_unchanged": true,
+  "tracked_and_index_clean": true,
+  "branch": "codex/operational-source-collection-fix-20261114",
+  "method": "stage only the6 verified owned paths, prove index tree equals remote A, then atomically fast-forward owned branch ref; no working file restored/deleted/reset"
+}

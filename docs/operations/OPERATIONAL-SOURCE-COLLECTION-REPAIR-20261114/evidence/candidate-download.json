@@ -1,0 +1,38 @@
+{
+  "artifact_id": 14097739901,
+  "run_id": 43557214320,
+  "zip_path": "/workspace/scratch/019fa8a18b3d/mezan-pr1917-A-candidate.zip",
+  "zip_sha256": "b4d0327379c7a8144909b49e57be719f2f9b3bc0299b8c4de8ac1e552ee521eb",
+  "zip_bytes": 376375,
+  "members": [
+    "release-intent-v5.json"
+  ],
+  "intent_path": "/workspace/scratch/019fa8a18b3d/mezan-pr1917-A-intent.json",
+  "intent_bytes": 1302197,
+  "intent_sha256": "512e8d5b4c459ad664f9c33abd8f8e127896bf54e64e058840383e55cc59a53c",
+  "intent_git_blob": "cc47829c141bb997089a05baac832207f3a1537f",
+  "keys": [
+    "backend_runtime_source",
+    "branch",
+    "client_environment",
+    "critical_file_hashes",
+    "frontend_build",
+    "frontend_reproducibility",
+    "frontend_source",
+    "kind",
+    "protocol_version",
+    "release_control_source",
+    "runtime_identity",
+    "schema_version",
+    "source_base_git_sha",
+    "source_git_sha"
+  ],
+  "runtime_identity": {
+    "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+    "source_git_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+    "source_base_git_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb"
+  },
+  "frontend_build": {
+    "artifact_tree_sha256": "9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6"
+  }
+}

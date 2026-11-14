@@ -1,7 +1,7 @@
 {
   "task_id": "OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114",
-  "stage": "source_A_frozen_exact_commit_CI_running",
-  "updated_at": "2026-11-14T04:34:25.379Z",
+  "stage": "exact_A_CI_running_candidate_validated",
+  "updated_at": "2026-11-14T04:39:18.921Z",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
@@ -239,7 +239,96 @@
     ],
     "pr": 1917,
     "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1917",
-    "pr_body": "## Problem\nThe verified PR1916 release still falls back to the old financial snapshot. A controlled visible attempt completed snapshot loading in9.084s, then source_collection was cancelled after72.943s at the85.040s total deadline. Reconciliation never began. Within collection, recorded_courier_fee repeatedly scans the complete financial history for each eligible order; independent operation counts prove quadratic growth. The live evidence does not establish that this helper alone consumed the entire source phase.\n\n## Change\nBuild one attempt-local fee-history lookup through the existing request-owned preparation worker and use it at both existing fee checks. Preserve complete history, exact prefix/short-circuit/error/Decimal/allocation semantics; unusual structures use the unchanged legacy reader. Rebuild for every collector invocation and CAS retry. Add15 fixed source-substage timing wrappers so any remaining cancellation identifies its actual subphase. No database read, financial mutation, cache across requests, cap increase, deadline extension or authorization change.\n\n## Verification\n-129 new cases pass:116 fee/parity/full-collector/reconciliation/report/lifetime cases and13 timing cases.\n-Root integrated selection:339 passed, actual exit0. Three local Mongo cases were explicitly deselected after connection-refused failures; they remain required without exclusion in exact-A CI's replica set.\n-Independent reviewer:37,386 comparisons against exact J over two hash seeds, comparing values, exception type/message, Decimal flags and input immutability; no blocking finding. Actual visible disconnect joins the worker, releases the owned lease and leaves no nonlease writes or orphan tasks.\n-Negative controls using exact J fail the intended repeated-scan growth assertion. Integrated collector AST matches J after removing only timing wrappers and the intended lookup substitution; old delivery reader remains byte-for-byte unchanged.\n-Paired synthetic timings including full index build:1000/1000 absent-proof0.396461→0.008789s;4000/4000 5.915601→0.030327s;20000 history/250 lookups1.821549→0.056824s. Direct-proof control20000/20000 adds58.6ms (0.007265→0.065864s); no speedup claimed there. Each pair has equal results/unchanged inputs, no DB, actual exit0. These are local observations, not production acceptance.\n\n## Frozen source and pending release\nJ: `9c71435f4a19977c09f4331dee8fddbfa12a45eb`\nA: `8839d3aeb32b4bda2de2015efb0deca7fbb844a3`\nA tree: `492727ceae6b6cada3894e7a450f837186f9a962`\n\nAll source/tests/status are frozen in A. Exact-A CI, official129-case JUnit inclusion in both Operational and Stock, reviewed artifact, intent-only B, normal merge, original-operator build, guarded publish/verify and a fresh visible as_of remain required. Production has not changed by this follow-up. Original /app120 unrelated untracked files and unsaved Untitled-1 remain preserved.\n\n[Source status](https://github.com/AMASI-SA/AMASI-SA/blob/8839d3aeb32b4bda2de2015efb0deca7fbb844a3/docs/operations/OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114/STATUS.md). Documentation-only continuation branch: `codex/operational-source-collection-handoff-20261114`; never merge or deploy that branch. Issue1006 is at GitHub's2500-comment limit."
+    "pr_body": "## Problem\nThe verified PR1916 release still falls back to the old financial snapshot. A controlled visible attempt completed snapshot loading in9.084s, then source_collection was cancelled after72.943s at the85.040s total deadline. Reconciliation never began. Within collection, recorded_courier_fee repeatedly scans the complete financial history for each eligible order; independent operation counts prove quadratic growth. The live evidence does not establish that this helper alone consumed the entire source phase.\n\n## Change\nBuild one attempt-local fee-history lookup through the existing request-owned preparation worker and use it at both existing fee checks. Preserve complete history, exact prefix/short-circuit/error/Decimal/allocation semantics; unusual structures use the unchanged legacy reader. Rebuild for every collector invocation and CAS retry. Add15 fixed source-substage timing wrappers so any remaining cancellation identifies its actual subphase. No database read, financial mutation, cache across requests, cap increase, deadline extension or authorization change.\n\n## Verification\n-129 new cases pass:116 fee/parity/full-collector/reconciliation/report/lifetime cases and13 timing cases.\n-Root integrated selection:339 passed, actual exit0. Three local Mongo cases were explicitly deselected after connection-refused failures; they remain required without exclusion in exact-A CI's replica set.\n-Independent reviewer:37,386 comparisons against exact J over two hash seeds, comparing values, exception type/message, Decimal flags and input immutability; no blocking finding. Actual visible disconnect joins the worker, releases the owned lease and leaves no nonlease writes or orphan tasks.\n-Negative controls using exact J fail the intended repeated-scan growth assertion. Integrated collector AST matches J after removing only timing wrappers and the intended lookup substitution; old delivery reader remains byte-for-byte unchanged.\n-Paired synthetic timings including full index build:1000/1000 absent-proof0.396461→0.008789s;4000/4000 5.915601→0.030327s;20000 history/250 lookups1.821549→0.056824s. Direct-proof control20000/20000 adds58.6ms (0.007265→0.065864s); no speedup claimed there. Each pair has equal results/unchanged inputs, no DB, actual exit0. These are local observations, not production acceptance.\n\n## Frozen source and pending release\nJ: `9c71435f4a19977c09f4331dee8fddbfa12a45eb`\nA: `8839d3aeb32b4bda2de2015efb0deca7fbb844a3`\nA tree: `492727ceae6b6cada3894e7a450f837186f9a962`\n\nAll source/tests/status are frozen in A. Exact-A CI, official129-case JUnit inclusion in both Operational and Stock, reviewed artifact, intent-only B, normal merge, original-operator build, guarded publish/verify and a fresh visible as_of remain required. Production has not changed by this follow-up. Original /app120 unrelated untracked files and unsaved Untitled-1 remain preserved.\n\n[Source status](https://github.com/AMASI-SA/AMASI-SA/blob/8839d3aeb32b4bda2de2015efb0deca7fbb844a3/docs/operations/OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114/STATUS.md). Documentation-only continuation branch: `codex/operational-source-collection-handoff-20261114`; never merge or deploy that branch. Issue1006 is at GitHub's2500-comment limit.",
+    "candidate": {
+      "artifact_id": 14097739901,
+      "run_id": 43557214320,
+      "zip_path": "/workspace/scratch/019fa8a18b3d/mezan-pr1917-A-candidate.zip",
+      "zip_sha256": "b4d0327379c7a8144909b49e57be719f2f9b3bc0299b8c4de8ac1e552ee521eb",
+      "zip_bytes": 376375,
+      "members": [
+        "release-intent-v5.json"
+      ],
+      "intent_path": "/workspace/scratch/019fa8a18b3d/mezan-pr1917-A-intent.json",
+      "intent_bytes": 1302197,
+      "intent_sha256": "512e8d5b4c459ad664f9c33abd8f8e127896bf54e64e058840383e55cc59a53c",
+      "intent_git_blob": "cc47829c141bb997089a05baac832207f3a1537f",
+      "keys": [
+        "backend_runtime_source",
+        "branch",
+        "client_environment",
+        "critical_file_hashes",
+        "frontend_build",
+        "frontend_reproducibility",
+        "frontend_source",
+        "kind",
+        "protocol_version",
+        "release_control_source",
+        "runtime_identity",
+        "schema_version",
+        "source_base_git_sha",
+        "source_git_sha"
+      ],
+      "runtime_identity": {
+        "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+        "source_git_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+        "source_base_git_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb"
+      },
+      "frontend_build": {
+        "artifact_tree_sha256": "9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6"
+      }
+    },
+    "R": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+    "candidateValidation": {
+      "result": {
+        "actual_exit": 0,
+        "started_at": "2026-11-14T04:36:58.065264+00:00",
+        "ended_at": "2026-11-14T04:37:00.871096+00:00",
+        "elapsed_seconds": 2.805837974010501,
+        "stdout_sha256": "27a0230481a27a52ca8414e085723f64d2451e63cf1b80640fd76ebf174576d3",
+        "stderr_sha256": "8df0835d9a20d7162057e7e392e82ddb24ed51ae37d9002a318e967feb7f57a0",
+        "stderr_bytes": 185
+      },
+      "validated": {
+        "validated": true,
+        "source_git_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+        "source_base_git_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+        "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+        "frontend_artifact_tree_sha256": "9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6"
+      },
+      "module_review": {
+        "checked_at": "2026-11-14T04:37:39.484263+00:00",
+        "source_git_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+        "source_tree": "492727ceae6b6cada3894e7a450f837186f9a962",
+        "source_base_git_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+        "intent_path": "/workspace/scratch/019fa8a18b3d/mezan-pr1917-A-intent.json",
+        "intent_bytes": 1302197,
+        "intent_sha256": "512e8d5b4c459ad664f9c33abd8f8e127896bf54e64e058840383e55cc59a53c",
+        "intent_git_blob": "cc47829c141bb997089a05baac832207f3a1537f",
+        "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+        "new_module_record": {
+          "bytes": 4385,
+          "git_blob": "192d3cc19f3d47c9d4fad41069c6a0f028fd95e0",
+          "mode": "100644",
+          "path": "operational_courier_fee_history.py",
+          "sha256": "d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d"
+        },
+        "new_module_absent_from_base": true,
+        "top_and_embedded_backend_manifests_equal": true,
+        "module_matches_frozen_git_bytes": true,
+        "critical_subset_unchanged_as_expected": true,
+        "backend_file_count": 1206,
+        "manifest_sha256": "33f5fdc11d82f70f1cab369b5cbe7ffeca828b606efe57e33db7aed27827dfd5",
+        "verdict": "PASS (module record; official full candidate loader owned by root)"
+      }
+    },
+    "operatorVerificationHelper": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1917_original_verify.py",
+      "sha256": "93211e2f6a8d3aeb04cd10141bd90cdffd0efd2247c369dc61c70e589b8a2263",
+      "bytes": 8119,
+      "review": "pending",
+      "executed": false
+    }
   },
   "production_changed_by_this_followup": false,
   "verified_scope": "Live source_collection cancelled after72942.769ms; snapshot_load completed9084.282ms; no reconciliation started.",

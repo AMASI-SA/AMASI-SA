@@ -1,0 +1,25 @@
+{
+  "checked_at": "2026-11-14T04:37:39.484263+00:00",
+  "source_git_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+  "source_tree": "492727ceae6b6cada3894e7a450f837186f9a962",
+  "source_base_git_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+  "intent_path": "/workspace/scratch/019fa8a18b3d/mezan-pr1917-A-intent.json",
+  "intent_bytes": 1302197,
+  "intent_sha256": "512e8d5b4c459ad664f9c33abd8f8e127896bf54e64e058840383e55cc59a53c",
+  "intent_git_blob": "cc47829c141bb997089a05baac832207f3a1537f",
+  "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+  "new_module_record": {
+    "bytes": 4385,
+    "git_blob": "192d3cc19f3d47c9d4fad41069c6a0f028fd95e0",
+    "mode": "100644",
+    "path": "operational_courier_fee_history.py",
+    "sha256": "d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d"
+  },
+  "new_module_absent_from_base": true,
+  "top_and_embedded_backend_manifests_equal": true,
+  "module_matches_frozen_git_bytes": true,
+  "critical_subset_unchanged_as_expected": true,
+  "backend_file_count": 1206,
+  "manifest_sha256": "33f5fdc11d82f70f1cab369b5cbe7ffeca828b606efe57e33db7aed27827dfd5",
+  "verdict": "PASS (module record; official full candidate loader owned by root)"
+}
