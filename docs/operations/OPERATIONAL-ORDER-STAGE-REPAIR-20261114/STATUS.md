@@ -67,3 +67,8 @@ Original official verify ran 2026-11-14T06:44:36.933528Z to 06:56:21.765981Z (70
 ## First live financial refresh and local controls passed — 2026-11-14T07:03:42.061Z
 
 After official verification closed the owned lease, one visible page mount started at 06:57:54.483Z. The report displayed fresh as_of 14/11/2026, 09:57 Asia/Riyadh, all three sections, no loading, no main error, and no stale fallback. Runtime logs match this request: HTTP 200, 62,848.657 ms; source_orders complete 5,755.266 ms; source_collection complete 21,423.146 ms; reconciliation complete 23,095.890 ms; profit_snapshot complete 9,014.404 ms; snapshot_commit complete 152.634 ms. Table next/previous and pending-order open/page/no-match-search/clear/close passed with unchanged fresh as_of. No financial confirmation, settlement, external provider action, or background refresh was performed. Existing data-completeness warnings remain; individual accounting amounts were not certified. Private screenshot is retained locally and not published to GitHub.
+
+
+## Independent live acceptance review passed — 2026-11-14T07:04:59.703Z
+
+Independent read-only review matched the official and live evidence to exact A/M/R, checked both evidence SHA256 values and the embedded/separate runtime equality, and returned PASS for closing the reproduced refresh failure. All 18 captured stage events completed. Evidence supports this one production attempt and the tested local controls; it does not establish concurrent-load performance, constant latency, complete accounting data, or absence of unrelated background activity outside the capture window.
