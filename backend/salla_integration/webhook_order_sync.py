@@ -445,8 +445,14 @@ async def sync_order_from_verified_webhook(
         if result.get("blocked"):
             return {"attempted": True, "synced": False, "order_number": order_number, **result}
         if result.get("stale"):
-            return {"attempted": True, "synced": False, "reason": "stale_salla_snapshot",
-                    "order_number": order_number, "no_salla_api_calls": True, "no_qoyod_calls": True}
+            stale = {"attempted": True, "synced": False, "reason": "stale_salla_snapshot",
+                     "order_number": order_number, "no_salla_api_calls": True, "no_qoyod_calls": True}
+            if event_name == "order.created":
+                from .stale_creation_options import enrich_stale_creation_options
+                stale["customer_options_enrichment"] = await enrich_stale_creation_options(
+                    db, user_id=user_id, order_number=order_number, payload=payload,
+                )
+            return stale
         attribution_ledger = {
             "synced": False,
             "reason": "not_attempted",

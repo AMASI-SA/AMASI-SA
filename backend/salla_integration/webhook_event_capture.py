@@ -352,6 +352,8 @@ async def capture_unknown_event(
     order_mutation_scope = (
         "full_order_from_webhook"
         if order_sync.get("synced")
+        else "customer_options_only"
+        if (order_sync.get("customer_options_enrichment") or {}).get("applied") is True
         else "shipping_address_only"
         if (order_sync.get("address_sync") or {}).get("synced")
         else "shipping_fields_only"
