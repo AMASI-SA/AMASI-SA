@@ -4,7 +4,8 @@ const dashboard = fs.readFileSync(path.join(__dirname, "AdvancedDashboard.jsx"),
 const orders = fs.readFileSync(path.join(__dirname, "OrdersV2.jsx"), "utf8");
 const hook = fs.readFileSync(path.join(__dirname, "../hooks/useCampaignHover.js"), "utf8");
 test("both surfaces use the revision-aware shared hook", () => {
-  expect(dashboard).toContain("useCampaignHover(orders, { limit: 8, visibleCount: 8, totals })");
+  expect(dashboard).toContain("useCampaignHover(orders, { limit: 8, visibleCount: 8, totals, operatingContext })");
+  expect(dashboard).toContain("operatingContext={visibleData ? filters : null}");
   expect(orders).toContain("useCampaignHover(orders, { limit: 20, totals: resultSummary })");
   expect(orders).not.toContain("orderTotals");
   expect(dashboard).toContain("<CampaignHoverBadge");

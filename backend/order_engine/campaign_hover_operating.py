@@ -1,4 +1,4 @@
-"""Bounded, read-only executive operating basis for one Riyadh store day.
+"""Bounded, read-only executive operating basis for a selected Riyadh period.
 
 Dashboard V2 uses gross SAR sales from its configured order cohort and replaces
 legacy operating costs with Employee OS/household/charity salaries plus V2
@@ -11,9 +11,8 @@ from __future__ import annotations
 import asyncio
 import math
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
 from dashboard_v2_routes import _matches_any
@@ -29,9 +28,10 @@ from order_currency import (
 from recurring_obligations_routes import (
     INVOICES, OBLIGATIONS, obligation_active_on, obligation_daily_amount,
 )
+from sold_products_report_v2 import order_matches_status
+from .campaign_hover_scope import OperatingScope, STORE_TIMEZONE, resolve_operating_scope
 
 
-STORE_TIMEZONE = "Asia/Riyadh"
 MAX_STORE_ORDERS = 4000
 MAX_PAYROLL_ROWS = 1000
 MAX_OBLIGATIONS = 1000
@@ -39,7 +39,8 @@ MAX_INVOICES = 5000
 BASIS_TIMEOUT_SECONDS = 3.0
 
 ORDER_PROJECTION = {**SALLA_RAW_CURRENCY_PROJECTION, **{key: 1 for key in (
-    "order_status", "total_amount", "total", "amounts", "currency",
+    "order_status", "order_status_slug", "payment_method", "shipping_company",
+    "total_amount", "total", "amounts", "currency",
     "original_currency", "original_total_amount", "accounting_currency",
     "total_amount_sar", "exchange_rate_to_sar", "exchange_rate",
     "currency_conversion_status",
@@ -89,20 +90,30 @@ async def _gather(*reads):
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-async def _employee_salary_rows_on(db, owner, day, budget):
-    """Apply the shared employee identity/calendar policy before cost validation."""
+def _days(scope):
+    for offset in range((scope.date_to - scope.date_from).days + 1):
+        yield scope.date_from + timedelta(days=offset)
+
+
+async def _employee_salary_sources(db, owner):
+    """Load payroll identity once, independently of the selected range length."""
     contracts = await _read(db, SALARY_CONTRACTS_COLLECTION, {"user_id": owner},
         SALARY_PROJECTIONS[SALARY_CONTRACTS_COLLECTION], MAX_PAYROLL_ROWS)
     employee_ids = [str(row.get("employee_id") or "").strip() for row in contracts
         if str(row.get("employee_id") or "").strip()]
     if not employee_ids:
-        return []
+        return contracts, {}
     employees = await _read(db, EMPLOYEES_COLLECTION,
         {"user_id": owner, "id": {"$in": employee_ids}}, SALARY_PROJECTIONS[EMPLOYEES_COLLECTION],
         min(len(employee_ids), MAX_PAYROLL_ROWS))
     employees_by_id = {str(row.get("id") or "").strip(): row for row in employees
         if str(row.get("id") or "").strip()
         and not any(row.get(flag) for flag in ("archived", "is_archived", "deleted", "is_deleted"))}
+    return contracts, employees_by_id
+
+
+async def _employee_salary_rows_on(contracts, employees_by_id, day, budget):
+    """Apply the shared employee identity/calendar policy before cost validation."""
     seen, salaries = set(), []
     for contract in contracts:
         await budget.checkpoint()
@@ -137,29 +148,32 @@ async def _employee_salary_rows_on(db, owner, day, budget):
     return salaries
 
 
-async def _salary_total(db, owner, day, budget):
-    employee_rows, other_rows = await _gather(
-        _employee_salary_rows_on(db, owner, day, budget),
+async def _salary_total(db, owner, scope, budget):
+    employee_sources, other_rows = await _gather(
+        _employee_salary_sources(db, owner),
         _read(db, "operating_salaries", {"user_id": owner,
             "category": {"$in": ["household", "charity"]}},
             {"_id": 0, "category": 1, "status": 1, "start_date": 1, "monthly_amount": 1},
             MAX_PAYROLL_ROWS),
     )
     totals = defaultdict(float)
-    for row in employee_rows + other_rows:
+    for day in _days(scope):
         await budget.checkpoint()
-        if not _salary_active_on(row, day):
-            continue
-        category = str(row.get("category") or "").strip()
-        monthly = _number(salary_amount_on(row, day) if category == "employee" else row.get("monthly_amount"))
-        if monthly is None or monthly < 0:
-            raise _Unavailable("operating_basis_cost_missing")
-        totals[category] += _daily_from_monthly(monthly, day)
-    # Same grouping and rounding boundary as the executive legacy salary seam.
+        employee_rows = await _employee_salary_rows_on(*employee_sources, day, budget)
+        for row in employee_rows + other_rows:
+            await budget.checkpoint()
+            if not _salary_active_on(row, day):
+                continue
+            category = str(row.get("category") or "").strip()
+            monthly = _number(salary_amount_on(row, day) if category == "employee" else row.get("monthly_amount"))
+            if monthly is None or monthly < 0:
+                raise _Unavailable("operating_basis_cost_missing")
+            totals[category] += _daily_from_monthly(monthly, day)
+    # Round the entire selected range once, like the executive salary seam.
     return round(totals["employee"] + totals["household"] + totals["charity"], 2)
 
 
-async def _recurring_total(db, owner, day, budget):
+async def _recurring_total(db, owner, scope, budget):
     rows = await _read(db, OBLIGATIONS, {"user_id": owner}, {"_id": 0,
         **{key: 1 for key in ("id", "expense_type", "status", "start_date", "stopped_at",
             "auto_renew", "cycle", "custom_end_date", "period_amount", "estimation_basis")}}, MAX_OBLIGATIONS)
@@ -172,56 +186,59 @@ async def _recurring_total(db, owner, day, budget):
         await budget.checkpoint()
         by_obligation[str(invoice.get("obligation_id") or "").strip()].append(invoice)
     totals = defaultdict(float)
-    for row in rows:
+    for day in _days(scope):
         await budget.checkpoint()
-        if not obligation_active_on(row, day):
-            continue
-        daily = _number(obligation_daily_amount(row,
-            by_obligation.get(str(row.get("id") or "").strip(), []), day))
-        # The executive calculator gives valid utilities without an invoice or
-        # configured estimate a zero contribution. Allocate that same reported
-        # operating total; do not add a separate completeness rule here.
-        if daily is None or daily < 0:
-            raise _Unavailable("operating_basis_cost_missing")
-        if daily == 0:
-            # The shared utility fallback also maps invalid nonpositive/NaN
-            # estimates to zero. Accept only absent or valid configured values
-            # here; a positive invoice contribution never consults this fallback.
-            configured = row.get("period_amount")
-            if configured is not None:
-                estimate = _number(configured)
-                if estimate is None or estimate < 0:
-                    raise _Unavailable("operating_basis_cost_missing")
-            continue
-        totals[str(row.get("expense_type") or "other").strip()] += daily
+        for row in rows:
+            await budget.checkpoint()
+            if not obligation_active_on(row, day):
+                continue
+            daily = _number(obligation_daily_amount(row,
+                by_obligation.get(str(row.get("id") or "").strip(), []), day))
+            # Preserve the executive's zero contribution for valid unpriced
+            # utilities, while rejecting invalid configured monetary values.
+            if daily is None or daily < 0:
+                raise _Unavailable("operating_basis_cost_missing")
+            if daily == 0:
+                configured = row.get("period_amount")
+                if configured is not None:
+                    estimate = _number(configured)
+                    if estimate is None or estimate < 0:
+                        raise _Unavailable("operating_basis_cost_missing")
+                continue
+            totals[str(row.get("expense_type") or "other").strip()] += daily
     return round(sum(totals.values()), 2)
 
 
-async def _sales_total(db, owner, day, settings, budget):
+async def _sales_total(db, owner, scope, settings, budget):
     included = settings.get("report_included_statuses") or []
     if not isinstance(included, list) or any(not isinstance(value, str) for value in included):
         raise _Unavailable("operating_basis_settings_invalid")
-    query = {"user_id": owner, "order_date": {"$gte": day.isoformat(), "$lte": day.isoformat()}}
+    query = {"user_id": owner, "order_date": {
+        "$gte": scope.date_from.isoformat(), "$lte": scope.date_to.isoformat()}}
     if settings.get("hide_inferred_date_orders"):
         query["order_date_inferred"] = {"$ne": True}
     orders = await _read(db, "unified_orders", query, ORDER_PROJECTION, MAX_STORE_ORDERS)
     selected = []
     for order in orders:
         await budget.checkpoint()
-        if _matches_any(order.get("order_status", ""), included):
+        if (_matches_any(order.get("payment_method", ""), scope.payment_methods)
+                and _matches_any(order.get("shipping_company", ""), scope.shipping_companies)
+                and (order_matches_status(order, list(scope.report_statuses), included)
+                    if scope.report_statuses is not None
+                    else _matches_any(order.get("order_status", ""), included))):
             selected.append(order)
     await hydrate_order_currency_fields_cooperative(selected, (), checkpoint=budget.checkpoint)
     return await summarize_orders_sar_cooperative(selected, checkpoint=budget.checkpoint)
 
 
-async def _basis(db, owner, day):
+async def _basis(db, owner, scope):
     settings_rows = await _read(db, "settings", {"user_id": owner},
         {"_id": 0, "report_included_statuses": 1, "hide_inferred_date_orders": 1}, 1)
     budget = CPUWorkBudget(PARSER_BUDGET_MS)
     sales, salary, recurring = await _gather(
-        _sales_total(db, owner, day, settings_rows[0] if settings_rows else {}, budget),
-        _salary_total(db, owner, day, budget),
-        _recurring_total(db, owner, day, budget),
+        _sales_total(db, owner, scope, settings_rows[0] if settings_rows else {}, budget),
+        _salary_total(db, owner, scope, budget),
+        _recurring_total(db, owner, scope, budget),
     )
     expenses = round(salary + recurring, 2)
     total = _number(sales.get("total_sar"))
@@ -238,19 +255,17 @@ async def _basis(db, owner, day):
         "sales_sar": total, "reasons": []}
 
 
-async def read_operating_basis(db: Any, user_id: str, now: datetime | None = None) -> dict[str, Any]:
+async def read_operating_basis(db: Any, user_id: str, now: datetime | None = None,
+        *, operating_scope: OperatingScope | None = None) -> dict[str, Any]:
     """Return one read-only basis for the hover batch, including explicit gaps."""
-    instant = now or datetime.now(timezone.utc)
-    if instant.tzinfo is None:
-        instant = instant.replace(tzinfo=timezone.utc)
-    day = instant.astimezone(ZoneInfo(STORE_TIMEZONE)).date()
+    scope = operating_scope or resolve_operating_scope(now=now)
     result = {"complete": False, "ratio": None, "expenses_sar": None, "sales_sar": None,
-        "date": day.isoformat(), "timezone": STORE_TIMEZONE, "reasons": []}
+        **scope.metadata(), "reasons": []}
     if not isinstance(user_id, str) or not user_id.strip():
         result["reasons"] = ["operating_basis_owner_invalid"]
         return result
     try:
-        result.update(await asyncio.wait_for(_basis(db, user_id, day), timeout=BASIS_TIMEOUT_SECONDS))
+        result.update(await asyncio.wait_for(_basis(db, user_id, scope), timeout=BASIS_TIMEOUT_SECONDS))
     except asyncio.TimeoutError:
         result["reasons"] = ["operating_basis_timeout"]
     except _Unavailable as exc:

@@ -284,7 +284,7 @@ async def _bounded(awaitable):
         return None
 
 
-async def enrich_campaign_profit(db, owner, records, cohorts, now):
+async def enrich_campaign_profit(db, owner, records, cohorts, now, *, operating_scope=None):
     from .campaign_hover_operating import read_operating_basis
     eligible = {cid: record for cid, record in records.items() if record.get("orders") is not None}
     if not eligible:
@@ -295,7 +295,7 @@ async def enrich_campaign_profit(db, owner, records, cohorts, now):
         _bounded(_price_orders(readonly, owner, list(distinct.values()))),
         _bounded(_ad_settings(readonly, owner)),
         # This reader owns its 3s deadline and returns a structured timeout.
-        read_operating_basis(db, owner, now),
+        read_operating_basis(db, owner, now, operating_scope=operating_scope),
     )
     for cid, record in eligible.items():
         selected = [priced.get(str(order["order_number"])) for order in cohorts[cid]] if priced is not None else None

@@ -102,6 +102,8 @@ export default function CampaignHoverBadge({ badge, campaign, report }) {
     ];
     const updated = accountTime(report?.updated_at, report?.timezone);
     const covered = accountTime(report?.spend_as_of, report?.timezone);
+    const operatingFrom = report?.operating_basis?.date_from || report?.operating_basis?.date;
+    const operatingTo = report?.operating_basis?.date_to || operatingFrom;
     const displayName = campaign?.campaignName || report?.campaign_name || campaign?.campaignDisplay || "الحملة غير محددة";
     const popupWidth = position?.width;
     useLayoutEffect(() => {
@@ -175,9 +177,10 @@ export default function CampaignHoverBadge({ badge, campaign, report }) {
                 <div className="mt-1 text-[10px] text-slate-500">إجمالي التكاليف: المنتجات والشحن ورسوم الدفع وعمولة بنك الإعلان.</div>
                 <div className="mt-1 text-[10px] text-slate-500">صافي الأرباح بعد خصم التكاليف والصرف الإعلاني وحصة المصروفات التشغيلية.</div>
                 {report?.product_cost_complete === false && <div className="mt-1 text-[10px] text-amber-700">بانتظار حسم خيارات المنتجات وتكاليفها.</div>}
-                <div className="mt-1 text-[10px] text-slate-500">
-                    نسبة التشغيل من مصروفات الملخص التنفيذي إلى مبيعاته حسب يوم المتجر
-                    {report?.operating_basis?.date && <>: <bdi dir="ltr">{report.operating_basis.date}</bdi></>}
+                <div className="mt-1 text-[10px] text-slate-500" data-testid="campaign-operating-basis">
+                    {operatingFrom ? <>نسبة التشغيل من مصروفات الملخص التنفيذي إلى مبيعاته للفترة المحددة: <bdi dir="ltr">{operatingFrom}</bdi>
+                        {operatingTo !== operatingFrom && <> إلى <bdi dir="ltr">{operatingTo}</bdi></>}</>
+                        : "فترة احتساب المصروفات التشغيلية غير متاحة"}
                     {report?.operating_basis?.timezone && <> · <bdi dir="ltr">{report.operating_basis.timezone}</bdi></>}.
                 </div>
                 {profitProvisional && <div className="mt-1 text-[10px] text-amber-700">صافي الأرباح تقديري حتى اكتمال بيانات الصرف.</div>}

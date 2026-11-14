@@ -12,8 +12,9 @@ const order = (id, extra = {}) => ({ order_number: id, campaign_id: CID,
 const NOW = new Date("2026-11-13T12:00:10Z").getTime();
 let host, root;
 
-function View({ orders, totals }) {
-    const reports = useCampaignHover(orders, { totals });
+function View({ orders, totals, operatingContext, observe }) {
+    const reports = useCampaignHover(orders, { totals, operatingContext });
+    observe?.(reports);
     return <span>{reports[CID]?.orders ?? "pending"}</span>;
 }
 async function settle() { await act(async () => { jest.advanceTimersByTime(400); }); }
@@ -104,4 +105,119 @@ test("canonical OrdersV2 money, item and result-summary changes invalidate the s
         { orders: 30 }, NOW)).not.toBe(base);
     expect(campaignSnapshotRevision([{ ...dto, customer: { name: "private" },
         source: { ...dto.source, fetched_at: "2026-11-13T12:01:00Z" } }], { orders: 30 }, NOW)).toBe(base);
+});
+
+const executiveContext = { from: "2026-11-13", to: "2026-11-13",
+    payment_methods: ["mada"], shipping_companies: ["carrier"], report_statuses: ["reviewed"] };
+
+test("selected period and every cohort dimension invalidate identical campaign rows within one bucket", async () => {
+    const orders = [order("30")];
+    const totals = { total_orders: 30, total_sales: 1000, operating_expenses_total: 20 };
+    let context = executiveContext;
+    await act(async () => root.render(<View orders={orders} totals={totals} operatingContext={context} />));
+    await settle();
+    for (const change of [
+        { from: "2026-11-12", to: "2026-11-12" },
+        { to: "2026-11-13" },
+        { payment_methods: ["cash"] },
+        { shipping_companies: ["other"] },
+        { report_statuses: ["in_progress"] },
+    ]) {
+        context = { ...context, ...change };
+        const before = getCampaignHoverBatch.mock.calls.length;
+        const seen = [];
+        await act(async () => root.render(<View orders={orders} totals={totals} operatingContext={context}
+            observe={(reports) => seen.push(reports[CID])} />));
+        expect(seen.length).toBeGreaterThan(0);
+        expect(seen.every((value) => value === undefined)).toBe(true);
+        expect(host.textContent).toBe("pending");
+        await settle();
+        expect(getCampaignHoverBatch).toHaveBeenCalledTimes(before + 1);
+        expect(getCampaignHoverBatch.mock.calls.at(-1)[1].operatingContext).toEqual(context);
+    }
+});
+
+test("equivalent selectors normalize without another request or hiding the current report", async () => {
+    const orders = [order("30")];
+    const totals = { count: 30 };
+    await act(async () => root.render(<View orders={orders} totals={totals} operatingContext={{
+        ...executiveContext, payment_methods: ["mada", "cash"], shipping_companies: ["b", "a"],
+    }} />));
+    await settle();
+    await act(async () => root.render(<View orders={orders} totals={totals} operatingContext={{
+        ...executiveContext, payment_methods: [" cash ", "mada", "cash"], shipping_companies: ["a", "b", "a"],
+    }} />));
+    await settle();
+    expect(getCampaignHoverBatch).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toBe("30");
+    expect(getCampaignHoverBatch.mock.calls[0][1].operatingContext).toEqual({ ...executiveContext,
+        payment_methods: ["cash", "mada"], shipping_companies: ["a", "b"] });
+});
+
+test("a pending executive context neither requests a fallback day nor reuses prior financials", async () => {
+    const orders = [order("30")];
+    await act(async () => root.render(<View orders={orders} operatingContext={null} />));
+    await settle();
+    expect(getCampaignHoverBatch).not.toHaveBeenCalled();
+    await act(async () => root.render(<View orders={orders} operatingContext={executiveContext} />));
+    await settle();
+    expect(host.textContent).toBe("30");
+    const seen = [];
+    await act(async () => root.render(<View orders={orders} operatingContext={null}
+        observe={(reports) => seen.push(reports[CID])} />));
+    expect(seen.every((value) => value === undefined)).toBe(true);
+    await settle();
+    expect(getCampaignHoverBatch).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toBe("pending");
+});
+
+test("a delayed response from a previous executive cohort cannot replace the selected cohort", async () => {
+    const pending = [];
+    getCampaignHoverBatch.mockImplementation(() => new Promise((resolve) => pending.push(resolve)));
+    const orders = [order("30")];
+    await act(async () => root.render(<View orders={orders} operatingContext={executiveContext} />));
+    await settle();
+    await act(async () => root.render(<View orders={orders} operatingContext={{
+        ...executiveContext, payment_methods: ["cash"],
+    }} />));
+    await settle();
+    await act(async () => pending[1]({ [CID]: { orders: 12 } }));
+    await act(async () => pending[0]({ [CID]: { orders: 30 } }));
+    expect(host.textContent).toBe("12");
+});
+
+test("standalone orders advance the store day only when existing data refreshes after Riyadh midnight", async () => {
+    jest.setSystemTime(new Date("2026-11-13T20:59:50Z"));
+    const orders = [order("30")];
+    await act(async () => root.render(<View orders={orders} />));
+    await settle();
+    jest.setSystemTime(new Date("2026-11-13T21:00:10Z"));
+    await act(async () => root.render(<View orders={orders} />));
+    await settle();
+    expect(getCampaignHoverBatch).toHaveBeenCalledTimes(1);
+    await act(async () => root.render(<View orders={[...orders]} />));
+    await settle();
+    expect(getCampaignHoverBatch).toHaveBeenCalledTimes(2);
+    expect(getCampaignHoverBatch.mock.calls[0][1].operatingContext).toEqual({
+        from: "2026-11-13", to: "2026-11-13", payment_methods: [], shipping_companies: [], report_statuses: [] });
+    expect(getCampaignHoverBatch.mock.calls[1][1].operatingContext).toEqual({
+        from: "2026-11-14", to: "2026-11-14", payment_methods: [], shipping_companies: [], report_statuses: [] });
+});
+
+test("changed executive operating amounts or sales invalidate without using generation timestamps", async () => {
+    const orders = [order("30")];
+    for (const totals of [
+        { total_orders: 30, total_sales: 1000, operating_expenses_total: 20 },
+        { total_orders: 30, total_sales: 1000, operating_expenses_total: 30 },
+        { total_orders: 30, total_sales: 2000, operating_expenses_total: 30 },
+    ]) {
+        await act(async () => root.render(<View orders={orders} totals={totals} operatingContext={executiveContext} />));
+        await settle();
+    }
+    expect(getCampaignHoverBatch).toHaveBeenCalledTimes(3);
+    await act(async () => root.render(<View orders={orders} totals={{ total_orders: 30,
+        total_sales: 2000, operating_expenses_total: 30, generated_at: "2026-11-13T12:00:20Z" }}
+        operatingContext={executiveContext} />));
+    await settle();
+    expect(getCampaignHoverBatch).toHaveBeenCalledTimes(3);
 });
