@@ -69,3 +69,9 @@ The candidate has not been merged, built in original /app, prepared or published
 - OperationalBalanceWeb run43617869606 backendjob132516789691 failed one CPU-ratio benchmark, 4759passed. ActualoldCPU0.1652199959999976/newCPU0.2488520640000047, thresholdnew<old*0.65. Diagnostic output equality passed. Failedartifact14123355672 ZIP024a8998613ec2c5832e1a4b5af27569f260ddd9de94a777bb86c10c4942bef0 retained, exactB3/treeverified.
 - Root/independent source review: same measuredcode aspassingA3; nointentdependency or indexedfallback defect found. Benchmark measures two single samples withoutwarmup/repetition/GCcontrol. Causeunproven; do notcallharmless schedulingflake. Exactlyone unchangedfailed-jobrerun isallowed asdiagnosis, withallgatesstillrequired. No code/testthresholdchanges orretryloop.
 - ForeignPR1921 release stillactive inlatestledger. Noownmerge/originalbuild/lease/publication.
+
+
+## One rerun started; foreign publication now verifying — 2026-11-14 17:00:12 UTC
+
+- Exactlyone failed-jobrerun toolreturned success:true; actualnewbackendjob132518905107 isrunning onunchangedB3. All10 otherapplicableworkflows nowSUCCESS. Originalfailure remainsrecorded; gate notwaived.
+- Root readforeignledger44fff464a2fc3b3be93c5d311bf9c1f167fcf9c9: PR1921publicationecb9679completed; ownerlaunchedofficialverifyonce atprefix/tmp/mezan-pr1921-original-zu179mmf/28-verify inTerminal2. Noactualexit/inactiveyet. Do nottouchitslease, process, terminal orrepeatpublish.

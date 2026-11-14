@@ -1,7 +1,7 @@
 {
   "task": "CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114",
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 16:58:53 UTC",
+  "updated_at_utc": "2026-11-14 17:00:12 UTC",
   "branch": "codex/campaign-operating-executive-parity-m94f6-20261114",
   "pr": 1924,
   "base_J3": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
@@ -33,15 +33,17 @@
     "other_pr": 1921,
     "other_merge": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
     "other_handoff_branch": "codex/financial-section-pages-handoff-20261114",
-    "other_checkpoint": "9bf95138f4158e8b1e54b326ec802f30edb6f10b",
-    "state_at_checkpoint": "foreign-owned active lease, one publication inprogress",
+    "other_checkpoint": "44fff464a2fc3b3be93c5d311bf9c1f167fcf9c9",
+    "state_at_checkpoint": "publication completed; official verification launched once andstillrunning",
     "must_wait_for_other_owner_release_and_fresh_inactive": true,
     "actor": "codex-financial-section-pages-1921",
     "prepare_finished": "2026-11-14T16:44:34.399060Z",
     "prepublish_finished": "2026-11-14T16:45:27.073703Z",
     "publish_clicked": "2026-11-14T16:46:05.772Z",
     "verified": false,
-    "inactive_after_release": false
+    "inactive_after_release": false,
+    "published_ui_version": "ecb9679",
+    "verify_prefix": "/tmp/mezan-pr1921-original-zu179mmf/28-verify"
   },
   "superseded_pr1922": {
     "task": "CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114",
@@ -144,7 +146,7 @@
     }
   },
   "production_changed_by_this_followup": false,
-  "next": "Preserve failedattempt evidence; run only failedbackendjob once unchanged. Require actualsuccess/fullremaininggates, no waivers. Otherowner release remainsactive; no merger/sharedapp actions.",
+  "next": "Await singleunchangedOperationalBackend retry andforeignofficialverify actualexit/inactive. No merge/app changes whileforeignleaseactive. Ifbenchmarkrecurs investigateno furtherretries.",
   "static_review": "root plus independent source reuse/overlap PASS",
   "source_coverage": {
     "backend": 248,
@@ -172,7 +174,7 @@
     "unchanged_logic_from_reviewed1922": true
   },
   "intent_tree": "b48a0eefb368ba655c8370f6b2e4435e07612790",
-  "B3_ci": "blocked by one operational backend CPU benchmark failure; other2 gates stillrunning",
+  "B3_ci": "other10 applicable workflows succeeded; OperationalBalanceWeb attempt2 running",
   "B3_hosts": {
     "root": "PASS",
     "independent": "PASS",
@@ -221,6 +223,13 @@
     },
     "diagnosis": "single-sample process CPU comparison, no warmup/repetition/GC isolation; measured source unchanged since passing A3; no intent read or indexed fallback/O(n2) defect found",
     "cause": "unproven; GC/process CPU variation is only a hypothesis",
-    "decision": "one exact unchanged failed-job rerun for diagnosis; do not weaken thresholds/skip failure or loop retries"
+    "decision": "one exact unchanged failed-job rerun for diagnosis; do not weaken thresholds/skip failure or loop retries",
+    "rerun": {
+      "requested_once": true,
+      "tool_success": true,
+      "new_backend_job": 132518905107,
+      "state": "running",
+      "same_source": "0a93847af8eb3898ae195c58ad88092388d908ad"
+    }
   }
 }
