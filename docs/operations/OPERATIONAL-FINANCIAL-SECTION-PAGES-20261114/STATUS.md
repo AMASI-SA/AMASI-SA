@@ -425,3 +425,28 @@ Browser tabs changed outside this task: oldMezan10 no longerexists; do not use
 unrelatednewtabs12/17. Root will create one fresh tab at the already verified
 financial-center URL for read-only page checks while the official static-file
 verification runs. Manualfinancialrefresh waits for officialidentity success.
+
+## Live read-only pages observed during official verification
+
+Fresh Mezan tab21 opened the original financial-position URL and showed the
+new summary default and10-link Arabic RTL sidebar. Existing authentication
+remained valid. Root checked actual report-content headings, expected table
+IDs, aria-busy:false and absence of role-alert errors after each requested
+navigation. Providers,couriers,drivers,employees andsummary all loaded.
+All retained saved as_of14/11/2026,18:22Riyadh. Do not call this a new balance
+calculation; no manualrefresh has been clicked in this release yet.
+
+Observed click-to-confirmed-report durations (include browser-control overhead,
+one navigation each, not pure backend timings): providers9.621s at17:00:24Z;
+couriers14.912s at17:00:46Z;drivers9.774s at17:01:01Z;employees8.524s at17:01:24Z;
+returnsummary10.663s at17:01:33Z. Initial fresh-tab summary was confirmed within
+19.558s, an upper bound including a separate observation gap. Do not use that
+as precise network latency or invent a percentage improvement.
+
+Expected tables observed: providers+balance_origin;couriers+balance_origin+
+courier_fee_review;drivers+balance_origin+driver_fee_review;employees+
+employee_custody. Summary shows saved debt/profit/current/net displays and
+separate pendingforecast; existing unknown-data warnings remain explicit.
+Root visually inspected the actual summary/sidebar. No financial numbers or
+customer records are included in this public handoff. Official verifier is
+still running; original Terminal2 must not be interrupted or reused yet.
