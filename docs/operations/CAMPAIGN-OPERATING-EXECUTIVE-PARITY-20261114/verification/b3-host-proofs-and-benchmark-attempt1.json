@@ -1,0 +1,78 @@
+{
+  "hosts": {
+    "root": "PASS",
+    "independent": "PASS",
+    "generated_files": 293,
+    "frontend_content_records": 289,
+    "all_generated_bytes_sizes_modes_identical": true,
+    "intent_bytes_match": true,
+    "identity_matches_full_intent": true,
+    "source": "c484b549e8bca017627ce80749c7895198f04bf8",
+    "base": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+    "runtime": "rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33",
+    "identity_sha256": "d71fc8e889e8d35f09d4b5ec090b5e850422c43be5545444cdc54da3ad910313",
+    "identity_bytes": 437504,
+    "meta_sha256": "662ad88f2ae043b494f2b96159e5bbe456f536a4d91d561289ddf99798629aa0",
+    "proof_sha256": "db16d184d492c1bb6b22edae93b6a6e0315a6029cc43107f15696e24d134b7ff",
+    "artifact_tree": "8b55f9ab1883c764826c27dd77b504fa55599bf0d84875f156565a9d8eaba5f4",
+    "tar_sha256": {
+      "host20": "f8e791a3ba6836033de4ae45ed6897fa9879d5324ce3d45b279109563b10da1f",
+      "host24": "dc8f1dbb0d94adcc10cb19f57dc23248eadd3b45b9af6b247e66e28ce52c54c5"
+    },
+    "isolated_package_boundary_links_verified": true,
+    "backend_package_files": 1216,
+    "frontend_package_files": 1472
+  },
+  "artifacts": [
+    {
+      "id": 14122960797,
+      "name": "release-v5-generated-outputs-host-20.20.2",
+      "digest": "sha256:6f39521e5182c0ef5c9908b582f5496a60ad58fe1076fdcb9e004adbd458932d",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad"
+    },
+    {
+      "id": 14122891949,
+      "name": "release-v5-generated-outputs-host-24.19.0",
+      "digest": "sha256:1c1da3d92b424ab0c6c2fb7ab64e449c6835bec4bafb63d5ece5748e5316908f",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad"
+    },
+    {
+      "id": 14122759371,
+      "name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "digest": "sha256:06101ab04e581b83a7f3628ea2e9aefeddf9862b4b218465e7c8c1ef3a8e2d71",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad"
+    },
+    {
+      "id": 14122114440,
+      "name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "digest": "sha256:f3ebfb3f4cfe948a0cd0b651bda7e5227f0c190ee0aa5a52bc5e45b641d68368",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad"
+    }
+  ],
+  "failure": {
+    "workflow_run": 43617869606,
+    "job": 132516789691,
+    "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+    "attempt": 1,
+    "actual_exit": 1,
+    "failed_test": "backend/tests/test_operational_balance_issue_index.py::test_four_thousand_distinct_diagnostics_avoid_repeated_whole_list_work",
+    "assertion": "new_cpu < old_cpu * 0.65",
+    "old_cpu": 0.1652199959999976,
+    "new_cpu": 0.2488520640000047,
+    "output_equality_passed": true,
+    "suite": {
+      "failed": 1,
+      "passed": 4759,
+      "warnings": 8
+    },
+    "artifact": {
+      "id": 14123355672,
+      "zip_sha256": "024a8998613ec2c5832e1a4b5af27569f260ddd9de94a777bb86c10c4942bef0",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "tree": "b48a0eefb368ba655c8370f6b2e4435e07612790"
+    },
+    "diagnosis": "single-sample process CPU comparison, no warmup/repetition/GC isolation; measured source unchanged since passing A3; no intent read or indexed fallback/O(n2) defect found",
+    "cause": "unproven; GC/process CPU variation is only a hypothesis",
+    "decision": "one exact unchanged failed-job rerun for diagnosis; do not weaken thresholds/skip failure or loop retries"
+  }
+}

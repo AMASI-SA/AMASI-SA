@@ -61,3 +61,11 @@ The candidate has not been merged, built in original /app, prepared or published
 - Newintent-onlyB3 `0a93847af8eb3898ae195c58ad88092388d908ad`, tree `b48a0eefb368ba655c8370f6b2e4435e07612790`, soleparentA3. Root exactcompare shows onlyrelease/release-intent-v5.json. Uploadedblob matches `2159398256b11323a9cce8e09f89508bb6f18818`. Runtime `rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33`.
 - ExactB3CI/hostrehearsals pending. No M3/ownoriginalbuild/ownlease/ownpublication.
 - Root readPR1921ledger9bf95138f4158e8b1e54b326ec802f30edb6f10b: its actor owns the activelease, prepare/prepublish succeeded, oneUIpublicationclicked16:46:05.772UTC andstillrunning atcheckpoint. Preserveitsworkflow; neverclearorreuseitslease. Originalworkspaceoperations andmerge aredeferreduntilotherreleaseverified/inactive andfreshchecksagree.
+
+
+## B3 host proofs passed; independent benchmark failure retained — 2026-11-14 16:58:53 UTC
+
+- Both B3 host rehearsals succeeded. Root and independent archive review PASS:293 files byte/mode-identical;289 frontend content hashes; exactnewintent/runtime/meta/proof links. Runtime identity fileSHA `d71fc8e889e8d35f09d4b5ec090b5e850422c43be5545444cdc54da3ad910313`.
+- OperationalBalanceWeb run43617869606 backendjob132516789691 failed one CPU-ratio benchmark, 4759passed. ActualoldCPU0.1652199959999976/newCPU0.2488520640000047, thresholdnew<old*0.65. Diagnostic output equality passed. Failedartifact14123355672 ZIP024a8998613ec2c5832e1a4b5af27569f260ddd9de94a777bb86c10c4942bef0 retained, exactB3/treeverified.
+- Root/independent source review: same measuredcode aspassingA3; nointentdependency or indexedfallback defect found. Benchmark measures two single samples withoutwarmup/repetition/GCcontrol. Causeunproven; do notcallharmless schedulingflake. Exactlyone unchangedfailed-jobrerun isallowed asdiagnosis, withallgatesstillrequired. No code/testthresholdchanges orretryloop.
+- ForeignPR1921 release stillactive inlatestledger. Noownmerge/originalbuild/lease/publication.
