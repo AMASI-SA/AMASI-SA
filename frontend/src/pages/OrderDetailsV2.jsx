@@ -39,6 +39,7 @@ import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
 import OrderActivityPanel from "../components/orders/OrderActivityPanel";
 import OrderProfitabilityCard from "../components/orders/OrderProfitabilityCard";
 import BundleOperationalPanel from "../components/orders/BundleOperationalPanel";
+import ProductsProjectionRepair from "../components/orders/ProductsProjectionRepair";
 import { printStoreCourierLabel } from "../lib/storeCourierLabelPrint";
 import { formatRiyadhDateTime } from "../lib/dates";
 
@@ -805,7 +806,7 @@ export default function OrderDetailsV2() {
     const allowedReturnPaths = new Set(["/orders-v2", "/dashboard-v2", "/dashboard-advanced"]);
     const returnTo = allowedReturnPaths.has(requestedReturnTo) ? requestedReturnTo : "/orders-v2";
     const returnLabel = returnTo.startsWith("/dashboard") ? "العودة إلى لوحة التحكم" : "العودة إلى الطلبات";
-    const { order, loading, error, reload: reloadOrder } = useOrder(orderNumber);
+    const { order, loading, error, reload: reloadOrder, refresh: refreshOrder } = useOrder(orderNumber);
     const { items, loading: itemsLoading, error: itemsError, reload: reloadItems } = useOrderItems(orderNumber);
     const additionsRefreshKey = JSON.stringify(items.map((item) => [item.order_item_id, item.quantity, item.variant_id, item.options]));
     const additionReview = useSourceAdditionReview({
@@ -900,6 +901,8 @@ export default function OrderDetailsV2() {
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="order-v2-items">
                 <div className="mb-4 flex items-center gap-2"><div className="rounded-lg bg-violet-100 p-2 text-violet-700"><Package size={20} weight="fill" /></div><h2 className="font-extrabold text-slate-950">عناصر الطلب ({itemCount.toLocaleString("en-US")})</h2></div>
+                <ProductsProjectionRepair orderNumber={orderNumber} onApplied={refreshOrder}
+                    disabled={refreshingFromSalla || openedOrderNumber !== String(orderNumber || "").trim()} />
                 <SourceAdditionReviewNotice review={additionReview} />
                 {itemsLoading ? <div className="flex min-h-40 items-center justify-center"><SpinnerGap size={28} className="animate-spin text-violet-600" /></div> : itemsError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><b>تعذّر تحميل عناصر الطلب</b><p className="mt-2 text-sm">{itemsError}</p><button type="button" onClick={reloadItems} className="mt-3 rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white">إعادة المحاولة</button></div> : items.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">لا توجد عناصر مرتبطة بهذا الطلب.</div> : <div className="space-y-4">{items.map((item, index) => <ProductCard key={item.order_item_id || index} item={item} index={index} currency={currency} additionReview={additionReview} />)}</div>}
             </section>
