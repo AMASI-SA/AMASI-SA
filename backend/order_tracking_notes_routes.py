@@ -657,7 +657,9 @@ async def _record_approval_submission(
         "note": instruction.get("submitted_result"),
         "occurred_at": instruction.get("submitted_at") or _now(),
     })
-    await emit_instruction_notification(db, merchant_id=merchant_id, instruction=instruction, event_type="submitted", sender_id=actor_id)
+    await emit_instruction_notification(db, merchant_id=merchant_id,
+        instruction={**instruction, "note": text(instruction.get("submitted_result")) or "تم إرسال نتيجة التنفيذ للمراجعة."},
+        event_type="submitted", sender_id=actor_id)
     await _notify_customer_service_approval(
         db,
         merchant_id=merchant_id,
@@ -1973,7 +1975,8 @@ def make_order_tracking_notes_router(
         rejected_recipients = None
         if updated.get("task_protocol"):
             rejected_recipients = {task["assignee_id"] for task in tasks if task["id"] in payload.task_ids and task.get("assignee_id")}
-        await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction=updated, event_type="rejected", recipient_ids=rejected_recipients)
+        await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction=updated,
+            event_type="rejected", recipient_ids=rejected_recipients, sender_id=context["actor_id"])
         return {"ok": True, "instruction": await scoped_instruction(db, context["merchant_id"], updated, context["actor_id"], _can_manage_tracking_instructions(user, context))}
 
     @router.post("/instructions/{instruction_id}/complete")
@@ -2170,7 +2173,10 @@ def make_order_tracking_notes_router(
             db,
             instruction_id=instruction["id"],
         )
-        await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction=updated, event_type=("closed" if instruction.get("action_type") not in BLOCKING_ACTION_TYPES else "approved" if instruction.get("status") == "waiting_customer_service_approval" else "completed"))
+        await emit_instruction_notification(db, merchant_id=context["merchant_id"],
+            instruction={**updated, "note": completion_note or ""},
+            event_type=("closed" if instruction.get("action_type") not in BLOCKING_ACTION_TYPES else "approved" if instruction.get("status") == "waiting_customer_service_approval" else "completed"),
+            sender_id=context["actor_id"])
         return {"ok": True, "instruction": await scoped_instruction(db, context["merchant_id"], updated, context["actor_id"], _can_manage_tracking_instructions(user, context))}
 
     return router
