@@ -4,9 +4,9 @@
 
 The user confirmed that operational-product images are saved and visible in waiting review, but disappear only in assembly and labeling. The image save flow is correct. The reviewed server repair permits an assembly-authorized mobile employee to read the already-saved image through the mobile permission bridge.
 
-This is a documentation continuation of the immutable source checkpoint, not another deployment candidate. Source/intent identities must never be amended for a status update. The image release is now normal-merged as `d6f246b4d3b14fd56ef2cbc574b99f08bb7d6fc1`; its tree exactly matches reviewed B. The authorized **single Publish changes** was submitted and Emergent displays **Deployment Started14November2026 03:58 UTC+03**. Our matching lease is active. Explicit platform completion and official three-probe verification remain pending; no live image-success claim yet.
+This is a documentation continuation of the immutable source checkpoint, not another deployment candidate. Source/intent identities must never be amended for a status update. **The image server repair is published and officially verified.** Normal merge M is `d6f246b4d3b14fd56ef2cbc574b99f08bb7d6fc1`, with the exact reviewed-B tree. The authorized single Publish completed on 14 November 2026 at 04:08 UTC+03, with new platform version `892c7f3`. The unchanged official verifier exited 0 after 562.28 seconds, returned `verified:true` and `checks:3` with exact M/A/runtime, and closed the matching lease. Final original status is `active:false`.
 
-The earlier Ready server release was separately published and officially verified. The combined Android app includes Ready ordering and supplier-invoice storage recovery; the one exact-source APK build succeeded and its actual artifact passed20 verification checks. Final installation-link delivery waits for image-server acceptance.
+The earlier Ready server release was separately published and officially verified. The combined Android app includes Ready ordering and supplier-invoice storage recovery; the one exact-source APK build succeeded and its actual artifact passed20 verification checks. The image-server dependency is now accepted and the existing Android80 installation link is ready for delivery. Physical employee-device installation has not been performed.
 
 ## Cause and behavior
 
@@ -66,15 +66,47 @@ Shared `/app` fast-forwarded from J to M without reset. The original `yarn --cwd
 
 Original prepare succeeded for actor `codex-assembly-image-20261114`, prepared_at `2026-11-14T00:57:10.603194+00:00`. Both original prepublish steps passed, the second immediately before the one Publish click. Runtime/source/deployment identities match the table above. Full operator records are under `/tmp/assembly-images-d6f246-*`.
 
-The predecessor platform version is `164bf90`. The platform now shows disabled Publishing and Deployment Started at03:58 UTC+03. Do not mutate shared `/app`, clear our lease, start another release or repeat Publish while this publication is active.
+The predecessor platform version was `164bf90`. A new task-specific Emergent view confirmed a new green `Deployment finished` event at 14 November 2026, 04:08 UTC+03 and new published version `892c7f3`. A readable screenshot of this exact platform state was saved and independently read back; screenshot SHA256 `7176a5fde88ae037d9cd0a06c5f9d24e26e429516756ed8a3f9a9b056908a68e`.
 
-The exact next safe step is to observe a new explicit green completion and new published version, run the unchanged official `python scripts/production_release_guard.py verify --url https://mezansalla.com`, verify all3probes and matching source/runtime, then confirm official status inactive. Continue the read-only image acceptance and final app-link delivery afterward.
+All three automatic workflows on actual M completed successfully: Security `43537128848`, Readiness `43537128802`, and CodeQL `43537128806`. The production Git ref was freshly read as exact M again at approximately 01:25 UTC.
+
+### Completed official live acceptance
+
+At `2026-11-14T01:20:24.683243+00:00`, the release owner launched the unchanged command `python scripts/production_release_guard.py verify --url https://mezansalla.com` once in code-server Terminal 3. The wrapper first called original status and asserted active actor `codex-assembly-image-20261114`, exact M, source A and runtime from the identity table.
+
+The execution/browser environment briefly disconnected while the verifier ran. After access returned, the owner read the same command's completed output; no second verification or Publish was submitted. The observed result was:
+
+```json
+{
+  "exit_code": 0,
+  "elapsed_seconds": 562.28,
+  "verified": true,
+  "checks": 3,
+  "protocol_version": 5,
+  "deployment_git_sha": "d6f246b4d3b14fd56ef2cbc574b99f08bb7d6fc1",
+  "source_git_sha": "f91eb6c43d2faeb2f7da174ecdc67a455ac0ec2c",
+  "release_id": "rg5-da00190ef168c57061fc38676a46099d28817d602aab27baff59155c6956cd2c"
+}
+```
+
+The wrapper subsequently called unchanged original status, asserted and printed `{"active": false}`. Successful verification closed our own matching lease normally. No lease was manually cleared.
+
+| Remote evidence | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `/tmp/assembly-images-d6f246-live-verify.json` | 33,299 | `340780ca2c752c932f6d843f1d32f30d949578257bc06f486b8e0ea4aeace85e` |
+| `/tmp/assembly-images-d6f246-live-verify.stderr` | 0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
+| `/tmp/assembly-images-d6f246-final-guard.json` | 22 | `595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e` |
+
+After a fresh reload of the existing assembly view and a read-only search of reference order299308624, the already-saved operational image again loaded completely at natural dimensions311×500. No Ready/receipt/stock/invoice/shipping or image-save operation was triggered. This confirms saved-image delivery on the authorized web view; assembly-only mobile permission behavior is covered by the bridge/router regression tests, not a claimed physical-phone test.
+
+The platform also displays a general severe-performance alert. Two read-only attempts to open its details/Monitoring timed out at browser input dispatch, so the detailed metrics and cause were not assessed here. The successful official release verifier is a version/asset/health acceptance result, not a complete performance audit.
+
 
 ## Scoped rollback behavior
 
 Rollback content has been prepared and tested by restoring only the two image files from J while preserving every other B-tree file. Its tested tree is `84eff2ab486cafb741a57dfe4d0a5998e1cfe367`. The original28tests pass with no failures/errors/skips, and explicit HTTP checks restore assembly-only403 while both review roles remain200, foreign-merchant assets404 and disabled grants403.
 
-Rollback source A_R `d36163dd41b50c83cc7332c6ad0cea103ffd8173` now has sole parent actual M and exactly the tested rollback tree. Its clean candidate-source validator passed. Readiness43537354137 succeeded and produced artifact14090651318 (ZIP SHA256 `d1c370d3bbdbd2d6f3e559f4546ee5b51dbb4e111784de2211b705fded65dc92`). Root independently verified the external intent on clean A_R: SHA256 `6d0900368e1b05dc442316d6bd139adea89507d37771272845363c5733dfd090`, blob `32d99c7111982b233c1b8d2450708f066026d114`. Intent-only B_R `63a68eaea74c5f6a94c80fbe8415cbbbe027d1e9` is frozen on the dedicated rollback branch, tree `a92e136576c10d09f3bf6ccdba45759ffe1270ef`, sole parent A_R. Root independently verified the remote ref, parent/tree and intent-only delta; frozen-intent validation passed on a clean checkout. Its runtime is `rg5-8736b517cc71786f0209408062dd11d07bbb2da06f08ee447a39582de8075526`. Exact-B_R Readiness is being dispatched without the candidate-base input; it still needs its actual package gates and later isolated rehearsal before being called a deployable rollback. Never deploy the old forward intent with reverted runtime content or blindly redeploy an older production commit. No business data is reversed by this code restoration.
+Rollback source A_R `d36163dd41b50c83cc7332c6ad0cea103ffd8173` now has sole parent actual M and exactly the tested rollback tree. Its clean candidate-source validator passed. Readiness43537354137 succeeded and produced artifact14090651318 (ZIP SHA256 `d1c370d3bbdbd2d6f3e559f4546ee5b51dbb4e111784de2211b705fded65dc92`). Root independently verified the external intent on clean A_R: SHA256 `6d0900368e1b05dc442316d6bd139adea89507d37771272845363c5733dfd090`, blob `32d99c7111982b233c1b8d2450708f066026d114`. Intent-only B_R `63a68eaea74c5f6a94c80fbe8415cbbbe027d1e9` is frozen on the dedicated rollback branch, tree `a92e136576c10d09f3bf6ccdba45759ffe1270ef`, sole parent A_R. Root independently verified the remote ref, parent/tree and intent-only delta; frozen-intent validation passed on a clean checkout. Its runtime is `rg5-8736b517cc71786f0209408062dd11d07bbb2da06f08ee447a39582de8075526`. Exact-B_R Readiness `43537869550` succeeded at 01:04:02 UTC. Actual Host20 job `132271566146` and Host24 job `132271566069` passed the no-Git adapters, package verification and runtime checks. Evidence artifacts are `14089934054` and `14090692622`; both package proofs have SHA256 `1314300940fb7a5125d1be59693fc60d74bc2feaafad5fcf18ea766d59e86fc8`. The rollback remains unactivated. No separate Emergent rehearsal of B_R was run while the forward publication/verification lease was active. Any future activation requires fresh production/guard inspection, preservation of subsequent changes and the original release protocol. Never deploy the old forward intent with reverted runtime content or blindly redeploy an older production commit. No business data is reversed by this code restoration.
 
 ## Earlier Ready server acceptance
 
@@ -94,6 +126,6 @@ All8 exact-source app workflows passed, including full TypeScript/lint, historic
 
 ## Evidence boundaries and durable continuation
 
-Production changed by the earlier Ready task: **YES**, verified above. Image publication is in progress; production acceptance is **pending**, not yet verified. No live order, stock, invoice, image, shipping, or financial data was modified for testing. No message was sent to employees. Issue1006 is at its comment limit; task PRs and dedicated status documents serve as the continuation record.
+Production changed by the earlier Ready task: **YES**, verified above. Image publication is complete and official production acceptance is **verified**, with three matching checks and final inactive guard recorded above. No live order, stock, invoice, image, shipping, or financial data was modified for testing. No message was sent to employees. Issue1006 is at its comment limit; task PRs and dedicated status documents serve as the continuation record.
 
 The platform exposes runtime logs, not a complete Cloud Build transcript. The observed green UI wording is `Deployment finished`; do not claim the older literal wording `Deployment Succeeded` or unobserved historic Cloud Build argv/cwd. Governed package tests and the unchanged live verifier provide the bounded release evidence.
