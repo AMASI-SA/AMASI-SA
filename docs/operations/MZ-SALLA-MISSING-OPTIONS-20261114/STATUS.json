@@ -5,7 +5,7 @@
   "base_sha": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
   "previous_checkpoint_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
   "live_source_observed": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
-  "state": "original_rehearsal_running",
+  "state": "original_rehearsal_passed_guard_pinned",
   "scope": "Explain and prevent missing incoming customer choices without manual Salla refresh.",
   "confirmed": [
     "Initial native and root choices empty at revision 1.",
@@ -33,7 +33,7 @@
   ],
   "reproduction_limit": "Synthetic source mechanisms, not full webhook/Mongo integration or a passing preventive-fix suite.",
   "access": "Official Production viewer connected through secure user authentication. Scoped reads; edit off; no credential extracted.",
-  "next_safe_action": "Observe the already-started original runner and its evidence/exit; do not rerun. On actual success pin its summary/before hashes in the reviewed guard, then prepare/prepublish/one authorized UI publish/official three-probe verify.",
+  "next_safe_action": "Stage exact hash-verified guard outside /app. Invoke prepare once, inspect direct result/postchecks; prepublish immediately before one authorized free Publish changes action; observe newer explicit successful deployment then run verify once with pinned root UI/prepublish receipt. Do not repeat successful build or guard phases.",
   "continuity": "PR1923, task status and archival branch are durable. Issue1006 body update acknowledged but fresh readback absent; not claimed persisted.",
   "diagnosis_base_sha": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
   "source_implementation_present": true,
@@ -61,7 +61,7 @@
     "final_b_artifact_sha256": "decef6273a9c4027007a89563fc23e9a6a9a42ff3c29ebab13435f783888e211"
   },
   "independent_review": "Source review and114-test run passed. Exact-A real Mongo and gates passed. Exact-B host artifacts independently validated; root directly compared all293 file bytes and modes.",
-  "release_state": "Root invoked the pinned original runner once in Terminal6. Original source and frontend preflight both passed; the original build is in progress. No own lease or publication. Preserve this original workflow.",
+  "release_state": "One original rehearsal succeeded on exact M, actual runner exit0 and host yarn build exit0. Exact reviewed identity and all120 unchanged paths passed. Reviewed guard now pinned to actual success evidence. Prepare/prepublish/own publication/verify not yet executed.",
   "archival_branch": "codex/salla-options-prelinear-checkpoint-20261114",
   "ancestry_repair": {
     "failed_source_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
@@ -120,11 +120,16 @@
   "other_release_published_version": "5a7a310",
   "guard_runner": {
     "path": "docs/operations/MZ-SALLA-MISSING-OPTIONS-20261114/guard_phase_runner.py",
-    "disabled": true,
+    "disabled": false,
     "disabled_sha256": "2e86e5994e6015e99ae175c0ec195cbf6fc8da24472a049555b4f60061e6eac4",
-    "merge_pin": "UNPINNED",
-    "original_evidence_pins": "UNPINNED",
-    "review": "Root and independent static review passed against official schemas. One explicit phase; no publication, abort or retry. Actual guard receipt persists independently of validation/postchecks. Verify1800s, other phases600s. No execution."
+    "merge_pin": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+    "original_evidence_pins": {
+      "directory": "/tmp/mezan-pr1923-original-5a1jqt_2",
+      "summary_sha256": "a5e9d3b3d037c92e815c23a6f9fe48414e58702b1910fd5fe7b2ae854362b1fa",
+      "before_sha256": "115e2ced7f5947496ea4190f4f14b9d9a4581cdfdeceea39115032bccd3b37bd"
+    },
+    "review": "Root and independent complete-byte comparison approved exact five enabling assignments only. Operational logic remains identical to reviewed disabled2e86e599; no guard execution yet.",
+    "enabled_sha256": "6cc7f944ea402666edc6e41d1beb3f42b9afddd4bf61f50830318c580978285c"
   },
   "original_premerge": {
     "utc": "2026-11-14T18:20:03.296232+00:00",
@@ -164,13 +169,25 @@
     "executed": true
   },
   "original_rehearsal": {
-    "state": "in_progress",
-    "evidence_directory": "/tmp/mezan-pr1923-original-5a1jqt_2",
-    "command": "PYTHONDONTWRITEBYTECODE=1 python -B /tmp/mezan-pr1923-operators-ofxm9kbl/original_runner.py",
-    "observed_preflight": {
-      "python_source_exit": 0,
-      "frontend_source_exit": 0
-    },
+    "evidenceDirectory": "/tmp/mezan-pr1923-original-5a1jqt_2",
+    "exit": 0,
+    "build_exit": 0,
+    "build_elapsed_seconds": 65.536,
+    "summarySha256": "a5e9d3b3d037c92e815c23a6f9fe48414e58702b1910fd5fe7b2ae854362b1fa",
+    "beforeSha256": "115e2ced7f5947496ea4190f4f14b9d9a4581cdfdeceea39115032bccd3b37bd",
+    "rehearsal_passed": true,
+    "preserved_count": 120,
+    "preserved_unchanged": true,
+    "lease_created": false,
+    "published": false,
+    "host_node": "v24.19.0",
+    "host_yarn": "1.22.22",
+    "state": "success",
     "runner_invocations": 1
+  },
+  "ui_baseline": {
+    "version": "5a7a310",
+    "observed_at": "2026-11-14T18:35:13.811Z",
+    "evidence": "Root CUA tab36 Manage and Deployment finished Nov14 09:01PM history"
   }
 }
