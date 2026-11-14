@@ -4,6 +4,7 @@ This module intentionally imports no accounting service. Confirmed obligations
 are not bank cash. Bank statements are optional later matching evidence.
 """
 import asyncio
+import logging
 from copy import deepcopy
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
@@ -16,6 +17,8 @@ from operational_balance_engine import reconcile_credits
 from operational_provider_report_coverage import provider_customer_payments
 from operational_external_advances import ACTIONS as EXTERNAL_ACTIONS, CREATION as EXTERNAL_CREATION, REPAYMENT as EXTERNAL_REPAYMENT, advance_id, advance_obligations, balance_snapshot
 from operational_ad_wallet_pool import enabled as wallet_pool_enabled, project_pool
+
+_LOG = logging.getLogger(__name__)
 
 DEFINITIVE_MOVEMENT_REJECTIONS = {
     "operational_future_business_date", "operational_business_date_invalid",
@@ -534,9 +537,11 @@ async def refresh(db, owner, *, clock=None):
         except ValueError as exc:
             from operational_read_runtime import SourceReadError
             if isinstance(exc, SourceReadError):
-                raise HTTPException(409, detail={"code": "operational_source_setup_incomplete",
-                    "cause": exc.code, "source_collection": exc.collection,
-                    "message": "تعذر تحديث مصدر الأرصدة؛ احتُفظ بآخر لقطة ناجحة مع سبب الفشل."}) from None
+                from operational_source_diagnostics import source_failure_detail
+                detail = source_failure_detail(exc.code, exc.collection)
+                _LOG.warning("operational_refresh_source_failure stage=source_collection outcome=failed "
+                             "cause=%s source_collection=%s", detail["cause"], detail["source_collection"])
+                raise HTTPException(409, detail=detail) from None
             fail("operational_source_setup_incomplete", "مصادر ميزان 2 غير مكتملة أو تجاوزت حدود القراءة")
         sources.setdefault("supplier_returns", []).extend(state.get("supplier_returns", []))
         from operational_customer_returns import attach_returns
