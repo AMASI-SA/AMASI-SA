@@ -10,11 +10,15 @@ on:
       - "backend/order_tracking_notes_routes.py"
       - "backend/instruction_edit_flow.py"
       - "backend/operational_push.py"
+      - "backend/operational_push_preview.py"
+      - "backend/operational_instruction_*.py"
+      - "backend/operational_notification_directory.py"
       - "backend/tests/test_instruction_*.py"
       - "backend/tests/test_operational_*.py"
       - "backend/tests/test_instruction_orders_permission.py"
       - "backend/tests/test_instruction_edit_flow.py"
       - "backend/tests/test_operational_instruction_notifications.py"
+      - "backend/tests/test_notification_sender_directory.py"
       - "backend/tests/test_mobile_order_tracking.py"
       - ".github/workflows/mobile-order-tracking.yml"
   workflow_dispatch:
@@ -79,7 +83,13 @@ jobs:
           tests/test_operational_instruction_notifications.py
           tests/test_instruction_product_cards.py
           tests/test_instruction_comments_progress.py
+          tests/test_instruction_conversations.py
+          tests/test_instruction_account_scope.py
           tests/test_operational_push.py
+          tests/test_operational_push_preview.py
+          tests/test_operational_push_presentation.py
+          tests/test_operational_notification_preview_snapshot.py
+          tests/test_notification_sender_directory.py
           tests/test_order_tracking_notes.py
           tests/test_operational_courier_instructions.py
           tests/test_assembly_search_instruction_batch.py
@@ -92,6 +102,17 @@ jobs:
           tests = [row for row in root.iter('testcase') if 'test_mobile_order_tracking' in row.get('classname', '')]
           assert len(tests) >= 20, len(tests)
           assert all(row.find('skipped') is None for row in tests)
+          for module, minimum in [
+              ('test_instruction_conversations', 31),
+              ('test_instruction_account_scope', 10),
+              ('test_operational_push_preview', 32),
+              ('test_operational_push_presentation', 9),
+              ('test_operational_notification_preview_snapshot', 6),
+              ('test_notification_sender_directory', 7),
+          ]:
+              cases = [row for row in root.iter('testcase') if module in row.get('classname', '')]
+              assert len(cases) >= minimum, (module, len(cases))
+              assert all(row.find('skipped') is None for row in cases), module
           PY
       - name: Stop isolated Mongo
         if: always()

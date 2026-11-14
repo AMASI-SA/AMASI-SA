@@ -39,6 +39,9 @@ def public_comment(row):
 
 
 async def notify_comment(db, row):
+    if row.get("conversation_id"):
+        from operational_instruction_conversations import notify_message
+        return await notify_message(db, row)
     instruction = await db[ORDER_TRACKING_INSTRUCTIONS].find_one({"user_id": row["merchant_id"], "id": row["instruction_id"]}, {"_id": 0})
     task = await db[TASKS].find_one({"merchant_id": row["merchant_id"], "instruction_id": row["instruction_id"], "id": row["task_id"]})
     if not instruction or not task:
@@ -97,6 +100,9 @@ def make_instruction_comments_router(db, current_user):
 
 
 async def retry_comment_notifications(db):
+    from operational_instruction_conversations import retry_projection
+    await retry_projection(db)
     rows = await db[COMMENTS].find({"notification_pending": True}).sort("created_at", 1).to_list(50)
     for row in rows:
         await notify_comment(db, row)
+

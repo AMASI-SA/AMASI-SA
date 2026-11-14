@@ -1,4 +1,4 @@
-"""Account-bound operational push outbox. Payloads contain no customer data.
+"""Account-bound operational push outbox with scoped native message previews.
 
 Delivery is at-least-once; event IDs let clients collapse repeats. Provider
 acceptance is recorded separately from Expo's downstream delivery receipt.
@@ -24,6 +24,7 @@ from pymongo import ReturnDocument
 
 DEVICES = "operational_push_devices_v1"
 OUTBOX = "operational_push_outbox_v1"
+ANDROID_RTL_PRESENTATION = "amasi_android_rtl_v1"
 log = logging.getLogger(__name__)
 
 
@@ -86,6 +87,7 @@ class DeviceRegistration(BaseModel):
     kind: str
     token: str | None = Field(default=None, max_length=256)
     subscription: dict | None = None
+    notification_presentation: str | None = Field(default=None, max_length=64)
 
 
 class DeviceRemoval(BaseModel):
@@ -134,6 +136,10 @@ def make_operational_push_router(db, current_user):
             **destination, "kind": payload.kind, "installation_id": payload.installation_id,
             "actor_id": user["id"], "merchant_id": await merchant_for_actor(db, user),
             "session_id": session["origin_session_ref"], "generation": generation,
+            # An absent/unsupported capability deliberately clears an older
+            # registration, including downgrade to an APK without the module.
+            "notification_presentation": ANDROID_RTL_PRESENTATION if (
+                payload.kind == "expo" and payload.notification_presentation == ANDROID_RTL_PRESENTATION) else None,
             "active": True, "updated_at": now(),
         }}, upsert=True)
         return {"ok": True}
@@ -251,11 +257,30 @@ async def send_to_provider(device, payload, *, ticket=None):
                 if not result:
                     return {"status": "receipt_pending"}
             else:
-                response = await client.post("https://exp.host/--/api/v2/push/send", headers=headers, json={
-                    "to": device["token"], "title": payload["title"], "body": payload["body"],
-                    "data": payload, "sound": "default", "channelId": "operational-instructions", "ttl": 3600,
-                    "priority": "high" if payload.get("priority") == "urgent" else "default",
-                })
+                if device.get("notification_presentation") == ANDROID_RTL_PRESENTATION:
+                    content = {"version": 1, "presentation": ANDROID_RTL_PRESENTATION,
+                        "title": payload["title"], "body": payload["body"]}
+                    count = payload.get("unread_count")
+                    if type(count) is int and 0 <= count <= 2147483647:
+                        content["unread_count"] = count
+                    data = {key: payload[key] for key in (
+                        "event_id", "instruction_id", "priority", "notice_id", "conversation_id") if key in payload}
+                    data["amasi_notification"] = content
+                    # No top-level presentation fields, including channelId:
+                    # FCM must enter our native handler while the app is closed.
+                    # That handler supplies the existing channel/default sound.
+                    message = {"to": device["token"], "data": data, "priority": "high", "ttl": 3600}
+                else:
+                    message = {
+                        "to": device["token"], "title": payload["title"], "body": payload["body"],
+                        "data": payload, "sound": "default", "channelId": "operational-instructions", "ttl": 3600,
+                        "priority": "high" if payload.get("priority") == "urgent" else "default",
+                    }
+                # Includes duplicated title/body in data and UTF-8 identifiers.
+                # Leave headroom below the provider's 4 KiB payload boundary.
+                if len(json.dumps(message, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) > 4000:
+                    return {"status": "failed", "error": "payload_too_large"}
+                response = await client.post("https://exp.host/--/api/v2/push/send", headers=headers, json=message)
                 response.raise_for_status()
                 result = response.json().get("data") or {}
             if result.get("status") == "ok":
@@ -292,8 +317,66 @@ async def deliver_one(db, sender=send_to_provider):
     result = {"status": "discarded"}
     if await device_is_active(db, device):
         try:
-            result = await sender(device, {"title": "أماسي — تنبيه مستعجل" if job.get("priority") == "urgent" else "أماسي — تعليمات الطلب", "body": "لديك تحديث على مهمة. افتح التطبيق للاطلاع والتأكيد.",
-                "event_id": job["event_id"], "instruction_id": job["instruction_id"], "priority": job.get("priority", "normal")}, ticket=job.get("ticket"))
+            payload = {"title": "أماسي — تنبيه مستعجل" if job.get("priority") == "urgent" else "أماسي — تعليمات الطلب", "body": "لديك تحديث على مهمة. افتح التطبيق للاطلاع والتأكيد.",
+                "event_id": job["event_id"], "instruction_id": job["instruction_id"], "priority": job.get("priority", "normal")}
+            if not job.get("ticket"):
+                rich_content = False
+                from operational_instruction_conversations import push_is_resolved, push_reference
+                if await push_is_resolved(db, merchant_id=device["merchant_id"],
+                        recipient_id=job["actor_id"], event_id=job["event_id"]):
+                    payload = None
+                else:
+                    payload.update(await push_reference(db, merchant_id=device["merchant_id"],
+                        recipient_id=job["actor_id"], event_id=job["event_id"]))
+                    if device["kind"] == "expo":
+                        from operational_push_preview import native_notification_payload
+                        generic_payload = payload
+                        payload = await native_notification_payload(db, device, job, payload)
+                        rich_content = payload is not None and payload is not generic_payload
+                        if payload is generic_payload:
+                            # A genuinely missing legacy notice has no saved
+                            # conversation context. Preserve its instruction-only
+                            # tap; never emit a reference the detail route rejects.
+                            payload.pop("notice_id", None)
+                            payload.pop("conversation_id", None)
+                        if rich_content and device.get("notification_presentation") == ANDROID_RTL_PRESENTATION:
+                            from operational_instruction_conversations import EVENTS, conversation_unread_count
+                            # The same scoped active-conversation count as the
+                            # new inbox, without backfill or business mutations.
+                            # An unfinished projection is unknown, never zero.
+                            source = await db["operational_instruction_notifications_v1"].find_one({
+                                "_id": job["event_id"], "merchant_id": device["merchant_id"],
+                                "recipient_id": device["actor_id"], "conversation_pending": {"$ne": True},
+                            }, {"_id": 1})
+                            projected = await db[EVENTS].find_one({"merchant_id": device["merchant_id"],
+                                "recipient_id": device["actor_id"], "source_notice_id": job["event_id"]},
+                                {"_id": 1}) if source else None
+                            if projected:
+                                payload["unread_count"] = await conversation_unread_count(db,
+                                    merchant_id=device["merchant_id"], actor_id=device["actor_id"])
+                if payload is not None and await push_is_resolved(db, merchant_id=device["merchant_id"],
+                        recipient_id=job["actor_id"], event_id=job["event_id"]):
+                    payload = None
+                if payload is not None and rich_content:
+                    from operational_push_preview import native_recipient_authorized
+                    if not await native_recipient_authorized(db, device):
+                        payload = None
+                if payload is not None:
+                    # All projection/hydration awaits can overlap an account
+                    # switch/logout. Recheck the same binding before a new send.
+                    # A provider submission already in flight cannot be recalled.
+                    current = await db[DEVICES].find_one({
+                        "_id": job["device_id"], "generation": job["generation"],
+                        "actor_id": device["actor_id"], "merchant_id": device["merchant_id"],
+                        "session_id": device["session_id"], "kind": device["kind"],
+                        "installation_id": device.get("installation_id"), "token": device.get("token"),
+                    })
+                    if await device_is_active(db, current):
+                        device = current
+                    else:
+                        payload = None
+            if payload is not None:
+                result = await sender(device, payload, ticket=job.get("ticket"))
         except Exception:
             # Provider exception text can contain device credentials; never log it.
             result = {"status": "retry", "error": "transport_error"}
@@ -312,6 +395,8 @@ async def deliver_one(db, sender=send_to_provider):
 
 
 async def run(db):
+    from operational_instruction_conversations import ensure_indexes
+    await ensure_indexes(db)
     await db["operational_instruction_notifications_v1"].create_index([
         ("merchant_id", 1), ("recipient_id", 1), ("read_at", 1), ("created_at", -1), ("id", -1)])
     await db["operational_instruction_notifications_v1"].create_index([
