@@ -1,27 +1,33 @@
 # Ready server release and Android continuation — 2026-11-14
 
-## Current verified state and expanded scope
+## Current verified state and completed delivery
 
-**The Ready server release is published and officially verified.** The user subsequently added supplier-receiving storage-full recovery and clarified that saved operational-product images are missing only in mobile assembly and labeling. No new APK has been built or distributed. The final app candidate now combines Ready ordering and storage recovery; the image permission repair is a separate server release dependency.
+**The Ready server release and the subsequent operational-image server repair are both published and officially verified. The combined Android80 APK was built successfully and its actual downloaded artifact passed all20 inspection checks.** The original scope expanded to include supplier-receiving storage-full recovery and saved operational images missing only in assembly and labeling; both additions are included in the completed release work.
 
 | Operation | Observed state |
 | --- | --- |
-| Ready PR1912 merge | Normal M, tree exactly reviewed B |
-| Forward isolated/shared adapters | PASS77.44s / PASS65.14s;120 existing untracked files preserved |
-| Scoped rollback | Source/intent prepared; fresh64tests+38subtests; exact-B Host20/24 and isolated Emergent adapter pass; not activated |
-| Ready Publish | Exactly one normal Publish,23:39UTC /02:39UTC+03 |
-| Platform outcome | New green `Deployment finished`,14November02:49UTC+03; new version `4e63025` |
-| Official verifier | `verified=true`, `checks=3`, exact M/A/runtime; stderr empty |
-| Matching lease | Closed by successful verify; fresh official status `active:false` |
-| Original order readback | Current Salla status completed, local assembly incomplete; existing Ready source-status gate remains correctly blocked |
-| Operational image on web | Existing image loaded with311×500 natural dimensions |
-| Mobile image defect | Assembly-only request denied403 by earlier generic review permission bridge; narrow GET-only repair in PR1914 |
-| Combined Android candidate | PR352, source `a667ad320eb1cb80b6e57e742eda58f84ec5bba4`,1.0.65/code80; fresh CI running |
-| New APK | Not built or distributed; old c10-only build form canceled |
+| Ready PR1912 merge and Publish | Normal M with the exact reviewed-B tree; one normal Publish |
+| Ready platform outcome | New green `Deployment finished`,14 November02:49 UTC+03, version `4e63025` |
+| Ready official verification | `verified:true`, `checks:3`, exact M/A/runtime; matching lease closed and final `active:false` |
+| Ready scoped rollback | Source/intent prepared and tested, Host20/24 and isolated Emergent rehearsal passed; not activated |
+| Original order299308624 | Authoritative status completed; existing completed-order Ready gate remains correctly blocked |
+| Image PR1914 | Normal-merged M `d6f246b4d3b14fd56ef2cbc574b99f08bb7d6fc1`, preserving intervening PR1913 |
+| Image platform outcome | One Publish; new green completion14 November04:08 UTC+03, version `892c7f3` |
+| Image official verification | Original verifier exit0 in562.28s, `verified:true`, `checks:3`, exact M/A/runtime; final original status `active:false` |
+| Saved image after deployment | Fresh web reload/read-only order search loaded operational image at311×500; no re-upload |
+| Combined Android source | PR352, `a667ad320eb1cb80b6e57e742eda58f84ec5bba4`,1.0.65/code80; all8 applicable exact-source workflows passed |
+| APK outcome | EAS build `c68427db-ebd7-4978-9a7e-27fd833bccda` Succeeded; actual20/20 artifact checks passed |
+| Physical employee phones | No installation, on-device upgrade or employee distribution was performed |
 
-Ready verify JSON SHA256: `0a91a8097d530c0027b34bf5d6150eb536722335f98af1884af00df5b258e2c8`. Final guard JSON SHA256: `7410be1a1dec3ea052e3dbfb62c5896880cc53d98149b928eeef1cbfa1a5a2be`. The current platform says `Deployment finished`, not the old literal `Deployment Succeeded`; the existing November12 Google/courier protocol record accepts this green new event/new version followed by the unchanged official three-probe verifier. No protocol was weakened.
+Ready verify JSON SHA256: `0a91a8097d530c0027b34bf5d6150eb536722335f98af1884af00df5b258e2c8`. Its final guard SHA256: `7410be1a1dec3ea052e3dbfb62c5896880cc53d98149b928eeef1cbfa1a5a2be`.
 
-The actual production Git branch subsequently advanced through independent PR1913 to `6012ceb480bf9dc0f51ec6cc64c054e5e0db3846`; this does not change the recorded identity of the completed Ready deployment. The image source A is `f91eb6c43d2faeb2f7da174ecdc67a455ac0ec2c`, based on6012, preserving all other merged work. Its intent/deployment remains pending at this checkpoint.
+Image verify JSON SHA256: `340780ca2c752c932f6d843f1d32f30d949578257bc06f486b8e0ea4aeace85e` (33,299bytes); empty stderr. Image final guard SHA256: `595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e` (22bytes).
+
+The platform's current green wording is `Deployment finished`. The existing November12 Google/courier protocol record accepts this new event/new version followed by unchanged official verification; no protocol was weakened. The platform also displays a general performance alert whose detailed metrics could not be inspected because browser input actions timed out. Successful release verification is not a complete performance audit.
+
+[Accepted image-server continuation](https://github.com/AMASI-SA/AMASI-SA/blob/7199b910f9450a52486a7561b8ddd18e987d0b31/docs/operations/ASSEMBLY-OPERATIONAL-IMAGE-ACCESS-20261114/STATUS.md) and [completed APK continuation](https://github.com/AMASI-SA/amasi-mobile/blob/25a922a9d3d00b70338e933af0f088e59ef63b6d/docs/operations/ANDROID80-READY-RECEIVING-STORAGE-20261114/STATUS.md) preserve the expanded release evidence. [Install/view the completed Android80 build](https://expo.dev/accounts/amasi-sa/projects/amasi/builds/c68427db-ebd7-4978-9a7e-27fd833bccda). The historical c10-only build form was canceled; exactly one combined a667 build was submitted and no duplicate is needed.
+
+The production lineage advanced from Ready M through independent PR1913 at6012 and then the accepted image M. These later releases preserve the prior Ready repair and do not change the recorded identity of the original Ready deployment.
 
 ## Canonical records and repositories
 
@@ -31,7 +37,7 @@ The actual production Git branch subsequently advanced through independent PR191
 - Current release ledger: [server PR #1912](https://github.com/AMASI-SA/AMASI-SA/pull/1912).
 - Current rollback branch: `codex/ready-current-rollback-20261114`.
 - Mobile repository: `AMASI-SA/amasi-mobile`.
-- Mobile continuation: [draft PR #351](https://github.com/AMASI-SA/amasi-mobile/pull/351).
+- Final mobile continuation: [PR #352](https://github.com/AMASI-SA/amasi-mobile/pull/352), built from exact a667. Earlier [PR #351](https://github.com/AMASI-SA/amasi-mobile/pull/351) is its preserved Ready parent.
 - Issue #1006 has reached its comment limit. Do not repeatedly try to append to
   it. PR #1912 and this task's final documentation checkpoint are the continuation
   records.
@@ -268,68 +274,32 @@ consumption automatically, reset completed order/shipping states, repeat Ready,
 or replay provider operations. Reconcile any in-flight outcome before deciding
 on a further operational action.
 
-## Android continuation
+## Android continuation — completed build and actual artifact
 
-The employee-app Ready-ordering change remains separate from the server repair.
-The prepared current source is [draft PR #351](https://github.com/AMASI-SA/amasi-mobile/pull/351),
-exact commit **`c10fcd49adaaded57b69afdf3fc73dfc8d9df3bf`**, with **all seven CI checks
-passed**. This is source evidence only: no new APK or completed EAS build has yet
-been established for this source.
+The final combined application source is `a667ad320eb1cb80b6e57e742eda58f84ec5bba4`, tree `93be9b3ef5e3464640b4fcd9fdea9ea75b715f4c`, sole parent Ready source `c10fcd49adaaded57b69afdf3fc73dfc8d9df3bf`. The scoped storage donor is `2fe5dfe883009b23c25b83bf09517f116fb0881a`; unrelated notification/native release changes were not imported.
 
-Expected configured application identity:
+All8 applicable exact-source workflows passed. Local verification covered19 script commands, and independent storage review passed77 checks. The full Android export, TypeScript/lint, historical route-return checks, real-screen Ready reverse-acknowledgement tests and native checks passed.
 
-| Field | Expected value |
+| Android outcome | Observed value |
 | --- | --- |
-| Android package | `com.amasi.sa.mobile` |
-| Version name | `1.0.65` |
-| Version code | `80` |
-| EAS build profile | `mezan-web-assembly-pilot` |
-| Expo project | `f285e8fe-06a6-48b4-b095-f1c42d63f7c3` |
-| OTA updates | Disabled; `checkAutomatically=NEVER`, `fallbackToCacheTimeout=0` |
-| Runtime version policy | `appVersion`; verify the built artifact's resolved value |
+| Build | [c68427db-ebd7-4978-9a7e-27fd833bccda](https://expo.dev/accounts/amasi-sa/projects/amasi/builds/c68427db-ebd7-4978-9a7e-27fd833bccda), Succeeded |
+| Version / package |1.0.65 /80; `com.amasi.sa.mobile` |
+| Profile / environment | `mezan-web-assembly-pilot` / production, internal APK, no automatic store submission |
+| Timing | Started14 November03:22 UTC+03; build20m1s / total20m9s |
+| Actual APK size |115,538,714bytes |
+| Actual APK SHA256 | `93730a8ca69481a8c49e6a4762a1cb32760065881e0f74c6dcdf6c15055397b2` |
+| Actual artifact inspection |20/20 checks passed with official Android Build Tools36; command exit0, all inspector stderr empty |
+| Signature |Valid v2, one signer; certificate `ca6b376f14e01eadf611b0ea0208eab7c75576ac5ee51606d01df571f0d1ac54` |
+| Manifest/runtime |Neither debuggable nor test-only; native OTAfalse/NEVER/0; runtime1.0.65 |
+| Report SHA256 | `723acac614e00be99a14c9d39b8acab3044ad3aa6f0460737cb343c4c915cdd4` |
 
-Build 80 preserves the isolated build-77 scope and avoids the already-used
-intervening version codes. The intended UI ordering is eligible Ready cards
-first, blocked cards next, and completed Ready cards last; a newly confirmed
-card moves to the end of the completed group. Do not claim that this source
-change has reached installed employee applications before artifact distribution
-and installation have been observed.
+The APK was obtained through the successful authenticated EAS build's normal Download build action. Source provenance comes from the build receipt plus that download association; APK inspection alone cannot prove a Git commit.
 
-The attempted baseline APK77 browser download received an **explicit browser
-URL-policy denial**. No alternate client or download route is authorized to
-work around that denial, and none was attempted by the independent reviewer.
-The baseline artifact and its signature have therefore not been independently
-validated during this continuation. A physical phone is unavailable, so device
-installation and live mobile acceptance are also unproven.
+The current signer matches historical75/76 evidence. The earlier baseline77 download received an explicit browser URL-policy denial; no retry or alternate-path bypass was used. Therefore a fresh77/installed77 signer comparison and actual on-device upgrade have not been established. The permitted Android80 normal download succeeded independently.
 
-Official Android Build Tools 36.0.0 were prepared in an isolated local directory
-for read-only artifact inspection. Google metadata and archive checks matched:
+Storage recovery bounds completed scan/invoice history and generated invoice PDFs while preserving unresolved intent, identity and retry bodies under the tested cases. Verified invoice readback precedes compaction. SQLite-full handling performs conservative cleanup and one local-write retry, without replaying business POSTs. This does not establish physical RAM improvement or add durable offline-photo upload.
 
-- Archive: `https://dl.google.com/android/repository/build-tools_r36_linux.zip`.
-- Published size: `63,737,259` bytes.
-- Published SHA-1: `b0b6376977657e8ad9b969bacf4093601da2c6fb`.
-- Computed archive SHA-256: `5d9ac77fb6ff43d9da518a337b4fcf8f9097113df531d99ccefe80ef7ce8250b`.
-- Tools directory: `/workspace/scratch/b2b642f1aff1/mezan-apk-validation-tools-no15bfz7/unpacked/android-16`.
-- `apksigner version` and `aapt2 version` exited 0; Java and required native
-  libraries were available. No system installation, global PATH change, key
-  import, or private-key access was performed.
-
-After server acceptance and a permitted artifact handoff, verify the actual APK
-package/version, successful APK signature verification, signer certificate
-SHA-256 equality with the authentic baseline, and compiled Expo metadata. Tool
-availability is not artifact verification. Do not use the legacy
-`NOT_COMMISSIONED` publisher for mobile or server release.
-
-| Android outcome | Final observed value |
-| --- | --- |
-| Server acceptance prerequisite | **[PENDING]** |
-| EAS authentication/build readiness | **[PENDING: observed status, without credentials]** |
-| Built source SHA and EAS build ID | **[PENDING]** |
-| Artifact URL/path and APK SHA-256 | **[PENDING: only after permitted acquisition]** |
-| Verified package, version, and OTA metadata | **[PENDING]** |
-| Baseline provenance and matching signer certificate | **[PENDING; baseline download currently denied]** |
-| Device installation and functional acceptance | **[PENDING; physical phone unavailable]** |
-| Distribution/publication | **[PENDING; not performed]** |
+The [full completed APK record](https://github.com/AMASI-SA/amasi-mobile/blob/25a922a9d3d00b70338e933af0f088e59ef63b6d/docs/operations/ANDROID80-READY-RECEIVING-STORAGE-20261114/STATUS.md) preserves hashes, test identities and limits. Do not rebuild old c10, the standalone donor or the documentation branch. Do not silently uninstall an existing app or clear its data to force installation.
 
 ## Superseded references preserved
 
@@ -349,67 +319,18 @@ availability is not artifact verification. Do not use the legacy
   has been superseded by the freshly tested current tree
   `fe5b157f759ec0daf67f05e445fe841c295eff66` and the current A_R/B_R pair.
 
-## Resume procedure and next safe commands
+## Current final facts and remaining device acceptance
 
-First read the latest PR #1912 ledger entries, this final documentation checkpoint,
-the repository's `AGENTS.md`, and the exact current forward/rollback workflow
-conclusions. Do not restart a completed deployment merely because a previous
-terminal or conversation ended. Reconcile newer owner observations before using
-the draft-time state above.
-
-Read-only shared-state checks:
-
-```bash
-cd /app
-python scripts/production_release_guard.py status
-git status --short --untracked-files=no
-git fetch origin hotfix/prod-snap-meta-final
-git rev-parse HEAD origin/hotfix/prod-snap-meta-final
-git rev-parse HEAD^{tree}
-git merge-base --is-ancestor cdf175841376d2f68605d66c1979273d23aed70d 304e8793a15fd3269fd6f6d4cfba903d1760e285
-git diff --exit-code a948f4592fd725792fe354dfa72fd40e99000915^{tree} 304e8793a15fd3269fd6f6d4cfba903d1760e285^{tree}
-```
-
-Expected forward deployment checkout is M, with tree
-`baf88eeeb7eec15a043da14358fa77f2ba2bc149`. A changed actual production ref or
-another owner's active lease requires reconciliation before a shared mutation.
-Never clear another owner's lease or use `git reset --hard` to force agreement.
-Preserve unrelated files and the recorded quarantine.
-
-Already executed, for the audit record only; **do not rerun to resume the
-in-progress deployment**:
-
-```bash
-cd /app
-python scripts/production_release_guard.py prepare --actor codex-ready-server-20261114
-python scripts/production_release_guard.py prepublish
-```
-
-The prepublish command was checked twice, and both checks passed. Exactly one
-normal UI Publish action followed. No second Publish action is authorized merely
-to compensate for a conversation or terminal interruption.
-
-Next actions, in order:
-
-1. Preserve the successful Ready publication and tested scoped rollback records. Do not republish the old Ready source.
-2. Complete server PR1914 for the narrow operational-image permission fix: exact-source CI, new source A/intent-only B, exact-B gates, original isolated/shared adapters, normal merge, fresh inactive guard, prepare/prepublish, one Publish, green platform completion and unchanged three-probe verification. Re-read the actual production ref and never interfere with another owner.
-3. Complete fresh CI on Android PR352, including storage recovery, full application TypeScript/lint, full-history route-return and Android export. Do not build the superseded c10-only source.
-4. After server dependencies are accepted, build exact combined Android source through the existing Expo internal APK profile. Verify actual artifact identity/signature/metadata through permitted means and provide its install link. Retain any physical-device or signer-comparison limitations honestly.
-5. Update this documentation-only continuation branch and the corresponding PRs at each verified milestone. Never modify a frozen release pair to add post-release documentation.
-
-## Current final facts and remaining work
-
-| Fact | Observed value |
+| Area | Final fact |
 | --- | --- |
-| Ready production deployment | M304e8793, sourceAcdf17584, runtime rg5-3e41b3… exactly as the identity table above |
-| Platform | One Publish; new green finished02:49UTC+03, new version4e63025 |
-| Official verification | PASS3probes, full governed identity/hash/frontend and canonical/cache-busted artifact metadata/bytes/MIME; empty stderr |
-| Final Ready lease | Closed by verifier; fresh official active=false |
-| Reported order | Source completed / تم التنفيذ; local incomplete; source-status safety gate correctly blocks further Ready, no business mutation |
-| Additional positive live Ready sample | Not yet recorded; do not claim the completed order exercises the new reviewed physical exception |
-| Image server fix | PR1914 sourceAf91eb6c43d2faeb2f7da174ecdc67a455ac0ec2c on latest6012;45freshcombined-base tests pass, separately reviewed; new release pending |
-| Combined Android | PR352 sourcea667ad320eb1cb80b6e57e742eda58f84ec5bba4, tree93be9b3ef5e3464640b4fcd9fdea9ea75b715f4c,1.0.65/code80;19local script commands and77independentchecks pass; fresh full CI pending |
-| APK/device/distribution | No new build, no physical-phone acceptance; old Ready-only form canceled |
-| Next action | Complete image server protocol and combined appCI, then build/verify/deliver the combined APK |
+| Ready server |Published and officially verified; full original release/rollback evidence retained above |
+| Image server |PR1914 published and officially verified, exact M/A/runtime, three checks, final inactive guard |
+| Combined application |Exact a667 Android1.0.65/80 built successfully; actual signed APK verified20/20 |
+| Saved operational images |Existing saved image returned after fresh web reload; narrow assembly-only bridge behavior covered by45 regressions |
+| Business data |No live Ready, receipt, invoice, image-save, stock or shipping mutation was used as a test |
+| Employee communication |No message or notification was sent to employees |
+| Outstanding device outcome |Install/update and accept on a physical employee phone during ordinary work; not performed by this session |
 
-The historical Android parent/earlier APK/tool evidence above is retained for provenance; its c10 SHA is no longer the final candidate. No images, unresolved receipts, pending invoices, credentials, orders, stock or shipping records were cleared to obtain acceptance. The final deliverable is still in progress because the newly requested image release and combined APK remain outstanding.
+The release installation link can now be delivered. The first device acceptance should check eligible Ready items at the top and approved items at the bottom, supplier-invoice receiving and safe retry behavior, and the existing operational image in assembly/labeling under the employee's own account. Preserve current application data during upgrade. If Android rejects the update, inspect the reported reason before any uninstall or data clearing.
+
+For any future deployment or rollback, read the actual production ref and original guard afresh and preserve subsequent owners' work. The previously verified inactive guard is an observation at release closure, not a permanent permission to reuse an old deployment candidate. No further build, merge or Publish is required to deliver the completed APK linked above.
