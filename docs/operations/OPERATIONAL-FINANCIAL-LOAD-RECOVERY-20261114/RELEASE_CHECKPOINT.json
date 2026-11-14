@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-FINANCIAL-LOAD-RECOVERY-20261114",
-  "phase": "original-preflight-cache-quarantine-reviewed",
+  "phase": "original-same-device-cache-preservation-ready",
   "repository": "AMASI-SA/AMASI-SA",
   "release_branch": "codex/financial-loading-resume-20261114",
   "handoff_branch": "codex/financial-loading-release-handoff-20261114",
@@ -19,7 +19,7 @@
   "source_A_stock_run": 43604084975,
   "production_changed": false,
   "lease_started": false,
-  "next": "Stage exact independently reviewed cache helper outside /app; run once to atomically preserve only reviewed generated cache directory in private /tmp; verify120untracked+J+inactiveguard retained. Then rerun unchanged original rehearsal in a fresh evidence directory. Fill gate only after actual successful build; prepare/prepublish/UIpublish/officialverify/liveacceptance.",
+  "next": "Stage exact v2 helper outside /app from this handoff. Require exit0+successful preserved outcome; then run unchanged original rehearsal once into new evidence directory. No prepare/publish until originalbuildsuccess. Fill gate evidence_dir from successful outcome and continue existing reviewed release protocol.",
   "notes": [
     "Issue1006 is full; this branch, task status and PR1919 carry continuation.",
     "The handoff branch is documentation only and must never be merged into frozen release A/B.",
@@ -61,5 +61,13 @@
     "backend/__pycache__/release_protocol_v5.cpython-311.pyc"
   ],
   "reviewed_cache_bytes": 120563,
-  "quarantine_helper_sha256": "cde071b8cf0b9aa5d38da95bcd7d1ebbb064c2e36e1f24783f8b89a7753ff191"
+  "quarantine_helper_sha256": "cde071b8cf0b9aa5d38da95bcd7d1ebbb064c2e36e1f24783f8b89a7753ff191",
+  "quarantine_v1_evidence": "/tmp/mezan-pr1919-cache-quarantine-ct7vu6pc",
+  "quarantine_v1_completed": false,
+  "quarantine_v1_moved_cache": false,
+  "quarantine_v1_reason": "atomic_same_device_rename_unavailable_no_cache_changed",
+  "quarantine_v2_sha256": "06e774209be58d3fc347f6645448c311bb3e7a9974f2b84f869828ea32310758",
+  "quarantine_v2_payload_parent": "/app/.release-preserved",
+  "quarantine_v2_evidence_parent": "/tmp",
+  "quarantine_v2_review": "Root reviewed destination-only delta; static compilation and help passed; original scope/guard/baseline checks unchanged."
 }

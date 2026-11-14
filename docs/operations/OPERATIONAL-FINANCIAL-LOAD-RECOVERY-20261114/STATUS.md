@@ -187,3 +187,20 @@ static review PASS for SHA-256 cde071b8cf0b9aa5d38da95bcd7d1ebbb064c2e36e1f24783
 Root has not executed this helper yet. Successful quarantine must be followed
 by a fresh unchanged original rehearsal; never reuse the failed preflight as a
 successful build. Live Production remains unchanged and no lease exists.
+
+## Same-device cache preservation adjustment
+
+The first quarantine attempt stopped before mutation because /tmp and /app
+have different devices. Its evidence remains at
+`/tmp/mezan-pr1919-cache-quarantine-ct7vu6pc` with cache_quarantined=false.
+The cache and original checkout are unchanged. Fresh UI inspection showed
+/app/.release-preserved is an existing real root-owned0755 directory on the
+same device as /app/backend. Exact __pycache__ payload paths and both pyc files
+are ignored by existing rules; the generic parent is not ignored. V2 therefore
+keeps all logs/manifests in /tmp and creates only an ignored cache payload under
+a new private0700 child of that existing parent. It changes no ignore rule.
+Root reviewed the narrow delta and all original preservation/guard checks stay
+intact. Reviewed V2 SHA256:
+`06e774209be58d3fc347f6645448c311bb3e7a9974f2b84f869828ea32310758`.
+Execution has not yet occurred; a successful helper is required before a new
+original build rehearsal. Old helper and failed evidence are retained.
