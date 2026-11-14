@@ -22,7 +22,7 @@ preserved after verification. The original refresh nevertheless timed out in
 two visible attempts and displayed saved as_of18:22 Riyadh. This remains an
 open refresh defect; no fresh calculation success is claimed.
 
-Latest original /app status at15:45:34Z is owned by a DIFFERENT active release:
+Latest original /app status at16:03:43Z is owned by a DIFFERENT active release:
 actor codex-campaign-hover-profit-1920, deployment29ec1e07..., source2cf4d70d....
 Do not modify /app, start a rehearsal, clear its lease or publish concurrently.
 Root will coordinate by rechecking the official guard before release work.
@@ -107,7 +107,9 @@ for direct diagnosis when the platform log viewer is stale; this adds no reads,
 timers or background work. Neither this diagnostic nor unfinished frontend work
 is included in this backend-only WIP checkpoint.
 
-Production changed by this task: no. No new PR, release intent, lease or publish.
+Production changed by this task: no. Draft PR1921 is open; no new release intent,
+lease or publish. Backend WIP remote checkpoint:
+3cf27b03ebd1a79f9274a218b0bc93df85a8a87b.
 The separate campaign release was publicly observed at15:52:38Z with verified
 identity source2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb; its guard completion
 remains unobserved. Issue1006 is full (2500 comments); durable task/PR records
@@ -116,3 +118,23 @@ replace further attempts to append there.
 Next: independently review the frozen backend slice; finish and test frontend
 navigation, forecast binding and guarded exports, then run integrated checks.
 Recheck the official original /app guard before any release work.
+
+## Timeout diagnostic checkpoint
+
+Root added a fixed-vocabulary, request-local bounded tail of stage timings only
+to the existing operational_refresh_timeout408 response. Each record contains
+only stage, finite rounded duration_ms and a fixed outcome; no owner/order IDs,
+exception details or additional DB reads. Existing deadline, source cancellation,
+owned cleanup and admitted atomic-commit behavior are unchanged. Nested stages
+overlap, so durations must not be summed as total runtime.
+
+The extended deadline test first failed on the old response lacking timings.
+Focused refresh/source timing, demand runtime/routes and archive-visible-batch
+suites passed110 tests in12.72s (actual exit0). New cases cover malformed/private
+values, bounded retention of cancelled stages, concurrent request isolation,
+unchanged success and403 responses, and unchanged acquire/release calls.
+Independent review is pending. The workflow now collects the73 new scoped
+backend cases and requires their counts; it also requires all20 stage tests.
+
+Next: finish frontend and synthetic browser regressions, independently review
+the complete patch, and persist the integrated source before release rehearsal.

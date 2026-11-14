@@ -69,6 +69,8 @@ jobs:
           backend/tests/test_operational_completed_shipping*.py
           backend/tests/test_operational_read_runtime.py
           backend/tests/test_operational_financial_review_groups.py
+          backend/tests/test_operational_financial_position_state.py
+          backend/tests/test_operational_financial_position_views.py
           backend/tests/test_operational_open_cost_exposure.py
           backend/tests/test_operational_bundle_cost_projection.py
           backend/tests/test_operational_supplier_invoice_cutover.py
@@ -119,10 +121,12 @@ jobs:
               ('test_operational_completed_shipping_review_index', 10),
               ('test_operational_read_runtime', 10),
               ('test_operational_financial_review_groups', 1),
+              ('test_operational_financial_position_state', 25),
+              ('test_operational_financial_position_views', 48),
               ('test_operational_driver_review_packed_state', 3),
               ('test_operational_balance_delivery_start_rule', 53),
               ('test_operational_balance_piece_index', 13),
-              ('test_operational_balance_refresh_stage_timing', 5),
+              ('test_operational_balance_refresh_stage_timing', 20),
               ('test_operational_balance_delivery_confirmation', 44),
               ('test_operational_balance_delivery_confirmation_integration', 20),
               ('test_operational_balance_delivery_confirmation_lifetime', 4),
