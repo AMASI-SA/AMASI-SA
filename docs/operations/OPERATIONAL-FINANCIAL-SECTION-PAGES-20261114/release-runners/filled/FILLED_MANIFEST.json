@@ -6,15 +6,15 @@
   "tree": "d636970f1a954530cf7845e408e05362af160cfa",
   "fresh_count": 120,
   "fresh_inventory_observed_at": "2026-11-14T16:32:20.133559+00:00",
-  "evidence_directory_unfilled": true,
+  "evidence_directory_unfilled": false,
   "files": {
     "pr1921_original_rehearsal.py": {
       "sha256": "208b74f527d385ed1684359b25a100e29e779416e1c546297664678b392d70ae",
       "bytes": 16667
     },
     "pr1921_original_gate.py": {
-      "sha256": "c1cc61b9dcf652c475f14d9aa4bf28b09282d3ebbed1cce55368ee8dbad0a317",
-      "bytes": 11540
+      "sha256": "e7240d4667bb5c69868140106ee717e03c6927fd35ae5d9a97d2f89766e9c33a",
+      "bytes": 11522
     },
     "pr1921_original_verify.py": {
       "sha256": "eee5c599c05c5afd1f6d8be87ad5eaf8264f7b3c612e15fddf3571b057620774",
@@ -24,5 +24,8 @@
       "sha256": "26d5aadb61b017c389754d7d209627c347b564aa697248b96e2abfb7f26ae4d0",
       "bytes": 5348
     }
-  }
+  },
+  "successful_original_evidence_directory": "/tmp/mezan-pr1921-original-zu179mmf",
+  "original_build_finished_at": "2026-11-14T16:41:57.956406+00:00",
+  "original_runner_directory": "/tmp/mezan-pr1921-runners-1j_g1nsn"
 }

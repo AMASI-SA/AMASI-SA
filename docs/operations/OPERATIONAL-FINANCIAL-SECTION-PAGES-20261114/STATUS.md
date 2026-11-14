@@ -360,3 +360,19 @@ Terminal2. It reported evidence directory /tmp/mezan-pr1921-original-zu179mmf.
 The command is running; no successful build is claimed yet. Do not rerun it or
 send another command into Terminal2 until its actual outcome is known.
 No prepare, prepublish or task publication has occurred.
+
+## Original build actual success
+
+Root observed successful original rehearsal outcome at2026-11-14T16:41:57.956406Z
+and separately read its actual child record: command[yarn,build],cwd/app/frontend,
+actual_exit0,problem:null,start16:40:50.910899Z,end16:41:57.777948Z,
+elapsed66.867071s. ExactA/M/B/tree/runtime/intent matched. Fresh guard inactive,
+HEADM94f6dfb8,trackedclean. Preservation evidence before_count120,after_count120,
+changed_paths[],preserved:true. Separate UI still shows1unsavedUntitled-1.
+
+The final filled gate changes only EVIDENCE to this successful private directory:
+/tmp/mezan-pr1921-original-zu179mmf. Independent exact byte/AST review passed;
+new gate SHA256e7240d4667bb5c69868140106ee717e03c6927fd35ae5d9a97d2f89766e9c33a,
+11522bytes. Root will update only that staged /tmp runner, verify its old/new
+hashes, then execute official prepare and prepublish at the ready publication UI.
+No prepare/lease/publication has occurred yet.
