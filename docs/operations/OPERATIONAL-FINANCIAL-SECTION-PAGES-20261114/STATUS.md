@@ -338,3 +338,25 @@ Emergent management tab6 stopped responding to browser focus; a fresh tab19
 on the same original salla-analytics project opened successfully. Manage /
 Overview shows prior100th publish1b4c4f6; no new task publication was clicked.
 No task lease or original /app mutation has occurred.
+
+## Exact-M gates and original build started
+
+All3 exactM production-push workflows passed: Readiness43616365743,
+Security43616365916,CodeQL43616365742. Root inspected terminal workflow
+statuses and successful required jobs. Both actual M host adapter rehearsals
+132512532313/132512532318 passed steps12–17; manual redeploy handoff
+132513134494 also passed. The candidate runtime/source remained exactA/rg5-5a1f.
+
+Reviewed filled runners were staged by the original code-server Terminal2
+outside /app at /tmp/mezan-pr1921-runners-1j_g1nsn. Each downloaded immutable
+8238e6ec file SHA256 matched the reviewed filled manifest before being written;
+no stage executed during staging. Gate still has its invalid evidence placeholder.
+
+Fresh original preflight at2026-11-14T16:40:27.543397Z observed inactive guard,
+HEADJ29ec, correct branch, trackedclean,120 nonignored entries and0 ignored
+backend bytecode. UI still had1unsavedUntitled-1 and120pendingchanges.
+Root then launched the reviewed rehearsal once with --build through original
+Terminal2. It reported evidence directory /tmp/mezan-pr1921-original-zu179mmf.
+The command is running; no successful build is claimed yet. Do not rerun it or
+send another command into Terminal2 until its actual outcome is known.
+No prepare, prepublish or task publication has occurred.
