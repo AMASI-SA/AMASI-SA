@@ -133,18 +133,88 @@ this task. Do not interfere with it or reuse its lease. Before this task's
 release, fetch the current production branch, inspect the deployment state,
 run a fresh original /app guard status, and preserve all unrelated files.
 
+## Integrated source checkpoint
+
+Instrumentation milestone is remotely recoverable at
+ae539b0c8fb491f1474f239eb42e40816ccaa291,
+tree a1cd7c892c28e8e7ea19b8f295a2c139c493c87c, parent7898f3be92da5c34250db4a7aa0c5111d8a21237.
+Root aligned the exact fetched tree/index with compare-and-swap, preserving all
+four reader working files. No source reset or force push occurred.
+
+The reader correction is complete and independently reviewed. It covers every
+primary refresh_source_rows call and ordinary rows only within the owned
+load_collections scope, including forecast reads. Ordinary rows outside that
+scope retain their prior to_list behavior and full payload. The source query,
+all evidence containers, owner checks, row cap,15-second primary budget and
+85-second visible budget remain unchanged. An exhausted budget fails before
+entering CSOT. Sibling failure, caller cancellation and repeated cancellation
+join the covered active Motor operation and sequential cursor cleanup before
+releasing the reader scope. No automatic retry or replacement query is added.
+
+Read-only independent source review checked actual Motor3.7.1/PyMongo4.18.3
+implementation and production AcceptanceConfigDatabase/SnapshotReads adapter
+compatibility. It found no blocking defect. Reviewed Git blobs:
+
+- operational_read_runtime.py:a5947ab218536e49ba51344f8196734fcff6fed9
+- operational_balance_sources.py:56b7a4edcb02fc44f12c5386bd4ac48c4a5de618
+- test_operational_read_runtime.py:513ff884f43225e66ff8e9ee071a2cdb8b358df1
+- test_operational_balance_order_source_projection.py:cca2dbfcaae4a5a850b8ef1a84e16320367bb4da
+
+Focused final reader/projection tests passed89 cases in8.49s; adjacent forecast,
+source, profit and supplier-preview lifetime suites passed182 in21.23s.
+The real-driver wire fixture binds only a dynamic127.0.0.1 port, with synthetic
+Mongo replies and finite cleanup. It proves stalled initial find and later
+getMore operations finish, uncancelled, before error return; the responder sees
+socket EOF. Initial find carries finite maxTimeMS. Three operations use
+decreasing socket budgets with one common deadline and one initial query.
+There is no real database, credential, environment loader or provider contact.
+
+Root's fresh combined verification on the final integrated working files:
+
+- Motor3.7.1/PyMongo4.18.3 using the isolated pinned overlay: actualexit0,
+  **541 passed in30.10s**, no skips/failures. Two pre-existing Pydantic
+  root_validator deprecation warnings came from recurring_obligations_routes.
+- Both affected frontend suites using governed Node22.23.2/Yarn1.22.22:
+  actualexit0, **115 passed/2 suites in15.45s** Jest time.
+- All four reader/source/test blobs match the independent review above;
+  git diff --check passed.
+
+Combined backend invocation: PYTHONPATH includes the4.18.3 overlay first, then
+backend:backend/tests; PYTHON_DOTENV_DISABLED=1; isolated Python -B -m pytest
+--noconftest -q -p no:cacheprovider --asyncio-mode=auto --tb=short, against
+test_operational_read_runtime, order_source_projection, refresh_stage_timing,
+source_diagnostics, source_stage_timing, demand_refresh, demand_refresh_routes,
+open_cost_exposure, balance_sources, balance_profit_sources,
+supplier_preview_lifetime, source_conversion_lifetime and visible_evidence.
+The frontend command is the exact governed two-suite invocation recorded above.
+
+Scope limit: generic operational_profit_sources component callbacks still use
+direct to_list. They inherit CSOT but are not routed through the owned cursor
+helper; early cancellation there may outlive its waiter until that driver
+budget expires. No claim of application-wide Motor ownership is made. Driver
+CSOT also does not hard-preempt BSON decoding/thread scheduling, and failed
+close may queue driver maintenance. The demonstrated guarantee concerns the
+covered active source-read operation. Initial production latency remains
+unmeasured, and a production recovery claim is not justified yet.
+
+Latest fresh GitHub production branch is still
+77e4acf33e8f5432d97bda5d7208983f0fadc599. No /app changes, release lease,
+merge or publication have been performed by this task.
+
 ## Next safe action
 
-Finish the owned-reader tests and independent review, then root must run fresh
-combined verification on Motor3.7.1/PyMongo4.18.3. Persist the reviewed source
-and open a Draft PR. Only after required CI and protocol-v5 sourceA/intentB/
-mergeM/rehearsal gates may the authorized release proceed. After official
-production verification, perform one intentional visible manual refresh and
-capture its sanitized request-correlated outcome. If it fails, use that exact
-stage evidence to choose the next repair. Do not infer a missing index or
-truncate source coverage, and do not claim fresh balances until success and an
-advanced saved timestamp are observed.
+Persist this integrated source and open its Draft PR; record the exact source
+SHA and PR URL in the PR continuation record. Inspect all required exact-source
+CI gates. Recheck the other publication and original guard before any /app
+work. After protocol-v5 sourceA/intentB/normal mergeM, clean-clone rehearsal and
+official three-probe production verification, perform one intentional visible
+manual refresh and retain its sanitized request-correlated outcome. If it
+fails, use that exact stage evidence to choose the next repair. Do not infer a
+missing index, reduce coverage or claim fresh balances until the saved date
+advances after a successful refresh. Subsequent release handoff documentation
+must not modify frozen A/B governed source; use the task PR and a separate
+documentation checkpoint branch as needed.
 
 Production changed by this task: **no**.
-Status: **verified diagnostic milestone; reader integration in progress;
-no production recovery or refreshed balances claimed**.
+Status: **integrated source locally verified; exact CI/release/live recovery
+pending**.
