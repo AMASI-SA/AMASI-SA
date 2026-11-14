@@ -2,7 +2,7 @@
   "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
   "round": 6,
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 19:17:41 UTC",
+  "updated_at_utc": "2026-11-14 19:19:48 UTC",
   "branch": "codex/campaign-operating-pilot-m3e9d-20261114",
   "pr": 1929,
   "base_J6": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
@@ -331,7 +331,7 @@
       }
     }
   },
-  "next": "Wait remaining B6 workflows, then readytransition gates. After fresh J6/head/checks, a GitHub-only normal merge is permitted while foreign verifier runs: review confirms it does not read remote refs and cloud publication already finished. Do not mutate /app or lease until foreign verification/preservation closure and fresh inactive. Then exactMCI, pinnedreviewedoperators, originalbuild, publish, verify3 andlive arithmetic.",
+  "next": "Wait exactM6 push Readiness/Security/CodeQL and foreign verification/preservation closure. Finish independent operator review and durable freeze. Fresh original official status must be inactive, HEADJ6/clean, before staging/running pinned one-shot original build. No live publication yet.",
   "original_build": false,
   "lease": false,
   "published": false,
@@ -856,6 +856,59 @@
     "head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
     "settings_run": 43631264285,
     "direct_run": 43631264327,
-    "status": "running"
+    "status": "Bothpassed",
+    "settings_job": 132558173612,
+    "direct_job": 132558174046,
+    "completed_at": "2026-11-14T19:17:30Z"
+  },
+  "merge": {
+    "deployment": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+    "actual_merged_at": "2026-11-14T19:17:59Z",
+    "observed_at": "2026-11-14 19:18:01 UTC",
+    "tree": "c2d683827c54574fcd60ee4102c9de7c163f5ef8",
+    "root": {
+      "result": "PASS",
+      "M": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+      "tree": "c2d683827c54574fcd60ee4102c9de7c163f5ef8",
+      "ordered_parents": [
+        "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+        "93efe593ebe2c401763c5d8faa4ba8547a8a8016"
+      ],
+      "A_to_M_only_diff": "release/release-intent-v5.json",
+      "intent_blob": "84ab82046397eaac1e2e7b76adf6418e56d3bd4e",
+      "production": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+      "observed_at": "2026-11-14 19:18:25 UTC"
+    },
+    "independent": "PASS",
+    "github_only": true,
+    "original_mutation": false
+  },
+  "deployment_ci": {
+    "status": "pending",
+    "head": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+    "readiness": 43631333866,
+    "security": 43631333754,
+    "codeql": 43631333690
+  },
+  "original_operator": {
+    "path": "/workspace/scratch/a7d75184af2d/campaign-operating-original-build-1929.py",
+    "bytes": 15488,
+    "sha256": "01263d94478e74075a5833fe9700d263c9e3a56263bedb9c563945a46d519e69",
+    "pins": {
+      "SOURCE": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "BASE": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+      "INTENT_COMMIT": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+      "DEPLOYMENT": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+      "TREE": "c2d683827c54574fcd60ee4102c9de7c163f5ef8",
+      "RELEASE": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2",
+      "INTENT_SHA256": "0b46743398c032f7f8e151125e52e5360ba3061fd70434fa51ba257f5db90223",
+      "IDENTITY_SHA256": "bbae56b576d8ac89a878b0486ff63783a09b077cb9e19d77e2aec8aa37515554",
+      "PINS_REVIEWED": true
+    },
+    "root_review": "PASS docstring and immutable pin changes only; behavior identical to reviewed template",
+    "independent_review": "PASS: exact bytes/AST, only immutable pins+docstring, official inactive/mutex, 120-file preservation, one build/package proof, no lease/retry/restore",
+    "executed": false,
+    "repository_path": "docs/operations/CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114/operators/original-build-1929.py",
+    "git_blob": "2e145c3266d848bffba221af976c13c1d443b344"
   }
 }

@@ -1,0 +1,16 @@
+{
+  "root": {
+    "result": "PASS",
+    "M": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+    "tree": "c2d683827c54574fcd60ee4102c9de7c163f5ef8",
+    "ordered_parents": [
+      "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+      "93efe593ebe2c401763c5d8faa4ba8547a8a8016"
+    ],
+    "A_to_M_only_diff": "release/release-intent-v5.json",
+    "intent_blob": "84ab82046397eaac1e2e7b76adf6418e56d3bd4e",
+    "production": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+    "observed_at": "2026-11-14 19:18:25 UTC"
+  },
+  "independent": "PASS"
+}
