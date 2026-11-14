@@ -73,6 +73,17 @@ ALLOWED_COLLECTIONS = ALLOWED_COLLECTIONS | {TXN_COLLECTION, DELIVERY_HISTORY, S
 ALLOWED_COLLECTIONS = ALLOWED_COLLECTIONS | STATEMENT_COLLECTIONS
 
 MAX_ROWS = 20000
+# Refresh consumers use the canonical payload plus these independent identity,
+# freshness, payment and shipping contradictions. Keep each evidence object
+# whole: dotted projections could hide malformed shapes or conflicting proof.
+REFRESH_ORDER_FIELDS = (
+    'user_id', 'raw_by_source', 'g47_salla_snapshot', 'salla_shipping_current',
+    'salla_paid_sar_evidence', 'order_id', 'salla_order_id', 'order_number',
+    'order_status', 'order_status_slug', 'last_salla_direct_status_source_updated_at',
+    'merchant', 'merchant_id', 'store_id', 'salla_shipment_id', 'tracking_number',
+    'shipping_number', 'shipping_company_code', 'shipping_company',
+    'shipping_status', 'shipment_status',
+)
 # Existing MZ2 daily-movement codes plus explicitly requested operational types.
 # The physical registry is shared. Only explicit operational provenance or a
 # known system expense code may augment this picker; store categories cannot.
@@ -383,6 +394,21 @@ async def rows(db, owner, collection):
     if len(result) > MAX_ROWS:
         raise ValueError('operational_source_scope_too_large')
     if any(r.get('user_id') != owner for r in result):
+        raise ValueError('operational_source_owner_mismatch')
+    return result
+
+
+async def refresh_source_rows(db, owner, collection):
+    """Trim only order DTO fields; retain the entire owner cohort and read cap."""
+    if collection != 'unified_orders':
+        return await rows(db, owner, collection)
+    if not owner or collection not in ALLOWED_COLLECTIONS:
+        raise ValueError('operational_source_rejected')
+    projection = {'_id': 0, **{key: 1 for key in REFRESH_ORDER_FIELDS}}
+    result = await db[collection].find({'user_id': owner}, projection).to_list(MAX_ROWS + 1)
+    if len(result) > MAX_ROWS:
+        raise ValueError('operational_source_scope_too_large')
+    if any(row.get('user_id') != owner for row in result):
         raise ValueError('operational_source_owner_mismatch')
     return result
 
@@ -1260,7 +1286,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     source_names = sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - STATEMENT_COLLECTIONS - {TXN_COLLECTION,
         DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'expense_categories',
         'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})
-    data = await load_collections(db, owner, source_names, reader=rows)
+    data = await load_collections(db, owner, source_names, reader=refresh_source_rows)
     fee_settings = await db['settings'].find({'user_id': owner}, {
         '_id': 0, 'user_id': 1, 'payment_methods': 1, 'updated_at': 1}).to_list(2)
     out['provider_fee_settings'] = {}
