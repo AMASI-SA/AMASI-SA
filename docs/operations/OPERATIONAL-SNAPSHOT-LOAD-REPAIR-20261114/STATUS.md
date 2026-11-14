@@ -1,15 +1,13 @@
-# Snapshot-load repair — live financial acceptance in progress
+# Snapshot-load repair — published; live acceptance FAILED
 
-Updated 2026-11-14T03:45:22.906Z. Documentation-only checkpoint; never merge or deploy.
+Updated 2026-11-14T03:50:23.398Z. Documentation-only continuation; never merge or deploy.
 
-PR[#1916](https://github.com/AMASI-SA/AMASI-SA/pull/1916) is merged and published as platform version `bfa6a5f`, M `9c71435f4a19977c09f4331dee8fddbfa12a45eb`, source A `ff9f8b69b980acfda8dffd210feaf72e17e6727a`, release `rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db`. All source/intent/merge gates and the original build passed; all120 unrelated files and unsaved Untitled-1 were preserved.
+PR[#1916](https://github.com/AMASI-SA/AMASI-SA/pull/1916) is merged as M `9c71435f4a19977c09f4331dee8fddbfa12a45eb`, published as platform `bfa6a5f`, and officially verified:3 probes,582 frontend checked requests, actual exit0, fresh guard inactive. All CI/source/intent/build gates passed and the original120 unrelated files and unsaved buffer were preserved. A `ff9f8b69b980acfda8dffd210feaf72e17e6727a`, R `rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db`.
 
-## Official production verification PASS
+## Actual financial result
 
-The original official verifier ran once from 2026-11-14T03:31:33.295909+00:00 to 2026-11-14T03:41:28.050928+00:00, actual exit0, elapsed 594.755 seconds. It returned verified=true through the reviewed helper, **3 probes**, exact A/M/R,582 frontend checked requests, and a fresh **guard active:false**. The own lease closed normally. Full stdout SHA256 `473401ba5f7e7ce4fb20d3e73ce024280a5872ad2a8d505573e2b6df30f4a393`; private evidence prefix `/tmp/mezan-pr1916-original-fu9s2qng/28-verify`. Sanitized proof is in evidence/official-verification.json.
+The only initial visible financial mount began at2026-11-14T03:44:42.930Z on tab65. It completed with a report but **as_of still12Nov01:07**, no main report error, and the refresh warning: total update deadline expired and the last successful snapshot was retained. There were zero manual Refresh clicks in that attempt. The release is therefore **not accepted as resolving the user's financial issue**.
 
-A transient browser transport disconnect occurred while the original verifier continued. After reconnection root observed the same process and then its successful result; verification and publication were not repeated. The old financial tab62 was no longer present after browser recovery. The next live acceptance must use **one new visible page mount**, which automatically triggers refresh; do not also press Refresh.
+The runtime Logs UI unexpectedly reused a cached03:42window when re-entered through Overview. Root reloaded the management page and proved fresh logs available (window03:46:48–03:48:31), but the initial failed attempt's stage was no longer in that retained tail. Sanitized failed-attempt evidence is preserved in evidence/live-first-attempt.json; no private business values/IDs were recorded.
 
-## Live acceptance still pending
-
-One visible new page mount started at2026-11-14T03:44:42.930Z on tab65; page and loading state were confirmed visible, with no manual Refresh clicks. This is the only PR1916 financial attempt so far. Keep that page visible and inspect its result; do not create another page or repeat Refresh. The previous baseline was12Nov01:07. Require a fresh as_of aligned with the new attempt and no top-level refresh-failure warning; generated_at alone is insufficient. If successful, inspect the3 sections and local table/pending-order navigation. If unsuccessful, capture current sanitized stage logs and diagnose before any additional attempt. No delivery confirmation, settlement, provider or advertising writes are test actions.
+Next is one bounded visible diagnostic refresh with the log page reloaded near the request deadline so the actual cancelled stage is retained. This is to obtain new evidence; no blind repetition. Source review confirms the exact DB/owner active-context identity reaches unpack and activates the batch path; this is code-path evidence, not a live timing measurement. Do not assume the next failure stage before capturing it. Choose and test a focused follow-up from that evidence, then preserve the normal reviewed A/B/M release protocol again.

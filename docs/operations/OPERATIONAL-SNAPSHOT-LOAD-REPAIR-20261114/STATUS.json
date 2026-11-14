@@ -1,6 +1,6 @@
 {
-  "stage": "published_verified_visible_financial_acceptance_in_progress",
-  "updated_at": "2026-11-14T03:45:22.906Z",
+  "stage": "published_verified_but_live_acceptance_failed_stage_diagnostic_next",
+  "updated_at": "2026-11-14T03:50:23.398Z",
   "repo": "AMASI-SA/AMASI-SA",
   "pr": 1916,
   "task_branch": "codex/operational-snapshot-load-fix-20261114",
@@ -651,23 +651,46 @@
       "prefix": "/tmp/mezan-pr1916-original-fu9s2qng/28-verify"
     },
     "financialAcceptance": {
-      "status": "visible_refresh_in_progress",
-      "started_at": "2026-11-14T03:44:42.930Z",
-      "trigger": "one new visible page mount",
-      "tab_id": "65",
-      "manual_refresh_clicks": 0,
-      "visibility_confirmed": true,
-      "first_loading_observed": true,
-      "old_as_of": "12/11/2026, 01:07",
-      "recorded_at": "2026-11-14T03:45:22.906Z"
+      "status": "FAILED_stale_as_of_total_deadline",
+      "first_attempt": {
+        "attempt_started_at": "2026-11-14T03:44:42.930Z",
+        "recorded_at": "2026-11-14T03:49:43.672Z",
+        "trigger": "one visible new mount",
+        "manual_refresh_clicks": 0,
+        "source_git_sha": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+        "release_id": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
+        "result": {
+          "asOf": "12/11/2026, 01:07",
+          "loading": null,
+          "mainError": null,
+          "refreshWarning": "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة",
+          "reportPresent": true,
+          "visibility": "visible"
+        },
+        "accepted": false,
+        "log_diagnosis": {
+          "initial_log_window": [
+            "2026-11-14 03:42:41,940",
+            "2026-11-14 03:42:04,861"
+          ],
+          "initial_log_cache_stale": true,
+          "fresh_window_after_ui_reload": [
+            "2026-11-14 03:48:31,940",
+            "2026-11-14 03:46:48,755"
+          ],
+          "first_attempt_stage_already_rotated_out": true
+        }
+      },
+      "diagnostic_plan": "One additional controlled visible refresh after proving fresh runtime logs via UI reload; reload log UI near request deadline to capture the actual cancelled stage. No blind retries."
     }
   },
   "production_changed_by_this_followup": true,
   "blockers": [],
   "next_actions": [
-    "Read result on existing tab65; do not create another mount or click Refresh",
-    "Require fresh as_of and no refresh warning; capture sanitized stage logs promptly if unsuccessful",
-    "Only after freshness succeeds inspect local tables and pending-order dialog; never delivery confirmation"
+    "One controlled visible diagnostic after restoring fresh logs; capture actual cancelled stage near deadline",
+    "Use evidence to choose next fix, do not assume reconciliation CPU or snapshot path",
+    "Never repeat Publish/official verification; both completed successfully",
+    "No confirmations/settlements/provider/ads test writes"
   ],
   "historical_prechange_test": {
     "observed_red_source_sha256": "b1858f3b050ba46925916e34f59c6b941f93f032e3be2f9313a07bde2b33eba4",

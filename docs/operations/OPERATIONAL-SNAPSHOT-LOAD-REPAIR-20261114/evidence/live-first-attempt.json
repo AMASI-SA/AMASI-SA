@@ -1,0 +1,29 @@
+{
+  "attempt_started_at": "2026-11-14T03:44:42.930Z",
+  "recorded_at": "2026-11-14T03:49:43.672Z",
+  "trigger": "one visible new mount",
+  "manual_refresh_clicks": 0,
+  "source_git_sha": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+  "release_id": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
+  "result": {
+    "asOf": "12/11/2026, 01:07",
+    "loading": null,
+    "mainError": null,
+    "refreshWarning": "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة",
+    "reportPresent": true,
+    "visibility": "visible"
+  },
+  "accepted": false,
+  "log_diagnosis": {
+    "initial_log_window": [
+      "2026-11-14 03:42:41,940",
+      "2026-11-14 03:42:04,861"
+    ],
+    "initial_log_cache_stale": true,
+    "fresh_window_after_ui_reload": [
+      "2026-11-14 03:48:31,940",
+      "2026-11-14 03:46:48,755"
+    ],
+    "first_attempt_stage_already_rotated_out": true
+  }
+}
