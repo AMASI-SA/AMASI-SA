@@ -258,3 +258,6 @@ Next: observe a newer explicit Deployment finished event and a new current publi
 - Official verification closed this lease. A fresh official status at16:23:12.874031UTC exited0 and returnedinactive. No abort or manual lease clearing.
 - This certifies deploymentidentity, not full functional acceptance: live operating/net unknown prompted a source-proven executive-parity followup. New draft PR#1922, branch `codex/campaign-operating-executive-parity-20261114`, initial source `22832941d5d61d77ed5c6acb2b3a6565423ce675`.
 - Initial source coverage/readiness passed, but independent review found a masked-invalid utility fallback boundary; a narrow correction is pending before freezing the final source. Old CI success will not substitute for the final source's gates.
+
+
+Follow-up continuation 2026-11-14 16:28:20 UTC: PR#1922 final source `0f5bca7427fed7851008d0f7d64e23414746bdc1` is remotely recoverable with R2 boundary correction; root/independent static review PASS, exact-source CI pending. Detailed current state is `docs/operations/CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114/RELEASE_CHECKPOINT.json` on this handoff branch.

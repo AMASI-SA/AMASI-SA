@@ -1,0 +1,38 @@
+{
+  "task": "CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114",
+  "updated_at_utc": "2026-11-14 16:28:20 UTC",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/campaign-operating-executive-parity-20261114",
+  "pr": 1922,
+  "base_J2": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
+  "source_A2": "0f5bca7427fed7851008d0f7d64e23414746bdc1",
+  "source_tree": "01ef389fd3b167e602fe8a889210641d7b148d4c",
+  "initial_source": "22832941d5d61d77ed5c6acb2b3a6565423ce675",
+  "source_commits_after_base": 2,
+  "changed_files": [
+    "backend/order_engine/campaign_hover_operating.py",
+    "backend/order_engine/campaign_hover_profit.py",
+    "backend/tests/test_campaign_hover_operating.py",
+    "docs/operations/CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114/STATUS.md"
+  ],
+  "inherited_intent_unchanged": true,
+  "static_review": "root and independent R2 PASS",
+  "repository_ci": "pending exact final A2",
+  "intent_B2": null,
+  "merge_M2": null,
+  "runtime_release_id": null,
+  "production_changed_by_followup": false,
+  "preceding_release": {
+    "pr": 1920,
+    "deployment": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
+    "published_version": "1b4c4f6",
+    "official_verify_exit": 0,
+    "official_verify_checks": 3,
+    "verified_at": "2026-11-14T16:22:18.751950Z",
+    "fresh_guard_inactive_at": "2026-11-14T16:23:12.874031Z",
+    "do_not_repeat_publish_or_verify": true
+  },
+  "next": "Require all11 triggered finalA2 PR workflows successful. Download exactA2 readiness candidate, validate artifact/provenance/fullsourcebindings, freeze intent-onlyB2 withoutchangingA2, requireB2 gates+twohostproofs, thenfreshinactive/latestbase check beforeordinarymerge/app work.",
+  "live_cause_attribution": "unproven; fixes are source-proven discrepancies from requested executive authority",
+  "writes": "no customer/order/accounting/provider/ad writes; no new polling/sync"
+}

@@ -1,6 +1,6 @@
 {
   "task": "CAMPAIGN-HOVER-PROFIT-20261114",
-  "updated_at_utc": "2026-11-14 16:24:47 UTC",
+  "updated_at_utc": "2026-11-14 16:28:20 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": 1920,
   "task_branch": "codex/campaign-hover-profit-20261114",
@@ -105,6 +105,7 @@
     "branch": "codex/campaign-operating-executive-parity-20261114",
     "pr": 1922,
     "initial_source": "22832941d5d61d77ed5c6acb2b3a6565423ce675",
-    "state": "draft source CI; narrow invalid utility fallback correction pending"
+    "state": "final R2 source static review PASS; exact-source CI pending",
+    "source": "0f5bca7427fed7851008d0f7d64e23414746bdc1"
   }
 }
