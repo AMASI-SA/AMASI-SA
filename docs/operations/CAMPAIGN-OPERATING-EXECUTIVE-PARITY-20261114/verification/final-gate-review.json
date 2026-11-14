@@ -1,0 +1,11 @@
+{
+  "sha256": "15f47c312bec26684c55be53d67f81a3d5a71c814f0c5b213bb5781697e94839",
+  "bytes": 47419,
+  "actor": "codex-campaign-operating-parity-1924",
+  "original_evidence": "/tmp/mezan-pr1924-original-recovery-jxtvm4fn",
+  "baseline_ui_version": "ecb9679",
+  "baseline_observed_at": "2026-11-14T17:47:56.490Z",
+  "root_review": "PASS",
+  "independent_review": "PASS",
+  "executed": false
+}

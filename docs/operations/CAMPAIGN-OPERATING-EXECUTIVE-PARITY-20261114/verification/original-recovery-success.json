@@ -1,0 +1,89 @@
+{
+  "observation": "Parsed actual original-terminal receipts; original file byte hashes retained separately",
+  "result": {
+    "kind": "mezan_original_build_continuation_v1",
+    "source": "c484b549e8bca017627ce80749c7895198f04bf8",
+    "base": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+    "intent_commit": "0a93847af8eb3898ae195c58ad88092388d908ad",
+    "deployment": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+    "tree": "b48a0eefb368ba655c8370f6b2e4435e07612790",
+    "release_id": "rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33",
+    "intent_sha256": "fb1ce72783899a9c64b592ce7d39a2c2e73bae6bec500a58f857c7fed132a68d",
+    "identity_sha256": "d71fc8e889e8d35f09d4b5ec090b5e850422c43be5545444cdc54da3ad910313",
+    "failed_original_evidence": "/tmp/mezan-pr1924-original-a4ssl2aq",
+    "prior_original_adapter_exit": 1,
+    "failed_precheck_evidence": "/tmp/mezan-pr1924-original-recovery-wj_jnfqk",
+    "prior_precheck_exit": 128,
+    "initial_head": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+    "fast_forward_repeated": false,
+    "adapter_exit": 0,
+    "package_proof_exit": 0,
+    "preserved_untracked_files": 120,
+    "exact_original_records": 119,
+    "append_only_file": ".emergent/stripped_env_names",
+    "before_bookkeeping_bytes": 49364,
+    "after_bookkeeping_bytes": 49364,
+    "all_witnessed_prefixes_preserved": true,
+    "preservation_sha256": {
+      "before-untracked.json": "a23b1d57920d07962fb6de170a7c3e703b003ccb2b12c32172600ac21bd9d605",
+      "before-bookkeeping-prefix-proof.json": "080189dbb1d2bd3c4a171bc7f100c785045a6e31861f799317ba708613acf15e",
+      "after-quarantine-untracked.json": "a23b1d57920d07962fb6de170a7c3e703b003ccb2b12c32172600ac21bd9d605",
+      "after-quarantine-bookkeeping-prefix-proof.json": "6f557f8587374b4273727fcc01bf764f63924cf45ba4bd668532ffbf3e999b6f",
+      "after-untracked.json": "a23b1d57920d07962fb6de170a7c3e703b003ccb2b12c32172600ac21bd9d605",
+      "after-bookkeeping-prefix-proof.json": "fa56a92ff952bfde47f032b0d070d360c58a086ef2785a2526f6cc86beb7ac5e"
+    },
+    "prior_original_inventory_sha256": "4af59b6a1f80e27ec6ff3320180558685c69295e091f4e4544d98b2e089d222b",
+    "quarantine_receipt_sha256": "f4995ba7fe2a1ce47dd86c498b92bc6bc949ba60be2fb80d37802869ad28af44",
+    "guard_inactive": true,
+    "finished_at": "2026-11-14T17:47:25.756990Z",
+    "evidence": "/tmp/mezan-pr1924-original-recovery-jxtvm4fn"
+  },
+  "commands": {
+    "06-governed-adapter": {
+      "argv": [
+        "yarn",
+        "build"
+      ],
+      "cwd": "/app/frontend",
+      "started_at": "2026-11-14T17:46:20.473021Z",
+      "finished_at": "2026-11-14T17:47:23.480252Z",
+      "exit_code": 0,
+      "seconds": 63.00718900299398,
+      "stdout_sha256": "585ec4702f89fd46a6b5b30f58cbc9158b2ac86fd000c6b87ca5aad6145e7baf",
+      "stderr_sha256": "f9de9a5c904514893fea046115f3a8ce6346639f86ce2fae7c20dd6ea7532633"
+    },
+    "07-package-proof": {
+      "argv": [
+        "python",
+        "-B",
+        "scripts/emergent_deployment_adapter.py",
+        "verify-packages"
+      ],
+      "cwd": "/app",
+      "started_at": "2026-11-14T17:47:23.481310Z",
+      "finished_at": "2026-11-14T17:47:25.673834Z",
+      "exit_code": 0,
+      "seconds": 2.1924680109950714,
+      "stdout_sha256": "1a791cbfb6428e28958fb12720730a4d1bd0c8842f092c9dabe99d6a5fc8d1fd",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "quarantine": {
+    "operation": "os.rename",
+    "source": "/app/backend/__pycache__",
+    "destination": "/app/.git/mezan-pr1924-bytecode-quarantine-jotkfxik/backend-__pycache__",
+    "started_at": "2026-11-14T17:46:20.446610Z",
+    "finished_at": "2026-11-14T17:46:20.448123Z",
+    "same_filesystem": true,
+    "source_absent": true
+  },
+  "evidence_hashes": {
+    "started.json": "fe480c7915b15c3a31b9ddd0db58833e689ba973a9b1f44f5ffd04a8d0a14f39",
+    "result.json": "c06fdd5c5202ab9e5bcfafaabace013575ba82b1577ed16f3acda19099c40928",
+    "06-governed-adapter.json": "a0ba99e17c3d6377984f105fde473ce1d4006d73512fd83af31139a9aef48be8",
+    "07-package-proof.json": "010ef23fa81742695f840b3f86ccd6fe1a9aede1ded3df30cee36f78677b3b48",
+    "quarantine.json": "f4995ba7fe2a1ce47dd86c498b92bc6bc949ba60be2fb80d37802869ad28af44",
+    "prior-original-before.json": "4af59b6a1f80e27ec6ff3320180558685c69295e091f4e4544d98b2e089d222b",
+    "prior-original-after.json": "4af59b6a1f80e27ec6ff3320180558685c69295e091f4e4544d98b2e089d222b"
+  }
+}
