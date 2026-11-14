@@ -321,3 +321,31 @@ The financial position page was then opened once and showed authenticated UI
 with its automatic visible load in progress. That attempt's result is pending.
 The separate public health observation at15:21:25Z also matched the intended
 source/runtime and all identity flags. Full live acceptance is still required.
+
+## Live result and user-directed section redesign
+
+The first visible mount attempt began around15:29:56Z and ended by15:32:17Z
+with enabled controls plus the explicit refresh-timeout/saved-snapshot warning.
+Displayed as_of was18:22 Asia/Riyadh, before that attempt. One additional manual
+attempt began15:36:53.748Z and showed the same fallback/snapshot by15:39:23Z.
+There was no third retry. Bounded loading recovery works; successful fresh
+refresh has NOT been demonstrated and the original timeout remains open.
+
+Emergent's latest100-line log view remained frozen at15:34:19–15:33:29Z even
+after revisiting and reloading management. This prevented retrieval of the
+attempt's stage timings. No particular backend phase is claimed as the cause.
+
+The user proposed a sidebar with payment platforms, shipping companies, drivers
+and employees, with the six final summary tables as the first page, conditional
+on faster loading. Source inspection confirms the present mount always waits
+for global POSTrefresh before GET, and the GET always computes the entire
+report. The planned safe direction is scoped GET-only navigation from saved
+state with explicit last calculation, one manual shared refresh, and no closed
+section/background work. Forecasts must preserve their actual source/coverage
+and cannot be substituted from unrelated profit snapshots or made zero.
+
+A restored isolated clone showed origin production now at
+`29ec1e07eb7d1a23647cadff5bac26149accfa99`, a descendant of M adding campaign
+hover profit/cost features. The new work must preserve that unrelated change
+and recheck the shared original release guard before any /app mutation. Frozen
+PR1919 source/intent/merge and its completed release remain untouched.

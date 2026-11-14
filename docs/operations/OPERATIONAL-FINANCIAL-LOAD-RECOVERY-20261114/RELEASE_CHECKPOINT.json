@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-FINANCIAL-LOAD-RECOVERY-20261114",
-  "phase": "published-officially-verified-live-acceptance-in-progress",
+  "phase": "published-verified-fresh-refresh-failed-section-pages-planning",
   "repository": "AMASI-SA/AMASI-SA",
   "release_branch": "codex/financial-loading-resume-20261114",
   "handoff_branch": "codex/financial-loading-release-handoff-20261114",
@@ -19,7 +19,7 @@
   "source_A_stock_run": 43604084975,
   "production_changed": true,
   "lease_started": true,
-  "next": "Observe the single already-started visible financial-page mount refresh. Require fresh report as_of and absence of saved-snapshot/timeout fallback. Do not republish or rerun official verification.",
+  "next": "Finish scoped-read/summary forecast contract, then implement on a new dedicated task branch based on latest production head. Do not edit/replay frozen PR1919 lineage or repeat its release. Before original /app changes, recheck shared release guard and coordinate with any other release owner.",
   "notes": [
     "Issue1006 is full; this branch, task status and PR1919 carry continuation.",
     "The handoff branch is documentation only and must never be merged into frozen release A/B.",
@@ -109,8 +109,8 @@
   "blocker": null,
   "blocker_recorded_utc": "2026-11-14T15:13:47.636Z",
   "official_verify_result_observed": true,
-  "official_verify_last_observed_state": "phase=started; Terminal 3 python still running at the last successful observation around 15:11 UTC",
-  "original_app_guard_last_confirmed_active": true,
+  "official_verify_last_observed_state": "Completed successfully; actual evidence inspected after reconnection",
+  "original_app_guard_last_confirmed_active": false,
   "lease_state": "closed automatically by successful official verifier; after-status active false",
   "live_financial_acceptance": false,
   "public_health_last_success_observed_utc": "2026-11-14T15:05:39.556462+00:00",
@@ -128,5 +128,17 @@
   "preservation_after_verify_before_count": 120,
   "preservation_after_verify_after_count": 120,
   "preservation_after_verify_changed_paths": [],
-  "original_editor_unsaved_count": 1
+  "original_editor_unsaved_count": 1,
+  "live_load_recovery_bounded": true,
+  "live_first_attempt_opened_at": "2026-11-14T15:29:56Z",
+  "live_first_attempt_outcome_observed_at": "2026-11-14T15:32:17.639Z",
+  "live_first_attempt_outcome": "Loading ended; refresh timeout warning and saved as_of 2026-11-14 18:22 Asia/Riyadh; not a fresh calculation",
+  "live_second_attempt_started_at": "2026-11-14T15:36:53.748Z",
+  "live_second_attempt_outcome_observed_at": "2026-11-14T15:39:23.405Z",
+  "live_second_attempt_outcome": "Same timeout fallback and same saved as_of; no third attempt",
+  "live_stage_logs": "Emergent log panel remained cached at 15:34:19–15:33:29 UTC even after management reload, so stage timings were not recovered; no bottleneck attribution",
+  "user_new_direction": "Split financial center into sidebar pages for payment platforms, shipping companies, drivers and employees, defaulting to the six final summary tables, if faster",
+  "new_design_direction": "GET-only saved scoped sections with explicit as_of; shared manual refresh; no closed-section work or repeated global refresh on navigation. Summary forecast dependencies still under design; unknown values remain incomplete.",
+  "observed_new_production_branch_head": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
+  "observed_new_production_branch_change": "Campaign hover costs/profit and proportional operating expenses, descendant of M; preserve unrelated changes. Runtime last checked remains financial-loading A."
 }
