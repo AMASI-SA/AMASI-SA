@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-11-14T01:36:49.903Z",
-  "stage": "ready_for_original_operator_rehearsal",
+  "updated_at": "2026-11-14T01:46:12.525Z",
+  "stage": "prepared_awaiting_single_publish",
   "J": "d6f246b4d3b14fd56ef2cbc574b99f08bb7d6fc1",
   "A": "a496dd428241b06d2292286de030c70d6241fcf0",
   "B": "30dc66ec09b371a6b990adbd167162254bfd77c6",
@@ -262,5 +262,32 @@
     "publish_number": 100,
     "completed_display": "Nov 14, 04:08 AM UTC+3"
   },
-  "rootfix_publication_started": false
+  "rootfix_publication_started": false,
+  "original_operator_build": {
+    "build_exit": 0,
+    "build_seconds": 64.04,
+    "build_started_at": "2026-11-14T01:40:57.492168+00:00",
+    "build_finished_at": "2026-11-14T01:42:01.531349+00:00",
+    "stdout_sha256": "81b9e340e8ecc44bc6c739f9d8a22c0bad73f073a03a55bf4cbd33536c5ef4d1",
+    "stderr_sha256": "f9de9a5c904514893fea046115f3a8ce6346639f86ce2fae7c20dd6ea7532633",
+    "manifest_sha256": "7597ef11b3a643bc86db5f359b112af7f5347bc91a16999f54346208918e1b9f",
+    "untracked_before": 120,
+    "untracked_after": 120,
+    "preserved": true,
+    "sidecar_append_bytes": 0,
+    "identity_equals_reviewed_intent": true,
+    "source_git_sha": "a496dd428241b06d2292286de030c70d6241fcf0",
+    "deployment_git_sha": "4860548f0b032e8e3beca18a4776413cd7e0368b",
+    "release_id": "rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e"
+  },
+  "current_lease": {
+    "actor": "codex-operational-source-rootfix-1915",
+    "prepared_at": "2026-11-14T01:44:54.230670+00:00",
+    "deployment_git_sha": "4860548f0b032e8e3beca18a4776413cd7e0368b",
+    "source_git_sha": "a496dd428241b06d2292286de030c70d6241fcf0",
+    "release_id": "rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e",
+    "prepare_exit": 0,
+    "prepare_seconds": 2.72
+  },
+  "original_evidence_dir": "/tmp/mezan-pr1915-original-qqo8fwy9"
 }

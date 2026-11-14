@@ -1,3 +1,17 @@
+# Current stage — original build passed, own release prepared
+
+Actual original-operator package adapter exited **0 in 64.04 seconds**, from 2026-11-14T01:40:57.492168+00:00 to 01:42:01.531349+00:00. /app is exact M `4860548f0b032e8e3beca18a4776413cd7e0368b`. The complete materialized runtime identity equals the reviewed intent. All 120 preexisting untracked files are preserved byte-for-byte/mode, including zero appended sidecar bytes; tracked/index remain clean. The wrapper ended ready=true without creating a lease. Evidence directory: `/tmp/mezan-pr1915-original-qqo8fwy9`; sanitized proof is preserved in the machine-readable status.
+
+Root then independently checked the proof and inactive guard, and ran official prepare with actor **`codex-operational-source-rootfix-1915`**. Actual exit **0 in 2.72s**, prepared_at **2026-11-14T01:44:54.230670+00:00**. This is now **our active matching lease** for A `a496dd428241b06d2292286de030c70d6241fcf0`, M `4860548f0b032e8e3beca18a4776413cd7e0368b`, R `rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e`. No other owner's lease was reused or cleared.
+
+**No root-fix Publish yet.** The Emergent republish confirmation is open with free republishes and the Publish changes button. Next: official prepublish immediately before one Publish click; then explicit newer deployment completion, official three-probe verification/normal lease closure, and one visible page-owned calculation proving a fresh as_of. Do not rerun prepare or rebuild while this lease is active.
+
+A shell-command quoting error in the first metadata/prepare wrapper was caught by Python parsing before any statement ran; it created no lease. The corrected command completed with the exit/identity proof above. It did not affect the successful package build or frozen source.
+
+---
+
+## Earlier checkpoints
+
 # Rehearsal command checkpoint
 
 The original-operator wrapper has been reviewed independently and by the release owner. SHA-256 `112eeeb9f2d4a9656966fcbacd65423fa6cbe9552a314532985bfe03d424d67a`, 11809 bytes; preserved beside this status file. It rechecks inactive status, exact Git identities and original work preservation, runs the actual package adapter, and records the child result before postconditions. It creates no release lease and performs no Publish. Last read-only operator preflight: HEAD J, tracked/index clean, 120 untracked files, zero Backend bytecode files. All exact-M gates are green. Rehearsal is the next action; no root-fix Publish yet.
