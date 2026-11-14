@@ -420,3 +420,20 @@ The demonstrated cancellation defect is fixed in the candidate; the original pro
 
 
 Fresh original read-only status returned at 18:39:45.920340 UTC: HEAD `af9caabb3119aeb9cf450af0a8b89d376cef8c74`, tracked files clean, 120 complete untracked files and guard `{"active": false}`. This task made no original changes. Independent B2 review also verified its single parent, sole intent path, exact tree/blob and byte equality across Git, local intent, CI intent and sole ZIP member.
+
+
+## R2 normal merge and configured helper checkpoint — 2026-11-14 18:49 UTC
+
+Root freshly re-read exact B2 checks: all 29 completed, 23 successful and six declared conditional skips, no pending/neutral/failure. Both actual clean-clone host logs were independently reviewed by the agent and root: readiness run 43627775151, Node20 job132547644707 and Node24 job132547644724, exact source/runtime/frontend identities and isolated backend/frontend artifact proofs. B2 operational backend again passed 4,799 plus16shipping/18subtests, frontend783/52, browser14, stock4,513/7subtests; Python and aggregate CodeQL passed.
+
+Root freshly confirmed production J2, exact B2 PR head and mergeability, marked PR #1928 ready, rechecked production J2 immediately before normal merge, and merged with expected head B2.
+
+- Final M2: `3e9dc3b25e41c663e001822a666323c802e5ec5a`.
+- Exact ordered parents: [`af9caabb3119aeb9cf450af0a8b89d376cef8c74`, `db6971b59b12bdda3a3585712ca881ac22d6bc0f`].
+- M2 tree equals B2 tree `355fdae884cf4a849b0acdf1c29081730556c6b0`.
+- A2 to M2 changes exactly `release/release-intent-v5.json`. GitHub and freshly fetched local Git objects agree; frozen B2 working tree remains clean.
+- Fresh original status at18:46:41.540788UTC: HEAD J2, trackedclean,120 full untracked files, guardinactive. Unsaved Untitled-1 and original terminals1/2 remain untouched; temporary Terminal3 is task-owned.
+
+The three PR1928 wrappers now contain exact B2/M2/tree/runtime/intent and fresh count120. Gate EVIDENCE deliberately remains unfilled until an actual successful original rehearsal produces it. Root reviewed the complete four helper files; independent exact-six-substitution review passed with matching hashes and no blocking issue; the preservation helper is byte-identical and all executable logic is unchanged. No original /app mutation, lease, publication or new financial refresh has occurred yet. Continue only after that review, stage exact reviewed helper bytes in a private temporary directory, and run the original governed build rehearsal. All later preparation, publication and official verification gates still apply.
+
+Emergent's former tab28 became unresponsive to the documented focus API; a new temporary tab37 restored the same signed-in Salla Analytics project through visible navigation. It is on Manage/Overview with Republish visible. No paid chat/Build/Ask-agent action or credit purchase was used. Current visible published version remains100th publish `5a7a310`; newer explicit platform success must be observed for this release.
