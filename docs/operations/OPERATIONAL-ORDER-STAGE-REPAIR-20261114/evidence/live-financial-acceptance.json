@@ -1,0 +1,213 @@
+{
+  "schema": 1,
+  "attempt": {
+    "started_at": "2026-11-14T06:57:54.483Z",
+    "url": "https://mezansalla.com/operational-balances/financial-position",
+    "attempt": 1,
+    "trigger": "single visible page mount after official verification",
+    "creation_note": "Visibility option was unsupported before tab creation; inventory confirmed no financial tab. Created once with supported options."
+  },
+  "observed_at": "2026-11-14T07:00:11.296Z",
+  "url": "https://mezansalla.com/operational-balances/financial-position",
+  "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+  "deployment_git_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+  "release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+  "report": {
+    "as_of": "14/11/2026, 09:57",
+    "display_timezone": "Asia/Riyadh",
+    "fresh_compared_with_prior_as_of": "12/11/2026, 01:07",
+    "content_present": true,
+    "loading_complete": true,
+    "no_main_error": true,
+    "no_stale_fallback": true,
+    "all_three_sections_present": true,
+    "data_quality_warnings_present": true
+  },
+  "pagination": {
+    "next": {
+      "observed_at": "2026-11-14T07:00:40.535Z",
+      "as_of": "14/11/2026, 09:57",
+      "page_index": "2",
+      "previous_enabled": true,
+      "table_changed": true
+    },
+    "return": {
+      "observed_at": "2026-11-14T07:00:50.615Z",
+      "restored": true,
+      "as_of": "14/11/2026, 09:57",
+      "page_index": "1"
+    }
+  },
+  "pending_orders": {
+    "next": {
+      "observed_at": "2026-11-14T07:01:06.227Z",
+      "rows_changed": true,
+      "as_of": "14/11/2026, 09:57",
+      "dialog_open": true,
+      "page_index": "2",
+      "previous_enabled": true
+    },
+    "search": {
+      "no_match_message_seen": true
+    },
+    "clear": {
+      "observed_at": "2026-11-14T07:01:17.785Z",
+      "rows_restored": true,
+      "table_present": true
+    },
+    "close": {
+      "observed_at": "2026-11-14T07:01:18.513Z",
+      "dialog_closed": true,
+      "as_of": "14/11/2026, 09:57",
+      "error": false,
+      "fallback": false,
+      "loading": false
+    }
+  },
+  "runtime": {
+    "observed_at": "2026-11-14T07:00:03.410Z",
+    "events": [
+      {
+        "duration_ms": "62848.657",
+        "kind": "api",
+        "method": "POST",
+        "route": "/api/operational-balances/refresh",
+        "status": "200",
+        "timestamp": "2026-11-14 06:58:59"
+      },
+      {
+        "duration_ms": 61397.229,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "aggregate",
+        "timestamp": "2026-11-14 06:58:59"
+      },
+      {
+        "duration_ms": 152.634,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "snapshot_commit",
+        "timestamp": "2026-11-14 06:58:59"
+      },
+      {
+        "duration_ms": 823.232,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "snapshot_pack",
+        "timestamp": "2026-11-14 06:58:59"
+      },
+      {
+        "duration_ms": 17.013,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "snapshot_compare",
+        "timestamp": "2026-11-14 06:58:58"
+      },
+      {
+        "duration_ms": 109.501,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "party_catalogs",
+        "timestamp": "2026-11-14 06:58:58"
+      },
+      {
+        "duration_ms": 380.794,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "bank_claims",
+        "timestamp": "2026-11-14 06:58:58"
+      },
+      {
+        "duration_ms": 9014.404,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "profit_snapshot",
+        "timestamp": "2026-11-14 06:58:57"
+      },
+      {
+        "duration_ms": 23095.89,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "reconciliation",
+        "timestamp": "2026-11-14 06:58:48"
+      },
+      {
+        "duration_ms": 21423.146,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "source_collection",
+        "timestamp": "2026-11-14 06:58:25"
+      },
+      {
+        "duration_ms": 23.927,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "source_finalize",
+        "timestamp": "2026-11-14 06:58:25"
+      },
+      {
+        "duration_ms": 9.731,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "source_native_overlaps",
+        "timestamp": "2026-11-14 06:58:25"
+      },
+      {
+        "duration_ms": 15.59,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "source_other_sources",
+        "timestamp": "2026-11-14 06:58:25"
+      },
+      {
+        "duration_ms": 188.224,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "source_invoices",
+        "timestamp": "2026-11-14 06:58:25"
+      },
+      {
+        "duration_ms": 5755.266,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "source_orders",
+        "timestamp": "2026-11-14 06:58:25"
+      },
+      {
+        "duration_ms": 11.05,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "source_bank_catalog",
+        "timestamp": "2026-11-14 06:58:21"
+      },
+      {
+        "duration_ms": 183.005,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "source_order_indexes",
+        "timestamp": "2026-11-14 06:58:19"
+      },
+      {
+        "duration_ms": 1863.706,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "source_option_catalog",
+        "timestamp": "2026-11-14 06:58:19"
+      },
+      {
+        "duration_ms": 2688.704,
+        "kind": "stage",
+        "outcome": "complete",
+        "stage": "source_bundles",
+        "timestamp": "2026-11-14 06:58:17"
+      }
+    ],
+    "line_count": 100,
+    "log_box_found": true
+  },
+  "limitations": [
+    "Live freshness and local controls verified; accounting data completeness and individual monetary correctness were not asserted.",
+    "Existing warnings identify evidence, payment-method, fee, refund, bank-mapping and pre-operation coverage gaps."
+  ],
+  "financial_confirmation_or_settlement_performed": false
+}

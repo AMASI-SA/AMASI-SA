@@ -1,6 +1,8 @@
-# Operational order-stage repair — measured WIP
+# Operational order-stage repair — deployed and live acceptance passed
 
-Production base is the verified PR1917 merge. Financial refresh still times out inside source_orders; this task continues the authorized fix/merge/publish goal. No new financial attempt will run before a reviewed source change and governed release.
+PR1918 is merged and published as platform 279b7a3. Official production verification passed with three probes, 582 frontend requests, exact A/M/R identity, and a fresh inactive lease guard. The first visible financial refresh after verification returned HTTP 200 and advanced report as_of to 14 November 2026 at 09:57 Asia/Riyadh. Report loading, table pagination, and pending-order page/search/clear/close checks passed. Existing source-data completeness warnings remain and are not claimed resolved.
+
+The sections below preserve the chronological investigation and release evidence; the latest completion evidence is at the end.
 
 
 ## preserve measured source_orders diagnosis and isolated repair ownership — 2026-11-14T05:36:21.134Z
@@ -60,3 +62,8 @@ ExplicitDeploymentfinished Nov14,09:44AM observed06:44:36.254Z withnewplatform27
 ## Official production verification passed — 2026-11-14T06:57:36.522Z
 
 Original official verify ran 2026-11-14T06:44:36.933528Z to 06:56:21.765981Z (704.832459 seconds), actual exit 0. It verified three production probes and 582 frontend requests against exact source A, merge M, and runtime R, then returned a fresh inactive guard. One authorized visible financial refresh remains; no live acceptance claim has been made.
+
+
+## First live financial refresh and local controls passed — 2026-11-14T07:03:42.061Z
+
+After official verification closed the owned lease, one visible page mount started at 06:57:54.483Z. The report displayed fresh as_of 14/11/2026, 09:57 Asia/Riyadh, all three sections, no loading, no main error, and no stale fallback. Runtime logs match this request: HTTP 200, 62,848.657 ms; source_orders complete 5,755.266 ms; source_collection complete 21,423.146 ms; reconciliation complete 23,095.890 ms; profit_snapshot complete 9,014.404 ms; snapshot_commit complete 152.634 ms. Table next/previous and pending-order open/page/no-match-search/clear/close passed with unchanged fresh as_of. No financial confirmation, settlement, external provider action, or background refresh was performed. Existing data-completeness warnings remain; individual accounting amounts were not certified. Private screenshot is retained locally and not published to GitHub.

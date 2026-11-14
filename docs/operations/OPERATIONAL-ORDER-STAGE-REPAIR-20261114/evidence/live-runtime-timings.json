@@ -1,0 +1,141 @@
+{
+  "observed_at": "2026-11-14T07:00:03.410Z",
+  "events": [
+    {
+      "duration_ms": "62848.657",
+      "kind": "api",
+      "method": "POST",
+      "route": "/api/operational-balances/refresh",
+      "status": "200",
+      "timestamp": "2026-11-14 06:58:59"
+    },
+    {
+      "duration_ms": 61397.229,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "aggregate",
+      "timestamp": "2026-11-14 06:58:59"
+    },
+    {
+      "duration_ms": 152.634,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "snapshot_commit",
+      "timestamp": "2026-11-14 06:58:59"
+    },
+    {
+      "duration_ms": 823.232,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "snapshot_pack",
+      "timestamp": "2026-11-14 06:58:59"
+    },
+    {
+      "duration_ms": 17.013,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "snapshot_compare",
+      "timestamp": "2026-11-14 06:58:58"
+    },
+    {
+      "duration_ms": 109.501,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "party_catalogs",
+      "timestamp": "2026-11-14 06:58:58"
+    },
+    {
+      "duration_ms": 380.794,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "bank_claims",
+      "timestamp": "2026-11-14 06:58:58"
+    },
+    {
+      "duration_ms": 9014.404,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "profit_snapshot",
+      "timestamp": "2026-11-14 06:58:57"
+    },
+    {
+      "duration_ms": 23095.89,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "reconciliation",
+      "timestamp": "2026-11-14 06:58:48"
+    },
+    {
+      "duration_ms": 21423.146,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "source_collection",
+      "timestamp": "2026-11-14 06:58:25"
+    },
+    {
+      "duration_ms": 23.927,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "source_finalize",
+      "timestamp": "2026-11-14 06:58:25"
+    },
+    {
+      "duration_ms": 9.731,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "source_native_overlaps",
+      "timestamp": "2026-11-14 06:58:25"
+    },
+    {
+      "duration_ms": 15.59,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "source_other_sources",
+      "timestamp": "2026-11-14 06:58:25"
+    },
+    {
+      "duration_ms": 188.224,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "source_invoices",
+      "timestamp": "2026-11-14 06:58:25"
+    },
+    {
+      "duration_ms": 5755.266,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "source_orders",
+      "timestamp": "2026-11-14 06:58:25"
+    },
+    {
+      "duration_ms": 11.05,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "source_bank_catalog",
+      "timestamp": "2026-11-14 06:58:21"
+    },
+    {
+      "duration_ms": 183.005,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "source_order_indexes",
+      "timestamp": "2026-11-14 06:58:19"
+    },
+    {
+      "duration_ms": 1863.706,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "source_option_catalog",
+      "timestamp": "2026-11-14 06:58:19"
+    },
+    {
+      "duration_ms": 2688.704,
+      "kind": "stage",
+      "outcome": "complete",
+      "stage": "source_bundles",
+      "timestamp": "2026-11-14 06:58:17"
+    }
+  ],
+  "line_count": 100,
+  "log_box_found": true
+}

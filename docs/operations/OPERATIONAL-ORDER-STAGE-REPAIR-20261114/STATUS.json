@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-ORDER-STAGE-REPAIR-20261114",
-  "stage": "official-production-verified-awaiting-financial-acceptance",
+  "stage": "completed-deployed-live-financial-acceptance-passed",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "2db0edc9edb315026eee4b6edd43b420a569c37d",
@@ -328,7 +328,7 @@
         "sha": "9f96b7ac42ac3870d8af179e779a302632cdb19a"
       }
     ],
-    "pr_body": "## Problem\nPR1917 reached production successfully, but its first visible financial refresh still timed out. The request was cancelled inside `source_orders` after 61.803 seconds, returned HTTP 408, and preserved the old report snapshot. Synthetic operation counts identified repeated scans in assignment selection, courier hold history, cost catalogue selection, and diagnostic-list membership. Those measurements do not establish each helper's share of the production delay.\n\n## Change\nBuild request-local indexes for delivery assignments, courier hold history, and cost catalogues through the existing joined preparation worker. Keep strict assignment identity matching separate from the older raw order-number filter. Preserve row order, duplicates, first-error behavior, lazy Decimal evaluation, and legacy fallback for unusual inputs. Rebuild the indexes for every collector invocation and CAS retry.\n\nAdd an explicitly owned diagnostic index that retains full-dictionary equality and metadata enrichment, then removes itself before returning the ordinary output list. Add fixed timings for index preparation and the existing bank catalogue read. Financial rules, source limits, request deadlines, authorization, and background-refresh behavior remain unchanged.\n\n## Verification\n- Exact-A CI: **4,647 passing Operational Balance cases** and **4,456 passing Stock Eligibility cases plus 7 passing subtests**. Both official XML artifacts contain all 449 specifically reviewed cases, all 17 source-timing cases, and all four locally deferred Mongo cases exactly once, with no failures, errors, or skips.\n- Final local integrated selection: **1,467 passed, actual exit 0**. Source hashes remained unchanged during the run. The four real-Mongo cases were explicitly deferred locally and subsequently passed in both official CI suites.\n- Negative controls fail the intended repeated-work assertions when assignment, cost, or diagnostic indexing is disabled. Independent reviews cover collector/reconcile/report parity, immutable inputs, duplicates, ordering, Decimal flags, cancellation, worker joining, and lease cleanup.\n- Candidate and tracked-B loaders returned actual exit 0. Independent review re-derived the complete backend and release-control manifests from Git and verified all four added module records.\n- All applicable exact-A, exact-B, and exact-M workflows passed. Both Host Node 20 and Host Node 24 performed the actual clean-clone deployment adapter rehearsals.\n- Original `/app/frontend yarn build`: actual exit 0, 71.919 seconds. All 120 unrelated pending files remained byte-identical.\n\n## Release identities\n| Role | SHA |\n|---|---|\n| J | `2db0edc9edb315026eee4b6edd43b420a569c37d` |\n| A | `d70b42cda3d70a7f07c78c3efc5fde8331fdc877` |\n| B | `9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9` |\n| M | `23cc06da003c18c0f3fc6c2e749aad1326666166` |\n\nB is A's direct child and changes only the exact reviewed release-intent bytes. M has parents J/B and the same tree as B: `9de141756a4c5dcfa8d1d4dfb6513178c406ac8e`.\n\nRuntime: `rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f`.\n\n## Deployment and live acceptance\nThe authorized manual publication completed as platform **279b7a3**, with explicit completion observed on 2026-11-14 at 06:44:36 UTC. Public health reports the exact reviewed source/runtime identity, verified backend/control manifests, matching critical hashes, and a verified frontend.\n\n**Official production verification passed** on 2026-11-14 at 06:56:21 UTC: actual exit 0, three probes, 582 frontend requests checked, exact A/M/runtime identity, and a fresh inactive lease guard. It ran for 704.832 seconds without interruption.\n\n**Financial acceptance is next and has not yet passed.** Require one visible refresh with a new report `as_of`, then check table pagination and pending-order search/page/close without financial confirmations.\n\n[Handoff and evidence](https://github.com/AMASI-SA/AMASI-SA/blob/codex/operational-order-stage-handoff-20261114/docs/operations/OPERATIONAL-ORDER-STAGE-REPAIR-20261114/STATUS.md). The handoff branch is documentation only and must not be merged or deployed.\n",
+    "pr_body": "## Problem\nPR1917 reached production successfully, but its first visible financial refresh still timed out. The request was cancelled inside `source_orders` after 61.803 seconds, returned HTTP 408, and preserved the old report snapshot. Synthetic operation counts identified repeated scans in assignment selection, courier hold history, cost catalogue selection, and diagnostic-list membership. Those measurements do not establish each helper's share of the production delay.\n\n## Change\nBuild request-local indexes for delivery assignments, courier hold history, and cost catalogues through the existing joined preparation worker. Keep strict assignment identity matching separate from the older raw order-number filter. Preserve row order, duplicates, first-error behavior, lazy Decimal evaluation, and legacy fallback for unusual inputs. Rebuild the indexes for every collector invocation and CAS retry.\n\nAdd an explicitly owned diagnostic index that retains full-dictionary equality and metadata enrichment, then removes itself before returning the ordinary output list. Add fixed timings for index preparation and the existing bank catalogue read. Financial rules, source limits, request deadlines, authorization, and background-refresh behavior remain unchanged.\n\n## Verification\n- Exact-A CI: **4,647 passing Operational Balance cases** and **4,456 passing Stock Eligibility cases plus 7 passing subtests**. Both official XML artifacts contain all 449 specifically reviewed cases, all 17 source-timing cases, and all four locally deferred Mongo cases exactly once, with no failures, errors, or skips.\n- Final local integrated selection: **1,467 passed, actual exit 0**. Source hashes remained unchanged during the run. The four real-Mongo cases were explicitly deferred locally and subsequently passed in both official CI suites.\n- Negative controls fail the intended repeated-work assertions when assignment, cost, or diagnostic indexing is disabled. Independent reviews cover collector/reconcile/report parity, immutable inputs, duplicates, ordering, Decimal flags, cancellation, worker joining, and lease cleanup.\n- Candidate and tracked-B loaders returned actual exit 0. Independent review re-derived the complete backend and release-control manifests from Git and verified all four added module records.\n- All applicable exact-A, exact-B, and exact-M workflows passed. Both Host Node 20 and Host Node 24 performed the actual clean-clone deployment adapter rehearsals.\n- Original `/app/frontend yarn build`: actual exit 0, 71.919 seconds. All 120 unrelated pending files remained byte-identical.\n\n## Release identities\n| Role | SHA |\n|---|---|\n| J | `2db0edc9edb315026eee4b6edd43b420a569c37d` |\n| A | `d70b42cda3d70a7f07c78c3efc5fde8331fdc877` |\n| B | `9e6746b5ea540ff525b0a4302da88c2e8eb1e0b9` |\n| M | `23cc06da003c18c0f3fc6c2e749aad1326666166` |\n\nB is A's direct child and changes only the exact reviewed release-intent bytes. M has parents J/B and the same tree as B: `9de141756a4c5dcfa8d1d4dfb6513178c406ac8e`.\n\nRuntime: `rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f`.\n\n## Deployment and live acceptance\nThe authorized manual publication completed as platform **279b7a3**, with explicit completion observed on 2026-11-14 at 06:44:36 UTC. Public health reports the exact reviewed source/runtime identity, verified backend/control manifests, matching critical hashes, and a verified frontend.\n\n**Official production verification passed** on 2026-11-14 at 06:56:21 UTC: actual exit 0, three probes, 582 frontend requests checked, exact A/M/runtime identity, and a fresh inactive lease guard. It ran for 704.832 seconds without interruption.\n\n**Live financial acceptance passed on the first visible page attempt after official verification.** The report snapshot `as_of` advanced from 2026-11-12 01:07 to **2026-11-14 09:57 (Asia/Riyadh)**. The report finished loading with all three major sections, no main error, and no stale-snapshot fallback.\n\nThe matching server request returned **HTTP 200 in 62,848.657 ms**. `source_orders` completed in **5,755.266 ms**, compared with the prior attempt being cancelled at 61,803.392 ms; `source_collection`, reconciliation, profit snapshot, snapshot packing, and snapshot commit all completed. These are observations of two individual attempts, not a controlled benchmark or a guarantee for all future loads.\n\nSupplier-table next/previous pagination changed and restored the rows. The pending-order dialog opened, paged, displayed the expected no-match search state, restored its rows after clearing search, and closed. The report snapshot stayed unchanged throughout these local controls. No financial confirmation or settlement was executed.\n\n**Remaining data limitations:** the report continues to flag missing or unmatched operational evidence, payment methods/timestamps, refunds, fees, bank mappings, and pre-operation coverage. This acceptance establishes software refresh and UI behavior; it does not claim all underlying accounting data or balances are complete.\n\n[Handoff and evidence](https://github.com/AMASI-SA/AMASI-SA/blob/codex/operational-order-stage-handoff-20261114/docs/operations/OPERATIONAL-ORDER-STAGE-REPAIR-20261114/STATUS.md). The handoff branch is documentation only and must not be merged or deployed.\n",
     "pr": 1918,
     "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1918",
     "validation": {
@@ -845,9 +845,223 @@
       "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
       "started_at": "2026-11-14T06:44:36.933528+00:00",
       "stdout_sha256": "9b03e760e599b7aa032599b75d406797cdb34f34533734cd9956421c8569e94d"
-    }
+    },
+    "liveAcceptance": {
+      "schema": 1,
+      "attempt": {
+        "started_at": "2026-11-14T06:57:54.483Z",
+        "url": "https://mezansalla.com/operational-balances/financial-position",
+        "attempt": 1,
+        "trigger": "single visible page mount after official verification",
+        "creation_note": "Visibility option was unsupported before tab creation; inventory confirmed no financial tab. Created once with supported options."
+      },
+      "observed_at": "2026-11-14T07:00:11.296Z",
+      "url": "https://mezansalla.com/operational-balances/financial-position",
+      "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+      "deployment_git_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+      "report": {
+        "as_of": "14/11/2026, 09:57",
+        "display_timezone": "Asia/Riyadh",
+        "fresh_compared_with_prior_as_of": "12/11/2026, 01:07",
+        "content_present": true,
+        "loading_complete": true,
+        "no_main_error": true,
+        "no_stale_fallback": true,
+        "all_three_sections_present": true,
+        "data_quality_warnings_present": true
+      },
+      "pagination": {
+        "next": {
+          "observed_at": "2026-11-14T07:00:40.535Z",
+          "as_of": "14/11/2026, 09:57",
+          "page_index": "2",
+          "previous_enabled": true,
+          "table_changed": true
+        },
+        "return": {
+          "observed_at": "2026-11-14T07:00:50.615Z",
+          "restored": true,
+          "as_of": "14/11/2026, 09:57",
+          "page_index": "1"
+        }
+      },
+      "pending_orders": {
+        "next": {
+          "observed_at": "2026-11-14T07:01:06.227Z",
+          "rows_changed": true,
+          "as_of": "14/11/2026, 09:57",
+          "dialog_open": true,
+          "page_index": "2",
+          "previous_enabled": true
+        },
+        "search": {
+          "no_match_message_seen": true
+        },
+        "clear": {
+          "observed_at": "2026-11-14T07:01:17.785Z",
+          "rows_restored": true,
+          "table_present": true
+        },
+        "close": {
+          "observed_at": "2026-11-14T07:01:18.513Z",
+          "dialog_closed": true,
+          "as_of": "14/11/2026, 09:57",
+          "error": false,
+          "fallback": false,
+          "loading": false
+        }
+      },
+      "runtime": {
+        "observed_at": "2026-11-14T07:00:03.410Z",
+        "events": [
+          {
+            "duration_ms": "62848.657",
+            "kind": "api",
+            "method": "POST",
+            "route": "/api/operational-balances/refresh",
+            "status": "200",
+            "timestamp": "2026-11-14 06:58:59"
+          },
+          {
+            "duration_ms": 61397.229,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "aggregate",
+            "timestamp": "2026-11-14 06:58:59"
+          },
+          {
+            "duration_ms": 152.634,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "snapshot_commit",
+            "timestamp": "2026-11-14 06:58:59"
+          },
+          {
+            "duration_ms": 823.232,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "snapshot_pack",
+            "timestamp": "2026-11-14 06:58:59"
+          },
+          {
+            "duration_ms": 17.013,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "snapshot_compare",
+            "timestamp": "2026-11-14 06:58:58"
+          },
+          {
+            "duration_ms": 109.501,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "party_catalogs",
+            "timestamp": "2026-11-14 06:58:58"
+          },
+          {
+            "duration_ms": 380.794,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "bank_claims",
+            "timestamp": "2026-11-14 06:58:58"
+          },
+          {
+            "duration_ms": 9014.404,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "profit_snapshot",
+            "timestamp": "2026-11-14 06:58:57"
+          },
+          {
+            "duration_ms": 23095.89,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "reconciliation",
+            "timestamp": "2026-11-14 06:58:48"
+          },
+          {
+            "duration_ms": 21423.146,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "source_collection",
+            "timestamp": "2026-11-14 06:58:25"
+          },
+          {
+            "duration_ms": 23.927,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "source_finalize",
+            "timestamp": "2026-11-14 06:58:25"
+          },
+          {
+            "duration_ms": 9.731,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "source_native_overlaps",
+            "timestamp": "2026-11-14 06:58:25"
+          },
+          {
+            "duration_ms": 15.59,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "source_other_sources",
+            "timestamp": "2026-11-14 06:58:25"
+          },
+          {
+            "duration_ms": 188.224,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "source_invoices",
+            "timestamp": "2026-11-14 06:58:25"
+          },
+          {
+            "duration_ms": 5755.266,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "source_orders",
+            "timestamp": "2026-11-14 06:58:25"
+          },
+          {
+            "duration_ms": 11.05,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "source_bank_catalog",
+            "timestamp": "2026-11-14 06:58:21"
+          },
+          {
+            "duration_ms": 183.005,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "source_order_indexes",
+            "timestamp": "2026-11-14 06:58:19"
+          },
+          {
+            "duration_ms": 1863.706,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "source_option_catalog",
+            "timestamp": "2026-11-14 06:58:19"
+          },
+          {
+            "duration_ms": 2688.704,
+            "kind": "stage",
+            "outcome": "complete",
+            "stage": "source_bundles",
+            "timestamp": "2026-11-14 06:58:17"
+          }
+        ],
+        "line_count": 100,
+        "log_box_found": true
+      },
+      "limitations": [
+        "Live freshness and local controls verified; accounting data completeness and individual monetary correctness were not asserted.",
+        "Existing warnings identify evidence, payment-method, fee, refund, bank-mapping and pre-operation coverage gaps."
+      ],
+      "financial_confirmation_or_settlement_performed": false
+    },
+    "completedAt": "2026-11-14T07:03:41.081Z"
   },
-  "production_changed_by_this_followup": "New platform279b7a3 is live and exact public identity verified; comprehensive official verification is running.",
+  "production_changed_by_this_followup": "Merged PR1918 and published platform 279b7a3; official verification and first visible financial acceptance passed.",
   "constraints": [
     "Original/app120untracked andunsavedUntitled-1 preserved",
     "Onlyroot mutatesGitHub/original/operator",
@@ -857,6 +1071,6 @@
     "FrozenpreviousA/B untouched"
   ],
   "ledger_note": "Issue1006 reached2500commentlimit; use taskstatus+PRcontinuation",
-  "updated_at": "2026-11-14T06:57:36.522Z",
-  "next_action": "Open the financial-position page once, allow its visible refresh to complete, require fresh report as_of without fallback, then test local table and pending-order controls."
+  "updated_at": "2026-11-14T07:03:42.061Z",
+  "next_action": "Authorized software fix, merge, publication and live acceptance are complete. Any follow-up data reconciliation must use source evidence and separately scoped financial actions."
 }
