@@ -204,3 +204,17 @@ intact. Reviewed V2 SHA256:
 `06e774209be58d3fc347f6645448c311bb3e7a9974f2b84f869828ea32310758`.
 Execution has not yet occurred; a successful helper is required before a new
 original build rehearsal. Old helper and failed evidence are retained.
+
+## Original governed build in progress
+
+Reviewed V2 cache preservation succeeded at14:46:37UTC, actual helperexit0.
+Its evidence is `/tmp/mezan-pr1919-cache-quarantine-p8jfjitq`; payload retained
+at `/app/.release-preserved/mezan-pr1919-cache-zi6cl1xa/backend/__pycache__`.
+Both files'120563bytes, modes and inodes were preserved; the120-path baseline,
+tracked checkout J and inactive guard were unchanged.
+
+The unchanged original rehearsal then started a fresh build-mode run at
+`/tmp/mezan-pr1919-original-72x801fd`. Do not assume completion from this
+checkpoint. The gate has been filled with that exact directory and frozen;
+its checks require the actual successful build evidence before preparing any
+lease. No prepare/prepublish/publish has run. AllMCI gates passed already.

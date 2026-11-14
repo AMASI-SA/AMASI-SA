@@ -18,7 +18,7 @@ import time
 
 
 APP = Path('/app')
-EVIDENCE = Path('<REVIEWED_REHEARSAL_EVIDENCE_DIR>')
+EVIDENCE = Path('/tmp/mezan-pr1919-original-72x801fd')
 SOURCE = '5f7fce4fcf1b81f3fbe1093d0983184c281ca733'
 BASE = '23cc06da003c18c0f3fc6c2e749aad1326666166'
 

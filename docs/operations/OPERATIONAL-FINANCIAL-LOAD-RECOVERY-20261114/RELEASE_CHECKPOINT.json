@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-FINANCIAL-LOAD-RECOVERY-20261114",
-  "phase": "original-same-device-cache-preservation-ready",
+  "phase": "original-governed-build-running",
   "repository": "AMASI-SA/AMASI-SA",
   "release_branch": "codex/financial-loading-resume-20261114",
   "handoff_branch": "codex/financial-loading-release-handoff-20261114",
@@ -19,7 +19,7 @@
   "source_A_stock_run": 43604084975,
   "production_changed": false,
   "lease_started": false,
-  "next": "Stage exact v2 helper outside /app from this handoff. Require exit0+successful preserved outcome; then run unchanged original rehearsal once into new evidence directory. No prepare/publish until originalbuildsuccess. Fill gate evidence_dir from successful outcome and continue existing reviewed release protocol.",
+  "next": "Observe original72x801fd outcome and actual22-build result. Requireexit0, exactidentity, preserved120files, inactiveguard. Onlythenstage exactfilledgate and executeprepare; preservecheck; immediately beforeauthorizedUIpublish execute prepublish+preservecheck. Observefreshsuccess, officialverify3probes, inactiveguard, finalpreservation+liveacceptance.",
   "notes": [
     "Issue1006 is full; this branch, task status and PR1919 carry continuation.",
     "The handoff branch is documentation only and must never be merged into frozen release A/B.",
@@ -69,5 +69,14 @@
   "quarantine_v2_sha256": "06e774209be58d3fc347f6645448c311bb3e7a9974f2b84f869828ea32310758",
   "quarantine_v2_payload_parent": "/app/.release-preserved",
   "quarantine_v2_evidence_parent": "/tmp",
-  "quarantine_v2_review": "Root reviewed destination-only delta; static compilation and help passed; original scope/guard/baseline checks unchanged."
+  "quarantine_v2_review": "Root reviewed destination-only delta; static compilation and help passed; original scope/guard/baseline checks unchanged.",
+  "quarantine_v2_evidence": "/tmp/mezan-pr1919-cache-quarantine-p8jfjitq",
+  "quarantine_v2_payload": "/app/.release-preserved/mezan-pr1919-cache-zi6cl1xa/backend/__pycache__",
+  "quarantine_v2_completed": true,
+  "quarantine_v2_actual_exit": 0,
+  "quarantine_v2_untracked120_preserved": true,
+  "quarantine_v2_cache_bytes_modes_inodes_preserved": true,
+  "original_rehearsal_evidence": "/tmp/mezan-pr1919-original-72x801fd",
+  "original_rehearsal_build_pending": true,
+  "gate_sha256": "1b82d25a905e686965fe1586e47426aa774ca65ebd8966cf14f0525436901821"
 }
