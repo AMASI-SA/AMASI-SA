@@ -1,0 +1,34 @@
+{
+  "status": "PASS",
+  "evidence": "/tmp/mezan-operating-period-original-iljwu1fd",
+  "runner": "/tmp/mezan-operating-period-build-1932.py",
+  "preflight": {
+    "observed_at": "2026-11-14T22:07:26.754537+00:00",
+    "guard": {
+      "active": false
+    },
+    "head": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+    "untracked": 120
+  },
+  "source": "af36682ec95e578764242001dccd16ef9e61c07b",
+  "deployment": "7ef45017e5221635ce3c80c3788f73d9c50b1e08",
+  "tree": "e55cdf2c2b15cfe08efe3e0305d043e87f916d8b",
+  "adapter_exit": 0,
+  "adapter_seconds": 64.00042893498903,
+  "adapter_finished_at": "2026-11-14T22:08:32.642565Z",
+  "package_proof_exit": 0,
+  "guard_inactive": true,
+  "preserved_untracked_files": 120,
+  "exact_original_records": 119,
+  "bookkeeping_before_bytes": 50912,
+  "bookkeeping_after_bytes": 50912,
+  "finished_at": "2026-11-14T22:08:34.851568Z",
+  "untracked_manifest_sha256": "ebddaa4b6e6429831e9f04501a5ce33b3464d25d03a76c6cbdc10a7ccd9f9321",
+  "adapter_stdout_sha256": "9d3f96034057462cd9e080868a83fc82bb49c81c2233c5246a642ecb852007de",
+  "adapter_stderr_sha256": "f9de9a5c904514893fea046115f3a8ce6346639f86ce2fae7c20dd6ea7532633",
+  "package_proof_seconds": 2.164472548989579,
+  "package_proof_finished_at": "2026-11-14T22:08:34.807597Z",
+  "package_boundary_sha256": "446286a7b7e3c52a8d36d5158c52ee3a666397889165db8844e8ced89dc58419",
+  "result_sha256": "135848f377199ee9da945745e71de161c7d83c1e7be9e0ca9a07384595507b0f",
+  "failed_file_exists": false
+}
