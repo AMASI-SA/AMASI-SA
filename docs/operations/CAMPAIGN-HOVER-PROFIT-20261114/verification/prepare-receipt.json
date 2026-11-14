@@ -1,0 +1,24 @@
+{
+  "argv": [
+    "python",
+    "-B",
+    "scripts/production_release_guard.py",
+    "prepare",
+    "--actor",
+    "codex-campaign-hover-profit-1920"
+  ],
+  "cwd": "/app",
+  "started_at": "2026-11-14T15:39:35.521683Z",
+  "exit_code": 0,
+  "finished_at": "2026-11-14T15:39:38.180044Z",
+  "seconds": 2.6583157920395024,
+  "stdout_sha256": "20d5b57fe2faf3213a50ed1d5dae6725d5a318cc7b4ffce48d250a71d0fa1694",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "prepared_at": "2026-11-14T15:39:37.177675+00:00",
+  "actor": "codex-campaign-hover-profit-1920",
+  "source": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
+  "deployment": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
+  "release_id": "rg5-5c3980b0f83f3859023070ef846486e877849ca7ca848367a181995ca32c1d5e",
+  "preserved_untracked_files": 120,
+  "status_after_active": true
+}
