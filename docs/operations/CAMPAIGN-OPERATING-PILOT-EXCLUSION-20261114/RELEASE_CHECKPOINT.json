@@ -2,7 +2,7 @@
   "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
   "round": 6,
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 19:03:18 UTC",
+  "updated_at_utc": "2026-11-14 19:10:21 UTC",
   "branch": "codex/campaign-operating-pilot-m3e9d-20261114",
   "pr": 1929,
   "base_J6": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
@@ -74,7 +74,7 @@
     "fix_scope": "Add projected non-payroll policy fields; ignore explicit disabled-pilot contract only when canonical normalized history is empty; keep all contributing missing-cost protections."
   },
   "source_ci": {
-    "status": "10 workflows successful; Stock attempt1 failed measured CPU ratio; one unchanged diagnostic retry requested",
+    "status": "All11 applicable workflows successful; Stock attempt2 successful after one preserved diagnostic retry.",
     "readiness_run": 43629148670,
     "coverage_run": 43629148717,
     "applicable_workflows": 11,
@@ -139,14 +139,111 @@
         "shipping_subtests_passed": 18,
         "shipping_seconds": 0.41,
         "includes_unchanged_benchmark": true
+      },
+      "junit_artifact": {
+        "id": 14127611426,
+        "name": "eligibility-backend-fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+        "bytes": 75081,
+        "uploaded_at": "2026-11-14T19:00:14Z"
       }
     },
     "diagnostic_retry": {
       "at": "2026-11-14 19:02:30 UTC",
       "response": {
         "success": true
+      },
+      "run": 43629148620,
+      "attempt": 2,
+      "job": 132553954291,
+      "result": "success",
+      "passed": 4513,
+      "warnings": 8,
+      "subtests_passed": 7,
+      "seconds": 349.13,
+      "zero_skips_failures_errors": true,
+      "artifact": 14128430016,
+      "artifact_bytes": 75159,
+      "root_actual_log_review": "PASS"
+    },
+    "runs": [
+      {
+        "id": 43629148736,
+        "name": "Snapchat Settings Management V2",
+        "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43629148585,
+        "name": "Snapchat Direct Active Publication",
+        "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43629148758,
+        "name": "Qoyod Payment Freshness",
+        "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43629148717,
+        "name": "Campaign hover source coverage",
+        "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43629148670,
+        "name": "Mezan Release Readiness",
+        "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43629148596,
+        "name": "Security Gate",
+        "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43629148612,
+        "name": "MZ2 Track F native shipping",
+        "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43629148723,
+        "name": "CodeQL",
+        "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43629148640,
+        "name": "G47 Focused Integration",
+        "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43629148605,
+        "name": "Operational Balance Web",
+        "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43629148620,
+        "name": "Operational Stock Eligibility",
+        "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+        "conclusion": "success",
+        "attempt": 2
       }
-    }
+    ]
   },
   "superseded": {
     "pr1927": {
@@ -184,7 +281,7 @@
       "deployment": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
       "source": "d41cd73132793209d13758ef07b2eda4fcfe018a",
       "intent": "db6971b59b12bdda3a3585712ca881ac22d6bc0f",
-      "state": "Publishing: root UI observation at18:59:37UTC saw Deployment Started Nov14,09:58PM, Publishing/Packaging, old version5a7a310. Root did not click.",
+      "state": "Explicit UI Deployment finished Nov14,10:08PM newversion3a22e2d at19:09:22UTC. Official verification/closure not yet observed; last guard active ownedby1928.",
       "last_body_update": "2026-11-14T18:51:51Z",
       "checkpoint": "abff26067a8f926c4c903829b330fa516347c6d7",
       "original_build": {
@@ -202,10 +299,33 @@
         "status": "Publishing...; Packaging your latest changes...",
         "baseline_version": "5a7a310",
         "own_click": false
+      },
+      "root_guard": {
+        "observed_at": "2026-11-14T19:07:25.160390+00:00",
+        "head": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+        "guard": {
+          "active": true,
+          "actor": "codex-financial-source-read-1928",
+          "source_git_sha": "d41cd73132793209d13758ef07b2eda4fcfe018a",
+          "source_base_git_sha": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+          "deployment_git_sha": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+          "release_id": "rg5-12003f05673102a08c649a74e75e894372796da07bd75ada680a7f07aec65951",
+          "prepared_at": "2026-11-14T18:57:24.557825+00:00",
+          "incomplete_lease_directory": null
+        }
+      },
+      "publication_completed_ui": {
+        "observed_at": "2026-11-14 19:09:22 UTC",
+        "tab": 24,
+        "event_text": "Deployment finished Nov 14, 10:08 PM",
+        "published_version": "3a22e2d",
+        "previous_version": "5a7a310",
+        "own_click": false,
+        "ui_button": "Republish"
       }
     }
   },
-  "next": "Wait for the single unchanged Stock diagnostic attempt2; do not hide attempt1, lower thresholds or rerun until green. A6 candidate independently passed, but all source gates must pass before B6 freeze. Respect active PR1928 publication/lease; no original mutation.",
+  "next": "Verify B6 applicableCI and both declared host generated-package evidence; ready transition gates; normal merge and exactM push gates. Original writes require fresh official inactive and no foreign writer. Preserve first Stock failure. No own original build, lease or publication.",
   "original_build": false,
   "lease": false,
   "published": false,
@@ -327,5 +447,25 @@
       "sha256": "4054617daf7d0a05cfee53b3c94a485a49e97c5e5e1485549c59eeaeed30e96c",
       "review": "Root reviewed exact A6/J6/intent pins and text-only delta; not yet run because B6 does not exist."
     }
+  },
+  "intent_B6": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+  "intent_tree": "c2d683827c54574fcd60ee4102c9de7c163f5ef8",
+  "intent_only_blob": "84ab82046397eaac1e2e7b76adf6418e56d3bd4e",
+  "intent_commit_review": {
+    "root": {
+      "result": "PASS",
+      "B": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+      "tree": "c2d683827c54574fcd60ee4102c9de7c163f5ef8",
+      "sole_parent": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "only_diff": "release/release-intent-v5.json",
+      "intent_blob": "84ab82046397eaac1e2e7b76adf6418e56d3bd4e",
+      "branch_head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+      "observed_at": "2026-11-14 19:10:21 UTC"
+    },
+    "independent": "pending"
+  },
+  "intent_ci": {
+    "status": "pending",
+    "head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016"
   }
 }

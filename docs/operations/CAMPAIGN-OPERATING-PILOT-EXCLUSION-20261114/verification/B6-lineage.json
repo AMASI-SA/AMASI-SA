@@ -1,0 +1,10 @@
+{
+  "result": "PASS",
+  "B": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+  "tree": "c2d683827c54574fcd60ee4102c9de7c163f5ef8",
+  "sole_parent": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+  "only_diff": "release/release-intent-v5.json",
+  "intent_blob": "84ab82046397eaac1e2e7b76adf6418e56d3bd4e",
+  "branch_head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+  "observed_at": "2026-11-14 19:10:21 UTC"
+}

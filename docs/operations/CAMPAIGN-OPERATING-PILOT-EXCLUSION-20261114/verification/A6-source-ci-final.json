@@ -1,0 +1,163 @@
+{
+  "all": [
+    {
+      "id": 43629148736,
+      "name": "Snapchat Settings Management V2",
+      "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43629148585,
+      "name": "Snapchat Direct Active Publication",
+      "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43629148758,
+      "name": "Qoyod Payment Freshness",
+      "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43629148717,
+      "name": "Campaign hover source coverage",
+      "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43629148670,
+      "name": "Mezan Release Readiness",
+      "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43629148596,
+      "name": "Security Gate",
+      "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43629148612,
+      "name": "MZ2 Track F native shipping",
+      "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43629148723,
+      "name": "CodeQL",
+      "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43629148640,
+      "name": "G47 Focused Integration",
+      "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43629148605,
+      "name": "Operational Balance Web",
+      "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43629148620,
+      "name": "Operational Stock Eligibility",
+      "head": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "conclusion": "success",
+      "attempt": 2
+    }
+  ],
+  "first_failure": {
+    "source": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+    "run": 43629148620,
+    "job": 132551645016,
+    "attempt": 1,
+    "conclusion": "failure",
+    "test": "tests/test_operational_balance_issue_index.py::test_four_thousand_distinct_diagnostics_avoid_repeated_whole_list_work",
+    "line": 245,
+    "old_cpu_seconds": 0.2929022449999934,
+    "new_cpu_seconds": 0.26621650900000304,
+    "required": "new_cpu < old_cpu * 0.65",
+    "functional_equality_assertion": "passed before CPU ratio assertion",
+    "summary": {
+      "failed": 1,
+      "passed": 4512,
+      "warnings": 8,
+      "subtests_passed": 7,
+      "seconds": 328.99
+    },
+    "unchanged_blobs": {
+      "test": "12bd98a39b1d91b67feff7c592d828cef794f73d",
+      "implementation": "872611390c2b4ae3cee4a84cd55e7aac9a9c9ab5",
+      "checkpoint_runtime": "ba969e58421940af62b32a4f64eeac75fd17619b"
+    },
+    "baseline": {
+      "head": "db6971b59b12bdda3a3585712ca881ac22d6bc0f",
+      "tree_equal_J6": true,
+      "run": 43627775121,
+      "job": 132547412934,
+      "attempt": 1,
+      "conclusion": "success",
+      "actual_test_step_success": true,
+      "no_skips_gate_success": true,
+      "actual_summary": {
+        "passed": 4513,
+        "warnings": 8,
+        "subtests_passed": 7,
+        "seconds": 367.1,
+        "zero_skips_failures_errors": true,
+        "artifact": 14127048442
+      }
+    },
+    "classification": "Isolated measured CPU-ratio failure on unchanged benchmark/implementation; underlying source of timing variation not proven.",
+    "diagnostic_decision": "One unchanged rerun of the failed job only. Preserve attempt1 and all thresholds. No broad rerun, source change, suppression or repeated-until-green policy.",
+    "recorded_at": "2026-11-14 19:02:29 UTC",
+    "same_source_other_cohort": {
+      "run": 43629148605,
+      "job": 132551644870,
+      "conclusion": "success",
+      "passed": 4799,
+      "warnings": 8,
+      "seconds": 364.83,
+      "shipping_passed": 16,
+      "shipping_subtests_passed": 18,
+      "shipping_seconds": 0.41,
+      "includes_unchanged_benchmark": true
+    },
+    "junit_artifact": {
+      "id": 14127611426,
+      "name": "eligibility-backend-fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "bytes": 75081,
+      "uploaded_at": "2026-11-14T19:00:14Z"
+    }
+  },
+  "retry": {
+    "at": "2026-11-14 19:02:30 UTC",
+    "response": {
+      "success": true
+    },
+    "run": 43629148620,
+    "attempt": 2,
+    "job": 132553954291,
+    "result": "success",
+    "passed": 4513,
+    "warnings": 8,
+    "subtests_passed": 7,
+    "seconds": 349.13,
+    "zero_skips_failures_errors": true,
+    "artifact": 14128430016,
+    "artifact_bytes": 75159,
+    "root_actual_log_review": "PASS"
+  }
+}
