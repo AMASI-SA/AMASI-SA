@@ -1,0 +1,12 @@
+{
+  "argv": [
+    "/workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python",
+    "-B",
+    "/workspace/scratch/019fa8a18b3d/pr1916-source-cpu-benchmark/paired_bench.py"
+  ],
+  "started_at": "2026-11-14T04:28:47.955954+00:00",
+  "actual_exit": 0,
+  "elapsed_seconds": 13.364221152005484,
+  "stdout_sha256": "6fb26400b4eb0bc7dda2a6e535fe3a5200d1075242a816e4aae8d85368ce668c",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

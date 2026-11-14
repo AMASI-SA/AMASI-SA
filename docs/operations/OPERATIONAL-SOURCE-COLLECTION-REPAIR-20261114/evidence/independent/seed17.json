@@ -1,0 +1,26 @@
+{
+  "base": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+  "helper_sha256": "d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d",
+  "negative_control": false,
+  "differential_comparisons": 18693,
+  "collector_ast_parity": true,
+  "cancellation": {
+    "status": 499,
+    "joined": true,
+    "lease_empty": true,
+    "nonlease_writes": 0,
+    "visits": 23
+  },
+  "work": {
+    "baseline": {
+      "size64_visits": 16448,
+      "size128_visits": 65664,
+      "doubling_ratio": 3.992217898832685
+    },
+    "candidate": {
+      "size64_visits": 514,
+      "size128_visits": 1026,
+      "doubling_ratio": 1.9961089494163424
+    }
+  }
+}

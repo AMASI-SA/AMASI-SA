@@ -1,0 +1,12 @@
+{
+  "argv": [
+    "/workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python",
+    "-B",
+    "/workspace/scratch/019fa8a18b3d/pr1916-source-cpu-benchmark/negative_control.py"
+  ],
+  "started_at": "2026-11-14T04:29:40.567577+00:00",
+  "actual_exit": 1,
+  "elapsed_seconds": 2.9122939740045695,
+  "stdout_sha256": "3dc75aef9e2244b4d214374c4a087cd42c175ff2ed22cfe4ea054288e3cf9f3d",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

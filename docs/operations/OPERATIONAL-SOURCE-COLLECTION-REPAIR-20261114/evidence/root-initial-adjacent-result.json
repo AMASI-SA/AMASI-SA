@@ -1,0 +1,30 @@
+{
+  "command": [
+    "/workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "--asyncio-mode=auto",
+    "--tb=short",
+    "backend/tests/test_operational_balance_source_stage_timing.py",
+    "backend/tests/test_operational_balance_refresh_stage_timing.py",
+    "backend/tests/test_operational_balance_sources.py",
+    "backend/tests/test_operational_balance_source_fixes.py",
+    "backend/tests/test_operational_balance_delivery_cutover.py",
+    "backend/tests/test_operational_balance_delivery_start_rule.py",
+    "backend/tests/test_operational_balance_delivery_confirmation.py",
+    "backend/tests/test_operational_balance_source_conversion_lifetime.py",
+    "backend/tests/test_operational_balance_piece_index.py",
+    "--junitxml=/workspace/scratch/019fa8a18b3d/source-collection-root-adjacent.xml"
+  ],
+  "actual_exit": 1,
+  "started_at": "2026-11-14T04:24:04.283349+00:00",
+  "ended_at": "2026-11-14T04:24:37.632070+00:00",
+  "elapsed_seconds": 33.34878658800153,
+  "stdout_sha256": "ef93e2e901cd664349d4fbab4b0c25b089484b8a2f0d288ca72e69b54bf8f57c",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

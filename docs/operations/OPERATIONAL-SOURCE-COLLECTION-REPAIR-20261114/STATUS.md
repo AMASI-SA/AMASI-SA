@@ -1,77 +1,128 @@
-# Operational source-collection repair — source work in progress
+# Operational source-collection repair — verified source, release pending
 
-## Problem and verified base
+## Production failure and base
 
-Production base J is `9c71435f4a19977c09f4331dee8fddbfa12a45eb`, tree
+The production base J is `9c71435f4a19977c09f4331dee8fddbfa12a45eb`, tree
 `c5bd7fb6c357e17c17104282d1d175676e95ed3e`. PR1916 was merged, published as
-platform `bfa6a5f`, and passed official identity verification. The visible
-financial report still retained its previous snapshot.
+platform `bfa6a5f`, and passed official identity verification, but the visible
+financial report retained its previous snapshot.
 
-A controlled visible attempt begun2026-11-14T03:57:55.990Z completed
-`native_evidence` in2926.310ms and `snapshot_load` in9084.282ms. Then
-`source_collection` was cancelled after72942.769ms by the85040.132ms total
-request deadline, returning408. Reconciliation did not begin. Exactly three
-financial attempts occurred on PR1916; no further attempt is planned before a
-source change. These timings localize the remaining failure to collection,
-but do not identify a particular subphase or justify attributing all of its
-time to the optimization below.
+The controlled visible attempt begun 2026-11-14T03:57:55.990Z completed native
+evidence in 2926.310ms and snapshot loading in 9084.282ms. Source collection was
+cancelled after 72942.769ms at the 85040.132ms total-request deadline (HTTP408).
+Reconciliation did not begin. This identifies the remaining phase, not the
+specific subphase or the share of time attributable to the fee-history scans.
+Three financial attempts occurred on PR1916; no additional attempt was used
+while implementing this follow-up.
 
-## Focused change under construction
+## Change
 
-The source collector calls `recorded_courier_fee` for each eligible order.
-Without a direct saved fee, that helper repeatedly scans the complete facts,
-obligations, movements and allocations. Separate instrumented samples recorded
-4096 visits per history category at64 lookups over64 rows, and16384 at128 by128:
-four times the work for twice the input size.
+`operational_courier_fee_history.build_recorded_courier_fee_lookup` builds one
+attempt-local lookup over complete saved facts, obligations and allocations.
+The collector creates it through the existing owned `prepare_in_thread`
+lifetime and calls it at the two existing recorded-fee checks. Every collector
+invocation and CAS retry builds a new lookup.
 
-Uninstrumented synthetic measurements at the exact production source recorded
-2.375s wall/2.135s CPU for1000 lookups over1000 rows;20.167s wall/18.787s CPU for
-4000 by4000; and11.017s wall/10.376s CPU for250 lookups over20000 rows. A control
-with direct saved fee evidence performed20000 lookups over20000 rows in0.418s
-CPU. All completed with actual exit0. These are offline synthetic observations,
-not production latency improvements or a claim of full resolution.
+The original `recorded_courier_fee` implementation remains byte-for-byte
+unchanged. Ordinary dict/list/string structures use the index; unusual
+structures use the original reader. The index does not interpret amounts
+during construction. It preserves literal prefix matching, early proof
+precedence, original obligation insertion before set construction, lazy
+Decimal conversion and global allocation order. No history or contradictory
+evidence is omitted. No database read or financial write is added.
 
-The intended fix is a request-local fee-history index, built once from the
-complete immutable attempt state. Legacy malformed structures retain the
-existing behavior; no eager validation of unrelated financial values is
-permitted. The existing unindexed helper remains the compatibility reference.
-The owned worker must remain cancellable and joined, with a new index for each
-collector invocation and CAS retry.
+Fixed-name `refresh_stage` wrappers distinguish source collision, primary
+reads, fee settings, setup, statements, delivery history, transactions, native
+links, bundles, option catalog, orders, invoices, other sources, native overlaps
+and finalization. Existing finally-based logging identifies the cancelled
+subphase at the end of the request. Only fixed stage names, elapsed time and
+outcome are logged. The timing-only edit was independently AST-equivalent to J
+after removing just these wrappers/import; the integrated collector was also
+AST-equivalent after removing the intended lookup substitution.
 
-The same patch adds fixed-name `refresh_stage` wrappers around source
-collision, primary reads, secondary helpers, order/invoice conversion, native
-overlaps and finalization. The existing timing mechanism emits the exact
-cancelled subphase during unwind without new I/O or private business data.
+## Verification
 
-## Safety and scope
+- 129 new cases: 116 fee-index/parity/integration cases and 13 source-stage
+  timing cases. Each executed and passed locally.
+- Root integrated selection: **339 passed, 3 explicitly deselected, exit0**.
+  The three deselected cases require the unavailable local Mongo replica set
+  at loopback port27305. The first unfiltered run recorded 223 passes and those
+  three connection-refused failures. They remain mandatory in exact-A CI with
+  its real replica set; no CI skip or exclusion was added.
+- Independent comparison used the exact J function in the same process under
+  hash seeds17 and73: **18,693 comparisons per seed, 37,386 total**, both exit0.
+  It compared return values, exception type/message, Decimal flags and input
+  preservation, including malformed structures, NaN/Infinity, colon-containing
+  identities, empty obligation sets and short-circuit behavior.
+- Whole-collector tests compare source results, reconciliation, ordinary
+  reports, financial position and source read order against the legacy lookup,
+  including replay and old/new delivery paths.
+- Actual visible collector disconnect/deadline tests stop and join the
+  preparation worker before returning, release only the owned lease, leave
+  financial/source state unchanged and retain no orphan tasks.
+- Independent operation counts: old work16448→65664 visits for64→128 rows and
+  calls (3.992×); indexed work including construction514→1026 (1.996×).
+  This counts instrumented loop visits, not every operation in sorting.
+- Independent negative control replaces the lookup with J in memory and fails
+  the doubling bound as expected (exit1). The implementation's own regression
+  negative control independently fails its intended growth assertion on J.
+- Timing tests cover failure/deadline at collision, primary/settings/transaction
+  reads and order conversion, hidden/unauthorized admission, private-canary
+  redaction and retention of the cancelled stage among the last100 log lines.
+- `git diff --check` and syntax checks passed. The old delivery reader's SHA256
+  remains `0a64e6a27dcf9e49afe23b0240c15f0ba4bd74c3ea79aafe6b6f5e056c7eabcc`.
 
-Complete owner data, source contradictions, historical records, row caps,
-authorization, CAS and the85-second request deadline remain required. No
-assignment/cost/reconciliation optimization is included. No financial
-confirmation, payout, settlement or provider write is used as a test.
-Original `/app`, its120 unrelated untracked files and unsaved `Untitled-1`
-remain untouched by this follow-up; no release lease has been created.
+These test selections overlap and must not be added together as unique cases.
 
-## Verification and release state
+## Paired synthetic measurements
 
-Implementation, parity/error-order/cancellation tests and independent review
-are in progress. No source A or intent B is frozen. Nothing from this
-follow-up has been merged or published. Source branch:
-`codex/operational-source-collection-fix-20261114`.
+Each row is one bounded, sequential old/new pair on identical in-memory
+inputs, with the old function extracted from immutable J. New time includes
+the complete index build. All four children and the runner exited0, returned
+equal expected results and preserved their inputs. No database was opened.
 
-Documentation-only checkpoint branch:
-`codex/operational-source-collection-handoff-20261114`.
-Issue1006 reached its2500-comment limit; its final entry documents continued
-tracking in task PRs. The handoff branch and forthcoming task PR preserve
-verified milestones without changing frozen source commits.
+| History rows per group | Lookups | Evidence path | Old wall | New total wall |
+| ---: | ---: | --- | ---: | ---: |
+| 1000 | 1000 | No direct saved fee | 0.396461s | 0.008789s |
+| 4000 | 4000 | No direct saved fee | 5.915601s | 0.030327s |
+| 20000 | 250 | No direct saved fee | 1.821549s | 0.056824s |
+| 20000 | 20000 | Direct saved fee control | 0.007265s | 0.065864s |
 
-Next: finish implementation, prove whole-collector/reconciliation parity and
-bounded indexing work, run independent review and focused regressions, then
-freeze all source/tests/documentation as A. Require exact-A CI and reviewed
-artifact, intent-only B, normal merge, actual original build, prepare/prepublish,
-one publish, official verification and a fresh visible financial as_of before
-claiming the user's issue resolved.
+The direct-proof path already avoids historical scans; indexing adds about
+0.0586s in that control, including a 0.0491s build. It is not a speedup there.
+These are local synthetic observations, not measured production acceleration
+or proof that the full refresh now finishes within85 seconds.
 
-## Implementation checkpoint
+## Preserved scope and release requirements
 
-The fee-history helper is implemented and temporarily frozen for independent review at SHA256 `d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d`. Its 103 focused cases passed with no failures/errors/skips. The original reader is byte-for-byte unchanged. The collector builds one callable in its owned preparation worker and uses it at both existing fee checks. The timing-only change passed 13 new cases and 82 adjacent cases; root independently proved full AST equality after removing only the timing wrappers/import, before adding fee wiring. Whole-collector integration tests, independent adversarial review and paired old/new measurements remain in progress. WIP source snapshots under evidence/wip are recoverable but are not a frozen release or deployable candidate.
+Owner scope, complete history, contradictions, source row caps, authorization,
+CAS and the85-second request deadline are unchanged. No assignment, product
+cost, reconciliation or bank-audit optimization is bundled. No payment,
+delivery confirmation, payout, settlement or provider write is used as a test.
+Original /app has120 unrelated untracked files and unsaved Untitled-1; this
+follow-up has not changed that workspace or created a release lease.
+
+The new helper is automatically governed by the complete backend runtime source
+manifest once tracked in A. The separate critical-file subset is unchanged.
+Both new tests match the existing Operational and Stock workflow globs.
+
+Source branch: `codex/operational-source-collection-fix-20261114`.
+Documentation-only continuation:
+`codex/operational-source-collection-handoff-20261114`. Issue1006 reached its2500-comment
+limit; the final ledger entry documents continued tracking through task PRs.
+Exact immutable A/B/M identities and subsequent CI/release evidence belong in
+the task PR and continuation branch, without editing frozen source A.
+
+Next: freeze source A, verify all exact-A CI and all129 new cases in both
+official JUnit artifacts, then freeze reviewed intent-only B. Require normal
+merge with the B-equivalent tree, the actual original-operator build,
+prepare/prepublish, one publish, explicit newer platform completion, official
+three-probe verification and fresh inactive guard. Finally trigger one visible
+financial refresh and require a fresh as_of. Do not claim resolution from
+publication or generated_at alone.
+
+## Immutable source checkpoint
+
+Source A `8839d3aeb32b4bda2de2015efb0deca7fbb844a3`, tree `492727ceae6b6cada3894e7a450f837186f9a962`, parent J `9c71435f4a19977c09f4331dee8fddbfa12a45eb`, is frozen on [https://github.com/AMASI-SA/AMASI-SA/pull/1917](https://github.com/AMASI-SA/AMASI-SA/pull/1917). All six source/test/status blobs were verified against local Git blob hashes before the ref was moved. Exact-A CI is running. The new helper/test and source wiring match independent review. Local proof files, exact129 new case names, independent harness/results, raw failed local-Mongo attempt and successful339-case selection, and all paired synthetic evidence are preserved under evidence. The local-Mongo connection failures are not represented as passing tests; exact-A CI must execute them with the replica set.
+
+No intent B, merge, original build, lease or publish has occurred for PR1917. Original workspace preservation remains required. After publication/official verification, use one visible refresh; avoid opening cached Logs beforehand and capture its fresh substage output near the request deadline.

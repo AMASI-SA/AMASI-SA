@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.481" timestamp="2026-11-14T07:29:41.654074+03:00" hostname="452ed8f7a76a"><testcase classname="backend.tests.test_operational_balance_recorded_courier_fee_index" name="test_history_work_scales_with_input_instead_of_orders_times_history" time="0.103"><failure message="AssertionError: (33792, 133120)&#10;assert 133120 &lt;= (33792 * 2.4)">backend/tests/test_operational_balance_recorded_courier_fee_index.py:196: in test_history_work_scales_with_input_instead_of_orders_times_history
+    assert large &lt;= small * 2.4, (small, large)
+E   AssertionError: (33792, 133120)
+E   assert 133120 &lt;= (33792 * 2.4)</failure></testcase></testsuite></testsuites>

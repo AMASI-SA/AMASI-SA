@@ -1,0 +1,9 @@
+{
+  "baseline_commit": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+  "baseline_source_sha256": "0a64e6a27dcf9e49afe23b0240c15f0ba4bd74c3ea79aafe6b6f5e056c7eabcc",
+  "head": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+  "helper_sha256": "d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d",
+  "harness_sha256": "56668f7ed611d21f2ec32822ed8632de5d4f689a9012db5f12976bd959b22fc2",
+  "cwd": "/workspace/scratch/019fa8a18b3d/mezan-source-collection-fix",
+  "database_access": false
+}

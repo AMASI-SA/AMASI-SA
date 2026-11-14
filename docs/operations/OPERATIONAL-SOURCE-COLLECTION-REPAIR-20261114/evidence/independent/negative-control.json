@@ -1,0 +1,17 @@
+{
+  "base": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+  "helper_sha256": "d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d",
+  "negative_control": true,
+  "work": {
+    "baseline": {
+      "size64_visits": 16448,
+      "size128_visits": 65664,
+      "doubling_ratio": 3.992217898832685
+    },
+    "candidate": {
+      "size64_visits": 16448,
+      "size128_visits": 65664,
+      "doubling_ratio": 3.992217898832685
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{"baseline_commit": "9c71435f4a19977c09f4331dee8fddbfa12a45eb", "baseline_source_sha256": "0a64e6a27dcf9e49afe23b0240c15f0ba4bd74c3ea79aafe6b6f5e056c7eabcc", "patch_scope": "child-process memory only", "repository_writes": false}
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____ test_history_work_scales_with_input_instead_of_orders_times_history ______
+backend/tests/test_operational_balance_recorded_courier_fee_index.py:196: in test_history_work_scales_with_input_instead_of_orders_times_history
+    assert large <= small * 2.4, (small, large)
+E   AssertionError: (33792, 133120)
+E   assert 133120 <= (33792 * 2.4)
+=========================== short test summary info ============================
+FAILED backend/tests/test_operational_balance_recorded_courier_fee_index.py::test_history_work_scales_with_input_instead_of_orders_times_history
+1 failed in 1.48s

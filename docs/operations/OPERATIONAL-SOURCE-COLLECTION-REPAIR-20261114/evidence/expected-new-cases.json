@@ -1,0 +1,518 @@
+[
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[0_0]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[False]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[cost3]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[cost4]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[0_1]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[NaN]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[None]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[False]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[0]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[proof4]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[proof5]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[proof6]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts0]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts1]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts2]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts3]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts4]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts5]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a:]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a:b]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a:b:]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a:b:c]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a::b]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[:b]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[aa]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[0]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[1]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[-1]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[Infinity]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[-Infinity]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[NaN]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[sNaN]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[not-a-number]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[None]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[confirmed9]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[False]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[True]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[0.5]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations0]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations1]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations2]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations3]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations4]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations5]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations6]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations7]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements0]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements1]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements2]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements3]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements4]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements5]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements6]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements7]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements8]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements9]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements10]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements11]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements0]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements1]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements2]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements3]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements4]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements5]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements6]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements7]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements8]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements9]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements10]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements11]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[0]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[-1]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[1]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[NaN]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[sNaN]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[Infinity]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[None]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[amount7]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[0.5]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_allocation_merge_retains_global_movement_order"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_nonstandard_outer_structure_uses_unchanged_reader[None]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_nonstandard_outer_structure_uses_unchanged_reader[False]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_nonstandard_outer_structure_uses_unchanged_reader[0]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_nonstandard_outer_structure_uses_unchanged_reader[value3]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_nonstandard_outer_structure_uses_unchanged_reader[value4]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_nonstandard_outer_structure_uses_unchanged_reader[value5]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_nonstandard_outer_structure_uses_unchanged_reader[value6]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_nonstandard_outer_structure_uses_unchanged_reader[value7]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_nonstring_order_identity_preserves_original_exception[None]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_nonstring_order_identity_preserves_original_exception[False]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_nonstring_order_identity_preserves_original_exception[0]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_nonstring_order_identity_preserves_original_exception[order_id3]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_nonstring_order_identity_preserves_original_exception[a]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_fallback_is_lazy_and_preserves_custom_mapping_access"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_no_eager_amount_validation_before_a_direct_proof"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_normal_history_lookups_never_scan_through_legacy_fallback"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_history_work_scales_with_input_instead_of_orders_times_history"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_each_attempt_builds_an_independent_lookup_after_replacing_history"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_cancellation_during_owned_build_joins_worker_before_return"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_whole_collector_reconciliation_and_reports_match_legacy[False-old_courier]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_whole_collector_reconciliation_and_reports_match_legacy[False-old_driver]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_whole_collector_reconciliation_and_reports_match_legacy[False-new_courier]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_whole_collector_reconciliation_and_reports_match_legacy[False-new_native_driver]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_whole_collector_reconciliation_and_reports_match_legacy[False-new_contract_driver]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_whole_collector_reconciliation_and_reports_match_legacy[True-old_courier]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_whole_collector_reconciliation_and_reports_match_legacy[True-old_driver]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_whole_collector_reconciliation_and_reports_match_legacy[True-new_courier]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_whole_collector_reconciliation_and_reports_match_legacy[True-new_native_driver]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_whole_collector_reconciliation_and_reports_match_legacy[True-new_contract_driver]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_collector_builds_again_for_each_invocation_even_with_same_state"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_actual_visible_collector_joins_history_worker_and_releases_only_own_lease[disconnect]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_recorded_courier_fee_index",
+    "name": "test_actual_visible_collector_joins_history_worker_and_releases_only_own_lease[deadline]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_source_stage_timing",
+    "name": "test_real_collection_stage_sequence_preserves_output_and_reads_and_is_silent_outside_visible"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_source_stage_timing",
+    "name": "test_real_source_read_exit_is_identified_and_joined[deadline-source_collision-mezan_supplier_invoices_v2]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_source_stage_timing",
+    "name": "test_real_source_read_exit_is_identified_and_joined[deadline-source_primary_reads-mezan_suppliers_v2]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_source_stage_timing",
+    "name": "test_real_source_read_exit_is_identified_and_joined[deadline-source_fee_settings-settings]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_source_stage_timing",
+    "name": "test_real_source_read_exit_is_identified_and_joined[deadline-source_transactions-order_payment_transactions_v2]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_source_stage_timing",
+    "name": "test_real_source_read_exit_is_identified_and_joined[failure-source_collision-mezan_supplier_invoices_v2]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_source_stage_timing",
+    "name": "test_real_source_read_exit_is_identified_and_joined[failure-source_primary_reads-mezan_suppliers_v2]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_source_stage_timing",
+    "name": "test_real_source_read_exit_is_identified_and_joined[failure-source_fee_settings-settings]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_source_stage_timing",
+    "name": "test_real_source_read_exit_is_identified_and_joined[failure-source_transactions-order_payment_transactions_v2]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_source_stage_timing",
+    "name": "test_real_order_loop_exit_is_identified_without_saving_or_continuing[cancelled]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_source_stage_timing",
+    "name": "test_real_order_loop_exit_is_identified_without_saving_or_continuing[failed]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_source_stage_timing",
+    "name": "test_hidden_or_unauthorized_route_starts_no_source_work_or_timing[payload0-None]"
+  },
+  {
+    "classname": "backend.tests.test_operational_balance_source_stage_timing",
+    "name": "test_hidden_or_unauthorized_route_starts_no_source_work_or_timing[payload1-principal1]"
+  }
+]

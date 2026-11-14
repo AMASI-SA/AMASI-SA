@@ -1,7 +1,7 @@
 {
   "task_id": "OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114",
-  "stage": "index_helper_verified_integration_and_independent_review_pending",
-  "updated_at": "2026-11-14T04:23:23.421Z",
+  "stage": "source_A_frozen_exact_commit_CI_running",
+  "updated_at": "2026-11-14T04:34:25.379Z",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
@@ -72,7 +72,174 @@
       "deployment_git_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
       "release_id": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
       "conclusion": "snapshot_load completed; total request deadline cancelled source_collection before reconciliation"
-    }
+    },
+    "validation": {
+      "root_cases": 339,
+      "root_actual_exit": 0,
+      "local_mongo_pending_cases": 3,
+      "new_cases": 129,
+      "fee_cases": 116,
+      "timing_cases": 13,
+      "independent_comparisons": 37386,
+      "review": "PASS",
+      "helper_sha256": "d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d",
+      "fee_test_sha256": "7742947fe377ffcb5ea7ba9e14e56e0d64ff570af5d227e94260a8f5bb538f9a",
+      "source_sha256": "c4cdd798daa9d897a26bb166d2962c3c93446b9e724a22489512047acc074b9f",
+      "paired": {
+        "pairs": [
+          {
+            "case": "absent",
+            "rows_per_history_group": 1000,
+            "calls": 1000,
+            "baseline_commit": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+            "baseline_source_sha256": "0a64e6a27dcf9e49afe23b0240c15f0ba4bd74c3ea79aafe6b6f5e056c7eabcc",
+            "helper_sha256": "d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d",
+            "legacy_wall_seconds": 0.3964608189999126,
+            "legacy_cpu_seconds": 0.377762507,
+            "indexed_total_wall_seconds": 0.008788529987214133,
+            "indexed_total_cpu_seconds": 0.00878754199999987,
+            "index_build_wall_seconds": 0.0025160719960695133,
+            "index_build_cpu_seconds": 0.0025175819999998517,
+            "indexed_lookup_wall_seconds": 0.00627245799114462,
+            "wall_speedup_including_build": 45.11116416245924,
+            "all_results_equal_and_expected": true,
+            "inputs_unchanged": true,
+            "input_sha256": "0f117df3b33e9b48ff98ae9a7e6e80ba13704b389650b9121f9bfc6ad2465e84",
+            "database_access": false
+          },
+          {
+            "case": "absent",
+            "rows_per_history_group": 20000,
+            "calls": 250,
+            "baseline_commit": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+            "baseline_source_sha256": "0a64e6a27dcf9e49afe23b0240c15f0ba4bd74c3ea79aafe6b6f5e056c7eabcc",
+            "helper_sha256": "d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d",
+            "legacy_wall_seconds": 1.8215488119894871,
+            "legacy_cpu_seconds": 1.821597204,
+            "indexed_total_wall_seconds": 0.05682378899655305,
+            "indexed_total_cpu_seconds": 0.056825967999999616,
+            "index_build_wall_seconds": 0.05445885899825953,
+            "index_build_cpu_seconds": 0.05446335800000002,
+            "indexed_lookup_wall_seconds": 0.002364929998293519,
+            "wall_speedup_including_build": 32.05609559228764,
+            "all_results_equal_and_expected": true,
+            "inputs_unchanged": true,
+            "input_sha256": "0e9f94249d5f80178a09ca46d61255965fbb16a5f2d3ce5830e718032988d5fa",
+            "database_access": false
+          },
+          {
+            "case": "absent",
+            "rows_per_history_group": 4000,
+            "calls": 4000,
+            "baseline_commit": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+            "baseline_source_sha256": "0a64e6a27dcf9e49afe23b0240c15f0ba4bd74c3ea79aafe6b6f5e056c7eabcc",
+            "helper_sha256": "d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d",
+            "legacy_wall_seconds": 5.915601264001452,
+            "legacy_cpu_seconds": 5.915508342000001,
+            "indexed_total_wall_seconds": 0.030327443004352972,
+            "indexed_total_cpu_seconds": 0.03033007899999962,
+            "index_build_wall_seconds": 0.00892756599932909,
+            "index_build_cpu_seconds": 0.008929314999999605,
+            "indexed_lookup_wall_seconds": 0.021399877005023882,
+            "wall_speedup_including_build": 195.05769949521863,
+            "all_results_equal_and_expected": true,
+            "inputs_unchanged": true,
+            "input_sha256": "a3f16b92642d2636fa648047838638cb16c114562cb35cb615398acd38e095bf",
+            "database_access": false
+          },
+          {
+            "case": "direct",
+            "rows_per_history_group": 20000,
+            "calls": 20000,
+            "baseline_commit": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+            "baseline_source_sha256": "0a64e6a27dcf9e49afe23b0240c15f0ba4bd74c3ea79aafe6b6f5e056c7eabcc",
+            "helper_sha256": "d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d",
+            "legacy_wall_seconds": 0.007264753003255464,
+            "legacy_cpu_seconds": 0.00726374399999985,
+            "indexed_total_wall_seconds": 0.06586353000602685,
+            "indexed_total_cpu_seconds": 0.06586787399999983,
+            "index_build_wall_seconds": 0.04910404900147114,
+            "index_build_cpu_seconds": 0.04910862699999985,
+            "indexed_lookup_wall_seconds": 0.01675948100455571,
+            "wall_speedup_including_build": 0.11030008568612557,
+            "all_results_equal_and_expected": true,
+            "inputs_unchanged": true,
+            "input_sha256": "72b6d19a0950999b57bf53aa0087599ded9de92bb88d5698496949b511db9bb4",
+            "database_access": false
+          }
+        ],
+        "identity": {
+          "baseline_commit": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+          "baseline_source_sha256": "0a64e6a27dcf9e49afe23b0240c15f0ba4bd74c3ea79aafe6b6f5e056c7eabcc",
+          "head": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+          "helper_sha256": "d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d",
+          "harness_sha256": "56668f7ed611d21f2ec32822ed8632de5d4f689a9012db5f12976bd959b22fc2",
+          "cwd": "/workspace/scratch/019fa8a18b3d/mezan-source-collection-fix",
+          "database_access": false
+        },
+        "negative": {
+          "argv": [
+            "/workspace/scratch/019fa8a18b3d/mezan-operational-test-venv/bin/python",
+            "-B",
+            "/workspace/scratch/019fa8a18b3d/pr1916-source-cpu-benchmark/negative_control.py"
+          ],
+          "started_at": "2026-11-14T04:29:40.567577+00:00",
+          "actual_exit": 1,
+          "elapsed_seconds": 2.9122939740045695,
+          "stdout_sha256": "3dc75aef9e2244b4d214374c4a087cd42c175ff2ed22cfe4ea054288e3cf9f3d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      }
+    },
+    "financialAcceptancePlan": {
+      "trigger": "one visible refresh only after official verification",
+      "log_cache_plan": "Do not open runtime Logs during publish/verification. Keep management Overview. At about87 seconds after the single visible refresh, open Logs for first time after old cache expiration; capture fixed substage cancellation or successful completion, then read final UI as_of.",
+      "pass_requires": "fresh as_of, no refresh failure, complete tables and local pending-order dialog/pagination without confirmation writes"
+    },
+    "A": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+    "Atree": "492727ceae6b6cada3894e7a450f837186f9a962",
+    "sourceFrozenAt": "2026-11-14T04:33:05.129Z",
+    "source_files": [
+      {
+        "path": "backend/operational_balance_sources.py",
+        "bytes": 148332,
+        "sha256": "c4cdd798daa9d897a26bb166d2962c3c93446b9e724a22489512047acc074b9f",
+        "git_blob": "9a37c1ec1a3becb0d5495acd3e2b6a01ec3297f1"
+      },
+      {
+        "path": "backend/operational_balance_service.py",
+        "bytes": 72407,
+        "sha256": "4462d0c1a8e327795b66b49e7d9112b3e5f4e8dfe3c92a4da5df0be70e7e48f0",
+        "git_blob": "3d44f1f4517e45e85ca57f0c60fcfb43af0c0414"
+      },
+      {
+        "path": "backend/operational_courier_fee_history.py",
+        "bytes": 4385,
+        "sha256": "d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d",
+        "git_blob": "192d3cc19f3d47c9d4fad41069c6a0f028fd95e0"
+      },
+      {
+        "path": "backend/tests/test_operational_balance_recorded_courier_fee_index.py",
+        "bytes": 16156,
+        "sha256": "7742947fe377ffcb5ea7ba9e14e56e0d64ff570af5d227e94260a8f5bb538f9a",
+        "git_blob": "68f211acbb6bdc02c9a2b9c35de9a8785699c1d8"
+      },
+      {
+        "path": "backend/tests/test_operational_balance_source_stage_timing.py",
+        "bytes": 11719,
+        "sha256": "fe642e2293deb74339def202a44480348ee28432c8a633aa996a3e8c6825e4d2",
+        "git_blob": "65278a17e110ce6e93dffee17464cd0c270c854c"
+      },
+      {
+        "path": "docs/operations/OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114/STATUS.md",
+        "bytes": 7234,
+        "sha256": "99fa861fa7c2c6e440163ad174952187c5004a1f409b6a7adfd2e6efc9e57c9e",
+        "git_blob": "88e03ab4901117516b5e291803eff23d8ba09da8"
+      }
+    ],
+    "pr": 1917,
+    "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1917",
+    "pr_body": "## Problem\nThe verified PR1916 release still falls back to the old financial snapshot. A controlled visible attempt completed snapshot loading in9.084s, then source_collection was cancelled after72.943s at the85.040s total deadline. Reconciliation never began. Within collection, recorded_courier_fee repeatedly scans the complete financial history for each eligible order; independent operation counts prove quadratic growth. The live evidence does not establish that this helper alone consumed the entire source phase.\n\n## Change\nBuild one attempt-local fee-history lookup through the existing request-owned preparation worker and use it at both existing fee checks. Preserve complete history, exact prefix/short-circuit/error/Decimal/allocation semantics; unusual structures use the unchanged legacy reader. Rebuild for every collector invocation and CAS retry. Add15 fixed source-substage timing wrappers so any remaining cancellation identifies its actual subphase. No database read, financial mutation, cache across requests, cap increase, deadline extension or authorization change.\n\n## Verification\n-129 new cases pass:116 fee/parity/full-collector/reconciliation/report/lifetime cases and13 timing cases.\n-Root integrated selection:339 passed, actual exit0. Three local Mongo cases were explicitly deselected after connection-refused failures; they remain required without exclusion in exact-A CI's replica set.\n-Independent reviewer:37,386 comparisons against exact J over two hash seeds, comparing values, exception type/message, Decimal flags and input immutability; no blocking finding. Actual visible disconnect joins the worker, releases the owned lease and leaves no nonlease writes or orphan tasks.\n-Negative controls using exact J fail the intended repeated-scan growth assertion. Integrated collector AST matches J after removing only timing wrappers and the intended lookup substitution; old delivery reader remains byte-for-byte unchanged.\n-Paired synthetic timings including full index build:1000/1000 absent-proof0.396461→0.008789s;4000/4000 5.915601→0.030327s;20000 history/250 lookups1.821549→0.056824s. Direct-proof control20000/20000 adds58.6ms (0.007265→0.065864s); no speedup claimed there. Each pair has equal results/unchanged inputs, no DB, actual exit0. These are local observations, not production acceptance.\n\n## Frozen source and pending release\nJ: `9c71435f4a19977c09f4331dee8fddbfa12a45eb`\nA: `8839d3aeb32b4bda2de2015efb0deca7fbb844a3`\nA tree: `492727ceae6b6cada3894e7a450f837186f9a962`\n\nAll source/tests/status are frozen in A. Exact-A CI, official129-case JUnit inclusion in both Operational and Stock, reviewed artifact, intent-only B, normal merge, original-operator build, guarded publish/verify and a fresh visible as_of remain required. Production has not changed by this follow-up. Original /app120 unrelated untracked files and unsaved Untitled-1 remain preserved.\n\n[Source status](https://github.com/AMASI-SA/AMASI-SA/blob/8839d3aeb32b4bda2de2015efb0deca7fbb844a3/docs/operations/OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114/STATUS.md). Documentation-only continuation branch: `codex/operational-source-collection-handoff-20261114`; never merge or deploy that branch. Issue1006 is at GitHub's2500-comment limit."
   },
   "production_changed_by_this_followup": false,
   "verified_scope": "Live source_collection cancelled after72942.769ms; snapshot_load completed9084.282ms; no reconciliation started.",
@@ -89,7 +256,7 @@
     "Collision preflight and secondary reads are not localized by current stage logs",
     "Repeated fee/assignment/cost scans exist inside source_collection; bounded synthetic measurement is running"
   ],
-  "next_action": "Measure actual source_collection CPU helpers offline; select narrow evidence-backed improvement, add fixed safe substage timings if needed, test and independently review before freezing A.",
+  "next_action": "Verify exact-A workflows and all129 new cases plus3 local-Mongo cases in official artifacts; validate candidate, freeze intent-only B, guarded release and one visible acceptance.",
   "ledger_note": "Issue1006 has2500 comments; latest ledger explicitly documents new-comment limit. Task-specific STATUS and forthcoming PR carry continuation.",
   "prechange_measurements": {
     "synthetic_only": true,
@@ -200,5 +367,84 @@
         "sha256": "b9a31f2a20b9cbdb5f5a27cc818617abb1271e9dd5b35ecb204e5c248ddf709f"
       }
     ]
-  }
+  },
+  "pr": 1917,
+  "local_verified_evidence": [
+    {
+      "path": "evidence/independent/courier_fee_independent_review.py",
+      "sha256": "6234f9ca0d20c963adc052d3bd7ed03d07933d9e4bb9d8a7cfa6c4f8518d36ed"
+    },
+    {
+      "path": "evidence/independent/seed17.json",
+      "sha256": "82d6581436014fe89d08f8aae97fada7f910503ff3cf76654cb910c485761994"
+    },
+    {
+      "path": "evidence/independent/seed73.json",
+      "sha256": "82d6581436014fe89d08f8aae97fada7f910503ff3cf76654cb910c485761994"
+    },
+    {
+      "path": "evidence/independent/negative-control.json",
+      "sha256": "a2857699ccb6ce60aff2ee34b83c1181247baf81aff69b4435a361c137be0b13"
+    },
+    {
+      "path": "evidence/root-integrated.xml",
+      "sha256": "e4d8c1aee46e58fb2afeef46612cedf107c30b019d13b4030cbc8620b26193e6"
+    },
+    {
+      "path": "evidence/root-integrated-result.json",
+      "sha256": "3bc13515b0bee5ee8c9985ec0207c67dcdb0d188099b78a24f124c320fa3450d"
+    },
+    {
+      "path": "evidence/root-initial-adjacent.xml",
+      "sha256": "c8176feefcbb2b42d5d867b69cde89954b51d784b6ad40b71c18a93bbb92ff49"
+    },
+    {
+      "path": "evidence/root-initial-adjacent-result.json",
+      "sha256": "e48e529271abcef867bcd9f55ed17716e291db47d02c9df0ee30d69f76f07c00"
+    },
+    {
+      "path": "evidence/expected-new-cases.json",
+      "sha256": "b73425b6a8550c17fe160072d1726e3fa5e195f6d9e17be2548980b5a01b16f0"
+    },
+    {
+      "path": "evidence/fee-index-proof.json",
+      "sha256": "bafe5c0aab90641d2bb34e5aa62e0b95684b1f4a024676d9068654474d0c2c7b"
+    },
+    {
+      "path": "evidence/fee-index-integration.xml",
+      "sha256": "062a78ae16e0b0e915454867fadf93635fc21c11337cb0a782607bab7631b4bd"
+    },
+    {
+      "path": "evidence/negative_control.py",
+      "sha256": "9df990d54c1d8511dfaec4832d6c851b2d27fa794d37e9ddc2d74e83d58053c6"
+    },
+    {
+      "path": "evidence/fee-index-negative-result.json",
+      "sha256": "af5015764fcf3dd09b77f443c0bfcef2553108ef985a555aa699c771046525bd"
+    },
+    {
+      "path": "evidence/fee-index-negative.stdout",
+      "sha256": "3dc75aef9e2244b4d214374c4a087cd42c175ff2ed22cfe4ea054288e3cf9f3d"
+    },
+    {
+      "path": "evidence/fee-index-negative.xml",
+      "sha256": "3eb5878af1d0cdd7cbda85f70a8c9cf9d52a760761649e9310fa925c1b14a28a"
+    },
+    {
+      "path": "evidence/paired_bench.py",
+      "sha256": "56668f7ed611d21f2ec32822ed8632de5d4f689a9012db5f12976bd959b22fc2"
+    },
+    {
+      "path": "evidence/paired-identity.json",
+      "sha256": "3c641a72b3644302c1de08d0c401e2e73c9c13d1db9d01e4839d0aa65f427933"
+    },
+    {
+      "path": "evidence/paired-harness-result.json",
+      "sha256": "5d652d4b3a5c446b218ea3459c59b4baf4144a295046025431eec6c2557f80df"
+    },
+    {
+      "path": "evidence/paired-harness.stdout",
+      "sha256": "6fb26400b4eb0bc7dda2a6e535fe3a5200d1075242a816e4aae8d85368ce668c"
+    }
+  ]
 }
