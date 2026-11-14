@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-FINANCIAL-LOAD-RECOVERY-20261114",
-  "phase": "prepared-for-authorized-publication",
+  "phase": "authorized-publication-in-progress",
   "repository": "AMASI-SA/AMASI-SA",
   "release_branch": "codex/financial-loading-resume-20261114",
   "handoff_branch": "codex/financial-loading-release-handoff-20261114",
@@ -19,7 +19,7 @@
   "source_A_stock_run": 43604084975,
   "production_changed": false,
   "lease_started": true,
-  "next": "Original prepared lease is owned by codex-financial-loading-recovery-1919. Run exact gateprepublish once pluspreservationafter-prepublish, immediatelyclickopenEmergentPublishchangesdialog. Observeexplicitnewsuccess andnewversion, thenrunoriginalverifywrapperonce with72x801fddirectory/M/actor, threeprobesandclosure. Neverrepeatprepare orpublishwithoutinspectingexistingresults/liveUI.",
+  "next": "Do not click Publish changes again. Observe currentEmergentpublication untilnewexplicitDeploymentSucceeded/newversion. Thenverifypublichealthintendedruntime/source, runofficialoriginalverifywrapperonce with72x801fd/M/actor, inspect3probes+actualexit+inactiveclosure andpostverify120preservation. Thenoneloadvisiblefinancialreportacceptance.",
   "notes": [
     "Issue1006 is full; this branch, task status and PR1919 carry continuation.",
     "The handoff branch is documentation only and must never be merged into frozen release A/B.",
@@ -44,7 +44,7 @@
   "merge_M_readiness_run": 43605488046,
   "merge_M_security_run": 43605488095,
   "merge_M_codeql_run": 43605488109,
-  "live_production_changed": false,
+  "live_production_changed": "deployment in progress; not yet verified",
   "original_app_preflight_utc": "2026-11-14T14:31:46.889739+00:00",
   "original_app_head": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
   "original_app_tracked_clean": true,
@@ -89,6 +89,13 @@
   "prepare_ended_at": "2026-11-14T14:50:45.041309+00:00",
   "prepare_owned_active": true,
   "preservation_after_prepare": true,
-  "prepublish_started": false,
-  "publish_started": false
+  "prepublish_started": true,
+  "publish_started": true,
+  "prepublish_actual_exit": 0,
+  "prepublish_elapsed_seconds": 3.4212061829748563,
+  "prepublish_ended_at": "2026-11-14T14:52:07.717482+00:00",
+  "prepublish_ready": true,
+  "preservation_after_prepublish": true,
+  "publish_ui_state": "Publishing...",
+  "publish_observed_utc": "2026-11-14 14:53:16 UTC"
 }

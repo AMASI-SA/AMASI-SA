@@ -234,3 +234,13 @@ The Emergent Republish dialog is open with Publish changes available. Its
 currently published version remains279b7a3/100thpublish. Prepublish and publication
 have not yet run. Next action is prepublish+preservation, then the authorized UI
 publication immediately afterward. The prepared lease must not be duplicated.
+
+## Authorized publication started
+
+Official prepublish completed with actualexit0 at14:52:07.717482UTC,
+ready_to_publish=true, matching owned lease and after-prepublish120-file
+preservation. Root clicked Publish changes once in the already-open Emergent
+management dialog. UI changed to disabled Publishing..., confirming the action
+started. Observed at 2026-11-14 14:53:16 UTC. Do not repeat that click.
+No newer success or public verification has yet been observed. The lease remains
+owned by this release until official verification closes it.
