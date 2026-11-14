@@ -1,16 +1,17 @@
 # Operational source-read recovery — 2026-11-14
 
-## Current outcome — published and verified; manual refresh still times out
+## Current outcome — one successful visible manual refresh observed
 
-PR #1928 is merged and published. The official three-probe verifier and final
-120-file preservation check passed. The one post-publication manual refresh
-did not advance the saved financial timestamp: it returned the canonical
-timeout warning and retained 14 November 2026, 18:22 Asia/Riyadh. The source
-cancellation defect in the covered source-reader helpers is fixed and verified,
-but successful live recalculation
-and the underlying production latency cause remain unresolved. See the final
-checkpoint below. Do not repeat publication, verification or the manual
-refresh merely to resume this task.
+PR #1928 is merged and published. Its official three-probe verifier and final
+120-file preservation check passed. The earlier post-publication attempt timed
+out, but the single prepared diagnostic attempt in the next continuation
+advanced the saved financial timestamp from 14 November 2026, 18:22 to
+**14 November 2026, 23:09 Asia/Riyadh**, with the page visible and no new
+timeout/source-failure warning or diagnostic event. The covered source-reader
+cancellation defect remains fixed and verified. One successful live outcome
+is demonstrated; the earlier timeout and any intermittent latency cause remain
+unexplained. No further refresh, code change or publication is needed merely
+to repeat this result. See the final checkpoint below.
 
 ## Scope and authorization
 
@@ -614,3 +615,108 @@ promptly before the 100-entry tail rotates. It must remain one visible,
 intentional action without background polling or automatic retry. Any source
 change requires a fresh reviewed source/intent candidate on the then-current
 production base; never amend the frozen A2/B2/M2 or reuse this completed lease.
+
+
+## Successful prepared continuation — 2026-11-14 23:11 Riyadh
+
+The owner asked to continue after the authentication-blocked handoff. Root
+re-read the skill, canonical status and fresh Git evidence: handoff
+`48529aff4caec37197f3ff20acf622ef2e989668` was clean and matched its remote
+branch, R2 remained frozen at B2, and production Git remained the reviewed
+descendant `324dab9fd01fab17a28a5f7de4bb2bd298d7aea9`. The database viewer
+was not present after the prior handoff; its restoration was not assumed or
+retried. No production credentials, customer records or financial amounts were
+read or copied.
+
+The current management UI showed a subsequent published version `75ee080`,
+with our `3a22e2d` as the previous published version, and no publication in
+progress. The current production Git intent identifies source
+`fcb827f556c40bebd843d8c9d85fedc0b60cf8fa` and runtime
+`rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2`.
+Its frontend artifact tree is the same reviewed
+`d6bd189f78c5bb7467fa0b0c7a8edc2e0c36f8d22f6b5ab23242b0a9a0dc25bd`.
+These intent fields are Git evidence, not a newly executed official live
+identity verification of the other conversation's publication. This task did
+not publish again, touch `/app`, create/clear a lease or alter the frozen heads.
+
+### Prepared normal log capture
+
+Before considering another financial calculation, root proved that the
+documented raw Playwright management actions and narrow DOM reads leave the
+financial page's `document.visibilityState` equal to `visible`. No native AX,
+tab-focus action, DevTools workaround or hidden-state access was used during
+the attempt. Normal Overview / View Logs controls were the only log-access
+path. A normal management-page reload was used during preparation, not as an
+authentication retry.
+
+An ordinary visible reload of the saved financial summary began at
+20:07:47.905 UTC. It did not invoke the financial refresh POST, and it settled
+on the existing 18:22 saved date. A later normal management log view showed a
+fresh corresponding server record:
+
+`2026-11-14 20:07:58,399 api_timing method=GET route=/api/operational-balances/financial-position status=200 duration_ms=8311.158 outcome=2xx`
+
+The retrieved tail covered 20:07:53.967 through 20:08:09.683 UTC. This was a
+successful freshness beacon for the permitted log view. Its 8,311.158 ms is a
+server duration for that preflight GET, not a database query time, speedup
+benchmark or duration of the subsequent manual refresh. Earlier unchanged
+tails did not by themselves prove caching.
+
+Preflight saved-report/forecast loading notices were absent and the refresh
+button was enabled. The existing timeout-event baseline contained one rendered
+`Array(22)` event with captured timestamp 20:02:04.656 UTC; it was treated only
+as an existing baseline, not attributed to this new attempt. The source-event
+baseline was empty.
+
+### Actual observed result
+
+Root made exactly one prepared diagnostic click at **20:09:30.395 UTC**
+(23:09 Riyadh). The purpose was to capture the previously unavailable stage
+evidence through the now-prepared permitted surface, not to blindly repeat a
+failed refresh. The financial page stayed visible and showed the disabled
+updating button while keeping the dated saved report readable.
+
+At the first settled observation, **20:11:13.746 UTC / 23:11 Riyadh**:
+
+- Saved calculation date advanced to **14/11/2026, 23:09 Asia/Riyadh**.
+- The refresh button was enabled.
+- No timeout, source-failure or paused-attempt notice appeared in the inspected
+  fields, and no new fixed timeout/source diagnostic event appeared.
+- The financial page was still visible.
+
+The final observation at **20:11:55.230 UTC** confirmed the same fresh 23:09
+saved date and settled controls. **One successful visible manual outcome is
+demonstrated.** The 103.351 seconds from the observed start to the first settled
+observation is an observation interval, not an exact refresh, server or Mongo
+duration. No raw refresh POST status or stage-duration trace was captured.
+
+Interim and terminal normal log reopens continued to expose the earlier
+20:07:53–20:08:09 tail. No stage records for this attempt were returned. Do not
+invent them or attribute the preflight GET duration to the calculation. This
+success does not explain the earlier timeout or establish permanent resolution
+of intermittent latency. No additional calculation or test is justified merely
+to strengthen the success claim.
+
+### Final state and continuation
+
+The financial summary tab was marked as the user-facing result with the fresh
+date. The original code-server tab and unsaved editor were preserved. The
+browser completion summary was accepted; no further browser action is pending
+for this successful check. Database diagnostic access remains unverified, but
+it was not required to observe this successful calculation. The owner does not
+need to restore that session merely to use the newly updated financial page.
+
+No source-code change, new deployment, additional database-auth attempt,
+provider sync or separate financial transaction was initiated in this
+continuation. Existing demand-only behavior remains unchanged. The independent
+read-only reviewer agreed that this one successful outcome is supported and
+that no further refresh/test is needed now; latency root cause remains unknown.
+
+The proposed one-line JSON serialization of already sanitized timing rows was
+reviewed only as an observability contingency and **was not implemented**.
+If a future failure requires investigation, continue from current production
+and fresh evidence; do not automatically retry the refresh or resurrect old
+leases. A future instrumentation change would require a new reviewed source /
+intent candidate and the full repository release protocol. Current task status:
+**published source correction verified; successful live refresh observed once;
+intermittent performance cause unresolved, with no further change claimed**.
