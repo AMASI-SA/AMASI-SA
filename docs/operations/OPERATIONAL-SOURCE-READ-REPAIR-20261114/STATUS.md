@@ -1,3 +1,15 @@
+# Current stage — official production verification passed; financial acceptance running
+
+The original official verifier exited **0** after **571.59 seconds**, started `2026-11-14T01:59:31.583329+00:00`, finished `2026-11-14T02:09:03.178132+00:00`. It returned `verified:true`, **checks:3**, exact A `a496dd428241b06d2292286de030c70d6241fcf0`, M `4860548f0b032e8e3beca18a4776413cd7e0368b`, R `rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e`, and **582 frontend checked requests per probe**. The wrapper then obtained a fresh official `active:false` guard result; the matching lease closed normally. Verification stdout SHA-256: `308de6a11d0d5293f6fbdd4b0364d063c63da9dd21faa33ed77aa0e40800d7be`. Evidence prefix: `/tmp/mezan-pr1915-original-qqo8fwy9/28-verify`.
+
+The new platform version is **effdd19**, with explicit completion Nov14,04:57AM UTC+3. Publication and release verification are complete; do not publish or prepare again for this frozen candidate.
+
+Root issued one open of the financial-position page and no manual refresh click. The browser control connection timed out during creation and inventory recovery; binding the existing operator tab restored it, and the new financial tab was found. The same tab is now visibly loading. The interruption prevents treating the interval as a clean performance measurement; no live success is claimed yet. Keep this page visible and read only its status/as_of/warnings until settled. Do not repeat the refresh before diagnosing an actual outcome.
+
+---
+
+## Earlier checkpoints
+
 # Current stage — official verification running
 
 Platform completion for `effdd19` was observed at Nov14,04:57AM UTC+3. The original-operator verification wrapper has now printed its started marker with prefix `/tmp/mezan-pr1915-original-qqo8fwy9/28-verify` and remains running. Do not repeat Publish, rebuild, prepare, interrupt the verifier, or clear its matching lease. No completion result is claimed yet.

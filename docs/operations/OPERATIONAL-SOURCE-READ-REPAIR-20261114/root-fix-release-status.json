@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-11-14T02:08:35.476Z",
-  "stage": "official_verification_running",
+  "updated_at": "2026-11-14T02:15:14.114Z",
+  "stage": "official_verified_financial_acceptance_running",
   "J": "d6f246b4d3b14fd56ef2cbc574b99f08bb7d6fc1",
   "A": "a496dd428241b06d2292286de030c70d6241fcf0",
   "B": "30dc66ec09b371a6b990adbd167162254bfd77c6",
@@ -254,7 +254,7 @@
   ],
   "original_guard_last_observed": {
     "active": false,
-    "observed_at": "2026-11-14T01:33:29.477224+00:00",
+    "observed_after": "2026-11-14T02:09:03.178132+00:00",
     "actual_exit": 0
   },
   "platform_baseline": {
@@ -281,13 +281,9 @@
     "release_id": "rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e"
   },
   "current_lease": {
-    "actor": "codex-operational-source-rootfix-1915",
-    "prepared_at": "2026-11-14T01:44:54.230670+00:00",
-    "deployment_git_sha": "4860548f0b032e8e3beca18a4776413cd7e0368b",
-    "source_git_sha": "a496dd428241b06d2292286de030c70d6241fcf0",
-    "release_id": "rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e",
-    "prepare_exit": 0,
-    "prepare_seconds": 2.72
+    "active": false,
+    "closed_by": "official_verify",
+    "previous_actor": "codex-operational-source-rootfix-1915"
   },
   "original_evidence_dir": "/tmp/mezan-pr1915-original-qqo8fwy9",
   "prepublish": {
@@ -325,8 +321,26 @@
     "observed_before": "2026-11-14T02:05:58Z"
   },
   "official_verification": {
-    "started": true,
-    "outcome": "pending",
+    "phase": "verified",
+    "source_git_sha": "a496dd428241b06d2292286de030c70d6241fcf0",
+    "deployment_git_sha": "4860548f0b032e8e3beca18a4776413cd7e0368b",
+    "release_id": "rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e",
+    "checks": 3,
+    "frontend_checked_request_count": 582,
+    "fresh_guard_inactive": true,
+    "actual_exit": 0,
+    "elapsed_seconds": 571.5948063230026,
+    "started_at": "2026-11-14T01:59:31.583329+00:00",
+    "ended_at": "2026-11-14T02:09:03.178132+00:00",
+    "stdout_sha256": "308de6a11d0d5293f6fbdd4b0364d063c63da9dd21faa33ed77aa0e40800d7be",
     "prefix": "/tmp/mezan-pr1915-original-qqo8fwy9/28-verify"
+  },
+  "financial_acceptance": {
+    "pageOpenActions": 1,
+    "manualRefreshClicks": 0,
+    "browserRecovered": true,
+    "tab": "62",
+    "stage": "visible_loading",
+    "observed_at": "2026-11-14T02:15:14.114Z"
   }
 }
