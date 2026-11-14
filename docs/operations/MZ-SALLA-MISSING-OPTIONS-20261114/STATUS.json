@@ -3,30 +3,36 @@
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/salla-missing-options-investigation-20261114",
   "base_sha": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
+  "previous_checkpoint_sha": "cad45ce2c60d364b8d42f9ef0e6fc7370e690a11",
   "live_source_observed": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
-  "state": "diagnosis_partial_compatibility_gap_reproduced_original_capture_pending",
-  "scope": "Explain absent customer choices without manual Salla refresh or source mutation.",
+  "state": "root_cause_confirmed_stale_creation_choices_rejected_preventive_fix_pending",
+  "scope": "Explain and prevent missing incoming customer choices without manual Salla refresh.",
   "confirmed": [
-    "Both native Order V2 and root product projections have empty option evidence.",
-    "The first accepted native snapshot and initial source clock remain current.",
-    "The background cost-options task has a fresh live heartbeat; attempt success is unproven.",
-    "The documented List Items shape omitting product identity is accepted by the complete reader but rejected by option recovery.",
-    "Fresh root offline reproduction exits 0; source functions, synthetic inputs, zero provider/database calls."
+    "Initial native and root choices empty at revision 1.",
+    "Exact saved sparse status accepted four milliseconds before rich creation.",
+    "Creation carried five options per matching native line but its one-second older source version was rejected as stale_salla_snapshot.",
+    "Captures agree on native order/reference/membership/product/quantity and common amounts.",
+    "Exact automatic recovery hash returned no record.",
+    "Later central refresh restored choices identical to creation capture; initiating caller unproven.",
+    "Diagnostic GETs used by task do not invoke central refresh.",
+    "Separate provider-product-ID compatibility defect reproduced, not attributed as incident cause."
   ],
   "unknown": [
-    "Whether the initial captured webhook omitted choices or carried an unsupported shape.",
-    "Whether the target recovery attempt was absent, delayed, unresolved, or failed.",
-    "Whether the target provider List Items response has the reproduced missing-product-ID shape."
+    "Initiating caller of later central refresh.",
+    "Target provider List Items response shape."
   ],
   "runtime_source_changed": false,
   "manual_refresh_executed": false,
   "repair_executed": false,
   "production_changed_by_task": false,
+  "production_record_changed_during_investigation": "Later central refresh observed; caller not attributed.",
   "prior_draft_1909_changed": false,
-  "reproduction_command": "python -B docs/operations/MZ-SALLA-MISSING-OPTIONS-20261114/reproduce_item_identity_gap.py",
-  "reproduction_exit_code": 0,
-  "reproduction_limit": "Confirms existing conditional defect only; not actual-order causal proof or a complete passing suite.",
-  "access": "Official viewer is authenticated and Preview connected; Production connection is not configured. No credential was extracted or persisted.",
-  "next_safe_action": "Obtain scoped original capture and recovery-attempt evidence via the official production viewer's secure connection flow. Do not trigger refresh, recovery, retry reset, source writes, or deployment from this checkpoint.",
-  "continuity": "Issue1006 is comment-limit blocked; exact checkpoint and PR discussion are supplementary durable records."
+  "source_reproductions": [
+    "python -B docs/operations/MZ-SALLA-MISSING-OPTIONS-20261114/reproduce_stale_creation.py",
+    "python -B docs/operations/MZ-SALLA-MISSING-OPTIONS-20261114/reproduce_item_identity_gap.py"
+  ],
+  "reproduction_limit": "Synthetic source mechanisms, not full webhook/Mongo integration or a passing preventive-fix suite.",
+  "access": "Official Production viewer connected through secure user authentication. Scoped reads; edit off; no credential extracted.",
+  "next_safe_action": "Implement and test option-only enrichment of the proven delayed creation race while preserving stale full-snapshot rejection and source/financial/operational fences. No manual live refresh or replay.",
+  "continuity": "Issue1006 comment-limit blocked; Draft PR1923 and task status are supplementary records."
 }
