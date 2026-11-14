@@ -21,6 +21,7 @@ from salla_integration.abandoned_carts import parse_salla_datetime
 from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION, canonical_ad_platform, campaign_id_candidates, field_values,
 )
+from .campaign_hover_profit import COST_ORDER_PROJECTION, blank_profit_fields, enrich_campaign_profit
 
 MAX_CAMPAIGNS = 20
 MAX_SALLA_ROWS = 4000
@@ -108,7 +109,7 @@ async def _read(db, collection, query, projection, limit=MAX_SPEND_ROWS):
 def _blank(cid, reason="campaign_account_unavailable"):
     return {"campaign_id": cid, "orders": None, "pieces": None, "sales_sar": None,
             "spend_sar": None, "cpa_sar": None, "roas": None, "timezone": None,
-            "date": None, "updated_at": None, "status": reason}
+            "date": None, "updated_at": None, "status": reason, **blank_profit_fields()}
 
 
 def _source(raw, row):
@@ -301,17 +302,18 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
     starts = [window[0] for window in windows.values() if window]
     if label_window:
         starts.append(label_window[0])
-    projection = {**SALLA_RAW_ATTRIBUTION_PROJECTION,
+    projection = {**SALLA_RAW_ATTRIBUTION_PROJECTION, **COST_ORDER_PROJECTION,
         "order_number": 1, "order_date": 1, "order_status": 1, "campaign_id": 1,
         "campaign_name": 1, "utm_campaign": 1, "utm_source": 1, "source": 1,
         "platform": 1, "channel": 1, "source_native": 1, "ad_platform_source": 1,
         "marketing_source": 1}
     for field in ("date", "created_at", "status", "amounts.total", "currency", "total_amount",
-                  "total", "exchange_rate", "items.quantity", "items.type"):
+                  "total", "exchange_rate"):
         projection["raw_by_source.salla_direct." + field] = 1
     orders, commerce_ok = await _read(db, "unified_orders",
         _salla_query(user_id, campaign_ids, min(starts), now), projection, MAX_SALLA_ROWS)
     totals = {cid: {"orders": 0, "pieces": 0.0, "sales": 0.0, "pieces_ok": True, "sales_ok": True, "time_ok": True} for cid in campaign_ids}
+    cohorts = {cid: [] for cid in campaign_ids}
     seen = set()
     for row_index, row in enumerate(orders):
         if row_index and row_index % 32 == 0:
@@ -345,6 +347,7 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
                     continue
                 metric = totals[cid]
                 metric["orders"] += 1
+                cohorts[cid].append(row)
                 pieces = _quantity(raw_order)
                 sales = _amount(salla_order_currency_fields(raw_order).get("total_amount_sar"))
                 if pieces is None:
@@ -366,6 +369,7 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
                 continue
             metric = totals[cid]
             metric["orders"] += 1
+            cohorts[cid].append(row)
             pieces = _quantity(raw_order)
             sales = _amount(salla_order_currency_fields(raw_order).get("total_amount_sar"))
             if pieces is None:
@@ -436,6 +440,7 @@ async def read_campaign_hover(db: Any, user_id: str, campaign_ids: list[str]) ->
         if record["sales_sar"] is not None and amount is not None and amount > 0:
             record["roas"] = round(record["sales_sar"] / amount, 2)
         record["status"] = "available" if all(record[k] is not None for k in ("orders", "pieces", "sales_sar", "spend_sar")) else "partial"
+    await enrich_campaign_profit(db, user_id, result, cohorts, now)
     return {"as_of": now.isoformat(), "campaigns": result,
             "sources_complete": {"campaign_catalog": catalog_ok, "raw_spend": raw_ok,
                                  "native_spend": all(source_health), "salla": commerce_ok}}
