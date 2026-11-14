@@ -1,0 +1,146 @@
+{
+  "verdict": "PASS",
+  "reviewed_at": "2026-11-14T21:40:07.468562+00:00",
+  "source_git_sha": "af36682ec95e578764242001dccd16ef9e61c07b",
+  "source_base_git_sha": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+  "source_tree": "218fa9d21d863783405dc227793ad7f9bbd1b7a5",
+  "base_tree": "c2d683827c54574fcd60ee4102c9de7c163f5ef8",
+  "source_changed_paths": 18,
+  "intent_sha256": "e971d2ce2f801e531f7541bb31cbbf963635584369c0c1208092a389d8ac1bb2",
+  "intent_bytes": 1309166,
+  "archive_sha256": "aa8a5d0b7569b11e4b86456961e43ec89ab0c07fb914216291d4e20f67a781d2",
+  "artifact_id": 14132258866,
+  "workflow_run_id": 43643265931,
+  "build_job_id": 132595279354,
+  "manifests": {
+    "backend_runtime_source": {
+      "file_count": 1217,
+      "tree_sha256": "eea98d532dc83b1e0623294ab96c8de105c275529bb1e7140071fb49cf0177db",
+      "fresh_content_rehashed": [
+        "order_engine/campaign_hover.py",
+        "order_engine/campaign_hover_operating.py",
+        "order_engine/campaign_hover_profit.py",
+        "order_engine/campaign_hover_scope.py"
+      ],
+      "unchanged_records_bound_to_verified_prior": 1213,
+      "added": [
+        "order_engine/campaign_hover_scope.py"
+      ],
+      "modified": [
+        "order_engine/campaign_hover.py",
+        "order_engine/campaign_hover_operating.py",
+        "order_engine/campaign_hover_profit.py"
+      ],
+      "deleted": [],
+      "manifest_sha256": "9ef4110bb1e38ef11bf1fe79c29fc67fcd46f51783be1c89bd34404913537a47",
+      "projection_tree_oid": "4a759131a4d14a7a93e2b7a8be50ac026df73fd8"
+    },
+    "release_control_source": {
+      "file_count": 291,
+      "tree_sha256": "15eb25341bd98a04295135221a881c09ac53e50088363b98debc8ce724d05ed9",
+      "fresh_content_rehashed": [
+        ".github/workflows/campaign-hover-source-acceptance.yml"
+      ],
+      "unchanged_records_bound_to_verified_prior": 290,
+      "added": [],
+      "modified": [
+        ".github/workflows/campaign-hover-source-acceptance.yml"
+      ],
+      "deleted": [],
+      "manifest_sha256": "6198543fdcc7cd089458923862861e5022b6ff9ae9309f3e14ec8abb70f3e0c2",
+      "projection_tree_oid": "c0677021ddc23554fc759712398dd3b603011259"
+    },
+    "frontend_source": {
+      "file_count": 1182,
+      "tree_sha256": "b3b0d1e4e7015ef9e0c3fb3ccec8a179d3ab71ba9e38fac504b5ac27034db6bb",
+      "fresh_content_rehashed": [
+        "src/components/CampaignHoverBadge.jsx",
+        "src/components/CampaignHoverProfit.test.jsx",
+        "src/hooks/useCampaignHover.js",
+        "src/hooks/useCampaignHover.test.jsx",
+        "src/pages/AdvancedDashboard.campaignHover.test.js",
+        "src/pages/AdvancedDashboard.cardRefresh.test.jsx",
+        "src/pages/AdvancedDashboard.jsx",
+        "src/services/campaignHover.js",
+        "src/services/campaignHover.test.js"
+      ],
+      "unchanged_records_bound_to_verified_prior": 1173,
+      "git_tree_oid": "a47d8aac3d9057b755ec7f7f1aa89a936820acd5"
+    }
+  },
+  "runtime_release_id": "rg5-3c726702879630f436b0b615a4e2d1dd85ff5889c45b43b1be477f84cb3043fe",
+  "runtime_identity_bytes": 438055,
+  "runtime_identity_sha256": "0662d49ed6abfc16074d1033667e19df182f7189698c285689cb431ea1a05ed3",
+  "frontend": {
+    "content_records": 289,
+    "public_records": 287,
+    "assets": 280,
+    "artifact_tree_sha256": "46124201d595e2b24e8c8abcfbedc57de464adec3f814f55ecf31a752c41499d",
+    "build_meta_bytes": 474117,
+    "build_meta_sha256": "fa17c24f7d548d9c67ffddca109dcd8d643746ee30930c624a4a848352b905e2",
+    "proof_bytes": 1521,
+    "proof_sha256": "07fe7cc45688859a23cdaf757cee712a2729c25040a6d87c8817df66d3319d5a",
+    "toolchain": {
+      "node": "22.23.2",
+      "yarn": "1.22.22",
+      "vite": "8.2.4"
+    }
+  },
+  "actual_two_build_receipts": [
+    "2026-11-14T21:32:21.0768285Z Frontend build identity: 46124201d595e2b24e8c8abcfbedc57de464adec3f814f55ecf31a752c41499d",
+    "2026-11-14T21:32:26.5998280Z Frontend build identity: 46124201d595e2b24e8c8abcfbedc57de464adec3f814f55ecf31a752c41499d",
+    "2026-11-14T21:32:26.6016872Z Frontend reproducibility proof: 07fe7cc45688859a23cdaf757cee712a2729c25040a6d87c8817df66d3319d5a"
+  ],
+  "actual_step_receipts": [
+    {
+      "name": "Classify reviewed B or source candidate A",
+      "number": 8,
+      "started_at": "2026-11-14T21:32:13Z",
+      "completed_at": "2026-11-14T21:32:15Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "Build production frontend twice and retain verified build B",
+      "number": 9,
+      "started_at": "2026-11-14T21:32:15Z",
+      "completed_at": "2026-11-14T21:32:26Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "Verify retained frontend artifact and reproducibility proof",
+      "number": 10,
+      "started_at": "2026-11-14T21:32:26Z",
+      "completed_at": "2026-11-14T21:32:26Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "Freeze a candidate reviewed intent from the source commit",
+      "number": 11,
+      "started_at": "2026-11-14T21:32:26Z",
+      "completed_at": "2026-11-14T21:32:29Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "Retain the candidate reviewed intent",
+      "number": 12,
+      "started_at": "2026-11-14T21:32:29Z",
+      "completed_at": "2026-11-14T21:32:31Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "Prove install and build leave the worktree clean",
+      "number": 13,
+      "started_at": "2026-11-14T21:32:31Z",
+      "completed_at": "2026-11-14T21:32:31Z",
+      "conclusion": "success"
+    }
+  ],
+  "build_job_log_sha256": "623d98266f3e7cc1e08a64b16fb5807697af05d62d5a3781a050038ba5d08c57",
+  "prior_verified_intent_sha256": "0b46743398c032f7f8e151125e52e5360ba3061fd70434fa51ba257f5db90223",
+  "limitations": [
+    "A-stage source/intent verification; no new production or original-workspace execution.",
+    "Fresh Git inventory binds every file; unchanged source byte hashes reuse the exact completed prior release only after matching blob, mode and size.",
+    "Changed governed content bytes were rehashed locally against reviewed candidate files.",
+    "Generated frontend metadata and proof bytes reconstructed; actual generated asset bytes await B host archives and original rehearsal."
+  ]
+}
