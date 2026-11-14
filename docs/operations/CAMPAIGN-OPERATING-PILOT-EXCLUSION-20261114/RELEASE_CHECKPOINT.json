@@ -2,7 +2,7 @@
   "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
   "round": 6,
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 19:43:00 UTC",
+  "updated_at_utc": "2026-11-14 19:53:07 UTC",
   "branch": "codex/campaign-operating-pilot-m3e9d-20261114",
   "pr": 1929,
   "base_J6": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
@@ -345,7 +345,7 @@
       }
     }
   },
-  "next": "UI publication is running after one Republish menu click and one free Publish changes click. Do not republish or repeat completed prepare/prepublish/build. Await explicit new Deployment finished UI and new version, then invoke reviewed verify once with actual UI evidence. Live numeric arithmetic and cropped tooltip acceptance remain.",
+  "next": "Wait for the single running verify to finish. Read actual guard receipt and reported3checks, freshinactive and120-file preservation. Do not invoke another official phase or publish. Numeric API, independent Decimal arithmetic, executive parity and actual tooltip/cropped proof have passed.",
   "original_build": {
     "state": "success",
     "result": {
@@ -434,7 +434,7 @@
     "deployment": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
     "release_id": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2"
   },
-  "published": false,
+  "published": true,
   "coordination": "Issue1006 full; task STATUS, replacement PR and continuation branch are durable.",
   "intent_candidate": {
     "path": "/workspace/scratch/a7d75184af2d/campaign-operating-intent-a6/release-intent-v5.json",
@@ -1174,6 +1174,13 @@
       },
       "ready_to_publish": true,
       "postcheck_errors": []
+    },
+    "verify": {
+      "calls": 1,
+      "invoked_at_utc": "2026-11-14 19:47:22 UTC",
+      "result_observed": false,
+      "phase_directory": "/tmp/mezan-operating-followup-original-5dp0ykxf/release-gate/verify",
+      "process_observed_running": true
     }
   },
   "publication": {
@@ -1181,7 +1188,7 @@
     "republish_menu_clicks": 1,
     "publish_changes_clicks": 1,
     "free_republishes_confirmed": true,
-    "ui_state": "Publishing…",
+    "ui_state": "Deployment finished",
     "baseline_version": "3a22e2d",
     "deployment_git_sha": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
     "ui_started_text": "Deployment Started Nov 14, 10:36 PM",
@@ -1189,6 +1196,42 @@
       "text": "Workspace ready; Changes packaged; Building your website...",
       "elapsed": "6m 33s",
       "complete": false
-    }
+    },
+    "observed_at_utc": "2026-11-14 19:47:03 UTC",
+    "ui_finished_at": "2026-11-14T19:47:03Z",
+    "ui_event_text": "Deployment finished Nov 14, 10:45 PM",
+    "ui_published_version": "75ee080",
+    "previous_ui_version": "3a22e2d",
+    "complete": true
+  },
+  "live_acceptance": {
+    "api_observed_after_ui_publication": true,
+    "all_required_completeness_flags": true,
+    "numeric_operating_and_net": true,
+    "root_decimal_arithmetic": "PASS",
+    "formula_components_checked": [
+      "order_payment_plus_ad_bank",
+      "product_plus_shipping_plus_payment",
+      "full_operating_ratio",
+      "campaign_operating_round_half_up",
+      "net_after_ad_spend_direct_and_operating"
+    ],
+    "genuine_cost_reasons_empty": true,
+    "basis_reasons_empty": true,
+    "profit_provisional": true,
+    "provisional_reason": "Snapchat hour coverage unverified",
+    "private_values_archived": false,
+    "tooltip_visual": "PASS",
+    "independent_arithmetic": "PASS",
+    "executive_sales_and_operating_basis_match": true,
+    "tooltip_rows": [
+      "إجمالي التكاليف",
+      "المصروفات التشغيلية",
+      "صافي الأرباح"
+    ],
+    "displayed_operating_percent_matches_executive": true,
+    "displayed_values_match_api": true,
+    "provisional_label_verified": true,
+    "cropped_proof_retained_privately": true
   }
 }
