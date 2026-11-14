@@ -311,15 +311,19 @@ class InstructionConversations(unittest.IsolatedAsyncioTestCase):
         cid = (await self.listing())["items"][0]["id"]
         old_notice = await self.db[notices.NOTIFICATIONS].find_one({"recipient_id": "a", "event_type": "created"})
         await self.finish(["p1", "p2"])
-        await self.db[push.DEVICES].insert_one({"_id": "device", "generation": "g1", "merchant_id": "owner", "actor_id": "a"})
+        await self.db[push.DEVICES].insert_one({"_id": "device", "generation": "g1", "merchant_id": "owner", "actor_id": "a",
+            "kind": "expo", "active": True, "session_id": "synthetic-session", "installation_id": "synthetic_installation_1234",
+            "token": "ExpoPushToken[synthetic]"})
+        await self.db.order_review_auth_sessions_v2.insert_one({"_id": "synthetic-session", "actor_id": "a",
+            "user_id": "owner", "state": "active", "expires_at": datetime.now(timezone.utc) + timedelta(hours=1)})
 
         async def job(event_id):
-            await self.db[push.OUTBOX].insert_one({"_id": uuid4().hex, "status": "pending", "actor_id": "a",
-                "device_id": "device", "generation": "g1", "event_id": event_id, "instruction_id": "urgent",
-                "next_at": datetime.now(timezone.utc), "expires_at": datetime.now(timezone.utc) + timedelta(hours=1), "attempts": 0})
+            await push.enqueue_operational_push(self.db, recipient_id="a", event_id=event_id, instruction_id="urgent")
 
         sender = AsyncMock(return_value={"status": "provider_accepted"})
-        with patch.object(push, "device_is_active", AsyncMock(return_value=True)):
+        # Exercise the real current device/session/native-access gates. The old
+        # fixture omitted kind/session and mocked activity before previews existed.
+        with patch.dict(os.environ, {"OPERATIONAL_PUSH_ENABLED": "1"}):
             await job(old_notice["id"])
             self.assertTrue(await push.deliver_one(self.db, sender=sender))
             sender.assert_not_awaited()
@@ -334,6 +338,7 @@ class InstructionConversations(unittest.IsolatedAsyncioTestCase):
             payload = sender.await_args.args[1]
             self.assertEqual(payload["conversation_id"], cid)
             self.assertEqual(payload["notice_id"], fresh["id"])
+            self.assertIn("A new question after receipt", payload["body"])
         await self.select("a")
         row = next(row for row in (await self.listing())["items"] if row["id"] == cid)
         self.assertTrue(row["alert_active"])
@@ -703,4 +708,87 @@ class InstructionConversations(unittest.IsolatedAsyncioTestCase):
                 else:
                     forbidden = await self.client.get(PREFIX + "/instructions/urgent", params={"conversation_only": "true"})
                     self.assertEqual(forbidden.status_code, 404)
+
+    async def clear_conversation_projection(self):
+        from operational_instruction_conversations import CONVERSATIONS, EVENTS, BOOKMARKS, COMMENTS
+        for collection in (CONVERSATIONS, EVENTS, BOOKMARKS, COMMENTS, notices.NOTIFICATIONS):
+            await self.db[collection].delete_many({})
+
+    async def test_registry_linked_creator_and_assignee_use_private_native_routes(self):
+        from fulfillment_v2_routes import _actor_context as real_actor_context
+        await self.clear_conversation_projection()
+        await self.db.users.update_many({"id": {"$in": ["cs", "a"]}}, {"$unset": {"created_by": ""}})
+        await self.db.mezan_employees_v2.insert_many([
+            {"account_user_id": actor, "user_id": "owner"} for actor in ("cs", "a")])
+        # Default recipient resolution is part of this regression; explicit
+        # recipient_ids would hide the missing registry-linked delivery bug.
+        await notices.emit_instruction_notification(self.db, merchant_id="owner", instruction=self.instruction,
+            event_type="created")
+        self.assertEqual(set(await self.db[notices.NOTIFICATIONS].distinct("recipient_id")), {"cs", "a", "b"})
+        with patch.object(routes, "_actor_context", real_actor_context):
+            await self.select("a")
+            directory = await self.listing(directory_only="true")
+            self.assertEqual([row["id"] for row in directory["items"]], ["cs"])
+            detail = await self.detail()
+            cid = detail["conversation"]["id"]
+            self.assertEqual(detail["conversation"]["peer"], {"id": "cs", "name": "CS"})
+            self.assertEqual({card["piece_id"] for card in detail["product_cards"]}, {"p1", "p2"})
+            await self.read(detail)
+            self.assertEqual((await self.listing(count_only="true"))["unread_count"], 0)
+            response = await self.client.post(PREFIX + "/instructions/urgent/conversation/messages", json={
+                "conversation_id": cid, "body": "Linked employee private response", "client_request_id": "linked-private-message-01"})
+            self.assertEqual(response.status_code, 200, response.text)
+            await self.select("cs")
+            creator = await self.detail(cid)
+            self.assertTrue(any(event["body"] == "Linked employee private response" for event in creator["timeline"]))
+            self.assertEqual({card["piece_id"] for card in creator["product_cards"]}, {"p1", "p2"})
+            await self.select("b")
+            forbidden = await self.client.get(PREFIX + "/instructions/urgent", params={
+                "conversation_only": "true", "conversation_id": cid})
+            self.assertEqual(forbidden.status_code, 404)
+            self.assertNotIn("Linked employee private response", forbidden.text)
+
+    async def test_registry_link_cannot_override_foreign_unlinked_or_owner_identity(self):
+        from fulfillment_v2_routes import _actor_context as real_actor_context
+        from operational_instruction_conversations import CONVERSATIONS, COMMENTS, conversation_id
+        cid = conversation_id("owner", "urgent", "a")
+        cases = (
+            ({}, None, 403), ({}, "other", 403), ({"created_by": "other"}, "owner", 404),
+            ({"role": "owner", "created_by": "owner"}, "owner", 404),
+            ({"is_owner": True, "created_by": "owner"}, "owner", 404),
+        )
+        with patch.object(routes, "_actor_context", real_actor_context):
+            for account, registry_merchant, status in cases:
+                with self.subTest(account=account, registry_merchant=registry_merchant):
+                    await self.clear_conversation_projection()
+                    await self.db.users.replace_one({"id": "a"}, {"id": "a", "role": "employee", "name": "A", **account})
+                    await self.db.mezan_employees_v2.delete_many({"account_user_id": "a"})
+                    if registry_merchant:
+                        await self.db.mezan_employees_v2.insert_one({"account_user_id": "a", "user_id": registry_merchant})
+                    await notices.emit_instruction_notification(self.db, merchant_id="owner", instruction=self.instruction,
+                        event_type="created")
+                    self.assertEqual(await self.db[notices.NOTIFICATIONS].count_documents({"recipient_id": "a"}), 0)
+                    self.assertEqual(await self.db[CONVERSATIONS].count_documents({"merchant_id": "owner", "assignee_id": "a"}), 0)
+                    await self.select("a")
+                    response = await self.client.get(PREFIX + "/instructions/urgent", params={
+                        "conversation_only": "true", "conversation_id": cid})
+                    self.assertEqual(response.status_code, status, response.text)
+                    for route, payload in (("read", {"conversation_id": cid}), ("messages", {
+                            "conversation_id": cid, "body": "Denied linked identity", "client_request_id": "denied-linked-message-01"})):
+                        denied = await self.client.post(PREFIX + "/instructions/urgent/conversation/" + route, json=payload)
+                        self.assertEqual(denied.status_code, status, denied.text)
+                    self.assertEqual(await self.db[COMMENTS].count_documents({"author_id": "a"}), 0)
+
+    async def test_trusted_legacy_merchant_wins_over_conflicting_registry_in_native_routes(self):
+        from fulfillment_v2_routes import _actor_context as real_actor_context
+        await self.clear_conversation_projection()
+        await self.db.mezan_employees_v2.insert_one({"account_user_id": "a", "user_id": "other"})
+        await notices.emit_instruction_notification(self.db, merchant_id="owner", instruction=self.instruction,
+            event_type="created")
+        self.assertEqual(await self.db[notices.NOTIFICATIONS].count_documents({"recipient_id": "a"}), 1)
+        with patch.object(routes, "_actor_context", real_actor_context):
+            await self.select("a")
+            detail = await self.detail()
+            self.assertEqual({card["piece_id"] for card in detail["product_cards"]}, {"p1", "p2"})
+            self.assertEqual(detail["conversation"]["peer"]["id"], "cs")
 

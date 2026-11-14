@@ -5,6 +5,7 @@ notification layout. A preview never hydrates the current instruction or task.
 """
 from __future__ import annotations
 
+import re
 import unicodedata
 
 from mobile_app_permissions import mobile_app_access_for_user
@@ -49,6 +50,10 @@ STAGE_LABELS = {
 }
 RESPONSE_EVENTS = {"submitted", "approved", "completed", "closed"}
 COMPLETION_EVENTS = {"approved", "completed", "closed"}
+CONVERSATION_OUTCOMES = {
+    "تم الاستلام من المورد", "اكتمل تجهيز المنتج", "المنتج جاهز", "تم الاستلام من موظف التجهيز",
+    "اكتمل المطلوب", "أُغلقت التعليمات", "أُلغيت التعليمات", "رُفضت التعليمات", "أُرشفت التعليمات",
+}
 
 
 def _plain(value):
@@ -72,6 +77,13 @@ def _clip(value, byte_limit):
 
 def _progress_summary(row):
     metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+    # Only the durable, versioned conversation-completion hook can supply a
+    # proven product outcome. Arbitrary legacy progress notes remain excluded.
+    if (type(row.get("event_message_version")) is int and row["event_message_version"] == 1
+            and all(re.fullmatch(r"[a-f0-9]{64}", _plain(metadata.get(key))) for key in (
+                "conversation_id", "conversation_completion_key"))
+            and _plain(row.get("message")) in CONVERSATION_OUTCOMES):
+        return _plain(row["message"])
     previous = metadata.get("previous") if isinstance(metadata.get("previous"), dict) else {}
     current = metadata.get("current") if isinstance(metadata.get("current"), dict) else {}
     before = STAGE_LABELS.get(_plain(previous.get("stage")))
@@ -135,20 +147,28 @@ async def native_notification_payload(db, device, job, generic_payload):
         "_id": 0, "sender_id": 1, "sender_name": 1, "event_type": 1, "action_type": 1,
         "event_message_version": 1, "order_number": 1, "message": 1,
         "metadata.previous.stage": 1, "metadata.current.stage": 1,
+        "metadata.conversation_id": 1, "metadata.conversation_completion_key": 1,
     })
     if row is None:
         exists = await db[NOTIFICATIONS].find_one({"_id": identity}, {"_id": 1})
         return None if exists else generic_payload
     if job.get("merchant_id") != device["merchant_id"]:
         return None
+    if not await native_recipient_authorized(db, device):
+        return None
+    return {**generic_payload, **format_notification_preview(row)}
+
+
+async def native_recipient_authorized(db, device):
+    """Current native content grants; rechecked after awaited delivery metadata."""
     actor = await db["users"].find_one({"id": device["actor_id"]}, {
         "_id": 0, "id": 1, "role": 1, "is_owner": 1, "created_by": 1,
         "disabled": 1, "is_active": 1, "deleted_at": 1,
     })
     if not actor or actor.get("disabled") or actor.get("is_active") is False or actor.get("deleted_at"):
-        return None
+        return False
     if await merchant_for_actor(db, actor) != device["merchant_id"]:
-        return None
+        return False
     # Exactly the native GET /order-tracking-notes/notifications/me policy:
     # owner and store-driver exceptions; other staff need enabled app access
     # and at least one effective grant, without a current-assignment restriction.
@@ -156,5 +176,5 @@ async def native_notification_payload(db, device, job, generic_payload):
     if role not in {"owner", "store_driver"} and actor.get("is_owner") is not True:
         access = await mobile_app_access_for_user(db, actor)
         if not access.get("enabled") or not access.get("permissions"):
-            return None
-    return {**generic_payload, **format_notification_preview(row)}
+            return False
+    return True

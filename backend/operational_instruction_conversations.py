@@ -18,6 +18,7 @@ from pymongo.errors import DuplicateKeyError
 
 from order_tracking_notes import BLOCKING_ACTION_TYPES, ORDER_TRACKING_INSTRUCTIONS, instruction_targets, text
 from operational_instruction_notifications import ACTIVE, NOTIFICATIONS, TASKS
+from operational_instruction_accounts import accounts_for_merchant
 
 CONVERSATIONS = "operational_instruction_conversations_v1"
 EVENTS = "operational_instruction_conversation_events_v1"
@@ -206,8 +207,7 @@ async def reconcile_instruction(db, instruction, *, pieces=None, workflow=None, 
                 or all(task["piece_id"] not in by_piece for task in prior.get("tasks", []))):
             grouped[assignee] = prior.get("tasks", [])
     account_ids = set(grouped) | {creator}
-    accounts = await db.users.find({"id": {"$in": sorted(account_ids)},
-        "$or": [{"id": merchant}, {"created_by": merchant}]}, {"_id": 0, "id": 1, "name": 1}).to_list(5000)
+    accounts = await accounts_for_merchant(db, merchant, account_ids, active_only=False)
     names = {row["id"]: text(row.get("name")) or "الموظف" for row in accounts}
     result = []
     for assignee, own in grouped.items():

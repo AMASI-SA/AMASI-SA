@@ -4,6 +4,7 @@ import hashlib
 import logging
 from datetime import datetime, timezone
 from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS, instruction_targets, public_instruction, text
+from operational_instruction_accounts import accounts_for_merchant
 
 NOTIFICATIONS = "operational_instruction_notifications_v1"
 ACTIVE = ["active", "waiting_customer_service_approval"]
@@ -68,11 +69,7 @@ async def recipients(db, merchant_id, instruction):
         claimed = await db[TASKS].find({"merchant_id": merchant_id, "instruction_id": instruction["id"],
             "claimed_for_review": True}, {"_id": 0, "assignee_id": 1}).to_list(100)
         result.update(text(task.get("assignee_id")) for task in claimed if text(task.get("assignee_id")))
-    users = await db["users"].find({
-        "$or": [{"id": merchant_id}, {"created_by": merchant_id}], "id": {"$in": list(result)},
-        "disabled": {"$ne": True}, "is_active": {"$ne": False},
-        "deleted_at": {"$in": [None, ""]},
-    }, {"_id": 0, "id": 1, "role": 1, "extra_permissions": 1, "denied_permissions": 1}).to_list(5000)
+    users = await accounts_for_merchant(db, merchant_id, result)
     valid = {text(row.get("id")) for row in users}
     for row in users if not (instruction.get("task_protocol") or instruction.get("thread_protocol")) else []:
         if "customer_intelligence.inbox.read" not in (row.get("denied_permissions") or []) and (
@@ -112,8 +109,7 @@ async def emit_instruction_notification(db, *, merchant_id, instruction, event_t
     if recipient_ids is None and event_type in {"approved", "rejected", "completed"}:
         # Submitter needs the result even if the work has since changed hands.
         submitter = text(instruction.get("submitted_by"))
-        if submitter and await db["users"].find_one({"id": submitter, "created_by": merchant_id,
-                "disabled": {"$ne": True}, "is_active": {"$ne": False}}):
+        if submitter and await accounts_for_merchant(db, merchant_id, {submitter}):
             targets.add(submitter)
     if event_type in {"approved", "completed", "closed"} and (instruction.get("task_protocol") or instruction.get("thread_protocol")):
         tasks = await db[TASKS].find({"merchant_id": merchant_id, "instruction_id": instruction["id"]}, {"_id": 0, "assignee_id": 1}).to_list(5000)
@@ -137,7 +133,6 @@ async def emit_instruction_notification(db, *, merchant_id, instruction, event_t
             "event_key": hashlib.sha256(f"{merchant_id}:{instruction['id']}:{event_type}:{event_revision}".encode()).hexdigest()}
         await db[NOTIFICATIONS].update_one({"_id": key}, {"$setOnInsert": row}, upsert=True)
         conversation_sources.append(await db[NOTIFICATIONS].find_one({"_id": key}))
-        await _enqueue(db, row)
     if conversation_sources:
         try:
             from operational_instruction_conversations import capture_notifications
@@ -148,13 +143,16 @@ async def emit_instruction_notification(db, *, merchant_id, instruction, event_t
             # Projection failure must never fail an existing business command.
             # The existing notification worker retries the durable marker.
             log.warning("Instruction conversation projection deferred", exc_info=False)
+    # New phone counts may observe only committed conversation events. Keep the
+    # durable alert deliverable if projection failed, and retain its original
+    # timestamp when retrying an existing event rather than replaying it as new.
+    for source in conversation_sources:
+        await _enqueue(db, source)
     return len(targets)
 
 async def refresh_actor_instructions(db, *, merchant_id, actor_id):
     """Called by the background device sweep and inbox fetch; writes only alerts."""
-    actor = await db["users"].find_one({"id": actor_id, "$or": [{"id": merchant_id}, {"created_by": merchant_id}],
-        "disabled": {"$ne": True}, "is_active": {"$ne": False}})
-    if not actor:
+    if not await accounts_for_merchant(db, merchant_id, {actor_id}):
         return
     orders = set()
     owned_pieces = await db["mezan_preparation_pieces_v1"].find({"user_id": merchant_id,

@@ -320,6 +320,7 @@ async def deliver_one(db, sender=send_to_provider):
             payload = {"title": "أماسي — تنبيه مستعجل" if job.get("priority") == "urgent" else "أماسي — تعليمات الطلب", "body": "لديك تحديث على مهمة. افتح التطبيق للاطلاع والتأكيد.",
                 "event_id": job["event_id"], "instruction_id": job["instruction_id"], "priority": job.get("priority", "normal")}
             if not job.get("ticket"):
+                rich_content = False
                 from operational_instruction_conversations import push_is_resolved, push_reference
                 if await push_is_resolved(db, merchant_id=device["merchant_id"],
                         recipient_id=job["actor_id"], event_id=job["event_id"]):
@@ -331,13 +332,29 @@ async def deliver_one(db, sender=send_to_provider):
                         from operational_push_preview import native_notification_payload
                         generic_payload = payload
                         payload = await native_notification_payload(db, device, job, payload)
-                        if (payload is not None and payload is not generic_payload
-                                and device.get("notification_presentation") == ANDROID_RTL_PRESENTATION):
-                            from operational_instruction_conversations import conversation_unread_count
+                        rich_content = payload is not None and payload is not generic_payload
+                        if rich_content and device.get("notification_presentation") == ANDROID_RTL_PRESENTATION:
+                            from operational_instruction_conversations import EVENTS, conversation_unread_count
                             # The same scoped active-conversation count as the
                             # new inbox, without backfill or business mutations.
-                            payload["unread_count"] = await conversation_unread_count(db,
-                                merchant_id=device["merchant_id"], actor_id=device["actor_id"])
+                            # An unfinished projection is unknown, never zero.
+                            source = await db["operational_instruction_notifications_v1"].find_one({
+                                "_id": job["event_id"], "merchant_id": device["merchant_id"],
+                                "recipient_id": device["actor_id"], "conversation_pending": {"$ne": True},
+                            }, {"_id": 1})
+                            projected = await db[EVENTS].find_one({"merchant_id": device["merchant_id"],
+                                "recipient_id": device["actor_id"], "source_notice_id": job["event_id"]},
+                                {"_id": 1}) if source else None
+                            if projected:
+                                payload["unread_count"] = await conversation_unread_count(db,
+                                    merchant_id=device["merchant_id"], actor_id=device["actor_id"])
+                if payload is not None and await push_is_resolved(db, merchant_id=device["merchant_id"],
+                        recipient_id=job["actor_id"], event_id=job["event_id"]):
+                    payload = None
+                if payload is not None and rich_content:
+                    from operational_push_preview import native_recipient_authorized
+                    if not await native_recipient_authorized(db, device):
+                        payload = None
                 if payload is not None:
                     # All projection/hydration awaits can overlap an account
                     # switch/logout. Recheck the same binding before a new send.

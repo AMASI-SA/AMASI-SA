@@ -84,6 +84,7 @@ jobs:
           tests/test_instruction_product_cards.py
           tests/test_instruction_comments_progress.py
           tests/test_instruction_conversations.py
+          tests/test_instruction_account_scope.py
           tests/test_operational_push.py
           tests/test_operational_push_preview.py
           tests/test_operational_push_presentation.py
@@ -102,8 +103,9 @@ jobs:
           assert len(tests) >= 20, len(tests)
           assert all(row.find('skipped') is None for row in tests)
           for module, minimum in [
-              ('test_instruction_conversations', 26),
-              ('test_operational_push_preview', 24),
+              ('test_instruction_conversations', 31),
+              ('test_instruction_account_scope', 10),
+              ('test_operational_push_preview', 32),
               ('test_operational_push_presentation', 9),
               ('test_operational_notification_preview_snapshot', 6),
               ('test_notification_sender_directory', 7),

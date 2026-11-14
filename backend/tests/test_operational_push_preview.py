@@ -111,6 +111,26 @@ class PushPreviewTests(unittest.IsolatedAsyncioTestCase):
         for forbidden in ("OLD_REQUEST_NOTE", "WRONG_RESPONSIBLE", "RESPONSIBLE_NOT_AUTHOR", "PRIVATE_METADATA"):
             self.assertNotIn(forbidden, serialized)
 
+    async def test_versioned_saved_conversation_completion_shows_actual_outcome(self):
+        self.db.raw[NOTIFICATIONS].update_one({"_id": "event"}, {"$set": {
+            "event_type": "progress", "message": "المنتج جاهز",
+            "metadata": {"conversation_id": "c" * 64, "conversation_completion_key": "a" * 64}}})
+        await self.deliver()
+        self.assertEqual(visible(self.sent[0]["payload"]["body"]), "المنتج جاهز\nالطلب TEST-501")
+        self.assertTrue(visible(self.sent[0]["payload"]["title"]).startswith("تحديثات النظام"))
+
+    async def test_legacy_or_untrusted_progress_note_never_becomes_completion_preview(self):
+        for override in ({"event_message_version": 0}, {"metadata": {}},
+                {"message": "OLD_PRIVATE_INSTRUCTION"}, {"metadata": {"conversation_id": "c" * 64,
+                    "conversation_completion_key": "invalid"}}):
+            with self.subTest(override=override):
+                self.reset_data()
+                self.db.raw[NOTIFICATIONS].update_one({"_id": "event"}, {"$set": {
+                    "event_type": "progress", "message": "المنتج جاهز",
+                    "metadata": {"conversation_id": "c" * 64, "conversation_completion_key": "a" * 64}, **override}})
+                await self.deliver()
+                self.assertEqual(visible(self.sent[0]["payload"]["body"]), "تحديث تقدم تجهيز المنتج\nالطلب TEST-501")
+
     async def test_progress_without_known_transition_and_acknowledgment_use_event_summary(self):
         for event in ("progress", "acknowledged"):
             with self.subTest(event=event):
@@ -235,7 +255,8 @@ class PushPreviewTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(access_collection, "find_one", side_effect=rebind_during_access) as lookup:
             await self.deliver()
-        self.assertEqual(lookup.call_count, 1)
+        # Preview hydration and the final rich-content fence both recheck access.
+        self.assertEqual(lookup.call_count, 2)
         self.assertEqual(self.sent, [])
         self.assertEqual(self.db.raw[OUTBOX].find_one()["status"], "discarded")
 
@@ -252,7 +273,8 @@ class PushPreviewTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(access_collection, "find_one", side_effect=revoke_during_access) as lookup:
             await self.deliver()
-        self.assertEqual(lookup.call_count, 1)
+        # Preview hydration and the final rich-content fence both recheck access.
+        self.assertEqual(lookup.call_count, 2)
         self.assertEqual(self.sent, [])
         self.assertEqual(self.db.raw[OUTBOX].find_one()["status"], "discarded")
 
@@ -268,6 +290,8 @@ class PushPreviewTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_capable_device_receives_the_same_scoped_conversation_count(self):
         self.db.raw[DEVICES].update_one({}, {"$set": {"notification_presentation": "amasi_android_rtl_v1"}})
+        self.db.raw.operational_instruction_conversation_events_v1.insert_one({
+            "merchant_id": "owner", "recipient_id": "staff", "source_notice_id": "event", "conversation_id": "conversation"})
         calls = []
         async def count(db, **scope):
             self.assertIs(db, self.db)
@@ -280,9 +304,56 @@ class PushPreviewTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_account_change_during_conversation_count_prevents_submission(self):
         self.db.raw[DEVICES].update_one({}, {"$set": {"notification_presentation": "amasi_android_rtl_v1"}})
+        self.db.raw.operational_instruction_conversation_events_v1.insert_one({
+            "merchant_id": "owner", "recipient_id": "staff", "source_notice_id": "event", "conversation_id": "conversation"})
         async def count(db, **scope):
             self.db.raw[DEVICES].update_one({}, {"$set": {"actor_id": "other", "generation": "g2"}})
             return 27
+        with patch("operational_instruction_conversations.conversation_unread_count", side_effect=count):
+            await self.deliver()
+        self.assertEqual(self.sent, [])
+        self.assertEqual(self.db.raw[OUTBOX].find_one()["status"], "discarded")
+
+    async def test_native_grant_or_merchant_change_during_count_prevents_rich_submission(self):
+        for change in ("grant", "merchant"):
+            with self.subTest(change=change):
+                self.reset_data()
+                self.db.raw[DEVICES].update_one({}, {"$set": {"notification_presentation": "amasi_android_rtl_v1"}})
+                self.db.raw.operational_instruction_conversation_events_v1.insert_one({
+                    "merchant_id": "owner", "recipient_id": "staff", "source_notice_id": "event", "conversation_id": "conversation"})
+                async def count(db, **scope):
+                    if change == "grant":
+                        self.db.raw[ACCESS].update_one({}, {"$set": {"enabled": False, "permissions": []}})
+                    else:
+                        self.db.raw.users.update_one({"id": "staff"}, {"$set": {"created_by": "foreign"}})
+                    return 27
+                with patch("operational_instruction_conversations.conversation_unread_count", side_effect=count):
+                    await self.deliver()
+                self.assertEqual(self.sent, [])
+                self.assertEqual(self.db.raw[OUTBOX].find_one()["status"], "discarded")
+
+    async def test_unprojected_or_pending_source_sends_without_fabricated_zero_badge(self):
+        for pending in (False, True):
+            with self.subTest(pending=pending):
+                self.reset_data()
+                self.db.raw[DEVICES].update_one({}, {"$set": {"notification_presentation": "amasi_android_rtl_v1"}})
+                if pending:
+                    self.db.raw[NOTIFICATIONS].update_one({}, {"$set": {"conversation_pending": True}})
+                    self.db.raw.operational_instruction_conversation_events_v1.insert_one({
+                        "merchant_id": "owner", "recipient_id": "staff", "source_notice_id": "event", "conversation_id": "conversation"})
+                with patch("operational_instruction_conversations.conversation_unread_count", side_effect=AssertionError("unknown count")) as count:
+                    await self.deliver()
+                count.assert_not_called()
+                self.assertEqual(len(self.sent), 1)
+                self.assertNotIn("unread_count", self.sent[0]["payload"])
+
+    async def test_read_during_count_does_not_send_already_resolved_conversation(self):
+        self.db.raw[DEVICES].update_one({}, {"$set": {"notification_presentation": "amasi_android_rtl_v1"}})
+        self.db.raw.operational_instruction_conversation_events_v1.insert_one({
+            "merchant_id": "owner", "recipient_id": "staff", "source_notice_id": "event", "conversation_id": "conversation"})
+        async def count(db, **scope):
+            self.db.raw.operational_instruction_conversation_events_v1.update_one({}, {"$set": {"read_at": now()}})
+            return 0
         with patch("operational_instruction_conversations.conversation_unread_count", side_effect=count):
             await self.deliver()
         self.assertEqual(self.sent, [])
