@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-FINANCIAL-LOAD-RECOVERY-20261114",
-  "phase": "merged-M-rehearsal-and-CI-pending",
+  "phase": "original-preflight-cache-quarantine-reviewed",
   "repository": "AMASI-SA/AMASI-SA",
   "release_branch": "codex/financial-loading-resume-20261114",
   "handoff_branch": "codex/financial-loading-release-handoff-20261114",
@@ -19,7 +19,7 @@
   "source_A_stock_run": 43604084975,
   "production_changed": false,
   "lease_started": false,
-  "next": "Stage reviewed runners from this handoff branch outside /app. Original rehearsal can run while exact-M checks complete; no lease/publish until M gates succeed. Fill gate evidence_dir only from actual successful original build outcome, then prepare/prepublish and authorized UI publication, explicit success, official verify and visible live acceptance.",
+  "next": "Stage exact independently reviewed cache helper outside /app; run once to atomically preserve only reviewed generated cache directory in private /tmp; verify120untracked+J+inactiveguard retained. Then rerun unchanged original rehearsal in a fresh evidence directory. Fill gate only after actual successful build; prepare/prepublish/UIpublish/officialverify/liveacceptance.",
   "notes": [
     "Issue1006 is full; this branch, task status and PR1919 carry continuation.",
     "The handoff branch is documentation only and must never be merged into frozen release A/B.",
@@ -50,5 +50,16 @@
   "original_app_tracked_clean": true,
   "original_app_guard_active": false,
   "original_app_untracked_count": 120,
-  "original_editor_dirty_buffer": "Untitled-1"
+  "original_editor_dirty_buffer": "Untitled-1",
+  "merge_M_all_applicable_workflows_passed": true,
+  "merge_M_independent_audit": "PASS",
+  "failed_original_rehearsal": "/tmp/mezan-pr1919-original-9l31h7ck",
+  "failed_original_rehearsal_reason": "ignored_backend_pycache_requires_separate_review_no_files_changed",
+  "original_app_still_J_before_fetch": true,
+  "reviewed_cache_scope": [
+    "backend/__pycache__/frontend_build_identity.cpython-311.pyc",
+    "backend/__pycache__/release_protocol_v5.cpython-311.pyc"
+  ],
+  "reviewed_cache_bytes": 120563,
+  "quarantine_helper_sha256": "cde071b8cf0b9aa5d38da95bcd7d1ebbb064c2e36e1f24783f8b89a7753ff191"
 }

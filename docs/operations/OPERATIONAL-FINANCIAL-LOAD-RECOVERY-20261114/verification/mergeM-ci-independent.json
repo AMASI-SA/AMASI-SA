@@ -1,0 +1,217 @@
+{
+  "schema_version": 1,
+  "reviewer": "independent_reconciliation_review",
+  "review_date_utc": "2026-11-14",
+  "verdict": "PASS",
+  "scope": "Independent normal-merge lineage, exact-M official push CI, and both Host Node 20/24 clean-clone adapter artifacts. Production rehearsal/publication/live verification are outside this verdict.",
+  "repository": "AMASI-SA/AMASI-SA",
+  "pull_request": 1919,
+  "production_branch": "hotfix/prod-snap-meta-final",
+  "source_A": "5f7fce4fcf1b81f3fbe1093d0983184c281ca733",
+  "intent_B": "b8f50264becf51d3f5aaf279e7cf2ddba1844193",
+  "baseline_J": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+  "merge_M": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+  "merge_tree": "14626f7c528626d422d6098800ac109bcba2984b",
+  "lineage": {
+    "merge": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+    "ordered_parents": [
+      "23cc06da003c18c0f3fc6c2e749aad1326666166",
+      "b8f50264becf51d3f5aaf279e7cf2ddba1844193"
+    ],
+    "B_tree": "14626f7c528626d422d6098800ac109bcba2984b",
+    "M_tree": "14626f7c528626d422d6098800ac109bcba2984b",
+    "A_to_M_paths": [
+      "release/release-intent-v5.json"
+    ],
+    "A_ancestor_M": true,
+    "J_ancestor_A": true,
+    "intent_sha256": "bb3fcbc5858d2c79c95aa55551a0ad2d0393467ce218fe3fa57984cebe001467",
+    "task_checkout_head": "b8f50264becf51d3f5aaf279e7cf2ddba1844193",
+    "task_checkout_status": ""
+  },
+  "remote_lineage_evidence": "GitHub Git commit API independently confirmed ordered parents [J, B] and tree146; production ref API returned exact M. Local git independently confirmed the same parents/tree, J ancestor A, A ancestor M, and A-to-M diff limited to the intent file.",
+  "source_equivalence": "M and tested B have the same full tree, preserving all source and the reviewed release intent. The runtime identity continues to identify reviewed source A by protocol v5 design.",
+  "intent_sha256": "bb3fcbc5858d2c79c95aa55551a0ad2d0393467ce218fe3fa57984cebe001467",
+  "runtime_release_id": "rg5-9b6621b12a348a9d27542452b3d2040456e720478b9fd0dc3a2b82af27438605",
+  "official_push_workflows": [
+    {
+      "id": 43605488046,
+      "name": "Mezan Release Readiness",
+      "head_sha": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "updated_at": "2026-11-14T14:36:47Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43605488046"
+    },
+    {
+      "id": 43605488095,
+      "name": "Security Gate",
+      "head_sha": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "updated_at": "2026-11-14T14:35:36Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43605488095"
+    },
+    {
+      "id": 43605488109,
+      "name": "CodeQL",
+      "head_sha": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "updated_at": "2026-11-14T14:39:29Z",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43605488109"
+    }
+  ],
+  "readiness_jobs": [
+    {
+      "id": 132479103141,
+      "name": "Frontend build",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132479103329,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132479103337,
+      "name": "Backend preflight",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132479103340,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132479344400,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132479344417,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132479947788,
+      "name": "Emergent manual redeploy required",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "adapter_artifacts": [
+    {
+      "artifact_id": 14118167906,
+      "name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "zip_sha256": "250692ef3d237f14ce921ca30cff7e89c77cbd24ff22c9807999161cf9ed5632",
+      "workflow_head_sha": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+      "host_node": "v24.19.0",
+      "actual_build_git_directory_present": false,
+      "cold_toolchain": true,
+      "node_version": "v22.23.2",
+      "yarn_version": "1.22.22",
+      "built": true,
+      "backend_health_isolated_verified": true,
+      "backend_without_git_or_sibling_frontend": true,
+      "frontend_application_json_verified": true,
+      "package_trees_equal_B": true,
+      "final_log_line": "Done in 57.05s."
+    },
+    {
+      "artifact_id": 14117988233,
+      "name": "release-v5-generated-outputs-host-24.19.0",
+      "zip_sha256": "786dd1bf5406f6fd4e6058c8600a16a49f6ca7ab873b76ce21c5991fbd4a109a",
+      "workflow_head_sha": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+      "tar_sha256": "7f35853fb8faf20ad2e2b14960c66284d40e073aea4084f9b1d8da76ce575141",
+      "generated_regular_files": 293,
+      "frontend_files_verified": 289,
+      "frontend_tree_sha256": "4fe38becd5383760b7c392e20acca340daa2e92ef9c3d4b133f8f32aa703e019",
+      "identity_sha256": "847b4fa6ea4791d39d06b57c303c5784adc079b99988c3c464687b068e7a94eb",
+      "exact_intent_runtime_metadata_proof_match": true
+    },
+    {
+      "artifact_id": 14117653210,
+      "name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "zip_sha256": "964d18ead235019f7c3b0d752a14ab6908ef573c09f442b78a0469afe0f656a8",
+      "workflow_head_sha": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+      "host_node": "v20.20.2",
+      "actual_build_git_directory_present": false,
+      "cold_toolchain": true,
+      "node_version": "v22.23.2",
+      "yarn_version": "1.22.22",
+      "built": true,
+      "backend_health_isolated_verified": true,
+      "backend_without_git_or_sibling_frontend": true,
+      "frontend_application_json_verified": true,
+      "package_trees_equal_B": true,
+      "final_log_line": "Done in 62.19s."
+    },
+    {
+      "artifact_id": 14117493738,
+      "name": "release-v5-generated-outputs-host-20.20.2",
+      "zip_sha256": "5ddcaa53cff041983bbf7729d37e2046e2850060ea2efaa06ac7dd16c49788f1",
+      "workflow_head_sha": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+      "tar_sha256": "0ff6e4e23304ed66fff3d9e7b1c1dfbd36f43f4563603c15a45388acbfd4e6d6",
+      "generated_regular_files": 293,
+      "frontend_files_verified": 289,
+      "frontend_tree_sha256": "4fe38becd5383760b7c392e20acca340daa2e92ef9c3d4b133f8f32aa703e019",
+      "identity_sha256": "847b4fa6ea4791d39d06b57c303c5784adc079b99988c3c464687b068e7a94eb",
+      "exact_intent_runtime_metadata_proof_match": true
+    }
+  ],
+  "cross_host_result": {
+    "M_host_outputs_identical": true,
+    "generated_regular_files": 293,
+    "frozen_B_intent_runtime_frontend_proof_match": true
+  },
+  "adapter_method": "Downloaded all 4 official artifact ZIPs into memory; verified metadata ZIP digests, declared tar digests, safe regular-file membership, exact frozen intent bytes, runtime identity bytes/JSON, every frontend file record and recomputed artifact-tree digest, exact build-meta and reproducibility proof. Compared all generated regular-file digests across M hosts; package-proof trees match the previously verified B proofs.",
+  "frozen_generated_identity": {
+    "runtime_identity_sha256": "847b4fa6ea4791d39d06b57c303c5784adc079b99988c3c464687b068e7a94eb",
+    "frontend_artifact_tree_sha256": "4fe38becd5383760b7c392e20acca340daa2e92ef9c3d4b133f8f32aa703e019",
+    "build_meta_sha256": "9ddfe3e02cef3aa25539b2ecefd1c60fda16a623a2aec830dcef660b70f6165e",
+    "reproducibility_proof_sha256": "43cc29a215e474ff94dba963dd360916b8d7bb82de5137a1ba09ad68d72876c8",
+    "backend_package_tree_sha256": "72d539611cb36f2a555fafcfc7b2deffe5b78b9b7a55c068ecc4f3ad9648910d",
+    "frontend_package_tree_sha256": "4d7fa30c0d2278b5457f89f72dc1f4592fc9492132c6440f42ab3afffa0d6f70"
+  },
+  "actual_adapter_boundaries": [
+    "Both hosts cold-installed governed Node22.23.2 and Yarn1.22.22.",
+    "Actual build evidence has no .git and concludes built:true with exact source A/runtime.",
+    "Isolated backend health verifies without .git or a sibling frontend.",
+    "Frontend package proof requires application/json and isolated runtime-artifact verification.",
+    "All 293 regular generated files match across M hosts; all 289 frontend artifact records verify against frozen intent.",
+    "Official readiness jobs passed runtime metadata, host-install sentinel, clean tree, package boundary, and handoff steps."
+  ],
+  "prior_exact_B_test_evidence": {
+    "audit_file": "intentB-ci-independent.json",
+    "audit_sha256": "adf6d66bac365318cf93144e785b3b6283929eaf28beb24561ae1891ca89f0bd",
+    "backend_passing_testcase_elements": 4672,
+    "eligibility_passing_testcase_elements": 4481,
+    "eligibility_passing_subtests": 7,
+    "all_four_deferred_real_mongo_cases_pass": true,
+    "all_25_journal_index_scaling_regressions_pass": true,
+    "failures_errors_skips": 0,
+    "scope_note": "Those tests ran on exact B. M has an independently confirmed identical full Git tree; this record does not relabel them as an M backend test run."
+  },
+  "current_release_boundary": {
+    "ci_and_lineage_blockers": [],
+    "original_workspace_state": "Not independently operated or verified in this audit. Root reports the original rehearsal stopped before fetch/fast-forward on two ignored backend .pyc cache files; other reviewers are handling a reversible, exact-scope preservation plan.",
+    "release_accepted": false,
+    "remaining": [
+      "Successful original-workspace adapter rehearsal with required file/editor preservation.",
+      "Authorized prepare/prepublish and newer explicit platform publication completion.",
+      "Official production verifier must confirm exact runtime/artifact identity across three probes and leave the matching lease inactive.",
+      "Live user-flow acceptance remains separate."
+    ]
+  },
+  "mutations": "No source, repository, remote, browser, /app, lease, or production state changed by this review. This requested scratch audit file is the only new write for the M audit."
+}

@@ -168,3 +168,22 @@ Filled release runners are preserved in `release-runners/`; the gate deliberatel
 still needs the successful rehearsal's private evidence directory. The original
 rehearsal may proceed in parallel with M checks, with no lease/publication until
 all applicable M checks pass. Live Production remains on the previous release.
+
+## Original preflight environment review
+
+All exact-M push checks and independent lineage/adapter evidence passed; see
+`verification/mergeM-ci-independent.json`. The original rehearsal stopped safely
+before fetch/fast-forward/build at `/tmp/mezan-pr1919-original-9l31h7ck` because
+`backend/__pycache__/` contained exactly two ignored generated .pyc files
+(frontend_build_identity and release_protocol_v5, 120563 bytes). No source,
+tracked file, untracked file or lease changed in that stopped attempt.
+
+The separately reviewed quarantine helper pins that exact scope, J/branch,
+inactive guard, clean tracked state and the saved120-path baseline; it preserves
+all cache bytes/modes/inodes via one same-device atomic rename into a fresh
+private /tmp directory, and verifies preservation afterward. It performs no
+build, source edit, gate change, deletion or automatic restoration. Independent
+static review PASS for SHA-256 cde071b8cf0b9aa5d38da95bcd7d1ebbb064c2e36e1f24783f8b89a7753ff191.
+Root has not executed this helper yet. Successful quarantine must be followed
+by a fresh unchanged original rehearsal; never reuse the failed preflight as a
+successful build. Live Production remains unchanged and no lease exists.
