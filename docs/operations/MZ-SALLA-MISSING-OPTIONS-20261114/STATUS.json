@@ -5,7 +5,7 @@
   "base_sha": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
   "previous_checkpoint_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
   "live_source_observed": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
-  "state": "combined_pr1928_published_identity_matched_official_verification_running",
+  "state": "complete_root_cause_fixed_merged_and_live_verified",
   "scope": "Explain and prevent missing incoming customer choices without manual Salla refresh.",
   "confirmed": [
     "Initial native and root choices empty at revision 1.",
@@ -33,7 +33,7 @@
   ],
   "reproduction_limit": "Synthetic source mechanisms, not full webhook/Mongo integration or a passing preventive-fix suite.",
   "access": "Official Production viewer connected through secure user authentication. Scoped reads; edit off; no credential extracted.",
-  "next_safe_action": "Await immutable combined-owner official verification: actual success, three matching live probes, fresh inactive guard and separate120-file preservation. Do not mutate /app or operate any release. Recheck visible order/card using saved-data page only, finalize sanitized evidence and report. No Salla refresh/replay.",
+  "next_safe_action": "Task complete. Report the proven sparse-status/rich-creation race, merged and verified effective release, current saved-data UI result and no manual Salla refresh. Keep original operators/evidence retained but closed; no further release, refresh, replay, worker or data repair. Other owners' financial-refresh or campaign acceptance is separate.",
   "continuity": "PR1923, task status and archival branch are durable. Issue1006 body update acknowledged but fresh readback absent; not claimed persisted.",
   "diagnosis_base_sha": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
   "source_implementation_present": true,
@@ -61,7 +61,7 @@
     "final_b_artifact_sha256": "decef6273a9c4027007a89563fc23e9a6a9a42ff3c29ebab13435f783888e211"
   },
   "independent_review": "Source review and114-test run passed. Exact-A real Mongo and gates passed. Exact-B host artifacts independently validated; root directly compared all293 file bytes and modes.",
-  "release_state": "Our unchanged Salla fix is live inside the authorized combined PR1928 publication. Root observed newer platform version3a22e2d and independently matched live sourceA2/runtime/backend/control/frontend identity. The combined owner has started official verification exactly once; its three probes, inactive guard and preservation receipt remain pending. Our older candidate/operators remain closed and must never be rerun.",
+  "release_state": "The proven delayed-creation-options cause is fixed in merged PR1923 and preserved byte-for-byte in combined PR1928. The combined owner published version3a22e2d; root independently observed platform success, exact live source/runtime/backend/control/frontend identity and saved order option/cost display. The owner's durable PR continuity, independently fetched by root and reviewer, records successful official three-probe verification, inactive guard and final120-file preservation. Our older pinned release sequence remains closed without its own publication; never rerun its operators.",
   "archival_branch": "codex/salla-options-prelinear-checkpoint-20261114",
   "ancestry_repair": {
     "failed_source_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
@@ -347,10 +347,44 @@
       "preserved_count": 120
     },
     "official_verification": {
-      "state": "running",
-      "invocation_count": 1,
+      "state": "passed",
+      "actual_exit": 0,
+      "completed_at": "2026-11-14T19:22:36.992638Z",
+      "elapsed_seconds": 764.558089,
+      "checks": 3,
+      "frontend_request_records": 582,
+      "source_git_sha": "d41cd73132793209d13758ef07b2eda4fcfe018a",
+      "deployment_git_sha": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+      "release_id": "rg5-12003f05673102a08c649a74e75e894372796da07bd75ada680a7f07aec65951",
+      "official_result_sha256": "0dbcb38d4cc6104cd48ef41dcd66dd9e7103035bb256ee0368c666a66b1c3a1b",
       "evidence_path": "/tmp/mezan-pr1928-original-2e86crex/28-verify.result.json",
-      "do_not_interrupt": true
+      "matching_lease_closed": true,
+      "fresh_guard_active": false,
+      "final_preservation": {
+        "passed": true,
+        "count": 120,
+        "completed_at": "2026-11-14T19:23:29.109552Z"
+      },
+      "evidence_source": "https://github.com/AMASI-SA/AMASI-SA/pull/1928",
+      "evidence_source_updated_at": "2026-11-14T19:24:59Z",
+      "root_and_independent_reviewer_fetched_owner_record": true,
+      "private_receipts_inspected_by_combined_release_owner": true,
+      "private_receipts_inspected_by_this_task": false
+    },
+    "effective_publication_complete": true,
+    "monitor_stopped": true,
+    "later_branch_advance": {
+      "sha": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+      "first_parent": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+      "root_checked_commit": true,
+      "changed_paths": [
+        "backend/order_engine/campaign_hover_operating.py",
+        "backend/tests/test_campaign_hover_operating.py",
+        "docs/operations/CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114/STATUS.md",
+        "release/release-intent-v5.json"
+      ],
+      "salla_fix_paths_unchanged": true,
+      "another_release_required_for_this_task": false
     }
   },
   "production_runtime_contains_task_fix": true,
@@ -361,6 +395,11 @@
     "manual_provider_refresh": false,
     "restoration_predated_this_release": true,
     "existing_local_read_marker_permitted": true,
-    "transient_origin_response_during_publication_recovered": true
-  }
+    "transient_origin_response_during_publication_recovered": true,
+    "after_publication_review_completed": true,
+    "final_product_service_component_cost_complete": true,
+    "final_cua_summary": "Verified the published options fix and saved-data order view."
+  },
+  "implementation_and_release_complete": true,
+  "manual_data_repair_executed": false
 }
