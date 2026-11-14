@@ -125,3 +125,16 @@ Next safe action: push the CI dependency correction as the new source A on PR
 the governed candidate intent, create intent-only B, pass exact-B gates, ordinary
 merge with B's exact tree, and follow the authorized v5 deployment protocol. Do
 not deploy this feature using the inherited PR #1919 intent.
+
+
+## Release checkpoint — 2026-11-14 14:53:39 UTC
+
+Current immutable source A: `2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb`, tree `b18db6ce619970c2a5c11c86e332fd21199b6dd3`; PR #1920. The revised source's campaign and Snapchat acceptance, security, CodeQL, source-readiness, operational web, shipping and integration gates have passed. Stock eligibility remains running at this checkpoint. Operational backend artifact verifies 4,672 testcases with no failures/errors/skips; official frontend verifies 733 tests/51 suites, browser 9/9, worker 4/4. Campaign suites are independently accepted by their own workflow; they use offline read-only mocks, not the operational workflow's real Mongo fixture.
+
+The current independently verified candidate is from readiness run 43606645216, artifact 14118910376; SHA-256 `9980404a8cd44b0b9a687923202e428bbb2ccec7482e0c4a411ffe75fd68d02b`, intended runtime `rg5-5c3980b0f83f3859023070ef846486e877849ca7ca848367a181995ca32c1d5e`. The complete manifest comparison is retained in `verification/source-a-candidate-validation.json`.
+
+Read-only original `/app` preflight observed the separate active lease `codex-financial-loading-recovery-1919`, source `5f7fce4fcf1b81f3fbe1093d0983184c281ca733`, deployment `4c623c640fb63ac3c138fa4a9cabb20e2b39dca7`, runtime `rg5-9b6621b12a348a9d27542452b3d2040456e720478b9fd0dc3a2b82af27438605`; tracked worktree was clean. No mutation, release, verification or lease closure for that owner was attempted. Do not advance the production ref or original workspace while that release is in progress.
+
+Next: finish exact-A stock gate, freeze validated intent-only B, pass exact-B gates/rehearsals. Wait for the existing owner to close its lease; fresh guard status must be inactive before merging our release and changing `/app`. Production changed by this task: **no**.
+
+This handoff branch is documentation-only and excluded from frozen A/B release ancestry.

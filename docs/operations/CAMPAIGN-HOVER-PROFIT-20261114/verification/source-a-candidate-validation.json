@@ -1,0 +1,109 @@
+{
+  "result": "PASS",
+  "command": "official load_candidate_release_intent at exact clean A + independently rederived full manifests",
+  "source_git_sha": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
+  "source_base_git_sha": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+  "source_tree": "b18db6ce619970c2a5c11c86e332fd21199b6dd3",
+  "artifact_path": "/workspace/scratch/a7d75184af2d/campaign-profit-readiness-a-43606645216/release-intent-v5.json",
+  "artifact_sha256": "9980404a8cd44b0b9a687923202e428bbb2ccec7482e0c4a411ffe75fd68d02b",
+  "artifact_git_blob": "16d916c910d02c5e2bf5fdafec5b89b6c417ede2",
+  "runtime_release_id": "rg5-5c3980b0f83f3859023070ef846486e877849ca7ca848367a181995ca32c1d5e",
+  "source_intent_baseline_sha256": "bb3fcbc5858d2c79c95aa55551a0ad2d0393467ce218fe3fa57984cebe001467",
+  "source_intent_baseline_git_blob": "02d51ddd35b45eeac467ffc7e4a438c28d8a51cd",
+  "source_intent_history_unchanged": true,
+  "full_manifest_comparisons": {
+    "backend_runtime_source": {
+      "file_count": 1213,
+      "tree_sha256": "46a0cad8cc2934330cfc7d165f59b17ade78547ed793019c082bee15277c16a3",
+      "manifest_sha256": "1b385ce2b414b9d16f9e64f689a5a33129f3f189c22f56c06bdb5381a9d52be0",
+      "added_count": 2,
+      "modified_count": 1,
+      "deleted_count": 0
+    },
+    "release_control_source": {
+      "file_count": 291,
+      "tree_sha256": "f47c5e80a1f1642515a1d75995a2c4609d3e505f0f4e90dd05ee7ffaf8d5da07",
+      "manifest_sha256": "dbeccf5c85c905d5b39d68cf5f87c680b6c15eb43f719cf5d9f478a00f4c68d8",
+      "added_count": 0,
+      "modified_count": 2,
+      "deleted_count": 0
+    },
+    "frontend_source": {
+      "file_count": 1180,
+      "tree_sha256": "5367d492f33c833c171411c5b3e5383247fc41c5e5db26775fdd3b0e6f66cb56",
+      "git_tree_oid": "80c958ccbaaaf143cee5ab6fbc6ef6080cde207c"
+    }
+  },
+  "governed_changed_files": {
+    "backend/order_engine/campaign_hover.py": {
+      "bytes": 25607,
+      "git_blob": "c30c300c04f839c8c15c924bdb022fe97eb06b5d",
+      "mode": "100644",
+      "path": "order_engine/campaign_hover.py",
+      "sha256": "e75ee79b87cc17f880063037da9d7730e009e166dd2abccfc2eec134bcd46cd5"
+    },
+    "backend/order_engine/campaign_hover_profit.py": {
+      "bytes": 18685,
+      "git_blob": "5512bfc479591c64c658d98498c5e0373eb087e7",
+      "mode": "100644",
+      "path": "order_engine/campaign_hover_profit.py",
+      "sha256": "618d12fb93251a6b41808fdb8b686dc29fd4bf294ce8dc48b614fb61ca59068d"
+    },
+    "backend/order_engine/campaign_hover_operating.py": {
+      "bytes": 10162,
+      "git_blob": "ace1d0b595542859b8699ae94ef0990c00ebef1c",
+      "mode": "100644",
+      "path": "order_engine/campaign_hover_operating.py",
+      "sha256": "4b8efca5e56abdad0c6d4efc6c1cdbe6a049d32cfc24bd06e5ba84ae276a80fe"
+    },
+    "frontend/src/components/CampaignHoverBadge.jsx": {
+      "bytes": 14800,
+      "git_blob": "103234467259bce80c16a42f9f9da17f9aa24bcd",
+      "mode": "100644",
+      "path": "src/components/CampaignHoverBadge.jsx",
+      "sha256": "fbc6be63ed5ad5f51175e4f6a72bd01184237923918014b866a2c2a4b5e37f28"
+    },
+    "frontend/src/components/CampaignHoverBadge.test.jsx": {
+      "bytes": 4892,
+      "git_blob": "bc62f70020d33bd1d365a25b408641a085129df6",
+      "mode": "100644",
+      "path": "src/components/CampaignHoverBadge.test.jsx",
+      "sha256": "e2cd1deb3023c7d6981efe5413de0e21326c023bdc9ca016ca861fcad1bc4097"
+    },
+    "frontend/src/components/CampaignHoverProfit.test.jsx": {
+      "bytes": 10684,
+      "git_blob": "3d84391a85b29fc8bef9a6cca7df24e8aa9afbd4",
+      "mode": "100644",
+      "path": "src/components/CampaignHoverProfit.test.jsx",
+      "sha256": "f5d349a27371cf7eb1495a22820dcc254563894034fc4ca240a85e2318fa93cc"
+    },
+    ".github/workflows/campaign-hover-source-acceptance.yml": {
+      "bytes": 5216,
+      "git_blob": "ff4141a76169c5d1f77fe87d89ab11361bb7d8c4",
+      "mode": "100644",
+      "path": ".github/workflows/campaign-hover-source-acceptance.yml",
+      "sha256": "7cd4ead40c5754b3abaf752e4ebb06de15cbcff87c467008c0c33dc2065767fc"
+    },
+    ".github/workflows/snapchat-integrations-v2.yml": {
+      "bytes": 4746,
+      "git_blob": "7061a681dee29fbc54ab0c9eabcc41f67b47addb",
+      "mode": "100644",
+      "path": ".github/workflows/snapchat-integrations-v2.yml",
+      "sha256": "74f96c7f7ec7745083f00ef5c33d76cbfc53c68c006ab0db655dcca6f069d616"
+    }
+  },
+  "frontend_artifact_tree_sha256": "2fcfaa59c69093dda0175cedf0b2aa18e3d1c1a79c7033d8c9a98d2c81d71401",
+  "frontend_build_meta": {
+    "bytes": 473567,
+    "path": "build-meta.json",
+    "sha256": "62a0defcd380a81a521ca92ad8155a39bdd35d6dc01351383a0a8c0f0b2f9378"
+  },
+  "frontend_reproducibility_proof_file": {
+    "bytes": 1521,
+    "path": "frontend/.release/reproducible-build.json",
+    "sha256": "415c7982ef0d88aad4972d1c72446f1336fd0588339316e98145a521b31fcc90"
+  },
+  "retained_pass": 2,
+  "worktree_clean_after": true,
+  "supersedes_candidate_source": "2c26dea8487bf6779a6eb01a65771f175e83b0f4"
+}
