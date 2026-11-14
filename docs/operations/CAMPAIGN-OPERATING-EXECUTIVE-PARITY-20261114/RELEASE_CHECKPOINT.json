@@ -1,7 +1,7 @@
 {
   "task": "CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114",
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 16:44:27 UTC",
+  "updated_at_utc": "2026-11-14 16:47:06 UTC",
   "branch": "codex/campaign-operating-executive-parity-m94f6-20261114",
   "pr": 1924,
   "base_J3": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
@@ -15,7 +15,7 @@
   ],
   "same_three_backend_test_blobs_as_A2": true,
   "inherited_J3_intent_unchanged": true,
-  "source_ci": "pending",
+  "source_ci": "6 of11 applicable succeeded; remaining inprogress, nofailures observed",
   "intent_B3": null,
   "merge_M3": null,
   "runtime_release_id": null,
@@ -138,5 +138,31 @@
     }
   },
   "production_changed_by_this_followup": false,
-  "next": "Complete exactA3 CI and its new candidate artifact. Freeze only new intentB3 then fullgates/hosts. Preserve other's active original build/release. After ownready and othercomplete, freshinactive/latestbase before ordinary merge and originalrehearsal."
+  "next": "Complete exactA3 CI and its new candidate artifact. Freeze only new intentB3 then fullgates/hosts. Preserve other's active original build/release. After ownready and othercomplete, freshinactive/latestbase before ordinary merge and originalrehearsal.",
+  "static_review": "root plus independent source reuse/overlap PASS",
+  "source_coverage": {
+    "backend": 248,
+    "frontend": 50,
+    "frontend_suites": 9
+  },
+  "candidate": {
+    "path": "/workspace/scratch/a7d75184af2d/campaign-operating-intent-a3/release-intent-v5.json",
+    "bytes": 1308035,
+    "chars": 1308035,
+    "json_sha256": "fb1ce72783899a9c64b592ce7d39a2c2e73bae6bec500a58f857c7fed132a68d",
+    "git_blob_sha": "2159398256b11323a9cce8e09f89508bb6f18818",
+    "release_id": "rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33",
+    "frontend_artifact_tree_sha256": "8b55f9ab1883c764826c27dd77b504fa55599bf0d84875f156565a9d8eaba5f4",
+    "run": 43617140686,
+    "artifact": 14122553318,
+    "zip_sha256": "db47ea144d128c6aaa4c3ccadb277ae260fa0f4696a4d27dc3f59e7f787af3b2",
+    "root_bindings": "PASS",
+    "independent_review": "inprogress"
+  },
+  "templates": {
+    "disabled": true,
+    "build_sha256": "249d6fa4a9b45820e1bfbafec3f5ca3d64f1fe5b46f0a25c1b3f755fb6114b6b",
+    "gate_sha256": "1721a17978503165fa1faa3972cbb8bfc35f90b055562d665a403434e34acf9a",
+    "unchanged_logic_from_reviewed1922": true
+  }
 }
