@@ -1,0 +1,81 @@
+{
+  "updated_at": "2026-11-14T02:42:59.890Z",
+  "stage": "implementation_in_progress_prechange_regression_failed_as_expected",
+  "base_J": "4860548f0b032e8e3beca18a4776413cd7e0368b",
+  "base_tree": "9a98153a5b6b69bc6a282613a1b3e354e1fe75b9",
+  "source_branch": "codex/operational-snapshot-load-fix-20261114",
+  "source_committed": false,
+  "production_changed_by_followup": false,
+  "previous_release_verified": {
+    "phase": "verified",
+    "source_git_sha": "a496dd428241b06d2292286de030c70d6241fcf0",
+    "deployment_git_sha": "4860548f0b032e8e3beca18a4776413cd7e0368b",
+    "release_id": "rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e",
+    "checks": 3,
+    "frontend_checked_request_count": 582,
+    "fresh_guard_inactive": true,
+    "actual_exit": 0,
+    "elapsed_seconds": 571.5948063230026,
+    "started_at": "2026-11-14T01:59:31.583329+00:00",
+    "ended_at": "2026-11-14T02:09:03.178132+00:00",
+    "stdout_sha256": "308de6a11d0d5293f6fbdd4b0364d063c63da9dd21faa33ed77aa0e40800d7be",
+    "prefix": "/tmp/mezan-pr1915-original-qqo8fwy9/28-verify"
+  },
+  "live_diagnostic": {
+    "started_at": "2026-11-14T02:30:17.361Z",
+    "manual_refresh_clicks": 1,
+    "visibility_confirmed": true,
+    "reason": "Production runtime logs became accessible but only retain100 visible lines. Existing attempt had rotated out. One bounded visible reproduction will capture the actual cancelled stage.",
+    "logs_target_at": "2026-11-14T02:31:47Z",
+    "financial_mutations": "No confirmations, settlements, or provider writes requested by the operator.",
+    "log_capture_at": "2026-11-14T02:31:52.895Z",
+    "source": "Current effdd19 production runtime Logs UI, most recent100lines",
+    "log_window": [
+      "2026-11-14T02:30:38.108Z",
+      "2026-11-14T02:31:47.405Z"
+    ],
+    "stages": [
+      {
+        "timestamp": "2026-11-14T02:30:44.060Z",
+        "stage": "native_evidence",
+        "duration_ms": 23437.488,
+        "outcome": "complete"
+      },
+      {
+        "timestamp": "2026-11-14T02:31:43.920Z",
+        "stage": "snapshot_load",
+        "duration_ms": 59693.907,
+        "outcome": "cancelled"
+      },
+      {
+        "timestamp": "2026-11-14T02:31:43.921Z",
+        "stage": "aggregate",
+        "duration_ms": 59860.253,
+        "outcome": "cancelled"
+      }
+    ],
+    "request": {
+      "timestamp": "2026-11-14T02:31:43.925Z",
+      "method": "POST",
+      "route": "/api/operational-balances/refresh",
+      "status": 408,
+      "duration_ms": 85793.467,
+      "outcome": "4xx"
+    },
+    "post_capture_visibility": "visible",
+    "as_of_text": "12/11/2026, 01:07",
+    "refresh_warning": "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة",
+    "conclusion": "Snapshot loading was cancelled by the total request deadline before source collection or reconciliation."
+  },
+  "red_test": {
+    "result": "failed as expected on guard amplification only",
+    "actual_exit": 1,
+    "failed": 1,
+    "elapsed_seconds": 1.21,
+    "checkpoint_count": 136,
+    "target_max": 24,
+    "snapshot_sha256": "57e27c41552496aef327d518f6fd0beb44bbe51ac1225363b4e5a2a83e3fbe31",
+    "snapshot_bytes": 16267
+  },
+  "next_safe_action": "Finish confined visible archive guard batching, focused tests, independent review; do not change or repeat existing publication."
+}
