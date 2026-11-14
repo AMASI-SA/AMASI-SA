@@ -2,12 +2,12 @@
 
 ## Current status
 
-The safe diagnostic stage is implemented and locally verified. It repairs the loss of the source/cause in the visible warning, but **does not yet repair the underlying production source-read failure**. No release intent, merge or publication by this task exists at this checkpoint. The user explicitly authorized fixing, merging and publishing. The accepted behavior remains page-owned computation: refresh only while visible and cancel/join work on hide or exit. No background calculation, polling, financial confirmation, settlement or payout is authorized as a test.
+The safe diagnostic stage is implemented, independently reviewed, fully verified on A/B/M in CI, and merged as PR #1913. It repairs the loss of the source/cause in the visible warning, but **does not yet repair the underlying production source-read failure**. The original operator checkout is at the exact reviewed merge M; no publication or lease by this task has occurred. The first operator package build stopped safely because preexisting ignored Python bytecode was present. This documentation-only handoff branch must not be merged or published. The user explicitly authorized fixing, merging and publishing. The accepted behavior remains page-owned computation: refresh only while visible and cancel/join work on hide or exit. No background calculation, polling, financial confirmation, settlement or payout is authorized as a test.
 
 ## Continuity and current base
 
 - Task branch: `codex/operational-source-read-repair-20261114`.
-- Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1913.
+- Merged PR: https://github.com/AMASI-SA/AMASI-SA/pull/1913.
 - Initial remote checkpoint: `a1497e7ff7e2cdec60be4e3c34d516a1441d2346`.
 - Production base read: `304e8793a15fd3269fd6f6d4cfba903d1760e285` (PR #1912), including the prior campaign changes from #1911.
 - Previous balances release #1906 is already merged and officially verified. Its later live application check failed; do not republish that source/intent.
@@ -68,10 +68,37 @@ PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 \
 | operational_source_diagnostics.py | `8ede8a7cb44cbc04c68b0a22a99f0cc0d0bacc7295fe9925c064b47526615fa4` |
 | test_operational_balance_source_diagnostics.py | `51e400012e491dd3c6bc6578932f025c5ddb41a8cf0d3359ded48d28c2ce9210` |
 
+## Release checkpoint — 2026-11-14 UTC
+
+- Source A: `54184a6c3725067eda2e9ac56345f578425cf3f0`; tree `969894a74194268f968754acaa52cbbdac816220`.
+- Intent-only B: `b2feb7d4b2f8bbd58e28644733a09205b2da4a05`.
+- Normal merge M: `6012ceb480bf9dc0f51ec6cc64c054e5e0db3846`; B/M tree `2b6e4d1da108350b3d0f8637000e7de09fb3bd7b`.
+- Merge parents in order: prior production `304e8793a15fd3269fd6f6d4cfba903d1760e285`, then B. Merged 2026-11-14T00:05:32Z; remote production ref verified M.
+- Runtime identity: `rg5-51a27cab964259844260959047effc778bbe1aa204c5da13133af9e0628fcaaa`.
+- Intent SHA256: `43f7acd0c0c2217087029cec6ca656d64bddd6f5454f1a3fb2f1a1b46e6ad315`; 1,301,645 bytes; Git blob `0d12084f8113345bc311e2570a564896c3b1affc`.
+- A: 27 checks, 21 success and 6 expected scope/source-role skips, no pending/failure. B: 29 checks, 23 success and 6 expected skips. Both B host20/host24 clean-clone adapter rehearsals actually ran and passed.
+- Exact A and B Operational Balance JUnit artifacts each contain 3,981 cases, including all 179 new cases, with zero failures/errors/skips; embedded SHA/tree matched. B artifact14087202774 ZIP SHA256 `5f84d9469dae00c3d0d05eb786d5980f2e9fe48a208ac85456ef461baf2f6d16`.
+- A frontend verification: 721 tests/51 suites; worker4/4; browser9/9. These are synthetic checks, not live financial acceptance.
+- M independently checked at 00:14:03 UTC: all 11 checks success, no pending/skipped/failure. Readiness43531799950, Security43531799982, CodeQL43531799971 all success.
+- Candidate artifact14085749847 from A Readiness43529628224 downloaded and hash-checked; ZIP SHA256 `df20ad159b2fa557dcce9d7ac3a0a56fa6e8410a266617b8597ae1fb1ba36ed5`. Official candidate validation exit0 in a fresh clean clone; official B intent/Git validation exit0.
+
+## Original operator state and safe build recovery
+
+The previous Ready release lease closed without intervention by this task. Fresh official guard checks returned exactly `{"active":false}` before each operator mutation. Original `/app` was fast-forwarded from the previous production head to M; tracked/index clean and all 120 preexisting untracked files byte-for-byte unchanged. Preservation manifest SHA256: `fc1aade13ea5358fed8ce97e532a7d4a600674ebce99c60ad5417b0d9c380dd8`. Unsaved editor content and unrelated files were preserved.
+
+The actual configured `yarn build` in `/app/frontend`, with the reviewed public backend URL and Python bytecode writing disabled, exited1 in1.52 seconds before bootstrap. Sanitized adapter error: `release source manifests are invalid: Backend runtime source contains prepackaged bytecode: __pycache__`. Read-only inspection found exactly one ignored `backend/__pycache__` directory (two files,120563 bytes); no standalone bytecode or other caches in backend/scripts/workflow/action scan roots. No application source failure or candidate-identity mismatch was reported.
+
+Failed-build evidence remains at `/tmp/mezan-pr1913-6012ceb4-build.log`, `.err`, and `-result.json` on the original operator; the substantive failure and identities are durably recorded here. Next recover by preserving these generated ignored cache files outside the deployment source roots, checking exact before/after hashes, then running a new logged build with no source/intent changes. Never delete or overwrite unrelated files, disable the manifest check, use fake CI markers, or modify the frozen A/B/M.
+
+This handoff is on `codex/operational-source-release-handoff-20261114`, branched from M. Its commit SHA is recorded in the PR continuation comment; do not deploy the documentation branch.
+
 ## Next safe action
 
-Run exact-source CI and freeze a new diagnostic intent only after it passes. Any further proven existing authenticated GET count may supply narrower evidence without a new refresh; do not invent endpoints or bypass browser restrictions. If it does not identify the blocker, publish the diagnostic stage through the full guarded protocol after the concurrent release closes, reproduce one visible attempt, and fix the demonstrated cause. An instrumentation-only release is not completion.
+1. Read fresh original guard status; proceed only if inactive. Reversibly quarantine the observed ignored bytecode with manifest/hash preservation, then rerun the exact package adapter on M with a new log prefix and `PYTHONDONTWRITEBYTECODE=1`.
+2. Verify actual build exit0, intended A/runtime identity, tracked cleanliness and preserved original untracked-file manifest. Check current remote production head before preparing a unique own lease.
+3. Run own `prepare`, then `prepublish` immediately before one authorized normal Emergent publish. Preserve a newer explicit platform success and run the full official three-probe verification. Require exit0 and inactive guard afterward.
+4. Reproduce one visible financial-page attempt to obtain the source/cause. Implement the demonstrated root fix with regression tests and independent review, then new A/B/merge/release and fresh successful calculation timestamp. Diagnostic instrumentation alone is not completion.
 
-Keep the existing owner scope, full financial evidence and cancellation guarantees. Add cause-specific regression coverage and obtain independent review. Freeze a new source A and intent-only B under protocol v5, preserve both with normal merge, then publish through the original adapter and complete official verification plus a fresh visible-page acceptance check.
+Keep the existing owner scope, full financial evidence and cancellation guarantees. No background calculation or financial mutation as a test. No credentials, customer identifiers or financial payloads are included in this record.
 
-Production changed by this task: **NO**. No customer data, account identifiers, order identifiers, financial amounts or credentials are included in this record.
+Production source branch changed by this task: **YES**, normal M merge above. Production runtime changed by this task: **NO** at this checkpoint; no own prepare/prepublish/Publish/verify.
