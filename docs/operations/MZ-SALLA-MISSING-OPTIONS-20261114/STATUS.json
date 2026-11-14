@@ -5,7 +5,7 @@
   "base_sha": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
   "previous_checkpoint_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
   "live_source_observed": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
-  "state": "original_build_passed_append_preservation_operator_r2_reviewed",
+  "state": "own_release_superseded_waiting_combined_pr1928_publication",
   "scope": "Explain and prevent missing incoming customer choices without manual Salla refresh.",
   "confirmed": [
     "Initial native and root choices empty at revision 1.",
@@ -33,7 +33,7 @@
   ],
   "reproduction_limit": "Synthetic source mechanisms, not full webhook/Mongo integration or a passing preventive-fix suite.",
   "access": "Official Production viewer connected through secure user authentication. Scoped reads; edit off; no credential extracted.",
-  "next_safe_action": "Stage reviewed R2 under /tmp/mezan-pr1923-operators-ofxm9kbl/guard_runner_r2.py using immutable checkpoint and exactSHA. Invoke first actual official prepare through R2; inspect direct receipt and preservation postchecks. Prepublish immediately before one authorized free UI publish; observe newer success and then one official three-probe verify. Do not repeat original build or alter any original/failed evidence.",
+  "next_safe_action": "Do not mutate original /app, run older guard/rehearsal, revert production or clear another lease. Independently verify PR1928 preserves our exact code and ancestry, monitor its immutable operator handoff to actual publication/official3probe/inactive, then confirm live source includes this fix and finalize this task truthfully. No manual Salla order refresh.",
   "continuity": "PR1923, task status and archival branch are durable. Issue1006 body update acknowledged but fresh readback absent; not claimed persisted.",
   "diagnosis_base_sha": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
   "source_implementation_present": true,
@@ -61,7 +61,7 @@
     "final_b_artifact_sha256": "decef6273a9c4027007a89563fc23e9a6a9a42ff3c29ebab13435f783888e211"
   },
   "independent_review": "Source review and114-test run passed. Exact-A real Mongo and gates passed. Exact-B host artifacts independently validated; root directly compared all293 file bytes and modes.",
-  "release_state": "R2 operator independently approved; original build/source/intent/official guard unchanged. First wrapper attempt stopped before official prepare; first actual prepare is still pending. R2 preserves original and phase-entry bookkeeping prefixes while all119 other entries and membership/type/mode remain exact.",
+  "release_state": "Our fix is merged. The original rehearsal succeeded, but before a lease was established production advanced through PR1928 (first parent our M). First actual official prepare refused the moved remote and post-status was inactive. Our older candidate release sequence is closed without publication. Do not execute its pinned operators again. PR1928 owner has begun the combined original rehearsal; preserve that workflow while independently verifying inclusion and eventual publication.",
   "archival_branch": "codex/salla-options-prelinear-checkpoint-20261114",
   "ancestry_repair": {
     "failed_source_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
@@ -223,6 +223,38 @@
     "review": "Root full-diff review and independent AST/source review passed. Implementer25 and independent21 pure synthetic helper cases passed; no actual phase was invoked.",
     "scope": "Only fixed append-only bookkeeping preservation and truthful proof metadata; previous artifacts/evidence unchanged.",
     "governed_scope": "Exact reviewed intent hash unchanged, no bookkeeping path in any source manifest/critical entries/tombstones; outside frontend/backend/release-control package roots.",
-    "executed": false
+    "executed": true
+  },
+  "official_prepare": {
+    "invocations": 1,
+    "evidence_directory": "/tmp/mezan-pr1923-r2-prepare-2277yjjr",
+    "receipt_path": "/tmp/mezan-pr1923-r2-prepare-2277yjjr/07-official-prepare.json",
+    "receipt_sha256": "2e2b210b36b70e7de215b7655c673f6e039f01e7c56e010ac73dbc50929a400a",
+    "exit": 2,
+    "completed_at": "2026-11-14T18:50:09.595492+00:00",
+    "reason": "workspace does not match GitHub production branch",
+    "local": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+    "remote": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+    "lease_active_after": false,
+    "postchecks_passed": true,
+    "preserved_intact": true,
+    "preserved_unchanged": false,
+    "exact_other_entries": 119,
+    "bookkeeping_phase_entry_and_post_bytes": 49794,
+    "bookkeeping_phase_prefix_preserved": true
+  },
+  "superseding_release": {
+    "pr": 1928,
+    "A": "d41cd73132793209d13758ef07b2eda4fcfe018a",
+    "J": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+    "B": "db6971b59b12bdda3a3585712ca881ac22d6bc0f",
+    "M": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+    "tree": "355fdae884cf4a849b0acdf1c29081730556c6b0",
+    "releaseId": "rg5-12003f05673102a08c649a74e75e894372796da07bd75ada680a7f07aec65951",
+    "intentSha256": "57ff9aacd5490ce42605ee22d9ab9cf1f2e8c6855fc9e2664266992438efd279",
+    "handoffBranch": "codex/financial-source-read-handoff-20261114",
+    "statusPath": "docs/operations/OPERATIONAL-SOURCE-READ-RECOVERY-20261114/STATUS.md",
+    "ownerOriginalStarted": true,
+    "oursOldCandidateMustNotPublish": true
   }
 }
