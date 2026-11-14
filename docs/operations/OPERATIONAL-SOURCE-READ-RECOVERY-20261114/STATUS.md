@@ -1,5 +1,17 @@
 # Operational source-read recovery — 2026-11-14
 
+## Current outcome — published and verified; manual refresh still times out
+
+PR #1928 is merged and published. The official three-probe verifier and final
+120-file preservation check passed. The one post-publication manual refresh
+did not advance the saved financial timestamp: it returned the canonical
+timeout warning and retained 14 November 2026, 18:22 Asia/Riyadh. The source
+cancellation defect in the covered source-reader helpers is fixed and verified,
+but successful live recalculation
+and the underlying production latency cause remain unresolved. See the final
+checkpoint below. Do not repeat publication, verification or the manual
+refresh merely to resume this task.
+
 ## Scope and authorization
 
 The owner asked to continue after the published financial sidebar pages.
@@ -469,3 +481,136 @@ After that explicit completion, root started the official verification exactly o
 **Current state: official verification is in progress.** It has no external timeout and must not be interrupted, detached or restarted. Do not change original `/app`, clear another or this lease manually, publish again, or run a financial refresh while it is active. Wait for its actual `28-verify.result.json`/summary, all three expected live probes, matching runtime/frontend identity and a fresh inactive guard, then run the separate preservation helper with labelafter-verify using the original120-file baseline. Only after that make one visible intentional `تحديث المصادر والأرصدة` attempt and observe its settled saved `as_of` and sanitized stage logs. No financial recovery is claimed at this checkpoint.
 
 Production branch watch has remained M2. Frozen source A2, intent B2 and M2 are unchanged. Original terminals1/2 and unsaved Untitled-1 remain untouched. Browser tab37 is the current working Emergent management tab, tab27 the original code-server, tab21 the financial page (reload it once after official verification to load the published frontend before the manual test). Private evidence stays at `/tmp/mezan-pr1928-original-2e86crex`; never publish raw manifests, customer/financial records or secrets.
+
+
+## Official live verification passed; one manual refresh failed
+
+This checkpoint supersedes the preceding in-progress state. Production changed
+by this task: **yes**, through the already recorded single free publication
+of PR #1928 / M2, platform version `3a22e2d`, explicitly finished at
+22:08 Asia/Riyadh on 14 November 2026.
+
+The original official verifier started at 19:09:52.434557 UTC and finished at
+19:22:36.992638 UTC, actual exit 0, problem null, elapsed 764.558089 seconds.
+All three live probes matched source A2
+`d41cd73132793209d13758ef07b2eda4fcfe018a`, deployment M2
+`3e9dc3b25e41c663e001822a666323c802e5ec5a`, and runtime
+`rg5-12003f05673102a08c649a74e75e894372796da07bd75ada680a7f07aec65951`.
+The official result reported 582 frontend request records; these are request
+records, not a claim of 582 distinct files. Root separately inspected the
+actual command result, official JSON, its digest and the fresh inactive guard.
+Verification stdout SHA-256:
+`0dbcb38d4cc6104cd48ef41dcd66dd9e7103035bb256ee0368c666a66b1c3a1b`.
+The official guard closed its matching owned lease. No verifier was interrupted,
+repeated or externally timed out.
+
+The separate final preservation check completed at
+19:23:29.109552 UTC: all 120 complete baseline untracked files were preserved,
+with no changed paths. Original terminals 1/2 and unsaved Untitled-1 remain
+untouched. Task-owned Terminal3 was left idle. The frozen R2 worktree remains
+clean at B2; helpers and private evidence remain at their recorded paths.
+
+### Subsequent production merge preserves the fix
+
+Production Git advanced at the 19:18:49 UTC observation to
+`324dab9fd01fab17a28a5f7de4bb2bd298d7aea9`, normal merge PR #1929.
+Its ordered parents are M2 and `93efe593ebe2c401763c5d8faa4ba8547a8a8016`.
+Root fetched the actual commit; independent full-tree review verified that all
+nine PR #1928 code/test/workflow blobs and modes are unchanged. The four new
+paths are the campaign operating-cost code, its test, its task status and its
+release intent. This is a later descendant of our published fix. Do not reset,
+overwrite, re-release or clear a lease belonging to that other conversation.
+The watch's final observation at 19:34:43 UTC found no further Git advance;
+the read-only watch has now ended. This paragraph
+does not assert that the later candidate has or has not been published.
+
+### Single visible functional attempt
+
+The old financial tab had closed. Root opened a fresh financial summary tab
+at the verified URL
+`https://mezansalla.com/operational-balances/financial-position?view=summary`.
+Its loaded frontend script was `/assets/index-BliItB6V.js`, matching A2.
+Saved-report and snapshot-bound forecast reads settled first. Both fixed
+diagnostic console-label baselines were empty, and the saved date was
+`14/11/2026, 18:22` Asia/Riyadh.
+
+Root clicked `تحديث المصادر والأرصدة` exactly once, observed start
+19:26:05.331 UTC (22:26 Riyadh). The page remained visible throughout the
+attempt and kept the dated previous report visible while the button was
+disabled. No second refresh was performed. Root initiated no separate provider
+sync or financial transaction; the timeout alone cannot prove that no admitted
+internal operation had an effect.
+
+At 19:27:34.715 UTC the existing allowed browser log interface recorded:
+
+`operational_refresh_timeout_stage_timings Array(22)`
+
+No source-specific 409 label appeared. Frozen A2 emits this exact timeout
+label only for status 408 with `operational_refresh_timeout`; therefore the
+code path is identified. Its backend handler covers an escaping TimeoutError
+inside the timed work region, so the label alone does not prove which timer or
+component expired. The raw HTTP response/status was not separately
+captured and must not be described as directly observed network evidence.
+
+At the settled 19:29:24.824 UTC observation, the button was enabled, the page
+was visible, the saved timestamp was still `14/11/2026, 18:22`, and the warning
+was exactly:
+
+> تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة
+
+**Live recalculation failed.** A successful publication, a readable saved
+report, or a re-enabled button is not evidence of successful recomputation.
+Do not call observed browser wall time a server or database-query duration.
+The configured 85-second backend request bound is not a measured query time.
+
+### Available diagnostics and concrete access limits
+
+The permitted browser log API exposes only rendered `Array(22)`, not the
+individual rows. An ordinary native attempt to open Chrome DevTools displayed
+`DevTools not allowed on this page` and
+`Your organization has blocked the use of DevTools on this page`.
+Root dismissed the notice and did not retry, bypass it or use another protocol
+to access the blocked tools.
+
+The existing published-version Manage / View Logs surface was then inspected.
+It exposed only its latest 100 entries, with timestamps about
+19:32:13–19:32:31 UTC, after this attempt. No matching
+`operational_refresh_stage` or refresh-POST timing lines were present. No
+earlier-time selector or pagination was exposed in that view. The existing
+backend emits sanitized INFO lines of the form
+`operational_refresh_stage stage=... duration_ms=... outcome=...`, but no
+request/owner correlation identifier; overlapping attempts would require an
+explicit attribution qualification. These are stage timings, not database
+query-plan measurements, and nested stages must never be summed.
+
+The platform's Monitoring page reports aggregate performance/resource pressure
+over 24 hours. It does not identify this attempt's slow stage or establish a
+missing index, pool contention, data volume or CPU as the cause. No resource
+upgrade, credit purchase or paid agent action was performed.
+
+Production database access remains blocked by the previously observed
+`Session Ended` viewer and its one unsuccessful recovery. No further automatic
+authentication retry, token/cookie inspection, credential workaround, owner
+guess or use of the preview database as production was attempted. No production
+query plan or database execution duration has been measured.
+
+### Exact next safe action
+
+Preserve this remotely recoverable documentation checkpoint and PR #1928.
+The next useful step is restoring the existing production database diagnostic
+session through the owner's normal visible management flow, using the
+documented browser-auth handoff where needed. Do not ask for passwords, tokens
+or connection strings in chat. Restoring this viewer is only a diagnostic-access
+step: it will not recover the lost 22-row trace or prove that the database caused
+the timeout. Once the production session is actually usable,
+perform bounded read-only diagnosis with verified owner scope and sanitized
+metadata; establish the slow stage/query before changing source, indexes,
+deadlines or financial formulas. No additional refresh should be triggered
+merely to resume or while waiting for access.
+
+If a future explicitly justified diagnostic attempt is needed, prepare the
+existing permitted backend log view first and capture its narrow stage lines
+promptly before the 100-entry tail rotates. It must remain one visible,
+intentional action without background polling or automatic retry. Any source
+change requires a fresh reviewed source/intent candidate on the then-current
+production base; never amend the frozen A2/B2/M2 or reuse this completed lease.
