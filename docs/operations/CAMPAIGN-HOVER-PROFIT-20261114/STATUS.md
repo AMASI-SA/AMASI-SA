@@ -249,3 +249,12 @@ Next: observe a newer explicit Deployment finished event and a new current publi
 - Terminal3 now shows running python. Final official receipt/exit is not yet observed; do not infer verification success or repeat the command.
 - Narrow operating diagnosis reached only the two exact-name campaign catalogs in original configured DB, both empty; no owner chosen and no financial basis function called. Process environment did not override Mongo settings. No broader searches, provider calls, writes, or credentials printed. Live operating cause remains unproven.
 - A separate candidate payroll-scope correction exists in scratch with synthetic regression evidence; it is not part of frozen M and has not been accepted, merged, or published.
+
+
+## Publication officially verified; follow-up parity fix remains — 2026-11-14 16:24:47 UTC
+
+- One actual official CLI verify completed exit0 from16:10:08.014524Z to16:22:18.751950Z (730.737s), with `verified:true`, three probes, exact sourceA/deploymentM/runtime identity and frontend artifact tree. First-probe manifest records582 checked frontend requests. Stdout SHA256 `f7bb0927efbd754ced07837146d9169f64794ffc262d5acf6a1b1849044e7dda`.
+- Root read actual receipt/streams and recomputed hashes; prior phases remain byte/metadata identical. New reviewed continuation result completed16:22:18.957407Z. All119 other preservation records exact; specific metadata file only appended86bytes while all witnessed prefixes, inode and mode were retained.
+- Official verification closed this lease. A fresh official status at16:23:12.874031UTC exited0 and returnedinactive. No abort or manual lease clearing.
+- This certifies deploymentidentity, not full functional acceptance: live operating/net unknown prompted a source-proven executive-parity followup. New draft PR#1922, branch `codex/campaign-operating-executive-parity-20261114`, initial source `22832941d5d61d77ed5c6acb2b3a6565423ce675`.
+- Initial source coverage/readiness passed, but independent review found a masked-invalid utility fallback boundary; a narrow correction is pending before freezing the final source. Old CI success will not substitute for the final source's gates.

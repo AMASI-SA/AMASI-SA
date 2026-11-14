@@ -1,0 +1,63 @@
+{
+  "phase": "verify-after-bookkeeping-review",
+  "official_guard_invocations": 1,
+  "guard_receipt": {
+    "argv": [
+      "python",
+      "-B",
+      "scripts/production_release_guard.py",
+      "verify",
+      "--url",
+      "https://mezansalla.com"
+    ],
+    "cwd": "/app",
+    "started_at": "2026-11-14T16:10:08.014524Z",
+    "finished_at": "2026-11-14T16:22:18.751950Z",
+    "exit_code": 0,
+    "seconds": 730.7373067239532,
+    "stdout_sha256": "f7bb0927efbd754ced07837146d9169f64794ffc262d5acf6a1b1849044e7dda",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "verified": true,
+  "checks": 3,
+  "source_git_sha": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
+  "source_base_git_sha": "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+  "deployment_git_sha": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
+  "release_id": "rg5-5c3980b0f83f3859023070ef846486e877849ca7ca848367a181995ca32c1d5e",
+  "protocol_version": 5,
+  "frontend_artifact_tree_sha256": "2fcfaa59c69093dda0175cedf0b2aa18e3d1c1a79c7033d8c9a98d2c81d71401",
+  "frontend_checked_request_count": 582,
+  "backend_source_file_count": 1213,
+  "backend_source_manifest_sha256": "1b385ce2b414b9d16f9e64f689a5a33129f3f189c22f56c06bdb5381a9d52be0",
+  "release_control_file_count": 291,
+  "release_control_manifest_sha256": "dbeccf5c85c905d5b39d68cf5f87c680b6c15eb43f719cf5d9f478a00f4c68d8",
+  "all_stream_and_receipt_digests_match": true,
+  "original_phase_records_unchanged": true,
+  "wrapper_finished_at": "2026-11-14T16:22:18.957407Z",
+  "guard_receipt_sha256": "2a0d992264134d357f63c83ad2cea35e5f61a17d334e3df9935d60d252d5dfd3",
+  "preservation": {
+    "paths": 120,
+    "exact_original_records": 119,
+    "append_only_file": ".emergent/stripped_env_names",
+    "before_bytes": 48676,
+    "after_bytes": 48762,
+    "before_sha256": "1a715333f8f54e8fe579f3a9ed0ef1b742fe25ddad15053d2975afda430b9d05",
+    "after_sha256": "8fa78cce0e74478860657403f2b1f271f14c69683fbd56b1a183951166f3f030",
+    "all_witnessed_prefixes_preserved": true
+  },
+  "status_after_active": false,
+  "fresh_status": {
+    "started_at": "2026-11-14T16:23:12.769436+00:00",
+    "finished_at": "2026-11-14T16:23:12.874031+00:00",
+    "exit_code": 0,
+    "stdout_sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e",
+    "active": false
+  },
+  "evidence": "/tmp/mezan-pr1920-original-a_3qop92/release-gate/verify-after-bookkeeping-review",
+  "publication": {
+    "text": "Deployment finished Nov 14, 06:51 PM",
+    "finished_at": "2026-11-14T15:51:00Z",
+    "version": "1b4c4f6",
+    "observed_at": "2026-11-14 15:55:38 UTC"
+  }
+}
