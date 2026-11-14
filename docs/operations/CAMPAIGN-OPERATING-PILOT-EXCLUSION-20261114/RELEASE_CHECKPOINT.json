@@ -2,7 +2,7 @@
   "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
   "round": 5,
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 18:27:01 UTC",
+  "updated_at_utc": "2026-11-14 18:34:13 UTC",
   "branch": "codex/campaign-operating-pilot-maf9-20261114",
   "pr": 1927,
   "base_J5": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
@@ -74,10 +74,99 @@
     "fix_scope": "Add projected non-payroll policy fields; ignore explicit disabled-pilot contract only when canonical normalized history is empty; keep all contributing missing-cost protections."
   },
   "source_ci": {
-    "status": "running",
-    "readiness_run": 43626531393,
-    "coverage_run": 43626531408,
-    "applicable_workflows": 11
+    "status": "all_11_success",
+    "at": "2026-11-14 18:32:56 UTC",
+    "independent": "PASS",
+    "runs": [
+      {
+        "id": 43626531323,
+        "name": "Snapchat Settings Management V2",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531323",
+        "updated": "2026-11-14T18:25:49Z"
+      },
+      {
+        "id": 43626531194,
+        "name": "Snapchat Direct Active Publication",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531194",
+        "updated": "2026-11-14T18:25:48Z"
+      },
+      {
+        "id": 43626531444,
+        "name": "Qoyod Payment Freshness",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531444",
+        "updated": "2026-11-14T18:26:03Z"
+      },
+      {
+        "id": 43626531408,
+        "name": "Campaign hover source coverage",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531408",
+        "updated": "2026-11-14T18:26:31Z"
+      },
+      {
+        "id": 43626531393,
+        "name": "Mezan Release Readiness",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531393",
+        "updated": "2026-11-14T18:26:41Z"
+      },
+      {
+        "id": 43626531297,
+        "name": "Security Gate",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531297",
+        "updated": "2026-11-14T18:28:44Z"
+      },
+      {
+        "id": 43626531528,
+        "name": "G47 Focused Integration",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531528",
+        "updated": "2026-11-14T18:29:07Z"
+      },
+      {
+        "id": 43626531318,
+        "name": "MZ2 Track F native shipping",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531318",
+        "updated": "2026-11-14T18:30:02Z"
+      },
+      {
+        "id": 43626531313,
+        "name": "Operational Balance Web",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531313",
+        "updated": "2026-11-14T18:31:06Z"
+      },
+      {
+        "id": 43626531441,
+        "name": "CodeQL",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531441",
+        "updated": "2026-11-14T18:31:00Z"
+      },
+      {
+        "id": 43626531304,
+        "name": "Operational Stock Eligibility",
+        "conclusion": "success",
+        "attempt": 1,
+        "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43626531304",
+        "updated": "2026-11-14T18:32:12Z"
+      }
+    ]
   },
   "predecessor_own_release": {
     "pr": 1924,
@@ -93,8 +182,14 @@
     "intent_B": "ece0b24b0978c5064c4e605b577ad2722158f56a",
     "state": "Merged; owner preparing original rehearsal at last observed PR update. Root must read current guard before original actions and wait for the owner's successful verification/inactive receipt if a lease is active.",
     "last_guard_read": {
-      "active": false,
-      "scope": "Actual root read via original Terminal3; no original source or lease mutation."
+      "at": "2026-11-14T18:32:37.219498+00:00",
+      "guard_exit": 0,
+      "guard": {
+        "active": false
+      },
+      "head": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+      "tracked_clean": true,
+      "scope": "Root read-only Terminal3; no original mutation."
     }
   },
   "superseded_pr1926": {
@@ -103,6 +198,112 @@
     "B4": "8351754572cfd82833b9901e794275f6598f79f1",
     "reason": "Production advanced immediately after the pre-B4 ref check; frozen B4 cannot merge against the new intent/source base."
   },
-  "next": "Wait for all exact-A5 source workflows and independently validate its new A5/J5 candidate. Do not reuse the A4/B4 intent. Then freeze only a new B5 and pass all B5/host gates. Respect PR1923's separate original release.",
-  "coordination": "Issue1006 is full; task status, PR body and handoff branch preserve checkpoints."
+  "next": "Wait for all exact-B5 applicable gates and independently verify both Host20.20.2 and24.19.0 generated artifacts/package-boundary/JSON-route proofs. Then mark ready, pass ready-transition repeats and fresh production/foreign ownership checks. No original changes while PR1923 owner is publishing or verifying.",
+  "coordination": "Issue1006 is full; task status, PR body and handoff branch preserve checkpoints.",
+  "intent_B5": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+  "intent_tree": "d199c053cc3f3c3aad55ca1e96dde7c1fde44926",
+  "intent_candidate": {
+    "path": "/workspace/scratch/a7d75184af2d/campaign-operating-intent-a5/release-intent-v5.json",
+    "zip_bytes": 378226,
+    "zip_sha256": "28439ee348937530e9fc26623c3f5ee625929d908499d293aae36a364811f217",
+    "intent_bytes": 1308607,
+    "intent_sha256": "e5223937d883ce8ce2d02e524e079d78658be47b289ddc2c174d452c5ca1aebf",
+    "intent_git_blob": "d4a50b97e17522430479fe16f3927f47c56a520c",
+    "source": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+    "base": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+    "runtime_release_id": "rg5-a80ea84875fa69d3a23cec8f7bb90bfafb5dbab2f78e594197c02d1d8ff370b3",
+    "runtime_identity_bytes": 437783,
+    "runtime_identity_sha256": "06a7579dab38387c81c17c71bdb689e56e1d521f8a2628cb575d9f8ac16423c9",
+    "frontend_source_tree": "ea3a91a417ada4226cd1614fb1de928351da3ebf",
+    "frontend_source_file_count": 1182,
+    "frontend_artifact_tree": "8b55f9ab1883c764826c27dd77b504fa55599bf0d84875f156565a9d8eaba5f4",
+    "frontend_build_meta": {
+      "bytes": 474116,
+      "path": "build-meta.json",
+      "sha256": "5b84999ee406f9e3f51cec5c3ffabb193dd36fa5430b95cfcdc2cd0b791c6bbc"
+    },
+    "frontend_proof": {
+      "bytes": 1521,
+      "path": "frontend/.release/reproducible-build.json",
+      "sha256": "b3385c9255f6b64f6f683a45613b1cb1995239c5480a1dadf3e6255739f02d17"
+    },
+    "toolchain": {
+      "node": "22.23.2",
+      "vite": "8.2.4",
+      "yarn": "1.22.22"
+    },
+    "backend": {
+      "added_count": 0,
+      "deleted_count": 0,
+      "file_count": 1216,
+      "manifest_sha256": "0f4b06ac8fe58befd686304e188b4337ead5feaa2ea9270747730324ee3f88ab",
+      "modified_count": 1,
+      "projection_tree_oid": "c1946e5479b2da4cf44c82ffb9284b02b088eb35",
+      "scope": "backend_runtime_package_v1",
+      "scope_tree_oid": "5e5df1dc56f39a5e63f49c8b58404c6cc7d8cedd",
+      "source_base_git_sha": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+      "source_base_root_tree_oid": "b5aba4c6ec2755fb27fe084c2b74f87f9d8fddf6",
+      "source_base_scope_tree_oid": "3d49971b92d94db7a32a0ffa989e098d253558f8",
+      "source_git_sha": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+      "source_root_tree_oid": "d0990feaa0514cf06fd09eb601051c116bb8be46",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "80f73d29109d1810d3df7a7de7c4a2444e04bc5e15a9680a1fdc36b56a2e0357"
+    },
+    "control": {
+      "added_count": 0,
+      "deleted_count": 0,
+      "file_count": 291,
+      "manifest_sha256": "95dff713de138cd3236da67cf04bb1d8e1662a7d095ebd7acfceb98af7c6f038",
+      "modified_count": 0,
+      "projection_tree_oid": "f439e50ce2dd9755cbfba633a7a3fee982fbbda7",
+      "scope": "release_control_source_v1",
+      "scope_tree_oid": "f439e50ce2dd9755cbfba633a7a3fee982fbbda7",
+      "source_base_git_sha": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+      "source_base_root_tree_oid": "b5aba4c6ec2755fb27fe084c2b74f87f9d8fddf6",
+      "source_base_scope_tree_oid": "f439e50ce2dd9755cbfba633a7a3fee982fbbda7",
+      "source_git_sha": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+      "source_root_tree_oid": "d0990feaa0514cf06fd09eb601051c116bb8be46",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "70d8d5e49a3c89d1620bde2c8fa35e27a2c23f983be546ad20725a39c2a2be10"
+    },
+    "root_initial_bindings": "PASS",
+    "independent_review": "PASS",
+    "source_readiness_run": 43626531393,
+    "source_artifact": 14126221258,
+    "independent_scope_records": 2689
+  },
+  "intent_freeze_review": {
+    "result": "PASS",
+    "base": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+    "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+    "files": [
+      {
+        "filename": "release/release-intent-v5.json",
+        "sha": "d4a50b97e17522430479fe16f3927f47c56a520c",
+        "status": "modified"
+      }
+    ],
+    "independent": "PASS",
+    "sole_parent": "3545ef861c17f1411d6258efb5db4a5aaf52f577"
+  },
+  "intent_ci": {
+    "status": "running",
+    "readiness_run": 43627233700,
+    "coverage_run": 43627233670,
+    "applicable_workflows": 11,
+    "expected_tiktok_skip": true
+  },
+  "disabled_runner_templates": {
+    "original_build": {
+      "path": "operators/original-build-1927.template.py",
+      "sha256": "4c394d8fb0a6f5a2ca6d3fd19bd0e89f74dc6033058bd23f96df6a5045c85bed"
+    },
+    "release_gate": {
+      "path": "operators/release-gate-1927.template.py",
+      "sha256": "7be8c2f7cae81d8c9cf0dcaa01007c36524c31b53be622d289993195e8ca09bc"
+    },
+    "root_review": "PASS; disabled PINS_REVIEWED=False; unknown pins remain UNPINNED. No execution."
+  }
 }

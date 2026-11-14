@@ -1,35 +1,31 @@
-# Campaign operating basis: disabled pilot exclusion
+# Campaign operating disabled pilot follow-up — PR1927
 
-## Goal and proven cause
+Updated: 2026-11-14 18:34:13 UTC
 
-The user requested complete campaign direct costs, operating expenses allocated using the executive summary's current unrounded expenses-to-sales ratio, and net profit. PR1924 is published and passed its single official three-probe verification at 2026-11-14T18:14:07.202705Z, with the owned lease closed. Live numeric acceptance found an explicitly disabled pilot salary contract without effective normalized salary history. The executive salary reader excludes it; the campaign reader omitted its policy fields and incorrectly treated it as a missing contributing payroll cost. Authorized owner-scoped reads established the cause without changing business data. No private identifiers, staffing counts or financial values are included here.
+## Current verified state
 
-## Reviewed change
+The three-file source A5 `3545ef861c17f1411d6258efb5db4a5aaf52f577` on J5 `af9caabb3119aeb9cf450af0a8b89d376cef8c74` passed all11 exact-source workflows on attempt1. Root fresh confirmation was 2026-11-14 18:32:56 UTC. Actual source coverage:253 backend tests and50 frontend tests/9suites. Source and new-base compatibility reviews passed.
 
-Project the existing status, payroll_enabled and accrual_policy fields. After shared identity/calendar and salary normalization, omit only empty normalized history with all three explicit markers: status=pilot_only, payroll_enabled is False, accrual_policy=disabled_during_pilot. Valid revision history and a valid legacy baseline still contribute even with obsolete markers. Contributing contracts with missing or invalid costs remain unknown.
+A5 readiness43626531393 candidate artifact14126221258 passed root and independent review, including all2689 Git records, manifests, canonical runtime binding and exact ZIP digest. Intent SHA256 `e5223937d883ce8ce2d02e524e079d78658be47b289ddc2c174d452c5ca1aebf`, Git blob `d4a50b97e17522430479fe16f3927f47c56a520c`, runtime `rg5-a80ea84875fa69d3a23cec8f7bb90bfafb5dbab2f78e594197c02d1d8ff370b3`.
 
-Five synthetic regressions compare the actual executive salary cohort, preserve valid revision/legacy history and protect explicit/default contributing contracts with missing history. No operating-ratio formula, currency, read limit, deadline, recurring cost, direct cost, profit rounding or frontend behavior changes.
+Intent-only B5 `0a79480d2246d4ad748ed82b0a3510a4c0c0123c` / tree `d199c053cc3f3c3aad55ca1e96dde7c1fde44926` is now frozen and pushed on `codex/campaign-operating-pilot-maf9-20261114`. Root and independent review confirm its sole parent is A5 and its only change is release/release-intent-v5.json with the exact candidate bytes. PR1927 remains draft. B5 readiness43627233700 and the other gates are running; both host adapters and their actual JSON-route proofs are still required.
 
-## New base and superseded release candidate
+## Original and publication ownership
 
-Base J5 is PR1923 merge `af9caabb3119aeb9cf450af0a8b89d376cef8c74`, tree `b5aba4c6ec2755fb27fe084c2b74f87f9d8fddf6`, which entered production history after the pre-intent check for PR1926. It adds delayed Salla customer-option preservation. Independent full-tree and source review confirmed the pilot source, tests, payroll, expenses, recurring, currency and acceptance workflow remain identical to the previous base, so the same reviewed source/test bytes are reused.
+PR1924's own official three-probe verification and inactive closure remain complete. Root's read-only original observation at2026-11-14T18:32:37.219498+00:00 found guard inactive, HEAD J5 and tracked clean. PR1923's owner has advanced original to J5 and owns its separate rehearsal/publication. That observation is not authorization to interfere with its release. No PR1927 original build, lease or publication has occurred.
 
-PR1926 remains immutable and is superseded: A4 `1140a3fec8ef77f81fdd0cf768f9a89fb2db4ab0`, B4 `8351754572cfd82833b9901e794275f6598f79f1`. All 11 A4 workflows passed on attempt 1, including 253 backend and 50 frontend source-coverage tests. Its candidate intent passed independent validation, but B4 became unmergeable against the advancing production base and no B4 workflows ran. No B4 publication occurred.
+The archived1927 normal runner templates are disabled and reviewed; all unknown exact pins remain UNPINNED and PINS_REVIEWED=False. They must be fully pinned and independently reviewed before any original execution.
 
-The new source A5 directly descends from J5 and retains J5's intent blob `f44168176bc3a995776f71e4aa61ea4ee9509366` unchanged. Never carry the old B4 intent into A5. Extract a new reviewed intent from exact-A5 CI and create a new intent-only B5.
+## Scope and safety
 
-## Verification status and next steps
+Only explicitly disabled pilot payroll with empty canonical history is excluded, aligning the executive salary cohort. Valid history and legacy baseline continue to contribute; real missing costs remain unknown. Source/test blobs are byte-identical to reviewed A4; obsolete PR1926 is closed, its frozen history and successful source evidence preserved in verification/superseded-pr1926.json.
 
-- Source module blob `b0576e365eb2a5b4f1e105e2a1be17f1d2393655`; test blob `5ec985aa2307f07d05b87486f59c9fb764205ed7`.
-- Independent narrow patch review: PASS; patch SHA256 `dee247aa5fe6d2dff46d96537e0c390a60b9644adf91679dd65e1916583aaa0c`.
-- Actual-helper offline regression: baseline 46 passed / 1 failed on the disabled-pilot case; candidate 47 passed / 0 failed. Local pytest was unavailable; A4 CI above executed the real tests.
-- Exact-A5 CI is pending and must pass independently. Previous A4 results do not replace it.
-- PR1923's separate original release is being prepared by its owner. Respect its guard and preservation state; no original-source, lease or deployment change from this task before the required gates and fresh ownership checks.
-- Require all A5 gates, exact candidate validation, all B5 gates and both host proofs, ordinary tree-equivalent merge M5, exact-M5 push gates, original build/package proof, official prepare/prepublish/single publication/three-probe verify and actual live numeric acceptance.
+No private employee identifiers, names, salary values or campaign financial values are recorded. No business-data writes, manual sync, new worker or paid agent action. Preserve foreign work, editor buffer and all untracked paths. Do not resume or reuse PR1924 phases or A4/B4 identity.
 
-Continuation ledger: `codex/campaign-hover-profit-release-handoff-20261114`. Issue #1006 is full; this task status and PR body retain the required checkpoint. No business-data, advertising, sync, financial-setting or paid-agent changes are authorized or performed by this task.
+## Next safe action
 
+Wait for all exact-B5 applicable gates and independently verify both Host20.20.2 and24.19.0 generated artifacts/package-boundary/JSON-route proofs. Then mark ready, pass ready-transition repeats and fresh production/foreign ownership checks. No original changes while PR1923 owner is publishing or verifying.
 
-## Exact A5 checkpoint
+After an ordinary tree-equivalent merge and exact-merge push gates, perform the reviewed original rehearsal, then official prepare/prepublish, one free UI publication and actual three-probe verification. Final acceptance requires live campaign operating allocation and net-profit arithmetic; CI alone does not complete the user's request.
 
-PR1927 https://github.com/AMASI-SA/AMASI-SA/pull/1927 is frozen at source A5 `3545ef861c17f1411d6258efb5db4a5aaf52f577`, tree `d0990feaa0514cf06fd09eb601051c116bb8be46`, sole parent J5 `af9caabb3119aeb9cf450af0a8b89d376cef8c74`. Independent commit/history/full-tree review passed: exactly the two reviewed code/test blobs plus updated STATUS; J5 intent unchanged. Exact A5 CI is running (readiness43626531393; coverage43626531408). PR1926 is closed and archived separately with all passing A4 results and its unused B4. Do not resume that old candidate.
+Issue1006 is full. This task record, PR1927 and the continuation branch preserve progress. Detailed state is in RELEASE_CHECKPOINT.json.

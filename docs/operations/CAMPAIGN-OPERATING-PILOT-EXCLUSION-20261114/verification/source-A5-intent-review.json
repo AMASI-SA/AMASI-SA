@@ -1,0 +1,99 @@
+{
+  "root": {
+    "path": "/workspace/scratch/a7d75184af2d/campaign-operating-intent-a5/release-intent-v5.json",
+    "zip_bytes": 378226,
+    "zip_sha256": "28439ee348937530e9fc26623c3f5ee625929d908499d293aae36a364811f217",
+    "intent_bytes": 1308607,
+    "intent_sha256": "e5223937d883ce8ce2d02e524e079d78658be47b289ddc2c174d452c5ca1aebf",
+    "intent_git_blob": "d4a50b97e17522430479fe16f3927f47c56a520c",
+    "source": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+    "base": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+    "runtime_release_id": "rg5-a80ea84875fa69d3a23cec8f7bb90bfafb5dbab2f78e594197c02d1d8ff370b3",
+    "runtime_identity_bytes": 437783,
+    "runtime_identity_sha256": "06a7579dab38387c81c17c71bdb689e56e1d521f8a2628cb575d9f8ac16423c9",
+    "frontend_source_tree": "ea3a91a417ada4226cd1614fb1de928351da3ebf",
+    "frontend_source_file_count": 1182,
+    "frontend_artifact_tree": "8b55f9ab1883c764826c27dd77b504fa55599bf0d84875f156565a9d8eaba5f4",
+    "frontend_build_meta": {
+      "bytes": 474116,
+      "path": "build-meta.json",
+      "sha256": "5b84999ee406f9e3f51cec5c3ffabb193dd36fa5430b95cfcdc2cd0b791c6bbc"
+    },
+    "frontend_proof": {
+      "bytes": 1521,
+      "path": "frontend/.release/reproducible-build.json",
+      "sha256": "b3385c9255f6b64f6f683a45613b1cb1995239c5480a1dadf3e6255739f02d17"
+    },
+    "toolchain": {
+      "node": "22.23.2",
+      "vite": "8.2.4",
+      "yarn": "1.22.22"
+    },
+    "backend": {
+      "added_count": 0,
+      "deleted_count": 0,
+      "file_count": 1216,
+      "manifest_sha256": "0f4b06ac8fe58befd686304e188b4337ead5feaa2ea9270747730324ee3f88ab",
+      "modified_count": 1,
+      "projection_tree_oid": "c1946e5479b2da4cf44c82ffb9284b02b088eb35",
+      "scope": "backend_runtime_package_v1",
+      "scope_tree_oid": "5e5df1dc56f39a5e63f49c8b58404c6cc7d8cedd",
+      "source_base_git_sha": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+      "source_base_root_tree_oid": "b5aba4c6ec2755fb27fe084c2b74f87f9d8fddf6",
+      "source_base_scope_tree_oid": "3d49971b92d94db7a32a0ffa989e098d253558f8",
+      "source_git_sha": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+      "source_root_tree_oid": "d0990feaa0514cf06fd09eb601051c116bb8be46",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "80f73d29109d1810d3df7a7de7c4a2444e04bc5e15a9680a1fdc36b56a2e0357"
+    },
+    "control": {
+      "added_count": 0,
+      "deleted_count": 0,
+      "file_count": 291,
+      "manifest_sha256": "95dff713de138cd3236da67cf04bb1d8e1662a7d095ebd7acfceb98af7c6f038",
+      "modified_count": 0,
+      "projection_tree_oid": "f439e50ce2dd9755cbfba633a7a3fee982fbbda7",
+      "scope": "release_control_source_v1",
+      "scope_tree_oid": "f439e50ce2dd9755cbfba633a7a3fee982fbbda7",
+      "source_base_git_sha": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+      "source_base_root_tree_oid": "b5aba4c6ec2755fb27fe084c2b74f87f9d8fddf6",
+      "source_base_scope_tree_oid": "f439e50ce2dd9755cbfba633a7a3fee982fbbda7",
+      "source_git_sha": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+      "source_root_tree_oid": "d0990feaa0514cf06fd09eb601051c116bb8be46",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "70d8d5e49a3c89d1620bde2c8fa35e27a2c23f983be546ad20725a39c2a2be10"
+    },
+    "root_initial_bindings": "PASS",
+    "independent_review": "pending",
+    "source_readiness_run": 43626531393,
+    "source_artifact": 14126221258
+  },
+  "independent": {
+    "result": "PASS",
+    "records": 2689,
+    "backend": 1216,
+    "frontend": 1182,
+    "control": 291,
+    "frontend_assets": 280,
+    "frontend_public": 287,
+    "candidate_zip_digest": "28439ee348937530e9fc26623c3f5ee625929d908499d293aae36a364811f217",
+    "source_readiness_run": 43626531393,
+    "frontend_job": 132543493047
+  },
+  "freeze": {
+    "result": "PASS",
+    "base": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+    "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+    "files": [
+      {
+        "filename": "release/release-intent-v5.json",
+        "sha": "d4a50b97e17522430479fe16f3927f47c56a520c",
+        "status": "modified"
+      }
+    ],
+    "independent": "PASS",
+    "sole_parent": "3545ef861c17f1411d6258efb5db4a5aaf52f577"
+  }
+}
