@@ -1,0 +1,65 @@
+{
+  "platform": "120e0fa",
+  "source_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+  "deployment_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+  "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+  "attempt_count": 1,
+  "started_at": "2026-11-14T05:24:14.504Z",
+  "financial": {
+    "as_of": "12/11/2026, 01:07",
+    "loading": null,
+    "main_error": null,
+    "refresh_warning": "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. أعد التحديث عند الحاجة من الصفحة.",
+    "report_present": true,
+    "visibility": "visible",
+    "observed_at": "2026-11-14T05:27:31.762Z",
+    "started_at": "2026-11-14T05:24:14.504Z"
+  },
+  "events": [
+    {
+      "duration_ms": 93152.823,
+      "stage": null,
+      "status": "408",
+      "timestamp": "2026-11-14 05:25:49"
+    },
+    {
+      "duration_ms": 84086.423,
+      "stage": "aggregate",
+      "status": null,
+      "timestamp": "2026-11-14 05:25:42",
+      "outcome": "cancelled"
+    },
+    {
+      "duration_ms": 77356.104,
+      "stage": "source_collection",
+      "status": null,
+      "timestamp": "2026-11-14 05:25:42",
+      "outcome": "cancelled"
+    },
+    {
+      "duration_ms": 61803.392,
+      "stage": "source_orders",
+      "status": null,
+      "timestamp": "2026-11-14 05:25:42",
+      "outcome": "cancelled"
+    },
+    {
+      "duration_ms": 514.373,
+      "stage": "source_option_catalog",
+      "status": null,
+      "timestamp": "2026-11-14 05:24:40",
+      "outcome": "complete"
+    },
+    {
+      "duration_ms": 5121.961,
+      "stage": "source_bundles",
+      "status": null,
+      "timestamp": "2026-11-14 05:24:39",
+      "outcome": "complete"
+    }
+  ],
+  "source_failure_events": [],
+  "visibility_during_attempt": "visible",
+  "new_financial_as_of": false,
+  "timestamp_note": "Event timestamps are extracted only from whitelisted refresh-stage/api_timing lines; an earlier global timestamp scan included embedded payload dates and is not a runtime-window bound."
+}

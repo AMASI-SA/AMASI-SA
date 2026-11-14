@@ -1,0 +1,100 @@
+{
+  "task_id": "OPERATIONAL-ORDER-STAGE-REPAIR-20261114",
+  "stage": "measured_bottlenecks_implementation_wip",
+  "repo": "AMASI-SA/AMASI-SA",
+  "source": {
+    "J": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+    "Jtree": "9d8844f32f9db18cd036ff1b55edaec2c0dbe1b8",
+    "prior_pr": 1917,
+    "prior_platform": "120e0fa",
+    "prior_release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+    "source_branch": "codex/operational-order-stage-fix-20261114",
+    "handoff_branch": "codex/operational-order-stage-handoff-20261114",
+    "worktree": "/workspace/scratch/019fa8a18b3d/mezan-order-stage-fix",
+    "prefix": "docs/operations/OPERATIONAL-ORDER-STAGE-REPAIR-20261114/",
+    "live_diagnostic": {
+      "platform": "120e0fa",
+      "source_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+      "deployment_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+      "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+      "attempt_count": 1,
+      "started_at": "2026-11-14T05:24:14.504Z",
+      "financial": {
+        "as_of": "12/11/2026, 01:07",
+        "loading": null,
+        "main_error": null,
+        "refresh_warning": "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. أعد التحديث عند الحاجة من الصفحة.",
+        "report_present": true,
+        "visibility": "visible",
+        "observed_at": "2026-11-14T05:27:31.762Z",
+        "started_at": "2026-11-14T05:24:14.504Z"
+      },
+      "events": [
+        {
+          "duration_ms": 93152.823,
+          "stage": null,
+          "status": "408",
+          "timestamp": "2026-11-14 05:25:49"
+        },
+        {
+          "duration_ms": 84086.423,
+          "stage": "aggregate",
+          "status": null,
+          "timestamp": "2026-11-14 05:25:42",
+          "outcome": "cancelled"
+        },
+        {
+          "duration_ms": 77356.104,
+          "stage": "source_collection",
+          "status": null,
+          "timestamp": "2026-11-14 05:25:42",
+          "outcome": "cancelled"
+        },
+        {
+          "duration_ms": 61803.392,
+          "stage": "source_orders",
+          "status": null,
+          "timestamp": "2026-11-14 05:25:42",
+          "outcome": "cancelled"
+        },
+        {
+          "duration_ms": 514.373,
+          "stage": "source_option_catalog",
+          "status": null,
+          "timestamp": "2026-11-14 05:24:40",
+          "outcome": "complete"
+        },
+        {
+          "duration_ms": 5121.961,
+          "stage": "source_bundles",
+          "status": null,
+          "timestamp": "2026-11-14 05:24:39",
+          "outcome": "complete"
+        }
+      ],
+      "source_failure_events": [],
+      "visibility_during_attempt": "visible",
+      "new_financial_as_of": false,
+      "timestamp_note": "Event timestamps are extracted only from whitelisted refresh-stage/api_timing lines; an earlier global timestamp scan included embedded payload dates and is not a runtime-window bound."
+    },
+    "plan": "Remove four measured repeated scans within source_orders using attempt-local indexes: delivery assignments, courier history hold, product cost catalog, and diagnostic membership. Preserve every financial rule, completehistory, duplicate/error/order/Decimal semantics, default othercallers, requestvisibility/cancellation andfresheachCASattempt. No cap/deadline/auth/DBwritechanges.",
+    "ownership": {
+      "root": "operational_balance_sources.py, diagnostic-index helper/tests, integration/source/release",
+      "source_read_review": "delivery_assignment_index helper + delivery_evidence/confirmation optionalplumbing + focusedtests",
+      "screenshot_handoff": "cost_catalog_index helper + focusedtests",
+      "release_gate_audit": "courier_hold_history helper + focusedtests"
+    }
+  },
+  "production_changed_by_this_followup": false,
+  "constraints": [
+    "Original/app120untracked andunsavedUntitled-1 preserved",
+    "Onlyroot mutatesGitHub/original/operator",
+    "No paidagentcalls",
+    "Nofinancialconfirmation/settlement/providerwrites as tests",
+    "No caps/deadline/authchanges",
+    "FrozenpreviousA/B untouched"
+  ],
+  "ledger_note": "Issue1006 reached2500commentlimit; use taskstatus+PRcontinuation",
+  "updated_at": "2026-11-14T05:36:21.134Z",
+  "next_action": "Implement narrowattempt-localindexes inownedfiles, provelegacyparity/negativecontrols/wholecollector, independentlyreviewintegratedpatch, checkpointWIPbeforelongtests. ThenfreezeA,exactCIartifact,intentonlyB,normalmerge,originalbuild,publish/verify,freshvisibleasof. Do nottouchoriginal/appuntilrelease."
+}
