@@ -1,6 +1,6 @@
 {
   "task_id": "OPERATIONAL-ORDER-STAGE-REPAIR-20261114",
-  "stage": "measured_bottlenecks_implementation_wip",
+  "stage": "integrated_implementation_checkpoint",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "2db0edc9edb315026eee4b6edd43b420a569c37d",
@@ -83,7 +83,79 @@
       "source_read_review": "delivery_assignment_index helper + delivery_evidence/confirmation optionalplumbing + focusedtests",
       "screenshot_handoff": "cost_catalog_index helper + focusedtests",
       "release_gate_audit": "courier_hold_history helper + focusedtests"
-    }
+    },
+    "wip_manifest": [
+      {
+        "path": "backend/operational_balance_sources.py",
+        "sha256": "e5aa59de263c24a5f3dc831da474c1c1f6115f9b256cec6d4d7f32792f0998e5",
+        "chars": 148649
+      },
+      {
+        "path": "backend/operational_completed_shipping_sources.py",
+        "sha256": "a4aae7ac0d64f75bbebff39ecdb3156a2862539f14e5c6924e3e6f829e034733",
+        "chars": 8637
+      },
+      {
+        "path": "backend/operational_delivery_confirmation.py",
+        "sha256": "1bd80af7a3d06dae1647d71079579adfd5661b84aa22a340d213340de67e0b56",
+        "chars": 14333
+      },
+      {
+        "path": "backend/operational_delivery_evidence.py",
+        "sha256": "f0903effb9f616c8a1a2ee17b34d43ce9c64ce3d025bd41969fd700ce75c94ac",
+        "chars": 32325
+      },
+      {
+        "path": "backend/operational_shipping_fee_review.py",
+        "sha256": "bbd637b0a10c7cd12fa257bb7ef8a42698494fb28d3cdeff3e8a2ce3514908d8",
+        "chars": 23304
+      },
+      {
+        "path": "backend/tests/test_operational_balance_source_stage_timing.py",
+        "sha256": "1e4dd88f1984e9398ba4c6b5942ad8b49c74d292ace8a7029643a2b449209b6a",
+        "chars": 12508
+      },
+      {
+        "path": "backend/operational_cost_catalog_index.py",
+        "sha256": "1d3b93a1f24fb047232ef102bfcf73d459f58af7c193cb3e1ee3c0255810affb",
+        "chars": 3571
+      },
+      {
+        "path": "backend/operational_courier_hold_history.py",
+        "sha256": "65558f50db761fcdff74a5ea6f8030386856993929a2e7920fed8e49170fef59",
+        "chars": 6799
+      },
+      {
+        "path": "backend/operational_delivery_assignment_index.py",
+        "sha256": "9fa319a0c1b13bfeb55d587713da634f8c46f65276edb627843c26171d2763d4",
+        "chars": 5841
+      },
+      {
+        "path": "backend/operational_issue_index.py",
+        "sha256": "bed1e3ad3bb345c11ba2b2582a4cb54c942fb514bdc91316f897985c75d6644b",
+        "chars": 4757
+      },
+      {
+        "path": "backend/tests/test_operational_balance_cost_catalog_index.py",
+        "sha256": "dc2348f91909f8620eec81f3f71f68c2183e1c9f535983d6087a56255365bebc",
+        "chars": 21350
+      },
+      {
+        "path": "backend/tests/test_operational_balance_courier_hold_history.py",
+        "sha256": "7607e1245985f20524e1fe2c99539f7f73d85276bdb27bcec5e3ff2b3aa70f53",
+        "chars": 20987
+      },
+      {
+        "path": "backend/tests/test_operational_balance_delivery_assignment_index.py",
+        "sha256": "00ef94a220182d5be2432cb900485c337efdc886e8252b511006ce23bb5ae873",
+        "chars": 23990
+      },
+      {
+        "path": "backend/tests/test_operational_balance_issue_index.py",
+        "sha256": "6b959ce5c9defb09931ec107658bed5ace72a4d041958d57ad47db83ecc8eaf6",
+        "chars": 10659
+      }
+    ]
   },
   "production_changed_by_this_followup": false,
   "constraints": [
@@ -95,6 +167,6 @@
     "FrozenpreviousA/B untouched"
   ],
   "ledger_note": "Issue1006 reached2500commentlimit; use taskstatus+PRcontinuation",
-  "updated_at": "2026-11-14T05:36:21.134Z",
-  "next_action": "Implement narrowattempt-localindexes inownedfiles, provelegacyparity/negativecontrols/wholecollector, independentlyreviewintegratedpatch, checkpointWIPbeforelongtests. ThenfreezeA,exactCIartifact,intentonlyB,normalmerge,originalbuild,publish/verify,freshvisibleasof. Do nottouchoriginal/appuntilrelease."
+  "updated_at": "2026-11-14T05:57:15.489Z",
+  "next_action": "Complete final owned-file reviews and combined focused/adjacent validation. Freeze exact A only after results and independent integrated review, then candidate/intent B/normal merge/original build/publish/official verify/live fresh-as_of acceptance."
 }
