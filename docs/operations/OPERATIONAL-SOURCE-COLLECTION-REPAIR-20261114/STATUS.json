@@ -1,7 +1,7 @@
 {
   "task_id": "OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114",
-  "stage": "platform_complete_official_verification_next",
-  "updated_at": "2026-11-14T05:11:08.373Z",
+  "stage": "official_verification_running_live_health_identity_pass",
+  "updated_at": "2026-11-14T05:13:25.912Z",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
@@ -194,7 +194,8 @@
     "financialAcceptancePlan": {
       "trigger": "one visible refresh only after official verification",
       "log_cache_plan": "Do not open runtime Logs during publish/verification. Keep management Overview. At about87 seconds after the single visible refresh, open Logs for first time after old cache expiration; capture fixed substage cancellation or successful completion, then read final UI as_of.",
-      "pass_requires": "fresh as_of, no refresh failure, complete tables and local pending-order dialog/pagination without confirmation writes"
+      "pass_requires": "fresh as_of, no refresh failure, complete tables and local pending-order dialog/pagination without confirmation writes",
+      "navigation_update": "Previous financial tab65 and health64 were absent in fresh browser inventory (only46/59 remained). New health page was opened and confirms exact A/R. After official verify and freshinactive, create one new visible financial-position tab; its mount auto-refresh is the sole first attempt. Do not also clickrefresh. Capture Logs aftercompletion or around87s ifpending; no Logs opened yet."
     },
     "A": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
     "Atree": "492727ceae6b6cada3894e7a450f837186f9a962",
@@ -507,6 +508,61 @@
       "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
       "completion_is_newer_than_publish_start": true,
       "runtime_logs_not_opened_since_previous_release": true
+    },
+    "verificationStart": {
+      "submitted_at": "2026-11-14T05:11:22.923Z",
+      "evidence_prefix": "/tmp/mezan-pr1917-original-jpg_gysb/28-verify",
+      "source_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+      "deployment_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+      "actor": "codex-operational-source-collection-rootfix-1917",
+      "platform": "120e0fa",
+      "single_invocation": true
+    },
+    "publicHealth": {
+      "backend_manifest_keys": [
+        "added_count",
+        "deleted_count",
+        "file_count",
+        "manifest_sha256",
+        "modified_count",
+        "projection_tree_oid",
+        "scope",
+        "scope_tree_oid",
+        "source_base_git_sha",
+        "source_base_root_tree_oid",
+        "source_base_scope_tree_oid",
+        "source_git_sha",
+        "source_root_tree_oid",
+        "tombstone_count",
+        "tombstones_sha256",
+        "tree_sha256"
+      ],
+      "backend_runtime_source_verified": true,
+      "boot_started_at": "2026-11-14T05:09:28.080185+00:00",
+      "branch": "hotfix/prod-snap-meta-final",
+      "critical_file_hashes_match": true,
+      "frontend_build_keys": [
+        "schema_version",
+        "git_sha",
+        "source",
+        "toolchain",
+        "environment",
+        "index",
+        "entrypoints",
+        "assets",
+        "public_files",
+        "artifact_tree_sha256",
+        "build_meta"
+      ],
+      "frontend_build_verified": true,
+      "ok": true,
+      "protocol_version": 5,
+      "release_control_source_bound": true,
+      "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+      "source_base_git_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+      "source_git_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+      "verified_identity_available": true,
+      "observed_at": "2026-11-14T05:12:42.092Z"
     }
   },
   "production_changed_by_this_followup": "yes: M merged and platform120e0fa completed; official verification and fresh financial acceptance pending",
@@ -524,7 +580,7 @@
     "Collision preflight and secondary reads are not localized by current stage logs",
     "Repeated fee/assignment/cost scans exist inside source_collection; bounded synthetic measurement is running"
   ],
-  "next_action": "Run shared reviewed pr1917_original_verify.py once with evidence-dir /tmp/mezan-pr1917-original-jpg_gysb, deployment-sha2db0edc9edb315026eee4b6edd43b420a569c37d, actorcodex-operational-source-collection-rootfix-1917. Expect roughly10min without terminal output; do not interrupt/retry. Require actual exit0, threeprobes, frontendchecks and freshinactive before a visible financialrefresh.",
+  "next_action": "Wait originalTerminal4 for actual verify completion (about10min expected). Preserve own active lease, do not run status concurrently or repeat verify. Require actualexit0/threeprobes/exactA-M-R/freshinactive. Then one new visible financial page mount, capturing freshasof or exactsource substage failure; runtimeLogs stay unopened untilthatattempt.",
   "ledger_note": "Issue1006 has2500 comments; latest ledger explicitly documents new-comment limit. Task-specific STATUS and forthcoming PR carry continuation.",
   "prechange_measurements": {
     "synthetic_only": true,

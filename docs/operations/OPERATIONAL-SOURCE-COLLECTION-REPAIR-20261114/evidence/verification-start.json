@@ -1,0 +1,9 @@
+{
+  "submitted_at": "2026-11-14T05:11:22.923Z",
+  "evidence_prefix": "/tmp/mezan-pr1917-original-jpg_gysb/28-verify",
+  "source_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+  "deployment_sha": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+  "actor": "codex-operational-source-collection-rootfix-1917",
+  "platform": "120e0fa",
+  "single_invocation": true
+}
