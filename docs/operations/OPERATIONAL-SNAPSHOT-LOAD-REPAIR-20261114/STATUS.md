@@ -1,6 +1,6 @@
-# Snapshot-load repair — published and officially verified
+# Snapshot-load repair — live financial acceptance in progress
 
-Updated 2026-11-14T03:43:52.012Z. Documentation-only checkpoint; never merge or deploy.
+Updated 2026-11-14T03:45:22.906Z. Documentation-only checkpoint; never merge or deploy.
 
 PR[#1916](https://github.com/AMASI-SA/AMASI-SA/pull/1916) is merged and published as platform version `bfa6a5f`, M `9c71435f4a19977c09f4331dee8fddbfa12a45eb`, source A `ff9f8b69b980acfda8dffd210feaf72e17e6727a`, release `rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db`. All source/intent/merge gates and the original build passed; all120 unrelated files and unsaved Untitled-1 were preserved.
 
@@ -12,4 +12,4 @@ A transient browser transport disconnect occurred while the original verifier co
 
 ## Live acceptance still pending
 
-No financial refresh has yet been attempted on PR1916. The previous baseline was12Nov01:07. Require a fresh as_of aligned with the new attempt and no top-level refresh-failure warning; generated_at alone is insufficient. If successful, inspect the3 sections and local table/pending-order navigation. If unsuccessful, capture current sanitized stage logs and diagnose before any additional attempt. No delivery confirmation, settlement, provider or advertising writes are test actions.
+One visible new page mount started at2026-11-14T03:44:42.930Z on tab65; page and loading state were confirmed visible, with no manual Refresh clicks. This is the only PR1916 financial attempt so far. Keep that page visible and inspect its result; do not create another page or repeat Refresh. The previous baseline was12Nov01:07. Require a fresh as_of aligned with the new attempt and no top-level refresh-failure warning; generated_at alone is insufficient. If successful, inspect the3 sections and local table/pending-order navigation. If unsuccessful, capture current sanitized stage logs and diagnose before any additional attempt. No delivery confirmation, settlement, provider or advertising writes are test actions.

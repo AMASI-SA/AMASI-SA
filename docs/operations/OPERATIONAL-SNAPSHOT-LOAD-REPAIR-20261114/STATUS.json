@@ -1,6 +1,6 @@
 {
-  "stage": "official_verification_passed_fresh_guard_inactive_live_acceptance_next",
-  "updated_at": "2026-11-14T03:43:52.012Z",
+  "stage": "published_verified_visible_financial_acceptance_in_progress",
+  "updated_at": "2026-11-14T03:45:22.906Z",
   "repo": "AMASI-SA/AMASI-SA",
   "pr": 1916,
   "task_branch": "codex/operational-snapshot-load-fix-20261114",
@@ -651,19 +651,23 @@
       "prefix": "/tmp/mezan-pr1916-original-fu9s2qng/28-verify"
     },
     "financialAcceptance": {
-      "status": "not_started",
+      "status": "visible_refresh_in_progress",
+      "started_at": "2026-11-14T03:44:42.930Z",
+      "trigger": "one new visible page mount",
+      "tab_id": "65",
+      "manual_refresh_clicks": 0,
+      "visibility_confirmed": true,
+      "first_loading_observed": true,
       "old_as_of": "12/11/2026, 01:07",
-      "prior_tab_closed_during_browser_recovery": true,
-      "next_trigger": "one new visible page mount; do not additionally click refresh"
+      "recorded_at": "2026-11-14T03:45:22.906Z"
     }
   },
   "production_changed_by_this_followup": true,
   "blockers": [],
   "next_actions": [
-    "Create financial page once visibly; original tab62 closed during browser recovery",
-    "Wait for refreshed report; require new as_of and no refresh-failure warning",
-    "Capture sanitized current runtime stage evidence if failed; no blind retry",
-    "On fresh success inspect tables and pending-order dialog locally without confirmation writes"
+    "Read result on existing tab65; do not create another mount or click Refresh",
+    "Require fresh as_of and no refresh warning; capture sanitized stage logs promptly if unsuccessful",
+    "Only after freshness succeeds inspect local tables and pending-order dialog; never delivery confirmation"
   ],
   "historical_prechange_test": {
     "observed_red_source_sha256": "b1858f3b050ba46925916e34f59c6b941f93f032e3be2f9313a07bde2b33eba4",
