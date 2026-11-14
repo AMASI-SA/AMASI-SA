@@ -1,0 +1,75 @@
+# Operational snapshot loading repair — 2026-11-14
+
+## Current stage
+
+The confined implementation and independent local verification are complete. It is ready to freeze source A and enter exact-commit CI. The user explicitly authorized fixing, merging and publishing Mezan. No source from this follow-up has been merged or published yet; source A's full SHA will be recorded in its PR and documentation-only handoff after creation.
+
+Repository: AMASI-SA/AMASI-SA. Task branch: `codex/operational-snapshot-load-fix-20261114`. Exact production base J: `4860548f0b032e8e3beca18a4776413cd7e0368b`, tree `9a98153a5b6b69bc6a282613a1b3e354e1fe75b9`. Root owns integration, GitHub writes and the original operator. The implementation owner may edit only the archive reader and its new focused test module.
+
+## Production evidence and scope
+
+The prior payload repair PR1915 was normally merged at J, published as `effdd19` with explicit completion Nov14,04:57AM UTC+3, and officially verified against source `a496dd428241b06d2292286de030c70d6241fcf0` and runtime `rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e`.
+
+The original official verifier exited0 after571.594806323s, from01:59:31.583329UTC to02:09:03.178132UTC, with three probes,582 frontend requests per probe, exact identities, and a fresh inactive guard. Its stdout SHA-256 is `308de6a11d0d5293f6fbdd4b0364d063c63da9dd21faa33ed77aa0e40800d7be`. The prior release is valid, but live freshness acceptance failed: the page retained its12Nov01:07 snapshot with the whole-refresh timeout warning.
+
+After the production runtime log viewer became accessible, root performed one bounded visible diagnostic refresh at02:30:17.361UTC. Both the financial page and log page remained visible during cross-tab observations; no financial confirmation or settlement action was performed. Root captured the current-release runtime tail at02:31:52.895UTC, before the relevant entries rotated out of the100-line UI window.
+
+| Stage/request | Timestamp UTC | Duration | Outcome |
+| --- | --- | --- | --- |
+| native_evidence |02:30:44.060|23437.488ms|complete|
+| snapshot_load |02:31:43.920|59693.907ms|cancelled|
+| aggregate |02:31:43.921|59860.253ms|cancelled; contains snapshot_load|
+| POST operational-balances/refresh |02:31:43.925|85793.467ms|HTTP408|
+
+This attempt did not reach source_collection or reconciliation. Do not sum aggregate with its child stage. The page settled back to the same old snapshot. The deadline remains85 seconds; this work does not raise it.
+
+Sanitized live evidence and the full previous release chronology are preserved on documentation-only branch `codex/operational-source-fix-handoff-20261114`, checkpoint `62c108e8696b8d54f9d29ad5747815bef3546686`, under `docs/operations/OPERATIONAL-SOURCE-READ-REPAIR-20261114/`. Do not merge or deploy that handoff branch. Issue1006 is at its comment cap; PR1915 conversation comments carry the continuation ledger until this follow-up has its own PR.
+
+## Implemented repair
+
+The existing visible snapshot loader creates a separately guarded calculation for each immutable audit page. For a packed snapshot with P archive pages, the snapshot-load path performs2P+8 authorization/lease checkpoints, in addition to exact page reads. Each owner-browser checkpoint re-reads the permission/scope inputs and renews the owned lease. This is a code-level operation count; production page count and per-operation latency are not known.
+
+Only these repeated guard boundaries are now batched in groups of at most8 pages, and only when the active visible-demand context owns the exact database object and owner. Each page still uses the exact `_id` and `owner_id` query and is fully validated before the next read. Worker preparation remains owned, cancellable and joined. Scope/authorization/lease are freshly revalidated before and after every bounded group; the existing guarded restoration, copy, mutation and commit paths are retained.
+
+The following remain mandatory:
+
+- Read only manifest IDs from the same stored revision; preserve page order and every event and tail entry.
+- Preserve manifest/hash/owner/start/count/BSON validation and fail on the first corrupt or missing page before the next lookup.
+- Keep ordinary readers and strict same-session wrappers on their existing behavior. No bulk query, owner scan, parallel session operation or new index.
+- No authorization cache, cross-request or CAS-retry cache, discarded history, changed financial formula, increased limit/deadline, background financial work or retry loop.
+- No archive mutation, TTL or deletion. Majority page staging and revision CAS remain unchanged.
+- On cancellation, join owned I/O/calculation work and expose no partially validated state; on authorization or lease failure, do not return a state or execute a financial callback/commit.
+
+## Completed local verification
+
+Before changing the archive reader, the new regression test restored a complete64-page synthetic state, verified equality, exact64 page reads, input preservation and zero nonlease writes, then failed only on the guard-amplification assertion:136 checkpoints versus a maximum24. Pytest actual exit1,1 failed in1.21s. The expected failure is preserved in the implementation evidence; it is not a production measurement.
+
+The final source passed43 new cases in4.13s, and an integrated adjacent selection passed106 cases in6.30s (both exit0, zero failures/errors/skips). An independent reviewer found no blocking issue and passed79 cases in4.15s, including all43 new cases. Their isolated exact-J negative control failed only the intended136-versus24 assertion (exit1,1 failed in0.66s). Root independently parsed all five JUnit files and verified the counts and file hashes. These overlapping test selections are not additive unique-test totals.
+
+The new cases cover complete BSON/history/tail parity, boundary sizes1/8/9/16, first corrupt/missing page, manifest tampering and incompleteness, scope revocation, lost lease and successor preservation, I/O cancellation, joined validation-worker cancellation, the real request-deadline path, mismatched-context fallback, strict session wrappers, and CAS retry against a new revision/manifest without duplicating the operation. `git diff --check` passed. No production database or credentials were used in these tests.
+
+Final source SHA-256: `d382ab270474b68700f1672afd2871bb6d7eb0392dad539771536a90fe5082ce` (`backend/operational_balance_archive.py`). New test SHA-256: `d0625c6477b6dae55d1d594bfbb66d95e08f47c97804320528af36f8cdf13d2d` (`backend/tests/test_operational_balance_archive_visible_batches.py`). Both remained unchanged during independent verification.
+
+The final-code benchmark ran three paired64-page synthetic loads with3ms simulated latency per database operation. Baseline durations were2469.165/2395.412/2399.883ms; new durations were610.852/665.631/673.341ms. Median2399.883ms became665.631ms (3.605x in this simulation). Every run retained64 exact page reads, full-state equality, input immutability, zero nonlease writes and zero orphan tasks; checkpoints/renewals fell136 to24. Actual benchmark exit0. These are synthetic observations, not measured production improvements.
+
+Reproduction from the source checkout:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend:backend/tests python -B -m pytest --noconftest -q -p no:cacheprovider --asyncio-mode=auto --tb=short backend/tests/test_operational_balance_archive_visible_batches.py backend/tests/test_operational_balance_archive_read_lifetime.py backend/tests/test_operational_balance_snapshot_encoding.py backend/tests/test_operational_balance_demand_refresh.py backend/tests/test_operational_balance_demand_refresh_routes.py backend/tests/test_operational_balance_refresh_stage_timing.py backend/tests/test_operational_balance_supplier_invoice_preview.py::test_snapshot_audit_page_only_allows_an_exact_owner_key_in_the_same_session backend/tests/test_store_delivery_noncash_review.py::test_capability_denial_is_latched_before_calling_database
+```
+
+The actual local command used the existing isolated test venv and wrote JUnit/benchmark artifacts outside the source checkout. The documentation-only handoff preserves the exact artifact metadata and benchmark program/results.
+
+Remaining release gates: exact-source CI including isolated real Mongo integration; the reviewed A/B release chain; original-operator rehearsal; official publication verification; and a new visible financial calculation with an advanced as_of and no stale-refresh warning. Local verification does not prove that the complete production refresh now fits its existing deadline.
+
+## Preserved and deferred work
+
+The previous order projection remains in production and is inherited unchanged. A separate synthetic reconciliation benchmark proved quadratic CPU costs at20k provider orders, but production did not reach that phase in the captured attempt. That optimization is deferred; it is not this repair's claimed cause or scope.
+
+The original `/app` was last observed at J. Its120 preexisting untracked files and unsaved editor work were preserved by the prior release; do not reset/clean them. The last verified release lease closed normally. A fresh original guard read is required before any later original-host mutation or rehearsal; never reuse or clear another owner's lease.
+
+## Next safe action
+
+Freeze the reviewed three-file source change as A over the freshly verified production J; obtain exact-A CI and the exact reviewed candidate artifact before freezing intent-only B. Use a normal merge with unchanged source/intent ancestry and an identical merge tree. After all required gates, perform the real original-host build outside GitHub, prepare/prepublish on our own matching lease, publish once, require explicit newer completion plus official three-probe verification and fresh inactive status, then verify live freshness and the corresponding stage log.
+
+Production changed by PR1915: **YES**, evidence above. Production changed by this snapshot-loading follow-up: **NO**. Fresh successful financial calculation: **NOT YET PROVED**.
