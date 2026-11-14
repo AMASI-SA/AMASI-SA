@@ -1,0 +1,187 @@
+{
+  "verified_at": "2026-11-14T04:49:49.487660+00:00",
+  "verdict": "PASS",
+  "source_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+  "deployment_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+  "source_base_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+  "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+  "host_package_boundaries_identical": true,
+  "hosts": [
+    {
+      "host_node": "20.20.2",
+      "run_id": 43558145690,
+      "job_id": 132335795413,
+      "job_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145690/job/132335795413",
+      "job_started_at": "2026-11-14T04:45:33Z",
+      "job_completed_at": "2026-11-14T04:47:51Z",
+      "artifact_id": 14098924649,
+      "archive_bytes": 46017,
+      "archive_sha256": "1da45de658a1c55e991ea1e639379dd082529937b73480efd7b6d59ba07e8489",
+      "required_steps": {
+        "Create a clean tracked-source clone": "success",
+        "Prove generated release inputs are absent": "success",
+        "Record sanitized Host adapter evidence": "success",
+        "Rehearse a conservative outer Host frozen install": "success",
+        "Emulate a Cloud Build checkout without Git metadata": "success",
+        "Invoke the Emergent package adapter under the selected Host Node": "success",
+        "Verify artifact, proof, identity, and package boundaries": "success",
+        "Prove the governed runtime returns build metadata as JSON": "success",
+        "Archive verified generated release outputs": "success",
+        "Retain verified generated release outputs": "success",
+        "Retain sanitized rehearsal evidence": "success"
+      },
+      "source_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+      "source_base_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+      "deployment_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+      "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+      "actual_adapter_built": true,
+      "actual_adapter_had_no_git_metadata": true,
+      "materialized_identity_matches_frozen_intent_bytes": true,
+      "runtime_json_route_step_success": true,
+      "package_boundary": {
+        "backend": {
+          "file_count": 1207,
+          "git_directory_present": false,
+          "health_verified": true,
+          "identity": {
+            "bytes": 435063,
+            "path": "release_identity.json",
+            "sha256": "3fe8f9fb02d22013260d766e25998788aca82044a374501e09ea9725aca308b8"
+          },
+          "isolated_verified": true,
+          "package_tree_sha256": "d88fc7102861c3cbbcb21ac3250916dae984ecd54cd86b0940730d32f068cc4e",
+          "runtime_root": "backend",
+          "sibling_frontend_present": false
+        },
+        "frontend": {
+          "artifact_tree_sha256": "9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6",
+          "build_meta": {
+            "bytes": 473286,
+            "path": "build/build-meta.json",
+            "sha256": "fa99f87d05657b2f6cfb9fe8b29e8892017eacad8e3288283e7fe675a66896d9"
+          },
+          "content_type_contract": "application/json",
+          "file_count": 1469,
+          "isolated_runtime_artifact_verified": true,
+          "package_tree_sha256": "f341deaf8667af5a19f20b3b62d8175e8d846a6913641496d4d3d1d4b52248d1",
+          "runtime_root": "frontend",
+          "static_root": "frontend/build"
+        },
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+        "schema_version": 1,
+        "source_git_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3"
+      },
+      "evidence_files": [
+        {
+          "path": "mezan-adapter-build-v5.log",
+          "bytes": 164932,
+          "sha256": "2faaf69a52818a42bb5a0ba4b18fdbb9d77fc6d4ecfdb8a88b9f50d532d41c9b"
+        },
+        {
+          "path": "mezan-adapter-environment-v5.json",
+          "bytes": 1102,
+          "sha256": "822bbedb438190c66b3eba5b11884ab30ad30516b272795e7b5053f3d3626891"
+        },
+        {
+          "path": "mezan-governed-runtime.log",
+          "bytes": 517,
+          "sha256": "336562df58f0f2118f3c711e80f810df4061108a8f5b44fd03fba614cc241bc6"
+        },
+        {
+          "path": "mezan-package-boundary-v5.json",
+          "bytes": 1278,
+          "sha256": "af0b528eb2eedc822ff8094a80a3871650f0d2ceaf4bc0e5c3561fd867c8fbe5"
+        }
+      ]
+    },
+    {
+      "host_node": "24.19.0",
+      "run_id": 43558145690,
+      "job_id": 132335795271,
+      "job_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43558145690/job/132335795271",
+      "job_started_at": "2026-11-14T04:45:33Z",
+      "job_completed_at": "2026-11-14T04:47:15Z",
+      "artifact_id": 14099945069,
+      "archive_bytes": 46016,
+      "archive_sha256": "4c33bde65f5348d715e0477abdf4ea2200aeb69396467f1ae481b0103749def8",
+      "required_steps": {
+        "Create a clean tracked-source clone": "success",
+        "Prove generated release inputs are absent": "success",
+        "Record sanitized Host adapter evidence": "success",
+        "Rehearse a conservative outer Host frozen install": "success",
+        "Emulate a Cloud Build checkout without Git metadata": "success",
+        "Invoke the Emergent package adapter under the selected Host Node": "success",
+        "Verify artifact, proof, identity, and package boundaries": "success",
+        "Prove the governed runtime returns build metadata as JSON": "success",
+        "Archive verified generated release outputs": "success",
+        "Retain verified generated release outputs": "success",
+        "Retain sanitized rehearsal evidence": "success"
+      },
+      "source_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+      "source_base_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+      "deployment_sha": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+      "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+      "actual_adapter_built": true,
+      "actual_adapter_had_no_git_metadata": true,
+      "materialized_identity_matches_frozen_intent_bytes": true,
+      "runtime_json_route_step_success": true,
+      "package_boundary": {
+        "backend": {
+          "file_count": 1207,
+          "git_directory_present": false,
+          "health_verified": true,
+          "identity": {
+            "bytes": 435063,
+            "path": "release_identity.json",
+            "sha256": "3fe8f9fb02d22013260d766e25998788aca82044a374501e09ea9725aca308b8"
+          },
+          "isolated_verified": true,
+          "package_tree_sha256": "d88fc7102861c3cbbcb21ac3250916dae984ecd54cd86b0940730d32f068cc4e",
+          "runtime_root": "backend",
+          "sibling_frontend_present": false
+        },
+        "frontend": {
+          "artifact_tree_sha256": "9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6",
+          "build_meta": {
+            "bytes": 473286,
+            "path": "build/build-meta.json",
+            "sha256": "fa99f87d05657b2f6cfb9fe8b29e8892017eacad8e3288283e7fe675a66896d9"
+          },
+          "content_type_contract": "application/json",
+          "file_count": 1469,
+          "isolated_runtime_artifact_verified": true,
+          "package_tree_sha256": "f341deaf8667af5a19f20b3b62d8175e8d846a6913641496d4d3d1d4b52248d1",
+          "runtime_root": "frontend",
+          "static_root": "frontend/build"
+        },
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+        "schema_version": 1,
+        "source_git_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3"
+      },
+      "evidence_files": [
+        {
+          "path": "mezan-adapter-build-v5.log",
+          "bytes": 164929,
+          "sha256": "c2b5c03f3073c073285e4b2b6a752c11f08d89a58a1f7795ebd511a41a0a6316"
+        },
+        {
+          "path": "mezan-adapter-environment-v5.json",
+          "bytes": 1102,
+          "sha256": "60397d12a5da9fee97664f68278b6077c64ade4de80f39d61d8ed36e2c8488d7"
+        },
+        {
+          "path": "mezan-governed-runtime.log",
+          "bytes": 518,
+          "sha256": "eeb8efe2e25c2ccc6682f4207751ee8bf64933500fce80183a689fe4bb010692"
+        },
+        {
+          "path": "mezan-package-boundary-v5.json",
+          "bytes": 1278,
+          "sha256": "af0b528eb2eedc822ff8094a80a3871650f0d2ceaf4bc0e5c3561fd867c8fbe5"
+        }
+      ]
+    }
+  ]
+}

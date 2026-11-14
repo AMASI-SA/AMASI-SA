@@ -1,7 +1,7 @@
 {
   "task_id": "OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114",
-  "stage": "reviewed_intent_B_frozen_waiting_exact_B_CI",
-  "updated_at": "2026-11-14T04:46:46.970Z",
+  "stage": "merged_original_build_pending",
+  "updated_at": "2026-11-14T04:52:56.512Z",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
@@ -239,7 +239,7 @@
     ],
     "pr": 1917,
     "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1917",
-    "pr_body": "## Problem\nThe verified PR1916 release still falls back to the old financial snapshot. A controlled visible attempt completed snapshot loading in9.084s, then source_collection was cancelled after72.943s at the85.040s total deadline. Reconciliation never began. Within collection, recorded_courier_fee repeatedly scans the complete financial history for each eligible order; independent operation counts prove quadratic growth. The live evidence does not establish that this helper alone consumed the entire source phase.\n\n## Change\nBuild one attempt-local fee-history lookup through the existing request-owned preparation worker and use it at both existing fee checks. Preserve complete history, exact prefix/short-circuit/error/Decimal/allocation semantics; unusual structures use the unchanged legacy reader. Rebuild for every collector invocation and CAS retry. Add15 fixed source-substage timing wrappers so any remaining cancellation identifies its actual subphase. No database read, financial mutation, cache across requests, cap increase, deadline extension or authorization change.\n\n## Verification\n-129 new cases pass:116 fee/parity/full-collector/reconciliation/report/lifetime cases and13 timing cases.\n-Root integrated selection:339 passed, actual exit0. Three local Mongo cases were explicitly deselected after connection-refused failures; they remain required without exclusion in exact-A CI's replica set.\n-Independent reviewer:37,386 comparisons against exact J over two hash seeds, comparing values, exception type/message, Decimal flags and input immutability; no blocking finding. Actual visible disconnect joins the worker, releases the owned lease and leaves no nonlease writes or orphan tasks.\n-Negative controls using exact J fail the intended repeated-scan growth assertion. Integrated collector AST matches J after removing only timing wrappers and the intended lookup substitution; old delivery reader remains byte-for-byte unchanged.\n-Paired synthetic timings including full index build:1000/1000 absent-proof0.396461→0.008789s;4000/4000 5.915601→0.030327s;20000 history/250 lookups1.821549→0.056824s. Direct-proof control20000/20000 adds58.6ms (0.007265→0.065864s); no speedup claimed there. Each pair has equal results/unchanged inputs, no DB, actual exit0. These are local observations, not production acceptance.\n\n## Frozen source and pending release\nJ: `9c71435f4a19977c09f4331dee8fddbfa12a45eb`\nA: `8839d3aeb32b4bda2de2015efb0deca7fbb844a3`\nA tree: `492727ceae6b6cada3894e7a450f837186f9a962`\n\nAll source/tests/status are frozen in A. Exact-A CI, official129-case JUnit inclusion in both Operational and Stock, reviewed artifact, intent-only B, normal merge, original-operator build, guarded publish/verify and a fresh visible as_of remain required. Production has not changed by this follow-up. Original /app120 unrelated untracked files and unsaved Untitled-1 remain preserved.\n\n[Source status](https://github.com/AMASI-SA/AMASI-SA/blob/8839d3aeb32b4bda2de2015efb0deca7fbb844a3/docs/operations/OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114/STATUS.md). Documentation-only continuation branch: `codex/operational-source-collection-handoff-20261114`; never merge or deploy that branch. Issue1006 is at GitHub's2500-comment limit.",
+    "pr_body": "## Problem\nThe verified PR1916 release still returns the old financial snapshot. Its controlled visible attempt completed snapshot loading in 9.084 seconds, then source collection was cancelled after 72.943 seconds at the 85.040-second request deadline. Reconciliation never began. The recorded courier fee reader rescans complete history for each eligible order; independent operation counts reproduce quadratic growth. Live evidence does not establish that this helper consumed the entire phase.\n\n## Change\nBuild one attempt-local fee-history lookup through the existing request-owned preparation worker, and use it at both existing fee checks. Preserve complete history, prefix handling, short circuits, exceptions, Decimal behavior and allocation ordering. Unusual structures use the unchanged legacy reader; every collector invocation and CAS retry rebuilds the lookup.\n\nAdd 15 fixed source-substage timing wrappers so a remaining cancellation identifies its subphase. There is no new database read, financial mutation, cross-request cache, cap increase, deadline extension or authorization change.\n\n## Verification\n- All 11 exact-A workflows passed. Operational Balance: **4,202 passing cases**; Stock Eligibility: **4,011 passing cases plus 7 passing subtests**. Both official XML artifacts include all **129 new cases** and the three locally deferred Mongo cases exactly once, with no failures, errors or skips.\n- Root integrated local selection: 339 passed, actual exit 0. Independent review: 37,386 comparisons against exact J across two hash seeds, covering values, exceptions, Decimal flags and input immutability.\n- A visible disconnect joins the worker, releases its owned lease, and leaves no nonlease writes or orphan tasks. The collector AST differs only in the intended lookup substitution and timing wrappers; the legacy reader is byte-for-byte unchanged.\n- Negative controls with exact J fail the repeated-scan growth regression as intended.\n- Paired local synthetic timings include the full index build: 1,000/1,000 absent-proof 0.396461 → 0.008789 seconds; 4,000/4,000 5.915601 → 0.030327 seconds; 20,000 history rows/250 lookups 1.821549 → 0.056824 seconds. The 20,000/20,000 direct-proof control adds 58.6 ms. One pair per cohort; no production speedup or complete repair is claimed.\n- The official candidate loader and tracked B loader both returned actual exit 0. The new helper is present exactly once in the governed backend manifest and matches its Git bytes.\n\n## Frozen release identities\n| Role | SHA |\n|---|---|\n| J | `9c71435f4a19977c09f4331dee8fddbfa12a45eb` |\n| A | `8839d3aeb32b4bda2de2015efb0deca7fbb844a3` |\n| A tree | `492727ceae6b6cada3894e7a450f837186f9a962` |\n| B | `1469f4916715458b8374beb3bfddfc1f3c01f125` |\n| B tree | `9d8844f32f9db18cd036ff1b55edaec2c0dbe1b8` |\n\nRuntime: `rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4`.\n\nB is the direct child of A and changes only `release/release-intent-v5.json`, using the exact reviewed artifact bytes (Git blob `cc47829c141bb997089a05baac832207f3a1537f`).\n\n## Remaining release gates\nExact-B CI, including actual Host20/Host24 clean-clone adapter rehearsals, is running. Require normal merge with expected B, original-operator build, guarded publish and official verification, then a fresh visible financial **as_of**. Production has not changed in this follow-up.\n\nOriginal /app preflight passed with 120 unrelated untracked files preserved, and unsaved Untitled-1 was separately observed in the editor. No PR1917 release lease or publish has occurred.\n\n[Handoff and evidence](https://github.com/AMASI-SA/AMASI-SA/blob/codex/operational-source-collection-handoff-20261114/docs/operations/OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114/STATUS.md). The handoff branch is documentation only and must not be merged or deployed. Issue1006 has reached GitHub's 2,500-comment limit.\n",
     "candidate": {
       "artifact_id": 14097739901,
       "run_id": 43557214320,
@@ -358,10 +358,39 @@
       "bytes": 14892,
       "sha256": "3a38a680fcf5e7696b510c5edd73de515b919bf5927f8759e64ee1361a596f4d",
       "ast_valid": true,
-      "executed": false
-    }
+      "executed": false,
+      "independent_review": "PASS; source_read_review read-only full source and AST review; only identity/label differences versus1916"
+    },
+    "originalPreflight": {
+      "ready": true,
+      "evidence_dir": "/tmp/mezan-pr1917-original-tcu816rg",
+      "untracked_count": 120,
+      "unsaved_Untitled_1_observed": true,
+      "finished_at": "2026-11-14T04:47:47.678319+00:00"
+    },
+    "readyForReviewAt": "2026-11-14T04:50:51.417Z",
+    "M": "2db0edc9edb315026eee4b6edd43b420a569c37d",
+    "mergedAt": "2026-11-14T04:52:27.410Z",
+    "Mtree": "9d8844f32f9db18cd036ff1b55edaec2c0dbe1b8",
+    "mergeParents": [
+      "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+      "1469f4916715458b8374beb3bfddfc1f3c01f125"
+    ],
+    "BCI": {
+      "passed": true,
+      "observed_at": "2026-11-14T04:52:12Z",
+      "check_count": 35,
+      "success_checks": 25,
+      "expected_skipped": 10,
+      "runs": 14,
+      "successful_workflows": 13,
+      "expected_skipped_workflows": 1,
+      "host_proof_sha256": "80e1b63e16ea26a8a080a4bcb5627d60c84110e9979688bddd398110a141e250",
+      "root_check_identity": "1469f4916715458b8374beb3bfddfc1f3c01f125"
+    },
+    "actor": "codex-operational-source-collection-rootfix-1917"
   },
-  "production_changed_by_this_followup": false,
+  "production_changed_by_this_followup": "Git production branch merged; deployed platform remains PR1916 bfa6a5f",
   "verified_scope": "Live source_collection cancelled after72942.769ms; snapshot_load completed9084.282ms; no reconciliation started.",
   "constraints": [
     "Full owner history and all financial evidence remain required",

@@ -1,0 +1,9 @@
+{
+  "phase": "preflight",
+  "ready": true,
+  "evidence_dir": "/tmp/mezan-pr1917-original-tcu816rg",
+  "untracked_count": 120,
+  "unsaved_Untitled_1_observed": true,
+  "observed_at": "2026-11-14T04:48:12.504Z",
+  "helper_sha256": "3a38a680fcf5e7696b510c5edd73de515b919bf5927f8759e64ee1361a596f4d"
+}

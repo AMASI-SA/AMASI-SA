@@ -139,3 +139,12 @@ All 11 exact-A workflows passed; 27 checks comprise 21 success and 6 expected sk
 B is `1469f4916715458b8374beb3bfddfc1f3c01f125`, tree `9d8844f32f9db18cd036ff1b55edaec2c0dbe1b8`, direct parent A. Its only changed path is release/release-intent-v5.json, whose exact candidate Git blob is `cc47829c141bb997089a05baac832207f3a1537f`. The full official tracked-intent loader returned actual exit 0 in 2.292 seconds. Local owned worktree is clean at B. Runtime remains `rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4`.
 
 B CI, including actual Host20/Host24 clean-clone adapter rehearsals, is pending. No merge or PR1917 original /app mutation, lease, publish or financial refresh has happened. Original operator browser remains connected; 120 pending changes and one unsaved editor file are still present. The new rehearsal helper is source/AST checked and awaits independent review; the verify helper has independent read-only PASS. No helper has been executed.
+
+
+## Normal merge complete; original build pending — 2026-11-14T04:52:56.512Z
+
+B final gate passed: 35 checks = 25 success + 10 expected skips, no pending/failure/neutral. All 13 applicable workflows passed; one TikTok workflow was expected skipped. Both real Host20/24 clean-clone adapter artifacts independently prove built:true, no Git during adapter, matching A/R and frontend/backend identities.
+
+Normal merge M is `2db0edc9edb315026eee4b6edd43b420a569c37d`, parents [J,B] in that order, tree `9d8844f32f9db18cd036ff1b55edaec2c0dbe1b8` identical to B. No source differences were introduced by merge. Original preflight finished 2026-11-14T04:47:47.678319+00:00 with active:false, tracked/index clean and all 120 unrelated untracked files. Unsaved Untitled-1 was separately observed in UI.
+
+Rehearsal helper independent source/AST review passed at SHA256 `3a38a680fcf5e7696b510c5edd73de515b919bf5927f8759e64ee1361a596f4d`. Next run it once with --build --deployment-sha 2db0edc9edb315026eee4b6edd43b420a569c37d. It performs fresh inactive checks before FF/build and preserves all existing files. No PR1917 build, lease or publish has begun yet. Actor planned: codex-operational-source-collection-rootfix-1917.
