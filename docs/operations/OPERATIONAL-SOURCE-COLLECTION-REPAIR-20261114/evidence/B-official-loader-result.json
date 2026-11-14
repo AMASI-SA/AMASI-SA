@@ -1,0 +1,9 @@
+{
+  "started_at": "2026-11-14T04:45:26.418819+00:00",
+  "ended_at": "2026-11-14T04:45:28.711199+00:00",
+  "elapsed_seconds": 2.2923836760019185,
+  "actual_exit": 0,
+  "stdout_sha256": "ded8a59fe9af18fe2ad6b8e92dc6db6c0ad65ea25feeeb184c63f527ca889af7",
+  "stderr_sha256": "8df0835d9a20d7162057e7e392e82ddb24ed51ae37d9002a318e967feb7f57a0",
+  "stderr_bytes": 185
+}

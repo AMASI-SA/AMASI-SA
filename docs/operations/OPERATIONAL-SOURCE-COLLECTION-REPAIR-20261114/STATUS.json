@@ -1,7 +1,7 @@
 {
   "task_id": "OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114",
-  "stage": "exact_A_CI_running_candidate_validated",
-  "updated_at": "2026-11-14T04:39:18.921Z",
+  "stage": "reviewed_intent_B_frozen_waiting_exact_B_CI",
+  "updated_at": "2026-11-14T04:46:46.970Z",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
@@ -327,6 +327,37 @@
       "sha256": "93211e2f6a8d3aeb04cd10141bd90cdffd0efd2247c369dc61c70e589b8a2263",
       "bytes": 8119,
       "review": "pending",
+      "executed": false,
+      "independent_review": "PASS; read-only AST/source review by screenshot_handoff; actual verification not run; labels still1916 in docstring/error only"
+    },
+    "B": "1469f4916715458b8374beb3bfddfc1f3c01f125",
+    "Btree": "9d8844f32f9db18cd036ff1b55edaec2c0dbe1b8",
+    "intentBlob": "cc47829c141bb997089a05baac832207f3a1537f",
+    "BFrozenAt": "2026-11-14T04:44:35.564Z",
+    "ACI": {
+      "status": "all_passed",
+      "workflows": 11,
+      "checks": 27,
+      "success": 21,
+      "expected_skipped": 6,
+      "observed_at": "2026-11-14T04:41:20.350Z",
+      "proof": "pr1917-exact-a-ci-review/verification.json",
+      "proof_sha256": "4e94a1f0a9153f359aae1365b38b193654d2d933688bb30031f40a738b11092b"
+    },
+    "BValidation": {
+      "started_at": "2026-11-14T04:45:26.418819+00:00",
+      "ended_at": "2026-11-14T04:45:28.711199+00:00",
+      "elapsed_seconds": 2.2923836760019185,
+      "actual_exit": 0,
+      "stdout_sha256": "ded8a59fe9af18fe2ad6b8e92dc6db6c0ad65ea25feeeb184c63f527ca889af7",
+      "stderr_sha256": "8df0835d9a20d7162057e7e392e82ddb24ed51ae37d9002a318e967feb7f57a0",
+      "stderr_bytes": 185
+    },
+    "operatorRehearsalHelper": {
+      "path": "/workspace/scratch/019fa8a18b3d/pr1917_original_rehearsal.py",
+      "bytes": 14892,
+      "sha256": "3a38a680fcf5e7696b510c5edd73de515b919bf5927f8759e64ee1361a596f4d",
+      "ast_valid": true,
       "executed": false
     }
   },
@@ -345,7 +376,7 @@
     "Collision preflight and secondary reads are not localized by current stage logs",
     "Repeated fee/assignment/cost scans exist inside source_collection; bounded synthetic measurement is running"
   ],
-  "next_action": "Verify exact-A workflows and all129 new cases plus3 local-Mongo cases in official artifacts; validate candidate, freeze intent-only B, guarded release and one visible acceptance.",
+  "next_action": "Require all exact-B checks including actual Host20/Host24 adapter rehearsals. Then normal merge with expected B, prove M parents[J,B] and Mtree=Btree; fresh original inactive, preserve120untracked+unsaved buffer, actual original yarn build, prepare/prepublish, one Publish, newer platform completion, officialverify/freshinactive, one visible financial attempt with fresh as_of required.",
   "ledger_note": "Issue1006 has2500 comments; latest ledger explicitly documents new-comment limit. Task-specific STATUS and forthcoming PR carry continuation.",
   "prechange_measurements": {
     "synthetic_only": true,

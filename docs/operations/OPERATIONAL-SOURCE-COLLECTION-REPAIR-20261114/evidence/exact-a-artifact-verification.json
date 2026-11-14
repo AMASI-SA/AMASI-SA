@@ -1,0 +1,1709 @@
+{
+  "verified_at": "2026-11-14T04:40:47.884395+00:00",
+  "verdict": "PASS",
+  "source_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+  "source_tree": "492727ceae6b6cada3894e7a450f837186f9a962",
+  "source_base_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+  "expected_new_cases_sha256": "b73425b6a8550c17fe160072d1726e3fa5e195f6d9e17be2548980b5a01b16f0",
+  "expected_new_case_count": 129,
+  "extra_deferred_mongo_case_count": 3,
+  "artifacts": [
+    {
+      "label": "operational",
+      "run_id": 43557214417,
+      "job_id": 132332664737,
+      "run_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43557214417",
+      "job_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43557214417/job/132332664737",
+      "job_conclusion": "success",
+      "artifact_id": 14097909762,
+      "artifact_name": "operational-backend-results",
+      "archive_bytes": 72399,
+      "archive_sha256": "10eec470ac1d99339045f6d5a61ceb6ae3f3def1eab1c2f7242acd6eeb5b7c89",
+      "xml_name": "operational-backend.xml",
+      "xml_bytes": 761260,
+      "xml_sha256": "3796e7f81c46495627ee32c81b1fd778531e4892ae6200e1ca773c9227d909d6",
+      "total_testcase_elements": 4202,
+      "junit_suite_headers": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "0",
+          "skipped": "0",
+          "tests": "4202",
+          "time": "241.514",
+          "timestamp": "2026-11-14T04:33:44.834643+00:00",
+          "hostname": "runnervmccnms"
+        }
+      ],
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "all_129_new_cases_exactly_once": true,
+      "all_3_deferred_mongo_cases_exactly_once": true,
+      "new_case_module_counts": {
+        "test_operational_balance_recorded_courier_fee_index": 116,
+        "test_operational_balance_source_stage_timing": 13
+      },
+      "checked_new_cases": [
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[0_0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[False]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[cost3]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[cost4]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[0_1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[NaN]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[None]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[False]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[proof4]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[proof5]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[proof6]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts3]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts4]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts5]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a:]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a:b]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a:b:]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a:b:c]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a::b]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[:b]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[aa]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[-1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[Infinity]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[-Infinity]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[NaN]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[sNaN]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[not-a-number]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[None]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[confirmed9]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[False]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[True]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[0.5]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations3]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations4]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations5]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations6]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations7]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements3]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements4]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements5]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements6]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements7]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements8]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements9]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements10]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements11]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements3]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements4]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements5]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements6]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements7]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements8]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements9]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements10]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements11]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[-1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[NaN]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[sNaN]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[Infinity]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[None]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[amount7]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[0.5]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_merge_retains_global_movement_order",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstandard_outer_structure_uses_unchanged_reader[None]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstandard_outer_structure_uses_unchanged_reader[False]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstandard_outer_structure_uses_unchanged_reader[0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstandard_outer_structure_uses_unchanged_reader[value3]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstandard_outer_structure_uses_unchanged_reader[value4]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstandard_outer_structure_uses_unchanged_reader[value5]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstandard_outer_structure_uses_unchanged_reader[value6]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstandard_outer_structure_uses_unchanged_reader[value7]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstring_order_identity_preserves_original_exception[None]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstring_order_identity_preserves_original_exception[False]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstring_order_identity_preserves_original_exception[0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstring_order_identity_preserves_original_exception[order_id3]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstring_order_identity_preserves_original_exception[a]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fallback_is_lazy_and_preserves_custom_mapping_access",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_no_eager_amount_validation_before_a_direct_proof",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_normal_history_lookups_never_scan_through_legacy_fallback",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_history_work_scales_with_input_instead_of_orders_times_history",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_each_attempt_builds_an_independent_lookup_after_replacing_history",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_cancellation_during_owned_build_joins_worker_before_return",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[False-old_courier]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[False-old_driver]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[False-new_courier]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[False-new_native_driver]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[False-new_contract_driver]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[True-old_courier]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[True-old_driver]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[True-new_courier]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[True-new_native_driver]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[True-new_contract_driver]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_collector_builds_again_for_each_invocation_even_with_same_state",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_actual_visible_collector_joins_history_worker_and_releases_only_own_lease[disconnect]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_actual_visible_collector_joins_history_worker_and_releases_only_own_lease[deadline]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_collection_stage_sequence_preserves_output_and_reads_and_is_silent_outside_visible",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_source_read_exit_is_identified_and_joined[deadline-source_collision-mezan_supplier_invoices_v2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_source_read_exit_is_identified_and_joined[deadline-source_primary_reads-mezan_suppliers_v2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_source_read_exit_is_identified_and_joined[deadline-source_fee_settings-settings]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_source_read_exit_is_identified_and_joined[deadline-source_transactions-order_payment_transactions_v2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_source_read_exit_is_identified_and_joined[failure-source_collision-mezan_supplier_invoices_v2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_source_read_exit_is_identified_and_joined[failure-source_primary_reads-mezan_suppliers_v2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_source_read_exit_is_identified_and_joined[failure-source_fee_settings-settings]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_source_read_exit_is_identified_and_joined[failure-source_transactions-order_payment_transactions_v2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_order_loop_exit_is_identified_without_saving_or_continuing[cancelled]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_order_loop_exit_is_identified_without_saving_or_continuing[failed]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_hidden_or_unauthorized_route_starts_no_source_work_or_timing[payload0-None]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_hidden_or_unauthorized_route_starts_no_source_work_or_timing[payload1-principal1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        }
+      ],
+      "checked_deferred_mongo_cases": [
+        {
+          "module": "test_operational_balance_delivery_cutover",
+          "name": "test_real_refresh_preserves_old_delivery_custody_and_bank_settlement_once",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_delivery_start_rule",
+          "name": "test_real_refresh_persists_unknown_delivery_date_once_without_rewriting_sources_or_cash[courier]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_delivery_start_rule",
+          "name": "test_real_refresh_persists_unknown_delivery_date_once_without_rewriting_sources_or_cash[native_driver]",
+          "occurrences": 1,
+          "outcome": "passed"
+        }
+      ],
+      "source_sha_observed_in_job_log": true,
+      "source_tree_observed_in_job_log": false,
+      "source_identity_embedded_in_artifact": true
+    },
+    {
+      "label": "stock",
+      "run_id": 43557214327,
+      "job_id": 132332664326,
+      "run_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43557214327",
+      "job_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43557214327/job/132332664326",
+      "job_conclusion": "success",
+      "artifact_id": 14098464581,
+      "artifact_name": "eligibility-backend-8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+      "archive_bytes": 69273,
+      "archive_sha256": "7c54b4f1deddc2a8fa05db699baba4a47430449409099e103830b40d37a46dd6",
+      "xml_name": "eligibility-backend.xml",
+      "xml_bytes": 694778,
+      "xml_sha256": "78c4ef101dd2274de3a99cfbf3b70221e02da237f42b99a60fdae952eafdfed8",
+      "total_testcase_elements": 4011,
+      "junit_suite_headers": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "0",
+          "skipped": "0",
+          "tests": "4018",
+          "time": "362.147",
+          "timestamp": "2026-11-14T04:33:41.198009+00:00",
+          "hostname": "runnervmccnms"
+        }
+      ],
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "all_129_new_cases_exactly_once": true,
+      "all_3_deferred_mongo_cases_exactly_once": true,
+      "new_case_module_counts": {
+        "test_operational_balance_recorded_courier_fee_index": 116,
+        "test_operational_balance_source_stage_timing": 13
+      },
+      "checked_new_cases": [
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[0_0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[False]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[cost3]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[cost4]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[0_1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_direct_cost_short_circuit_keeps_every_non_none_value[NaN]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[None]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[False]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[proof4]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[proof5]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fee_key_presence_never_requires_truthy_or_well_formed_value[proof6]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts3]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts4]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fallback_preserves_fact_access_and_prefix_exception_order[facts5]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a:]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a:b]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a:b:]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a:b:c]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[a::b]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[:b]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_exact_prefix_semantics_include_colons_and_empty_segments[aa]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[-1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[Infinity]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[-Infinity]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[NaN]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[sNaN]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[not-a-number]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[None]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[confirmed9]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[False]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[True]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_confirmed_decimal_results_errors_and_flags_are_unchanged[0.5]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations3]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations4]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations5]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations6]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_obligation_set_construction_and_iteration_match_legacy[obligations7]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements3]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements4]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements5]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements6]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements7]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements8]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements9]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements10]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[False-movements11]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements3]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements4]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements5]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements6]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements7]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements8]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements9]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements10]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_structure_and_unrelated_amounts_keep_legacy_behavior[True-movements11]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[-1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[NaN]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[sNaN]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[Infinity]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[None]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[amount7]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_matching_allocation_decimal_is_lazy_and_unchanged[0.5]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_allocation_merge_retains_global_movement_order",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstandard_outer_structure_uses_unchanged_reader[None]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstandard_outer_structure_uses_unchanged_reader[False]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstandard_outer_structure_uses_unchanged_reader[0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstandard_outer_structure_uses_unchanged_reader[value3]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstandard_outer_structure_uses_unchanged_reader[value4]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstandard_outer_structure_uses_unchanged_reader[value5]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstandard_outer_structure_uses_unchanged_reader[value6]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstandard_outer_structure_uses_unchanged_reader[value7]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstring_order_identity_preserves_original_exception[None]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstring_order_identity_preserves_original_exception[False]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstring_order_identity_preserves_original_exception[0]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstring_order_identity_preserves_original_exception[order_id3]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_nonstring_order_identity_preserves_original_exception[a]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_fallback_is_lazy_and_preserves_custom_mapping_access",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_no_eager_amount_validation_before_a_direct_proof",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_normal_history_lookups_never_scan_through_legacy_fallback",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_history_work_scales_with_input_instead_of_orders_times_history",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_each_attempt_builds_an_independent_lookup_after_replacing_history",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_cancellation_during_owned_build_joins_worker_before_return",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[False-old_courier]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[False-old_driver]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[False-new_courier]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[False-new_native_driver]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[False-new_contract_driver]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[True-old_courier]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[True-old_driver]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[True-new_courier]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[True-new_native_driver]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_whole_collector_reconciliation_and_reports_match_legacy[True-new_contract_driver]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_collector_builds_again_for_each_invocation_even_with_same_state",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_actual_visible_collector_joins_history_worker_and_releases_only_own_lease[disconnect]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_recorded_courier_fee_index",
+          "name": "test_actual_visible_collector_joins_history_worker_and_releases_only_own_lease[deadline]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_collection_stage_sequence_preserves_output_and_reads_and_is_silent_outside_visible",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_source_read_exit_is_identified_and_joined[deadline-source_collision-mezan_supplier_invoices_v2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_source_read_exit_is_identified_and_joined[deadline-source_primary_reads-mezan_suppliers_v2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_source_read_exit_is_identified_and_joined[deadline-source_fee_settings-settings]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_source_read_exit_is_identified_and_joined[deadline-source_transactions-order_payment_transactions_v2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_source_read_exit_is_identified_and_joined[failure-source_collision-mezan_supplier_invoices_v2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_source_read_exit_is_identified_and_joined[failure-source_primary_reads-mezan_suppliers_v2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_source_read_exit_is_identified_and_joined[failure-source_fee_settings-settings]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_source_read_exit_is_identified_and_joined[failure-source_transactions-order_payment_transactions_v2]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_order_loop_exit_is_identified_without_saving_or_continuing[cancelled]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_real_order_loop_exit_is_identified_without_saving_or_continuing[failed]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_hidden_or_unauthorized_route_starts_no_source_work_or_timing[payload0-None]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_source_stage_timing",
+          "name": "test_hidden_or_unauthorized_route_starts_no_source_work_or_timing[payload1-principal1]",
+          "occurrences": 1,
+          "outcome": "passed"
+        }
+      ],
+      "checked_deferred_mongo_cases": [
+        {
+          "module": "test_operational_balance_delivery_cutover",
+          "name": "test_real_refresh_preserves_old_delivery_custody_and_bank_settlement_once",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_delivery_start_rule",
+          "name": "test_real_refresh_persists_unknown_delivery_date_once_without_rewriting_sources_or_cash[courier]",
+          "occurrences": 1,
+          "outcome": "passed"
+        },
+        {
+          "module": "test_operational_balance_delivery_start_rule",
+          "name": "test_real_refresh_persists_unknown_delivery_date_once_without_rewriting_sources_or_cash[native_driver]",
+          "occurrences": 1,
+          "outcome": "passed"
+        }
+      ],
+      "source_sha_observed_in_job_log": true,
+      "source_tree_observed_in_job_log": true,
+      "source_identity_embedded_in_artifact": false
+    }
+  ],
+  "candidate_module_verification": {
+    "checked_at": "2026-11-14T04:37:39.484263+00:00",
+    "source_git_sha": "8839d3aeb32b4bda2de2015efb0deca7fbb844a3",
+    "source_tree": "492727ceae6b6cada3894e7a450f837186f9a962",
+    "source_base_git_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+    "intent_path": "/workspace/scratch/019fa8a18b3d/mezan-pr1917-A-intent.json",
+    "intent_bytes": 1302197,
+    "intent_sha256": "512e8d5b4c459ad664f9c33abd8f8e127896bf54e64e058840383e55cc59a53c",
+    "intent_git_blob": "cc47829c141bb997089a05baac832207f3a1537f",
+    "release_id": "rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4",
+    "new_module_record": {
+      "bytes": 4385,
+      "git_blob": "192d3cc19f3d47c9d4fad41069c6a0f028fd95e0",
+      "mode": "100644",
+      "path": "operational_courier_fee_history.py",
+      "sha256": "d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d"
+    },
+    "new_module_absent_from_base": true,
+    "top_and_embedded_backend_manifests_equal": true,
+    "module_matches_frozen_git_bytes": true,
+    "critical_subset_unchanged_as_expected": true,
+    "backend_file_count": 1206,
+    "manifest_sha256": "33f5fdc11d82f70f1cab369b5cbe7ffeca828b606efe57e33db7aed27827dfd5",
+    "verdict": "PASS (module record; official full candidate loader owned by root)"
+  }
+}

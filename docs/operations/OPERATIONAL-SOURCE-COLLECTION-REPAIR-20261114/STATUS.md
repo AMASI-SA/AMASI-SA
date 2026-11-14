@@ -130,3 +130,12 @@ No intent B, merge, original build, lease or publish has occurred for PR1917. Or
 ## Candidate identity verified
 
 Readiness run43557214320 passed on exact A. Candidate artifact14097739901 is376375 bytes, ZIP SHA256 b4d0327379c7a8144909b49e57be719f2f9b3bc0299b8c4de8ac1e552ee521eb. Unmodified intent is1302197 bytes, SHA256512e8d5b4c459ad664f9c33abd8f8e127896bf54e64e058840383e55cc59a53c, Git blobcc47829c141bb997089a05baac832207f3a1537f. Official candidate loader actual exit0 (2.805837974s), A/J match, R `rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4`; frontend artifact tree9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6. The harmless missing local generated backend/release_identity.json warning was retained; this loader is validating the external candidate, not asserting a local deployed identity. Independent module audit confirms the4385-byte new helper appears exactly once in both complete backend manifests with the reviewed Git blob and SHA256, and matches git show A. Local owned branch/index/worktree are now clean at A without changing working file bytes. Exact-A Operational, Stock and Python CodeQL remain in progress; no B is frozen yet.
+
+
+## Reviewed intent B frozen — 2026-11-14T04:46:46.970Z
+
+All 11 exact-A workflows passed; 27 checks comprise 21 success and 6 expected skips. Official Operational artifact has 4202 passing cases; Stock has 4011 passing cases plus 7 passing subtests. All 129 new cases and all 3 locally deferred Mongo cases occur once and pass in both XML reports. See evidence/exact-a-artifact-verification.json and evidence/exact-a-final-ci.json.
+
+B is `1469f4916715458b8374beb3bfddfc1f3c01f125`, tree `9d8844f32f9db18cd036ff1b55edaec2c0dbe1b8`, direct parent A. Its only changed path is release/release-intent-v5.json, whose exact candidate Git blob is `cc47829c141bb997089a05baac832207f3a1537f`. The full official tracked-intent loader returned actual exit 0 in 2.292 seconds. Local owned worktree is clean at B. Runtime remains `rg5-e81e97c26945236de423fc17e997db852574b424ba799a3fbba37f4a71d4b7a4`.
+
+B CI, including actual Host20/Host24 clean-clone adapter rehearsals, is pending. No merge or PR1917 original /app mutation, lease, publish or financial refresh has happened. Original operator browser remains connected; 120 pending changes and one unsaved editor file are still present. The new rehearsal helper is source/AST checked and awaits independent review; the verify helper has independent read-only PASS. No helper has been executed.
