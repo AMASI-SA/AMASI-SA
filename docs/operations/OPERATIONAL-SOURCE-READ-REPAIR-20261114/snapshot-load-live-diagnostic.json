@@ -1,0 +1,46 @@
+{
+  "started_at": "2026-11-14T02:30:17.361Z",
+  "manual_refresh_clicks": 1,
+  "visibility_confirmed": true,
+  "reason": "Production runtime logs became accessible but only retain100 visible lines. Existing attempt had rotated out. One bounded visible reproduction will capture the actual cancelled stage.",
+  "logs_target_at": "2026-11-14T02:31:47Z",
+  "financial_mutations": "No confirmations, settlements, or provider writes requested by the operator.",
+  "log_capture_at": "2026-11-14T02:31:52.895Z",
+  "source": "Current effdd19 production runtime Logs UI, most recent100lines",
+  "log_window": [
+    "2026-11-14T02:30:38.108Z",
+    "2026-11-14T02:31:47.405Z"
+  ],
+  "stages": [
+    {
+      "timestamp": "2026-11-14T02:30:44.060Z",
+      "stage": "native_evidence",
+      "duration_ms": 23437.488,
+      "outcome": "complete"
+    },
+    {
+      "timestamp": "2026-11-14T02:31:43.920Z",
+      "stage": "snapshot_load",
+      "duration_ms": 59693.907,
+      "outcome": "cancelled"
+    },
+    {
+      "timestamp": "2026-11-14T02:31:43.921Z",
+      "stage": "aggregate",
+      "duration_ms": 59860.253,
+      "outcome": "cancelled"
+    }
+  ],
+  "request": {
+    "timestamp": "2026-11-14T02:31:43.925Z",
+    "method": "POST",
+    "route": "/api/operational-balances/refresh",
+    "status": 408,
+    "duration_ms": 85793.467,
+    "outcome": "4xx"
+  },
+  "post_capture_visibility": "visible",
+  "as_of_text": "12/11/2026, 01:07",
+  "refresh_warning": "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة",
+  "conclusion": "Snapshot loading was cancelled by the total request deadline before source collection or reconciliation."
+}

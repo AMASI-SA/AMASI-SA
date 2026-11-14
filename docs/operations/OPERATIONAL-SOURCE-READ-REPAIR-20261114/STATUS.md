@@ -1,3 +1,26 @@
+# Current stage — production failure localized to snapshot_load
+
+A bounded diagnostic refresh was deliberately authorized within the repair work after production runtime Logs became accessible. The prior attempt had rotated out of the UI's100-line tail. Root first verified that both the financial and log pages remained visible while reading either tab, then clicked financial Refresh once at `2026-11-14T02:30:17.361Z` and captured the runtime tail immediately after the deadline. This replaces the earlier hold on repeating refresh; it was a targeted observation with newly available production logs, not a blind retry.
+
+Observed current-release production events:
+
+| Stage/request | Duration | Outcome |
+| --- | --- | --- |
+| native_evidence at02:30:44.060UTC |23437.488ms|complete|
+| snapshot_load at02:31:43.920UTC |59693.907ms|cancelled|
+| aggregate at02:31:43.921UTC |59860.253ms|cancelled (contains snapshot_load)|
+| POST operational-balances/refresh at02:31:43.925UTC |85793.467ms|HTTP408|
+
+The page remained visible after log capture and settled back to the old12Nov01:07 snapshot with the same timeout warning. **This attempt did not reach source_collection or reconciliation.** Do not sum aggregate with its child duration. Production tail evidence is preserved in `snapshot-load-live-diagnostic.json`, without raw logs, IPs, account/order IDs, values or business counts.
+
+Next source repair must target snapshot loading: fully validated packet/audit restoration, its sequential page reads and repeated authorization checkpoints. All owner binding, audit hashes/order/completeness, cancellation, revision CAS and financial history must remain intact. No source change has yet been made for this follow-up. The current frozen PR1915 release remains verified but does not resolve live freshness.
+
+A separate synthetic reconciliation benchmark also demonstrated a quadratic CPU cost (20k provider fixture144.308s); because production cancelled before reconciliation, that issue is deferred and must not be claimed as this observed failure's cause.
+
+---
+
+## Earlier checkpoints
+
 # Current stage — release verified; live freshness acceptance FAILED
 
 PR1915 is merged, published as **effdd19**, and officially verified (exit0, three probes, exact A/M/R, fresh inactive guard). **The stale-balance symptom is NOT resolved.** The existing visible financial page settled after browser reconnection with the old `as_of` **12/11/2026,01:07**, report present, and the warning:
