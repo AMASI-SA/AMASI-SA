@@ -17,3 +17,12 @@ test("permission failure remains rejected for the report page to handle", async 
     await expect(operationalApi.financialPosition()).rejects.toBe(denied);
     expect(http.post).not.toHaveBeenCalled();
 });
+
+test("scoped and bound full report reads forward only explicit GET configuration", async () => {
+    const controller = new AbortController();
+    const params = { view: "all", expected_revision: 7, expected_as_of: "2026-11-01T09:00:00Z", expected_started_at: "2026-10-31T21:00:00Z" };
+    http.get.mockResolvedValueOnce({ data: { view: "all", revision: 7 } });
+    await operationalApi.financialPosition({ params, signal: controller.signal });
+    expect(http.get).toHaveBeenLastCalledWith("/operational-balances/financial-position", { timeout: 60000, params, signal: controller.signal });
+    expect(http.post).not.toHaveBeenCalled();
+});

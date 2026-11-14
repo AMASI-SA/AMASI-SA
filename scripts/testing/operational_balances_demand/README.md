@@ -18,10 +18,23 @@ browser assertions, request counts, and desktop/mobile dialog screenshots.
 This is component acceptance, not a substitute for the repository's governed
 v5 build, authenticated real-Mongo acceptance, exact-source CI or live probes.
 
-The `Operational Balance Web` workflow runs all nine scenarios on an isolated
+The `Operational Balance Web` workflow runs all fourteen scenarios on an isolated
 Ubuntu 22.04 GitHub Actions runner using Node 22.23.2 and Playwright 1.58.2.
 It retains the exact checked-out commit/tree, component hashes, request counts,
 assertion results and desktop/mobile screenshots as one browser evidence artifact.
+
+The default summary proves that four saved displays render while the separate
+forecast request is held, then only the matching snapshot can supply the two
+forecast displays. Every sidebar page is visited through the real navigation;
+mount, currency selection and navigation must send no source-refresh POST and
+no hidden full-report request. The server serves real per-view builder output,
+checks snapshot bindings and rejects unknown fixture views. Delayed forecast
+completion after navigation must not replace the new page.
+
+The fixture also downloads the explicitly scoped page workbook and the separate
+full-report workbook, preserving known money and leaving unknown forecasts
+unknown. Evidence includes exact generated-fixture hashes, query/view request
+records, the two workbooks, and summary/sidebar desktop/mobile screenshots.
 
 Three scenarios exercise the explicit owner delivery confirmation: one preview
 and confirmation followed by one visible refresh; saved evidence remaining

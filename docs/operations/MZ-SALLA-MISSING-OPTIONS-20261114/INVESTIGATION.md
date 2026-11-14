@@ -32,7 +32,8 @@ SHA-256 recovery key. Edit mode remained off.
 | Four milliseconds later | `order.created` | Older by one second | Five option records per line | Rejected as stale |
 
 The captures agree on native order/reference, complete native line membership,
-explicit product identity and quantity. Status uses `product_id`; creation
+explicit product identity and quantity. Shared order-header currency and all six
+amount fields also match. Status uses `product_id`; creation
 uses the matching `product.id`. All shared commercial fields match: price
 without tax, discount, tax and total, including currencies. Creation adds
 original price. Choices were not inferred from prices, SKU, name or position.
@@ -172,3 +173,46 @@ supplementary recoverable record.
 Next: implement and independently verify the bounded delayed-creation
 prevention under the existing root-fix authorization. No live order replay or
 manual refresh. Production code was not changed by this evidence checkpoint.
+
+## Candidate implementation checkpoint
+
+The preventive implementation is now present in
+`salla_integration/stale_creation_options.py`, called only by the verified
+webhook stale-creation branch. It validates current omitted-choice evidence,
+all native identities/membership, quantities, compatible variants, source
+clocks, cancellation and shared commercial values. Qualification and the
+existing option-only writer run within the same operational owner transaction.
+It verifies the planned patch fills every proven line; ambiguous or partial
+patches are refused. Existing cost recovery and the generic stale fence remain
+unchanged. Capture scope reports `customer_options_only`; full sync stays false.
+
+Focused tests cover the public handler, native-line ordering, idempotence,
+explicit empty and legacy selection aliases, conflicting identities/amounts,
+source changes, and sanitized failure results. Independent review identified
+and corrected common-money, partial-patch and legacy-variant evidence gaps.
+The retained source-only reproduction continues to demonstrate the full
+snapshot's stale rejection; that rejection is intentionally preserved.
+
+Seven new real-Mongo cases exercise both arrival orders, exact write scope,
+replay, a competing committed writer, explicit empty choices, stale
+non-creation events and tenant isolation. Collection of the complete snapshot
+suite passed with 19 cases. CI runs these against its isolated Mongo 8 replica
+set and rejects missing cases, skips, errors or failures. Execution is still a
+required gate, not implied by local collection or mocked tests.
+
+Local Mongo execution was unavailable: official SHA-verified Mongo 8 could
+not read the container's CPU topology; official Mongo 7 could print its version
+but startup failed with an operating-system permission error. No sandbox or
+server safeguard was bypassed. The CI replica set is the transaction evidence.
+
+Production branch advanced independently to financial-pages merge
+`94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894`. Its changed paths are disjoint from
+this fix. The source candidate retains that complete tree, adds this task's
+reviewed files, and preserves both branch parents. An independently owned v5
+lease for that release was observed in the shared project. This task made no
+shared `/app` change or release rehearsal while it was active.
+
+The Issue1006 body-update tool acknowledged an appended entry, but two fresh
+read paths did not return it; persistence is therefore unverified. Do not claim
+the ledger was updated. The immutable task branch and Draft PR are verified
+continuity records.
