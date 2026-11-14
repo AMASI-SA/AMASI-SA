@@ -399,3 +399,29 @@ deploymentM94f6dfb8,release rg5-5a1f26fa... . Neverclear/reuse anotherlease.
 Next: observe new explicit DeploymentSucceeded, run official verification once
 with no wrapper timeout, preserve its actual exit, then final preservation and
 fresh inactiveguard. Only then perform real financial-center UI timing checks.
+
+## New publication completed; official verification running
+
+Emergent displayed the new green Deploymentfinished Nov14,07:55PM in this
+publication's b1458cee message, then the newly published versionecb9679.
+This is newer than prepare/prepublish and the prior1b4c4f6. The UI's displayed
+ordinal remained100th; do not invent101st. New log view showed current runtime
+logs (not a complete Cloud Build transcript). No second publish was requested.
+
+Root launched the reviewed official verifier exactly once in original Terminal2:
+python -B /tmp/mezan-pr1921-runners-1j_g1nsn/pr1921_original_verify.py
+ --evidence-dir /tmp/mezan-pr1921-original-zu179mmf
+ --deployment-sha 94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894
+ --actor codex-financial-section-pages-1921
+It printed phase:started,prefix:/tmp/mezan-pr1921-original-zu179mmf/28-verify
+and is still running. No wrapper timeout; do not interrupt or repeat it.
+The full owned lease remains subject to its final official result and fresh
+inactive status. Do not claim final verified success before its actual exit.
+
+Original UI still separately shows1unsavedUntitled-1 and120pending changes.
+Root's original Terminal2 is occupied; Terminal4 is an empty temporary shell
+created for optional monitoring. Terminal1 is unrelated and must not be used.
+Browser tabs changed outside this task: oldMezan10 no longerexists; do not use
+unrelatednewtabs12/17. Root will create one fresh tab at the already verified
+financial-center URL for read-only page checks while the official static-file
+verification runs. Manualfinancialrefresh waits for officialidentity success.
