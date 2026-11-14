@@ -1,4 +1,51 @@
-# Post-deployment campaign snapshot refresh — source only
+# Campaign card refresh — deployed and verified
+
+## Current completion status — 2026-11-14 00:08:32 UTC
+
+**Complete: the campaign changes are published in the combined PR #1912 release, the official protocol-5 verification passed all three probes, and the canonical guard is inactive.** This section supersedes every historical pending/not-deployed statement below.
+
+The user explicitly approved recovering the existing Emergent project session. This continuation reopened it using the normal UI. The concurrent Ready release owner performed the serialized publication of the descendant release, which preserves all campaign/frontend/dependency changes from PR #1911. This campaign continuation observed the explicit Deployment successful notification, independently inspected production identity and campaign cards, and read the owner's completed verification result. It did not repeat Publish or operate on another owner's lease.
+
+### Exact accepted production identity
+
+| Field | Accepted value |
+| --- | --- |
+| Combined source A | `cdf175841376d2f68605d66c1979273d23aed70d` |
+| Source base | `5d158f6006b63ac7663c293696d501f595ce8754` |
+| Intent B | `a948f4592fd725792fe354dfa72fd40e99000915` |
+| Deployment M | `304e8793a15fd3269fd6f6d4cfba903d1760e285` |
+| B/M tree | `baf88eeeb7eec15a043da14358fa77f2ba2bc149` |
+| Release ID | `rg5-3e41b3f0b14d180f45cd3b242798ea348797b06e8edc770592130ac87b2a9cb0` |
+| Frontend artifact tree SHA256 | `9a34bf9ba4d65a89b3431002ab8e729d6b5311a332ec17800abffb88c2406ab6` |
+| Backend runtime tree SHA256 | `39a86c469d44a7fbf2036098e5ed56824eb0505d291e1072677f1c0ba221b537` |
+| Release-control tree SHA256 | `c4a96fabeb7474fc54386fadaa98b03f0b58119f3aa3863b2cff1b1e032df822` |
+
+Official evidence read directly from the existing shared workspace:
+
+- `/tmp/ready-current-verify.json`: valid JSON, 33,299 bytes, persisted at `2026-11-14T00:04:12.101505+00:00`.
+- `verified=true`, `protocol_version=5`, `checks=3`, URL `https://mezansalla.com`; source, source base, deployment, release and frontend/backend/control identity fields exactly match the table above.
+- The verification output records 582 frontend request entries, three shell-cache entries and two service-worker entries; the observed service-worker entry is `retirement_payload_present`.
+- `boot_started_at=2026-11-13T23:49:03.073620+00:00`, two boot observations. This is after the matching prepare at `2026-11-13T23:38:18.470493+00:00`.
+- `/tmp/ready-current-verify-stderr.log`: zero bytes.
+- A subsequent official `status()` readback returned exactly `{"active": false}`. The Ready owner's matching verification closed its lease; this task did not clear or modify it.
+
+Independent production health also verified the reviewed build metadata SHA256 `12630fc66d1c95a2a9db36f7f9286fddb7623f72c79428b950ca7bdd37728f50` and reproducibility proof SHA256 `6ce34a0f8e5db937529b257ed4b309df696b2e942cb6620b8eab2e1f1d3d86aa`, with all identity/runtime/control/critical-file/frontend flags true. Its separate readback is `/tmp/mezan-campaign-combined-live-readback.json`. The official three-probe result, rather than that single health read, establishes release acceptance.
+
+### Live campaign acceptance and honest limits
+
+- **Snapchat:** the previously unavailable native account-day spend now appears on the live card for the saved `America/Los_Angeles` account day, with orders/pieces/sales, CPA and ROAS. The card retains the incomplete-hours/provisional-evidence advisory. This is validation against saved native facts, not direct platform reconciliation or proof of a complete day.
+- **TikTok:** the Salla tracking-label example displays its readable name, explicit `Asia/Riyadh` store day, commerce counts/sales and unlinked-advertising notice. Spend, CPA and ROAS remain unavailable without a trustworthy advertising identity. The observed zero-count day validates the displayed state, not a separately witnessed nonzero aggregation.
+- **Google:** the inspected generic-click example lacks a trustworthy campaign identity and now explains why campaign metrics are unavailable. No campaign ID, spend or return is guessed. This does not claim every Google attribution record has been linked.
+- **Same-campaign arrivals:** the 30→31 regression passed in automated acceptance. A controlled post-deployment live arrival was not separately witnessed, and no synthetic order was created.
+- Existing source acceptance remains 85 backend tests, 28 focused frontend tests and 3,696 full frontend tests passed. Exact-B gates, audits and adapter rehearsals are detailed in the historical evidence below. No extra tests were added or rerun merely to repeat already-sufficient acceptance.
+
+Private cropped screenshots of all three live cards were saved for the user. No customer/business screenshots or metric values were uploaded to GitHub.
+
+**Remaining functional limitations are evidence/data limitations**, especially missing verified campaign identity and incomplete saved spend coverage. There is no outstanding campaign publication step. No new polling, scheduled sync, manual provider sync, order write, advertising/budget/bid write or accounting write was introduced.
+
+This is a documentation-only continuation checkpoint. Do not deploy this branch, restore the superseded PR #1911 intent, merge the old recovery PR #1907 separately, or rerun Publish/verification for this already-accepted release. Preserve the immutable source/intent pairs and other owners' workspace state.
+
+## Initial source-only checkpoint (historical)
 
 Base: 8d25f7a6fa9a310b319b753c32457e70987f7c51. Prior live guard verification passed; financial matching still has unresolved cases.
 
