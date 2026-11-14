@@ -1,3 +1,11 @@
+# Current checkpoint — Publish still building; verifier ready
+
+The one Publish is still in the platform build stage; no completion observed yet. The independently prepared and root-reviewed verification wrapper is preserved beside this document, SHA-256 `fb9f399b81f682b45f2b2135b5333704ec8f9356ec60083c65787525688a87d2`, 5884 bytes. **It has not been executed.** It checks our exact lease owner/A/M/R, invokes the official verify without a short artificial timeout, records the actual child outcome before parsing, requires the three-probe identity/artifact result, and then requires fresh inactive status. It refuses to overwrite existing verification evidence.
+
+Do not repeat Publish. Execute the wrapper only after a newer explicit platform completion for the current deployment; final visible fresh-as_of acceptance remains pending.
+
+---
+
 # Current stage — one Publish in progress
 
 Official prepublish exited **0 in3.57s**, finished **2026-11-14T01:47:08.477403+00:00**, for our exact actor/A/M/R. Root then clicked **Publish changes once**. UI changed to Publishing and explicitly recorded **Deployment Started Nov14,04:47AM UTC+3**, event `76a1f54a-3fff-5b3b-8764-400a0403f2e0`. Expanded progress shows Workspace ready, Changes packaged, and Building your website. The baseline prior version is `892c7f3`.
