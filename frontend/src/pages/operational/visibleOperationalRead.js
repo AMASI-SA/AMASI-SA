@@ -135,6 +135,26 @@ export function visibleOperationalRead(read, callbacks = {}, lane = {}, policy =
     };
 }
 
+const REFRESH_TIMING_STAGES = new Set([
+    "native_evidence", "aggregate", "source_collection", "source_collision", "reconciliation", "profit_snapshot",
+    "bank_claims", "party_catalogs", "snapshot_load", "snapshot_compare", "snapshot_pack", "snapshot_commit",
+    "source_primary_reads", "source_fee_settings", "source_setup", "source_statements", "source_delivery_history",
+    "source_transactions", "source_native_links", "source_bundles", "source_option_catalog", "source_orders",
+    "source_order_indexes", "source_bank_catalog", "source_invoices", "source_other_sources", "source_native_overlaps", "source_finalize",
+]);
+
+// Local diagnostic evidence only. Nested stages overlap; their durations must
+// not be added. Reconstruct the fixed fields instead of logging response data.
+export function logOperationalRefreshTimeoutTimings(detail) {
+    if (!Array.isArray(detail?.stage_timings)) return;
+    const timings = detail.stage_timings.filter(row => row && REFRESH_TIMING_STAGES.has(row.stage)
+        && typeof row.duration_ms === "number" && Number.isFinite(row.duration_ms)
+        && row.duration_ms >= 0 && row.duration_ms <= 300000
+        && ["complete", "cancelled", "failed"].includes(row.outcome))
+        .slice(-64).map(({ stage, duration_ms, outcome }) => ({ stage, duration_ms, outcome }));
+    if (timings.length) console.info("operational_refresh_timeout_stage_timings", timings);
+}
+
 export async function refreshVisibleSnapshot(api, config) {
     if (config.signal?.aborted || !canReadOperationalPage()) throw new DOMException("Page is not active", "AbortError");
     try {
@@ -150,6 +170,7 @@ export async function refreshVisibleSnapshot(api, config) {
         const sourceFailure = ["operational_capacity_requires_archive", "operational_source_setup_incomplete", "operational_refresh_failed",
             "operational_source_read_timeout", "operational_source_read_invalid", "operational_refresh_lease_lost"].includes(detail?.code);
         const refreshTimedOut = status === 408 && detail?.code === "operational_refresh_timeout";
+        if (refreshTimedOut) logOperationalRefreshTimeoutTimings(detail);
         if (refreshTimedOut || sourceFailure || status >= 500 || ["ECONNABORTED", "ETIMEDOUT", "ERR_NETWORK"].includes(error?.code)) {
             return {refresh_warning: "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. " + (detail?.message || "أعد التحديث عند الحاجة من الصفحة.")};
         }

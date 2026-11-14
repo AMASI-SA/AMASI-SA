@@ -6,14 +6,17 @@ commit starts, its exact result is observed before releasing the lease.
 Ordinary operational writers never enter this context and retain their gates.
 """
 import asyncio
+from collections import deque
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 import logging
+import math
 import time
 from threading import Event
 from uuid import uuid4
 
+from fastapi import HTTPException
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
@@ -25,6 +28,23 @@ LEASE_SECONDS = 120
 REQUEST_SECONDS = 85
 _CURRENT = ContextVar("operational_visible_refresh", default=None)
 _LOG = logging.getLogger(__name__)
+
+# Request-local diagnostic vocabulary. No identifiers or exception text can
+# enter the timeout response; nested stages overlap and must not be summed.
+TIMING_STAGES = frozenset({
+    "native_evidence", "aggregate", "source_collection", "source_collision",
+    "reconciliation", "profit_snapshot", "bank_claims", "party_catalogs",
+    "snapshot_load", "snapshot_compare", "snapshot_pack", "snapshot_commit",
+    "source_primary_reads", "source_fee_settings", "source_setup",
+    "source_statements", "source_delivery_history", "source_transactions",
+    "source_native_links", "source_bundles", "source_option_catalog",
+    "source_orders", "source_order_indexes", "source_bank_catalog",
+    "source_invoices", "source_other_sources", "source_native_overlaps",
+    "source_finalize",
+})
+TIMING_OUTCOMES = frozenset({"complete", "cancelled", "failed"})
+TIMING_LIMIT = 64
+TIMING_MAX_MS = 300000
 
 
 async def _join(task):
@@ -52,6 +72,21 @@ class DemandRefreshContext:
         self.token = uuid4().hex
         self.lease_attempted = False
         self.leased = False
+        self.stage_timings = deque(maxlen=TIMING_LIMIT)
+
+    def record_stage(self, stage, duration_ms, outcome):
+        if (not isinstance(stage, str) or stage not in TIMING_STAGES
+                or not isinstance(outcome, str) or outcome not in TIMING_OUTCOMES
+                or isinstance(duration_ms, bool)
+                or not isinstance(duration_ms, (int, float))
+                or not 0 <= duration_ms <= TIMING_MAX_MS
+                or not math.isfinite(duration_ms)):
+            return
+        # Keep the tail: cancellation unwinds the innermost bottleneck first,
+        # followed by its few enclosing stages. Historical repetitions drop.
+        self.stage_timings.append({"stage": stage,
+                                   "duration_ms": round(duration_ms, 3),
+                                   "outcome": outcome})
 
     def cancel(self, *, disconnected=False):
         self.disconnected = self.disconnected or disconnected
@@ -135,7 +170,8 @@ def refresh_stage(stage):
     Call sites pass fixed stage names, never owner/order data or exception text.
     This observes the existing request; it starts no task or additional read.
     """
-    if _CURRENT.get() is None:
+    context = _CURRENT.get()
+    if context is None:
         yield
         return
     started = time.monotonic()
@@ -149,8 +185,10 @@ def refresh_stage(stage):
         outcome = "failed"
         raise
     finally:
+        duration_ms = (time.monotonic() - started) * 1000
+        context.record_stage(stage, duration_ms, outcome)
         _LOG.info("operational_refresh_stage stage=%s duration_ms=%.3f outcome=%s",
-                  stage, (time.monotonic() - started) * 1000, outcome)
+                  stage, duration_ms, outcome)
 
 
 async def checkpoint():
@@ -233,7 +271,11 @@ async def run_visible_refresh(request, db, owner, actor, verify, operation):
                     return await operation()
             except TimeoutError:
                 context.cancelled.set()
-                fail("operational_refresh_timeout", "انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة", 408)
+                raise HTTPException(status_code=408, detail={
+                    "code": "operational_refresh_timeout",
+                    "message": "انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة",
+                    "stage_timings": list(context.stage_timings),
+                })
 
         context.work = asyncio.create_task(work())
         context.listener = asyncio.create_task(context.listen())

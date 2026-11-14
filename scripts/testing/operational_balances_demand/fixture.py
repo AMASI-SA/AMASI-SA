@@ -1,5 +1,6 @@
 """Generate synthetic money through the actual report projection; no DB or API."""
 import json
+import hashlib
 from copy import deepcopy
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -10,14 +11,17 @@ sys.path[:0] = [str(ROOT / 'backend'), str(ROOT / 'backend/tests')]
 from operational_balance_store import digest
 from operational_delivery_confirmation import BASIS, EVENT_SCHEMA, PREFIX, record_confirmation
 from operational_financial_position import build_financial_position
+from operational_financial_position_views import TABLES
 from test_operational_balance_financial_position import opening, obligation
 from test_operational_balance_provider_known_subtotals import priced_state, add_order
 
 output = Path(sys.argv[1])
-assert output.is_absolute()
+assert output.is_absolute() and not output.resolve().is_relative_to(ROOT)
 output.mkdir(parents=True, exist_ok=True)
 state = priced_state()
+state['revision'] = 7
 opening(state, 'test-bank', 'bank', '1200.00')
+opening(state, 'test-usd-bank', 'bank', '12.34', currency='USD')
 add_order(state, 'pending-fee', paid='50.00', method='unknown')
 for index in range(3):
     obligation(state, f'shipping:known-{index}', 'shipping', 'store_driver', '25.00',
@@ -30,10 +34,38 @@ for index in range(7):
         state['engine']['issues'].append({'code': code, 'message': reason, 'source_id': f'pending-{index}',
             'order_id': f'pending-{index}', 'order_number': str(9001 + index), 'currency': 'SAR',
             'party_type': 'store_driver', 'party_id': 'synthetic-driver'})
-report = build_financial_position(state)
-report.update(session_scope=digest(['synthetic-owner', 'synthetic-owner']),
-              permissions={'reports': True, 'confirm_delivery_after_start': True})
-(output / 'fixture.json').write_text(json.dumps(report, ensure_ascii=False), encoding='utf-8')
+scope = digest(['synthetic-owner', 'synthetic-owner'])
+permissions = {'reports': True, 'confirm_delivery_after_start': True}
+fixture_hashes = {}
+
+
+def write_reports(snapshot, name):
+    """Every view is the actual projection, including unknown forecast values."""
+    before = deepcopy(snapshot)
+    reports = {}
+    for view in ('all', *TABLES):
+        result = build_financial_position(snapshot, view=view,
+            generated_at=snapshot['engine']['as_of'])
+        result.update(session_scope=scope, permissions=permissions)
+        assert result['view'] == view and result['revision'] == snapshot['revision']
+        reports[view] = result
+    assert snapshot == before
+    for currency, saved in reports['summary']['currencies'].items():
+        complete = reports['all']['currencies'][currency]
+        for key in ('debt_rows', 'debt_totals', 'current_rows', 'profit_rows'):
+            assert saved[key] == complete[key]
+        assert saved['forecast_rows'] == []
+        assert saved['metrics']['forecast_monetary_position'] is None
+        assert reports['forecast']['currencies'][currency]['forecast_rows'] == complete['forecast_rows']
+    for filename, data in ((name + '.json', reports['all']), (name + '-views.json', reports)):
+        raw = json.dumps(data, ensure_ascii=False, sort_keys=True).encode('utf-8')
+        (output / filename).write_bytes(raw)
+        fixture_hashes[filename] = hashlib.sha256(raw).hexdigest()
+    return reports
+
+
+reports = write_reports(state, 'fixture')
+report = reports['all']
 
 # Both subsequent reports use the real proof factory and financial projection.
 # This in-memory state fixture does not substitute for the real-Mongo writer tests.
@@ -50,12 +82,12 @@ record = record_confirmation(state, event, actor=state['owner_id'], actor_name='
                              preview_hash='a' * 64)
 event['recorded_at'] = record['confirmed_at']
 pending_state = deepcopy(state)
+pending_state['revision'] += 1
 pending_state['engine']['facts'][PREFIX + 'pending-0'] = record
-pending = build_financial_position(pending_state)
-pending.update(session_scope=report['session_scope'], permissions=report['permissions'])
-(output / 'fixture-confirmation-pending.json').write_text(json.dumps(pending, ensure_ascii=False), encoding='utf-8')
+write_reports(pending_state, 'fixture-confirmation-pending')
 
 confirmed = deepcopy(pending_state)
+confirmed['revision'] += 1
 confirmed['engine']['issues'] = [issue for issue in confirmed['engine']['issues']
                                 if issue.get('order_id') != 'pending-0']
 key = 'shipping:pending-0:base_shipping'
@@ -69,8 +101,10 @@ confirmed['engine']['facts']['shipping:pending-0'] = {
     'delivered_at': None, 'recognition_basis': BASIS, 'recorded_at': record['confirmed_at'],
     'business_date_basis': 'recognition_recorded_at'}
 confirmed['engine']['as_of'] = confirmation_time
-after = build_financial_position(confirmed)
-after.update(session_scope=report['session_scope'], permissions=report['permissions'])
-(output / 'fixture-confirmed.json').write_text(json.dumps(after, ensure_ascii=False), encoding='utf-8')
+write_reports(confirmed, 'fixture-confirmed')
+(output / 'fixture-manifest.json').write_text(json.dumps({
+    'synthetic_only': True, 'views': list(reports), 'sha256': fixture_hashes,
+    'forecast_source': 'No live cost source; unavailable forecast components remain unknown.',
+}, ensure_ascii=False, indent=2), encoding='utf-8')
 
-print('Synthetic report prepared: three priced deliveries and seven distinct pending orders.')
+print('Synthetic scoped reports prepared: three priced deliveries, seven pending orders, two currencies.')
