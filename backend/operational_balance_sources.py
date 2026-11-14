@@ -12,9 +12,10 @@ import calendar
 import hashlib
 import json
 from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
-from operational_demand_refresh import calculation_checkpoint
+from operational_demand_refresh import calculation_checkpoint, refresh_stage
 from operational_financial_activity_runtime import prepare_in_thread
 from operational_piece_index import index_preparation_pieces
+from operational_courier_fee_history import build_recorded_courier_fee_lookup
 from shipping_companies import normalize_shipping_company
 from operational_courier_tariffs import matches as matches_courier_key
 
@@ -1282,639 +1283,654 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     out['ad_balance_sar_basis'] = {}
     # No service with side effects is called: collection access is allowlisted.
     # The inventory catalogue is read on demand, not on each financial sync.
-    from operational_read_runtime import load_collections
-    source_names = sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - STATEMENT_COLLECTIONS - {TXN_COLLECTION,
-        DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'expense_categories',
-        'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})
-    data = await load_collections(db, owner, source_names, reader=refresh_source_rows)
-    fee_settings = await db['settings'].find({'user_id': owner}, {
-        '_id': 0, 'user_id': 1, 'payment_methods': 1, 'updated_at': 1}).to_list(2)
-    out['provider_fee_settings'] = {}
-    modes = {row.get('fee_source_mode') for row in data['mz2_provider_fee_policies_v2'] if row.get('fee_source_mode')}
-    out['provider_fee_source_mode'] = 'mz2_policies' if 'mz2_policies' in modes else 'legacy_settings'
-    if len(modes) > 1:
-        issue(out, 'provider_fee_source_mode_ambiguous')
-    if len(fee_settings) == 1 and fee_settings[0].get('user_id') == owner:
-        out['provider_fee_settings'] = {key: fee_settings[0].get(key) for key in ('payment_methods', 'updated_at')}
-    elif fee_settings:
-        issue(out, 'provider_fee_settings_ambiguous')
-    from operational_shipping_fee_review import DriverEarnings, courier_issue, hold_prior_courier_event
-    from operational_historical_shipping_fee import APPROVALS
-    data['_fee_review_numbers'] = {r['candidate']['order_number'] for r in (operational_state or {}).get(APPROVALS, {}).values()}
-    if historical_fee_order:
-        data['_fee_review_numbers'].add(historical_fee_order)
-    data['_driver_fee_review'] = DriverEarnings(data, owner, operational_state, start, now)
-    from operational_ad_funding import bindings as funding_bindings
-    data['mz2_ad_account_bindings_v2'], conflicts = funding_bindings(
-        operational_state, owner, data['mz2_ad_account_bindings_v2'])
-    for identity in conflicts:
-        await cpu_budget.checkpoint()
-        calculation_checkpoint()
-        issue(out, 'operational_ad_funding_authority_conflict', identity)
-    setup_rows = data['mz2_shipping_setup_v2']
-    setup = setup_rows[0] if len(setup_rows) == 1 else {}
-    if len(setup_rows) > 1:
-        issue(out, 'shipping_setup_ambiguous')
-    else:
-        from operational_courier_tariffs import with_tariffs
-        setup, tariff_conflicts = with_tariffs(setup, owner, operational_state)
-        for party in tariff_conflicts:
+    with refresh_stage('source_primary_reads'):
+        from operational_read_runtime import load_collections
+        source_names = sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - STATEMENT_COLLECTIONS - {TXN_COLLECTION,
+            DELIVERY_HISTORY, SHIPPING_EVENT_BLOCKERS, SHIPPING_V2_BLOCKERS, 'users', 'settings', 'expense_categories',
+            'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})
+        data = await load_collections(db, owner, source_names, reader=refresh_source_rows)
+    with refresh_stage('source_fee_settings'):
+        fee_settings = await db['settings'].find({'user_id': owner}, {
+            '_id': 0, 'user_id': 1, 'payment_methods': 1, 'updated_at': 1}).to_list(2)
+        out['provider_fee_settings'] = {}
+        modes = {row.get('fee_source_mode') for row in data['mz2_provider_fee_policies_v2'] if row.get('fee_source_mode')}
+        out['provider_fee_source_mode'] = 'mz2_policies' if 'mz2_policies' in modes else 'legacy_settings'
+        if len(modes) > 1:
+            issue(out, 'provider_fee_source_mode_ambiguous')
+        if len(fee_settings) == 1 and fee_settings[0].get('user_id') == owner:
+            out['provider_fee_settings'] = {key: fee_settings[0].get(key) for key in ('payment_methods', 'updated_at')}
+        elif fee_settings:
+            issue(out, 'provider_fee_settings_ambiguous')
+    with refresh_stage('source_setup'):
+        from operational_shipping_fee_review import DriverEarnings, courier_issue, hold_prior_courier_event
+        from operational_historical_shipping_fee import APPROVALS
+        data['_fee_review_numbers'] = {r['candidate']['order_number'] for r in (operational_state or {}).get(APPROVALS, {}).values()}
+        if historical_fee_order:
+            data['_fee_review_numbers'].add(historical_fee_order)
+        data['_driver_fee_review'] = DriverEarnings(data, owner, operational_state, start, now)
+        from operational_ad_funding import bindings as funding_bindings
+        data['mz2_ad_account_bindings_v2'], conflicts = funding_bindings(
+            operational_state, owner, data['mz2_ad_account_bindings_v2'])
+        for identity in conflicts:
             await cpu_budget.checkpoint()
             calculation_checkpoint()
-            issue(out, 'operational_courier_tariff_authority_conflict', party, component='shipping_fee')
-    prepaid_keys = {str(key).casefold() for rate in setup.get('contracts', [])
-                    if rate.get('context') == 'order_completed' and rate.get('payment_mode') == 'prepaid'
-                    for key in rate.get('keys', [])}
-    completion_keys = {str(key).casefold() for rate in setup.get('contracts', [])
-                       if rate.get('party_type') == 'courier' and rate.get('context') in {'delivery', 'order_completed'}
-                       for key in rate.get('keys', [])}
-    data['_prepaid_orders'] = set()
-    profiles = unique_index(data['mezan_product_cost_profiles_v2'], 'salla_product_id')
-    suppliers = unique_index(data['mezan_suppliers_v2'], 'id')
-    pieces = [r for r in data['mezan_preparation_pieces_v1'] if not r.get('experiment_mode') and not r.get('experiment_run_id')]
-    pieces_by_order_item = await prepare_in_thread(index_preparation_pieces, pieces, physical_order_item_id)
-    order_numbers = {}
-    raw_orders = [(r.get('raw_by_source') or {}).get('salla_direct') for r in data['unified_orders']]
-    raw_orders = [r for r in raw_orders if isinstance(r, dict)]
-    from operational_payment_evidence import provider_for
-    plan_providers = {policy.get('provider') for document in data['mz2_provider_fee_policies_v2']
-        for policy in document.get('policies', []) if policy.get('status') == 'active'
-        and policy.get('event_type', 'capture') == 'capture' and policy.get('plan_id')
-        and policy.get('user_id') in (None, owner)}
-    plan_orders = []
-    for raw in raw_orders:
-        await cpu_budget.checkpoint()
-        calculation_checkpoint()
-        payment = raw.get('payment') if isinstance(raw.get('payment'), dict) else {}
-        methods = [payment.get('method'), raw.get('payment_method')]
-        if isinstance(raw.get('payment_methods'), list):
-            methods.extend(leg.get('payment_method') for leg in raw['payment_methods'] if isinstance(leg, dict))
-        if plan_providers.intersection(provider_for(method) for method in methods):
-            plan_orders.append(raw.get('reference_id') or raw.get('order_number'))
-    statement_plans = await load_statement_plans(db, owner, providers=plan_providers,
-        max_rows=MAX_ROWS, order_numbers=plan_orders) if plan_orders else {}
-    from operational_delivery_evidence import conflicting_shipments, created_after_start_delivery, status_delivery
-    from operational_delivery_confirmation import PREFIX as DELIVERY_CONFIRMATION_PREFIX, date_gap_identity
-    confirmation_facts = (operational_state or {}).get('engine', {}).get('facts', {})
-    manual_driver_numbers = {str(record.get('order_number')) for key, record in confirmation_facts.items()
-                            if key.startswith(DELIVERY_CONFIRMATION_PREFIX) and isinstance(record, dict)
-                            and record.get('party_type') == 'store_driver'}
-    shipment_conflicts = conflicting_shipments(data['unified_orders'], operational_state)
-    undated_drivers = {str(a.get('order_number')) for a in data['store_delivery_assignments']
-                       if a.get('active') is True and a.get('delivered_at') in (None, '')
-                       and a.get('status') in {'assigned', 'out_for_delivery', 'delivered'}}
-    undated_drivers.update(str(event.get('order_number'))
-        for key, event in (operational_state or {}).get('engine', {}).get('facts', {}).items()
-        if key.startswith('delivery_event:') and status_delivery(event) and event.get('party_type') == 'store_driver')
-    undated_drivers.update(manual_driver_numbers)
-    status_order_numbers = set()
-    for raw in (raw_orders if undated_drivers else ()):
-        await cpu_budget.checkpoint()
-        calculation_checkpoint()
-        number_key = str(raw.get('reference_id') or raw.get('order_number') or '')
-        if number_key not in undated_drivers:
-            continue
-        try:
-            if created_after_start_delivery(raw, start, now) or number_key in manual_driver_numbers:
-                status_order_numbers.add(number_key)
-        except (ValueError, TypeError):
-            pass  # The ordinary order parser retains its exact source issue.
-    delivery_history = await load_delivery_history(db, owner, data['unified_orders'], max_rows=MAX_ROWS,
-                                                   completion_keys=completion_keys, status_order_numbers=status_order_numbers)
-    txn_by_order = await load_transaction_rows(db, owner, raw_orders, start, now, to_instant=instant, max_rows=MAX_ROWS)
-    from operational_remaining_bundle_sources import load_remaining_bundles
-    from operational_native_purchase_link_service import verified_saved_links
-    native_matches = await verified_saved_links(db, owner, operational_state, as_of=as_of)
-    for invoice_id, match in native_matches.items():
-        await cpu_budget.checkpoint()
-        calculation_checkpoint()
-        if not match.get('matched'):
-            out['issues'].append({'code': 'native_purchase_operational_link_changed', 'source_id': invoice_id,
-                'scope': 'received_products', 'reasons': match.get('issues'),
-                'required_action': 'أعد معاينة مطابقة الفاتورة والسداد؛ لم تُرحّل الفروق تلقائيًا'})
-    bundle_costs = await load_remaining_bundles(db, owner, raw_orders, now, preparation_pieces=pieces,
-        operational_state=operational_state, native_matches=native_matches)
-    await _load_option_cost_catalog(db, owner, data, raw_orders, start, now, bundle_costs)
-    from operational_customer_tender_coverage import finish_coverage, new_coverage, observe_nonprovider
-    customer_tenders = out["customer_tender_coverage"] = new_coverage(start.isoformat(), now.isoformat())
-    counted_order_ids, inspected_order_ids = set(), set()
-    from operational_completed_shipping_admission import build_review_index
-    completion_review_index = build_review_index(operational_state) if operational_state else None
-    source_ids = Counter(str(r.get('id') or '') for r in raw_orders)
-    source_numbers = Counter(str(r.get('reference_id') or r.get('order_number') or '') for r in raw_orders)
-    bank_catalog = None
-    for source in data['unified_orders']:
-        await cpu_budget.checkpoint()
-        calculation_checkpoint()
-        raw = (source.get('raw_by_source') or {}).get('salla_direct')
-        if not isinstance(raw, dict):
-            issue(out, 'canonical_salla_source_missing', source.get('order_number'))
-            continue
-        try:
-            created = instant(raw.get('date') or raw.get('created_at') or raw.get('order_date'))
-            if created > now:
+            issue(out, 'operational_ad_funding_authority_conflict', identity)
+        setup_rows = data['mz2_shipping_setup_v2']
+        setup = setup_rows[0] if len(setup_rows) == 1 else {}
+        if len(setup_rows) > 1:
+            issue(out, 'shipping_setup_ambiguous')
+        else:
+            from operational_courier_tariffs import with_tariffs
+            setup, tariff_conflicts = with_tariffs(setup, owner, operational_state)
+            for party in tariff_conflicts:
+                await cpu_budget.checkpoint()
+                calculation_checkpoint()
+                issue(out, 'operational_courier_tariff_authority_conflict', party, component='shipping_fee')
+        prepaid_keys = {str(key).casefold() for rate in setup.get('contracts', [])
+                        if rate.get('context') == 'order_completed' and rate.get('payment_mode') == 'prepaid'
+                        for key in rate.get('keys', [])}
+        completion_keys = {str(key).casefold() for rate in setup.get('contracts', [])
+                           if rate.get('party_type') == 'courier' and rate.get('context') in {'delivery', 'order_completed'}
+                           for key in rate.get('keys', [])}
+        data['_prepaid_orders'] = set()
+        profiles = unique_index(data['mezan_product_cost_profiles_v2'], 'salla_product_id')
+        suppliers = unique_index(data['mezan_suppliers_v2'], 'id')
+        pieces = [r for r in data['mezan_preparation_pieces_v1'] if not r.get('experiment_mode') and not r.get('experiment_run_id')]
+        pieces_by_order_item = await prepare_in_thread(index_preparation_pieces, pieces, physical_order_item_id)
+        order_numbers = {}
+        raw_orders = [(r.get('raw_by_source') or {}).get('salla_direct') for r in data['unified_orders']]
+        raw_orders = [r for r in raw_orders if isinstance(r, dict)]
+    with refresh_stage('source_statements'):
+        from operational_payment_evidence import provider_for
+        plan_providers = {policy.get('provider') for document in data['mz2_provider_fee_policies_v2']
+            for policy in document.get('policies', []) if policy.get('status') == 'active'
+            and policy.get('event_type', 'capture') == 'capture' and policy.get('plan_id')
+            and policy.get('user_id') in (None, owner)}
+        plan_orders = []
+        for raw in raw_orders:
+            await cpu_budget.checkpoint()
+            calculation_checkpoint()
+            payment = raw.get('payment') if isinstance(raw.get('payment'), dict) else {}
+            methods = [payment.get('method'), raw.get('payment_method')]
+            if isinstance(raw.get('payment_methods'), list):
+                methods.extend(leg.get('payment_method') for leg in raw['payment_methods'] if isinstance(leg, dict))
+            if plan_providers.intersection(provider_for(method) for method in methods):
+                plan_orders.append(raw.get('reference_id') or raw.get('order_number'))
+        statement_plans = await load_statement_plans(db, owner, providers=plan_providers,
+            max_rows=MAX_ROWS, order_numbers=plan_orders) if plan_orders else {}
+    with refresh_stage('source_delivery_history'):
+        from operational_delivery_evidence import conflicting_shipments, created_after_start_delivery, status_delivery
+        from operational_delivery_confirmation import PREFIX as DELIVERY_CONFIRMATION_PREFIX, date_gap_identity
+        confirmation_facts = (operational_state or {}).get('engine', {}).get('facts', {})
+        manual_driver_numbers = {str(record.get('order_number')) for key, record in confirmation_facts.items()
+                                if key.startswith(DELIVERY_CONFIRMATION_PREFIX) and isinstance(record, dict)
+                                and record.get('party_type') == 'store_driver'}
+        shipment_conflicts = conflicting_shipments(data['unified_orders'], operational_state)
+        undated_drivers = {str(a.get('order_number')) for a in data['store_delivery_assignments']
+                           if a.get('active') is True and a.get('delivered_at') in (None, '')
+                           and a.get('status') in {'assigned', 'out_for_delivery', 'delivered'}}
+        undated_drivers.update(str(event.get('order_number'))
+            for key, event in (operational_state or {}).get('engine', {}).get('facts', {}).items()
+            if key.startswith('delivery_event:') and status_delivery(event) and event.get('party_type') == 'store_driver')
+        undated_drivers.update(manual_driver_numbers)
+        status_order_numbers = set()
+        for raw in (raw_orders if undated_drivers else ()):
+            await cpu_budget.checkpoint()
+            calculation_checkpoint()
+            number_key = str(raw.get('reference_id') or raw.get('order_number') or '')
+            if number_key not in undated_drivers:
                 continue
-            identity = str(raw.get('id') or '')
-            order_number = str(raw.get('reference_id') or raw.get('order_number') or '')
-            if created > start and identity and identity not in counted_order_ids:
-                counted_order_ids.add(identity)
-                customer_tenders["source_order_count"] += 1
-                customer_tenders["uninspected_source_orders"] += 1
-            if not identity or not order_number:
-                raise ValueError('order_identity_missing')
-            if source_ids[identity] != 1 or source_numbers[order_number] != 1:
-                raise ValueError('canonical_order_identity_ambiguous')
-            watermark = source.get('g47_salla_snapshot') or {}
-            if watermark.get('requires_authoritative_refresh'):
-                raise ValueError('canonical_salla_refresh_required')
-            current_shipping = source.get('salla_shipping_current') or raw.get('salla_shipping_current') or {}
-            from operational_completed_shipping_admission import CompletionReviewRequired
-            from operational_completed_shipping_sources import completion_issue
-            saved_prepaid = (operational_state or {}).get('engine', {}).get('facts', {}).get('prepaid_shipping:' + identity)
-            if saved_prepaid or isinstance(current_shipping, dict) and any(
-                    str(current_shipping.get(key) or '').casefold() in prepaid_keys for key in ('company_code', 'company_name')):
-                data['_prepaid_orders'].add(identity)
-                from operational_prepaid_shipping import source_event
-                try:
-                    prepaid, charge = source_event(data, setup, source, raw, operational_state, owner, start, now,
-                                                   delivery_history.get(order_number, ()), shipment_conflicts,
-                                                   review_index=completion_review_index)
-                    if not prepaid:
-                        data['_prepaid_orders'].discard(identity)
-                    if charge:
-                        out['prepaid_shipping_events'].append(charge)
-                except CompletionReviewRequired as exc:
-                    out['completed_shipping_candidates'].append(exc.candidate)
-                    completion_issue(out, str(exc), exc.candidate)
-                except (ValueError, TypeError, KeyError, InvalidOperation) as exc:
-                    code = str(exc) if str(exc).startswith(('operational_prepaid_shipping_', 'operational_shipping_completion_')) else 'operational_prepaid_shipping_evidence_incomplete'
-                    issue(out, code, identity, component='prepaid_shipping',
-                          required_action='راجع إثبات تنفيذ الطلب وتعرفة الشحن والصندوق المعتمد قبل احتساب الخصم.')
-                    courier_issue(out, code, raw, source, setup=setup, owner=owner)
-            if identity not in data['_prepaid_orders']:
-                from operational_completed_shipping import deferred_source_event
-                try:
-                    charge = deferred_source_event(data, setup, source, raw, operational_state, owner, start, now,
-                                                   delivery_history.get(order_number, ()), shipment_conflicts,
-                                                   review_index=completion_review_index)
-                    if charge:
-                        out['completed_shipping_events'].append(charge)
-                except CompletionReviewRequired as exc:
-                    out['completed_shipping_candidates'].append(exc.candidate)
-                    completion_issue(out, str(exc), exc.candidate)
-                except (ValueError, TypeError, KeyError, InvalidOperation) as exc:
-                    code = str(exc) if str(exc).startswith(('operational_shipping_completion_', 'operational_delivery_', 'operational_prepaid_shipping_')) else 'operational_shipping_completion_evidence_incomplete'
-                    issue(out, code, identity, component='shipping_fee',
-                          required_action='طابق هوية الشركة ووقت تم التنفيذ والتعرفة المعتمدة قبل احتساب أجرة الشحن.')
-                    courier_issue(out, code, raw, source, setup=setup, owner=owner)
-            # Supplier approval and actual delivery each have their own cutoff.
-            # Keep old orders out of the ordinary sales/estimate/payment stream.
-            order_numbers[order_number] = identity
-            if created <= start:
-                from operational_delivery_evidence import recorded_courier_fee, resolve_delivery_event
-                event = resolve_delivery_event(raw, source=source, owner=owner,
-                    assignments=data['store_delivery_assignments'], setup=setup,
-                    started_at=started_at, as_of=as_of, history=delivery_history.get(order_number, ()),
-                    shipment_conflicts=shipment_conflicts,
-                    frozen_event=(operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity),
-                    frozen_shipping=(operational_state or {}).get('engine', {}).get('facts', {}).get('shipping:' + identity),
-                    recorded_fee=recorded_courier_fee(operational_state, identity),
-                    owner_confirmation=confirmation_facts.get(DELIVERY_CONFIRMATION_PREFIX + identity))
-                if event is None:
+            try:
+                if created_after_start_delivery(raw, start, now) or number_key in manual_driver_numbers:
+                    status_order_numbers.add(number_key)
+            except (ValueError, TypeError):
+                pass  # The ordinary order parser retains its exact source issue.
+        delivery_history = await load_delivery_history(db, owner, data['unified_orders'], max_rows=MAX_ROWS,
+                                                       completion_keys=completion_keys, status_order_numbers=status_order_numbers)
+    with refresh_stage('source_transactions'):
+        txn_by_order = await load_transaction_rows(db, owner, raw_orders, start, now, to_instant=instant, max_rows=MAX_ROWS)
+    with refresh_stage('source_native_links'):
+        from operational_remaining_bundle_sources import load_remaining_bundles
+        from operational_native_purchase_link_service import verified_saved_links
+        native_matches = await verified_saved_links(db, owner, operational_state, as_of=as_of)
+        for invoice_id, match in native_matches.items():
+            await cpu_budget.checkpoint()
+            calculation_checkpoint()
+            if not match.get('matched'):
+                out['issues'].append({'code': 'native_purchase_operational_link_changed', 'source_id': invoice_id,
+                    'scope': 'received_products', 'reasons': match.get('issues'),
+                    'required_action': 'أعد معاينة مطابقة الفاتورة والسداد؛ لم تُرحّل الفروق تلقائيًا'})
+    with refresh_stage('source_bundles'):
+        bundle_costs = await load_remaining_bundles(db, owner, raw_orders, now, preparation_pieces=pieces,
+            operational_state=operational_state, native_matches=native_matches)
+    with refresh_stage('source_option_catalog'):
+        await _load_option_cost_catalog(db, owner, data, raw_orders, start, now, bundle_costs)
+    with refresh_stage('source_orders'):
+        from operational_customer_tender_coverage import finish_coverage, new_coverage, observe_nonprovider
+        customer_tenders = out["customer_tender_coverage"] = new_coverage(start.isoformat(), now.isoformat())
+        counted_order_ids, inspected_order_ids = set(), set()
+        from operational_completed_shipping_admission import build_review_index
+        completion_review_index = build_review_index(operational_state) if operational_state else None
+        source_ids = Counter(str(r.get('id') or '') for r in raw_orders)
+        source_numbers = Counter(str(r.get('reference_id') or r.get('order_number') or '') for r in raw_orders)
+        bank_catalog = None
+        recorded_fee_lookup = await prepare_in_thread(build_recorded_courier_fee_lookup, operational_state)
+        for source in data['unified_orders']:
+            await cpu_budget.checkpoint()
+            calculation_checkpoint()
+            raw = (source.get('raw_by_source') or {}).get('salla_direct')
+            if not isinstance(raw, dict):
+                issue(out, 'canonical_salla_source_missing', source.get('order_number'))
+                continue
+            try:
+                created = instant(raw.get('date') or raw.get('created_at') or raw.get('order_date'))
+                if created > now:
                     continue
-                # Native drivers retain their SAR-only contract. A courier's
-                # earned fee is independently denominated by its approved rate.
-                if event['party_type'] == 'store_driver' and event['currency'] != 'SAR':
-                    raise ValueError('operational_delivery_currency_unsupported')
+                identity = str(raw.get('id') or '')
+                order_number = str(raw.get('reference_id') or raw.get('order_number') or '')
+                if created > start and identity and identity not in counted_order_ids:
+                    counted_order_ids.add(identity)
+                    customer_tenders["source_order_count"] += 1
+                    customer_tenders["uninspected_source_orders"] += 1
+                if not identity or not order_number:
+                    raise ValueError('order_identity_missing')
+                if source_ids[identity] != 1 or source_numbers[order_number] != 1:
+                    raise ValueError('canonical_order_identity_ambiguous')
+                watermark = source.get('g47_salla_snapshot') or {}
+                if watermark.get('requires_authoritative_refresh'):
+                    raise ValueError('canonical_salla_refresh_required')
+                current_shipping = source.get('salla_shipping_current') or raw.get('salla_shipping_current') or {}
+                from operational_completed_shipping_admission import CompletionReviewRequired
+                from operational_completed_shipping_sources import completion_issue
+                saved_prepaid = (operational_state or {}).get('engine', {}).get('facts', {}).get('prepaid_shipping:' + identity)
+                if saved_prepaid or isinstance(current_shipping, dict) and any(
+                        str(current_shipping.get(key) or '').casefold() in prepaid_keys for key in ('company_code', 'company_name')):
+                    data['_prepaid_orders'].add(identity)
+                    from operational_prepaid_shipping import source_event
+                    try:
+                        prepaid, charge = source_event(data, setup, source, raw, operational_state, owner, start, now,
+                                                       delivery_history.get(order_number, ()), shipment_conflicts,
+                                                       review_index=completion_review_index)
+                        if not prepaid:
+                            data['_prepaid_orders'].discard(identity)
+                        if charge:
+                            out['prepaid_shipping_events'].append(charge)
+                    except CompletionReviewRequired as exc:
+                        out['completed_shipping_candidates'].append(exc.candidate)
+                        completion_issue(out, str(exc), exc.candidate)
+                    except (ValueError, TypeError, KeyError, InvalidOperation) as exc:
+                        code = str(exc) if str(exc).startswith(('operational_prepaid_shipping_', 'operational_shipping_completion_')) else 'operational_prepaid_shipping_evidence_incomplete'
+                        issue(out, code, identity, component='prepaid_shipping',
+                              required_action='راجع إثبات تنفيذ الطلب وتعرفة الشحن والصندوق المعتمد قبل احتساب الخصم.')
+                        courier_issue(out, code, raw, source, setup=setup, owner=owner)
+                if identity not in data['_prepaid_orders']:
+                    from operational_completed_shipping import deferred_source_event
+                    try:
+                        charge = deferred_source_event(data, setup, source, raw, operational_state, owner, start, now,
+                                                       delivery_history.get(order_number, ()), shipment_conflicts,
+                                                       review_index=completion_review_index)
+                        if charge:
+                            out['completed_shipping_events'].append(charge)
+                    except CompletionReviewRequired as exc:
+                        out['completed_shipping_candidates'].append(exc.candidate)
+                        completion_issue(out, str(exc), exc.candidate)
+                    except (ValueError, TypeError, KeyError, InvalidOperation) as exc:
+                        code = str(exc) if str(exc).startswith(('operational_shipping_completion_', 'operational_delivery_', 'operational_prepaid_shipping_')) else 'operational_shipping_completion_evidence_incomplete'
+                        issue(out, code, identity, component='shipping_fee',
+                              required_action='طابق هوية الشركة ووقت تم التنفيذ والتعرفة المعتمدة قبل احتساب أجرة الشحن.')
+                        courier_issue(out, code, raw, source, setup=setup, owner=owner)
+                # Supplier approval and actual delivery each have their own cutoff.
+                # Keep old orders out of the ordinary sales/estimate/payment stream.
+                order_numbers[order_number] = identity
+                if created <= start:
+                    from operational_delivery_evidence import resolve_delivery_event
+                    event = resolve_delivery_event(raw, source=source, owner=owner,
+                        assignments=data['store_delivery_assignments'], setup=setup,
+                        started_at=started_at, as_of=as_of, history=delivery_history.get(order_number, ()),
+                        shipment_conflicts=shipment_conflicts,
+                        frozen_event=(operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity),
+                        frozen_shipping=(operational_state or {}).get('engine', {}).get('facts', {}).get('shipping:' + identity),
+                        recorded_fee=recorded_fee_lookup(identity),
+                        owner_confirmation=confirmation_facts.get(DELIVERY_CONFIRMATION_PREFIX + identity))
+                    if event is None:
+                        continue
+                    # Native drivers retain their SAR-only contract. A courier's
+                    # earned fee is independently denominated by its approved rate.
+                    if event['party_type'] == 'store_driver' and event['currency'] != 'SAR':
+                        raise ValueError('operational_delivery_currency_unsupported')
+                    order = {'id': identity, 'order_number': order_number, 'created_at': created.isoformat(),
+                        'updated_at': max(instant(raw.get('updated_at') or raw.get('date_updated') or created),
+                                          instant(event.get('delivered_at') or event.get('recorded_at'))).isoformat(),
+                        'delivered_at': event['delivered_at'], 'status': 'delivered',
+                        'currency': event['currency'], 'delivery_event': event}
+                    payment = raw.get('payment') if isinstance(raw.get('payment'), dict) else {}
+                    method = str(payment.get('method') or raw.get('payment_method') or '').lower()
+                    cod = method in {'cod', 'cash_on_delivery', 'cashondelivery', 'cash on delivery',
+                                     'الدفع عند الاستلام', 'دفع عند الاستلام', 'دفع عند الإستلام'}
+                    total = None
+                    if cod:
+                        order['cod_required'] = True
+                        try:
+                            total, order['cod'] = _old_delivery_cod(raw)
+                            order['cod_amount'] = order['cod']['outstanding']
+                            if event['party_type'] == 'courier' and total > 0 and number(order['cod_amount']) == 0:
+                                # Paid customer status does not prove remittance by
+                                # the carrier. Do not freeze an unproved zero debt.
+                                order.pop('cod')
+                                order.pop('cod_amount')
+                                raise ValueError('operational_delivery_cod_history_reconciliation_required')
+                        except (ValueError, TypeError) as exc:
+                            issue(out, str(exc) if str(exc).startswith('operational_delivery_') else
+                                  'cod_collection_contract_incomplete', identity)
+                    else:
+                        from operational_balance_bank_orders import transfer_bank
+                        if not transfer_bank(method)[0] and not any(method in aliases for aliases in PAYMENT_METHODS.values()):
+                            # Earned base shipping can be proved independently; do
+                            # not turn an unknown payment method into zero COD fees.
+                            cod = order['cod_required'] = True
+                            issue(out, 'operational_delivery_payment_method_incomplete', identity)
+                    _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, cod,
+                                             delivery_event=event, started_at=started_at)
+                    if hold_prior_courier_event(operational_state, event, order.get('carrier')):
+                        courier_issue(out, 'courier_fee_historical_review_required', raw, source,
+                                     carrier=order.get('carrier'), event=event, setup=setup, owner=owner)
+                        if event.get('recognition_basis') == 'owner_confirmed_after_start':
+                            carrier = order.get('carrier')
+                            if carrier:
+                                carrier.update(cost=None, fee_complete=False, fee_recognition_held=True)
+                                carrier.pop('fee_components', None)
+                            out['delivery_events'].append(order)
+                    else:
+                        out['delivery_events'].append(order)
+                    continue
+                status_obj = raw.get('status')
+                status = (status_obj.get('slug') or status_obj.get('name')) if isinstance(status_obj, dict) else status_obj
+                source_total = (raw.get('amounts') or {}).get('total')
                 order = {'id': identity, 'order_number': order_number, 'created_at': created.isoformat(),
-                    'updated_at': max(instant(raw.get('updated_at') or raw.get('date_updated') or created),
-                                      instant(event.get('delivered_at') or event.get('recorded_at'))).isoformat(),
-                    'delivered_at': event['delivered_at'], 'status': 'delivered',
-                    'currency': event['currency'], 'delivery_event': event}
+                         'updated_at': instant(raw.get('updated_at') or raw.get('date_updated') or created).isoformat(),
+                         'status': status, 'currency': raw.get('currency') or (source_total.get('currency') if isinstance(source_total, dict) else None),
+                         'items': []}
+                if not order['currency']:
+                    raise ValueError('order_currency_missing')
+                for item in raw.get('items', []):
+                    await cpu_budget.checkpoint()
+                    calculation_checkpoint()
+                    source_item_id = item.get('id') or item.get('item_id') or item.get('order_item_id')
+                    if not source_item_id:
+                        issue(out, 'order_item_stable_identity_missing', identity)
+                        continue
+                    item_id = f'salla:{order_number}:{source_item_id}'
+                    product = item.get('product') or {}
+                    product_id = str(item.get('parent_product_id') or item.get('product_id') or product.get('id') or '')
+                    bundle = bundle_costs.get((order_number, item_id))
+                    if bundle is not None:
+                        order['items'].extend(bundle['items'])
+                        if not bundle['complete']:
+                            order['items_complete'] = False
+                        for problem in bundle['issues']:
+                            await cpu_budget.checkpoint()
+                            calculation_checkpoint()
+                            issue(out, problem['code'], problem['source_id'], scope=problem['scope'],
+                                  order_number=order_number, required_action=problem['required_action'])
+                        continue
+                    profile = profiles.get(product_id, {})
+                    try:
+                        cost, services = cost_components(data, product_id, item, profile)
+                        quantity = number(item.get('quantity'))
+                    except ValueError as exc:
+                        order['items_complete'] = False
+                        issue(out, str(exc) if str(exc) == 'mz2_product_cost_currency_requires_review' else 'mz2_product_cost_incomplete', item_id)
+                        continue
+                    matching = pieces_by_order_item.get((order_number, item_id), [])
+                    if matching:
+                        units = {physical_unit_index(piece) for piece in matching}
+                        if quantity != len(matching) or units != set(range(1, len(matching) + 1)):
+                            order['items_complete'] = False
+                            issue(out, 'preparation_piece_coverage_ambiguous', item_id)
+                            continue
+                        for piece in matching:
+                            await cpu_budget.checkpoint()
+                            calculation_checkpoint()
+                            supplier = piece.get('supplier_id')
+                            if supplier and supplier not in suppliers and supplier_receipt_proven(piece, now):
+                                order['items_complete'] = False
+                                issue(out, 'mz2_supplier_identity_missing', piece.get('id'))
+                                continue
+                            append_components(order, str(piece['id']), cost, services, 1, supplier, piece, as_of=now)
+                    else:
+                        append_components(order, item_id, cost, services, quantity)
                 payment = raw.get('payment') if isinstance(raw.get('payment'), dict) else {}
                 method = str(payment.get('method') or raw.get('payment_method') or '').lower()
-                cod = method in {'cod', 'cash_on_delivery', 'cashondelivery', 'cash on delivery',
-                                 'الدفع عند الاستلام', 'دفع عند الاستلام', 'دفع عند الإستلام'}
-                total = None
+                total_value = (raw.get('amounts') or {}).get('total', raw.get('total'))
+                total = number(total_value)
+                normalized_payment, payment_issues = normalize_operational_payment(
+                    raw, order['currency'], total, created, now, owner=owner, order_number=order_number,
+                    provider_order_id=identity, rows=txn_by_order.get(order_number, ()), source=source)
+                if (not normalized_payment and "provider_split:" + identity in
+                        (operational_state or {}).get("engine", {}).get("facts", {})):
+                    # Changing the order's payment method cannot turn a frozen split receipt into bank cash or COD.
+                    payment_issues.append({"code": "provider_payment_method_conflict"})
+                payment_identity_conflict = any(row['code'] in {
+                    'provider_payment_method_conflict', 'provider_payment_shape_invalid',
+                    'provider_split_payment_review_required'} for row in payment_issues)
+                observe_nonprovider(customer_tenders, raw, source, order, total_value, normalized_payment, owner,
+                                    blocked=payment_identity_conflict, payment_issues=payment_issues)
+                inspected_order_ids.add(identity)
+                from operational_balance_bank_orders import transfer_bank, resolve, native_paid_amount, QUALIFYING
+                native_bank = method == 'bank'
+                if not payment_identity_conflict and transfer_bank(method)[0] and (native_bank or status in QUALIFYING):
+                    try:
+                        paid = total
+                        if native_bank:
+                            paid = native_paid_amount(raw, source, owner=owner, order_number=order_number,
+                                provider_order_id=identity, currency=order['currency'], total=total_value, as_of=as_of)
+                            if bank_catalog is None:
+                                from operational_bank_catalog import bank_identities
+                                bank_catalog = await bank_identities(db, owner, include_routing=True)
+                        bank = resolve(data, owner, payment.get('method') or raw.get('payment_method'),
+                                       order['currency'], raw=raw, banks=bank_catalog or ())
+                        if paid <= 0 or paid != paid.quantize(Decimal('.01')):
+                            raise ValueError('operational_order_bank_amount_invalid')
+                        order['bank_credit'] = {'bank_id': bank['id'], 'bank_name': bank['name'], 'amount': str(paid)}
+                    except ValueError as exc:
+                        issue(out, str(exc), identity)
+                cod = method in {'cod', 'cash_on_delivery', 'cashondelivery', 'cash on delivery', 'الدفع عند الاستلام', 'دفع عند الاستلام', 'دفع عند الإستلام'}
                 if cod:
                     order['cod_required'] = True
                     try:
-                        total, order['cod'] = _old_delivery_cod(raw)
+                        if payment_identity_conflict:
+                            raise ValueError('provider_payment_method_conflict')
+                        order['cod'] = cod_facts(raw, total)
                         order['cod_amount'] = order['cod']['outstanding']
-                        if event['party_type'] == 'courier' and total > 0 and number(order['cod_amount']) == 0:
-                            # Paid customer status does not prove remittance by
-                            # the carrier. Do not freeze an unproved zero debt.
-                            order.pop('cod')
-                            order.pop('cod_amount')
-                            raise ValueError('operational_delivery_cod_history_reconciliation_required')
-                    except (ValueError, TypeError) as exc:
-                        issue(out, str(exc) if str(exc).startswith('operational_delivery_') else
-                              'cod_collection_contract_incomplete', identity)
-                else:
-                    from operational_balance_bank_orders import transfer_bank
-                    if not transfer_bank(method)[0] and not any(method in aliases for aliases in PAYMENT_METHODS.values()):
-                        # Earned base shipping can be proved independently; do
-                        # not turn an unknown payment method into zero COD fees.
-                        cod = order['cod_required'] = True
-                        issue(out, 'operational_delivery_payment_method_incomplete', identity)
-                _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, cod,
-                                         delivery_event=event, started_at=started_at)
-                if hold_prior_courier_event(operational_state, event, order.get('carrier')):
-                    courier_issue(out, 'courier_fee_historical_review_required', raw, source,
-                                 carrier=order.get('carrier'), event=event, setup=setup, owner=owner)
-                    if event.get('recognition_basis') == 'owner_confirmed_after_start':
+                    except (ValueError, TypeError):
+                        issue(out, 'cod_collection_contract_incomplete', identity)
+                if normalized_payment is not None:
+                    order['payment'] = bind_statement_plan(normalized_payment, statement_plans, order_number)
+                for payment_issue in payment_issues:
+                    await cpu_budget.checkpoint()
+                    calculation_checkpoint()
+                    issue(out, payment_issue['code'], identity, order_number=order_number, currency=order['currency'],
+                          scope='provider_payment',
+                          message=DIAGNOSTICS.get(payment_issue['code'], 'بيانات الدفع تحتاج مطابقة؛ لا يعني ذلك أن المبلغ صفر'),
+                          required_action='راجع إثبات التحصيل ومرجع العملية وتاريخها وخطة الدفع من المصدر المعتمد',
+                          **{key: value for key, value in payment_issue.items() if key not in {'code', 'currency'}})
+                event = None
+                allow_shipping = True
+                current = source.get('salla_shipping_current') or raw.get('salla_shipping_current') or {}
+                from operational_delivery_evidence import (DELIVERED, _status, _text, created_after_start_delivery,
+                                                            resolve_delivery_event)
+                native_driver = data['_driver_fee_review'].requires_delivery_proof(order)
+                # Saved evidence must be revalidated even when a later source status
+                # or assignment loses the fields that originally admitted delivery.
+                # Test presence, so malformed saved proofs cannot restore a fallback.
+                saved_delivery_proof = ('delivery_event:' + identity in confirmation_facts
+                                        or DELIVERY_CONFIRMATION_PREFIX + identity in confirmation_facts)
+                if saved_delivery_proof or native_driver or status in DELIVERED or (isinstance(current, dict) and _status(current.get('status')) in DELIVERED):
+                    # Legacy drivers have a separate native collection contract. External
+                    # couriers must prove this exact current waybill and delivery instant.
+                    assigned = [a for a in data['store_delivery_assignments']
+                                if str(a.get('order_number')) == order_number and a.get('active') is not False
+                                and a.get('status') in {'assigned','out_for_delivery','delivered'}]
+                    # The earlier contract-only producer binds one owner-scoped
+                    # assignment by the unique canonical order number. Retain its
+                    # independent collection contract without promoting a missing
+                    # order_id into the new strict delivery-status proof.
+                    legacy_driver = (not native_driver and len(assigned) == 1
+                        and assigned[0].get('user_id') == owner
+                        and assigned[0].get('order_id') in (None, '')
+                        and 'delivery_event:' + identity not in (operational_state or {}).get('engine', {}).get('facts', {})
+                        and 'owner_delivery_after_start:' + identity not in (operational_state or {}).get('engine', {}).get('facts', {})
+                        and _text(assigned[0].get('id')) and _text(assigned[0].get('driver_id'))
+                        and data['_driver_fee_review'].assignment_ids[assigned[0]['id']] == 1)
+                    if saved_delivery_proof or native_driver or not assigned or (created_after_start_delivery(raw, started_at, as_of) and not legacy_driver):
+                        try:
+                            if not native_driver and status not in DELIVERED:
+                                raise ValueError('operational_delivery_order_shipment_status_conflict')
+                            event = resolve_delivery_event(raw, source=source, owner=owner,
+                                assignments=data['store_delivery_assignments'], setup=setup, started_at=started_at, as_of=as_of,
+                                history=delivery_history.get(order_number, ()), shipment_conflicts=shipment_conflicts,
+                                frozen_event=(operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity),
+                                frozen_shipping=(operational_state or {}).get('engine', {}).get('facts', {}).get('shipping:' + identity),
+                                recorded_fee=recorded_fee_lookup(identity),
+                                owner_confirmation=confirmation_facts.get(DELIVERY_CONFIRMATION_PREFIX + identity))
+                            if event is None:
+                                raise ValueError('operational_delivery_timestamp_missing')
+                            saved = (operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity)
+                            if saved is not None and saved != event:
+                                raise ValueError('operational_delivery_confirmed_evidence_changed')
+                            order['delivered_at'] = event['delivered_at']
+                        except (ValueError, KeyError, TypeError) as exc:
+                            allow_shipping = False
+                            order['shipping_evidence_held'] = True
+                            code = str(exc) if str(exc).startswith('operational_delivery_') else 'operational_delivery_evidence_invalid'
+                            issue(out, code, identity, component='shipping_fee')
+                            courier_issue(out, code, raw, source, setup=setup, owner=owner)
+                            date_gap_identity(out, code, raw, data['store_delivery_assignments'], owner,
+                                record=confirmation_facts.get(DELIVERY_CONFIRMATION_PREFIX + identity), started_at=started_at)
+                if allow_shipping:
+                    _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, cod,
+                                             delivery_event=event, started_at=started_at)
+                    if hold_prior_courier_event(operational_state, event, order.get('carrier')):
+                        courier_issue(out, 'courier_fee_historical_review_required', raw, source,
+                                     carrier=order.get('carrier'), event=event, setup=setup, owner=owner)
+                        # Hold only this courier payable. A current verified
+                        # delivery can still establish the customer's COD custody.
                         carrier = order.get('carrier')
                         if carrier:
                             carrier.update(cost=None, fee_complete=False, fee_recognition_held=True)
                             carrier.pop('fee_components', None)
-                        out['delivery_events'].append(order)
-                else:
-                    out['delivery_events'].append(order)
-                continue
-            status_obj = raw.get('status')
-            status = (status_obj.get('slug') or status_obj.get('name')) if isinstance(status_obj, dict) else status_obj
-            source_total = (raw.get('amounts') or {}).get('total')
-            order = {'id': identity, 'order_number': order_number, 'created_at': created.isoformat(),
-                     'updated_at': instant(raw.get('updated_at') or raw.get('date_updated') or created).isoformat(),
-                     'status': status, 'currency': raw.get('currency') or (source_total.get('currency') if isinstance(source_total, dict) else None),
-                     'items': []}
-            if not order['currency']:
-                raise ValueError('order_currency_missing')
-            for item in raw.get('items', []):
-                await cpu_budget.checkpoint()
-                calculation_checkpoint()
-                source_item_id = item.get('id') or item.get('item_id') or item.get('order_item_id')
-                if not source_item_id:
-                    issue(out, 'order_item_stable_identity_missing', identity)
-                    continue
-                item_id = f'salla:{order_number}:{source_item_id}'
-                product = item.get('product') or {}
-                product_id = str(item.get('parent_product_id') or item.get('product_id') or product.get('id') or '')
-                bundle = bundle_costs.get((order_number, item_id))
-                if bundle is not None:
-                    order['items'].extend(bundle['items'])
-                    if not bundle['complete']:
-                        order['items_complete'] = False
-                    for problem in bundle['issues']:
-                        await cpu_budget.checkpoint()
-                        calculation_checkpoint()
-                        issue(out, problem['code'], problem['source_id'], scope=problem['scope'],
-                              order_number=order_number, required_action=problem['required_action'])
-                    continue
-                profile = profiles.get(product_id, {})
-                try:
-                    cost, services = cost_components(data, product_id, item, profile)
-                    quantity = number(item.get('quantity'))
-                except ValueError as exc:
-                    order['items_complete'] = False
-                    issue(out, str(exc) if str(exc) == 'mz2_product_cost_currency_requires_review' else 'mz2_product_cost_incomplete', item_id)
-                    continue
-                matching = pieces_by_order_item.get((order_number, item_id), [])
-                if matching:
-                    units = {physical_unit_index(piece) for piece in matching}
-                    if quantity != len(matching) or units != set(range(1, len(matching) + 1)):
-                        order['items_complete'] = False
-                        issue(out, 'preparation_piece_coverage_ambiguous', item_id)
-                        continue
-                    for piece in matching:
-                        await cpu_budget.checkpoint()
-                        calculation_checkpoint()
-                        supplier = piece.get('supplier_id')
-                        if supplier and supplier not in suppliers and supplier_receipt_proven(piece, now):
-                            order['items_complete'] = False
-                            issue(out, 'mz2_supplier_identity_missing', piece.get('id'))
-                            continue
-                        append_components(order, str(piece['id']), cost, services, 1, supplier, piece, as_of=now)
-                else:
-                    append_components(order, item_id, cost, services, quantity)
-            payment = raw.get('payment') if isinstance(raw.get('payment'), dict) else {}
-            method = str(payment.get('method') or raw.get('payment_method') or '').lower()
-            total_value = (raw.get('amounts') or {}).get('total', raw.get('total'))
-            total = number(total_value)
-            normalized_payment, payment_issues = normalize_operational_payment(
-                raw, order['currency'], total, created, now, owner=owner, order_number=order_number,
-                provider_order_id=identity, rows=txn_by_order.get(order_number, ()), source=source)
-            if (not normalized_payment and "provider_split:" + identity in
-                    (operational_state or {}).get("engine", {}).get("facts", {})):
-                # Changing the order's payment method cannot turn a frozen split receipt into bank cash or COD.
-                payment_issues.append({"code": "provider_payment_method_conflict"})
-            payment_identity_conflict = any(row['code'] in {
-                'provider_payment_method_conflict', 'provider_payment_shape_invalid',
-                'provider_split_payment_review_required'} for row in payment_issues)
-            observe_nonprovider(customer_tenders, raw, source, order, total_value, normalized_payment, owner,
-                                blocked=payment_identity_conflict, payment_issues=payment_issues)
-            inspected_order_ids.add(identity)
-            from operational_balance_bank_orders import transfer_bank, resolve, native_paid_amount, QUALIFYING
-            native_bank = method == 'bank'
-            if not payment_identity_conflict and transfer_bank(method)[0] and (native_bank or status in QUALIFYING):
-                try:
-                    paid = total
-                    if native_bank:
-                        paid = native_paid_amount(raw, source, owner=owner, order_number=order_number,
-                            provider_order_id=identity, currency=order['currency'], total=total_value, as_of=as_of)
-                        if bank_catalog is None:
-                            from operational_bank_catalog import bank_identities
-                            bank_catalog = await bank_identities(db, owner, include_routing=True)
-                    bank = resolve(data, owner, payment.get('method') or raw.get('payment_method'),
-                                   order['currency'], raw=raw, banks=bank_catalog or ())
-                    if paid <= 0 or paid != paid.quantize(Decimal('.01')):
-                        raise ValueError('operational_order_bank_amount_invalid')
-                    order['bank_credit'] = {'bank_id': bank['id'], 'bank_name': bank['name'], 'amount': str(paid)}
-                except ValueError as exc:
-                    issue(out, str(exc), identity)
-            cod = method in {'cod', 'cash_on_delivery', 'cashondelivery', 'cash on delivery', 'الدفع عند الاستلام', 'دفع عند الاستلام', 'دفع عند الإستلام'}
-            if cod:
-                order['cod_required'] = True
-                try:
-                    if payment_identity_conflict:
-                        raise ValueError('provider_payment_method_conflict')
-                    order['cod'] = cod_facts(raw, total)
-                    order['cod_amount'] = order['cod']['outstanding']
-                except (ValueError, TypeError):
-                    issue(out, 'cod_collection_contract_incomplete', identity)
-            if normalized_payment is not None:
-                order['payment'] = bind_statement_plan(normalized_payment, statement_plans, order_number)
-            for payment_issue in payment_issues:
-                await cpu_budget.checkpoint()
-                calculation_checkpoint()
-                issue(out, payment_issue['code'], identity, order_number=order_number, currency=order['currency'],
-                      scope='provider_payment',
-                      message=DIAGNOSTICS.get(payment_issue['code'], 'بيانات الدفع تحتاج مطابقة؛ لا يعني ذلك أن المبلغ صفر'),
-                      required_action='راجع إثبات التحصيل ومرجع العملية وتاريخها وخطة الدفع من المصدر المعتمد',
-                      **{key: value for key, value in payment_issue.items() if key not in {'code', 'currency'}})
-            event = None
-            allow_shipping = True
-            current = source.get('salla_shipping_current') or raw.get('salla_shipping_current') or {}
-            from operational_delivery_evidence import (DELIVERED, _status, _text, created_after_start_delivery,
-                                                        recorded_courier_fee, resolve_delivery_event)
-            native_driver = data['_driver_fee_review'].requires_delivery_proof(order)
-            # Saved evidence must be revalidated even when a later source status
-            # or assignment loses the fields that originally admitted delivery.
-            # Test presence, so malformed saved proofs cannot restore a fallback.
-            saved_delivery_proof = ('delivery_event:' + identity in confirmation_facts
-                                    or DELIVERY_CONFIRMATION_PREFIX + identity in confirmation_facts)
-            if saved_delivery_proof or native_driver or status in DELIVERED or (isinstance(current, dict) and _status(current.get('status')) in DELIVERED):
-                # Legacy drivers have a separate native collection contract. External
-                # couriers must prove this exact current waybill and delivery instant.
-                assigned = [a for a in data['store_delivery_assignments']
-                            if str(a.get('order_number')) == order_number and a.get('active') is not False
-                            and a.get('status') in {'assigned','out_for_delivery','delivered'}]
-                # The earlier contract-only producer binds one owner-scoped
-                # assignment by the unique canonical order number. Retain its
-                # independent collection contract without promoting a missing
-                # order_id into the new strict delivery-status proof.
-                legacy_driver = (not native_driver and len(assigned) == 1
-                    and assigned[0].get('user_id') == owner
-                    and assigned[0].get('order_id') in (None, '')
-                    and 'delivery_event:' + identity not in (operational_state or {}).get('engine', {}).get('facts', {})
-                    and 'owner_delivery_after_start:' + identity not in (operational_state or {}).get('engine', {}).get('facts', {})
-                    and _text(assigned[0].get('id')) and _text(assigned[0].get('driver_id'))
-                    and data['_driver_fee_review'].assignment_ids[assigned[0]['id']] == 1)
-                if saved_delivery_proof or native_driver or not assigned or (created_after_start_delivery(raw, started_at, as_of) and not legacy_driver):
-                    try:
-                        if not native_driver and status not in DELIVERED:
-                            raise ValueError('operational_delivery_order_shipment_status_conflict')
-                        event = resolve_delivery_event(raw, source=source, owner=owner,
-                            assignments=data['store_delivery_assignments'], setup=setup, started_at=started_at, as_of=as_of,
-                            history=delivery_history.get(order_number, ()), shipment_conflicts=shipment_conflicts,
-                            frozen_event=(operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity),
-                            frozen_shipping=(operational_state or {}).get('engine', {}).get('facts', {}).get('shipping:' + identity),
-                            recorded_fee=recorded_courier_fee(operational_state, identity),
-                            owner_confirmation=confirmation_facts.get(DELIVERY_CONFIRMATION_PREFIX + identity))
-                        if event is None:
-                            raise ValueError('operational_delivery_timestamp_missing')
-                        saved = (operational_state or {}).get('engine', {}).get('facts', {}).get('delivery_event:' + identity)
-                        if saved is not None and saved != event:
-                            raise ValueError('operational_delivery_confirmed_evidence_changed')
-                        order['delivered_at'] = event['delivered_at']
-                    except (ValueError, KeyError, TypeError) as exc:
-                        allow_shipping = False
-                        order['shipping_evidence_held'] = True
-                        code = str(exc) if str(exc).startswith('operational_delivery_') else 'operational_delivery_evidence_invalid'
-                        issue(out, code, identity, component='shipping_fee')
-                        courier_issue(out, code, raw, source, setup=setup, owner=owner)
-                        date_gap_identity(out, code, raw, data['store_delivery_assignments'], owner,
-                            record=confirmation_facts.get(DELIVERY_CONFIRMATION_PREFIX + identity), started_at=started_at)
-            if allow_shipping:
-                _attach_delivery_sources(data, setup, owner, raw, order, out, now, total, cod,
-                                         delivery_event=event, started_at=started_at)
-                if hold_prior_courier_event(operational_state, event, order.get('carrier')):
-                    courier_issue(out, 'courier_fee_historical_review_required', raw, source,
-                                 carrier=order.get('carrier'), event=event, setup=setup, owner=owner)
-                    # Hold only this courier payable. A current verified
-                    # delivery can still establish the customer's COD custody.
-                    carrier = order.get('carrier')
-                    if carrier:
-                        carrier.update(cost=None, fee_complete=False, fee_recognition_held=True)
-                        carrier.pop('fee_components', None)
-                if event and order.get('carrier'):
-                    order['delivery_event'] = event
-            out['orders'].append(order)
-        except (ValueError, TypeError, KeyError, InvalidOperation) as exc:
-            code = str(exc)
-            issue(out, code, raw.get('id'))
-            if code.startswith('operational_delivery_') and code not in {'operational_delivery_driver_assignment_required',
-                    'operational_delivery_owner_mismatch','operational_delivery_order_identity_conflict'}:
-                courier_issue(out, code, raw, source, setup=setup, owner=owner)
-                date_gap_identity(out, code, raw, data['store_delivery_assignments'], owner,
-                    record=confirmation_facts.get(DELIVERY_CONFIRMATION_PREFIX + str(raw.get('id'))), started_at=started_at)
-    # An issued, approved MZ2 invoice is the sole confirmation authority.
-    # Current piece state may have changed after invoicing and cannot revoke it.
-    piece_index = unique_index(pieces, 'id')
-    invoice_counts = Counter(r.get('id') for r in data['mezan_supplier_invoices_v2'])
-    coverage = {}
-    for invoice in data['mezan_supplier_invoices_v2']:
-        await cpu_budget.checkpoint()
-        calculation_checkpoint()
-        if invoice.get('experiment_mode') or invoice.get('experiment_run_id') or not invoice.get('approved_at'):
-            continue
-        if invoice.get('status') not in {None, 'payable_posted'}:
-            continue
-        if invoice.get('supplier_id') not in suppliers:
-            issue(out, 'supplier_invoice_supplier_identity_incomplete', invoice.get('id'))
-            continue
-        if operational_state:
-            from operational_native_purchase_link import collision_with_saved_link
-            if collision_with_saved_link(operational_state, invoice.get('supplier_id'),
-                    invoice.get('invoice_number'), invoice.get('id')):
-                issue(out, 'supplier_native_document_link_conflict', invoice.get('id'),
-                    scope='received_products', required_action='المستند مرتبط بفاتورة شراء مسجلة؛ طابق الهوية قبل احتساب دين ثانٍ')
-                continue
-        if not invoice.get('id') or invoice_counts[invoice.get('id')] != 1:
-            issue(out, 'supplier_invoice_identity_ambiguous', invoice.get('id'))
-            continue
-        covered = [pid for line in invoice.get('lines', []) for pid in line.get('piece_ids', [])]
-        if len(covered) != len(set(covered)):
-            issue(out, 'supplier_invoice_piece_coverage_ambiguous', invoice.get('id'))
-            continue
-        try:
-            accepted = instant(invoice['approved_at'])
-        except (ValueError, TypeError):
-            issue(out, 'supplier_invoice_approval_time_incomplete', invoice.get('id'))
-            continue
-        if accepted > now:
-            continue
-        # Both native receiving writers denominate supplier invoices in SAR.
-        # Older compatible rows may omit the field; this is the supplier
-        # contract, never the customer's order currency or FX.
-        currency = invoice.get('currency', 'SAR')
-        if currency != 'SAR':
-            issue(out, 'supplier_invoice_currency_conflict', invoice.get('id'))
-            continue
-        try:
-            component_amounts = invoice_component_amounts(invoice)
-        except (ValueError, KeyError, TypeError):
-            issue(out, 'supplier_invoice_tax_contract_incomplete', invoice.get('id'))
-            continue
-        for line in invoice.get('lines', []):
+                    if event and order.get('carrier'):
+                        order['delivery_event'] = event
+                out['orders'].append(order)
+            except (ValueError, TypeError, KeyError, InvalidOperation) as exc:
+                code = str(exc)
+                issue(out, code, raw.get('id'))
+                if code.startswith('operational_delivery_') and code not in {'operational_delivery_driver_assignment_required',
+                        'operational_delivery_owner_mismatch','operational_delivery_order_identity_conflict'}:
+                    courier_issue(out, code, raw, source, setup=setup, owner=owner)
+                    date_gap_identity(out, code, raw, data['store_delivery_assignments'], owner,
+                        record=confirmation_facts.get(DELIVERY_CONFIRMATION_PREFIX + str(raw.get('id'))), started_at=started_at)
+    with refresh_stage('source_invoices'):
+        # An issued, approved MZ2 invoice is the sole confirmation authority.
+        # Current piece state may have changed after invoicing and cannot revoke it.
+        piece_index = unique_index(pieces, 'id')
+        invoice_counts = Counter(r.get('id') for r in data['mezan_supplier_invoices_v2'])
+        coverage = {}
+        for invoice in data['mezan_supplier_invoices_v2']:
             await cpu_budget.checkpoint()
             calculation_checkpoint()
-            ids = line.get('piece_ids') or []
-            if line.get('product_price_authority') != 'mezan_v2' or not ids or len(ids) != len(set(ids)):
-                issue(out, 'supplier_receipt_component_contract_incomplete', invoice.get('id'))
+            if invoice.get('experiment_mode') or invoice.get('experiment_run_id') or not invoice.get('approved_at'):
+                continue
+            if invoice.get('status') not in {None, 'payable_posted'}:
+                continue
+            if invoice.get('supplier_id') not in suppliers:
+                issue(out, 'supplier_invoice_supplier_identity_incomplete', invoice.get('id'))
+                continue
+            if operational_state:
+                from operational_native_purchase_link import collision_with_saved_link
+                if collision_with_saved_link(operational_state, invoice.get('supplier_id'),
+                        invoice.get('invoice_number'), invoice.get('id')):
+                    issue(out, 'supplier_native_document_link_conflict', invoice.get('id'),
+                        scope='received_products', required_action='المستند مرتبط بفاتورة شراء مسجلة؛ طابق الهوية قبل احتساب دين ثانٍ')
+                    continue
+            if not invoice.get('id') or invoice_counts[invoice.get('id')] != 1:
+                issue(out, 'supplier_invoice_identity_ambiguous', invoice.get('id'))
+                continue
+            covered = [pid for line in invoice.get('lines', []) for pid in line.get('piece_ids', [])]
+            if len(covered) != len(set(covered)):
+                issue(out, 'supplier_invoice_piece_coverage_ambiguous', invoice.get('id'))
                 continue
             try:
-                if line.get('quantity') is not None and number(line['quantity']) != len(ids):
-                    raise ValueError('supplier_invoice_quantity_conflict')
-                unit_halalas = number(line.get('product_unit_price_halalas'))
-                product_total = unit_halalas * len(ids)
-                if line.get('product_total_halalas') is not None and number(line['product_total_halalas']) != product_total:
-                    raise ValueError('supplier_invoice_product_total_conflict')
-                service_totals = {}
-                for service in line.get('services') or []:
-                    await cpu_budget.checkpoint()
-                    calculation_checkpoint()
-                    service_id = service['service_id']
-                    if not service_id or service_id in service_totals:
-                        raise ValueError('supplier_invoice_service_identity_conflict')
-                    total = (number(service['unit_price_halalas']) * number(service['quantity_per_piece']) * len(ids)).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
-                    if service.get('total_halalas') is not None and number(service['total_halalas']) != total:
-                        raise ValueError('supplier_invoice_service_total_conflict')
-                    service_totals[service_id] = total
-                if line.get('total_halalas') is not None and number(line['total_halalas']) != product_total + sum(service_totals.values()):
-                    raise ValueError('supplier_invoice_line_total_conflict')
-            except (ValueError, KeyError):
-                issue(out, 'supplier_invoice_amount_or_quantity_incomplete', invoice.get('id'))
+                accepted = instant(invoice['approved_at'])
+            except (ValueError, TypeError):
+                issue(out, 'supplier_invoice_approval_time_incomplete', invoice.get('id'))
                 continue
-            # Sort stable IDs so source line ordering cannot change penny allocation.
-            for piece_id in sorted(ids):
+            if accepted > now:
+                continue
+            # Both native receiving writers denominate supplier invoices in SAR.
+            # Older compatible rows may omit the field; this is the supplier
+            # contract, never the customer's order currency or FX.
+            currency = invoice.get('currency', 'SAR')
+            if currency != 'SAR':
+                issue(out, 'supplier_invoice_currency_conflict', invoice.get('id'))
+                continue
+            try:
+                component_amounts = invoice_component_amounts(invoice)
+            except (ValueError, KeyError, TypeError):
+                issue(out, 'supplier_invoice_tax_contract_incomplete', invoice.get('id'))
+                continue
+            for line in invoice.get('lines', []):
                 await cpu_budget.checkpoint()
                 calculation_checkpoint()
-                piece = piece_index.get(piece_id, {})
-                order_id = order_numbers.get(str(piece.get('order_number')))
-                if not order_id:
-                    issue(out, 'supplier_receipt_order_evidence_incomplete', invoice.get('id'))
+                ids = line.get('piece_ids') or []
+                if line.get('product_price_authority') != 'mezan_v2' or not ids or len(ids) != len(set(ids)):
+                    issue(out, 'supplier_receipt_component_contract_incomplete', invoice.get('id'))
                     continue
                 try:
-                    # A service invoice may predate the eligibility flag. Its
-                    # zero-priced product must not disqualify a proven base charge.
-                    has_product = line.get('product_charge_eligible') is not False and (unit_halalas > 0 or not service_totals)
-                    components = [('product', piece_id)] if has_product else []
-                    components.extend((f'service:{service_id}', f'{piece_id}:service:{service_id}')
-                                      for service_id in service_totals)
-                    # Historical batches can carry different piece UUIDs for the
-                    # same order line and physical unit. Keep posted receipt IDs,
-                    # but compare claims across the permanent unit identity.
-                    physical_key = (piece_id,)
-                    unit = physical_unit_index(piece)
-                    order_item_id = physical_order_item_id(piece)
-                    if order_item_id and unit is not None:
-                        physical_key = (order_item_id, unit)
-                    for component, item_id in components:
+                    if line.get('quantity') is not None and number(line['quantity']) != len(ids):
+                        raise ValueError('supplier_invoice_quantity_conflict')
+                    unit_halalas = number(line.get('product_unit_price_halalas'))
+                    product_total = unit_halalas * len(ids)
+                    if line.get('product_total_halalas') is not None and number(line['product_total_halalas']) != product_total:
+                        raise ValueError('supplier_invoice_product_total_conflict')
+                    service_totals = {}
+                    for service in line.get('services') or []:
                         await cpu_budget.checkpoint()
                         calculation_checkpoint()
-                        coverage.setdefault((order_id, physical_key, component), set()).add((invoice['id'], item_id))
-                        if accepted < start:
-                            continue
-                        out['supplier_receipts'].append({'id': f"{invoice['id']}:{piece_id}:{component}",
-                            'order_id': order_id, 'item_id': item_id, 'supplier_id': invoice['supplier_id'],
-                            **component_amounts[(piece_id, component)], 'currency': currency,
-                            'accepted_at': accepted.isoformat(), 'invoice_id': invoice['id'],
-                            'invoice_number': invoice.get('invoice_number') or invoice.get('reference'),
-                            'component_fully_invoiced': True})
+                        service_id = service['service_id']
+                        if not service_id or service_id in service_totals:
+                            raise ValueError('supplier_invoice_service_identity_conflict')
+                        total = (number(service['unit_price_halalas']) * number(service['quantity_per_piece']) * len(ids)).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+                        if service.get('total_halalas') is not None and number(service['total_halalas']) != total:
+                            raise ValueError('supplier_invoice_service_total_conflict')
+                        service_totals[service_id] = total
+                    if line.get('total_halalas') is not None and number(line['total_halalas']) != product_total + sum(service_totals.values()):
+                        raise ValueError('supplier_invoice_line_total_conflict')
                 except (ValueError, KeyError):
-                    issue(out, 'supplier_receipt_evidence_incomplete', invoice.get('id'))
-    # Native supplier_piece_product_charge_eligible charges a physical product
-    # once, even across supplier reassignment. Completed services likewise retain
-    # their original invoice. Two issued invoices claiming the same component
-    # are contradictory evidence, not two independent obligations.
-    current_components = {(receipt['order_id'], receipt['item_id']) for receipt in out['supplier_receipts']}
-    ambiguous = {(order_id, item_id) for (order_id, _unit, _component), claims in coverage.items()
-                 if len(claims) > 1 for _, item_id in claims} & current_components
-    for key in sorted(ambiguous):
-        await cpu_budget.checkpoint()
-        calculation_checkpoint()
-        issue(out, 'supplier_cross_invoice_component_coverage_ambiguous', ':'.join(key),
-              scope='received_products',
-              required_action='طابق سطر القطعة وخدمتها في الفواتير مع الافتتاح والسداد قبل اعتماد أي فرق.')
-    if ambiguous:
-        out['supplier_receipts'] = [r for r in out['supplier_receipts'] if (r['order_id'], r['item_id']) not in ambiguous]
-    for document in data['mz2_provider_fee_policies_v2']:
-        await cpu_budget.checkpoint()
-        calculation_checkpoint()
-        for policy in document.get('policies', []):
+                    issue(out, 'supplier_invoice_amount_or_quantity_incomplete', invoice.get('id'))
+                    continue
+                # Sort stable IDs so source line ordering cannot change penny allocation.
+                for piece_id in sorted(ids):
+                    await cpu_budget.checkpoint()
+                    calculation_checkpoint()
+                    piece = piece_index.get(piece_id, {})
+                    order_id = order_numbers.get(str(piece.get('order_number')))
+                    if not order_id:
+                        issue(out, 'supplier_receipt_order_evidence_incomplete', invoice.get('id'))
+                        continue
+                    try:
+                        # A service invoice may predate the eligibility flag. Its
+                        # zero-priced product must not disqualify a proven base charge.
+                        has_product = line.get('product_charge_eligible') is not False and (unit_halalas > 0 or not service_totals)
+                        components = [('product', piece_id)] if has_product else []
+                        components.extend((f'service:{service_id}', f'{piece_id}:service:{service_id}')
+                                          for service_id in service_totals)
+                        # Historical batches can carry different piece UUIDs for the
+                        # same order line and physical unit. Keep posted receipt IDs,
+                        # but compare claims across the permanent unit identity.
+                        physical_key = (piece_id,)
+                        unit = physical_unit_index(piece)
+                        order_item_id = physical_order_item_id(piece)
+                        if order_item_id and unit is not None:
+                            physical_key = (order_item_id, unit)
+                        for component, item_id in components:
+                            await cpu_budget.checkpoint()
+                            calculation_checkpoint()
+                            coverage.setdefault((order_id, physical_key, component), set()).add((invoice['id'], item_id))
+                            if accepted < start:
+                                continue
+                            out['supplier_receipts'].append({'id': f"{invoice['id']}:{piece_id}:{component}",
+                                'order_id': order_id, 'item_id': item_id, 'supplier_id': invoice['supplier_id'],
+                                **component_amounts[(piece_id, component)], 'currency': currency,
+                                'accepted_at': accepted.isoformat(), 'invoice_id': invoice['id'],
+                                'invoice_number': invoice.get('invoice_number') or invoice.get('reference'),
+                                'component_fully_invoiced': True})
+                    except (ValueError, KeyError):
+                        issue(out, 'supplier_receipt_evidence_incomplete', invoice.get('id'))
+        # Native supplier_piece_product_charge_eligible charges a physical product
+        # once, even across supplier reassignment. Completed services likewise retain
+        # their original invoice. Two issued invoices claiming the same component
+        # are contradictory evidence, not two independent obligations.
+        current_components = {(receipt['order_id'], receipt['item_id']) for receipt in out['supplier_receipts']}
+        ambiguous = {(order_id, item_id) for (order_id, _unit, _component), claims in coverage.items()
+                     if len(claims) > 1 for _, item_id in claims} & current_components
+        for key in sorted(ambiguous):
             await cpu_budget.checkpoint()
             calculation_checkpoint()
-            if policy.get('user_id') not in (None, owner):
-                issue(out, 'provider_fee_owner_mismatch', policy.get('id'))
+            issue(out, 'supplier_cross_invoice_component_coverage_ambiguous', ':'.join(key),
+                  scope='received_products',
+                  required_action='طابق سطر القطعة وخدمتها في الفواتير مع الافتتاح والسداد قبل اعتماد أي فرق.')
+        if ambiguous:
+            out['supplier_receipts'] = [r for r in out['supplier_receipts'] if (r['order_id'], r['item_id']) not in ambiguous]
+    with refresh_stage('source_other_sources'):
+        for document in data['mz2_provider_fee_policies_v2']:
+            await cpu_budget.checkpoint()
+            calculation_checkpoint()
+            for policy in document.get('policies', []):
+                await cpu_budget.checkpoint()
+                calculation_checkpoint()
+                if policy.get('user_id') not in (None, owner):
+                    issue(out, 'provider_fee_owner_mismatch', policy.get('id'))
+                    continue
+                out['fee_policies'].append({k: v for k, v in policy.items() if k not in ('_id', 'user_id')})
+        await prepare_in_thread(_employees, data, out)
+        await prepare_in_thread(_advertising, data, out, start, now, baselines)
+        await prepare_in_thread(_recurring, data, out, start, now)
+    with refresh_stage('source_native_overlaps'):
+        from operational_shipping_fee_review import hold_native_fee_overlaps
+        await hold_native_fee_overlaps(db, owner, out, operational_state, max_rows=MAX_ROWS)
+        completion_candidates = (out['prepaid_shipping_events'] + out['completed_shipping_events']
+                                 + out['completed_shipping_candidates'])
+        if completion_candidates:
+            from operational_historical_shipping_fee import native_conflicts
+            overlaps = await native_conflicts(db, owner, completion_candidates, max_rows=MAX_ROWS)
+            out['completed_shipping_native_conflicts'] = overlaps
+            for charge in completion_candidates:
+                await cpu_budget.checkpoint()
+                calculation_checkpoint()
+                if charge['order_number'] in overlaps:
+                    completion_issue(out, ('operational_prepaid_shipping_native_overlap' if charge['schema'] == 'operational_prepaid_shipping_v1'
+                                          else 'operational_shipping_completion_native_overlap'), charge,
+                                     required_action=overlaps[charge['order_number']])
+            for key in ('prepaid_shipping_events', 'completed_shipping_events'):
+                await cpu_budget.checkpoint()
+                calculation_checkpoint()
+                out[key] = [charge for charge in out[key] if charge['order_number'] not in overlaps]
+    with refresh_stage('source_finalize'):
+        # A completed base charge has its own authority. Delivery can still earn
+        # its independent collection commission and establish COD custody.
+        managed = {str(charge['order_id']) for charge in completion_candidates
+                   if charge.get('schema') == 'operational_completed_shipping_v1'}
+        managed.update(key.removeprefix('completed_shipping:') for key in
+                       (operational_state or {}).get('engine', {}).get('facts', {}) if key.startswith('completed_shipping:'))
+        for order in out['orders'] + out['delivery_events']:
+            await cpu_budget.checkpoint()
+            calculation_checkpoint()
+            if order['id'] in managed:
+                order['completed_shipping_base_managed'] = True
+        # A persisted owner proof must stay reviewable even when its canonical order
+        # disappears from a later successful read. No fee/count is inferred here.
+        delivered_now = {str(order['id']) for order in out['orders'] + out['delivery_events'] if order.get('delivery_event')}
+        delivery_gaps = {str(row.get('order_id') or row.get('source_id')) for row in out['issues']
+                         if str(row.get('code', '')).startswith('operational_delivery_')}
+        from operational_delivery_confirmation import validate_record
+        for key, record in confirmation_facts.items():
+            if not key.startswith(DELIVERY_CONFIRMATION_PREFIX):
                 continue
-            out['fee_policies'].append({k: v for k, v in policy.items() if k not in ('_id', 'user_id')})
-    await prepare_in_thread(_employees, data, out)
-    await prepare_in_thread(_advertising, data, out, start, now, baselines)
-    await prepare_in_thread(_recurring, data, out, start, now)
-    from operational_shipping_fee_review import hold_native_fee_overlaps
-    await hold_native_fee_overlaps(db, owner, out, operational_state, max_rows=MAX_ROWS)
-    completion_candidates = (out['prepaid_shipping_events'] + out['completed_shipping_events']
-                             + out['completed_shipping_candidates'])
-    if completion_candidates:
-        from operational_historical_shipping_fee import native_conflicts
-        overlaps = await native_conflicts(db, owner, completion_candidates, max_rows=MAX_ROWS)
-        out['completed_shipping_native_conflicts'] = overlaps
-        for charge in completion_candidates:
             await cpu_budget.checkpoint()
             calculation_checkpoint()
-            if charge['order_number'] in overlaps:
-                completion_issue(out, ('operational_prepaid_shipping_native_overlap' if charge['schema'] == 'operational_prepaid_shipping_v1'
-                                      else 'operational_shipping_completion_native_overlap'), charge,
-                                 required_action=overlaps[charge['order_number']])
-        for key in ('prepaid_shipping_events', 'completed_shipping_events'):
-            await cpu_budget.checkpoint()
-            calculation_checkpoint()
-            out[key] = [charge for charge in out[key] if charge['order_number'] not in overlaps]
-    # A completed base charge has its own authority. Delivery can still earn
-    # its independent collection commission and establish COD custody.
-    managed = {str(charge['order_id']) for charge in completion_candidates
-               if charge.get('schema') == 'operational_completed_shipping_v1'}
-    managed.update(key.removeprefix('completed_shipping:') for key in
-                   (operational_state or {}).get('engine', {}).get('facts', {}) if key.startswith('completed_shipping:'))
-    for order in out['orders'] + out['delivery_events']:
-        await cpu_budget.checkpoint()
-        calculation_checkpoint()
-        if order['id'] in managed:
-            order['completed_shipping_base_managed'] = True
-    # A persisted owner proof must stay reviewable even when its canonical order
-    # disappears from a later successful read. No fee/count is inferred here.
-    delivered_now = {str(order['id']) for order in out['orders'] + out['delivery_events'] if order.get('delivery_event')}
-    delivery_gaps = {str(row.get('order_id') or row.get('source_id')) for row in out['issues']
-                     if str(row.get('code', '')).startswith('operational_delivery_')}
-    from operational_delivery_confirmation import validate_record
-    for key, record in confirmation_facts.items():
-        if not key.startswith(DELIVERY_CONFIRMATION_PREFIX):
-            continue
-        await cpu_budget.checkpoint()
-        calculation_checkpoint()
-        oid = key.removeprefix(DELIVERY_CONFIRMATION_PREFIX)
-        if oid in delivered_now or oid in delivery_gaps:
-            continue
-        try:
-            validate_record(record, owner=owner, started_at=started_at, order_id=oid)
-        except (ValueError, TypeError, KeyError):
-            issue(out, 'operational_delivery_confirmation_invalid', oid, component='shipping_fee')
-            continue
-        issue(out, 'operational_delivery_confirmation_source_unavailable', oid, component='shipping_fee',
-              order_id=oid, order_number=record['order_number'], party_type=record['party_type'], party_id=record['party_id'])
-    finish_coverage(customer_tenders, counted_order_ids - inspected_order_ids)
-    return out
+            oid = key.removeprefix(DELIVERY_CONFIRMATION_PREFIX)
+            if oid in delivered_now or oid in delivery_gaps:
+                continue
+            try:
+                validate_record(record, owner=owner, started_at=started_at, order_id=oid)
+            except (ValueError, TypeError, KeyError):
+                issue(out, 'operational_delivery_confirmation_invalid', oid, component='shipping_fee')
+                continue
+            issue(out, 'operational_delivery_confirmation_source_unavailable', oid, component='shipping_fee',
+                  order_id=oid, order_number=record['order_number'], party_type=record['party_type'], party_id=record['party_id'])
+        finish_coverage(customer_tenders, counted_order_ids - inspected_order_ids)
+        return out
 
 
 def _employees(data, out):
