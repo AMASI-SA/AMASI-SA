@@ -43,3 +43,7 @@ GitHubproductionbranch changed: yes, normalmergeM6. Ownlivepublication/originalb
 ## Current next action
 
 All prerequisites are satisfied as of19:25:26UTC. Stage the exact reviewed original-build operator under the official mutex while inactive, verify its frozenSHA, then execute it once for M6. No own originalbuild orlease has yet run. The operator itself repeats inactive/clean/ref/lineage checks and preserves120 files. Do not execute the disabled release-gate template; fill its actualevidence path only after successful build.
+
+## Original build started
+
+Staged operator was byte-verified under officialinactive mutex at19:26:21.051934UTC from checkpoint0c8c833f230804df44643ed46e39f23b85996c48; path /tmp/mezan-pr1929-operators-pcqr8if2/original-build-1929.py. The exactM6 one-shot build is now running in /tmp/mezan-operating-followup-original-5dp0ykxf. Do not repeat it. Result not yet observed. UI baseline refreshed:3a22e2d, Deployment finishedNov14,10:08PM. No own lease/publication.

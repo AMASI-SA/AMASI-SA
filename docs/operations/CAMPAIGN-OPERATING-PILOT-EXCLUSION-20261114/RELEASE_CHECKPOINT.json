@@ -2,7 +2,7 @@
   "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
   "round": 6,
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 19:25:59 UTC",
+  "updated_at_utc": "2026-11-14 19:27:11 UTC",
   "branch": "codex/campaign-operating-pilot-m3e9d-20261114",
   "pr": 1929,
   "base_J6": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
@@ -345,8 +345,20 @@
       }
     }
   },
-  "next": "Stage exact frozen reviewed original-build operator after rechecking inactive under official mutex; verify SHA25601263... then execute once with M6. No lease until actual build/packageproof accepted. Inspect actual receipts and preserve all120 untracked files. Final gate remains disabled until actual evidence path is known.",
-  "original_build": false,
+  "next": "Let the already running original-build operator finish. Read its actual result/06-governed-adapter/07-package-proof receipts in evidence directory. Do not repeat build or invoke the disabled gate. Only after successful actual build/preservation, pin final gate to that directory and currentUIbaseline3a22e2d.",
+  "original_build": {
+    "state": "running",
+    "evidence": "/tmp/mezan-operating-followup-original-5dp0ykxf",
+    "operator": "/tmp/mezan-pr1929-operators-pcqr8if2/original-build-1929.py",
+    "deployment": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+    "actual_command": [
+      "python",
+      "-B",
+      "/tmp/mezan-pr1929-operators-pcqr8if2/original-build-1929.py",
+      "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9"
+    ],
+    "result_not_yet_observed": true
+  },
   "lease": false,
   "published": false,
   "coordination": "Issue1006 full; task STATUS, replacement PR and continuation branch are durable.",
@@ -951,9 +963,18 @@
     },
     "root_review": "PASS docstring and immutable pin changes only; behavior identical to reviewed template",
     "independent_review": "PASS: exact bytes/AST, only immutable pins+docstring, official inactive/mutex, 120-file preservation, one build/package proof, no lease/retry/restore",
-    "executed": false,
+    "executed": true,
     "repository_path": "docs/operations/CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114/operators/original-build-1929.py",
-    "git_blob": "2e145c3266d848bffba221af976c13c1d443b344"
+    "git_blob": "2e145c3266d848bffba221af976c13c1d443b344",
+    "staged": {
+      "staged_at": "2026-11-14T19:26:21.051934+00:00",
+      "handoff": "0c8c833f230804df44643ed46e39f23b85996c48",
+      "operator": "/tmp/mezan-pr1929-operators-pcqr8if2/original-build-1929.py",
+      "sha256": "01263d94478e74075a5833fe9700d263c9e3a56263bedb9c563945a46d519e69",
+      "bytes": 15488,
+      "guard_inactive_under_lock": true,
+      "executed": false
+    }
   },
   "original_preflight": {
     "observed_at": "2026-11-14T19:25:26.701912+00:00",
@@ -962,5 +983,11 @@
     },
     "head": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
     "tracked_clean": true
+  },
+  "prepublication_ui": {
+    "observed_at": "2026-11-14 19:27:11 UTC",
+    "current_version": "3a22e2d",
+    "last_event": "Deployment finished Nov 14, 10:08 PM",
+    "republish_available": true
   }
 }
