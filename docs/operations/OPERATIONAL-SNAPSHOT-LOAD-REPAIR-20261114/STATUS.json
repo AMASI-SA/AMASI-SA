@@ -1,6 +1,6 @@
 {
-  "stage": "published_verified_but_live_acceptance_failed_stage_diagnostic_next",
-  "updated_at": "2026-11-14T03:50:23.398Z",
+  "stage": "live_source_collection_timeout_diagnosed_snapshot_load_succeeds",
+  "updated_at": "2026-11-14T04:03:38.417Z",
   "repo": "AMASI-SA/AMASI-SA",
   "pr": 1916,
   "task_branch": "codex/operational-snapshot-load-fix-20261114",
@@ -78,7 +78,7 @@
     "sourceFrozenAt": "2026-11-14T02:50:23.902Z",
     "pr": 1916,
     "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1916",
-    "pr_body": "## Problem\nThe verified PR1915 release still falls back to the old financial snapshot. A controlled visible production attempt localized the85-second timeout to snapshot loading: native evidence completed in23.437s, then snapshot_load was cancelled after59.694s before source collection or reconciliation began. The snapshot reader revalidates authorization and renews its lease before and after every immutable audit page, amplifying metadata round trips as history grows.\n\n## Change\nFor the exact active visible-demand database and owner, group fresh authorization/lease gates around bounded groups of at most8 pages. Each page still uses its exact owner/_id find_one and is fully validated before the next read. Per-page workers remain request-owned, cancellable and joined. Ordinary readers and strict transaction/session wrappers retain their current behavior. The complete manifest, hashes, ordering, history and tail are retained; CAS and the existing85-second deadline stay intact.\n\nThe source change is17 added and2 removed lines in the archive reader, plus43 focused regression cases and the task status document. This does not include the separately measured reconciliation CPU optimization; production did not reach that phase in the captured attempt.\n\n## Verification\n- Pre-change regression fails only at the intended guard budget:136 checkpoints versus24 for64 synthetic archive pages, after full-state parity and64 exact page reads pass.\n-43 new cases pass; integrated adjacent selection106 passed (exit0). Independent review79 passed, including all43 new cases, with no blocking finding. These selections overlap.\n- Tests cover complete BSON/history parity, first corrupt page, manifest and owner/hash/count checks, permission revocation, lost lease/successor preservation, I/O and worker cancellation, deadline behavior, fresh revision/manifest on CAS retry, and actual strict session wrappers.\n- Independent exact-J negative control fails the same136-versus24 bound. Source/test hashes stayed unchanged during review; diff-check passed.\n- Three paired64-page synthetic runs with3ms simulated database-operation latency: median2399.883ms →665.631ms,136→24 checkpoints/renewals,64→64 page reads; full-result equality, unchanged inputs, zero nonlease writes and zero orphan tasks. This is not a measured production improvement.\n\n## Frozen source\n- J: `4860548f0b032e8e3beca18a4776413cd7e0368b`\n- A: `ff9f8b69b980acfda8dffd210feaf72e17e6727a`\n- A tree: `92ab66ab75d52285e34131f3c4ca60a6a5f8ecc5`\n- Archive source SHA256: `d382ab270474b68700f1672afd2871bb6d7eb0392dad539771536a90fe5082ce`\n- Test SHA256: `d0625c6477b6dae55d1d594bfbb66d95e08f47c97804320528af36f8cdf13d2d`\n- B: `bd9607ba2b21c4d4e3e2bc6bced7680bc9c6f287` (tree `c5bd7fb6c357e17c17104282d1d175676e95ed3e`), one parent A, only intent path changed.\n- Exact candidate artifact 14094887136 from readiness run43548544254; unmodified intent SHA256 `9c4374110d7cb7ad4107acd968b419982cbecd5be934c34ebe80ebe30cd2dd47`.\n- Official candidate and tracked-B loaders passed with actual exit0; R `rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db`.\n- All11 A workflows passed. Official JUnit contains all43 new cases passing in each Operational4073-case and Stock3882-case (+7subtests) suite.\n\n## Release status\nMerged normally as `9c71435f4a19977c09f4331dee8fddbfa12a45eb`, exact B/M tree. All A/B/M gates passed; actual original build exited0 in69.693s and preserved all120 unrelated files and unsaved Untitled-1. Owned prepare and final prepublish passed. Publish changes was clicked once at2026-11-14T03:20:34.103Z. Platform explicitly completed the newer06:30AMRiyadh publication; current version is **bfa6a5f**. Public /api/health reports exactA/R and all identity/source/frontend flags true.\n\nThe reviewed official verifier was started once at2026-11-14T03:31:32.852Z and is still running without a short wrapper timeout. Its actual exit/3-probe result and normal lease closure remain pending. Fresh live financial as_of acceptance has not yet been attempted on this release. [Durable continuation](https://github.com/AMASI-SA/AMASI-SA/blob/b81ea2effb566ec1fb86d6bcce80ba14adfe01a9/docs/operations/OPERATIONAL-SNAPSHOT-LOAD-REPAIR-20261114/STATUS.md).\n",
+    "pr_body": "## Problem\nThe verified PR1915 release still falls back to the old financial snapshot. A controlled visible production attempt localized the85-second timeout to snapshot loading: native evidence completed in23.437s, then snapshot_load was cancelled after59.694s before source collection or reconciliation began. The snapshot reader revalidates authorization and renews its lease before and after every immutable audit page, amplifying metadata round trips as history grows.\n\n## Change\nFor the exact active visible-demand database and owner, group fresh authorization/lease gates around bounded groups of at most8 pages. Each page still uses its exact owner/_id find_one and is fully validated before the next read. Per-page workers remain request-owned, cancellable and joined. Ordinary readers and strict transaction/session wrappers retain their current behavior. The complete manifest, hashes, ordering, history and tail are retained; CAS and the existing85-second deadline stay intact.\n\nThe source change is17 added and2 removed lines in the archive reader, plus43 focused regression cases and the task status document. This does not include the separately measured reconciliation CPU optimization; production did not reach that phase in the captured attempt.\n\n## Verification\n- Pre-change regression fails only at the intended guard budget:136 checkpoints versus24 for64 synthetic archive pages, after full-state parity and64 exact page reads pass.\n-43 new cases pass; integrated adjacent selection106 passed (exit0). Independent review79 passed, including all43 new cases, with no blocking finding. These selections overlap.\n- Tests cover complete BSON/history parity, first corrupt page, manifest and owner/hash/count checks, permission revocation, lost lease/successor preservation, I/O and worker cancellation, deadline behavior, fresh revision/manifest on CAS retry, and actual strict session wrappers.\n- Independent exact-J negative control fails the same136-versus24 bound. Source/test hashes stayed unchanged during review; diff-check passed.\n- Three paired64-page synthetic runs with3ms simulated database-operation latency: median2399.883ms →665.631ms,136→24 checkpoints/renewals,64→64 page reads; full-result equality, unchanged inputs, zero nonlease writes and zero orphan tasks. This is not a measured production improvement.\n\n## Frozen source\n- J: `4860548f0b032e8e3beca18a4776413cd7e0368b`\n- A: `ff9f8b69b980acfda8dffd210feaf72e17e6727a`\n- A tree: `92ab66ab75d52285e34131f3c4ca60a6a5f8ecc5`\n- Archive source SHA256: `d382ab270474b68700f1672afd2871bb6d7eb0392dad539771536a90fe5082ce`\n- Test SHA256: `d0625c6477b6dae55d1d594bfbb66d95e08f47c97804320528af36f8cdf13d2d`\n- B: `bd9607ba2b21c4d4e3e2bc6bced7680bc9c6f287` (tree `c5bd7fb6c357e17c17104282d1d175676e95ed3e`), one parent A, only intent path changed.\n- Exact candidate artifact 14094887136 from readiness run43548544254; unmodified intent SHA256 `9c4374110d7cb7ad4107acd968b419982cbecd5be934c34ebe80ebe30cd2dd47`.\n- Official candidate and tracked-B loaders passed with actual exit0; R `rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db`.\n- All11 A workflows passed. Official JUnit contains all43 new cases passing in each Operational4073-case and Stock3882-case (+7subtests) suite.\n\n## Release status\nMerged normally as `9c71435f4a19977c09f4331dee8fddbfa12a45eb`, published as platform **bfa6a5f**, and officially verified:3 probes,582 frontend checked requests, actual exit0, fresh guard inactive. All A/B/M gates and actual original build passed with120 unrelated files preserved.\n\n**Live financial acceptance FAILED.** The single visible mount at2026-11-14T03:44:42.930Z retained as_of12Nov01:07 and reported the total refresh deadline. This PR is not accepted as fully resolving the user's issue. Runtime UI initially reused stale logs; a management-page reload restored fresh logs after the failing stage rotated out. Next: one bounded visible diagnostic with a fresh log capture near the deadline, then an evidence-led follow-up. [Continuation](https://github.com/AMASI-SA/AMASI-SA/blob/ffaeb218fb72304dd09cd806b4378409eab6f80f/docs/operations/OPERATIONAL-SNAPSHOT-LOAD-REPAIR-20261114/STATUS.md).\n",
     "R": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
     "intent_sha256": "9c4374110d7cb7ad4107acd968b419982cbecd5be934c34ebe80ebe30cd2dd47",
     "intent_bytes": 1301645,
@@ -651,7 +651,7 @@
       "prefix": "/tmp/mezan-pr1916-original-fu9s2qng/28-verify"
     },
     "financialAcceptance": {
-      "status": "FAILED_stale_as_of_total_deadline",
+      "status": "FAILED_source_collection_total_deadline_after_snapshot_load_completed",
       "first_attempt": {
         "attempt_started_at": "2026-11-14T03:44:42.930Z",
         "recorded_at": "2026-11-14T03:49:43.672Z",
@@ -681,16 +681,77 @@
           "first_attempt_stage_already_rotated_out": true
         }
       },
-      "diagnostic_plan": "One additional controlled visible refresh after proving fresh runtime logs via UI reload; reload log UI near request deadline to capture the actual cancelled stage. No blind retries."
+      "diagnostic_plan": "One additional controlled visible refresh after proving fresh runtime logs via UI reload; reload log UI near request deadline to capture the actual cancelled stage. No blind retries.",
+      "source_collection_diagnostic": {
+        "attempt_started_at": "2026-11-14T03:57:55.990Z",
+        "recorded_at": "2026-11-14T04:01:31.755Z",
+        "manual_refresh_clicks_this_attempt": 1,
+        "total_PR1916_financial_attempts": 3,
+        "visibility_confirmed": true,
+        "reason": "Final controlled reproduction timed after observed log-cache interval to capture actual cancelled stage",
+        "logs": {
+          "logPanelPresent": true,
+          "requests": [
+            {
+              "duration_ms": 85040.132,
+              "method": "POST",
+              "status": 408,
+              "timestamp": "2026-11-14 03:59:22,255"
+            }
+          ],
+          "stageMarkerCount": 4,
+          "stages": [
+            {
+              "duration_ms": 82063.009,
+              "outcome": "cancelled",
+              "stage": "aggregate",
+              "timestamp": "2026-11-14 03:59:22,246"
+            },
+            {
+              "duration_ms": 72942.769,
+              "outcome": "cancelled",
+              "stage": "source_collection",
+              "timestamp": "2026-11-14 03:59:22,245"
+            },
+            {
+              "duration_ms": 9084.282,
+              "outcome": "complete",
+              "stage": "snapshot_load",
+              "timestamp": "2026-11-14 03:58:09,282"
+            },
+            {
+              "duration_ms": 2926.31,
+              "outcome": "complete",
+              "stage": "native_evidence",
+              "timestamp": "2026-11-14 03:58:00,182"
+            }
+          ],
+          "window_max": "2026-11-14 03:59:32,186",
+          "window_min": "2026-11-14 03:57:51,832"
+        },
+        "source_failure_logs": [],
+        "result": {
+          "asOf": "12/11/2026, 01:07",
+          "loading": null,
+          "mainError": null,
+          "refreshWarning": "تعذر تحديث المصادر؛ تُعرض آخر أرصدة محفوظة بتاريخها. انتهت مهلة التحديث؛ احتُفظ بآخر لقطة ناجحة",
+          "reportPresent": true,
+          "visibility": "visible"
+        },
+        "source_git_sha": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+        "deployment_git_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+        "release_id": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
+        "conclusion": "snapshot_load completed; total request deadline cancelled source_collection before reconciliation"
+      }
     }
   },
   "production_changed_by_this_followup": true,
   "blockers": [],
   "next_actions": [
-    "One controlled visible diagnostic after restoring fresh logs; capture actual cancelled stage near deadline",
-    "Use evidence to choose next fix, do not assume reconciliation CPU or snapshot path",
-    "Never repeat Publish/official verification; both completed successfully",
-    "No confirmations/settlements/provider/ads test writes"
+    "Create isolated follow-up based on M9c71435/treec5bd7f",
+    "Identify source collection preflight/main-batch/secondary read overhead without assuming CPU reconciliation",
+    "Implement focused proven improvement; preserve full data, owner gates, cancellation and original85s request deadline",
+    "Repeat complete A/B/M original-build/publish/verify protocol, then one fresh visible acceptance"
   ],
   "historical_prechange_test": {
     "observed_red_source_sha256": "b1858f3b050ba46925916e34f59c6b941f93f032e3be2f9313a07bde2b33eba4",
@@ -725,5 +786,11 @@
     "name": "pr1916_original_gate.py",
     "sha256": "135416b223c82a6d4b988ba21a3384037ffb124585bd746f2c82920697366a33",
     "bytes": 9213
+  },
+  "diagnostic_attempt_accounting": {
+    "initial_mounts": 1,
+    "manual_diagnostic_refreshes": 2,
+    "total_PR1916_attempts": 3,
+    "explanation": "First diagnostic logs remained cached until after the stage detail rotated out. Final diagnostic was aligned after the observed log cache interval and captured the exact cancelled stage; no further refreshes are planned before a code change."
   }
 }
