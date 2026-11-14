@@ -127,3 +127,12 @@ The final gate `15f47c312bec26684c55be53d67f81a3d5a71c814f0c5b213bb5781697e94839
 The actual official prepare and prepublish commands both exited 0, with all wrapper identity/preservation checks successful. Prepare finished 17:50:32.134410Z; prepublish finished 17:50:50.745517Z and reported `ready_to_publish=true`. The active lease belongs to `codex-campaign-operating-parity-1924`, exact M3/runtime above. The 120-path preservation chain remains valid.
 
 Root clicked the free `Publish changes` control exactly once at 17:51:29.572Z. The live UI changed to `Publishing...`. Existing baseline version is `ecb9679`; no new completed version is claimed yet. Do not rerun prepare, prepublish, build, or the publish action. Keep the original workspace unchanged until the new UI completion and the one official verifier finish. Final live numeric acceptance remains pending.
+
+
+## Published follow-up; numeric acceptance still blocked
+
+The one free publication completed with UI event `Deployment finished Nov 14, 09:01 PM` (UTC minute 18:01), new version `5a7a310`, observed at 18:01:26.790 UTC. Root invoked the pinned final gate's official verify once in original Terminal 3; it remains running. One independent health read confirms source A3, the exact runtime release ID, source verification and frontend verification. The first campaign GET after publication returned origin error 520; one subsequent normal reload succeeded.
+
+Live numeric acceptance has **not passed**: direct costs are complete, but operating basis still reports `operating_basis_cost_missing`, so profit correctly remains unavailable. Owner-scoped read-only employee-management and canonical salary reads identify an explicit `pilot_only` / `payroll_enabled=false` / `disabled_during_pilot` contract with no effective salary history that the canonical executive salary list excludes. Hover's projection omits those policy fields and rejects the empty history. No employee, financial, order, ad, or settings data was modified. Private identifiers, amounts and staffing counts are deliberately omitted here.
+
+A narrow follow-up is being prepared in isolated scratch only, preserving the current source/intent/runtime/lease unchanged. Finish this actual official verification before a new release sequence. No repeated guard invocation, build, or publish.

@@ -1,7 +1,7 @@
 {
   "task": "CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114",
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 17:52:24 UTC",
+  "updated_at_utc": "2026-11-14 18:08:07 UTC",
   "branch": "codex/campaign-operating-executive-parity-m94f6-20261114",
   "pr": 1924,
   "base_J3": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
@@ -145,7 +145,7 @@
     }
   },
   "production_changed_by_this_followup": true,
-  "next": "Wait for explicit new Deployment finished UI event and new published version. Do not click Publish again. Then invoke frozen final gate verify exactly once; require official three probes and actual inactive status, then live campaign operating/net arithmetic acceptance.",
+  "next": "Finish the single running official PR1924 verify, preserve its actual receipt and close the owned lease. Independently review a narrow isolated follow-up candidate for the proven non-payroll pilot blocker; no original source mutation or new publication while current lease is active.",
   "static_review": "root plus independent source reuse/overlap PASS",
   "source_coverage": {
     "backend": 248,
@@ -241,7 +241,7 @@
   },
   "pr_draft": false,
   "merge_tree": "b48a0eefb368ba655c8370f6b2e4435e07612790",
-  "live_production_updated_by_followup": false,
+  "live_production_updated_by_followup": true,
   "merge_proof": {
     "ordered_parents": [
       "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
@@ -622,11 +622,16 @@
     "clicks": 1,
     "button": "Publish changes",
     "billing": "Free republishes",
-    "ui_state": "Publishing...",
+    "ui_state": "Deployment successful",
     "baseline_version": "ecb9679",
-    "new_version": null,
-    "finished": false,
-    "official_verify_started": false
+    "new_version": "5a7a310",
+    "finished": true,
+    "official_verify_started": true,
+    "event_text": "Deployment finished Nov 14, 09:01 PM",
+    "ui_finished_at_utc_minute": "2026-11-14T18:01:00Z",
+    "ui_observed_at": "2026-11-14T18:01:26.790Z",
+    "official_verify_invocations": 1,
+    "official_verify_ui_command_dispatched_at": "2026-11-14T18:01:26.790Z"
   },
   "release_lease": {
     "active": true,
@@ -634,5 +639,17 @@
     "source": "c484b549e8bca017627ce80749c7895198f04bf8",
     "deployment": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
     "release_id": "rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33"
+  },
+  "live_acceptance": {
+    "passed": false,
+    "after_publication": true,
+    "observed_as_of": "2026-11-14T18:02:27.483057+00:00",
+    "costs_complete": true,
+    "operating_expenses_complete": false,
+    "net_profit_available": false,
+    "reason": "operating_basis_cost_missing",
+    "private_values_not_archived": true,
+    "diagnosis": "Owner-scoped read-only employee management and canonical salary GETs identify an explicitly payroll-disabled pilot contract without effective salary history. The executive salary projection excludes it; hover's bounded projection omits non-payroll policy fields and rejects its empty history. No source data was changed.",
+    "followup_candidate": "Isolated, not yet frozen; exclude only the proven explicit non-payroll pilot shape while retaining missing-cost protection for contributing contracts."
   }
 }
