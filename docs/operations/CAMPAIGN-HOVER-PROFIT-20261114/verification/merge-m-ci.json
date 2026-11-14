@@ -1,0 +1,41 @@
+{
+  "M": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
+  "tree": "14dfe135d6633f72c92cb1cb359f4b9933ac176a",
+  "parents": [
+    "4c623c640fb63ac3c138fa4a9cabb20e2b39dca7",
+    "dcb97791d6ef8ad394575542eb4048c6c867bbba"
+  ],
+  "source": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
+  "source_diff": [
+    "release/release-intent-v5.json"
+  ],
+  "runs": [
+    {
+      "id": 43610488216,
+      "name": "Security Gate",
+      "head_sha": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43610488216",
+      "updated_at": "2026-11-14T15:32:21Z"
+    },
+    {
+      "id": 43610488214,
+      "name": "Mezan Release Readiness",
+      "head_sha": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43610488214",
+      "updated_at": "2026-11-14T15:33:16Z"
+    },
+    {
+      "id": 43610488271,
+      "name": "CodeQL",
+      "head_sha": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43610488271",
+      "updated_at": "2026-11-14T15:36:03Z"
+    }
+  ]
+}

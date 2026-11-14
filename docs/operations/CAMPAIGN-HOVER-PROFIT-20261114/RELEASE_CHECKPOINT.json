@@ -1,6 +1,6 @@
 {
   "task": "CAMPAIGN-HOVER-PROFIT-20261114",
-  "updated_at_utc": "2026-11-14 15:35:56 UTC",
+  "updated_at_utc": "2026-11-14 15:39:12 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pr": 1920,
   "task_branch": "codex/campaign-hover-profit-20261114",
@@ -22,7 +22,7 @@
     "prior_ended_at": "2026-11-14T15:18:09.798861+00:00",
     "fresh_original_status": "inactive"
   },
-  "next": "Require successful exact-M CodeQL and review release-gate wrapper. Then own official prepare, immediate prepublish before one authorized publish; observe newer Deployment finished event and new current version; official verify3 and inactive; live campaign card acceptance.",
+  "next": "Run reviewed gate prepare once. Read actual exit/receipt and exact owned active lease. Then prepublish once immediately before authorized UI Publish changes; observe newer actual event/newversion; verify once with real UI evidence, require3checks/inactive and livecard.",
   "B_conditional_skip": "TikTok Creator Release Candidate requires its dedicated codex/tiktok-content-ci-20261011 branch; not applicable here",
   "B_host_20_24_artifacts": "independently_verified",
   "original_runner_sha256": "7019b1b7f3fdc6bad77495cac3719c6c56f746d4afeb6239c9276c5ff7d915b0",
@@ -31,7 +31,7 @@
   "merge_M": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
   "merge_tree": "14dfe135d6633f72c92cb1cb359f4b9933ac176a",
   "M_lineage_verified": true,
-  "M_ci": "Readiness and Security success; CodeQL running",
+  "M_ci": "all_3_success",
   "original_app_head": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
   "original_app_tracked_clean": true,
   "original_app_untracked_count": 120,
@@ -42,5 +42,10 @@
   "original_package_exit": 0,
   "original_identity_matches": true,
   "original_preserved_untracked_files": 120,
-  "original_guard_inactive": true
+  "original_guard_inactive": true,
+  "gate_runner_sha256": "d072a7a0d92f8f6f79ade613094ebe0dda4c123563341b907f6134f85b8a9aff",
+  "gate_review": "root and independent static PASS",
+  "own_lease": "not_prepared",
+  "publication": "not_started",
+  "baseline_ui_version": "a5eae68"
 }
