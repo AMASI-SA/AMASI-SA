@@ -1,12 +1,14 @@
 {
   "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
+  "round": 5,
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 18:18:35 UTC",
-  "branch": "codex/campaign-operating-pilot-m77e4-20261114",
-  "pr": 1926,
-  "base_M3": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
-  "source_A4": "1140a3fec8ef77f81fdd0cf768f9a89fb2db4ab0",
-  "source_tree": "d9bf5df2fc8529d484988c5b743160c59aff5315",
+  "updated_at_utc": "2026-11-14 18:27:01 UTC",
+  "branch": "codex/campaign-operating-pilot-maf9-20261114",
+  "pr": 1927,
+  "base_J5": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+  "base_tree": "b5aba4c6ec2755fb27fe084c2b74f87f9d8fddf6",
+  "source_A5": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+  "source_tree": "d0990feaa0514cf06fd09eb601051c116bb8be46",
   "source_files": [
     {
       "path": "backend/order_engine/campaign_hover_operating.py",
@@ -24,23 +26,21 @@
       "path": "docs/operations/CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114/STATUS.md",
       "mode": "100644",
       "type": "blob",
-      "sha": "af496d793f07dacfdb6f38e9a144b81bcbd77c41"
+      "sha": "87ae08883b1c55923ab038b9ebc7fc027bc2b4d2"
     }
   ],
-  "source_review": {
-    "author": "review_hover_frontend",
-    "independent": "locate_campaign_fix",
-    "result": "PASS",
-    "patch_sha256": "dee247aa5fe6d2dff46d96537e0c390a60b9644adf91679dd65e1916583aaa0c",
-    "operating_sha256": "aaec456937c47e5e6f395c7c676809061ec75946e214ea51648abe0ea67a4ae6",
-    "tests_sha256": "a9921f3720373f5aaa39898430d2a434144dbed5361a769e10ada4c10ab6badf",
-    "unchanged_prior_functions_and_tests": true
-  },
   "source_history": {
-    "sole_parent": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+    "sole_parent": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
     "changed_files": 3,
-    "inherited_intent_blob": "2159398256b11323a9cce8e09f89508bb6f18818",
+    "inherited_intent_blob": "f44168176bc3a995776f71e4aa61ea4ee9509366",
     "independent_result": "PASS"
+  },
+  "source_review": {
+    "same_code_and_tests_as_reviewed_A4": true,
+    "operating_blob": "b0576e365eb2a5b4f1e105e2a1be17f1d2393655",
+    "tests_blob": "5ec985aa2307f07d05b87486f59c9fb764205ed7",
+    "independent_patch_review": "PASS",
+    "independent_new_base_compatibility_review": "PASS"
   },
   "diagnosis": {
     "recorded_at_utc": "2026-11-14 18:09:58 UTC",
@@ -73,159 +73,36 @@
     "private_identifiers_and_values_not_collected_for_evidence": true,
     "fix_scope": "Add projected non-payroll policy fields; ignore explicit disabled-pilot contract only when canonical normalized history is empty; keep all contributing missing-cost protections."
   },
-  "offline_probe": {
-    "baseline_passed": 46,
-    "baseline_failed": 1,
-    "candidate_passed": 47,
-    "candidate_failed": 0,
-    "local_pytest_run": false,
-    "local_pytest_reason": "pytest and mongomock_motor unavailable in scratch"
-  },
   "source_ci": {
-    "status": "8_of_11_success_at_18:17:58Z",
-    "readiness_run": 43625326307,
-    "coverage_run": 43625326323,
-    "frontend_suites": 9,
-    "frontend_tests": 50,
-    "frontend_job": 132539756755,
-    "backend_count": 253,
-    "backend_warnings": 2,
-    "backend_job": 132539756934
+    "status": "running",
+    "readiness_run": 43626531393,
+    "coverage_run": 43626531408,
+    "applicable_workflows": 11
   },
-  "predecessor_release": {
+  "predecessor_own_release": {
     "pr": 1924,
-    "deployment": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
-    "published_version": "5a7a310",
-    "official_verify_started": true,
-    "official_verify_invocations": 1,
-    "official_verify_complete": true,
-    "actor": "codex-campaign-operating-parity-1924",
-    "original_source_may_change": "Only after fresh inactive guard and all new A/B/M gates.",
     "official_verify_success": true,
-    "official_verify_finished_at": "2026-11-14T18:14:07.202705Z",
-    "lease_active": false
+    "checks": 3,
+    "lease_closed_at": "2026-11-14T18:14:07.202705Z",
+    "evidence_checkpoint": "e38c40f21b0c5d84b047403e5a3823617f2d2f59"
   },
-  "templates": {
-    "original_build_sha256": "30072495037433e41496fbd5503d3e66806673204e86e12a1f960012e9c8bb28",
-    "release_gate_sha256": "451b29d746dd13e5ec1fcbcbf66bb21fccd3d152e16d17b80d58b83d9c380846",
-    "pins_reviewed": false,
-    "root_disabled_diff_review": "PASS"
+  "foreign_release": {
+    "pr": 1923,
+    "deployment": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+    "source_A": "7944a567fef519b3a1f9eb933fc463fbdd0c8575",
+    "intent_B": "ece0b24b0978c5064c4e605b577ad2722158f56a",
+    "state": "Merged; owner preparing original rehearsal at last observed PR update. Root must read current guard before original actions and wait for the owner's successful verification/inactive receipt if a lease is active.",
+    "last_guard_read": {
+      "active": false,
+      "scope": "Actual root read via original Terminal3; no original source or lease mutation."
+    }
   },
-  "next": "Wait for all exact-A4 CI, download and independently validate its candidate intent; do not freeze B until A gates pass. Root must preserve actual final PR1924 verification receipt and inactive status before the next original release sequence.",
-  "coordination": "Issue1006 comment limit reached; task STATUS/PR body/handoff branch retain durable checkpoints.",
-  "candidate": {
-    "zip_bytes": 378046,
-    "zip_sha256": "df9fab5349b632400b948a8b4a95919462cd813f064d8cd2e4a75f3210a616b6",
-    "intent_bytes": 1308035,
-    "intent_sha256": "638db37e00140c08824eca2f67d10b7503330d9950fb2021ad798eab48dcd764",
-    "intent_git_blob": "770f834584fe2fa362aa3b8b54f2d2034737e9cd",
-    "path": "/workspace/scratch/a7d75184af2d/campaign-operating-intent-a4/release-intent-v5.json",
-    "top_level": {
-      "backend_runtime_source": [
-        "added_count",
-        "deleted_count",
-        "file_count",
-        "files",
-        "manifest_sha256",
-        "modified_count",
-        "projection_tree_oid",
-        "scope",
-        "scope_tree_oid",
-        "source_base_git_sha",
-        "source_base_root_tree_oid",
-        "source_base_scope_tree_oid",
-        "source_git_sha",
-        "source_root_tree_oid",
-        "tombstone_count",
-        "tombstones",
-        "tombstones_sha256",
-        "tree_sha256"
-      ],
-      "branch": "hotfix/prod-snap-meta-final",
-      "client_environment": [
-        "REACT_APP_BACKEND_URL"
-      ],
-      "critical_file_hashes": [
-        "frontend_build_identity.py",
-        "integrations/qoyod_manual/routes.py",
-        "integrations/qoyod_manual/send.py",
-        "release_identity.py",
-        "release_protocol_v5.py",
-        "server.py"
-      ],
-      "frontend_build": [
-        "artifact_tree_sha256",
-        "assets",
-        "build_meta",
-        "entrypoints",
-        "environment",
-        "git_sha",
-        "index",
-        "public_files",
-        "schema_version",
-        "source",
-        "toolchain"
-      ],
-      "frontend_reproducibility": [
-        "environment",
-        "git_sha",
-        "kind",
-        "passes",
-        "proof_file",
-        "retained_pass",
-        "schema_version",
-        "source",
-        "toolchain"
-      ],
-      "frontend_source": [
-        "file_count",
-        "files",
-        "git_tree_oid",
-        "scope",
-        "tree_sha256"
-      ],
-      "kind": "mezan_emergent_release_intent_v1",
-      "protocol_version": 5,
-      "release_control_source": [
-        "added_count",
-        "deleted_count",
-        "file_count",
-        "files",
-        "manifest_sha256",
-        "modified_count",
-        "projection_tree_oid",
-        "scope",
-        "scope_tree_oid",
-        "source_base_git_sha",
-        "source_base_root_tree_oid",
-        "source_base_scope_tree_oid",
-        "source_git_sha",
-        "source_root_tree_oid",
-        "tombstone_count",
-        "tombstones",
-        "tombstones_sha256",
-        "tree_sha256"
-      ],
-      "runtime_identity": [
-        "backend_runtime_source",
-        "branch",
-        "critical_file_hashes",
-        "frontend_build",
-        "frontend_reproducibility",
-        "kind",
-        "protocol_version",
-        "release_control_source",
-        "release_id",
-        "schema_version",
-        "source_base_git_sha",
-        "source_git_sha"
-      ],
-      "schema_version": 2,
-      "source_base_git_sha": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
-      "source_git_sha": "1140a3fec8ef77f81fdd0cf768f9a89fb2db4ab0"
-    },
-    "run": 43625326307,
-    "artifact": 14125533794,
-    "independent_review": "in progress"
-  }
+  "superseded_pr1926": {
+    "artifact": "verification/superseded-pr1926.json",
+    "A4": "1140a3fec8ef77f81fdd0cf768f9a89fb2db4ab0",
+    "B4": "8351754572cfd82833b9901e794275f6598f79f1",
+    "reason": "Production advanced immediately after the pre-B4 ref check; frozen B4 cannot merge against the new intent/source base."
+  },
+  "next": "Wait for all exact-A5 source workflows and independently validate its new A5/J5 candidate. Do not reuse the A4/B4 intent. Then freeze only a new B5 and pass all B5/host gates. Respect PR1923's separate original release.",
+  "coordination": "Issue1006 is full; task status, PR body and handoff branch preserve checkpoints."
 }

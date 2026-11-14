@@ -1,44 +1,35 @@
 # Campaign operating basis: disabled pilot exclusion
 
-## Scope and reason
+## Goal and proven cause
 
-The user requested campaign direct costs, operating expenses allocated with the executive summary's current unrounded expenses-to-sales ratio, and net profit. PR1924 is deployed from source `c484b549e8bca017627ce80749c7895198f04bf8` with merge `77e4acf33e8f5432d97bda5d7208983f0fadc599`, but live numeric acceptance exposed a remaining operating-basis blocker.
+The user requested complete campaign direct costs, operating expenses allocated using the executive summary's current unrounded expenses-to-sales ratio, and net profit. PR1924 is published and passed its single official three-probe verification at 2026-11-14T18:14:07.202705Z, with the owned lease closed. Live numeric acceptance found an explicitly disabled pilot salary contract without effective normalized salary history. The executive salary reader excludes it; the campaign reader omitted its policy fields and incorrectly treated it as a missing contributing payroll cost. Authorized owner-scoped reads established the cause without changing business data. No private identifiers, staffing counts or financial values are included here.
 
-Authorized read-only owner endpoints showed an explicitly disabled pilot salary contract with no effective normalized salary history. The canonical executive salary reader excludes it. The campaign reader's bounded projection omitted the pilot policy fields and treated the empty history as a missing contributing cost. Private identifiers, staffing counts and financial values are not recorded here.
+## Reviewed change
 
-## Changes
+Project the existing status, payroll_enabled and accrual_policy fields. After shared identity/calendar and salary normalization, omit only empty normalized history with all three explicit markers: status=pilot_only, payroll_enabled is False, accrual_policy=disabled_during_pilot. Valid revision history and a valid legacy baseline still contribute even with obsolete markers. Contributing contracts with missing or invalid costs remain unknown.
 
-- Project `status`, `payroll_enabled` and `accrual_policy` with the existing bounded contract read.
-- After the shared identity/calendar and salary-history normalization, omit only a contract with empty normalized history and all three explicit disabled-pilot markers.
-- Keep valid salary history and legacy effective baselines contributing even if obsolete pilot markers remain.
-- Keep missing or invalid costs for contributing contracts unknown; preserve currency, deadline, read-limit, recurring-expense, campaign-profit and frontend behavior.
-- Add five synthetic regression cases, including comparison with the canonical executive salary cohort and proof of no contract writes.
+Five synthetic regressions compare the actual executive salary cohort, preserve valid revision/legacy history and protect explicit/default contributing contracts with missing history. No operating-ratio formula, currency, read limit, deadline, recurring cost, direct cost, profit rounding or frontend behavior changes.
 
-## Verification and release state
+## New base and superseded release candidate
 
-- Baseline: exact production merge `77e4acf33e8f5432d97bda5d7208983f0fadc599`; inherited release intent remains unchanged.
-- Independent static review: PASS for the two-file patch, SHA256 `dee247aa5fe6d2dff46d96537e0c390a60b9644adf91679dd65e1916583aaa0c`.
-- Offline probe using the actual shared salary helpers: baseline 46 passed / 1 failed on the disabled-pilot case; candidate 47 passed / 0 failed. This is not a substitute for pytest/CI.
-- The scratch environment lacks pytest and mongomock_motor. Exact-source CI is required before an intent-only commit or merge.
-- PR1924's single official production verifier is running. This follow-up is isolated; its original build and guard phases must wait for the current owned lease to close.
-- No business data, advertising, synchronization, financial settings or paid agent operations were changed.
+Base J5 is PR1923 merge `af9caabb3119aeb9cf450af0a8b89d376cef8c74`, tree `b5aba4c6ec2755fb27fe084c2b74f87f9d8fddf6`, which entered production history after the pre-intent check for PR1926. It adds delayed Salla customer-option preservation. Independent full-tree and source review confirmed the pilot source, tests, payroll, expenses, recurring, currency and acceptance workflow remain identical to the previous base, so the same reviewed source/test bytes are reused.
 
-## Remaining gates
+PR1926 remains immutable and is superseded: A4 `1140a3fec8ef77f81fdd0cf768f9a89fb2db4ab0`, B4 `8351754572cfd82833b9901e794275f6598f79f1`. All 11 A4 workflows passed on attempt 1, including 253 backend and 50 frontend source-coverage tests. Its candidate intent passed independent validation, but B4 became unmergeable against the advancing production base and no B4 workflows ran. No B4 publication occurred.
 
-Freeze source A on the exact current production base, pass all applicable A workflows, independently validate its generated intent, freeze intent-only B, pass both clean-clone host adapters and all B workflows, merge ordinarily with the same tree, pass exact-merge push gates, then perform the original build/package proof and official prepare/prepublish/single publication/three-probe verify. Require actual live operating and profit arithmetic acceptance after publication.
+The new source A5 directly descends from J5 and retains J5's intent blob `f44168176bc3a995776f71e4aa61ea4ee9509366` unchanged. Never carry the old B4 intent into A5. Extract a new reviewed intent from exact-A5 CI and create a new intent-only B5.
 
-The durable continuation ledger is on `codex/campaign-hover-profit-release-handoff-20261114`. Issue #1006 has reached its comment limit; the task status and PR body retain the required checkpoint instead.
+## Verification status and next steps
 
+- Source module blob `b0576e365eb2a5b4f1e105e2a1be17f1d2393655`; test blob `5ec985aa2307f07d05b87486f59c9fb764205ed7`.
+- Independent narrow patch review: PASS; patch SHA256 `dee247aa5fe6d2dff46d96537e0c390a60b9644adf91679dd65e1916583aaa0c`.
+- Actual-helper offline regression: baseline 46 passed / 1 failed on the disabled-pilot case; candidate 47 passed / 0 failed. Local pytest was unavailable; A4 CI above executed the real tests.
+- Exact-A5 CI is pending and must pass independently. Previous A4 results do not replace it.
+- PR1923's separate original release is being prepared by its owner. Respect its guard and preservation state; no original-source, lease or deployment change from this task before the required gates and fresh ownership checks.
+- Require all A5 gates, exact candidate validation, all B5 gates and both host proofs, ordinary tree-equivalent merge M5, exact-M5 push gates, original build/package proof, official prepare/prepublish/single publication/three-probe verify and actual live numeric acceptance.
 
-## Frozen source checkpoint
-
-PR1926: https://github.com/AMASI-SA/AMASI-SA/pull/1926
-
-Source A4 `1140a3fec8ef77f81fdd0cf768f9a89fb2db4ab0`, tree `d9bf5df2fc8529d484988c5b743160c59aff5315`, sole parent M3 `77e4acf33e8f5432d97bda5d7208983f0fadc599`. Independent GitHub commit, recursive-tree and history review passed: exactly the reviewed operating module, tests and this task STATUS; inherited intent blob `2159398256b11323a9cce8e09f89508bb6f18818` is unchanged.
-
-All11 expected source workflows have started. Actual frontend source coverage passed9suites/50tests; remaining gates are still being observed. Readiness run43625326307; coverage run43625326323. Disabled normal original-build/gate templates are independently reviewed and retained here; no current original-workspace or lease mutation.
+Continuation ledger: `codex/campaign-hover-profit-release-handoff-20261114`. Issue #1006 is full; this task status and PR body retain the required checkpoint. No business-data, advertising, sync, financial-setting or paid-agent changes are authorized or performed by this task.
 
 
-## Predecessor closed; source tests progressing
+## Exact A5 checkpoint
 
-PR1924's single official verifier passed3checks and its actual lease is inactive as of18:14:07.202705UTC. Exact receipts are retained in the predecessor task checkpoint; do not rerun its phases. A4 source coverage passed253backendtests/2warnings and50frontendtests/9suites. At18:17:58UTC,8of11 source workflows succeeded; CodeQL/OperationalStock/OperationalBalance remained running without observed failed steps. Readiness candidateartifact14125533794 fromrun43625326307 is downloaded and under independent binding/manifest validation. Do not freeze B before all A workflows succeed.
+PR1927 https://github.com/AMASI-SA/AMASI-SA/pull/1927 is frozen at source A5 `3545ef861c17f1411d6258efb5db4a5aaf52f577`, tree `d0990feaa0514cf06fd09eb601051c116bb8be46`, sole parent J5 `af9caabb3119aeb9cf450af0a8b89d376cef8c74`. Independent commit/history/full-tree review passed: exactly the two reviewed code/test blobs plus updated STATUS; J5 intent unchanged. Exact A5 CI is running (readiness43626531393; coverage43626531408). PR1926 is closed and archived separately with all passing A4 results and its unused B4. Do not resume that old candidate.
