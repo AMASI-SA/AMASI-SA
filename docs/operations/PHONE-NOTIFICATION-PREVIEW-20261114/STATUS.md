@@ -2,7 +2,7 @@
 
 ## Owner hold and observed result
 
-Status: unpublished source checkpoint; **do not merge, deploy the server, build an APK, send an OTA, publish a store release or send test notifications**. The owner is collecting additional fixes. No production state changed in this task.
+Status: verified source checkpoint plus documentation-only CI evidence; **do not merge, deploy the server, build an APK, send an OTA, publish a store release or send test notifications**. The owner is collecting additional fixes. No production state changed in this task.
 
 The owner created a legitimate new notification and supplied screenshots showing an Android system notification, a launcher dot and an in-app unread increase from 26 to 27. This establishes delivery for that observed event on that device. It does not establish all foreground/background/locked states. The delivered title/body were generic and omitted sender, task and actual text. Earlier delivery-failure hypotheses are not established as the cause on this now-working device.
 
@@ -14,7 +14,9 @@ The owner created a legitimate new notification and supplied screenshots showing
 - Parent tree: `355fdae884cf4a849b0acdf1c29081730556c6b0`.
 - Work initially used `af9caabb3119aeb9cf450af0a8b89d376cef8c74`. The parent advanced via unrelated PR1928; its 11 changed paths do not overlap this patch. The six changed backend baseline files were updated and verified against their exact Git blob hashes before final integrated testing.
 - The local directory is an isolated source snapshot, not a Git checkout. The foreign checkout used to read immutable base objects was not changed.
-- The source commit SHA and CI links are recorded in the Draft PR and canonical Issue1006 after creation; this file does not claim a self-referential commit identity.
+- Frozen source commit: `7139f91495a6ceaf356621eb2a0eb2d418c40a92`; [Draft PR1930](https://github.com/AMASI-SA/AMASI-SA/pull/1930), open and unmerged. The source branch was read back at that exact SHA; the compare has exactly the eight intended files.
+- This later evidence revision is documentation-only on `codex/phone-notification-preview-evidence-20261114`. Do not build, merge or publish that evidence branch. It records verification of the frozen source above; it does not create a new tested application identity.
+- The Issue1006 body update was accepted by the connector, but subsequent generic and issue-specific reads did not show the new entry. Existing ledger contents were preserved; the verified Draft PR and task branches are the recoverable handoff. Do not claim the canonical ledger entry is visible without a later successful readback.
 
 ## Completed source behavior
 
@@ -64,7 +66,9 @@ Regression evidence already recorded: original delivery preview failed two integ
 
 Tests use real routing, merchant and native-access helpers, synthetic data and intercepted provider requests. Local dependencies are reused read-only. The available vendored `requests` is 2.32.3; the existing CI installs the repository's pinned 2.34.2. No production database, device or provider is contacted. Local commands set `PYTHON_DOTENV_DISABLED=1` and use `--noconftest -p no:cacheprovider`.
 
-The existing Mobile Order Tracking workflow now runs both new suites and the real-Mongo sender-directory suite, with minimum-case and no-skip checks. It checks out the exact PR head, uses a disposable loopback Mongo replica set and does not build or publish a mobile artifact. Final CI state belongs in the PR/ledger, not in an unexecuted local claim.
+The existing Mobile Order Tracking workflow now runs both new suites and the real-Mongo sender-directory suite, with minimum-case and no-skip checks. It checks out the exact PR head, uses a disposable loopback Mongo replica set and does not build or publish a mobile artifact.
+
+**Exact-source CI passed:** [run43629528927](https://github.com/AMASI-SA/AMASI-SA/actions/runs/43629528927), job132552842793, explicitly checked out `7139f91495a6ceaf356621eb2a0eb2d418c40a92`. The log reports **194 passed, 26 subtests passed, zero skips**, 14.14 seconds. The separate no-skip step passed for real tracking, preview, snapshot and directory suites. Pinned requests2.34.2 installed successfully. Independent source review also accepted the final message-first presentation adjustment and verified the writer's exact hashes. These results do not establish phone appearance or authorize release.
 
 ## Remaining acceptance and preserved work
 
@@ -77,4 +81,4 @@ The existing Mobile Order Tracking workflow now runs both new suites and the rea
 
 ## Next safe action
 
-Preserve the source checkpoint and independent review in a Draft PR and Issue1006; inspect exact-head CI. Continue collecting owner-requested changes without publishing. Only after the owner resumes publication, combine and revalidate the approved changes, execute the governed release process and test newly generated legitimate notifications on the intended phones. Opening a notification must continue to navigate without completing or approving the business task.
+Continue collecting owner-requested changes without publishing, using Draft PR1930 and these immutable source/evidence records. Reconcile the canonical ledger visibility when its connector readback is reliable. Only after the owner resumes publication, combine and revalidate the approved changes, execute the governed release process and test newly generated legitimate notifications on the intended phones. Opening a notification must continue to navigate without completing or approving the business task.
