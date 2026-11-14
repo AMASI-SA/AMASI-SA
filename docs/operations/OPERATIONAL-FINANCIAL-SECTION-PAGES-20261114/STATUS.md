@@ -268,3 +268,26 @@ independent clone was verified at exactA with all generated outputs absent;
 governed locked dependency install is in progress. Next: local two-build proof,
 freeze external candidate, compare exact CI artifact, then intent-only B when
 all A checks and review gates pass. No lease is created during this preparation.
+
+## Reviewed intent B
+
+All11 exactA workflows passed. Web run43614920574 recorded4760 backend tests,
+16 shipping/calculator tests plus18 subtests,774 frontend tests in52 suites,
+14 browser cases and4 worker tests. Stock run43614920535 recorded4496 tests
+plus7 subtests. Required collection/no-skip gates passed; totals overlap and
+must not be summed as unique tests.
+
+Independent clean-clone two-build47.777s, verification0.341s and external
+freeze5.814s all completed with actual exit0. Both local and exactA CI candidates
+passed load_candidate_release_intent and are byte-identical (1308035bytes).
+CI artifact14122235456 ZIP SHA256:
+cc035c56be8b664cccc7a4c7ed9b9d0886695f819197accc1c24fed10b412d57.
+Intent byte SHA256:ad0a524b2de8da1a734e46bfeb4d851f9743ae28293eedb361075c41fcc4a4b2.
+Frontend artifact tree:8b55f9ab1883c764826c27dd77b504fa55599bf0d84875f156565a9d8eaba5f4.
+Runtime:rg5-5a1f26faa5108bc63621c816cdbd90697e422290a4245a460ff6020e6c97dc30.
+
+Intent-only B:5fc08eef0b430b53911934d9f866ec7b13b61b47.
+B tree:d636970f1a954530cf7845e408e05362af160cfa.
+No source edits afterA; task branch nowB. Both exactB host20.20.2/24.19.0
+clean-clone adapter rehearsals and all B checks remain required before normal
+merge M. No lease, merge or publication has occurred for this task.
