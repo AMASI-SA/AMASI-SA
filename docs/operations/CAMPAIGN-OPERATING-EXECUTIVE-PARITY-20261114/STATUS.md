@@ -136,3 +136,10 @@ The one free publication completed with UI event `Deployment finished Nov 14, 09
 Live numeric acceptance has **not passed**: direct costs are complete, but operating basis still reports `operating_basis_cost_missing`, so profit correctly remains unavailable. Owner-scoped read-only employee-management and canonical salary reads identify an explicit `pilot_only` / `payroll_enabled=false` / `disabled_during_pilot` contract with no effective salary history that the canonical executive salary list excludes. Hover's projection omits those policy fields and rejects the empty history. No employee, financial, order, ad, or settings data was modified. Private identifiers, amounts and staffing counts are deliberately omitted here.
 
 A narrow follow-up is being prepared in isolated scratch only, preserving the current source/intent/runtime/lease unchanged. Finish this actual official verification before a new release sequence. No repeated guard invocation, build, or publish.
+
+
+## Official PR1924 verification complete
+
+The one official `verify --url https://mezansalla.com` command ran 18:01:27.299109–18:14:06.971805 UTC, exit0, 759.672573s, verified=true/checks=3, exact A3/base/runtime/frontend artifact and current boot. Wrapper completed 18:14:07.202705 UTC. Actual post-status is inactive. All120 original untracked paths are preserved (119exact plus append-only bookkeeping prefix proof); before/after bookkeeping49536bytes. Official stdout SHA256 `d14d8f6696a51b48f6765102d4af129e194ecce74b1799eb0dfdf5ae6f74d6f8`; guard receipt `2094abb734d548660a87c04bf8a6a177eea27a850d4008d42b5436f1969eb282`; final result `02195ecdac1bc2fdf826a3c03f6dfe25ba3d766969ff4f1fa43aab548ca3751e`.
+
+This release sequence is closed and must not be repeated. User-visible numeric acceptance remains incomplete for the diagnosed pilot contract; continue PR1926 source A4 `1140a3fec8ef77f81fdd0cf768f9a89fb2db4ab0`. A new release requires fresh inactive checks and its own complete A/B/M gates.

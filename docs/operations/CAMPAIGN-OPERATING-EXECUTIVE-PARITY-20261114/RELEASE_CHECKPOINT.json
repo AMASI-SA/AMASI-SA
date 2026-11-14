@@ -1,7 +1,7 @@
 {
   "task": "CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114",
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 18:08:07 UTC",
+  "updated_at_utc": "2026-11-14 18:18:35 UTC",
   "branch": "codex/campaign-operating-executive-parity-m94f6-20261114",
   "pr": 1924,
   "base_J3": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
@@ -145,7 +145,7 @@
     }
   },
   "production_changed_by_this_followup": true,
-  "next": "Finish the single running official PR1924 verify, preserve its actual receipt and close the owned lease. Independently review a narrow isolated follow-up candidate for the proven non-payroll pilot blocker; no original source mutation or new publication while current lease is active.",
+  "next": "PR1924 is published and officially verified; do not repeat any release phase. Live numeric acceptance remains blocked by the proven disabled pilot noncontributor, addressed by frozen PR1926 A4. Continue PR1926 A4/B4/M4 gates, then a new original release with fresh inactive checks.",
   "static_review": "root plus independent source reuse/overlap PASS",
   "source_coverage": {
     "backend": 248,
@@ -615,6 +615,65 @@
       "preserved_untracked_files": 120,
       "result_sha256": "4f281fb49dd283d0d1e90fc39a71593fa5a3213e0dd1dfd927d29f7b842048c8",
       "guard_receipt_sha256": "de7364e33714a4ca515e9a64b84ce7940843718d94d89a707d608e63b276192f"
+    },
+    "verify": {
+      "success": true,
+      "phase": "verify",
+      "actor": "codex-campaign-operating-parity-1924",
+      "source_git_sha": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "source_base_git_sha": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+      "intent_git_sha": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "deployment_git_sha": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+      "release_id": "rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33",
+      "protocol_version": 5,
+      "official_invocations": 1,
+      "receipt": {
+        "argv": [
+          "python",
+          "-B",
+          "scripts/production_release_guard.py",
+          "verify",
+          "--url",
+          "https://mezansalla.com"
+        ],
+        "cwd": "/app",
+        "started_at": "2026-11-14T18:01:27.299109Z",
+        "finished_at": "2026-11-14T18:14:06.971805Z",
+        "exit_code": 0,
+        "seconds": 759.6725731950137,
+        "stdout_sha256": "d14d8f6696a51b48f6765102d4af129e194ecce74b1799eb0dfdf5ae6f74d6f8",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "verified": true,
+      "checks": 3,
+      "url": "https://mezansalla.com",
+      "boot_started_at": "2026-11-14T18:00:29.944475+00:00",
+      "frontend_artifact_tree_sha256": "8b55f9ab1883c764826c27dd77b504fa55599bf0d84875f156565a9d8eaba5f4",
+      "finished_at": "2026-11-14T18:14:07.202705Z",
+      "status_after_active": false,
+      "preserved_untracked_files": 120,
+      "exact_original_records": 119,
+      "before_bookkeeping_bytes": 49536,
+      "after_bookkeeping_bytes": 49536,
+      "all_witnessed_prefixes_preserved": true,
+      "evidence": "/tmp/mezan-pr1924-original-recovery-jxtvm4fn/release-gate/verify",
+      "file_sha256": {
+        "started.json": "430099588c9d9499d4c26bd913f294ff18ed0faea850fcb298bac0416de087ad",
+        "ui-event.json": "bebbbdca385784dd0299ec130b0bdf60b03205c692eaba43093840591e177a9b",
+        "guard.started.json": "f85ad59ac99b14cee3eb7da54c30edbda45ca24d098149365680edd225144208",
+        "guard.json": "2094abb734d548660a87c04bf8a6a177eea27a850d4008d42b5436f1969eb282",
+        "guard.stdout": "d14d8f6696a51b48f6765102d4af129e194ecce74b1799eb0dfdf5ae6f74d6f8",
+        "guard.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "status-after.json": "e11cde3f191093cacd1376eb5406a76939d7a95ece0999375cf0f2e9f24ce912",
+        "status-after.stdout": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e",
+        "status-after.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "outcomes.json": "64346ceeb8fdb24b141b12f00abfdb23d9f60900213fc08067a76d924306e259",
+        "result.json": "02195ecdac1bc2fdf826a3c03f6dfe25ba3d766969ff4f1fa43aab548ca3751e",
+        "before-untracked.json": "6179ac84e182e5edb44b93c39d9b8e5de947729d16b6ec354a455695b5ba9b8d",
+        "before-bookkeeping-prefix-proof.json": "9fc42a2fee24cebda34a8a70f3b1d66e3feac2adab8dce534f50979528810a59",
+        "after-untracked.json": "6179ac84e182e5edb44b93c39d9b8e5de947729d16b6ec354a455695b5ba9b8d",
+        "after-bookkeeping-prefix-proof.json": "11d4104c1adc1ce193332b09db2f6553f3724227249a6446af68325047a07a64"
+      }
     }
   },
   "publication": {
@@ -631,14 +690,19 @@
     "ui_finished_at_utc_minute": "2026-11-14T18:01:00Z",
     "ui_observed_at": "2026-11-14T18:01:26.790Z",
     "official_verify_invocations": 1,
-    "official_verify_ui_command_dispatched_at": "2026-11-14T18:01:26.790Z"
+    "official_verify_ui_command_dispatched_at": "2026-11-14T18:01:26.790Z",
+    "official_verify_complete": true,
+    "official_verify_success": true,
+    "official_verify_finished_at": "2026-11-14T18:14:07.202705Z",
+    "official_verify_checks": 3
   },
   "release_lease": {
-    "active": true,
+    "active": false,
     "actor": "codex-campaign-operating-parity-1924",
     "source": "c484b549e8bca017627ce80749c7895198f04bf8",
     "deployment": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
-    "release_id": "rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33"
+    "release_id": "rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33",
+    "closed_at": "2026-11-14T18:14:07.202705Z"
   },
   "live_acceptance": {
     "passed": false,
@@ -651,5 +715,12 @@
     "private_values_not_archived": true,
     "diagnosis": "Owner-scoped read-only employee management and canonical salary GETs identify an explicitly payroll-disabled pilot contract without effective salary history. The executive salary projection excludes it; hover's bounded projection omits non-payroll policy fields and rejects its empty history. No source data was changed.",
     "followup_candidate": "Isolated, not yet frozen; exclude only the proven explicit non-payroll pilot shape while retaining missing-cost protection for contributing contracts."
+  },
+  "followup": {
+    "pr": 1926,
+    "A4": "1140a3fec8ef77f81fdd0cf768f9a89fb2db4ab0",
+    "reason": "Explicit disabled pilot noncontributor exclusion",
+    "release_complete": true,
+    "user_goal_complete": false
   }
 }

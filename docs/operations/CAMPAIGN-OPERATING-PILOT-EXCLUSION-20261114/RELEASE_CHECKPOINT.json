@@ -1,7 +1,7 @@
 {
   "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 18:14:33 UTC",
+  "updated_at_utc": "2026-11-14 18:18:35 UTC",
   "branch": "codex/campaign-operating-pilot-m77e4-20261114",
   "pr": 1926,
   "base_M3": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
@@ -82,13 +82,15 @@
     "local_pytest_reason": "pytest and mongomock_motor unavailable in scratch"
   },
   "source_ci": {
-    "status": "running",
+    "status": "8_of_11_success_at_18:17:58Z",
     "readiness_run": 43625326307,
     "coverage_run": 43625326323,
     "frontend_suites": 9,
     "frontend_tests": 50,
     "frontend_job": 132539756755,
-    "backend_count": null
+    "backend_count": 253,
+    "backend_warnings": 2,
+    "backend_job": 132539756934
   },
   "predecessor_release": {
     "pr": 1924,
@@ -96,9 +98,12 @@
     "published_version": "5a7a310",
     "official_verify_started": true,
     "official_verify_invocations": 1,
-    "official_verify_complete": false,
+    "official_verify_complete": true,
     "actor": "codex-campaign-operating-parity-1924",
-    "original_source_may_change": false
+    "original_source_may_change": "Only after fresh inactive guard and all new A/B/M gates.",
+    "official_verify_success": true,
+    "official_verify_finished_at": "2026-11-14T18:14:07.202705Z",
+    "lease_active": false
   },
   "templates": {
     "original_build_sha256": "30072495037433e41496fbd5503d3e66806673204e86e12a1f960012e9c8bb28",
@@ -107,5 +112,120 @@
     "root_disabled_diff_review": "PASS"
   },
   "next": "Wait for all exact-A4 CI, download and independently validate its candidate intent; do not freeze B until A gates pass. Root must preserve actual final PR1924 verification receipt and inactive status before the next original release sequence.",
-  "coordination": "Issue1006 comment limit reached; task STATUS/PR body/handoff branch retain durable checkpoints."
+  "coordination": "Issue1006 comment limit reached; task STATUS/PR body/handoff branch retain durable checkpoints.",
+  "candidate": {
+    "zip_bytes": 378046,
+    "zip_sha256": "df9fab5349b632400b948a8b4a95919462cd813f064d8cd2e4a75f3210a616b6",
+    "intent_bytes": 1308035,
+    "intent_sha256": "638db37e00140c08824eca2f67d10b7503330d9950fb2021ad798eab48dcd764",
+    "intent_git_blob": "770f834584fe2fa362aa3b8b54f2d2034737e9cd",
+    "path": "/workspace/scratch/a7d75184af2d/campaign-operating-intent-a4/release-intent-v5.json",
+    "top_level": {
+      "backend_runtime_source": [
+        "added_count",
+        "deleted_count",
+        "file_count",
+        "files",
+        "manifest_sha256",
+        "modified_count",
+        "projection_tree_oid",
+        "scope",
+        "scope_tree_oid",
+        "source_base_git_sha",
+        "source_base_root_tree_oid",
+        "source_base_scope_tree_oid",
+        "source_git_sha",
+        "source_root_tree_oid",
+        "tombstone_count",
+        "tombstones",
+        "tombstones_sha256",
+        "tree_sha256"
+      ],
+      "branch": "hotfix/prod-snap-meta-final",
+      "client_environment": [
+        "REACT_APP_BACKEND_URL"
+      ],
+      "critical_file_hashes": [
+        "frontend_build_identity.py",
+        "integrations/qoyod_manual/routes.py",
+        "integrations/qoyod_manual/send.py",
+        "release_identity.py",
+        "release_protocol_v5.py",
+        "server.py"
+      ],
+      "frontend_build": [
+        "artifact_tree_sha256",
+        "assets",
+        "build_meta",
+        "entrypoints",
+        "environment",
+        "git_sha",
+        "index",
+        "public_files",
+        "schema_version",
+        "source",
+        "toolchain"
+      ],
+      "frontend_reproducibility": [
+        "environment",
+        "git_sha",
+        "kind",
+        "passes",
+        "proof_file",
+        "retained_pass",
+        "schema_version",
+        "source",
+        "toolchain"
+      ],
+      "frontend_source": [
+        "file_count",
+        "files",
+        "git_tree_oid",
+        "scope",
+        "tree_sha256"
+      ],
+      "kind": "mezan_emergent_release_intent_v1",
+      "protocol_version": 5,
+      "release_control_source": [
+        "added_count",
+        "deleted_count",
+        "file_count",
+        "files",
+        "manifest_sha256",
+        "modified_count",
+        "projection_tree_oid",
+        "scope",
+        "scope_tree_oid",
+        "source_base_git_sha",
+        "source_base_root_tree_oid",
+        "source_base_scope_tree_oid",
+        "source_git_sha",
+        "source_root_tree_oid",
+        "tombstone_count",
+        "tombstones",
+        "tombstones_sha256",
+        "tree_sha256"
+      ],
+      "runtime_identity": [
+        "backend_runtime_source",
+        "branch",
+        "critical_file_hashes",
+        "frontend_build",
+        "frontend_reproducibility",
+        "kind",
+        "protocol_version",
+        "release_control_source",
+        "release_id",
+        "schema_version",
+        "source_base_git_sha",
+        "source_git_sha"
+      ],
+      "schema_version": 2,
+      "source_base_git_sha": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+      "source_git_sha": "1140a3fec8ef77f81fdd0cf768f9a89fb2db4ab0"
+    },
+    "run": 43625326307,
+    "artifact": 14125533794,
+    "independent_review": "in progress"
+  }
 }
