@@ -244,3 +244,22 @@ management dialog. UI changed to disabled Publishing..., confirming the action
 started. Observed at 2026-11-14 14:53:16 UTC. Do not repeat that click.
 No newer success or public verification has yet been observed. The lease remains
 owned by this release until official verification closes it.
+
+## Published release; official verification in progress
+
+Emergent now shows a new current published version `a5eae68` and a newer
+`Deployment finished Nov 14, 06:02 PM` event (Asia/Riyadh). The previous version
+`279b7a3` is now the prior rollback entry. The one authorized publish completed;
+no second publish was clicked.
+
+At 2026-11-14T15:05:39.556462Z, public `/api/health` reported `ok=true`, exact
+source A and intended runtime release ID. Verified identity availability,
+critical file hashes, frontend build and backend runtime source were all true.
+This is a preliminary identity check, not completion of official verification.
+
+Root started the unchanged original verifier once with evidence directory
+`/tmp/mezan-pr1919-original-72x801fd`, deployment M and the owned actor. Its UI
+terminal printed `phase=started`, prefix `28-verify`. It has no wrapper timeout.
+Do not repeat it while running. No final verifier result or live fresh financial
+report acceptance has been observed at this checkpoint. Preserve the current
+owned lease and all original evidence until official verification closes it.
