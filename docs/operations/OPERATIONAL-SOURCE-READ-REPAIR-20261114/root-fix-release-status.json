@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-11-14T01:59:07.169Z",
-  "stage": "platform_completed_awaiting_official_verification",
+  "updated_at": "2026-11-14T02:08:35.476Z",
+  "stage": "official_verification_running",
   "J": "d6f246b4d3b14fd56ef2cbc574b99f08bb7d6fc1",
   "A": "a496dd428241b06d2292286de030c70d6241fcf0",
   "B": "30dc66ec09b371a6b990adbd167162254bfd77c6",
@@ -311,5 +311,22 @@
     "platform_version": "effdd19",
     "completed_observed_at": "2026-11-14T01:59:07.169Z"
   },
-  "official_verification_prefix": "/tmp/mezan-pr1915-original-qqo8fwy9/28-verify"
+  "official_verification_prefix": "/tmp/mezan-pr1915-original-qqo8fwy9/28-verify",
+  "public_health": {
+    "ok": true,
+    "source_git_sha": "a496dd428241b06d2292286de030c70d6241fcf0",
+    "source_base_git_sha": "d6f246b4d3b14fd56ef2cbc574b99f08bb7d6fc1",
+    "release_id": "rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e",
+    "verified_identity_available": true,
+    "backend_runtime_source_verified": true,
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true,
+    "boot_started_at": "2026-11-14T01:57:36.731885+00:00",
+    "observed_before": "2026-11-14T02:05:58Z"
+  },
+  "official_verification": {
+    "started": true,
+    "outcome": "pending",
+    "prefix": "/tmp/mezan-pr1915-original-qqo8fwy9/28-verify"
+  }
 }

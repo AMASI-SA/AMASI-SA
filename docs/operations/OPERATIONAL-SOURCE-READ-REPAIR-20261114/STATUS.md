@@ -1,3 +1,15 @@
+# Current stage — official verification running
+
+Platform completion for `effdd19` was observed at Nov14,04:57AM UTC+3. The original-operator verification wrapper has now printed its started marker with prefix `/tmp/mezan-pr1915-original-qqo8fwy9/28-verify` and remains running. Do not repeat Publish, rebuild, prepare, interrupt the verifier, or clear its matching lease. No completion result is claimed yet.
+
+A fresh public health page reports exact source A `a496dd428241b06d2292286de030c70d6241fcf0` and runtime R `rg5-ec82d7649d17b217dd5a6c422bbe4e42138c25fe28236a9f9e6531f16a6b845e`, boot `2026-11-14T01:57:36.731885+00:00`, and true verified-identity, backend-runtime-source, critical-file-hash, and frontend-build flags. This preliminary identity observation does not substitute for the running official three-probe verifier.
+
+After official success and fresh inactive guard, perform one visible page-owned financial refresh and require `report.as_of` to advance beyond the old saved snapshot with no refresh warning. Live financial acceptance has not been attempted for this rootfix.
+
+---
+
+## Earlier checkpoints
+
 # Current stage — platform completed; official verification next
 
 Emergent explicitly changed the same deployment event to **Deployment finished Nov14,04:57AM UTC+3** and shows new published version **`effdd19`**, replacing baseline `892c7f3`. Exactly one Publish was clicked after successful final prepublish. Do not use the UI's rolling ordinal as identity; the new version and completion event are the observed evidence.
