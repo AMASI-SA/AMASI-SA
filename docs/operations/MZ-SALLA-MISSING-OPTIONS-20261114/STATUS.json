@@ -1,0 +1,62 @@
+{
+  "task_id": "MZ-SALLA-MISSING-OPTIONS-20261114",
+  "repository": "AMASI-SA/AMASI-SA",
+  "task_branch": "codex/salla-missing-options-investigation-20261114",
+  "base_sha": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+  "previous_checkpoint_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
+  "live_source_observed": "2cf4d70d7e0c23c11048cad5c610e8c0c60d7eeb",
+  "state": "linear_source_candidate_current_production_base_ci_pending",
+  "scope": "Explain and prevent missing incoming customer choices without manual Salla refresh.",
+  "confirmed": [
+    "Initial native and root choices empty at revision 1.",
+    "Exact saved sparse status accepted four milliseconds before rich creation.",
+    "Creation carried five options per matching native line but its one-second older source version was rejected as stale_salla_snapshot.",
+    "Captures agree on native order/reference/membership/product/quantity and common amounts.",
+    "Exact automatic recovery hash returned no record.",
+    "Later central refresh restored choices identical to creation capture; initiating caller unproven.",
+    "Diagnostic GETs used by task do not invoke central refresh.",
+    "Separate provider-product-ID compatibility defect reproduced, not attributed as incident cause."
+  ],
+  "unknown": [
+    "Initiating caller of later central refresh.",
+    "Target provider List Items response shape."
+  ],
+  "runtime_source_changed": false,
+  "manual_refresh_executed": false,
+  "repair_executed": false,
+  "production_changed_by_task": false,
+  "production_record_changed_during_investigation": "Later central refresh observed; caller not attributed.",
+  "prior_draft_1909_changed": false,
+  "source_reproductions": [
+    "python -B docs/operations/MZ-SALLA-MISSING-OPTIONS-20261114/reproduce_stale_creation.py",
+    "python -B docs/operations/MZ-SALLA-MISSING-OPTIONS-20261114/reproduce_item_identity_gap.py"
+  ],
+  "reproduction_limit": "Synthetic source mechanisms, not full webhook/Mongo integration or a passing preventive-fix suite.",
+  "access": "Official Production viewer connected through secure user authentication. Scoped reads; edit off; no credential extracted.",
+  "next_safe_action": "Verify new linear current-base source candidate and exact CI including seven real-Mongo cases, then freeze intent and follow authorized v5 release gates. Recheck shared guard immediately before release work. No manual live refresh or replay.",
+  "continuity": "PR1923, task status and archival branch are durable. Issue1006 body update acknowledged but fresh readback absent; not claimed persisted.",
+  "diagnosis_base_sha": "29ec1e07eb7d1a23647cadff5bac26149accfa99",
+  "source_implementation_present": true,
+  "local_focused_tests": {
+    "passed": 114,
+    "command": "PYTHONPATH=backend:backend/tests PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 python -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_salla_stale_creation_options.py backend/tests/test_cost_option_auto_recovery.py backend/tests/test_salla_raw_snapshot_preservation.py backend/tests/test_order_customer_options_contract.py",
+    "limit": "In-memory DB/source fence seams; not real transaction evidence.",
+    "previous_integrated_run": "114 passed in 5.64s; exit 0 on archived candidate. Fresh integration verification remains required for new source SHA."
+  },
+  "real_mongo_tests": {
+    "new_cases": 7,
+    "collected_file_cases": 19,
+    "execution": "pending exact-candidate CI",
+    "skip_policy": "zero skips/errors/failures required"
+  },
+  "independent_review": "Final exact-source review passed with no remaining material finding; independent 114-test run exit 0. Real-Mongo CI remains required.",
+  "release_state": "Official shared guard returned active:false after prior financial release; no task lease, shared workspace mutation, rehearsal, merge or publication.",
+  "archival_branch": "codex/salla-options-prelinear-checkpoint-20261114",
+  "ancestry_repair": {
+    "failed_source_sha": "bba66d8b239b00628d1a3006d974c822c4e2349f",
+    "readiness_run": 43620204528,
+    "cause": "Full-history intent path includes merge of the previous intent into the source candidate, despite equal endpoint bytes.",
+    "remedy": "Preserved failed candidate under verified remote archival ref; new unfrozen source candidate has current reviewed Production base as its sole parent. No intent B existed and no Production ref is rewritten.",
+    "source_test_workflow_bytes": "Unchanged from independently reviewed candidate."
+  }
+}

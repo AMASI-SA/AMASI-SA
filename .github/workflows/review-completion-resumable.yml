@@ -17,6 +17,10 @@ on:
       - "backend/salla_integration/auto_sync.py"
       - "backend/salla_integration/cost_option_recovery.py"
       - "backend/tests/test_cost_option_auto_recovery.py"
+      - "backend/salla_integration/stale_creation_options.py"
+      - "backend/salla_integration/webhook_order_sync.py"
+      - "backend/salla_integration/webhook_event_capture.py"
+      - "backend/tests/test_salla_stale_creation_options.py"
       - "backend/tests/test_shipping_pending_snapshot_recovery.py"
       - "backend/tests/test_salla_sync_component_snapshot.py"
       - "backend/order_review*.py"
@@ -210,9 +214,16 @@ jobs:
           tests/test_reviewed_products_catalog.py
           tests/test_salla_orders_sync_pagination_evidence.py
           tests/test_cost_option_auto_recovery.py
+          tests/test_salla_stale_creation_options.py
           --asyncio-mode=auto --junitxml="${{ runner.temp }}/review-completion.xml"
       - name: Verify stranded print snapshot recovery and sync fences
-        run: python -m unittest tests.test_assembly_option_change_notice tests.test_shipping_catalog_label_recovery tests.test_shipping_pending_snapshot_recovery tests.test_salla_sync_component_snapshot -v
+        run: >-
+          python -m pytest --noconftest -p no:cacheprovider -q --tb=short
+          tests/test_assembly_option_change_notice.py
+          tests/test_shipping_catalog_label_recovery.py
+          tests/test_shipping_pending_snapshot_recovery.py
+          tests/test_salla_sync_component_snapshot.py
+          --junitxml="${{ runner.temp }}/source-snapshot.xml"
       - name: Preserve the acceptance configuration conflict guard
         if: ${{ !cancelled() }}
         run: >-
@@ -226,12 +237,17 @@ jobs:
           import os
           from pathlib import Path
           import xml.etree.ElementTree as ET
-          for name, minimum in (("review-completion.xml", 256), ("review-acceptance-guard.xml", 1)):
+          for name, minimum in (("review-completion.xml", 256), ("review-acceptance-guard.xml", 1),
+                                ("source-snapshot.xml", 7)):
               cases = list(ET.parse(Path(os.environ["RUNNER_TEMP"]) / name).iter("testcase"))
               assert len(cases) >= minimum, (name, "Missing executed tests", len(cases))
               rejected = [row.attrib.get("name") for row in cases
                           if any(row.find(tag) is not None for tag in ("skipped", "failure", "error"))]
               assert not rejected, (name, rejected)
+              if name == "source-snapshot.xml":
+                  stale_creation = [row for row in cases if row.attrib.get("classname", "").endswith(
+                      "test_salla_sync_component_snapshot.StaleCreationOptionsMongoTests")]
+                  assert len(stale_creation) >= 7, ("Missing real Mongo stale creation contracts", len(stale_creation))
               if name == "review-completion.xml":
                   confirmation = [row for row in cases if row.attrib.get("classname", "").endswith(
                       "test_review_completion_confirmation.ConfirmationTests")]
@@ -277,6 +293,7 @@ jobs:
             ${{ runner.temp }}/review-completion.xml
             ${{ runner.temp }}/review-acceptance-guard.xml
             ${{ runner.temp }}/android-operations.xml
+            ${{ runner.temp }}/source-snapshot.xml
           if-no-files-found: error
       - name: Remove this job's disposable fixture
         if: always()
