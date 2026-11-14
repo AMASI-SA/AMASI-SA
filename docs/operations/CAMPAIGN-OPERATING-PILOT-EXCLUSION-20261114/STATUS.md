@@ -1,12 +1,12 @@
-# PR1929 — published, live arithmetic accepted; official verification running
+# PR1929 — published, verified and closed; live campaign arithmetic accepted
 
-Updated 2026-11-14 19:53:07 UTC.
+Updated 2026-11-14 20:01:30 UTC.
 
-## Current state
+## Final result
 
-Root published the reviewed update exactly once through Emergent's free Publish changes action. New UI version `75ee080` and the explicit event `Deployment finished Nov 14, 10:45 PM` were observed at19:47:03UTC, replacing3a22e2d. Official verify was invoked once through the frozen helper and is running. Do not interrupt it, repeat it, republish or alter/app. The ownedlease remains active until the official verifier closes it.
+The campaign cost/profit task is complete. Root published exactly once through the free Publish changes action; new platformversion75ee080 replaced3a22e2d. ExplicitDeploymentfinished event was observed19:47:03UTC. The single officialverify exited0 after3productionchecks at19:59:07.370893UTC. Wrapperclosure completed19:59:07.561528UTC with zero postcheckerrors and freshstatus active=false. Do not repeat any completed phase or publication.
 
-Live acceptance passed after publication: numeric operating allocation and net profit, all required completeness flags, empty actual cost/basis reasons, component totals, full-precision operating ratio and ROUND_HALF_UP net arithmetic. Root and independent calculations agree. The actual tooltip displays the three requested rows and the expected values; its percentage matches the executive summary using the same sales/expense basis. The provisional Snapchat-spend annotation remains visible. A cropped tooltip proof is retained privately. No campaign/customer/employee identifiers or financial values are archived here.
+Live acceptance passed after publication: all required completeness flags, numeric operating allocation and netprofit, component totals, full-precision operating ratio and ROUND_HALF_UP arithmetic. Root and independent calculations agree. Actualtooltip values and percentage match the API and executive summary's same sales/expense basis. The correct provisional Snapchat-spend annotation remains visible. Cropped tooltip evidence is retained privately for the user; no campaign/customer/employee identifiers or financial values are archived.
 
 ## Frozen identities
 
@@ -39,8 +39,15 @@ Finalhelper operators/release-gate-1929.py is29124bytes, SHA256852c696585a98fd21
 
 Prepare actualexit0:19:31:30.096294→19:31:32.844344UTC; wrappercompleted19:31:33.014814UTC. Prepublish actualexit0:19:32:36.729590→19:32:40.091714UTC; wrappercompleted19:32:40.261221UTC, ready_to_publish=true. Both phases have zero postcheckerrors and preserve120files/119exact with50052→50052bookkeeping. Actorcodex-campaign-operating-pilot-1929; exactA6/J6/M6/runtime. Actualreceipt metadata/digests are retained in RELEASE_CHECKPOINT.json.
 
-## Next and coordination
+## Final verification and preservation
 
-Wait for the single running verify in /tmp/mezan-operating-followup-original-5dp0ykxf/release-gate/verify. Read actualguardexit/result/checks3, freshinactive and finalpreservation before closure. Never rerun an officialphase because a later wrappercheck fails. Preserve original/app, untrackedfiles and the PR1924bytecodequarantine.
+Officialcommand: python -B scripts/production_release_guard.py verify --url https://mezansalla.com.
+Actualstart19:47:13.521132UTC; end19:59:07.370893UTC; exit0;713.849653465s; verified=true;checks=3. ExactsourceA6/baseJ6/deploymentM6/runtime/frontendartifact bindings match the preparedrelease. Backend-runtime and release-control source summaries match prepare exactly.
 
-Issue1006 isfull; this taskSTATUS, checkpoint andPR1929 are the durable continuation. PR1926/1927 areclosed/superseded; PR1923closedunpublished; PR1924verifiedclosed. Neverresume their operators. PR1930 hasexplicitownerhold and isunrelated. Earlier checkpoints remain in branch history.
+GuardreceiptSHA256ab8e7815c2cbefa963b1cd18a7b83a596789906b2dc9e3e1b3b591d351d0bb2f. CompleteofficialstdoutSHA2561dab8ff1e14be71cef5bd45c5de7b1a45440b5c9db9dbc64f73ac64725928147; stderr empty. Freshstatus_after active=false. Actualmetadata, identity, outcomes and preservationdigests are retained in verification/final-release-closure.json and RELEASE_CHECKPOINT.json.
+
+All120untrackedfiles preserved,119exact. The authorized append-only bookkeeping was50052bytes atoriginalbuild/prepublish,50224beforeverify and50310afterverify; every witnessedprefixpassed. No restoration/deletion of the PR1924bytecodequarantine. Original/app ends at the reviewedM6; no ongoingownlease or process.
+
+## Coordination and scope
+
+Issue1006 isfull; this taskSTATUS, checkpoint andPR1929 are the durable closure. Priorproofs and failed/supersededrelease histories remain recoverable. PR1926/1927closed/superseded; PR1923closedunpublished; PR1924verifiedclosed. Neverresume their operators. PR1930 retains its explicitownerhold and isunrelated. No paidagent invocation, provider synchronization, polling/job addition, advertising/budget/bid change or customer/order/payroll/accounting-data mutation was made by this release.

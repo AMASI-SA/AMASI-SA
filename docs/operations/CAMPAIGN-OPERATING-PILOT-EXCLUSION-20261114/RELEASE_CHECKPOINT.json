@@ -2,7 +2,7 @@
   "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
   "round": 6,
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 19:53:07 UTC",
+  "updated_at_utc": "2026-11-14 20:01:30 UTC",
   "branch": "codex/campaign-operating-pilot-m3e9d-20261114",
   "pr": 1929,
   "base_J6": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
@@ -345,7 +345,7 @@
       }
     }
   },
-  "next": "Wait for the single running verify to finish. Read actual guard receipt and reported3checks, freshinactive and120-file preservation. Do not invoke another official phase or publish. Numeric API, independent Decimal arithmetic, executive parity and actual tooltip/cropped proof have passed.",
+  "next": "Complete: single UI publication, actual official verify exit0/3checks, inactive ownlease, final120-file preservation and live numeric/API/executive/tooltip acceptance all passed. Do not repeat completed build, guard phases or publication. No further authorized implementation work remains for this campaign cost/profit task.",
   "original_build": {
     "state": "success",
     "result": {
@@ -428,11 +428,13 @@
     "root_direct_original_receipt_review": "PASS"
   },
   "lease": {
-    "active": true,
+    "active": false,
     "actor": "codex-campaign-operating-pilot-1929",
     "source": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
     "deployment": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
-    "release_id": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2"
+    "release_id": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2",
+    "verified_closed": true,
+    "closed_at": "2026-11-14T19:59:07.370893Z"
   },
   "published": true,
   "coordination": "Issue1006 full; task STATUS, replacement PR and continuation branch are durable.",
@@ -1178,9 +1180,88 @@
     "verify": {
       "calls": 1,
       "invoked_at_utc": "2026-11-14 19:47:22 UTC",
-      "result_observed": false,
+      "result_observed": true,
       "phase_directory": "/tmp/mezan-operating-followup-original-5dp0ykxf/release-gate/verify",
-      "process_observed_running": true
+      "process_observed_running": false,
+      "success": true,
+      "receipt": {
+        "argv": [
+          "python",
+          "-B",
+          "scripts/production_release_guard.py",
+          "verify",
+          "--url",
+          "https://mezansalla.com"
+        ],
+        "cwd": "/app",
+        "started_at": "2026-11-14T19:47:13.521132Z",
+        "exit_code": 0,
+        "finished_at": "2026-11-14T19:59:07.370893Z",
+        "seconds": 713.849653465033,
+        "stdout_sha256": "1dab8ff1e14be71cef5bd45c5de7b1a45440b5c9db9dbc64f73ac64725928147",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "official": {
+        "verified": true,
+        "checks": 3,
+        "url": "https://mezansalla.com",
+        "source_git_sha": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+        "source_base_git_sha": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+        "deployment_git_sha": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+        "release_id": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2",
+        "protocol_version": 5,
+        "frontend_artifact_tree_sha256": "d6bd189f78c5bb7467fa0b0c7a8edc2e0c36f8d22f6b5ab23242b0a9a0dc25bd",
+        "boot_started_at": "2026-11-14T19:45:23.789373+00:00",
+        "boot_started_at_observations": [
+          "2026-11-14T19:45:23.789373+00:00",
+          "2026-11-14T19:45:20.670204+00:00"
+        ]
+      },
+      "backend_binding_matches_prepare": true,
+      "control_binding_matches_prepare": true,
+      "outcomes": {
+        "phase": "verify",
+        "official_guard_started": true,
+        "actual_guard_exit_code": 0,
+        "guard_receipt_sha256": "ab8e7815c2cbefa963b1cd18a7b83a596789906b2dc9e3e1b3b591d351d0bb2f",
+        "guard_reported_verified": true,
+        "guard_reported_checks": 3,
+        "status_after_active": false,
+        "postcheck_errors": []
+      },
+      "fresh_status_after": {
+        "active": false
+      },
+      "preservation_sha256": {
+        "before-untracked.json": "4fb79d63e644a550ca0cd9c7e112cb0e134719440d852b75355aaee79923f52f",
+        "before-bookkeeping-prefix-proof.json": "51ad5752eea5fb1ac675820d89d15f0a5c32a3eed7df9c0a88dfd1768253b457",
+        "after-untracked.json": "bc6a0aaf3fe8d8c2bc0f1a342cb60f66fed47d90cc4e1452c230c938dad3e7fe",
+        "after-bookkeeping-prefix-proof.json": "f7beac8fa0d40d90c619f5efdb1b1d5195479bd4a1c8802e39542bacce41d766"
+      },
+      "wrapper_result": {
+        "success": true,
+        "phase": "verify",
+        "finished_at": "2026-11-14T19:59:07.561528Z",
+        "original_evidence": "/tmp/mezan-operating-followup-original-5dp0ykxf",
+        "source_git_sha": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+        "git_sha": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+        "source_base_git_sha": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+        "intent_git_sha": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+        "deployment_git_sha": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+        "tree": "c2d683827c54574fcd60ee4102c9de7c163f5ef8",
+        "release_id": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2",
+        "protocol_version": 5,
+        "actor": "codex-campaign-operating-pilot-1929",
+        "preserved_untracked_files": 120,
+        "exact_original_records": 119,
+        "append_only_file": ".emergent/stripped_env_names",
+        "before_bookkeeping_bytes": 50224,
+        "after_bookkeeping_bytes": 50310,
+        "all_witnessed_prefixes_preserved": true,
+        "status_after_active": false,
+        "guard_receipt_sha256": "ab8e7815c2cbefa963b1cd18a7b83a596789906b2dc9e3e1b3b591d351d0bb2f",
+        "evidence": "/tmp/mezan-operating-followup-original-5dp0ykxf/release-gate/verify"
+      }
     }
   },
   "publication": {
@@ -1202,7 +1283,10 @@
     "ui_event_text": "Deployment finished Nov 14, 10:45 PM",
     "ui_published_version": "75ee080",
     "previous_ui_version": "3a22e2d",
-    "complete": true
+    "complete": true,
+    "official_verified": true,
+    "checks": 3,
+    "closure_at": "2026-11-14T19:59:07.561528Z"
   },
   "live_acceptance": {
     "api_observed_after_ui_publication": true,
@@ -1233,5 +1317,7 @@
     "displayed_values_match_api": true,
     "provisional_label_verified": true,
     "cropped_proof_retained_privately": true
-  }
+  },
+  "final_result": "COMPLETE",
+  "cua_completed": true
 }
