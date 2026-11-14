@@ -465,9 +465,9 @@
   },
   "new_lease": null,
   "publication": null,
-  "next": "Wait for exact merge push gates; independently pin original build operator; fresh inactive guard and original governed build before lease.",
+  "next": "Fresh inactive original preflight, fetch this evidence-only operator by immutable commit, verify SHA256 and execute original build once for M7; no lease until original result passes.",
   "continuity": "Issue1006 full; PR1932 and dedicated handoff branch.",
-  "updated_at_utc": "2026-11-14 22:00:22 UTC",
+  "updated_at_utc": "2026-11-14 22:06:34 UTC",
   "handoff_branch": "codex/campaign-operating-period-handoff-20261115",
   "dashboard_cadence_ci": {
     "run_id": 43643266121,
@@ -861,18 +861,40 @@
     ]
   },
   "merge_push_ci": {
-    "status": "pending",
-    "expected": [
-      "Mezan Release Readiness",
-      "Security Gate",
-      "CodeQL"
+    "status": "PASS",
+    "runs": [
+      {
+        "id": 43645697294,
+        "name": "Security Gate",
+        "head": "7ef45017e5221635ce3c80c3788f73d9c50b1e08",
+        "event": "push",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43645697278,
+        "name": "Mezan Release Readiness",
+        "head": "7ef45017e5221635ce3c80c3788f73d9c50b1e08",
+        "event": "push",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43645697353,
+        "name": "CodeQL",
+        "head": "7ef45017e5221635ce3c80c3788f73d9c50b1e08",
+        "event": "push",
+        "conclusion": "success",
+        "attempt": 1
+      }
     ]
   },
   "original_operator": {
     "path": "operators/campaign-operating-original-build-1932.py",
     "sha256": "88c17d513c5549b797f06840465572ad285ce31a3b1d4ec25f31d633895de4b2",
     "bytes": 15520,
-    "independent_review": "pending",
-    "executed": false
+    "independent_review": "PASS",
+    "executed": false,
+    "review_evidence": "checks/pinned-original-backend-review.json"
   }
 }

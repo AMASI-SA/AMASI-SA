@@ -15,3 +15,7 @@ Normalmerge preserves reviewed A/B ancestry and exactBtree. Push Readiness/Secur
 Next: finish3exactMpushgates and operatorreview, refreshinactiveoriginalstatus, execute the pinned originalbuild once. Only after successful preserved originalbuild may a freshly pinned guardrunner prepare/prepublish, one authorized free UI publication, and official verify3/inactive occur. Preserve all unrelated files/terminals and unsavedbuffer. Never deploy this evidencebranch.
 
 Issue1006has reached its commentlimit; this STATUS/checkpoint/PR1932are continuationrecord.
+
+## Ready for original governed build
+
+All three exact-M7 push gates passed on attempt 1. The final original-build operator has passed independent byte, AST, ancestry and artifact-pin review. Its SHA256 is 88c17d513c5549b797f06840465572ad285ce31a3b1d4ec25f31d633895de4b2 (15,520 bytes). No original build, lease or publication has started. Next: a fresh inactive status and expected M6/clean/preservation checks, then execute this pinned operator once against M7. The operator performs its own locked checks and records actual exits.

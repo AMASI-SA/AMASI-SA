@@ -1,0 +1,68 @@
+{
+  "verdict": "PASS final pinned original-build bytes and artifact pins",
+  "operator": "campaign-operating-period-20261115/operators/campaign-operating-original-build-1932.py",
+  "operator_bytes": 15520,
+  "operator_sha256": "88c17d513c5549b797f06840465572ad285ce31a3b1d4ec25f31d633895de4b2",
+  "operator_git_blob": "9f8c2a7ae95c4349e786773fbe1cb2cf96827d9d",
+  "template_sha256": "468179174869d1fcb493a3fa48851825f7e76356eb5b4a090d5b53dfc103aabc",
+  "changed_assignments": [
+    "DEPLOYMENT",
+    "IDENTITY_SHA256",
+    "INTENT_COMMIT",
+    "INTENT_SHA256",
+    "PINS_REVIEWED",
+    "RELEASE",
+    "SOURCE",
+    "TREE"
+  ],
+  "ast_only_allowed_pins_changed": true,
+  "pins": {
+    "SOURCE": "af36682ec95e578764242001dccd16ef9e61c07b",
+    "BASE": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+    "INTENT_COMMIT": "c8d70f26ab02bc9467c844fee477ef040688edb2",
+    "DEPLOYMENT": "7ef45017e5221635ce3c80c3788f73d9c50b1e08",
+    "TREE": "e55cdf2c2b15cfe08efe3e0305d043e87f916d8b",
+    "RELEASE": "rg5-3c726702879630f436b0b615a4e2d1dd85ff5889c45b43b1be477f84cb3043fe",
+    "INTENT_SHA256": "e971d2ce2f801e531f7541bb31cbbf963635584369c0c1208092a389d8ac1bb2",
+    "IDENTITY_SHA256": "0662d49ed6abfc16074d1033667e19df182f7189698c285689cb431ea1a05ed3",
+    "PINS_REVIEWED": true,
+    "BRANCH": "hotfix/prod-snap-meta-final",
+    "ORIGIN": "https://mezansalla.com",
+    "PRESERVED_COUNT": 120
+  },
+  "intent_bytes": 1309166,
+  "intent_blob": "62defd44cdfd7abc6104e05766ff4e0724e357d7",
+  "host_artifact_identity_checks": {
+    "20.20.2": {
+      "identity_bytes": 438055,
+      "identity_sha256": "0662d49ed6abfc16074d1033667e19df182f7189698c285689cb431ea1a05ed3",
+      "runtime_identity_exact_intent_match": true,
+      "generated_zip_sha256": "56170828feaa051ead8e7aa6504727c35f157de9443bdbd86419ce50bd52fdb9"
+    },
+    "24.19.0": {
+      "identity_bytes": 438055,
+      "identity_sha256": "0662d49ed6abfc16074d1033667e19df182f7189698c285689cb431ea1a05ed3",
+      "runtime_identity_exact_intent_match": true,
+      "generated_zip_sha256": "1ee3e28336c1840da853c1d43bb23f9e0268d1b3214ef3b3097ac0807b6b06a6"
+    }
+  },
+  "operator_executed": false,
+  "original_workspace_accessed": false,
+  "prerequisites": "Root still requires successful M push gates and fresh inactive/clean120 original preflight; operator enforces pins again under official lock.",
+  "remote_checks": {
+    "M": "7ef45017e5221635ce3c80c3788f73d9c50b1e08",
+    "M_tree": "e55cdf2c2b15cfe08efe3e0305d043e87f916d8b",
+    "M_parents": [
+      "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+      "c8d70f26ab02bc9467c844fee477ef040688edb2"
+    ],
+    "B_parent": "af36682ec95e578764242001dccd16ef9e61c07b",
+    "B_tree_equals_M": true,
+    "A_tree": "218fa9d21d863783405dc227793ad7f9bbd1b7a5",
+    "A_to_M_only_changed_path": "release/release-intent-v5.json",
+    "remote_M_intent_blob": "62defd44cdfd7abc6104e05766ff4e0724e357d7",
+    "durable_operator_H": "d6950078db0b8c1b109324d91a9aec1ebdb67058",
+    "durable_operator_blob": "9f8c2a7ae95c4349e786773fbe1cb2cf96827d9d",
+    "durable_operator_matches_local": true
+  }
+}
