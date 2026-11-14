@@ -75,3 +75,10 @@ The candidate has not been merged, built in original /app, prepared or published
 
 - Exactlyone failed-jobrerun toolreturned success:true; actualnewbackendjob132518905107 isrunning onunchangedB3. All10 otherapplicableworkflows nowSUCCESS. Originalfailure remainsrecorded; gate notwaived.
 - Root readforeignledger44fff464a2fc3b3be93c5d311bf9c1f167fcf9c9: PR1921publicationecb9679completed; ownerlaunchedofficialverifyonce atprefix/tmp/mezan-pr1921-original-zu179mmf/28-verify inTerminal2. Noactualexit/inactiveyet. Do nottouchitslease, process, terminal orrepeatpublish.
+
+
+## All B3 gates passed; merge awaits foreign lease closure — 2026-11-14 17:04:32 UTC
+
+- The singleunchangedrerun completedSUCCESS. Root readactualbackendjob132518905107:4760passed/8warnings,202.47s. Originalfailedsample remainsinledger; itscause isnotclaimedresolved. No source/test/thresholdchanges.
+- All11 applicable exactB3workflows nowSUCCESS, TikTokexpectedbranchskip. Root andindependenthostarchive proofPASS; rootCIstepsconfirm bothhost artifact/proof/packageboundary andgovernedJSONroute testsSUCCESS.
+- PR1924 markedready atsamefrozenB3; no mergeperformed. Awaitotherowner'sofficialverify completion andfreshinactive/currentbasebeforeordinaryM3merge.

@@ -1,0 +1,357 @@
+{
+  "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+  "tree": "b48a0eefb368ba655c8370f6b2e4435e07612790",
+  "source": "c484b549e8bca017627ce80749c7895198f04bf8",
+  "base": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+  "runtime": "rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33",
+  "workflows": [
+    {
+      "id": 43617869438,
+      "name": "Campaign hover source coverage",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869455,
+      "name": "Security Gate",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869522,
+      "name": "Mezan Release Readiness",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869394,
+      "name": "MZ2 Track F native shipping",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869399,
+      "name": "G47 Focused Integration",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869430,
+      "name": "TikTok Creator Release Candidate",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "status": "completed",
+      "conclusion": "skipped",
+      "attempt": 1
+    },
+    {
+      "id": 43617869474,
+      "name": "Qoyod Payment Freshness",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869453,
+      "name": "Snapchat Direct Active Publication",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869504,
+      "name": "Snapchat Settings Management V2",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869402,
+      "name": "Operational Stock Eligibility",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869626,
+      "name": "CodeQL",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869606,
+      "name": "Operational Balance Web",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 2
+    }
+  ],
+  "host_proofs": {
+    "root": "PASS",
+    "independent": "PASS",
+    "generated_files": 293,
+    "frontend_content_records": 289,
+    "all_generated_bytes_sizes_modes_identical": true,
+    "intent_bytes_match": true,
+    "identity_matches_full_intent": true,
+    "source": "c484b549e8bca017627ce80749c7895198f04bf8",
+    "base": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+    "runtime": "rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33",
+    "identity_sha256": "d71fc8e889e8d35f09d4b5ec090b5e850422c43be5545444cdc54da3ad910313",
+    "identity_bytes": 437504,
+    "meta_sha256": "662ad88f2ae043b494f2b96159e5bbe456f536a4d91d561289ddf99798629aa0",
+    "proof_sha256": "db16d184d492c1bb6b22edae93b6a6e0315a6029cc43107f15696e24d134b7ff",
+    "artifact_tree": "8b55f9ab1883c764826c27dd77b504fa55599bf0d84875f156565a9d8eaba5f4",
+    "tar_sha256": {
+      "host20": "f8e791a3ba6836033de4ae45ed6897fa9879d5324ce3d45b279109563b10da1f",
+      "host24": "dc8f1dbb0d94adcc10cb19f57dc23248eadd3b45b9af6b247e66e28ce52c54c5"
+    },
+    "isolated_package_boundary_links_verified": true,
+    "backend_package_files": 1216,
+    "frontend_package_files": 1472,
+    "actual_host_runtime_json_route_steps": "bothSUCCESS"
+  },
+  "host_jobs": [
+    {
+      "id": 132517207545,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "conclusion": "success",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Select an isolated release toolchain cache",
+          "conclusion": "success"
+        },
+        {
+          "name": "Enable the runtime-observed Host Yarn version",
+          "conclusion": "success"
+        },
+        {
+          "name": "Create a clean tracked-source clone",
+          "conclusion": "success"
+        },
+        {
+          "name": "Prove generated release inputs are absent",
+          "conclusion": "success"
+        },
+        {
+          "name": "Record sanitized Host adapter evidence",
+          "conclusion": "success"
+        },
+        {
+          "name": "Rehearse a conservative outer Host frozen install",
+          "conclusion": "success"
+        },
+        {
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "conclusion": "success"
+        },
+        {
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "conclusion": "success"
+        },
+        {
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "conclusion": "success"
+        },
+        {
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "conclusion": "success"
+        },
+        {
+          "name": "Archive verified generated release outputs",
+          "conclusion": "success"
+        },
+        {
+          "name": "Retain verified generated release outputs",
+          "conclusion": "success"
+        },
+        {
+          "name": "Retain sanitized rehearsal evidence",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 132517207571,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "conclusion": "success",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Select an isolated release toolchain cache",
+          "conclusion": "success"
+        },
+        {
+          "name": "Enable the runtime-observed Host Yarn version",
+          "conclusion": "success"
+        },
+        {
+          "name": "Create a clean tracked-source clone",
+          "conclusion": "success"
+        },
+        {
+          "name": "Prove generated release inputs are absent",
+          "conclusion": "success"
+        },
+        {
+          "name": "Record sanitized Host adapter evidence",
+          "conclusion": "success"
+        },
+        {
+          "name": "Rehearse a conservative outer Host frozen install",
+          "conclusion": "success"
+        },
+        {
+          "name": "Emulate a Cloud Build checkout without Git metadata",
+          "conclusion": "success"
+        },
+        {
+          "name": "Invoke the Emergent package adapter under the selected Host Node",
+          "conclusion": "success"
+        },
+        {
+          "name": "Verify artifact, proof, identity, and package boundaries",
+          "conclusion": "success"
+        },
+        {
+          "name": "Prove the governed runtime returns build metadata as JSON",
+          "conclusion": "success"
+        },
+        {
+          "name": "Archive verified generated release outputs",
+          "conclusion": "success"
+        },
+        {
+          "name": "Retain verified generated release outputs",
+          "conclusion": "success"
+        },
+        {
+          "name": "Retain sanitized rehearsal evidence",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "performance_benchmark": {
+    "workflow_run": 43617869606,
+    "job": 132516789691,
+    "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+    "attempt": 1,
+    "actual_exit": 1,
+    "failed_test": "backend/tests/test_operational_balance_issue_index.py::test_four_thousand_distinct_diagnostics_avoid_repeated_whole_list_work",
+    "assertion": "new_cpu < old_cpu * 0.65",
+    "old_cpu": 0.1652199959999976,
+    "new_cpu": 0.2488520640000047,
+    "output_equality_passed": true,
+    "suite": {
+      "failed": 1,
+      "passed": 4759,
+      "warnings": 8
+    },
+    "artifact": {
+      "id": 14123355672,
+      "zip_sha256": "024a8998613ec2c5832e1a4b5af27569f260ddd9de94a777bb86c10c4942bef0",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "tree": "b48a0eefb368ba655c8370f6b2e4435e07612790"
+    },
+    "diagnosis": "single-sample process CPU comparison, no warmup/repetition/GC isolation; measured source unchanged since passing A3; no intent read or indexed fallback/O(n2) defect found",
+    "cause": "unproven; GC/process CPU variation is only a hypothesis",
+    "decision": "one exact unchanged failed-job rerun for diagnosis; do not weaken thresholds/skip failure or loop retries",
+    "rerun": {
+      "requested_once": true,
+      "tool_success": true,
+      "new_backend_job": 132518905107,
+      "attempt": 2,
+      "state": "completed",
+      "conclusion": "success",
+      "actual_suite": {
+        "passed": 4760,
+        "warnings": 8,
+        "seconds": 202.47
+      },
+      "same_source": "0a93847af8eb3898ae195c58ad88092388d908ad"
+    }
+  },
+  "pr_ready": true,
+  "merge": null,
+  "own_lease": null
+}
