@@ -1,0 +1,22 @@
+{
+  "stage": "prepublish",
+  "completed": true,
+  "source_git_sha": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+  "git_sha": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+  "deployment_git_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+  "release_id": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
+  "protocol_version": 5,
+  "source_base_git_sha": "4860548f0b032e8e3beca18a4776413cd7e0368b",
+  "actor": "codex-operational-snapshot-rootfix-1916",
+  "branch": "hotfix/prod-snap-meta-final",
+  "intent_commit": "bd9607ba2b21c4d4e3e2bc6bced7680bc9c6f287",
+  "tree": "c5bd7fb6c357e17c17104282d1d175676e95ed3e",
+  "fresh_owned_active": true,
+  "actual_exit": 0,
+  "elapsed_seconds": 3.4392829310090747,
+  "started_at": "2026-11-14T03:19:47.332412+00:00",
+  "ended_at": "2026-11-14T03:19:50.771689+00:00",
+  "stdout_sha256": "9c2c69b76b55d6cc554de9ef6d245bfa7ff501e61aba15dfef934fa891f11ef4",
+  "prefix": "/tmp/mezan-pr1916-original-fu9s2qng/27-prepublish",
+  "ready_to_publish": true
+}

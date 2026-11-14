@@ -1,0 +1,14 @@
+{
+  "prepublish_ended_at": "2026-11-14T03:19:50.771689+00:00",
+  "republish_control_clicked_at": "2026-11-14T03:20:15.330Z",
+  "publish_changes_clicked_at": "2026-11-14T03:20:34.103Z",
+  "publish_changes_click_count": 1,
+  "observed_status": "Publishing",
+  "initial_progress": 11,
+  "source_git_sha": "ff9f8b69b980acfda8dffd210feaf72e17e6727a",
+  "deployment_git_sha": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+  "release_id": "rg5-6e9b6b1216ad24c83d92f78483511cb6d6b5539a29bae69614dd088063b8a5db",
+  "platform_started_text": "Deployment Started Nov 14, 06:20 AM",
+  "observed_stage": "Building your website",
+  "status": "publishing"
+}
