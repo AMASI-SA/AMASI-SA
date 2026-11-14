@@ -376,3 +376,26 @@ new gate SHA256e7240d4667bb5c69868140106ee717e03c6927fd35ae5d9a97d2f89766e9c33a,
 11522bytes. Root will update only that staged /tmp runner, verify its old/new
 hashes, then execute official prepare and prepublish at the ready publication UI.
 No prepare/lease/publication has occurred yet.
+
+## Prepared, prepublished, one publication started
+
+Official prepare actualexit0,elapsed2.801461s,start16:44:31.597606Z,
+end16:44:34.399060Z, exactownedactor codex-financial-section-pages-1921.
+Official prepublish actualexit0,elapsed3.444751s,start16:45:23.628954Z,
+end16:45:27.073703Z,ready_to_publish:true andfresh_owned_active:true,
+exactA/M/runtime. Separate preservation afterprepare and afterprepublish
+bothpreserved:true,count120; finalcheck16:45:27.344656Z.
+
+Root clicked ManageOverview Republish, observed the explicit Free republishes /
+Publishchanges dialog, then clicked Publishchanges exactly once at
+2026-11-14T16:46:05.772Z. Overview changed to disabled Publishing... .
+This is a running publication, not success. The priorpublishedversion remains
+100th/1b4c4f6 until a new explicit completion appears. Do not click publish again.
+
+Current original evidence:/tmp/mezan-pr1921-original-zu179mmf.
+Current staged runners:/tmp/mezan-pr1921-runners-1j_g1nsn.
+Current ownedlease:codex-financial-section-pages-1921, sourceA0dd26a62,
+deploymentM94f6dfb8,release rg5-5a1f26fa... . Neverclear/reuse anotherlease.
+Next: observe new explicit DeploymentSucceeded, run official verification once
+with no wrapper timeout, preserve its actual exit, then final preservation and
+fresh inactiveguard. Only then perform real financial-center UI timing checks.
