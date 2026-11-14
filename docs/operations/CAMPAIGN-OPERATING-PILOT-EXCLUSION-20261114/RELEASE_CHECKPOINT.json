@@ -2,7 +2,7 @@
   "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
   "round": 6,
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 19:30:26 UTC",
+  "updated_at_utc": "2026-11-14 19:32:04 UTC",
   "branch": "codex/campaign-operating-pilot-m3e9d-20261114",
   "pr": 1929,
   "base_J6": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
@@ -345,7 +345,7 @@
       }
     }
   },
-  "next": "Stage exact frozen finalgate while officialinactive under mutex, verify SHA852c...; run prepare once and inspect actualresult/receipt. Then prepublish once immediately before one authorizedfreeUIpublish. Never repeat a claimedphase. Wait explicitnewUIversion/event before officialverify once, then livearithmetic andfinalclosure.",
+  "next": "Prepare completed successfully; do not repeat it. Run reviewed prepublish once, inspect actual receipts/status, then immediately click authorizedfreeRepublish once. Await explicitnewUIcompletion/version before verify once. Do not alter /app or ownedlease while active.",
   "original_build": {
     "state": "success",
     "result": {
@@ -427,7 +427,13 @@
     },
     "root_direct_original_receipt_review": "PASS"
   },
-  "lease": false,
+  "lease": {
+    "active": true,
+    "actor": "codex-campaign-operating-pilot-1929",
+    "source": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+    "deployment": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+    "release_id": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2"
+  },
   "published": false,
   "coordination": "Issue1006 full; task STATUS, replacement PR and continuation branch are durable.",
   "intent_candidate": {
@@ -1078,8 +1084,39 @@
     },
     "root_review": "PASS exact doc+pins diff; behavior unchanged",
     "independent_review": "PASS fullstatic/AST, phaseownership/receipts/preservation/no-retry",
-    "executed_phases": [],
+    "executed_phases": [
+      "prepare"
+    ],
     "repository_path": "docs/operations/CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114/operators/release-gate-1929.py",
-    "git_blob": "ae9168e84bf34d24540084327f1c019773c0236e"
+    "git_blob": "ae9168e84bf34d24540084327f1c019773c0236e",
+    "staged": {
+      "staged_at": "2026-11-14T19:31:10.067878+00:00",
+      "handoff": "c2d516d13a7e606c41b2b5b88818790f961c8729",
+      "operator": "/tmp/mezan-pr1929-operators-pcqr8if2/release-gate-1929.py",
+      "sha256": "852c696585a98fd218ea65fb85958ced8aa132b5718f2cd27ec5a46c5f97d78b",
+      "bytes": 29124,
+      "guard_inactive_under_lock": true
+    }
+  },
+  "guard_phases": {
+    "prepare": {
+      "calls": 1,
+      "success": true,
+      "phase": "prepare",
+      "finished_at": "2026-11-14T19:31:33.014814Z",
+      "actor": "codex-campaign-operating-pilot-1929",
+      "source": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "base": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+      "deployment": "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+      "release_id": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2",
+      "preserved_untracked_files": 120,
+      "exact_original_records": 119,
+      "before_bookkeeping_bytes": 50052,
+      "after_bookkeeping_bytes": 50052,
+      "all_witnessed_prefixes_preserved": true,
+      "status_after_active": true,
+      "guard_receipt_sha256": "069128413091441d9bbc6e5d0717368511dc598c597d81bfd540db9ac88fccc1",
+      "evidence": "/tmp/mezan-operating-followup-original-5dp0ykxf/release-gate/prepare"
+    }
   }
 }
