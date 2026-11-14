@@ -30,3 +30,7 @@ The final gate runner has passed independent byte and AST review. Path: operator
 No prepare, prepublish, verify or publication has run for this release. Next: fetch this exact evidence commit, verify gate-runner bytes, prepare once, inspect the actual receipt, and prepublish immediately before one authorized free UI publication. Require a new explicit successful deployment event and published version, then official verify with three consecutive probes and inactive post-status. Never repeat an official phase after a wrapper failure; inspect persisted outcomes first.
 
 Live Production remains the previous published version until the UI publication succeeds. Preserve all existing terminals and the unsaved editor buffer. Issue #1006 is full; this STATUS, RELEASE_CHECKPOINT and PR #1932 are the continuation record.
+
+## Lease prepared
+
+The pinned prepare phase completed successfully at 22:10:58.125567 UTC with its actual receipt and preserved files. The matching v5 lease is active for actor `codex-campaign-operating-period-1932`, source A and deployment M7. Receipt SHA256: f9301058bfacfd505e1398d9e55e38aaa4fe9b7fa5828990d6a1a5efc56b0402. No prepublish or UI publication has run yet. Next: pinned prepublish once, then one authorized free UI publication. Do not prepare again or clear this matching lease.

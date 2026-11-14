@@ -463,11 +463,18 @@
     "path": "release/release-intent-v5.json",
     "blob": "62defd44cdfd7abc6104e05766ff4e0724e357d7"
   },
-  "new_lease": null,
+  "new_lease": {
+    "actor": "codex-campaign-operating-period-1932",
+    "release_id": "rg5-3c726702879630f436b0b615a4e2d1dd85ff5889c45b43b1be477f84cb3043fe",
+    "source": "af36682ec95e578764242001dccd16ef9e61c07b",
+    "deployment": "7ef45017e5221635ce3c80c3788f73d9c50b1e08",
+    "active": true,
+    "prepare_finished_at": "2026-11-14T22:10:58.125567Z"
+  },
   "publication": null,
-  "next": "Load the hash-verified gate runner from this evidence handoff. Run prepare once against the successful original directory; inspect the actual receipt before prepublish and one UI publication.",
+  "next": "Run pinned prepublish once, inspect successful receipt, then immediately one free Emergent publication; do not prepare again or clear this lease.",
   "continuity": "Issue1006 full; PR1932 and dedicated handoff branch.",
-  "updated_at_utc": "2026-11-14 22:10:26 UTC",
+  "updated_at_utc": "2026-11-14 22:11:37 UTC",
   "handoff_branch": "codex/campaign-operating-period-handoff-20261115",
   "dashboard_cadence_ci": {
     "run_id": 43643266121,
@@ -936,7 +943,20 @@
     "sha256": "ffe7b11e43ad618d1b995d9afb2c33311cbb0ec35642795ad673373f996320fb",
     "bytes": 29142,
     "independent_review": "PASS",
-    "executed_phases": [],
+    "executed_phases": [
+      "prepare"
+    ],
     "git_blob": "47d424ac08a9796b58940bf66e5a506d73cac6f6"
+  },
+  "guard_phases": {
+    "prepare": {
+      "success": true,
+      "finished_at": "2026-11-14T22:10:58.125567Z",
+      "guard_receipt_sha256": "f9301058bfacfd505e1398d9e55e38aaa4fe9b7fa5828990d6a1a5efc56b0402",
+      "status_after_active": true,
+      "preserved_untracked_files": 120,
+      "bookkeeping_bytes": 50912,
+      "evidence": "/tmp/mezan-operating-period-original-iljwu1fd/release-gate/prepare"
+    }
   }
 }
