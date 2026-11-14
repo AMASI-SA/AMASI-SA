@@ -34,3 +34,7 @@ Complete machine-readable evidence is in RELEASE_CHECKPOINT.json. No private ide
 Root comparator and independent archive reconstruction both passed all293 generated files/3directories, exactidentity/meta/proof, 289 frontend records and backend1217/frontend1472 isolated package records. Both actualhost JSON-route steps passed in readiness43630583846. Independentactual emittedlog review also passed. B6 integration/CodeQL runs remain pending.
 
 Root and independent review of current officialguard and foreign1928 frozen verify/preservation wrappers confirmed no origin fetch/refcomparison during verify or afterpreservation. The foreigncloud deployment explicitly completed and its officialverify is running. Therefore GitHub-only merge after allown gates may proceed without changing its /app orlease; originalwork still waits verifiedclosure/preservation and freshinactive. The readiness push workflow performs no automatic publication orlease action. This replaces the older conservative premerge-wait plan; no protocol requirement is bypassed.
+
+## B6 full CI complete; ready transition
+
+All11 applicable B6 workflows passed attempt1; the expected TikTok conditional workflow skipped. ActualStock4513 tests/7subtests, checker zero skips/failures/errors; Operational Balance4799 plus16shipping/18subtests, frontend783 tests/52suites and14browser/mobile/visibility scenarios. Root freshly checked currentJ6 and exactB6; markedready19:17:17UTC. Additional Snapchat readytransition runs43631264285/43631264327 are running and mustfinish before merge.

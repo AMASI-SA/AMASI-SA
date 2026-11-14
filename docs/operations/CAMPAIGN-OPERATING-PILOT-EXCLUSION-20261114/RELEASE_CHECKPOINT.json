@@ -2,7 +2,7 @@
   "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
   "round": 6,
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 19:15:30 UTC",
+  "updated_at_utc": "2026-11-14 19:17:41 UTC",
   "branch": "codex/campaign-operating-pilot-m3e9d-20261114",
   "pr": 1929,
   "base_J6": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
@@ -478,7 +478,7 @@
     }
   },
   "intent_ci": {
-    "status": "8/11 applicable workflows successful; OperationalBalance, Stock, CodeQL still running; declared TikTok conditional skip.",
+    "status": "All11 applicable B6 workflows passed attempt1; one expected TikTok conditional skip.",
     "readiness": 43630583846,
     "coverage": 43630583946,
     "backend_coverage": {
@@ -705,6 +705,126 @@
       "actual_emitted_output_checked": true,
       "isolated_backend_no_git_or_sibling_frontend": true,
       "frontend_isolation": true
+    },
+    "runs": [
+      {
+        "id": 43630583854,
+        "name": "Snapchat Settings Management V2",
+        "head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43630583857,
+        "name": "Snapchat Direct Active Publication",
+        "head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43630583849,
+        "name": "TikTok Creator Release Candidate",
+        "head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+        "status": "completed",
+        "conclusion": "skipped",
+        "attempt": 1
+      },
+      {
+        "id": 43630583848,
+        "name": "Qoyod Payment Freshness",
+        "head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43630583946,
+        "name": "Campaign hover source coverage",
+        "head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43630583846,
+        "name": "Mezan Release Readiness",
+        "head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43630583893,
+        "name": "MZ2 Track F native shipping",
+        "head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43630583851,
+        "name": "Security Gate",
+        "head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43630583905,
+        "name": "G47 Focused Integration",
+        "head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43630583847,
+        "name": "Operational Balance Web",
+        "head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43630583843,
+        "name": "Operational Stock Eligibility",
+        "head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43630583920,
+        "name": "CodeQL",
+        "head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+        "status": "completed",
+        "conclusion": "success",
+        "attempt": 1
+      }
+    ],
+    "stock": {
+      "job": 132556068077,
+      "passed": 4513,
+      "warnings": 8,
+      "subtests_passed": 7,
+      "seconds": 374.6,
+      "zero_skips_failures_errors": true,
+      "artifact": 14127574354,
+      "artifact_bytes": 74951,
+      "root_actual_log_review": "PASS"
+    },
+    "operational": {
+      "job": 132556068352,
+      "passed": 4799,
+      "warnings": 8,
+      "seconds": 294.88,
+      "shipping": 16,
+      "shipping_subtests": 18,
+      "frontend_suites": 52,
+      "frontend_tests": 783,
+      "browser_scenarios": 14
     }
   },
   "merge_concurrency_review": {
@@ -730,5 +850,12 @@
       "Original /app, artifacts, actor and active lease remain untouched until owner verification/preservation closure and fresh inactive."
     ],
     "original_actions_allowed": false
+  },
+  "ready_transition": {
+    "at": "2026-11-14T19:17:17Z",
+    "head": "93efe593ebe2c401763c5d8faa4ba8547a8a8016",
+    "settings_run": 43631264285,
+    "direct_run": 43631264327,
+    "status": "running"
   }
 }
