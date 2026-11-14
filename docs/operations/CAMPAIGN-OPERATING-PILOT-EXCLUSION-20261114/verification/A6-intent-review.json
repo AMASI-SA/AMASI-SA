@@ -1,0 +1,30 @@
+{
+  "root": {
+    "result": "PASS",
+    "source": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+    "base": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+    "runtime_release_id": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2",
+    "intent_bytes": 1308609,
+    "intent_sha256": "0b46743398c032f7f8e151125e52e5360ba3061fd70434fa51ba257f5db90223",
+    "intent_git_blob": "84ab82046397eaac1e2e7b76adf6418e56d3bd4e",
+    "runtime_identity_bytes": 437784,
+    "runtime_identity_sha256": "bbae56b576d8ac89a878b0486ff63783a09b077cb9e19d77e2aec8aa37515554",
+    "frontend_source_tree": "9bf60f1803daf069d3d74bcbfa48fc029868a16e",
+    "frontend_artifact_tree": "d6bd189f78c5bb7467fa0b0c7a8edc2e0c36f8d22f6b5ab23242b0a9a0dc25bd",
+    "backend_records": 1216,
+    "frontend_records": 1182,
+    "control_records": 291,
+    "binding_and_top_level_runtime_equivalence": "PASS",
+    "metadata_note": "Initial display-only hash calculation escaped newline/header NUL; recomputed with actual newline/NUL bytes before any freeze. Artifact bytes unchanged."
+  },
+  "independent": {
+    "result": "PASS",
+    "records": 2689,
+    "backend": 1216,
+    "frontend": 1182,
+    "control": 291,
+    "source_frontend_tree": "9bf60f1803daf069d3d74bcbfa48fc029868a16e",
+    "artifact_tree": "d6bd189f78c5bb7467fa0b0c7a8edc2e0c36f8d22f6b5ab23242b0a9a0dc25bd",
+    "actual_source_two_build_job": 132551645333
+  }
+}

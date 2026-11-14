@@ -27,3 +27,15 @@ The source correction excludes only explicitly disabled pilot payroll with empty
 Wait exact-A6 all gates and independently verify its newly generated A6/J6 intent. Then freeze a new intent-only B6 and pass all host/gate checks. Before original mutations inspect current official guard and respect every active lease/writer; read the latest PR1928 release record. Do not reuse old intents or pinned operators.
 
 After the normal merge, exact-M gates, reviewed original rehearsal and official prepare/prepublish/publication/three-probe verification remain required. Final success requires actual live operating amount/ratio and net-profit arithmetic. Preserve all unrelated original paths and the unsaved editor buffer. Issue1006 is full; this status, PR1929 and the continuation branch carry the record.
+
+## A6 candidate accepted; one measured CPU gate failure retained — 2026-11-14 19:03:18 UTC
+
+Root and independent review accepted the A6 candidate artifact14127795162 from readiness43629148670. All2689 source/control/frontend records and J6 scopes match; runtime rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2, intent SHA256 0b46743398c032f7f8e151125e52e5360ba3061fd70434fa51ba257f5db90223, Git blob 84ab82046397eaac1e2e7b76adf6418e56d3bd4e. This does not bypass outstanding CI.
+
+Ten A6 workflows passed, including253 campaign backend and50 frontend tests, and full Operational Balance4799 tests plus16 shipping tests/18subtests. Stock attempt1 failed only the unchanged diagnostic-index CPU comparison: linear0.2929022449999934s vs indexed0.26621650900000304s, required indexed<linear*0.65. Functional list equality passed;4512 tests and7subtests passed,1 failed. The unchanged benchmark/implementation also passed in the tree-equivalent J6 baseline Stock4513-test run and in the separate exact-A6 Operational Balance cohort. The source of timing variation is not proven.
+
+Root authorized and requested exactly one unchanged retry of failed Stock job132551645016 in run43629148620. Preserve the first failure and inspect the new actual result; no threshold/source change, skip or repeated-until-green retries. Detailed evidence is verification/A6-stock-first-failure.json. No B6 exists yet.
+
+PR1928's original build passed and its publication has now started, observed directly in the UI at18:59:37UTC. This task did not publish. Original work and leases remain with that active owner until the required safe boundary. Archived1929 operators remain disabled and unexecuted.
+
+Next: Wait for the single unchanged Stock diagnostic attempt2; do not hide attempt1, lower thresholds or rerun until green. A6 candidate independently passed, but all source gates must pass before B6 freeze. Respect active PR1928 publication/lease; no original mutation.

@@ -2,7 +2,7 @@
   "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
   "round": 6,
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 18:55:21 UTC",
+  "updated_at_utc": "2026-11-14 19:03:18 UTC",
   "branch": "codex/campaign-operating-pilot-m3e9d-20261114",
   "pr": 1929,
   "base_J6": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
@@ -74,10 +74,79 @@
     "fix_scope": "Add projected non-payroll policy fields; ignore explicit disabled-pilot contract only when canonical normalized history is empty; keep all contributing missing-cost protections."
   },
   "source_ci": {
-    "status": "running",
+    "status": "10 workflows successful; Stock attempt1 failed measured CPU ratio; one unchanged diagnostic retry requested",
     "readiness_run": 43629148670,
     "coverage_run": 43629148717,
-    "applicable_workflows": 11
+    "applicable_workflows": 11,
+    "coverage": {
+      "backend": 253,
+      "frontend": 50,
+      "frontend_suites": 9
+    },
+    "failure": {
+      "source": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "run": 43629148620,
+      "job": 132551645016,
+      "attempt": 1,
+      "conclusion": "failure",
+      "test": "tests/test_operational_balance_issue_index.py::test_four_thousand_distinct_diagnostics_avoid_repeated_whole_list_work",
+      "line": 245,
+      "old_cpu_seconds": 0.2929022449999934,
+      "new_cpu_seconds": 0.26621650900000304,
+      "required": "new_cpu < old_cpu * 0.65",
+      "functional_equality_assertion": "passed before CPU ratio assertion",
+      "summary": {
+        "failed": 1,
+        "passed": 4512,
+        "warnings": 8,
+        "subtests_passed": 7,
+        "seconds": 328.99
+      },
+      "unchanged_blobs": {
+        "test": "12bd98a39b1d91b67feff7c592d828cef794f73d",
+        "implementation": "872611390c2b4ae3cee4a84cd55e7aac9a9c9ab5",
+        "checkpoint_runtime": "ba969e58421940af62b32a4f64eeac75fd17619b"
+      },
+      "baseline": {
+        "head": "db6971b59b12bdda3a3585712ca881ac22d6bc0f",
+        "tree_equal_J6": true,
+        "run": 43627775121,
+        "job": 132547412934,
+        "attempt": 1,
+        "conclusion": "success",
+        "actual_test_step_success": true,
+        "no_skips_gate_success": true,
+        "actual_summary": {
+          "passed": 4513,
+          "warnings": 8,
+          "subtests_passed": 7,
+          "seconds": 367.1,
+          "zero_skips_failures_errors": true,
+          "artifact": 14127048442
+        }
+      },
+      "classification": "Isolated measured CPU-ratio failure on unchanged benchmark/implementation; underlying source of timing variation not proven.",
+      "diagnostic_decision": "One unchanged rerun of the failed job only. Preserve attempt1 and all thresholds. No broad rerun, source change, suppression or repeated-until-green policy.",
+      "recorded_at": "2026-11-14 19:02:29 UTC",
+      "same_source_other_cohort": {
+        "run": 43629148605,
+        "job": 132551644870,
+        "conclusion": "success",
+        "passed": 4799,
+        "warnings": 8,
+        "seconds": 364.83,
+        "shipping_passed": 16,
+        "shipping_subtests_passed": 18,
+        "shipping_seconds": 0.41,
+        "includes_unchanged_benchmark": true
+      }
+    },
+    "diagnostic_retry": {
+      "at": "2026-11-14 19:02:30 UTC",
+      "response": {
+        "success": true
+      }
+    }
   },
   "superseded": {
     "pr1927": {
@@ -115,13 +184,148 @@
       "deployment": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
       "source": "d41cd73132793209d13758ef07b2eda4fcfe018a",
       "intent": "db6971b59b12bdda3a3585712ca881ac22d6bc0f",
-      "state": "Owner announced original rehearsal after status/staging18:50:51UTC. Publication and actual closure unobserved.",
-      "last_body_update": "2026-11-14T18:51:51Z"
+      "state": "Publishing: root UI observation at18:59:37UTC saw Deployment Started Nov14,09:58PM, Publishing/Packaging, old version5a7a310. Root did not click.",
+      "last_body_update": "2026-11-14T18:51:51Z",
+      "checkpoint": "abff26067a8f926c4c903829b330fa516347c6d7",
+      "original_build": {
+        "exit": 0,
+        "started_at": "2026-11-14T18:51:39.359831Z",
+        "finished_at": "2026-11-14T18:52:42.293406Z",
+        "preserved_files": 120,
+        "changed_paths": []
+      },
+      "publication_started_observed": {
+        "observed_at": "2026-11-14 18:59:37 UTC",
+        "tab": 24,
+        "url": "https://app.emergent.sh/chat",
+        "event_text": "Deployment Started Nov 14, 09:58 PM",
+        "status": "Publishing...; Packaging your latest changes...",
+        "baseline_version": "5a7a310",
+        "own_click": false
+      }
     }
   },
-  "next": "Wait exact-A6 all gates and independently verify its newly generated A6/J6 intent. Then freeze a new intent-only B6 and pass all host/gate checks. Before original mutations inspect current official guard and respect every active lease/writer; read the latest PR1928 release record. Do not reuse old intents or pinned operators.",
+  "next": "Wait for the single unchanged Stock diagnostic attempt2; do not hide attempt1, lower thresholds or rerun until green. A6 candidate independently passed, but all source gates must pass before B6 freeze. Respect active PR1928 publication/lease; no original mutation.",
   "original_build": false,
   "lease": false,
   "published": false,
-  "coordination": "Issue1006 full; task STATUS, replacement PR and continuation branch are durable."
+  "coordination": "Issue1006 full; task STATUS, replacement PR and continuation branch are durable.",
+  "intent_candidate": {
+    "path": "/workspace/scratch/a7d75184af2d/campaign-operating-intent-a6/release-intent-v5.json",
+    "zip_bytes": 378154,
+    "zip_sha256": "b8a357bb8373a76e049a5dca34e65691afe3c540265c513eebe0be6535d6e667",
+    "intent_bytes": 1308609,
+    "intent_sha256": "0b46743398c032f7f8e151125e52e5360ba3061fd70434fa51ba257f5db90223",
+    "intent_git_blob": "84ab82046397eaac1e2e7b76adf6418e56d3bd4e",
+    "source": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+    "base": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+    "runtime_release_id": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2",
+    "runtime_identity_bytes": 437784,
+    "runtime_identity_sha256": "bbae56b576d8ac89a878b0486ff63783a09b077cb9e19d77e2aec8aa37515554",
+    "frontend_source_tree": "9bf60f1803daf069d3d74bcbfa48fc029868a16e",
+    "frontend_artifact_tree": "d6bd189f78c5bb7467fa0b0c7a8edc2e0c36f8d22f6b5ab23242b0a9a0dc25bd",
+    "frontend_build_meta": {
+      "bytes": 474116,
+      "path": "build-meta.json",
+      "sha256": "3061506eddf23d3b12a3044c8be68d8a719cb0505d3a641a433bcb0f0fe98175"
+    },
+    "frontend_proof": {
+      "bytes": 1521,
+      "path": "frontend/.release/reproducible-build.json",
+      "sha256": "e88056c1bf705a2721cf607db3613a387394ced97a26c67f79dad1191baaf98e"
+    },
+    "backend": {
+      "added_count": 0,
+      "deleted_count": 0,
+      "file_count": 1216,
+      "manifest_sha256": "1d874b52b1432da07fd9effe2e3b6ef8dbbdecff76507706565b5fff97adb3cc",
+      "modified_count": 1,
+      "projection_tree_oid": "44ea92d2c84fda4daa7860d75b28c0e54071897c",
+      "scope": "backend_runtime_package_v1",
+      "scope_tree_oid": "2d32489f13eb992596ed41386b95ffb0535872b3",
+      "source_base_git_sha": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+      "source_base_root_tree_oid": "355fdae884cf4a849b0acdf1c29081730556c6b0",
+      "source_base_scope_tree_oid": "4a5987d3a8904ca52abd423f28012f25e396950d",
+      "source_git_sha": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "source_root_tree_oid": "4fa115690990990c5dc10436f163fd68ad5b64d9",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "ad121cbdef7d6a0e2ad79e020efefcdc73889e7d4726060dc41dd20c4a031791"
+    },
+    "control": {
+      "added_count": 0,
+      "deleted_count": 0,
+      "file_count": 291,
+      "manifest_sha256": "fef4f43ad8451910c0adbe75059c581a245075a9124279bb0613f5cbc78c1e86",
+      "modified_count": 0,
+      "projection_tree_oid": "b29ff0fa95af9d6980762935cda92e5d8e4d16e6",
+      "scope": "release_control_source_v1",
+      "scope_tree_oid": "b29ff0fa95af9d6980762935cda92e5d8e4d16e6",
+      "source_base_git_sha": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+      "source_base_root_tree_oid": "355fdae884cf4a849b0acdf1c29081730556c6b0",
+      "source_base_scope_tree_oid": "b29ff0fa95af9d6980762935cda92e5d8e4d16e6",
+      "source_git_sha": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "source_root_tree_oid": "4fa115690990990c5dc10436f163fd68ad5b64d9",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "2e730a50bceadf234068224451ad8b7dde2e8977f6ce26004824ca35a5ff5596"
+    },
+    "toolchain": {
+      "node": "22.23.2",
+      "vite": "8.2.4",
+      "yarn": "1.22.22"
+    },
+    "root_initial_bindings": "PASS",
+    "independent_review": "PASS",
+    "source_readiness_run": 43629148670,
+    "source_artifact": 14127795162,
+    "frontend_source_file_count": 1182,
+    "independent_scope_records": 2689
+  },
+  "intent_review": {
+    "root": {
+      "result": "PASS",
+      "source": "fcb827f556c40bebd843d8c9d85fedc0b60cf8fa",
+      "base": "3e9dc3b25e41c663e001822a666323c802e5ec5a",
+      "runtime_release_id": "rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2",
+      "intent_bytes": 1308609,
+      "intent_sha256": "0b46743398c032f7f8e151125e52e5360ba3061fd70434fa51ba257f5db90223",
+      "intent_git_blob": "84ab82046397eaac1e2e7b76adf6418e56d3bd4e",
+      "runtime_identity_bytes": 437784,
+      "runtime_identity_sha256": "bbae56b576d8ac89a878b0486ff63783a09b077cb9e19d77e2aec8aa37515554",
+      "frontend_source_tree": "9bf60f1803daf069d3d74bcbfa48fc029868a16e",
+      "frontend_artifact_tree": "d6bd189f78c5bb7467fa0b0c7a8edc2e0c36f8d22f6b5ab23242b0a9a0dc25bd",
+      "backend_records": 1216,
+      "frontend_records": 1182,
+      "control_records": 291,
+      "binding_and_top_level_runtime_equivalence": "PASS",
+      "metadata_note": "Initial display-only hash calculation escaped newline/header NUL; recomputed with actual newline/NUL bytes before any freeze. Artifact bytes unchanged."
+    },
+    "independent": {
+      "result": "PASS",
+      "records": 2689,
+      "backend": 1216,
+      "frontend": 1182,
+      "control": 291,
+      "source_frontend_tree": "9bf60f1803daf069d3d74bcbfa48fc029868a16e",
+      "artifact_tree": "d6bd189f78c5bb7467fa0b0c7a8edc2e0c36f8d22f6b5ab23242b0a9a0dc25bd",
+      "actual_source_two_build_job": 132551645333
+    }
+  },
+  "disabled_runner_templates": {
+    "original_build": {
+      "path": "operators/original-build-1929.template.py",
+      "sha256": "138ff4b3931022209744f68aadda466840f6df70f56841b88915b2505fb07a70"
+    },
+    "release_gate": {
+      "path": "operators/release-gate-1929.template.py",
+      "sha256": "648f60ad177556f96d38d4f8b7d695c45da04887915cc60b8ad57c3477f61c6c"
+    },
+    "review": "Root reviewed exact J6/base/doc-only delta; disabled PINS_REVIEWED=False, all unknown pins UNPINNED.",
+    "host_comparator": {
+      "path": "operators/verify-hosts-1929.py",
+      "sha256": "4054617daf7d0a05cfee53b3c94a485a49e97c5e5e1485549c59eeaeed30e96c",
+      "review": "Root reviewed exact A6/J6/intent pins and text-only delta; not yet run because B6 does not exist."
+    }
+  }
 }
