@@ -1,0 +1,16 @@
+{
+  "observed_at": "2026-11-14T06:57:07.932Z",
+  "actual_exit": 0,
+  "checks": 3,
+  "deployment_git_sha": "23cc06da003c18c0f3fc6c2e749aad1326666166",
+  "elapsed_seconds": 704.8324592419958,
+  "ended_at": "2026-11-14T06:56:21.765981+00:00",
+  "fresh_guard_inactive": true,
+  "frontend_checked_request_count": 582,
+  "phase": "verified",
+  "prefix": "/tmp/mezan-pr1918-original-6jyavqt4/28-verify",
+  "release_id": "rg5-e44d7833a828fd8cfcff3252b5bad60e6526cb80c98ca9464d8205e39d02800f",
+  "source_git_sha": "d70b42cda3d70a7f07c78c3efc5fde8331fdc877",
+  "started_at": "2026-11-14T06:44:36.933528+00:00",
+  "stdout_sha256": "9b03e760e599b7aa032599b75d406797cdb34f34533734cd9956421c8569e94d"
+}
