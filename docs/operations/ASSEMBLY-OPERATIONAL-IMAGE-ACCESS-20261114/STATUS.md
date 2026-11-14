@@ -8,6 +8,37 @@ This is a documentation continuation of the immutable source checkpoint, not ano
 
 The earlier Ready server release was separately published and officially verified. The combined Android app includes Ready ordering and supplier-invoice storage recovery; the one exact-source APK build succeeded and its actual artifact passed20 verification checks. The image-server dependency is now accepted and the existing Android80 installation link is ready for delivery. Physical employee-device installation has not been performed.
 
+## Follow-up after the user's continue request — 14 November 2026
+
+### Monitoring is now accessible
+
+Normal keyboard activation of the existing View Details button opened the official Monitoring page. The displayed warning explains that resource utilization crossed85% during multiple intervals in the preceding24hours. This establishes why the platform retains its warning; it does not identify the application operation responsible for each peak.
+
+| Metric | Value displayed in the follow-up | Displayed24-hour peak |
+| --- | ---: | ---: |
+| Response time |3.7seconds |10seconds |
+| Error rate |0% |17% |
+| CPU usage |17% |90% |
+| Memory usage |27% |100% |
+
+The response-time value changed from3.6s to3.7s during observation. These are platform display readings, not a new load test or a promise about every request. CPU and memory are measured against the plan's reserved resources. Current low utilization must not erase the earlier peaks or imply that the warning is fully resolved.
+
+Readable screenshot evidence was saved and independently read back: resources image SHA256 `39f45e0b995322d7644e317827ec87b629bbda8877a248d1b79eceaf336f335e`; overview/response image SHA256 `b1d2865a693c2de2c6d1d92533a1e844a2544b276323ae112fe9f0210a0e96d8`.
+
+### Bounded live-log observation
+
+The original Overview still displayed published version `892c7f3`. Its normal View Logs control showed **All logs(100), Error logs(0), Warning logs(0)**. The displayed sample covers approximately01:42:36–01:43:47UTC on14November. The API timing entries in that sample succeeded with status200. The executive dashboard request took3004.483ms, and its resource-governor stage completed in2982.56ms. Ordinary displayed order-list reads were approximately234–579ms; health checks approximately8–19ms.
+
+This is a bounded successful sample, not evidence of zero errors across24hours, nor a diagnosis of the earlier CPU/memory peaks. No extra production calculation, background sync, load test, paid Agent chat, resource-plan change or business mutation was initiated to obtain it.
+
+### Concurrent source changes and app continuation
+
+A fresh GitHub ref read found production source `4860548f0b032e8e3beca18a4776413cd7e0368b`, normal merge PR1915, directly after the accepted image merge. A bounded comparison found only the operational-balance order reader, its new tests, its own status document and v5 intent changed. Ready and image runtime/test files are unchanged.
+
+[The other owner's checkpoint](https://github.com/AMASI-SA/AMASI-SA/blob/113ccd55c0de930e3ee573a879300f531280d3f8/docs/operations/OPERATIONAL-SOURCE-READ-REPAIR-20261114/STATUS.md), dated01:29:03UTC, records that specific `unified_orders / operational_source_read_timeout` repair as merged, not yet published. Its old observation of our active lease predates our verified normal closure. A source-branch advance is not proof of live deployment. The general platform warning is not proved to have the same cause as that financial timeout. Do not duplicate the other owner's repair or overwrite its source with an old snapshot.
+
+The completed Android80 APK remains available from its already-verified EAS build. Physical-device installation and acceptance remain unperformed; no employee message or automatic device rollout was initiated.
+
 ## Cause and behavior
 
 `backend/mobile_app_request_context.py` previously classified the single-image URL under the generic review-page permission prefix. An assembly-only employee received HTTP403 before the image endpoint could apply its existing assembly permission and merchant ownership checks.
@@ -99,7 +130,7 @@ The wrapper subsequently called unchanged original status, asserted and printed 
 
 After a fresh reload of the existing assembly view and a read-only search of reference order299308624, the already-saved operational image again loaded completely at natural dimensions311×500. No Ready/receipt/stock/invoice/shipping or image-save operation was triggered. This confirms saved-image delivery on the authorized web view; assembly-only mobile permission behavior is covered by the bridge/router regression tests, not a claimed physical-phone test.
 
-The platform also displays a general severe-performance alert. Two read-only attempts to open its details/Monitoring timed out at browser input dispatch, so the detailed metrics and cause were not assessed here. The successful official release verifier is a version/asset/health acceptance result, not a complete performance audit.
+The platform also displays a general severe-performance alert. Initial read-only detail/Monitoring clicks timed out at browser input dispatch. A subsequent continuation opened Monitoring successfully with normal keyboard navigation; its bounded observations are recorded below. The successful official release verifier is a version/asset/health acceptance result, not a complete performance audit.
 
 
 ## Scoped rollback behavior
