@@ -436,7 +436,7 @@
     ]
   },
   "original_read_only_preflight": {
-    "observed_at": "2026-11-14T21:22:06.790532+00:00",
+    "observed_at": "2026-11-14T21:53:20.234395+00:00",
     "guard": {
       "active": false
     },
@@ -465,9 +465,9 @@
   },
   "new_lease": null,
   "publication": null,
-  "next": "Diagnose both CI failures and require exact-B reruns green before merge; no change to frozen source/intent.",
+  "next": "Wait for exact merge push gates; independently pin original build operator; fresh inactive guard and original governed build before lease.",
   "continuity": "Issue1006 full; PR1932 and dedicated handoff branch.",
-  "updated_at_utc": "2026-11-14 21:42:36 UTC",
+  "updated_at_utc": "2026-11-14 22:00:22 UTC",
   "handoff_branch": "codex/campaign-operating-period-handoff-20261115",
   "dashboard_cadence_ci": {
     "run_id": 43643266121,
@@ -497,241 +497,213 @@
     "independent_evidence": "checks/independent-intent-a1/review-result.json"
   },
   "intent_ci": {
-    "status": "two_timing_failures_under_diagnosis",
-    "run_readiness": 43644190870,
+    "status": "PASS",
     "expected_workflows": 25,
-    "expected_tiktok": "skipped",
-    "other24": "required_success",
+    "run_count": 28,
+    "successful_runs": 27,
+    "expected_tiktok_skip": 1,
     "runs": [
       {
         "id": 43644320972,
         "name": "Snapchat Direct Active Publication",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644320846,
         "name": "Snapchat Settings Management V2",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644320817,
         "name": "Snapchat Reporting V2 Shadow",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190666,
         "name": "Qoyod Payment Freshness",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190673,
         "name": "Snapchat Direct Active Publication",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190764,
         "name": "Snapchat Settings Management V2",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190794,
         "name": "TikTok Creator Release Candidate",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "skipped"
+        "conclusion": "skipped",
+        "attempt": 1
       },
       {
         "id": 43644190751,
         "name": "Production Dashboard Profit Date Race V1",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190800,
         "name": "Campaign hover source coverage",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190784,
         "name": "Page and operational read performance",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190806,
         "name": "Production Dashboard V2 Ad FX And Payment Fees",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190864,
         "name": "Production Campaign AI Decision V3 Extended",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190665,
         "name": "Snapchat Reporting V2 Shadow",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190683,
         "name": "Production Dashboard V2 Salla Ads Executive",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190688,
         "name": "Production Campaign AI Decision Intelligence V3",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190804,
         "name": "Dashboard card cadence and catalogue admission",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190797,
         "name": "Production Dashboard Executive Four Platform Date V1",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190759,
         "name": "Supplier embroidery and profit layout acceptance (PR only)",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190754,
         "name": "Sold product cost details",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190650,
         "name": "Google Ads full management",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190687,
         "name": "Security Gate",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190774,
         "name": "Background workers and two-hour Qoyod cycles",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190667,
         "name": "MZ2 Track F native shipping",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190813,
         "name": "G47 Focused Integration",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190870,
         "name": "Mezan Release Readiness",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
-      },
-      {
-        "id": 43644190930,
-        "name": "Operational Balance Web",
-        "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "failure"
+        "conclusion": "success",
+        "attempt": 1
       },
       {
         "id": 43644190658,
         "name": "CodeQL",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "success"
+        "conclusion": "success",
+        "attempt": 1
+      },
+      {
+        "id": 43644190930,
+        "name": "Operational Balance Web",
+        "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
+        "conclusion": "success",
+        "attempt": 2
       },
       {
         "id": 43644190839,
         "name": "Operational Stock Eligibility",
         "head": "c8d70f26ab02bc9467c844fee477ef040688edb2",
-        "attempt": 1,
-        "status": "completed",
-        "result": "failure"
+        "conclusion": "success",
+        "attempt": 2
       }
     ]
   },
   "host_artifacts": {
     "root": "PASS",
-    "independent": "pending",
+    "independent": "PASS",
     "acceptance": {
       "accepted": true,
       "source": "af36682ec95e578764242001dccd16ef9e61c07b",
@@ -845,7 +817,8 @@
           }
         }
       }
-    }
+    },
+    "independent_evidence_sha256": "b9e339e1148ebc55db88a3be1fd0f8e7dffc7c1d20fc1a676e81db594d4f6c1d"
   },
   "retry_diagnosis": {
     "stock": {
@@ -860,7 +833,8 @@
       "subtests": 7,
       "failed": 1,
       "rerun_requested": true,
-      "rerun_requested_at": "2026-11-14 21:52:27 UTC"
+      "rerun_requested_at": "2026-11-14 21:52:27 UTC",
+      "retry_result": "success attempt2"
     },
     "balance": {
       "run": 43644190930,
@@ -874,7 +848,31 @@
       "duration_seconds": 206.77,
       "result": "Same unchanged CPU-ratio assertion; equality and dependency/Mongo setup passed. Timing/test-state variability suspected, not proven infrastructure outage. One bounded failed-job rerun; no waiver or threshold change.",
       "rerun_requested": true,
-      "rerun_requested_at": "2026-11-14 21:52:38 UTC"
+      "rerun_requested_at": "2026-11-14 21:52:38 UTC",
+      "retry_result": "success attempt2"
     }
+  },
+  "merge": {
+    "sha": "7ef45017e5221635ce3c80c3788f73d9c50b1e08",
+    "tree": "e55cdf2c2b15cfe08efe3e0305d043e87f916d8b",
+    "parents": [
+      "324dab9fd01fab17a28a5f7de4bb2bd298d7aea9",
+      "c8d70f26ab02bc9467c844fee477ef040688edb2"
+    ]
+  },
+  "merge_push_ci": {
+    "status": "pending",
+    "expected": [
+      "Mezan Release Readiness",
+      "Security Gate",
+      "CodeQL"
+    ]
+  },
+  "original_operator": {
+    "path": "operators/campaign-operating-original-build-1932.py",
+    "sha256": "88c17d513c5549b797f06840465572ad285ce31a3b1d4ec25f31d633895de4b2",
+    "bytes": 15520,
+    "independent_review": "pending",
+    "executed": false
   }
 }
