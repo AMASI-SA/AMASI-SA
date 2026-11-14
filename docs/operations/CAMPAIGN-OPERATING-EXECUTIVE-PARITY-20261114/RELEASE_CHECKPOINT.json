@@ -1,7 +1,7 @@
 {
   "task": "CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114",
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 16:47:06 UTC",
+  "updated_at_utc": "2026-11-14 16:51:58 UTC",
   "branch": "codex/campaign-operating-executive-parity-m94f6-20261114",
   "pr": 1924,
   "base_J3": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
@@ -15,10 +15,10 @@
   ],
   "same_three_backend_test_blobs_as_A2": true,
   "inherited_J3_intent_unchanged": true,
-  "source_ci": "6 of11 applicable succeeded; remaining inprogress, nofailures observed",
-  "intent_B3": null,
+  "source_ci": "all11 exactA3 workflows successful",
+  "intent_B3": "0a93847af8eb3898ae195c58ad88092388d908ad",
   "merge_M3": null,
-  "runtime_release_id": null,
+  "runtime_release_id": "rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33",
   "original_workspace_observation": {
     "observed_at": "2026-11-14T16:41:25.665266+00:00",
     "status_exit": 0,
@@ -33,9 +33,15 @@
     "other_pr": 1921,
     "other_merge": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
     "other_handoff_branch": "codex/financial-section-pages-handoff-20261114",
-    "other_checkpoint": "19d6fdb6ea7dcbd488ad73de177ec5becab7a723",
-    "state_at_checkpoint": "original build started once in Terminal2, nolease yet",
-    "must_wait_for_other_owner_release_and_fresh_inactive": true
+    "other_checkpoint": "9bf95138f4158e8b1e54b326ec802f30edb6f10b",
+    "state_at_checkpoint": "foreign-owned active lease, one publication inprogress",
+    "must_wait_for_other_owner_release_and_fresh_inactive": true,
+    "actor": "codex-financial-section-pages-1921",
+    "prepare_finished": "2026-11-14T16:44:34.399060Z",
+    "prepublish_finished": "2026-11-14T16:45:27.073703Z",
+    "publish_clicked": "2026-11-14T16:46:05.772Z",
+    "verified": false,
+    "inactive_after_release": false
   },
   "superseded_pr1922": {
     "task": "CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114",
@@ -138,7 +144,7 @@
     }
   },
   "production_changed_by_this_followup": false,
-  "next": "Complete exactA3 CI and its new candidate artifact. Freeze only new intentB3 then fullgates/hosts. Preserve other's active original build/release. After ownready and othercomplete, freshinactive/latestbase before ordinary merge and originalrehearsal.",
+  "next": "Require exactB3 all11 applicable gates and expectedTikTokskip, bothhostartifact/proof validation. Wait for PR1921 owner to verify andclose its ownlease. Then freshoriginalinactive/latestproduction94f6 before ordinaryM3 merge, pushgates, neworiginalbuild. Do not touchforeignlease/workspace whileactive.",
   "static_review": "root plus independent source reuse/overlap PASS",
   "source_coverage": {
     "backend": 248,
@@ -157,12 +163,14 @@
     "artifact": 14122553318,
     "zip_sha256": "db47ea144d128c6aaa4c3ccadb277ae260fa0f4696a4d27dc3f59e7f787af3b2",
     "root_bindings": "PASS",
-    "independent_review": "inprogress"
+    "independent_review": "PASS"
   },
   "templates": {
     "disabled": true,
     "build_sha256": "249d6fa4a9b45820e1bfbafec3f5ca3d64f1fe5b46f0a25c1b3f755fb6114b6b",
     "gate_sha256": "1721a17978503165fa1faa3972cbb8bfc35f90b055562d665a403434e34acf9a",
     "unchanged_logic_from_reviewed1922": true
-  }
+  },
+  "intent_tree": "b48a0eefb368ba655c8370f6b2e4435e07612790",
+  "B3_ci": "pending"
 }

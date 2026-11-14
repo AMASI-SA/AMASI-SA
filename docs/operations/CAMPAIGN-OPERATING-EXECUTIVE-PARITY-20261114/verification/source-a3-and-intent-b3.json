@@ -1,0 +1,151 @@
+{
+  "source_A3": "c484b549e8bca017627ce80749c7895198f04bf8",
+  "base_J3": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+  "source_tree": "1afab9057e574c8db551f98411febaeaced5feb4",
+  "intent_B3": "0a93847af8eb3898ae195c58ad88092388d908ad",
+  "intent_tree": "b48a0eefb368ba655c8370f6b2e4435e07612790",
+  "runtime": "rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33",
+  "candidate": {
+    "path": "/workspace/scratch/a7d75184af2d/campaign-operating-intent-a3/release-intent-v5.json",
+    "bytes": 1308035,
+    "chars": 1308035,
+    "json_sha256": "fb1ce72783899a9c64b592ce7d39a2c2e73bae6bec500a58f857c7fed132a68d",
+    "git_blob_sha": "2159398256b11323a9cce8e09f89508bb6f18818",
+    "release_id": "rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33",
+    "frontend_artifact_tree_sha256": "8b55f9ab1883c764826c27dd77b504fa55599bf0d84875f156565a9d8eaba5f4",
+    "run": 43617140686,
+    "artifact": 14122553318,
+    "zip_sha256": "db47ea144d128c6aaa4c3ccadb277ae260fa0f4696a4d27dc3f59e7f787af3b2",
+    "root_bindings": "PASS",
+    "independent_review": "PASS"
+  },
+  "root_checks": {
+    "source": true,
+    "base": true,
+    "version": true,
+    "branch": true,
+    "origin": true,
+    "runtime_source": true,
+    "frontend": true,
+    "repro": true,
+    "backend": true,
+    "critical": true,
+    "control": true
+  },
+  "independent_checks": {
+    "verdict": "PASS",
+    "zip_digest": true,
+    "intent_digest": true,
+    "git_blob": true,
+    "source_manifest_hashes": true,
+    "projection_git_trees": true,
+    "runtime_id": true,
+    "source_base_component_bindings": true,
+    "governed_origin_toolchain": true,
+    "exact_three_R2_blobs": true,
+    "upstream_frontend_preserved": true
+  },
+  "workflows": [
+    {
+      "id": 43617140842,
+      "name": "Campaign hover source coverage",
+      "head": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43617140746,
+      "name": "Snapchat Direct Active Publication",
+      "head": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43617140751,
+      "name": "Snapchat Settings Management V2",
+      "head": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43617140696,
+      "name": "Qoyod Payment Freshness",
+      "head": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43617140686,
+      "name": "Mezan Release Readiness",
+      "head": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43617140790,
+      "name": "MZ2 Track F native shipping",
+      "head": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43617140807,
+      "name": "Security Gate",
+      "head": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43617140742,
+      "name": "G47 Focused Integration",
+      "head": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43617140720,
+      "name": "Operational Balance Web",
+      "head": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43617140690,
+      "name": "Operational Stock Eligibility",
+      "head": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 43617140710,
+      "name": "CodeQL",
+      "head": "c484b549e8bca017627ce80749c7895198f04bf8",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "source_coverage_jobs": {
+    "backend": 132514565958,
+    "frontend": 132514566178
+  },
+  "source_coverage": {
+    "backend": 248,
+    "frontend": 50,
+    "suites": 9
+  },
+  "B3_lineage": "solechild;intent-only",
+  "other_release": {
+    "other_pr": 1921,
+    "other_merge": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+    "other_handoff_branch": "codex/financial-section-pages-handoff-20261114",
+    "other_checkpoint": "9bf95138f4158e8b1e54b326ec802f30edb6f10b",
+    "state_at_checkpoint": "foreign-owned active lease, one publication inprogress",
+    "must_wait_for_other_owner_release_and_fresh_inactive": true,
+    "actor": "codex-financial-section-pages-1921",
+    "prepare_finished": "2026-11-14T16:44:34.399060Z",
+    "prepublish_finished": "2026-11-14T16:45:27.073703Z",
+    "publish_clicked": "2026-11-14T16:46:05.772Z",
+    "verified": false,
+    "inactive_after_release": false
+  }
+}

@@ -53,3 +53,11 @@ The candidate has not been merged, built in original /app, prepared or published
 - Source reuse independent review PASS: upstream27-file diff has no campaign-cost or shared expense/sales dependency changes. Exactthreebackend/testblobshashes match reviewedR2.
 - ExactA3sourcecoverage:248backend/50frontendtests in9suites passed; readiness43617140686 passed. Newcandidate14122553318 exactZIP/JSON/Gitblob and root source/base/component bindings verified. RemainingA3gates pending; noB3frozen.
 - PR1924 disabled templates archived; only source/base/PRnaming adapted from reviewed1922logic. AllB3/M3/artifact/evidence/UIpins remainUNPINNED, PINS_REVIEWED=False. Noexecution.
+
+
+## Exact A3 passed and new B3 frozen — 2026-11-14 16:51:58 UTC
+
+- All11 exactA3workflows completedSUCCESS, confirmedbyroot andindependentmonitor. Relevantactuallogs:248backend,50frontend/9suites. IndependentA3candidate reviewPASS includingfullsourceprojection/runtimehashderivation andPR1921frontendpreservation.
+- Newintent-onlyB3 `0a93847af8eb3898ae195c58ad88092388d908ad`, tree `b48a0eefb368ba655c8370f6b2e4435e07612790`, soleparentA3. Root exactcompare shows onlyrelease/release-intent-v5.json. Uploadedblob matches `2159398256b11323a9cce8e09f89508bb6f18818`. Runtime `rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33`.
+- ExactB3CI/hostrehearsals pending. No M3/ownoriginalbuild/ownlease/ownpublication.
+- Root readPR1921ledger9bf95138f4158e8b1e54b326ec802f30edb6f10b: its actor owns the activelease, prepare/prepublish succeeded, oneUIpublicationclicked16:46:05.772UTC andstillrunning atcheckpoint. Preserveitsworkflow; neverclearorreuseitslease. Originalworkspaceoperations andmerge aredeferreduntilotherreleaseverified/inactive andfreshchecksagree.
