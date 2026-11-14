@@ -1,0 +1,115 @@
+{
+  "at": "2026-11-14 18:40:58 UTC",
+  "applicable": 11,
+  "expected_tiktok_skip": true,
+  "runs": [
+    {
+      "id": 43627233676,
+      "name": "TikTok Creator Release Candidate",
+      "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+      "conclusion": "skipped",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233676",
+      "updated": "2026-11-14T18:33:12Z"
+    },
+    {
+      "id": 43627233751,
+      "name": "Snapchat Settings Management V2",
+      "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233751",
+      "updated": "2026-11-14T18:33:23Z"
+    },
+    {
+      "id": 43627233645,
+      "name": "Snapchat Direct Active Publication",
+      "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233645",
+      "updated": "2026-11-14T18:33:25Z"
+    },
+    {
+      "id": 43627233651,
+      "name": "Qoyod Payment Freshness",
+      "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233651",
+      "updated": "2026-11-14T18:33:37Z"
+    },
+    {
+      "id": 43627233670,
+      "name": "Campaign hover source coverage",
+      "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233670",
+      "updated": "2026-11-14T18:33:54Z"
+    },
+    {
+      "id": 43627233809,
+      "name": "Security Gate",
+      "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233809",
+      "updated": "2026-11-14T18:35:20Z"
+    },
+    {
+      "id": 43627233649,
+      "name": "G47 Focused Integration",
+      "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233649",
+      "updated": "2026-11-14T18:36:58Z"
+    },
+    {
+      "id": 43627233700,
+      "name": "Mezan Release Readiness",
+      "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233700",
+      "updated": "2026-11-14T18:36:50Z"
+    },
+    {
+      "id": 43627233646,
+      "name": "MZ2 Track F native shipping",
+      "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233646",
+      "updated": "2026-11-14T18:37:34Z"
+    },
+    {
+      "id": 43627233653,
+      "name": "Operational Balance Web",
+      "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233653",
+      "updated": "2026-11-14T18:38:43Z"
+    },
+    {
+      "id": 43627233744,
+      "name": "CodeQL",
+      "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233744",
+      "updated": "2026-11-14T18:40:38Z"
+    },
+    {
+      "id": 43627233850,
+      "name": "Operational Stock Eligibility",
+      "head": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/43627233850",
+      "updated": "2026-11-14T18:40:19Z"
+    }
+  ]
+}

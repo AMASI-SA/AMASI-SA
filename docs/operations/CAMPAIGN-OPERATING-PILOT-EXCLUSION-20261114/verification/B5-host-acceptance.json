@@ -1,0 +1,210 @@
+{
+  "root": {
+    "accepted": true,
+    "source": "3545ef861c17f1411d6258efb5db4a5aaf52f577",
+    "base": "af9caabb3119aeb9cf450af0a8b89d376cef8c74",
+    "intent_commit": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+    "intent_sha256": "e5223937d883ce8ce2d02e524e079d78658be47b289ddc2c174d452c5ca1aebf",
+    "runtime_release": "rg5-a80ea84875fa69d3a23cec8f7bb90bfafb5dbab2f78e594197c02d1d8ff370b3",
+    "identity_sha256": "06a7579dab38387c81c17c71bdb689e56e1d521f8a2628cb575d9f8ac16423c9",
+    "jobs_json_sha256": "07f7392780caf39a5bceea43d9a45262d6074071b13460904a7fcfaa5b46d0c0",
+    "generated_paths_bytes_modes_identical": true,
+    "json_route_job_steps_passed": 2,
+    "hosts": {
+      "20.20.2": {
+        "inner_tar_sha256": "24d1357977fe5ed8575ee3421c6df21080b04d9e3f618f14c1b1df67e00c9f1a",
+        "generated_files": 293,
+        "frontend_content_records": 289,
+        "identity_sha256": "06a7579dab38387c81c17c71bdb689e56e1d521f8a2628cb575d9f8ac16423c9",
+        "identity_bytes": 437783,
+        "build_meta_sha256": "5b84999ee406f9e3f51cec5c3ffabb193dd36fa5430b95cfcdc2cd0b791c6bbc",
+        "proof_sha256": "b3385c9255f6b64f6f683a45613b1cb1995239c5480a1dadf3e6255739f02d17",
+        "package_boundary_sha256": "aa04c75de90e60978cff8143430da8db67ab451ce7ada2de841607109b5bf1a1",
+        "backend_package_files": 1217,
+        "frontend_package_files": 1472,
+        "backend_package_tree_sha256": "8bbd32b6cc3ecb4fdfe4d925fed0bb79ea1de56b6ee97e66fa33d394153d8022",
+        "frontend_package_tree_sha256": "91358213a43dc6d6b902f9ecc7bff22a31bdaafe46a41064f4a2d71281568218",
+        "governed_node": "22.23.2",
+        "governed_yarn": "1.22.22",
+        "actual_adapter_built": true,
+        "generated_zip_sha256": "62dcfee1a1ee8b9f9b26ba1418fc540bc6ce6c55ce23a2460cf1d19258e0b84a",
+        "evidence_zip_sha256": "d2a75a08e40942d8cf2719eb86c97d09ba9b041007e7d1418017816d037dee38",
+        "ci": {
+          "job_id": 132546148748,
+          "run_id": 43627233700,
+          "head_sha": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+          "steps": [
+            {
+              "name": "Invoke the Emergent package adapter under the selected Host Node",
+              "number": 12,
+              "started_at": "2026-11-14T18:35:38Z",
+              "completed_at": "2026-11-14T18:36:36Z",
+              "conclusion": "success"
+            },
+            {
+              "name": "Verify artifact, proof, identity, and package boundaries",
+              "number": 13,
+              "started_at": "2026-11-14T18:36:36Z",
+              "completed_at": "2026-11-14T18:36:39Z",
+              "conclusion": "success"
+            },
+            {
+              "name": "Prove the governed runtime returns build metadata as JSON",
+              "number": 14,
+              "started_at": "2026-11-14T18:36:39Z",
+              "completed_at": "2026-11-14T18:36:39Z",
+              "conclusion": "success"
+            }
+          ]
+        }
+      },
+      "24.19.0": {
+        "inner_tar_sha256": "18153552a64e864878ea07d7add104cd15101e0056f5322f4988cfb5b7c581bc",
+        "generated_files": 293,
+        "frontend_content_records": 289,
+        "identity_sha256": "06a7579dab38387c81c17c71bdb689e56e1d521f8a2628cb575d9f8ac16423c9",
+        "identity_bytes": 437783,
+        "build_meta_sha256": "5b84999ee406f9e3f51cec5c3ffabb193dd36fa5430b95cfcdc2cd0b791c6bbc",
+        "proof_sha256": "b3385c9255f6b64f6f683a45613b1cb1995239c5480a1dadf3e6255739f02d17",
+        "package_boundary_sha256": "aa04c75de90e60978cff8143430da8db67ab451ce7ada2de841607109b5bf1a1",
+        "backend_package_files": 1217,
+        "frontend_package_files": 1472,
+        "backend_package_tree_sha256": "8bbd32b6cc3ecb4fdfe4d925fed0bb79ea1de56b6ee97e66fa33d394153d8022",
+        "frontend_package_tree_sha256": "91358213a43dc6d6b902f9ecc7bff22a31bdaafe46a41064f4a2d71281568218",
+        "governed_node": "22.23.2",
+        "governed_yarn": "1.22.22",
+        "actual_adapter_built": true,
+        "generated_zip_sha256": "9ff03c85c1fde109e3dbc85b035c796c5319bcc4f81b519a8ea454644d7ed38f",
+        "evidence_zip_sha256": "2a678cf16f929c196529546265d9b3f388acb4990a76cf0388177ef66ca1d790",
+        "ci": {
+          "job_id": 132546148767,
+          "run_id": 43627233700,
+          "head_sha": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c",
+          "steps": [
+            {
+              "name": "Invoke the Emergent package adapter under the selected Host Node",
+              "number": 12,
+              "started_at": "2026-11-14T18:35:28Z",
+              "completed_at": "2026-11-14T18:36:27Z",
+              "conclusion": "success"
+            },
+            {
+              "name": "Verify artifact, proof, identity, and package boundaries",
+              "number": 13,
+              "started_at": "2026-11-14T18:36:27Z",
+              "completed_at": "2026-11-14T18:36:30Z",
+              "conclusion": "success"
+            },
+            {
+              "name": "Prove the governed runtime returns build metadata as JSON",
+              "number": 14,
+              "started_at": "2026-11-14T18:36:30Z",
+              "completed_at": "2026-11-14T18:36:31Z",
+              "conclusion": "success"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "independent": {
+    "result": "PASS",
+    "provenance": "Official readiness 43627233700 success attempt1 / head B5; all four artifact IDs and ZIP digests rechecked.",
+    "generated_files": 293,
+    "directories": 3,
+    "identical_records_including_modes": 296,
+    "files_mode": "0644",
+    "directories_mode": "0755",
+    "frontend_content_records": 289,
+    "package_digests_reconstructed": true,
+    "backend_package_files": 1217,
+    "frontend_package_files": 1472,
+    "backend_package_tree": "8bbd32b6cc3ecb4fdfe4d925fed0bb79ea1de56b6ee97e66fa33d394153d8022",
+    "frontend_package_tree": "91358213a43dc6d6b902f9ecc7bff22a31bdaafe46a41064f4a2d71281568218",
+    "package_boundary_sha256": "aa04c75de90e60978cff8143430da8db67ab451ce7ada2de841607109b5bf1a1",
+    "actual_JSON_route_jobs": [
+      132546148748,
+      132546148767
+    ],
+    "workflow_source_review": "Actual metadata byte and application/json checks with query/Accept/Host; not inferred from log existence",
+    "limit": "CI rehearsal only; original build, publication and live acceptance not yet performed."
+  },
+  "artifacts": [
+    {
+      "id": 14127051812,
+      "name": "release-v5-clean-clone-evidence-host-20.20.2",
+      "size_in_bytes": 46069,
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14127051812",
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14127051812/zip",
+      "expired": false,
+      "created_at": "2026-11-14T18:36:41Z",
+      "expires_at": "2026-11-28T18:36:41Z",
+      "updated_at": "2026-11-14T18:36:41Z",
+      "digest": "sha256:d2a75a08e40942d8cf2719eb86c97d09ba9b041007e7d1418017816d037dee38",
+      "workflow_run": {
+        "id": 43627233700,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "codex/campaign-operating-pilot-maf9-20261114",
+        "head_sha": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c"
+      }
+    },
+    {
+      "id": 14126801400,
+      "name": "release-v5-clean-clone-evidence-host-24.19.0",
+      "size_in_bytes": 46078,
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14126801400",
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14126801400/zip",
+      "expired": false,
+      "created_at": "2026-11-14T18:36:34Z",
+      "expires_at": "2026-11-28T18:36:33Z",
+      "updated_at": "2026-11-14T18:36:34Z",
+      "digest": "sha256:2a678cf16f929c196529546265d9b3f388acb4990a76cf0388177ef66ca1d790",
+      "workflow_run": {
+        "id": 43627233700,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "codex/campaign-operating-pilot-maf9-20261114",
+        "head_sha": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c"
+      }
+    },
+    {
+      "id": 14126672670,
+      "name": "release-v5-generated-outputs-host-20.20.2",
+      "size_in_bytes": 2977982,
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14126672670",
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14126672670/zip",
+      "expired": false,
+      "created_at": "2026-11-14T18:36:40Z",
+      "expires_at": "2026-11-28T18:36:40Z",
+      "updated_at": "2026-11-14T18:36:40Z",
+      "digest": "sha256:62dcfee1a1ee8b9f9b26ba1418fc540bc6ce6c55ce23a2460cf1d19258e0b84a",
+      "workflow_run": {
+        "id": 43627233700,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "codex/campaign-operating-pilot-maf9-20261114",
+        "head_sha": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c"
+      }
+    },
+    {
+      "id": 14126322280,
+      "name": "release-v5-generated-outputs-host-24.19.0",
+      "size_in_bytes": 2978183,
+      "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14126322280",
+      "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/14126322280/zip",
+      "expired": false,
+      "created_at": "2026-11-14T18:36:33Z",
+      "expires_at": "2026-11-28T18:36:32Z",
+      "updated_at": "2026-11-14T18:36:33Z",
+      "digest": "sha256:9ff03c85c1fde109e3dbc85b035c796c5319bcc4f81b519a8ea454644d7ed38f",
+      "workflow_run": {
+        "id": 43627233700,
+        "repository_id": 1250664189,
+        "head_repository_id": 1250664189,
+        "head_branch": "codex/campaign-operating-pilot-maf9-20261114",
+        "head_sha": "0a79480d2246d4ad748ed82b0a3510a4c0c0123c"
+      }
+    }
+  ]
+}
