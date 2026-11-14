@@ -71,3 +71,7 @@ freeze all source/tests/documentation as A. Require exact-A CI and reviewed
 artifact, intent-only B, normal merge, actual original build, prepare/prepublish,
 one publish, official verification and a fresh visible financial as_of before
 claiming the user's issue resolved.
+
+## Implementation checkpoint
+
+The fee-history helper is implemented and temporarily frozen for independent review at SHA256 `d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d`. Its 103 focused cases passed with no failures/errors/skips. The original reader is byte-for-byte unchanged. The collector builds one callable in its owned preparation worker and uses it at both existing fee checks. The timing-only change passed 13 new cases and 82 adjacent cases; root independently proved full AST equality after removing only the timing wrappers/import, before adding fee wiring. Whole-collector integration tests, independent adversarial review and paired old/new measurements remain in progress. WIP source snapshots under evidence/wip are recoverable but are not a frozen release or deployable candidate.

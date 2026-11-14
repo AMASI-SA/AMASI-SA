@@ -1,7 +1,7 @@
 {
   "task_id": "OPERATIONAL-SOURCE-COLLECTION-REPAIR-20261114",
-  "stage": "proven_quadratic_fee_scan_implementation_in_progress",
-  "updated_at": "2026-11-14T04:17:10.803Z",
+  "stage": "index_helper_verified_integration_and_independent_review_pending",
+  "updated_at": "2026-11-14T04:23:23.421Z",
   "repo": "AMASI-SA/AMASI-SA",
   "source": {
     "J": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
@@ -155,6 +155,49 @@
       {
         "path": "evidence/prechange-fee/fee_direct-20000-20000-timing.stdout",
         "sha256": "a0977711f2ba013f2976a072efbb8eb005682f53c29d0a84346829def1e91ba1"
+      }
+    ]
+  },
+  "implementation_checkpoint": {
+    "helper_sha256": "d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d",
+    "helper_cases": 103,
+    "timing_cases": 13,
+    "timing_adjacent_cases": 82,
+    "AST_equivalence_before_fee_wiring": true,
+    "source_wiring": "request-owned prepare_in_thread once per collect; callable used at both existing fee checks",
+    "source_frozen": false,
+    "files": [
+      {
+        "path": "evidence/wip/operational_courier_fee_history.py.txt",
+        "sha256": "d03979de277bae09d5536df5b98e62138e2633f819d92957d0f4e552a7f0df6d"
+      },
+      {
+        "path": "evidence/wip/operational_balance_sources.py.txt",
+        "sha256": "c4cdd798daa9d897a26bb166d2962c3c93446b9e724a22489512047acc074b9f"
+      },
+      {
+        "path": "evidence/wip/operational_balance_service.py.txt",
+        "sha256": "4462d0c1a8e327795b66b49e7d9112b3e5f4e8dfe3c92a4da5df0be70e7e48f0"
+      },
+      {
+        "path": "evidence/wip/test_operational_balance_source_stage_timing.py.txt",
+        "sha256": "fe642e2293deb74339def202a44480348ee28432c8a633aa996a3e8c6825e4d2"
+      },
+      {
+        "path": "evidence/timing-ast-proof.json",
+        "sha256": "c39df5c178af09cf2996c783bc92ec7882bc1e303e1a1e7dd5990bb96277829f"
+      },
+      {
+        "path": "evidence/timing-focused.xml",
+        "sha256": "bd0058924b67ffe0b35a343eb471c3ed707bb7a3d240a0b0ebd2511873d3e945"
+      },
+      {
+        "path": "evidence/timing-adjacent.xml",
+        "sha256": "0f50b0cc932e48454b8072a5631629ccde9f85e250f210194328f0e17081d37d"
+      },
+      {
+        "path": "evidence/fee-helper-focused.xml",
+        "sha256": "b9a31f2a20b9cbdb5f5a27cc818617abb1271e9dd5b35ecb204e5c248ddf709f"
       }
     ]
   }

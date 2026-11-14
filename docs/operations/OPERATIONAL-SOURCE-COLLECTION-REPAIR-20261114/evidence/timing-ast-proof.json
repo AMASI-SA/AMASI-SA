@@ -1,0 +1,35 @@
+{
+  "base": "9c71435f4a19977c09f4331dee8fddbfa12a45eb",
+  "files": [
+    {
+      "path": "backend/operational_balance_sources.py",
+      "AST_equal_after_removing_only_timing_wrappers_and_import": true,
+      "old_sha256": "ed56061f536c49f7b54e8edbb3826ee7d8f9c4f10a40ac4d79e7646cd4d4b4f7",
+      "new_sha256": "67258d402ee2eea8e45544a761216cff22543e22f0e35af9cb56fa7531fbb640"
+    },
+    {
+      "path": "backend/operational_balance_service.py",
+      "AST_equal_after_removing_only_timing_wrappers_and_import": true,
+      "old_sha256": "94419f6cd928f3df14a44e8ad2faf3d7b0d2e4f2b1e8dfea90d5676c9b205e68",
+      "new_sha256": "4462d0c1a8e327795b66b49e7d9112b3e5f4e8dfe3c92a4da5df0be70e7e48f0"
+    }
+  ],
+  "private_values_logged": false,
+  "new_stage_names": [
+    "source_bundles",
+    "source_collision",
+    "source_delivery_history",
+    "source_fee_settings",
+    "source_finalize",
+    "source_invoices",
+    "source_native_links",
+    "source_native_overlaps",
+    "source_option_catalog",
+    "source_orders",
+    "source_other_sources",
+    "source_primary_reads",
+    "source_setup",
+    "source_statements",
+    "source_transactions"
+  ]
+}
