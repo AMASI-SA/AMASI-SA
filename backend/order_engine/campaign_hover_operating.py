@@ -48,7 +48,7 @@ SALARY_PROJECTIONS = {
     SALARY_CONTRACTS_COLLECTION: {"_id": 0, **{key: 1 for key in (
         "id", "employee_id", "monthly_amount", "currency", "effective_from", "start_date",
         "effective_to", "salary_revisions", "suspension_periods", "payroll_state",
-        "accrual_mode", "accrual_start_date",
+        "accrual_mode", "accrual_start_date", "status", "payroll_enabled", "accrual_policy",
     )}},
     EMPLOYEES_COLLECTION: {"_id": 0, **{key: 1 for key in (
         "id", "status", "hire_date", "updated_at", "archived", "is_archived",
@@ -122,6 +122,13 @@ async def _employee_salary_rows_on(db, owner, day, budget):
             continue
         salary = contract_salary_row(contract, employee)
         if not _salary_active_on(salary, day):
+            continue
+        # The shared executive reader omits contracts without normalized history.
+        # Only an explicitly disabled pilot can prove this is no payroll cost;
+        # missing history for a contributing contract must remain unknown.
+        if (not salary["salary_revisions"] and contract.get("status") == "pilot_only"
+                and contract.get("payroll_enabled") is False
+                and contract.get("accrual_policy") == "disabled_during_pilot"):
             continue
         if (str(contract.get("currency") or "SAR").upper() != "SAR"
                 or not salary["salary_revisions"]):

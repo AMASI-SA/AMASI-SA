@@ -264,6 +264,77 @@ def test_active_salary_with_missing_price_never_certifies_zero_expense(source):
     asyncio.run(check())
 
 
+def test_disabled_pilot_without_salary_history_matches_executive_salary_cohort():
+    async def check():
+        from employee_payroll_status import employee_salary_rows, normalized_salary_revisions
+
+        db = await fixture_db(sale("sale"))
+        await add_salary(db)
+        await db.mezan_employees_v2.insert_one({"user_id": OWNER, "id": "pilot",
+            "status": "active"})
+        pilot = {"user_id": OWNER, "id": "pilot-contract", "employee_id": "pilot",
+            "currency": "SAR", "monthly_amount": 9000, "salary_revisions": [],
+            "status": "pilot_only", "payroll_enabled": False,
+            "accrual_policy": "disabled_during_pilot"}
+        await db.mezan_employee_salary_contracts_v2.insert_one(deepcopy(pilot))
+        assert normalized_salary_revisions(pilot) == []
+        executive_rows = await employee_salary_rows(db, OWNER)
+        assert [row["employee_v2_id"] for row in executive_rows] == ["employee"]
+        before = await db.mezan_employee_salary_contracts_v2.find({}).to_list(10)
+        readonly = ReadDB(db)
+        result = await operating.read_operating_basis(readonly, OWNER, NOW)
+        # The explicitly disabled pilot has no accrual dates/history. Only the
+        # executive's contributing employee earns 3,000 / 30 days.
+        assert result == {"complete": True, "ratio": .1, "expenses_sar": 100.0,
+            "sales_sar": 1000.0, "date": DAY, "timezone": "Asia/Riyadh", "reasons": []}
+        assert all(count == 1 for count in Counter(c["collection"] for c in readonly.calls).values())
+        assert await db.mezan_employee_salary_contracts_v2.find({}).to_list(10) == before
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("history", ["revision", "legacy_baseline"])
+def test_pilot_markers_do_not_hide_a_contributing_salary_history(history):
+    async def check():
+        from employee_payroll_status import employee_salary_rows
+
+        db = await fixture_db(sale("sale"))
+        await add_salary(db)
+        await db.mezan_employees_v2.insert_one({"user_id": OWNER, "id": "contributing",
+            "status": "active"})
+        contract = {"user_id": OWNER, "id": "contributing-contract", "employee_id": "contributing",
+            "currency": "SAR", "monthly_amount": 9000, "status": "pilot_only",
+            "payroll_enabled": False, "accrual_policy": "disabled_during_pilot"}
+        if history == "revision":
+            contract["salary_revisions"] = [{"effective_from": "2026-11-01", "monthly_amount": 9000}]
+        else:
+            contract["effective_from"] = "2026-11-01"
+        await db.mezan_employee_salary_contracts_v2.insert_one(contract)
+        executive_rows = await employee_salary_rows(db, OWNER)
+        assert {row["employee_v2_id"] for row in executive_rows} == {"employee", "contributing"}
+        result = await operating.read_operating_basis(ReadDB(db), OWNER, NOW)
+        assert result["complete"] is True and result["reasons"] == []
+        assert result["expenses_sar"] == 400.0 and result["ratio"] == .4
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("contract_fields", [{}, {"status": "active", "payroll_enabled": True,
+    "accrual_policy": "calendar_daily_effective_salary_v1"}])
+def test_active_undated_contract_without_history_remains_unknown(contract_fields):
+    async def check():
+        db = await fixture_db(sale("sale"))
+        await add_salary(db)
+        await db.mezan_employees_v2.insert_one({"user_id": OWNER, "id": "undated",
+            "status": "active"})
+        await db.mezan_employee_salary_contracts_v2.insert_one({"user_id": OWNER,
+            "id": "undated-contract", "employee_id": "undated", "currency": "SAR",
+            "monthly_amount": 9000, "salary_revisions": [], **contract_fields})
+        result = await operating.read_operating_basis(ReadDB(db), OWNER, NOW)
+        assert result["complete"] is False and result["ratio"] is None
+        assert result["expenses_sar"] is None
+        assert result["reasons"] == ["operating_basis_cost_missing"]
+    asyncio.run(check())
+
+
 @pytest.mark.parametrize("failure", ["overflow", "unavailable"])
 def test_unreadable_or_truncated_basis_never_becomes_zero(monkeypatch, failure):
     async def check():
