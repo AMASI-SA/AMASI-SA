@@ -1,0 +1,152 @@
+{
+  "merge": {
+    "ordered_parents": [
+      "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+      "0a93847af8eb3898ae195c58ad88092388d908ad"
+    ],
+    "tree_equals_B3": true,
+    "A3_ancestor": true,
+    "diff_after_A3_only_intent": true,
+    "root_and_independent_review": "PASS"
+  },
+  "M": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+  "A": "c484b549e8bca017627ce80749c7895198f04bf8",
+  "B": "0a93847af8eb3898ae195c58ad88092388d908ad",
+  "base": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+  "tree": "b48a0eefb368ba655c8370f6b2e4435e07612790",
+  "premerge_original": {
+    "started_at": "2026-11-14T17:13:16.086386Z",
+    "finished_at": "2026-11-14T17:13:16.210034Z",
+    "status_exit": 0,
+    "active": false,
+    "status_stdout_sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e",
+    "status_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "head": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+    "tracked_status": "",
+    "untracked_count": 120
+  },
+  "foreign_release": {
+    "other_pr": 1921,
+    "other_merge": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+    "other_handoff_branch": "codex/financial-section-pages-handoff-20261114",
+    "other_checkpoint": "c9572085cbf2d355752e2d231249bb498781f16b",
+    "state_at_checkpoint": "officialverify3PASS; foreignleaseclosed; manualrefreshownedbyotheroperator",
+    "must_wait_for_other_owner_release_and_fresh_inactive": true,
+    "actor": "codex-financial-section-pages-1921",
+    "prepare_finished": "2026-11-14T16:44:34.399060Z",
+    "prepublish_finished": "2026-11-14T16:45:27.073703Z",
+    "publish_clicked": "2026-11-14T16:46:05.772Z",
+    "verified": true,
+    "inactive_after_release": true,
+    "published_ui_version": "ecb9679",
+    "verify_prefix": "/tmp/mezan-pr1921-original-zu179mmf/28-verify",
+    "verify_finished": "2026-11-14T17:10:13.373818Z",
+    "post_preservation_passed": "2026-11-14T17:10:44.989006Z"
+  },
+  "build_runner": {
+    "sha256": "7bef5ecff3a1c2b717c92633d135f94b1d8f44981498f864dbbb1be7405386d9",
+    "bytes": 15364,
+    "independent_exact_byte_review": "PASS",
+    "executed": false
+  },
+  "latest_B3_runs": [
+    {
+      "id": 43619003227,
+      "name": "Snapchat Settings Management V2",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43619003173,
+      "name": "Snapchat Direct Active Publication",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869438,
+      "name": "Campaign hover source coverage",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869455,
+      "name": "Security Gate",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869522,
+      "name": "Mezan Release Readiness",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869394,
+      "name": "MZ2 Track F native shipping",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869399,
+      "name": "G47 Focused Integration",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869430,
+      "name": "TikTok Creator Release Candidate",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "conclusion": "skipped",
+      "attempt": 1
+    },
+    {
+      "id": 43617869474,
+      "name": "Qoyod Payment Freshness",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869453,
+      "name": "Snapchat Direct Active Publication",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869504,
+      "name": "Snapchat Settings Management V2",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869402,
+      "name": "Operational Stock Eligibility",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869626,
+      "name": "CodeQL",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "conclusion": "success",
+      "attempt": 1
+    },
+    {
+      "id": 43617869606,
+      "name": "Operational Balance Web",
+      "head": "0a93847af8eb3898ae195c58ad88092388d908ad",
+      "conclusion": "success",
+      "attempt": 2
+    }
+  ]
+}

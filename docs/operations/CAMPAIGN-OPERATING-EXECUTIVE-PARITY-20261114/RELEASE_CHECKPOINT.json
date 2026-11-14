@@ -1,7 +1,7 @@
 {
   "task": "CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114",
   "repository": "AMASI-SA/AMASI-SA",
-  "updated_at_utc": "2026-11-14 17:04:32 UTC",
+  "updated_at_utc": "2026-11-14 17:16:14 UTC",
   "branch": "codex/campaign-operating-executive-parity-m94f6-20261114",
   "pr": 1924,
   "base_J3": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
@@ -17,7 +17,7 @@
   "inherited_J3_intent_unchanged": true,
   "source_ci": "all11 exactA3 workflows successful",
   "intent_B3": "0a93847af8eb3898ae195c58ad88092388d908ad",
-  "merge_M3": null,
+  "merge_M3": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
   "runtime_release_id": "rg5-c669a417474960a96386ef07047109a8e8cf1bef187873008b650bf00ac23e33",
   "original_workspace_observation": {
     "observed_at": "2026-11-14T16:41:25.665266+00:00",
@@ -33,17 +33,19 @@
     "other_pr": 1921,
     "other_merge": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
     "other_handoff_branch": "codex/financial-section-pages-handoff-20261114",
-    "other_checkpoint": "44fff464a2fc3b3be93c5d311bf9c1f167fcf9c9",
-    "state_at_checkpoint": "publication completed; official verification launched once andstillrunning",
+    "other_checkpoint": "c9572085cbf2d355752e2d231249bb498781f16b",
+    "state_at_checkpoint": "officialverify3PASS; foreignleaseclosed; manualrefreshownedbyotheroperator",
     "must_wait_for_other_owner_release_and_fresh_inactive": true,
     "actor": "codex-financial-section-pages-1921",
     "prepare_finished": "2026-11-14T16:44:34.399060Z",
     "prepublish_finished": "2026-11-14T16:45:27.073703Z",
     "publish_clicked": "2026-11-14T16:46:05.772Z",
-    "verified": false,
-    "inactive_after_release": false,
+    "verified": true,
+    "inactive_after_release": true,
     "published_ui_version": "ecb9679",
-    "verify_prefix": "/tmp/mezan-pr1921-original-zu179mmf/28-verify"
+    "verify_prefix": "/tmp/mezan-pr1921-original-zu179mmf/28-verify",
+    "verify_finished": "2026-11-14T17:10:13.373818Z",
+    "post_preservation_passed": "2026-11-14T17:10:44.989006Z"
   },
   "superseded_pr1922": {
     "task": "CAMPAIGN-OPERATING-EXECUTIVE-PARITY-20261114",
@@ -145,8 +147,8 @@
       ]
     }
   },
-  "production_changed_by_this_followup": false,
-  "next": "AwaitforeignPR1921officialverifyactualsuccess/inactive; thenfreshoriginalstatus/latestproduction andordinaryM3merge. AllnewB3gates andhostproofs nowPASS; no sourceedit/rebase/retry.",
+  "production_changed_by_this_followup": true,
+  "next": "Require all3exactM3push gates. Use reviewed frozen originalbuildrunner afterfreshinactive; beforebuildpreserve120files withnewappend baseline. No ownlease untiloriginalbuild/packageproof matches reviewedintent. Prepare finalgate only after actualoriginalevidence andfreshUIbaseline.",
   "static_review": "root plus independent source reuse/overlap PASS",
   "source_coverage": {
     "backend": 248,
@@ -240,5 +242,40 @@
       "same_source": "0a93847af8eb3898ae195c58ad88092388d908ad"
     }
   },
-  "pr_draft": false
+  "pr_draft": false,
+  "merge_tree": "b48a0eefb368ba655c8370f6b2e4435e07612790",
+  "live_production_updated_by_followup": false,
+  "merge_proof": {
+    "ordered_parents": [
+      "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+      "0a93847af8eb3898ae195c58ad88092388d908ad"
+    ],
+    "tree_equals_B3": true,
+    "A3_ancestor": true,
+    "diff_after_A3_only_intent": true,
+    "root_and_independent_review": "PASS"
+  },
+  "premerge_original": {
+    "started_at": "2026-11-14T17:13:16.086386Z",
+    "finished_at": "2026-11-14T17:13:16.210034Z",
+    "status_exit": 0,
+    "active": false,
+    "status_stdout_sha256": "595219792dd54a38a8ace80a6a7fc33b928ea74f0dd1bdfac6a2b708dbe0dd1e",
+    "status_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "head": "94f6dfb8c1f46bcb7d2dcba6ca0feeea628dc894",
+    "tracked_status": "",
+    "untracked_count": 120
+  },
+  "M3_push_ci": {
+    "readiness": 43619968433,
+    "security": 43619968483,
+    "codeql": 43619968456,
+    "state": "running"
+  },
+  "original_build_runner": {
+    "sha256": "7bef5ecff3a1c2b717c92633d135f94b1d8f44981498f864dbbb1be7405386d9",
+    "bytes": 15364,
+    "independent_exact_byte_review": "PASS",
+    "executed": false
+  }
 }
