@@ -1,0 +1,111 @@
+{
+  "task": "CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114",
+  "repository": "AMASI-SA/AMASI-SA",
+  "updated_at_utc": "2026-11-14 18:14:33 UTC",
+  "branch": "codex/campaign-operating-pilot-m77e4-20261114",
+  "pr": 1926,
+  "base_M3": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+  "source_A4": "1140a3fec8ef77f81fdd0cf768f9a89fb2db4ab0",
+  "source_tree": "d9bf5df2fc8529d484988c5b743160c59aff5315",
+  "source_files": [
+    {
+      "path": "backend/order_engine/campaign_hover_operating.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b0576e365eb2a5b4f1e105e2a1be17f1d2393655"
+    },
+    {
+      "path": "backend/tests/test_campaign_hover_operating.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5ec985aa2307f07d05b87486f59c9fb764205ed7"
+    },
+    {
+      "path": "docs/operations/CAMPAIGN-OPERATING-PILOT-EXCLUSION-20261114/STATUS.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "af496d793f07dacfdb6f38e9a144b81bcbd77c41"
+    }
+  ],
+  "source_review": {
+    "author": "review_hover_frontend",
+    "independent": "locate_campaign_fix",
+    "result": "PASS",
+    "patch_sha256": "dee247aa5fe6d2dff46d96537e0c390a60b9644adf91679dd65e1916583aaa0c",
+    "operating_sha256": "aaec456937c47e5e6f395c7c676809061ec75946e214ea51648abe0ea67a4ae6",
+    "tests_sha256": "a9921f3720373f5aaa39898430d2a434144dbed5361a769e10ada4c10ab6badf",
+    "unchanged_prior_functions_and_tests": true
+  },
+  "source_history": {
+    "sole_parent": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+    "changed_files": 3,
+    "inherited_intent_blob": "2159398256b11323a9cce8e09f89508bb6f18818",
+    "independent_result": "PASS"
+  },
+  "diagnosis": {
+    "recorded_at_utc": "2026-11-14 18:09:58 UTC",
+    "source_commit": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+    "runtime_source": "c484b549e8bca017627ce80749c7895198f04bf8",
+    "observation_type": "Authorized owner-scoped read-only rendered JSON, no database or business-data writes.",
+    "reason": "operating_basis_cost_missing",
+    "noncontributor_shape": {
+      "employee_status": "active",
+      "status": "pilot_only",
+      "payroll_enabled": false,
+      "accrual_policy": "disabled_during_pilot",
+      "currency": "SAR",
+      "monthly_amount_positive_finite": true,
+      "normalized_salary_revisions_empty": true,
+      "effective_from_absent": true,
+      "effective_to_absent": true,
+      "hire_date_absent": true,
+      "first_accrual_date_absent": true,
+      "scheduled_salary_revisions_empty": true,
+      "suspension_periods_empty": true
+    },
+    "canonical_membership_confirmed_absent": true,
+    "canonical_identity_fields_used_in_memory_only": [
+      "employee_v2_id",
+      "contract_id"
+    ],
+    "other_salary_amounts_positive_finite": true,
+    "recurring_configured_and_displayed_daily_amounts_positive_finite": true,
+    "private_identifiers_and_values_not_collected_for_evidence": true,
+    "fix_scope": "Add projected non-payroll policy fields; ignore explicit disabled-pilot contract only when canonical normalized history is empty; keep all contributing missing-cost protections."
+  },
+  "offline_probe": {
+    "baseline_passed": 46,
+    "baseline_failed": 1,
+    "candidate_passed": 47,
+    "candidate_failed": 0,
+    "local_pytest_run": false,
+    "local_pytest_reason": "pytest and mongomock_motor unavailable in scratch"
+  },
+  "source_ci": {
+    "status": "running",
+    "readiness_run": 43625326307,
+    "coverage_run": 43625326323,
+    "frontend_suites": 9,
+    "frontend_tests": 50,
+    "frontend_job": 132539756755,
+    "backend_count": null
+  },
+  "predecessor_release": {
+    "pr": 1924,
+    "deployment": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+    "published_version": "5a7a310",
+    "official_verify_started": true,
+    "official_verify_invocations": 1,
+    "official_verify_complete": false,
+    "actor": "codex-campaign-operating-parity-1924",
+    "original_source_may_change": false
+  },
+  "templates": {
+    "original_build_sha256": "30072495037433e41496fbd5503d3e66806673204e86e12a1f960012e9c8bb28",
+    "release_gate_sha256": "451b29d746dd13e5ec1fcbcbf66bb21fccd3d152e16d17b80d58b83d9c380846",
+    "pins_reviewed": false,
+    "root_disabled_diff_review": "PASS"
+  },
+  "next": "Wait for all exact-A4 CI, download and independently validate its candidate intent; do not freeze B until A gates pass. Root must preserve actual final PR1924 verification receipt and inactive status before the next original release sequence.",
+  "coordination": "Issue1006 comment limit reached; task STATUS/PR body/handoff branch retain durable checkpoints."
+}

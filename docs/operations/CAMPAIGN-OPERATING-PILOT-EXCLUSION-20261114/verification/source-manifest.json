@@ -1,0 +1,33 @@
+{
+  "base_commit": "77e4acf33e8f5432d97bda5d7208983f0fadc599",
+  "base_tree": "b48a0eefb368ba655c8370f6b2e4435e07612790",
+  "baseline": {
+    "backend/order_engine/campaign_hover_operating.py": {
+      "git_blob": "1f7d62ef2235ce5940fe35671047de9fc1ccfb31",
+      "sha256": "165b719bb2d617f50517a82bb3ad190c66666d4816cf5ed519939c99a22d3e2b",
+      "bytes": 11591
+    },
+    "backend/tests/test_campaign_hover_operating.py": {
+      "git_blob": "e7b5bae3dbf71071d47853a5d107c3d54e6be224",
+      "sha256": "374231133d312d825271a708446193e57aca9de8c122b1c3c7d88f191fe32845",
+      "bytes": 21753
+    }
+  },
+  "references": {
+    "backend/employee_payroll_status.py": {
+      "git_blob": "8dea65bacdf349bb6a5efcdd1a20db034b63d813",
+      "sha256": "9d104a8879ca3678240700ec7f3b9bfb6bd6a07d40a367a9554c5a235a2d6fa9",
+      "bytes": 20750
+    },
+    "backend/expenses_routes.py": {
+      "git_blob": "b7d4286db484ddf2e38d12956048ec4193105010",
+      "sha256": "97144a7da641b3727e807427881fc7438ca0a20fcc8d44b3fdbf5b227a6261fa",
+      "bytes": 50809
+    },
+    "backend/dashboard_cpu_budget.py": {
+      "git_blob": "8af0d1b12076f308b351452a0f4cd9f707e06ea6",
+      "sha256": "e10212602aaf84f00d6414fe3f5e9b2851c22f40db6a92f12f120b791c8c098c",
+      "bytes": 1066
+    }
+  }
+}

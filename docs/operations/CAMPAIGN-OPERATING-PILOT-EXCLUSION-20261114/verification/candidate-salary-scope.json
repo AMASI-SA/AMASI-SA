@@ -1,0 +1,662 @@
+{
+  "variant": "candidate",
+  "scope": "actual salary reducer and shared payroll functions; offline DB fixture",
+  "cases": 47,
+  "passed": 47,
+  "failed": 0,
+  "results": [
+    {
+      "case": "none/none",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "archived/missing_amount",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "archived/invalid_history",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "archived/foreign_currency",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "is_archived/missing_amount",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "is_archived/invalid_history",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "is_archived/foreign_currency",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "deleted/missing_amount",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "deleted/invalid_history",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "deleted/foreign_currency",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "is_deleted/missing_amount",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "is_deleted/invalid_history",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "is_deleted/foreign_currency",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "orphan/missing_amount",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "orphan/invalid_history",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "orphan/foreign_currency",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "stopped/missing_amount",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "stopped/invalid_history",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "stopped/foreign_currency",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "unpaid_leave/missing_amount",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "unpaid_leave/invalid_history",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "unpaid_leave/foreign_currency",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "future_start/missing_amount",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "future_start/invalid_history",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "future_start/foreign_currency",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "hire_day/missing_amount",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "hire_day/invalid_history",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "hire_day/foreign_currency",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "ended/missing_amount",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "ended/invalid_history",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "ended/foreign_currency",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "active/missing_amount",
+      "passed": true,
+      "expected_unknown": true,
+      "expected": null,
+      "actual": null,
+      "exception": "_Unavailable: operating_basis_cost_missing",
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "active/invalid_history",
+      "passed": true,
+      "expected_unknown": true,
+      "expected": null,
+      "actual": null,
+      "exception": "ValueError: employee_salary_history_invalid",
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "active/foreign_currency",
+      "passed": true,
+      "expected_unknown": true,
+      "expected": null,
+      "actual": null,
+      "exception": "_Unavailable: operating_basis_cost_missing",
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "returned/missing_amount",
+      "passed": true,
+      "expected_unknown": true,
+      "expected": null,
+      "actual": null,
+      "exception": "_Unavailable: operating_basis_cost_missing",
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "duplicate/missing_amount",
+      "passed": true,
+      "expected_unknown": true,
+      "expected": null,
+      "actual": null,
+      "exception": "ValueError: employee_salary_multiple_contracts",
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "future_revision/foreign_currency",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "disabled_pilot/none",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "pilot_revision/none",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 400.0,
+      "actual": 400.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "pilot_baseline/none",
+      "passed": true,
+      "expected_unknown": false,
+      "expected": 400.0,
+      "actual": 400.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "active_undated/none",
+      "passed": true,
+      "expected_unknown": true,
+      "expected": null,
+      "actual": null,
+      "exception": "_Unavailable: operating_basis_cost_missing",
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "legacy_undated/none",
+      "passed": true,
+      "expected_unknown": true,
+      "expected": null,
+      "actual": null,
+      "exception": "_Unavailable: operating_basis_cost_missing",
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "valid_revision_leave_calendar/1",
+      "passed": true,
+      "expected": 0.0,
+      "actual": 0.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "valid_revision_leave_calendar/2",
+      "passed": true,
+      "expected": 100.0,
+      "actual": 100.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "valid_revision_leave_calendar/10",
+      "passed": true,
+      "expected": 200.0,
+      "actual": 200.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "valid_revision_leave_calendar/12",
+      "passed": true,
+      "expected": 0.0,
+      "actual": 0.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    },
+    {
+      "case": "valid_revision_leave_calendar/14",
+      "passed": true,
+      "expected": 200.0,
+      "actual": 200.0,
+      "exception": null,
+      "data_unchanged": true,
+      "read_counts": {
+        "mezan_employee_salary_contracts_v2": 1,
+        "mezan_employees_v2": 1,
+        "operating_salaries": 1
+      }
+    }
+  ]
+}
