@@ -287,7 +287,8 @@ not evidence of file removal. Original terminals1/2 and unsaved Untitled-1
 remain untouched. This task only used its separate Terminal3 for read-only
 status and inventory checks.
 
-Four adapted release helper templates live beside this status in release-runners.
+Four adapted release helper templates live in release-runners on the separate
+financial-source-read-handoff branch recorded below.
 Their sourceA/baseJ/actor are fixed for PR1925; B/M/runtime/intent digest/fresh
 count/evidence parameters remain unfilled until the final configured review.
 They retain fresh complete manifest capture, preservation of mode/bytes/paths,
@@ -309,7 +310,7 @@ These templates are not evidence of rehearsal, a lease or publication. They
 must be filled consistently, independently rechecked, and fetched by exact
 reviewed commit/bytes before any original-environment execution.
 
-This separate documentation branch is
+The separate documentation branch is
 codex/financial-source-read-handoff-20261114, starting at sourceA. It is not a
 release branch and must not be merged into frozen A/B. The task PR carries its
 exact checkpoint SHA once persisted. Issue1006 remains full.
@@ -324,3 +325,98 @@ inspect the sanitized failure stages or successful advanced saved timestamp.
 Production changed by this task: **no**. No original /app source edit, merge,
 lease or publication has occurred. Status: **A verified, B frozen; B CI and
 live release/recovery pending**.
+
+
+## Production advance: replacement source R2
+
+Before any merge or original-environment write, the production branch advanced
+to af9caabb3119aeb9cf450af0a8b89d376cef8c74 (normal merge PR1923). Its parents
+are77e4acf33e8f5432d97bda5d7208983f0fadc599 and ece0b24b0978c5064c4e605b577ad2722158f56a.
+It adds reviewed delayed Salla creation-choice enrichment and its tests/workflow
+plus a new frozen intent. Root fetched and compared both deltas: the10 original
+non-intent source paths have no overlap with that production delta. The old
+PR1925 now conflicts at the release handoff; do not merge or publish it.
+
+Old B nevertheless finished all29 checks:23 success,6 conditional skips,zero
+neutral/pending/failure. Both actual clean-clone host jobs ran and passed with
+the recorded source/runtime/artifact identity. Those are old-candidate evidence
+only. All old A/B commits and the documentation checkpoint remain recoverable;
+no frozen commit was amended, rebased or force-pushed. No old candidate changed
+production, created a lease, or changed /app.
+
+Replacement worktree: mezan-source-read-recovery-r2.
+Replacement task branch: codex/financial-source-read-recovery-20261114-r2.
+New reviewed base J2:af9caabb3119aeb9cf450af0a8b89d376cef8c74.
+Root applied only the original source-A non-intent patch over J2, verified the
+nine runtime/test/workflow file blobs remain exactly those independently
+reviewed and tested before, and verified J2's tracked intent is untouched.
+The existing AGENTS.md bytes are unchanged. This status is the only provenance
+update in the replacement source. All PR1923 files remain exactly at J2.
+
+Next: run fresh combined affected tests on this integrated J2 worktree, persist
+new source A2, and create a replacement Draft PR. Close PR1925 as superseded
+only after linking the replacement. Run exact A2 CI, a fresh governed two-build
+and new intent-only B2; do not reuse old intent bytes or runtime ID. Then all
+B2/normal-merge/rehearsal/guard/live verification gates still apply. The other
+release may now be active: freshly inspect original guard before any /app work.
+
+Production changed by this task: **no**. Current state: **R2 integration in
+progress; old PR1925/A/B are superseded and must not deploy**.
+
+
+## R2 fresh integrated verification
+
+Root's fresh combined run on the actual J2 working tree exited0:541 backend
+tests passed in28.55s, with the same two Pydantic deprecation warnings and no
+skips/failures. It used Motor3.7.1/PyMongo4.18.3 and the exact combined13-suite
+command recorded earlier, now in mezan-source-read-recovery-r2. The governed
+frontend rerun exited0:115 tests/2 suites passed in18.55s, using the same two
+suites and the existing source-read-recovery dependency tree via --modulePaths.
+
+Independent read-only R2 integration review found no concrete incompatibility.
+It independently confirmed all nine reviewed runtime/test/workflow blobs match
+old sourceA, zero overlap with the11 PR1923 paths, and exact preservation of all
+PR1923 files including its intent blob f44168176bc3a995776f71e4aa61ea4ee9509366.
+PR1923 enriches products and raw_by_source.salla_direct.items options through
+the existing owner-fenced writer. The financial refresh retains whole canonical
+containers and derives cost items from raw.items. Ordinary rows retains its
+full document, and no writer enters the new read-local CSOT scope.
+
+Current state: **R2 source locally verified and independently reviewed; remote
+A2 checkpoint, replacement PR and all new release gates are next**. No original
+/app source change, lease, refresh, or publication has occurred in this task.
+
+
+## R2 frozen intent checkpoint — 2026-11-14 18:39 UTC
+
+Canonical current candidate is draft PR #1928, https://github.com/AMASI-SA/AMASI-SA/pull/1928, on `codex/financial-source-read-recovery-20261114-r2`. PR #1925 is closed unmerged and superseded; its frozen heads are preserved and must not be deployed.
+
+- Current production base J2: `af9caabb3119aeb9cf450af0a8b89d376cef8c74` (Salla delayed-choice enrichment from PR #1923 retained).
+- Source A2: `d41cd73132793209d13758ef07b2eda4fcfe018a`; tree `fbb96bf50748af391abd5c9f4c4d253e2ac13423`; parent J2.
+- Intent-only B2: `db6971b59b12bdda3a3585712ca881ac22d6bc0f`; tree `355fdae884cf4a849b0acdf1c29081730556c6b0`; parent A2.
+- A2 to B2 changes only `release/release-intent-v5.json`. Local checkout is aligned and clean.
+- Exact intent blob `097b7fa75d0ab840d1c8396d98ccfb279e64f777`; 1,308,609 bytes; SHA-256 `57ff9aacd5490ce42605ee22d9ab9cf1f2e8c6855fc9e2664266992438efd279`.
+- Runtime `rg5-12003f05673102a08c649a74e75e894372796da07bd75ada680a7f07aec65951`.
+- Frontend artifact tree `d6bd189f78c5bb7467fa0b0c7a8edc2e0c36f8d22f6b5ab23242b0a9a0dc25bd`.
+- Retained two-build proof SHA-256 `156ad123b2c9fa009804a40f58ef3e51ba028337af065380b484beca02f506d4`.
+
+### Completed R2 evidence
+
+Fresh root integration: 541 backend tests passed in 28.55 seconds using Motor 3.7.1/PyMongo 4.18.3, and 115 frontend tests in two suites passed in 18.55 seconds under governed Node 22.23.2/Yarn 1.22.22. Independent review found the nine code/test/workflow blobs identical to the prior reviewed patch, no path overlap with PR #1923, all PR #1923 files and its source intent preserved, and no blocking interaction with Salla canonical item enrichment.
+
+All exact A2 checks settled: 21 successful and six conditional skips across 27 checks. Full operational backend: 4,799 passed plus 16 shipping tests and 18 subtests; frontend: 783 tests in 52 suites; browser/mobile/visibility: 14 passed; stock: 4,513 passed and seven subtests; both CodeQL languages passed. The operational backend installed the production Motor 3.7.1/PyMongo 4.18.3 pair and ran the actual-Motor cancellation regressions.
+
+Governed local source build exited zero, as did the official frontend verifier, freeze-intent and candidate intent loader. Local and exact-A2 CI artifact intent bytes are identical. Readiness run 43626990075, artifact 14125584742, ZIP SHA-256 `e5c7ab19caaa805e6b80ea4357eaadd4d6673b5d826c8954b0310daefbc05c39`. No fake GitHub markers were supplied; the documented source-candidate bootstrap flag was used.
+
+### Original environment and pending release
+
+No original `/app` mutation, release lease, publication or new live financial refresh has been performed for this task. Fresh read-only original status/inventory is being obtained while B2 CI runs. The previous full inventory was 120 files, but new PR1928 templates deliberately keep the count unfilled until a fresh final review.
+
+Four new `pr1928_*` release templates are retained beside unchanged PR1925 templates in `release-runners/`. They use source A2, base J2 and actor `codex-financial-source-read-1928`, retain all guard/preservation/provenance gates and the official verifier's no-wrapper-timeout/interrupt-join rules, and require final B2/M2/tree/runtime/intent/count/evidence inputs. They passed static and independent exact-substitution review; none has been executed. These helper files and this handoff branch are documentation artifacts, not part of the frozen release candidate.
+
+Next: exact B2 checks including both actual clean-clone adapter jobs; fresh production-base check; normal M2 merge with parents [J2, B2] and tree B2; fresh inactive guard; configured and independently reviewed original helpers; original governed adapter rehearsal and actual exit; prepare/prepublish; authorized free publication; official three live probes and inactive guard; then one visible intentional financial refresh. Another draft campaign PR #1927 may advance production: preserve frozen candidates and create a fresh candidate if that happens before our merge. Do not overwrite or interrupt another release.
+
+The demonstrated cancellation defect is fixed in the candidate; the original production query latency cause remains unmeasured. Generic profit callbacks inherit CSOT but not strong cursor ownership. No production database credentials, customer/financial records, index changes, deadline increases, provider sync or financial transactions are authorized by this verification. Claim live recovery only after a successful manual refresh advances its saved timestamp.
+
+
+Fresh original read-only status returned at 18:39:45.920340 UTC: HEAD `af9caabb3119aeb9cf450af0a8b89d376cef8c74`, tracked files clean, 120 complete untracked files and guard `{"active": false}`. This task made no original changes. Independent B2 review also verified its single parent, sole intent path, exact tree/blob and byte equality across Git, local intent, CI intent and sole ZIP member.
