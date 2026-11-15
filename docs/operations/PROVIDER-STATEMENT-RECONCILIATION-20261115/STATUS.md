@@ -1,5 +1,138 @@
 # Operational provider statement reconciliation
 
+## R3 source preserved; shared publication remains owned, 2026-11-15 19:21 UTC
+
+Source A3 is `0fb8250a61336e9179675b2dc9ab502d3c494379`, direct parent J3
+`742b1032113730961597ea413665409d9c213f7b`, tree
+`9c2c4849a8326270ae65c8b45ffa4d0c49cada8f`. GitHub Draft PR1949:
+https://github.com/AMASI-SA/AMASI-SA/pull/1949, branch
+`codex/provider-statement-release-r3-20261115`. Remote tree equality, exact
+parent and clean local source were verified before soft-aligning the isolated
+checkout. Fresh exact-A3 CI has started. There is no B3 or provider deployment.
+
+A fresh independent coordination snapshot found PR1947's active publication
+handoff at19:14UTC: actor `codex-dashboard-ads-account-table-root-20261115`,
+prepared19:12:26, one actual Publish submitted, awaiting official three probes
+and inactive guard. This supersedes its older inactive/no-lease paragraphs.
+PR1948 has now frozen B `dd1f29970506f9db2454cdf3b708818b399ee620` on J3 and is
+queued. Our source work remains isolated; no shared movement or new lease was
+attempted. Recheck actual production before freezing; if it advances, preserve
+A3 and create a new successor instead of rewriting frozen release evidence.
+
+## R3 source integration verified, 2026-11-15 19:19 UTC
+
+Root mechanically transferred the source delta from the superseded A2
+`eb8f4260cdf1780cfe01df643e50c8e186be9c8b` onto current reviewed production J3
+`742b1032113730961597ea413665409d9c213f7b` in the isolated
+`codex/provider-statement-release-r3-20261115` worktree. No runtime source fix
+was introduced during this integration. The new source commit is to have J3
+as its sole direct parent; the frozen A2/B2 pair remains unchanged.
+
+Independent review proved that all 33 non-STATUS provider source/test/fixture
+paths exactly match A2, and all 25 paths changed by J3, including its reviewed
+intent, exactly match J3. These path sets do not intersect. The existing intent
+SHA-256 is `5ed6b52e7334a59b47cf3eefaae42768d76eb3e1e1b6f36f3db2ca48aea36311`.
+The review found no financial integration blocker: the new advertising reader
+hooks are optional and default off in operational source collection, while the
+advertising dashboard retains its existing merchant-settings fee source. This
+provider change does not claim to update advertising-dashboard estimates.
+
+The fresh combined backend regression run exited 0: **383 passed**, with two
+existing Pydantic warnings, in 50.42 seconds. It covered statement intake,
+reconciliation, actual/configured/estimated provider fees, known subtotals,
+financial position, capture/refund and settlement boundaries, current/native
+payment evidence, source-conversion lifetime, advertising costs/accounts and
+periods. The isolated real-Mongo rollback case is reserved for its actual CI
+environment and is not claimed as a local pass. No live business data was used.
+The local log is outside the repository; the previous exact-A2 CI remains
+historical corroboration, not a substitute for fresh A3/B3/M checks.
+
+The authorized Salla flag-off publication and all three official probes are
+complete as recorded below. PR1947 owns the subsequent advertising publication;
+its transient inactive guard is not a final handoff. PR1948 is also preparing
+a successor. Recheck production and their recorded handoffs before freezing,
+merging or taking the shared workspace. No active lease may be taken over.
+
+Next: preserve the clean A3 source and draft PR, obtain its successful official
+CI-frozen candidate artifact, verify archive provenance/digest and validate the
+unchanged external intent with `load_candidate_release_intent` at clean A3/J3.
+The official candidate job performs the governed two-build construction; an
+additional duplicate local A3 build is not required. Create B3 with only those
+exact intent bytes, then require exact-B3 CI and both adapter rehearsals, normal
+tree-equivalent merge and exact-M push checks, actual shared-workspace rehearsal,
+prepare/prepublish, one authorized publication and three deployed probes. Only
+then use the original saved Tabby statement through the owner UI and verify the
+provider table. No provider-feature publication or live statement binding has
+yet occurred. Financial principal/refund discrepancies remain explicit review.
+
+## Flag-off completed; successor source required, 2026-11-15 19:11 UTC
+
+The user-authorized J2 maintenance closure is complete. Platform `b2590fc`
+completed Nov15 at21:51 Riyadh. The sole official verifier ran
+18:53:06.098706Z to19:06:06.931600Z and exited0 after780.833seconds, with
+`verified:true`, three probes, exact source9b91e88/J2/runtime418840 and frontend
+artifact tree `7cd63bb1cd550a2601b09c5107b6e4ddba0c4b3eae435bfdfe80ddcb9934e977`.
+The observed new boots were18:51:36.252285Z and18:51:08.403532Z. Stdout was33409bytes,
+SHA-256 `567e810bb01cfb42727c9308943a6d344c5d8420ef0d75c6b470823c3981d3bd`, and
+stderr was empty. The post-verifier guard was exactly `active:false`.
+
+The normal owner UI explicitly showed recovery disabled at18:53:21Z and again
+19:07:14Z. All seven reported orders are present. Existing grants remain45done
+and two quarantined out of47, with none pending/processing/retry. The two reasons
+remain unknown; no regrant or marker removal was attempted. No financial
+principal, capture or refund was edited.
+
+Preservation comparison retained120untracked paths. The only metadata change
+was platform bookkeeping `.emergent/stripped_env_names`, size54306 to54558;
+it was left intact and its contents were not inspected. The other119entries
+matched size/mtime/symlink metadata. Tracked source was clean J2 at that read.
+Private receipts remain `/tmp/salla-flagoff-root-20261115-1831/`. PR1945 now
+records the completed flag-off handoff; the same authorization is not requested
+again.
+
+Production advanced during this verification through PR1947 to
+`742b1032113730961597ea413665409d9c213f7b` (J3), merged18:59:49Z. Its ordered
+parents are J2 and intent B `4a025e39a47290c2bb81c451d101932a6b21b8fa`; its tree
+`732e32cac9336738a989ee3eed98b0fa04beb53a` exactly matches that B. Its source A
+is `ede689569fa8656e6999666ea10ecb15c9e5da72`, runtime
+`rg5-75082bff0ff031f057071c9ced32c920ca1e4da1bed07ba820ccf4772530e5b6`.
+Its25changed paths comprise24advertising source/test/workflow/doc paths plus
+intent. The intersection with J2-to-A2's34paths is empty. Preserve those24paths
+and the current intent byte-for-byte in the successor source.
+
+Frozen PR1946/A2/B2 is now superseded and draft; its verified historical pair and
+branch remain untouched. Root created an isolated R3 worktree on J3 and will
+transfer only J2-to-A2's source delta, not the obsolete B2 intent. A newly reviewed
+source/intent pair and exact-head CI are required; the old proof is not reused
+as proof of the combined successor.
+
+PR1947 has its own authorized publication continuation and11successful M-push
+checks. A fresh shared read at19:11:19.981073Z found clean HEAD J3 and inactive
+guard, showing that its source handoff has begun; this is not final publication
+handoff or permission to take over its work. DraftPR1948 is also preparing a
+Ready-recovery successor from J3. Recheck actual production and coordination
+before freezing/merging our successor. No active lease is cleared or stolen.
+
+## Flag-off live readback and running verifier, 2026-11-15 18:54 UTC
+
+Platform version `b2590fc` explicitly completed Nov15 at21:51 Riyadh, replacing
+the previous `c75a275`. Root recorded that new completion and started exactly
+one official verify command at `2026-11-15T18:53:06.098706+00:00`, with no external
+timeout. The verify process is still running; its three-probe result and final
+inactive guard have not yet been observed.
+
+The normal owner recovery UI was explicitly refreshed at18:53:21Z and states
+that the incident recovery tool is not enabled; preview/apply is disabled.
+This is direct flag-off readback on the new platform version. It does not replace
+the pending official release verification. Existing grants remain47 with45done
+and two quarantined, and no new grant or marker removal was performed.
+
+Private `publication-completed.json` and the new verifier stdout/stderr/receipt
+paths are under `/tmp/salla-flagoff-root-20261115-1831/`. Shared source and the
+production branch remain J2 under root's active flag-off lease. B2 remains
+unchanged and unmerged. Require verifier success and inactive guard before
+moving to the provider release.
+
 ## Authorized flag-off publication active, 2026-11-15 18:42 UTC
 
 The user explicitly approved the previously blocked configuration-store access.
