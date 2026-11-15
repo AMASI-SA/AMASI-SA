@@ -52,6 +52,7 @@ const ASSEMBLY_BLOCKERS = {
     assembly_piece_supplier_receipt_required: "استلم المنتج من المورد أولًا، ثم من موظف التجهيز",
     assembly_piece_preparation_receipt_required: "استلم المنتج من موظف التجهيز أولًا",
     assembly_piece_stopped: "المنتج متوقف",
+    assembly_source_reconciliation_pending: "بانتظار مطابقة بيانات الطلب مع النسخة المعتمدة.",
     assembly_order_not_ready: "مرحلة الطلب لا تسمح بإكمال المنتج الآن",
     assembly_order_not_in_progress: "الطلب غير قيد التنفيذ في سلة؛ زر جاهز مجمّد",
 };
@@ -201,7 +202,7 @@ export function AssemblyProductCard({ piece, busy, onReady, onReceiveFromPrepara
                 ) : (
                     <div className="mt-4 space-y-2">
                         <button type="button" aria-disabled="true" onClick={() => { setBlockedNotice(true); onBlocked?.(piece); }} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-slate-200 px-4 text-lg font-black text-slate-500" data-testid="mark-assembly-piece-ready-frozen">جاهز · مجمّد</button>
-                        {blockedNotice && <div role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-center text-sm font-black text-rose-900">المنتج لم يجهز بعد. {blockerMessage}</div>}
+                        {blockedNotice && <div role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-center text-sm font-black text-rose-900">{piece.assembly_blocker_code !== "assembly_source_reconciliation_pending" && "المنتج لم يجهز بعد. "}{blockerMessage}</div>}
                         <div className="flex items-center justify-center gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-center text-sm font-black text-amber-900" role="status">
                             <WarningCircle size={22} weight="fill" /> {blockerMessage}
                         </div>
@@ -789,7 +790,7 @@ export default function ReadyToShipOrders() {
 
                     <div className="assembly-mobile-order-status">حالة الطلب في سلة: {result.order_status_native || result.order_status || "غير مؤكدة"}</div>
                     <div className="assembly-mobile-products">{result.pieces?.map((piece) => (
-                        <AssemblyProductCard key={piece.piece_id} piece={piece} busy={Boolean(busy)} onReady={handleReady} onReceiveFromPreparation={handleReceiveFromPreparation} onBlocked={(blocked) => setError(`المنتج لم يجهز بعد. ${ASSEMBLY_BLOCKERS[blocked.assembly_blocker_code] || "راجع مرحلة المنتج الحالية."}`)} onUpdated={() => openOrder(result.order_number)} />
+                        <AssemblyProductCard key={piece.piece_id} piece={piece} busy={Boolean(busy)} onReady={handleReady} onReceiveFromPreparation={handleReceiveFromPreparation} onBlocked={(blocked) => setError(blocked.assembly_blocker_code === "assembly_source_reconciliation_pending" ? ASSEMBLY_BLOCKERS[blocked.assembly_blocker_code] : `المنتج لم يجهز بعد. ${ASSEMBLY_BLOCKERS[blocked.assembly_blocker_code] || "راجع مرحلة المنتج الحالية."}`)} onUpdated={() => openOrder(result.order_number)} />
                     ))}</div>
                     {result.salla_admin_url && <a className="assembly-salla-link" href={sallaOrderHref(result.salla_admin_url)} target="_blank" rel="noopener noreferrer"><ArrowSquareOut size={20} /> الانتقال إلى صفحة الطلب في سلة</a>}
                 </div>

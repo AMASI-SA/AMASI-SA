@@ -8,6 +8,10 @@ on:
       - "backend/component_catalog_label_recovery.py"
       - "backend/component_zero_price_recovery.py"
       - "backend/tests/test_component_zero_price_recovery.py"
+      - "backend/component_option_currency_recovery.py"
+      - "backend/tests/test_component_option_currency_recovery.py"
+      - "backend/tests/test_component_option_currency_integration.py"
+      - "backend/tests/test_assembly_source_pending_message.py"
       - "scripts/audit_pending_reviewed_products.py"
       - "backend/assembly_option_change_notice.py"
       - "backend/tests/test_assembly_option_change_notice.py"
@@ -208,6 +212,9 @@ jobs:
           tests/test_review_acceptance_config_guard.py
           tests/test_g47_component_lifecycle_integration.py
           tests/test_component_zero_price_recovery.py
+          tests/test_component_option_currency_recovery.py
+          tests/test_component_option_currency_integration.py
+          tests/test_assembly_source_pending_message.py
           tests/test_order_review_stage_one.py
           tests/test_order_review_export_controls.py
           tests/test_order_review_mobile_app_permissions.py
@@ -278,6 +285,7 @@ jobs:
                                          ("test_assignment_single_post_transport.MongoSinglePostTests", 7),
                                          ("test_review_catalog_eligibility.CatalogEligibilityTests", 11),
                                          ("test_review_local_queues.LocalReviewQueueTests", 3),
+                                         ("test_component_option_currency_integration.OptionPriceCurrencyTests", 7),
                                          ("test_salla_orders_sync_pagination_evidence", 21)):
                       executed = [row for row in cases if (row.attrib.get("classname", "").endswith(suite)
                           or (suite.count(".") == 0 and suite in row.attrib.get("classname", "").split(".")))]
