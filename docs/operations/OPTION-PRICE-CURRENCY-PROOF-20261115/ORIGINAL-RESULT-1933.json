@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "merge": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
+  "tree": "7a89d5e1bacf3a78b268a348e27fa3c998517c75",
+  "finished_at": "2026-11-15T01:26:15.798302+00:00",
+  "untracked_count": 120,
+  "untracked_preserved": true,
+  "append_only_before_bytes": 51514,
+  "append_only_after_bytes": 51514,
+  "package_proof_matches_accepted_B": true,
+  "active_lease": false,
+  "adapter": {
+    "exit_code": 0,
+    "started_at": "2026-11-15T01:24:28.220850+00:00",
+    "finished_at": "2026-11-15T01:26:13.210172+00:00",
+    "stdout_sha256": "8f6f14e8532259ba0144e70197f8ec94151bfdd7aae8c93e7485d1b8f468d5b7",
+    "stderr_sha256": "f9de9a5c904514893fea046115f3a8ce6346639f86ce2fae7c20dd6ea7532633"
+  },
+  "packages": {
+    "exit_code": 0,
+    "stdout_sha256": "3129f92e151d4b9397f5b6dfd547eb68834bd13c7e91c3d435c625bab77625f7"
+  },
+  "failed_receipt_exists": false
+}
