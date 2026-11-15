@@ -1,127 +1,73 @@
-# Option-price currency representation recovery
+# Option-price currency recovery: release handoff
 
-## Scope and checkpoint
+## Current checkpoint
 
-- Task: `OPTION-PRICE-CURRENCY-PROOF-20261115`.
-- Repository: `AMASI-SA/AMASI-SA`.
-- Branch: `codex/option-price-currency-proof-20261115`.
-- Starting source: `7ef45017e5221635ce3c80c3788f73d9c50b1e08`.
-- Implementation commit: `a9f563890c2be4c36b026eb8c081cb9dcacddd75` (local).
-- Remote PR: https://github.com/AMASI-SA/AMASI-SA/pull/1933 (Draft).
-- First remote source: `51ee523d81806990498860851d14e9cbc0240040`, tree
-  `b2e79ae261171cf58e59a9c8a1171ac2d7944b02`.
-- State: the seven real-Mongo currency cases passed. One neighboring test
-  fixture needed correction; a new exact-source CI run and new v5 intent are
-  required before release.
-- Owner authorization on 2026-11-15: explicitly approved pushing, merging and
-  publishing this fix ("تمام وادمج وانشر"). The earlier push refusal is resolved
-  by this new explicit instruction. Publication still requires the normal
-  verification and v5 release gates.
-- Production changed: **no**. No merge, release intent, release lease, deployment,
-  order mutation, supplier receipt, or financial write was performed.
-- The prior hold is lifted for this fix. This task does not authorize unrelated
-  notification work to be included in either repository's release.
+- Task: OPTION-PRICE-CURRENCY-PROOF-20261115.
+- Repository: AMASI-SA/AMASI-SA; PR https://github.com/AMASI-SA/AMASI-SA/pull/1933.
+- Reviewed release branch: codex/option-price-currency-proof-20261115.
+- This separate branch is an evidence checkpoint only. Do not deploy or merge it into the release candidate.
+- Owner explicitly authorized this fix's push, merge and publication on 2026-11-15: “تمام وادمج وانشر”. No new permission is required for this fix.
+- Production changed by this task: **no**. No main merge, /app source change, lease mutation, deployment, order revalidation, receipt or financial write.
 
-## Implemented behavior
+## Frozen reviewed source and intent
 
-`backend/component_option_currency_recovery.py` proves the narrow case where
-approved nonzero KWD option prices later arrive as SAR. It binds the original
-order exchange-rate envelope to the immutable approved business snapshot,
-checks the completed local approval and its lineage, and compares every source
-fact and unknown source-field fingerprint after restoring only the permitted
-option envelopes in a temporary copy. Original source values, the approved
-snapshot, accounting amounts, selections, quantities, stock, and receipts remain
-unchanged.
+| Item | Value |
+| --- | --- |
+| Production base J | 7ef45017e5221635ce3c80c3788f73d9c50b1e08 |
+| Source A | fc5ff89f5794061bf62a7de283eedc9ecd4ec7c9 |
+| A tree | c890c51d486d58a3a487580b8fb02cd33d5b7c36 |
+| Intent-only B | 5165b3aaeece7022d178fa02df4654ac30cafea3 |
+| B tree | 7a89d5e1bacf3a78b268a348e27fa3c998517c75 |
+| Intent Git blob | 0a51838a49fbaa7b86655c7eeba921e002b9265a |
+| Intent SHA256 | c5eef438c004bafbc666b1edb4eb55a10de03b2973ecf844d28f3d9443a9c3f5 |
+| Runtime ID | rg5-92ce2e87026743df6ed7cd3083940f596b3a562e1c608cc985df3dc7c15cabe3 |
 
-The proof uses native minor units (KWD 0.001, SAR 0.01), rejects non-native
-precision and exact half-unit boundaries, and requires the SAR representation
-to lie strictly within half a fils of the approved KWD amount at the bound
-order rate. This is an operational equivalence policy; it does not reconstruct
-a unique historical SAR option price or assert Salla's tie-breaking policy.
-Other currencies/directions or any independent financial/source change fail
-closed. Repeated representation switches, the prior zero-price recovery, and
-return to the original representation keep the original approval lineage.
+Root and independent reviewer validated the candidate in clean checkouts, exit0. Root fetched B and verified its parent is exactly A, its only A-to-B change is release/release-intent-v5.json, and bytes match the accepted artifact. Independent B load_release_intent also passed. No governed source changed after A; do not squash or rebase.
 
-`backend/fulfillment_v2_routes.py` calls this proof from the existing unchanged
-snapshot revalidation path. The existing owner transaction, revision fence,
-cancellation, authoritative-refresh and stock gates remain in place. Successful
-proof records an audit on the component lifecycle. No scheduler or background
-job was added.
+## Acceptance evidence
 
-`backend/preparation_piece_operations.py` reports
-`assembly_source_reconciliation_pending` when the canonical in-progress order
-is awaiting source reconciliation. Missing supplier receipt or mandatory
-employee custody keeps its own blocking reason. The source lookup replaces an
-existing read; this does not add a query per piece or change Ready eligibility.
-The web client recognizes the source-pending reason and keeps its action frozen.
+All 19 exact-A workflows succeeded. Main Mongo workflow https://github.com/AMASI-SA/AMASI-SA/actions/runs/43658044976 executed 809 approval/recovery cases, 329 Android-operation cases, 122 source-snapshot cases and one acceptance guard: 1261 cases, zero failures/errors/skips. Root directly parsed all four JUnit files. The seven new real-Mongo currency cases and corrected legacy retry all passed.
 
-## Verification at this checkpoint
+A JUnit artifact14139256254 has SHA256 7a1e2c1aa25cbd5748d0657dc3392d53a5879d7395f6920198d878c20ce046df.
 
-- Local focused backend run: **93 passed, 102 subtests passed**, exit 0.
-  Command: pytest with `--noconftest -p no:cacheprovider` for
-  `test_assembly_source_pending_message.py`, `test_preparation_piece_operations.py`,
-  and `test_component_option_currency_recovery.py`; dotenv/bytecode disabled.
-- Independent read-only review found no material blocker in FX binding, exact
-  source comparison, native rounding bounds, approval lineage, transaction
-  fencing, receipt safety, or query count. The reviewer independently executed
-  **35 tests and 102 subtests**, exit 0.
-- Web regression: **58 passed, zero skipped**, exit 0. The new diagnostic and
-  removal of the misleading unprepared-product prefix were each observed
-  failing before the fix. The card and actual page alerts now show only the
-  source-pending reason for this code; pressing the frozen action never calls
-  the Ready mutation. Existing receipt reasons retain their wording.
-- Seven real-Mongo integration tests exercise source refresh, read-only dry run,
-  received/unreceived readiness, immutable financial/business state, zero-price
-  lineage, repeated transitions, and rejection of real changes or stale gates.
-  They are included in `Review Completion Resumable`, with an executed-test
-  minimum and the existing no-skip/no-failure evidence gate.
-- The local environment could not start a disposable Mongo server. No substitute
-  or production database was used. CI run `43656826678` ran the seven new
-  integration cases against its disposable replica set: all seven passed, with
-  zero skips, failures, or errors. Android recovery also passed 329 tests.
-- The first CI source was not accepted overall: the main group had 808 passed,
-  one failed, and 457 passed subtests. The failure was
-  `test_legacy_addition_ready_retry_after_address_correction[True-in_progress-in_progress-True]`.
-  Its obsolete `source_status` mock no longer supplied canonical source data
-  after the source-message read change. The fixture now inserts the same
-  parametrized status in scoped `unified_orders`; no production fallback or
-  assertion was changed. Local RED was reproduced (exit 1); the complete
-  source-addition file plus source-message tests then passed 25 tests (exit 0).
-- Retained first-run JUnit artifact: `14138252213`, SHA256
-  `0438d874bb1f90fa173d84fc6921545dff4addbe29ecbd5e768e4108f8d9f65c`.
-  The remaining 18 first-source workflows passed. The candidate intent from
-  readiness run `43656826800` is superseded by this fixture/status source
-  change and must not be frozen or deployed.
+Readiness A https://github.com/AMASI-SA/AMASI-SA/actions/runs/43658045024 produced artifact14138683871, ZIP SHA256 c6b0bf7657a037dfe5106bb3ccd808137dd9efb56df6a11030d1cd5fa7f51fc2. The candidate covers1218 backend runtime files,291 release controls and1182 frontend source files. Frontend artifact tree58479fd2f6f25764d8d68eb48cc43b53eb731863af7fb2b2448afd9ef0ea0d51; build-meta SHA256559938ac85a385e0d05f73e7e8e4f8fbef5ca03e9b6c2f83b8144999853a9f8a; proof72545e1217499bdf0712a634ac3582b7d7f7f47d0852b5d91b4db12270ee0a3b.
 
-## Remaining work and next safe action
+B CI is currently running. Readiness43658937913 includes actual Host20/24 clean-clone adapter/package/JSON-route rehearsals, currently in progress. Review Completion43658937865, Stock43658937944 and Balance43658937910 are also pending. Do not infer B acceptance from A success. TikTok Creator Release Candidate is an existing different-branch skip, not a skipped test or waived gate.
 
-1. Advance PR1933 with the narrow fixture correction and this checkpoint; record
-   the new full source A SHA in the PR. Require all exact-source CI, including
-   the seven new Mongo cases and the corrected neighboring retry regression.
-2. Review the new readiness artifact, freeze intent-only B, and require both
-   clean-clone deployment adapter rehearsals and all B gates. A normal merge
-   must have the exact B tree. Never reuse the superseded first-source intent.
-3. The original `/app` guard currently reports an active release owned by
-   `codex-campaign-operating-period-1932`, prepared at
-   `2026-11-14T22:10:56.977380+00:00`, deployment commit
-   `7ef45017e5221635ce3c80c3788f73d9c50b1e08`. Do not clear that lease or change
-   `/app` or the production branch during its handoff. Recheck read-only status
-   before the main merge/publication. This task has made no lease change.
-4. Mobile PR https://github.com/AMASI-SA/amasi-mobile/pull/357 is based directly
-   on published Android81 (`ef3984ee423d2e2645155fc33d154c6376d83a76`), excludes
-   PR356, and prepares Android82 / 1.0.67 with the existing APK profile. Current
-   candidate is `2d6b97656c84d9cc45a6adb2e907db6a57d028c7`; exact CI and export
-   must finish before normal merge and one EAS build. It changes the diagnostic
-   message only and does not remove the backend source hold.
-5. After verified deployment, perform a scoped dry run of the
-   existing revalidation path against the current revision of the affected
-   order. Apply only if the full approved-source proof passes. The complete live
-   proof has **not** been executed in this task; an FX-envelope match alone is
-   not sufficient to claim the existing order will pass.
-6. Preserve supplier-receipt and all other normal Ready requirements. A piece
-   without receipt remains blocked even after source reconciliation succeeds.
+The original51ee source failed one obsolete canonical-status fixture. Its failed evidence and narrow RED/GREEN correction remain in PR1933 and the source status history; the old51ee intent is superseded and must not be used.
 
-The repository-wide continuity ledger is Issue #1006. Fresh read on 2026-11-15
-still shows 2500 comments and a body last updated on 2026-11-12. This task-specific
-status and its new PR are the active continuation records. The saved review
-archive preserves the earlier pre-authorization checkpoint.
+## Separate production blocker
+
+Read-only /app guard status at approximately00:31UTC remains active:
+
+- Actor: codex-campaign-operating-period-1932.
+- Prepared: 2026-11-14T22:10:56.977380+00:00.
+- Deployment: 7ef45017e5221635ce3c80c3788f73d9c50b1e08.
+- Source: af36682ec95e578764242001dccd16ef9e61c07b.
+- Release: rg5-3c726702879630f436b0b615a4e2d1dd85ff5889c45b43b1be477f84cb3043fe.
+
+Read-only health returned200/ok with all verified identity flags true, but served earlier source fcb827f556c40bebd843d8c9d85fedc0b60cf8fa and release rg5-4a98965dc9ad5922b4dbd25e5c960360af8b09f8e5590cced0b87c8c8a0f07a2. Canonical build-meta GET returned403, so frontend identity was not verified. No deployment conclusion is inferred merely from the UI's older “Deployment finished” entries.
+
+AGENTS.md prohibits changing /app with an active lease or clearing another conversation's lease. verify is a mutation because it closes the matching lease on success; do not call it for PR1932. Moving production HEAD would also invalidate that owner's prepublish condition if not yet complete. Its owner must complete or cancel its handoff; elapsed time is not stale-owner evidence.
+
+## Independent mobile message release
+
+- Mobile PR: https://github.com/AMASI-SA/amasi-mobile/pull/357.
+- Published base81: ef3984ee423d2e2645155fc33d154c6376d83a76; PR356 excluded.
+- Accepted source: 2d6b97656c84d9cc45a6adb2e907db6a57d028c7.
+- Normal merge: de2103e64ecf50d3397fd48ad09de6e11be633b1.
+- Merge/candidate tree equal:109a633c42a10f80414b16b873e052b257b2c377.
+- Seven exact-source workflows passed; two unchanged old-branch-only jobs skipped. Actual19/19 card tests, TypeScript, session, Android export and native printing passed.
+- One EAS build submitted: https://expo.dev/accounts/amasi-sa/projects/amasi/builds/5179cefb-8ef2-485e-beeb-f3ea6da25842 .
+- EAS authenticated details show full merged commit, Android internal distribution, version1.0.67/code82, profile mezan-web-assembly-pilot and production environment. Source directory frontend; auto-submit off. Build is in progress, not yet accepted as a signed APK.
+- Do not submit a duplicate build. After success, inspect actual APK signature/package/version/OTA and bind its download to that EAS provenance. Device UAT has not run.
+
+## Next safe steps
+
+1. Complete and independently review all B CI plus both actual clean-clone host artifacts. Do not change thresholds or waive failures.
+2. Finish the single existing Android82 build, verify the downloaded APK and record its hash/signer and final result in mobile PR357.
+3. Recheck owner completion/cancellation and guard inactive before any main merge or /app change; read production ref again. If J moves, derive a new source/intent pair rather than reusing stale B.
+4. Once allowed, normal-merge PR1933 with expected B head and verify M tree equals B. Pass required push gates, then preserve unrelated /app files and perform the governed adapter rehearsal. Only then prepare this task's own lease, prepublish, publish once and verify three probes plus inactive status.
+5. After verified main deployment, read the affected order's fresh owner/revision inside the server, run the existing scoped revalidation dry run, apply only a fully proven eligible result with the same revision fence, and verify received pieces eligible while an unreceived piece remains blocked. No manual Ready or receipt mutation.
+
+The implementation policy and local regressions remain documented in source A's docs/operations/OPTION-PRICE-CURRENCY-PROOF-20261115/STATUS.md. Issue1006 is at its2500-comment capacity; PR1933 and this evidence branch are the active continuation record. Never store customer order data or secrets in these records.
