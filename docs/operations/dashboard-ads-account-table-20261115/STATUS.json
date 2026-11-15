@@ -1,8 +1,8 @@
 {
   "task_id": "dashboard-ads-account-table-20261115",
-  "status": "follow_up_verified_pending_exact_head_ci",
+  "status": "completed_merged_published_verified",
   "repository": "AMASI-SA/AMASI-SA",
-  "branch": "codex/dashboard-ads-compact-table-v2-20261115",
+  "branch": "docs/dashboard-ads-release-acceptance-20261115",
   "source_base": "db0d2c365f6cc13728cc5d8c334fb9880497fbe8",
   "scope": "Keep the existing Dashboard ads card width and chart; show each platform/account its actual Salla-attributed sales/orders, compact spend and CPA, plus one direct/unattributed row. Row-wide Riyadh half-day details exclude operating costs. Remove requested metadata, badges, notes and legend with their layout space. Never adjust counts to force equality with the executive headline.",
   "completed": [
@@ -13,16 +13,149 @@
     "Profit subtracts ad spend, products, shipping and payment fees only. Missing account, time, cost or spending evidence remains explicitly incomplete.",
     "Preserved native Snapchat hourly amounts and reconciled half-day spending with daily/native totals while allowing only proven rounding differences.",
     "Fixed the existing TikTok scheduler to store native hourly reports; account-local source days are scoped to authorized accounts that cover the Riyadh day. Daily facts survive hourly failures.",
-    "Integrated current Production Salla recovery changes from the base branch without changing them; no release or production operation was performed.",
+    "Integrated the existing Production Salla recovery changes without modifying that unrelated functionality. The later authorized publication is recorded separately below.",
     "Scoped account IDs, cost capture, precise timestamp hydration and account_results to the executive card snapshot. The full dashboard and period-summary retain their existing response and work contracts; frozen historical gate/oracle unchanged.",
     "Removed visible period/provider/timezone metadata, hourly/daily and aggregate badges, chart explanation notes and the chart legend. Reduced chart/loading/empty state height to 320px; date context remains accessible without taking layout space.",
     "The direct/unattributed source row includes only orders the existing Salla attribution classifier does not assign to the four ad platforms. It carries ad_spend_applicable=false; ad spend, CPA and ROAS are not applicable, and net profit subtracts only products, shipping and payment fees.",
     "All-order daily and half-day totals are reduced from the actual filtered Salla orders once. Snapchat orders with unknown or unshown accounts remain in the actual total and coverage.unrepresented_orders; they are never relabeled as direct.",
     "Latest user clarification makes Salla attribution authoritative. No order counts/sales are copied, padded or redistributed to match executive totals; advertising financial scope remains independently verified.",
     "Updated the existing focused UI workflow assertion to verify the retained four-provider table list instead of the explanatory text the user requested removed. No frozen runtime oracle or release guard was modified.",
-    "When orders belong to an ad account outside the loaded spend scope, preserve their actual Salla sales/orders/costs but withhold aggregate CPA, ROAS and net profit. Day and half-day scope are checked independently; an affected afternoon does not invalidate an otherwise verified morning."
+    "When orders belong to an ad account outside the loaded spend scope, preserve their actual Salla sales/orders/costs but withhold aggregate CPA, ROAS and net profit. Day and half-day scope are checked independently; an affected afternoon does not invalidate an otherwise verified morning.",
+    "Merged PR1947 by normal merge M, published one Emergent production version 0ba2d75, verified the exact reviewed source/artifact through all three official probes, and completed the live UI review."
   ],
   "verification": [
+    {
+      "name": "Final source A CI",
+      "sha": "ede689569fa8656e6999666ea10ecb15c9e5da72",
+      "result": "61 checks: 54 success, 7 intentional skips, zero failure or pending; focused backend 284 plus 5 subtests and frontend 260 tests / 8 suites; frozen runtime comparison matched 164 records across 40 cases in each arm, plus 255 regressions and 5 subtests."
+    },
+    {
+      "name": "Frozen intent B CI",
+      "sha": "4a025e39a47290c2bb81c451d101932a6b21b8fa",
+      "result": "70 checks: 60 success, 10 intentional skips, zero failure or pending. Readiness and both actual Node20/Node24 host adapter rehearsals passed, using the pinned Node22.23.2 runtime. Focused backend 284 plus 5 subtests; frontend 260 / 8 suites. Frozen runtime: 164 matching records, 40 cases per arm, 255 regressions plus 5 subtests, zero required skips.",
+      "workflow_runs": {
+        "readiness": 43748126175,
+        "focused": 43748126274,
+        "runtime": 43748126113,
+        "stock": 43748126267
+      }
+    },
+    {
+      "name": "Diagnostic CI retries",
+      "result": "No source, thresholds, assertions, or guards were changed to pass CI. Source A had a Stock CPU-ratio benchmark failure; the isolated first rerun passed, followed by one successful full job retry. Frozen B had an unrelated deadline-worker coordination timeout in test_actual_visible_collector_joins_history_worker_and_releases_only_own_lease[deadline]; relevant test/fixtures and all 118 operational modules were unchanged J/A/B. Both isolated cases passed on the first actual run (2 passed, 3.12s), then one full CI retry passed 4513 tests plus 7 subtests in 360.40s. Scheduling is a diagnosis, not an instrumented proof of the initial timing."
+    },
+    {
+      "name": "Normal merge M and CI",
+      "sha": "742b1032113730961597ea413665409d9c213f7b",
+      "result": "PR1947 merged 2026-11-15T18:59:49Z with ordered parents [J,B], M tree identical to B. All 11 M checks succeeded, zero failures/pending/skips, first attempts. Production ref still M at 19:35:28 UTC.",
+      "workflow_runs": [
+        43749866440,
+        43749866288,
+        43749866307
+      ]
+    },
+    {
+      "name": "Actual configured shared-workspace adapter",
+      "command": "yarn build (from /app/frontend)",
+      "exit_code": 0,
+      "seconds": 68.68,
+      "result": "One actual configured adapter invocation passed. Outer host dispatch used pinned Node22.23.2 / Yarn1.22.22. Frontend isolated package 1479 files, Backend isolated package 1224 files, both boundaries and Backend health verified. Exact artifact digest matches the reviewed intent.",
+      "launcher_note": "One initial outer Python launcher syntax error occurred before any adapter invocation. It was corrected and AST-checked; no adapter retry occurred."
+    },
+    {
+      "name": "Prepare and immediate prepublish",
+      "exit_code": 0,
+      "prepared_at": "2026-11-15T19:12:26.028785+00:00",
+      "result": "Own prepare passed after actual adapter; initial and final immediate prepublish passed ready_to_publish:true with exact A/M/release ID. Foreign owner completed first; inactive official guard was observed before shared /app was fast-forwarded J to fixed M. No reset/clean/foreign-lease clearing."
+    },
+    {
+      "name": "Production UI acceptance",
+      "url": "https://mezansalla.com/dashboard-advanced",
+      "result": "Observed the actual published UI. Card width remains 460px (same viewport before/after); six account/source rows and five columns, compact native/USD and SAR spend, removed top metadata/badges/notes and legend, five real chart paths including native TikTok #0f172a. Mouse and keyboard opening select the correct Snapchat account. Riyadh morning/afternoon cards and daily summary work. Direct/unattributed ad spend, CPA and ROAS display em dashes; no operating costs or ad-bank commission appear in account details. Screenshot proofs were captured without customer/order details.",
+      "limits": "Live observation was after noon. Empty afternoon at 03:00 and missing/out-of-scope evidence behavior are covered by the focused tests and synthetic component preview. No provider refresh or production financial/accounting action was used for verification."
+    },
+    {
+      "name": "Official production verification",
+      "command": "python -B scripts/production_release_guard.py verify --url https://mezansalla.com",
+      "started_at": "2026-11-15T19:27:56.038816+00:00",
+      "result": {
+        "boot_started_at": "2026-11-15T19:22:54.811848+00:00",
+        "checks": 3,
+        "current_head": "742b1032113730961597ea413665409d9c213f7b",
+        "deployment_git_sha": "742b1032113730961597ea413665409d9c213f7b",
+        "exit_code": 0,
+        "frontend_artifact_tree_sha256": "b9fefbd327c53b9e1fe778f416ec1ea655ae0283fbc3d1919e9d058a24480ead",
+        "frontend_requests_per_probe": 584,
+        "guard_active": false,
+        "preservation_match": false,
+        "protocol_version": 5,
+        "receipt_sha256": "ddf598544565b82bd20680e455eda6be4e311845d6a9bdeaa50e848e5ddf6f7d",
+        "release_id": "rg5-75082bff0ff031f057071c9ced32c920ca1e4da1bed07ba820ccf4772530e5b6",
+        "seconds": 800.89,
+        "source_base_git_sha": "db0d2c365f6cc13728cc5d8c334fb9880497fbe8",
+        "source_git_sha": "ede689569fa8656e6999666ea10ecb15c9e5da72",
+        "tracked_clean": true,
+        "untracked_files_preserved": 120,
+        "url": "https://mezansalla.com",
+        "verified": true
+      },
+      "interpretation": "Exit 0, verified true, exactly three complete probes with 584 frontend public requests per probe. Reviewed source A, deployment M, release ID, boot, full runtime source, artifact bytes and MIME matched. Matching owner lease closed. Final independent status at 19:43:52 UTC also returned active:false."
+    },
+    {
+      "name": "Shared workspace preservation and final handoff",
+      "result": {
+        "guard": {
+          "active": false
+        },
+        "head": "742b1032113730961597ea413665409d9c213f7b",
+        "tracked_clean": true,
+        "observed_at": "2026-11-15T19:43:52.549469+00:00",
+        "changed_metadata": {
+          "path": ".emergent/stripped_env_names",
+          "modified_at": "2026-11-15T19:31:54.110877+00:00",
+          "mode": 420
+        }
+      },
+      "post_publication_audit": {
+        "before_count": 120,
+        "after_count": 120,
+        "differences": [
+          {
+            "path": ".emergent/stripped_env_names",
+            "changed_fields": [
+              "bytes",
+              "sha256"
+            ]
+          }
+        ],
+        "content_values_inspected": false
+      },
+      "interpretation": "At the source fast-forward all 120 unrelated files retained exact bytes and modes. At final handoff all 120 still exist with unchanged paths/modes; 119 retain exact content. Only .emergent/stripped_env_names changed bytes/digest during publication; metadata modified_at is 19:31:54 UTC. This task did not edit or restore it, and no environment values were inspected. Platform bookkeeping is a plausible origin, not instrumented attribution. The governed source remains clean at M. No foreign work was deleted or reset."
+    }
+  ],
+  "incomplete": [],
+  "production_changed": true,
+  "release_guard": "Official v5 verification exited 0 after 800.89 seconds, verified=true and checks=3. The matching lease was closed; official status returned active:false, again confirmed at 2026-11-15T19:43:52.549469+00:00. A/M/release ID match the published version.",
+  "pr_state": "PR1947 merged into hotfix/prod-snap-meta-final at M. Prior PR1943 remains closed as superseded and recoverable.",
+  "continuation_ledger": "Issue1006 reached its comment cap. PR1947 is the final release handoff, with this separately recoverable post-publication documentation checkpoint.",
+  "next_safe_action": "Completed; no further publish, retry, provider sync, or deployment is required. Future work should read the final PR1947 handoff and this documentation checkpoint, then inspect the current production ref/guard before any new changes. This documentation branch is not a deployment candidate.",
+  "previous_remote_checkpoint": "4a025e39a47290c2bb81c451d101932a6b21b8fa",
+  "source_checkpoint_record": "PR1947 records the full SHA of this documentation commit after it is created, separately from the unchanged live A/B/M identities.",
+  "previous_pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1943",
+  "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1947",
+  "implementation_branch": "codex/dashboard-ads-compact-table-v2-20261115",
+  "documentation_only": true,
+  "deploy_candidate": false,
+  "documentation_checkpoint_base": "742b1032113730961597ea413665409d9c213f7b",
+  "source_git_sha": "ede689569fa8656e6999666ea10ecb15c9e5da72",
+  "intent_git_sha": "4a025e39a47290c2bb81c451d101932a6b21b8fa",
+  "deployment_git_sha": "742b1032113730961597ea413665409d9c213f7b",
+  "source_tree": "b3a9d7d82fa5ff22568b0bdee0c0732fa4609533",
+  "deployment_tree": "732e32cac9336738a989ee3eed98b0fa04beb53a",
+  "release_id": "rg5-75082bff0ff031f057071c9ced32c920ca1e4da1bed07ba820ccf4772530e5b6",
+  "frontend_artifact_tree_sha256": "b9fefbd327c53b9e1fe778f416ec1ea655ae0283fbc3d1919e9d058a24480ead",
+  "authorization": "The user explicitly authorized merge and publication in this session, then requested continuation.",
+  "historical_verification": [
     {
       "name": "Focused backend workflow suites",
       "result": "277 passed and 5 source-contract subtests passed after the executive-only compatibility fix; exit 0",
@@ -124,16 +257,67 @@
       "preview_source_note": "Temporary preview sources were removed from the Git worktree after verification; the self-contained HTML deliverable remains available."
     }
   ],
-  "incomplete": [
-    "Inspect exact-head focused CI, frozen runtime parity and candidate readiness for this recoverable follow-up source checkpoint. Merge/publish remains separately authorized."
-  ],
-  "production_changed": false,
-  "release_guard": "No lease created; no publish, provider write, accounting write, or production operation performed.",
-  "pr_state": "Draft PR #1947 is the active source review; prior PR #1943 remains recoverable and closed as superseded. No merge/publish authorization has been given.",
-  "continuation_ledger": "Issue #1006 is at its comment cap; preserve this task status and the draft PR as the recoverable handoff.",
-  "next_safe_action": "Inspect the exact full source SHA and CI results in draft PR #1947 after checkpointing. Review the updated interactive preview. Do not create a release lease, merge or publish without separate authorization required by AGENTS.md.",
-  "previous_remote_checkpoint": "b0aa18ff9323f27ed03cc3ae8390f86ef93cd0a7",
-  "source_checkpoint_record": "The PR body/continuation record carries the exact full source commit SHA after this status document is committed.",
-  "previous_pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1943",
-  "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1947"
+  "publication": {
+    "project": "salla-analytics",
+    "url": "https://mezansalla.com/dashboard-advanced",
+    "submissions": 1,
+    "publishing_observed_at": "2026-11-15 19:14:36 UTC",
+    "ui_completion_text": "Deployment finished Nov 15, 10:23 PM",
+    "completion_observed_at": "2026-11-15 19:27:00 UTC",
+    "platform_version": "0ba2d75",
+    "platform_ordinal": 100,
+    "previous_platform_version": "b2590fc",
+    "ui_wording_note": "The current Emergent UI said Deployment finished in green with a new published version. No claim that the older literal wording Deployment Succeeded was displayed.",
+    "forbidden_unrequested_actions_performed": false
+  },
+  "checkpoint_note": "This documentation-only branch starts from M and is not a deployment candidate. Frozen source A and deployment M retain their original pre-publication STATUS checkpoint. Never build, merge to production, or publish this documentation checkpoint as part of this release.",
+  "last_updated_at": "2026-11-15 19:46:59 UTC",
+  "release_verification": {
+    "boot_started_at": "2026-11-15T19:22:54.811848+00:00",
+    "checks": 3,
+    "current_head": "742b1032113730961597ea413665409d9c213f7b",
+    "deployment_git_sha": "742b1032113730961597ea413665409d9c213f7b",
+    "exit_code": 0,
+    "frontend_artifact_tree_sha256": "b9fefbd327c53b9e1fe778f416ec1ea655ae0283fbc3d1919e9d058a24480ead",
+    "frontend_requests_per_probe": 584,
+    "guard_active": false,
+    "preservation_match": false,
+    "protocol_version": 5,
+    "receipt_sha256": "ddf598544565b82bd20680e455eda6be4e311845d6a9bdeaa50e848e5ddf6f7d",
+    "release_id": "rg5-75082bff0ff031f057071c9ced32c920ca1e4da1bed07ba820ccf4772530e5b6",
+    "seconds": 800.89,
+    "source_base_git_sha": "db0d2c365f6cc13728cc5d8c334fb9880497fbe8",
+    "source_git_sha": "ede689569fa8656e6999666ea10ecb15c9e5da72",
+    "tracked_clean": true,
+    "untracked_files_preserved": 120,
+    "url": "https://mezansalla.com",
+    "verified": true
+  },
+  "final_handoff_audit": {
+    "guard": {
+      "active": false
+    },
+    "head": "742b1032113730961597ea413665409d9c213f7b",
+    "tracked_clean": true,
+    "observed_at": "2026-11-15T19:43:52.549469+00:00",
+    "changed_metadata": {
+      "path": ".emergent/stripped_env_names",
+      "modified_at": "2026-11-15T19:31:54.110877+00:00",
+      "mode": 420
+    }
+  },
+  "preservation_audit": {
+    "before_count": 120,
+    "after_count": 120,
+    "differences": [
+      {
+        "path": ".emergent/stripped_env_names",
+        "changed_fields": [
+          "bytes",
+          "sha256"
+        ]
+      }
+    ],
+    "content_values_inspected": false
+  }
 }
