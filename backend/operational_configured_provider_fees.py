@@ -8,7 +8,7 @@ from bnpl.settlements_service import _capture_fee_components
 from excel_parser import normalize_name, resolve_payment_setting
 from operational_fee_methods import fee_rail
 from operational_provider_fees import provider_projection
-from operational_provider_statement_fees import TABBY_AVERAGE_INCLUSIVE_RATE
+from operational_provider_statement_fees import AVERAGE_CALCULATION, statement_average_projection
 from payment_methods import KNOWN_PAYMENT_SUB_KEYS, normalize_payment_method
 
 CENT = Decimal(".01")
@@ -161,19 +161,109 @@ def estimate_fee(settings, provider, gross, *, method=None, refunded=ZERO, polic
     return max(total, ZERO)
 
 
+def _uniform_policy_vat(policies):
+    treatments = set()
+    for policy in policies:
+        components = policy.get("components") if policy.get("fee_model_version", 1) == 2 else [policy]
+        for component in components or []:
+            treatment = component.get("vat_treatment")
+            if treatment in {"exempt", "not_applicable"}:
+                treatments.add((treatment, ZERO))
+            elif treatment in {"exclusive", "inclusive"}:
+                rate = number(component.get("vat_rate"))
+                if rate is None or rate > 100:
+                    return None, True
+                treatments.add((treatment, rate / 100))
+            else:
+                return None, True
+    return (next(iter(treatments))[1], False) if len(treatments) == 1 else (None, bool(policies))
+
+
+def _uniform_policy_fixed(policies):
+    amounts = set()
+    for policy in policies:
+        components = policy.get("components") if policy.get("fee_model_version", 1) == 2 else [policy]
+        if any(component.get("vat_treatment") == "inclusive" for component in components or []):
+            return None  # Inclusive fixed money is not a proved pre-VAT fixed term.
+        values = [number(component.get("fixed_amount")) for component in components or []]
+        if not values or any(value is None or value != cash(value) for value in values):
+            return None
+        amounts.add(sum(values, ZERO))
+    return next(iter(amounts)) if len(amounts) == 1 else None
+
+
+def _average_gap(settings, provider, gross, args):
+    """Permit missing terms/qualifiers, never a bad tariff, date or tax rule."""
+    policies = args.get("policies", ())
+    projection_args = {key: value for key, value in args.items() if key != "policies"}
+    try:
+        projection = configured_projection(policies, provider, gross, **projection_args)
+    except ValueError as error:
+        reason = str(error)
+        if reason == "provider_fee_policy_incomplete_or_ambiguous":
+            return not has_capture_policies(policies, provider, args["currency"]), None, None, False
+        if reason not in {"provider_payment_plan_required", "provider_payment_method_required_for_fee"}:
+            return False, None, None, False
+    else:
+        if projection is not None:
+            return False, None, None, False
+        if args["currency"] != "SAR":
+            return True, None, None, False  # A SAR fixed-fee table is not native currency proof.
+        selected = configured_payment_setting(settings, provider, args.get("method"))
+        if selected is None:
+            return True, None, None, False
+        values = [number(selected.get(key)) for key in ("commission_percent", "fixed_fee", "vat_percent")]
+        if any(selected.get(key) not in (None, "") and value is None for key, value in
+               zip(("commission_percent", "fixed_fee", "vat_percent"), values)):
+            return False, None, None, False
+        rate, fixed, vat = values
+        if (rate is not None and rate > 100 or vat is not None and vat > 100
+                or fixed is not None and fixed != cash(fixed)):
+            return False, None, None, False
+        return any(value is None for value in values), vat / 100 if vat is not None else None, fixed, False
+    payment = args.get("payment") or {}
+    dates = [_policy_day(row["captured_at"]) for row in payment.get("captures", [])]
+    if not dates:
+        dates = [_policy_day(args.get("created_at"))]
+        if args.get("observed_at"):
+            dates.append(_policy_day(args["observed_at"]))
+    at = max(dates)
+    rail = fee_rail(args.get("method")) if provider == "salla" else None
+    applicable = [policy for policy in policies if policy.get("provider") == provider
+        and policy.get("currency") == args["currency"] and policy.get("status") == "active"
+        and policy.get("event_type", "capture") == "capture" and _policy_day(policy["effective_from"]) <= at
+        and (not policy.get("effective_to") or at <= _policy_day(policy["effective_to"]))
+        and (not payment.get("plan_id") or policy.get("plan_id") in (None, "", payment["plan_id"]))
+        and (not rail or policy.get("payment_method") in (None, "", rail))]
+    verified = []
+    for policy in applicable:
+        candidate = {**payment, "plan_id": payment.get("plan_id") or policy.get("plan_id")}
+        method = args.get("method") if rail else policy.get("payment_method") or args.get("method")
+        try:
+            result = configured_projection(policies, provider, gross,
+                **{**projection_args, "payment": candidate, "method": method})
+        except ValueError as error:
+            if str(error) in {"provider_payment_plan_required", "provider_payment_method_required_for_fee"}:
+                continue
+            return False, None, None, False
+        verified.extend(row for row in applicable if row.get("id") == result.get("policy_id"))
+    vat, vat_conflict = _uniform_policy_vat(verified)
+    return bool(verified), vat, _uniform_policy_fixed(verified), vat_conflict
+
+
 def estimate_fee_details(settings, provider, gross, *, paid_proven=False,
-                         native_currency=None, started_at=None, **kwargs):
-    """Keep the approved, VAT-inclusive missing-plan average visibly estimated."""
+                         native_currency=None, native_gross=None, fee_fx_basis=None,
+                         started_at=None, average_profile=None, operations=None, operations_basis=None, **kwargs):
+    """Use a source-derived variable estimate only after existing tariffs fail."""
     fee = estimate_fee(settings, provider, gross, **kwargs)
     result = {"fee": fee, "basis": "plan_estimate" if fee is not None else "unavailable"}
     payment = kwargs.get("payment") or {}
-    if (fee is not None or provider != "tabby" or not paid_proven
-            or native_currency != "SAR" or kwargs.get("currency", "SAR") != "SAR"
-            or payment.get("plan_id") not in (None, "") or payment.get("fee_plan_issue")
-            or number(gross) is None or number(gross) <= ZERO
-            or number(kwargs.get("refunded", ZERO)) != ZERO
-            or payment.get("refunds") or kwargs.get("refunds") or payment.get("cancellations")
-            or number(payment.get("cancelled", ZERO)) != ZERO):
+    if (fee is not None or not paid_proven or average_profile is None
+            or average_profile.get("calculation") != AVERAGE_CALCULATION
+            or (average_profile.get("provider"), average_profile.get("native_currency")) != (provider, native_currency)
+            or payment.get("fee_plan_issue") or number(native_gross) is None or number(native_gross) <= ZERO
+            or number(kwargs.get("refunded", ZERO)) != ZERO or payment.get("refunds") or kwargs.get("refunds")
+            or payment.get("cancellations") or number(payment.get("cancelled", ZERO)) != ZERO):
         return result
     try:
         created = datetime.fromisoformat(str(kwargs.get("created_at") or "").replace("Z", "+00:00"))
@@ -181,37 +271,30 @@ def estimate_fee_details(settings, provider, gross, *, paid_proven=False,
         as_of = datetime.fromisoformat(str(kwargs.get("as_of") or "").replace("Z", "+00:00"))
         if any(value.tzinfo is None for value in (created, start, as_of)) or not start < created <= as_of:
             return result
-        projection_args = {key: value for key, value in kwargs.items() if key != "policies"}
-        policies = kwargs.get("policies", ())
-        try:
-            configured_projection(policies, provider, number(gross), **projection_args)
-        except ValueError as exc:
-            if str(exc) != "provider_payment_plan_required":
+        native_args = {**kwargs, "currency": native_currency}
+        allowed, vat, fixed, vat_conflict = _average_gap(settings, provider, number(native_gross), native_args)
+        if not allowed:
+            return result
+        components = statement_average_projection(average_profile, native_gross, operations=operations,
+            configured_vat_rate=vat, configured_fixed_fee=fixed, vat_conflict=vat_conflict,
+            operations_basis=operations_basis)
+        if kwargs.get("currency", "SAR") != native_currency:
+            if kwargs.get("currency") != "SAR" or not fee_fx_basis:
                 return result
-        else:
-            return result
-        # A missing-plan error precedes whole-window and tariff validation.
-        # Every viable plan must independently pass those gates first.
-        dates = [_policy_day(row["captured_at"]) for row in payment.get("captures", [])]
-        if not dates:
-            dates = [_policy_day(created)]
-            if kwargs.get("observed_at"):
-                dates.append(_policy_day(kwargs["observed_at"]))
-        last = max(dates)
-        plans = {str(row["plan_id"]) for row in policies
-                 if row.get("provider") == "tabby" and row.get("currency") == "SAR"
-                 and row.get("status") == "active" and row.get("event_type", "capture") == "capture"
-                 and row.get("plan_id") not in (None, "")
-                 and _policy_day(row["effective_from"]) <= last
-                 and (not row.get("effective_to") or last <= _policy_day(row["effective_to"]))}
-        if not plans:
-            return result
-        for plan in sorted(plans):
-            configured_projection(policies, provider, number(gross),
-                **{**projection_args, "payment": {**payment, "plan_id": plan}})
+            from operational_provider_balance_sar import sar_amount
+            previous = cumulative = ZERO
+            for key in ("variable", "fixed", "vat"):
+                if components[key] is not None:
+                    cumulative += components[key]
+                    boundary = sar_amount(cumulative, fee_fx_basis)
+                    components[key] = boundary - previous
+                    previous = boundary
+            if components["fee"] is not None:
+                components["fee"] = sar_amount(components["fee"], fee_fx_basis)
+        return {"fee": components["fee"], "basis": "average_estimate", "components": components,
+                "profile": average_profile}
     except (ValueError, TypeError, KeyError, InvalidOperation, OverflowError):
         return result
-    return {"fee": cash(number(gross) * TABBY_AVERAGE_INCLUSIVE_RATE), "basis": "average_estimate"}
 
 
 def refresh_provider_fee_inputs(state, sources):
@@ -233,5 +316,5 @@ def refresh_provider_fee_inputs(state, sources):
         "settings": deepcopy(sources["provider_fee_settings"]), "orders": orders,
         "policies": deepcopy(sources.get("fee_policies", [])),
         "source_mode": sources.get("provider_fee_source_mode", "legacy_settings"),
-        **{key: deepcopy(previous[key]) for key in ("statement_events", "statement_evidence_as_of") if key in previous},
+        **{key: deepcopy(previous[key]) for key in ("statement_events", "statement_evidence_as_of", "average_profiles") if key in previous},
     }

@@ -839,6 +839,11 @@ def report(state, *, as_of=None, provider_balances_sar=False, ad_balances_sar=Fa
             bank = get("bank", case["refund_source_id"], case["currency"], case["refund_source_name"])
             bank["actual"] -= Decimal(case["amount"])
         elif status == "salla_refund_confirmed" and kind in {"bank", "provider"}:
+            from operational_provider_statement_reconciliation import fact_backed_employee_refund
+            if fact_backed_employee_refund(state, case):
+                # The statement approval already proved and recorded this exact
+                # provider refund fact. Do not also apply the older cash debit.
+                continue
             # This independent operational cash-source debit is authorized by
             # the user selecting where Salla's existing refund was executed.
             # Never subtract from provider receivables or order sales here:

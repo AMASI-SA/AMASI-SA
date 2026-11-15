@@ -1,5 +1,103 @@
 # Operational provider statement reconciliation
 
+## Current integrated checkpoint (2026-11-15)
+
+Parent checkpoint: `5f0143f9efcd13357f6304296f95a4609d0316db`, tree
+`094d22f53da3c59427dd0e260a6237c51997e292`. The exact new remote SHA is recorded
+in Draft PR https://github.com/AMASI-SA/AMASI-SA/pull/1938 after preserving this
+tree. Production base is still `331b7917b3c01d064ee2a17affb4714f3a296331`.
+
+The connected owner-only operational page, immutable intake, explicit matching,
+fee projection, employee-evidence upgrade and native-refund alias lifecycle are
+implemented. This checkpoint remains a Draft while one review finding is fixed:
+an already accepted refund's later native alias must remain linkable after a
+partial payout, even when its fee allocation requires review. The alias action
+must remain metadata-only; do not weaken fee validation or change principal.
+
+Latest averaging contract is implemented: source variable commission before VAT
+divided by the same sale principal, excluding fixed and payout charges. Preserve
+the exact numerator/denominator; display is rounded separately. A valid known
+tariff wins. Otherwise a uniquely configured pre-VAT fixed term or explicitly
+estimated source per-sale fixed mean stays separate. VAT needs explicit source
+or valid configured evidence; mixed or conflicting tax evidence stays incomplete.
+Salla formats without separate fixed/variable columns do not invent a split.
+Actual accepted evidence replaces only its covered estimate. Source profiles are
+bounded and isolated by owner, provider, currency and merchant account.
+
+All page reads remain demand-driven. History reads compact metadata and saved
+review counts; receipts contain applied row IDs rather than copied review rows.
+Missing-principal previews are bounded to 20 per action. Missing events require
+explicit confirmation, current canonical proof and the existing engine's gates.
+A single pending employee evidence record is upgraded in place. Later native
+refund references produce an order-specific hold while other orders can refresh.
+
+Fresh verification on the integrated source, actual exit 0:
+
+- Root combined backend gate: **279 passed in 21.60s**, covering intake,
+  reconciliation/API, fees, configured tariffs, subtotals, financial-position
+  mapping and the affected existing pure refund/payment contracts.
+- Service/API subset: **34 passed in 13.69s**, synthetic XLSX and
+  `mongomock_motor`, including CAS/replay, source mutation, owner isolation,
+  refund lifecycle, employee selection, metadata-only history and compact state.
+- Fee/presentation subset: **137 passed in 4.41s**.
+- Frontend: **179 passed across 4 suites in 27.314s**, no skipped tests.
+  The isolated real-component fixture build also passed. Root verified all
+  17 frontend and 7 service-file hashes against their freeze manifests.
+- Original privately supplied workbook was parsed and its variable-only profile
+  independently verified read-only. No merchant data or statement values are
+  stored in the repository or test fixtures.
+- `git diff --check` passed. No application dependency or lockfile changed.
+
+Root backend command (run from repository root):
+
+```text
+PYTHONPATH=backend:backend/tests PYTHON_DOTENV_DISABLED=1 \
+  <isolated-python> -B -m pytest --noconftest --asyncio-mode=auto -q \
+  backend/tests/test_operational_balance_statement_intake.py \
+  backend/tests/test_operational_balance_statement_reconciliation.py \
+  backend/tests/test_operational_balance_statement_fees.py \
+  backend/tests/test_operational_balance_configured_provider_fees.py \
+  backend/tests/test_operational_balance_provider_known_subtotals.py \
+  backend/tests/test_operational_balance_financial_position.py \
+  backend/tests/test_operational_balance_refund_capture_basis.py \
+  backend/tests/test_operational_balance_payment_source_current.py \
+  backend/tests/test_operational_balance_native_payment_compatibility.py \
+  backend/tests/test_operational_balance_provider_settlement_guard.py::test_component_refund_after_settlement_is_blocked_without_actual_fee_credit_allocation
+```
+
+Frontend command:
+
+```text
+CI=true python3 scripts/frontend_release_toolchain.py exec -- \
+  yarn --cwd frontend test --watch=false --runInBand --resetMocks=false \
+  --runTestsByPath src/pages/operational/ProviderStatements.test.jsx \
+  src/pages/operational/providerStatementsApi.test.js \
+  src/components/MezanV2NavigationShell.test.jsx \
+  src/pages/operational/OperationalFinancialPosition.test.jsx
+```
+
+Local real-Mongo legacy integration was blocked because the dedicated local
+Mongo service was absent; the attempted run was stopped (exit 130). Do not claim
+those tests passed locally. The repository's existing operational CI includes
+the real Mongo boundary; inspect results on the exact newly preserved head.
+
+Visual browser verification is **blocked**, with no completed browser scenarios
+or screenshots for the new page. Local Chromium failed before opening a page
+with `socket() failed: Operation not permitted`. The cloud fallback could not
+reach the loopback fixture and its subsequent error-page access was policy
+blocked. Browser use was ended and the fixture server stopped. Do not retry via
+alternate surfaces, expose a new endpoint, or bypass permissions for this gate.
+The fixture build and component tests are not a substitute for visual acceptance.
+
+Next safe action: reproduce and narrowly fix the partial-payout/native-alias
+finding, independently review it, rerun the affected backend gate, preserve the
+new tree and inspect CI. Retain the explicit visual limitation. No merge, release
+intent, lease, production source refresh or deployment is authorized by this
+checkpoint. Production changed: **no**.
+
+The sections below preserve earlier milestones and are historical where they
+describe in-progress work or superseded inclusive-average behavior.
+
 ## Scope and authority
 
 - Task branch: `codex/provider-statement-reconciliation-20261115`.

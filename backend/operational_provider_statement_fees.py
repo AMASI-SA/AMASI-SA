@@ -14,7 +14,9 @@ import re
 CENT = Decimal(".01")
 ZERO = Decimal(0)
 LIMIT = Decimal("999999999999.99")
-TABBY_AVERAGE_INCLUSIVE_RATE = Decimal(".091")
+MAX_AVERAGE_PROFILES = 32
+AVERAGE_SCHEMA = "statement_variable_weighted_average_v1"
+AVERAGE_CALCULATION = "sale_variable_fees_before_vat_over_sale_principal"
 PROVIDERS = frozenset(("tabby", "tamara", "salla"))
 REVIEW = "provider_statement_fee_review_required"
 RIYADH = timezone(timedelta(hours=3))
@@ -51,6 +53,239 @@ def _stamp(value):
     return stamp
 
 
+def _profile_key(profile):
+    return statement_evidence_fingerprint([profile["owner_id"], profile["provider"],
+                                          profile["native_currency"], profile.get("merchant_account")])
+
+
+def _profile_id(profile):
+    return statement_evidence_fingerprint({key: value for key, value in profile.items()
+        if key not in {"profile_id", "status", "conflicting_sources"}})
+
+
+def _profile_order(profile):
+    source = profile["source_as_of"]
+    at = datetime.fromisoformat(source).replace(tzinfo=RIYADH) if len(source) == 10 else _stamp(source)
+    return at, _stamp(profile["accepted_at"])
+
+
+def derive_statement_average_profile(state, normalized_statement, *, statement_id, accepted_at):
+    """Use all sale rows or none; other event types never enter the ratio.
+
+    Ratios remain exact numerator/denominator pairs. Display percentages are
+    never pricing inputs; variable, fixed and VAT money components round only
+    after their own final calculation.
+    """
+    data = normalized_statement
+    try:
+        accepted = _stamp(accepted_at)
+        if (not state.get("owner_id") or data.get("schema_version") != "operational_statement_v1"
+                or data.get("provider") not in PROVIDERS or not statement_id
+                or any(not isinstance(data.get(key), str) or not re.fullmatch(r"[a-f0-9]{64}", data[key])
+                       for key in ("file_hash", "fingerprint"))):
+            return None
+        sales = [row for row in data.get("rows", []) if row.get("event_type") == "sale"]
+        if not sales or len(sales) > 10000:
+            return None
+        currencies = {row.get("native_currency") for row in sales}
+        accounts = {row.get("merchant_account") for row in sales if row.get("merchant_account")}
+        if data.get("merchant_account"):
+            accounts.add(data["merchant_account"])
+        if len(currencies) != 1 or len(accounts) > 1:
+            return None
+        currency = next(iter(currencies))
+        if not isinstance(currency, str) or not re.fullmatch(r"[A-Z]{3}", currency):
+            return None
+        principal = fee_net = fee_vat = variable_net = fixed_net = ZERO
+        days = []
+        seen = set()
+        vat_rates = set()
+        missing_vat_rate = False
+        conflicting_vat_rate = False
+        for row in sales:
+            fingerprint = row.get("row_fingerprint")
+            if (row.get("blockers") or row.get("provider") != data["provider"]
+                    or not isinstance(fingerprint, str) or not re.fullmatch(r"[a-f0-9]{64}", fingerprint)
+                    or fingerprint in seen or not row.get("order_number")):
+                return None
+            seen.add(fingerprint)
+            amount = _positive(row.get("principal_amount"))
+            net, tax, total = (_cash(row.get(key)) for key in ("fee_net", "fee_vat", "fee_total"))
+            if min(net, tax, total) < ZERO or net + tax != total or amount - total != _cash(row.get("transferred_amount")):
+                return None
+            variable, fixed = (_cash(row.get(key)) for key in ("fee_variable_net", "fee_fixed_net"))
+            if min(variable, fixed) < ZERO or variable + fixed != net:
+                return None
+            rate = row.get("fee_vat_rate")
+            if "statement_tax_rate_invalid" in row.get("fee_component_issues", []):
+                conflicting_vat_rate = True
+            if rate is None:
+                missing_vat_rate = True
+            else:
+                rate = Decimal(str(rate))
+                if not rate.is_finite() or not ZERO <= rate <= 1:
+                    return None
+                vat_rates.add(rate)
+                # Source tax can be rounded per component. Tabby has at most
+                # three taxable legs (two variable plus fixed), Tamara two;
+                # versus rounded aggregate tax the cent bounds are .02/.01.
+                # A zero base/rate has no rounding uncertainty.
+                tolerance = (Decimal(".02") if data["provider"] == "tabby" else CENT) if net and rate else ZERO
+                expected_tax = (net * rate).quantize(CENT, rounding=ROUND_HALF_UP)
+                if abs(tax - expected_tax) > tolerance:
+                    conflicting_vat_rate = True
+            principal += amount
+            fee_net += net
+            fee_vat += tax
+            variable_net += variable
+            fixed_net += fixed
+            if row.get("event_date"):
+                days.append(date.fromisoformat(row["event_date"]))
+        if days and max(days) > accepted.astimezone(RIYADH).date():
+            return None
+        if data.get("statement_date"):
+            source = date.fromisoformat(data["statement_date"])
+            if source > accepted.astimezone(RIYADH).date() or days and source < max(days):
+                return None
+            source_as_of, source_basis, precision = source.isoformat(), "statement_date", "day"
+        elif days:
+            source_as_of, source_basis, precision = max(days).isoformat(), "sale_event_date", "day"
+        else:
+            source_as_of, source_basis, precision = accepted_at, "accepted_at", "instant"
+        total = fee_net + fee_vat
+        # Keep the compact active profile within the same validated money range.
+        for amount in (principal, fee_net, fee_vat, total, variable_net, fixed_net):
+            _cash(amount)
+        vat_rate = next(iter(vat_rates)) if len(vat_rates) == 1 and not missing_vat_rate and not conflicting_vat_rate else None
+        profile = {"schema_version": AVERAGE_SCHEMA, "owner_id": state["owner_id"],
+            "provider": data["provider"], "native_currency": currency,
+            "merchant_account": next(iter(accounts)) if accounts else None,
+            "statement_id": statement_id, "statement_reference": data.get("statement_reference"),
+            "file_hash": data["file_hash"], "source_fingerprint": data["fingerprint"],
+            "source_as_of": source_as_of, "source_date_basis": source_basis, "date_precision": precision,
+            "accepted_at": accepted_at, "eligible_sale_rows": len(sales),
+            "principal_total": format(principal, ".2f"), "fee_net_total": format(fee_net, ".2f"),
+            "fee_vat_total": format(fee_vat, ".2f"), "fee_total": format(total, ".2f"),
+            "fee_variable_net_total": format(variable_net, ".2f"), "fee_fixed_net_total": format(fixed_net, ".2f"),
+            "rate_percent": format((variable_net * 100 / principal).quantize(Decimal(".00000001"), rounding=ROUND_HALF_UP), ".8f"),
+            "fixed_amount_per_sale": format((fixed_net / len(sales)).quantize(Decimal(".00000001"), rounding=ROUND_HALF_UP), ".8f"),
+            "fixed_basis": "statement_sale_mean",
+            "vat_rate": format(vat_rate, "f") if vat_rate is not None else None,
+            "vat_rate_percent": format(vat_rate * 100, ".8f") if vat_rate is not None else None,
+            "vat_rate_status": "source_conflict" if conflicting_vat_rate else "mixed" if len(vat_rates) > 1 else "missing" if missing_vat_rate else "explicit_uniform",
+            "calculation": AVERAGE_CALCULATION, "status": "active"}
+        profile["scope_key"] = _profile_key(profile)
+        profile["profile_id"] = _profile_id(profile)
+        return profile if len(json.dumps(profile, ensure_ascii=False).encode()) <= 8192 else None
+    except (ValueError, TypeError, KeyError, InvalidOperation, OverflowError):
+        return None
+
+
+def _valid_average_profile(profile, owner):
+    try:
+        principal = _positive(profile.get("principal_total"))
+        net, tax, fee = (_cash(profile.get(key)) for key in ("fee_net_total", "fee_vat_total", "fee_total"))
+        variable, fixed = (_cash(profile.get(key)) for key in ("fee_variable_net_total", "fee_fixed_net_total"))
+        count = profile.get("eligible_sale_rows")
+        if type(count) is not int or not 0 < count <= 10000:
+            return False
+        rate = format((variable * 100 / principal).quantize(Decimal(".00000001"), rounding=ROUND_HALF_UP), ".8f")
+        fixed_per_sale = format((fixed / count).quantize(Decimal(".00000001"), rounding=ROUND_HALF_UP), ".8f")
+        vat_rate = profile.get("vat_rate")
+        if vat_rate is not None:
+            vat_rate = Decimal(str(vat_rate))
+            if not vat_rate.is_finite() or not ZERO <= vat_rate <= 1:
+                return False
+        return (profile.get("schema_version") == AVERAGE_SCHEMA and profile.get("owner_id") == owner
+            and profile.get("provider") in PROVIDERS and profile.get("status") == "active"
+            and profile.get("calculation") == AVERAGE_CALCULATION
+            and min(net, tax, fee, variable, fixed) >= ZERO and variable + fixed == net and net + tax == fee
+            and rate == profile.get("rate_percent") and fixed_per_sale == profile.get("fixed_amount_per_sale")
+            and profile.get("fixed_basis") == "statement_sale_mean"
+            and profile.get("vat_rate_status") in {"source_conflict", "mixed", "missing", "explicit_uniform"}
+            and (vat_rate is not None) == (profile.get("vat_rate_status") == "explicit_uniform")
+            and (profile.get("vat_rate_percent") == (format(vat_rate * 100, ".8f") if vat_rate is not None else None))
+            and profile.get("scope_key") == _profile_key(profile) and profile.get("profile_id") == _profile_id(profile)
+            and bool(_profile_order(profile)) and len(json.dumps(profile, ensure_ascii=False).encode()) <= 8192)
+    except (ValueError, TypeError, KeyError, InvalidOperation, OverflowError):
+        return False
+
+
+def store_statement_average_profile(state, profile):
+    """One active source per provider/currency/account; no growing file history."""
+    if profile is None:
+        return False
+    if not _valid_average_profile(profile, state.get("owner_id")):
+        raise ValueError("provider_statement_average_invalid")
+    profiles = state.setdefault("provider_statement_reconciliation", {}).setdefault("average_profiles", {})
+    key = profile["scope_key"]
+    previous = profiles.get(key)
+    if previous is not None:
+        if previous.get("source_fingerprint") == profile["source_fingerprint"]:
+            return False
+        if _profile_order(profile) < _profile_order(previous):
+            return False
+        if _profile_order(profile) == _profile_order(previous):
+            profiles[key] = {**deepcopy(previous), "status": "ambiguous",
+                "conflicting_sources": sorted({previous["source_fingerprint"], profile["source_fingerprint"]})}
+            return True
+    elif len(profiles) >= MAX_AVERAGE_PROFILES:
+        raise ValueError("provider_statement_average_scope_limit")
+    profiles[key] = deepcopy(profile)
+    return True
+
+
+def select_statement_average_profile(state, provider, native_currency, *, payment=None):
+    profiles = state.get("engine", {}).get("provider_fee_inputs", {}).get("average_profiles", [])
+    candidates = [profile for profile in profiles if isinstance(profile, dict)
+                  and profile.get("provider") == provider and profile.get("native_currency") == native_currency]
+    account = (payment or {}).get("merchant_account")
+    if account:
+        candidates = [profile for profile in candidates if profile.get("merchant_account") == account]
+    if (len(candidates) != 1 or not _valid_average_profile(candidates[0], state.get("owner_id"))):
+        return None
+    return candidates[0]
+
+
+def statement_average_summary(profile):
+    if not isinstance(profile, dict) or not _valid_average_profile(profile, profile.get("owner_id")):
+        return {"available": False, "reason_code": "source_average_unavailable" if profile is None else
+                "source_profile_ambiguous" if isinstance(profile, dict) and profile.get("status") == "ambiguous"
+                else "source_profile_invalid"}
+    return {"available": True, **{key: profile.get(key) for key in (
+        "profile_id", "provider", "native_currency", "merchant_account", "rate_percent", "principal_total",
+        "fee_variable_net_total", "fee_fixed_net_total", "fixed_amount_per_sale", "fixed_basis",
+        "fee_net_total", "fee_vat_total", "fee_total", "eligible_sale_rows", "statement_id", "statement_reference",
+        "source_as_of", "source_date_basis", "date_precision", "accepted_at", "vat_rate", "vat_rate_percent",
+        "vat_rate_status", "calculation")}, "full_estimate_requires_vat": profile.get("vat_rate") is None}
+
+
+def statement_average_projection(profile, principal, *, operations=None, configured_vat_rate=None,
+                                 configured_fixed_fee=None, vat_conflict=False, operations_basis=None):
+    """Variable commission, estimated fixed charge and VAT stay separate."""
+    if operations is not None and (type(operations) is not int or operations < 1):
+        raise ValueError("provider_statement_average_operations_invalid")
+    variable = (_cash(principal) * _cash(profile["fee_variable_net_total"])
+                / _positive(profile["principal_total"])).quantize(CENT, rounding=ROUND_HALF_UP)
+    fixed_rate = (_cash(configured_fixed_fee) if configured_fixed_fee is not None else
+                  _cash(profile["fee_fixed_net_total"]) / profile["eligible_sale_rows"])
+    fixed = ((fixed_rate * operations).quantize(CENT, rounding=ROUND_HALF_UP) if operations is not None
+             else ZERO if fixed_rate == ZERO else None)
+    rate = None if vat_conflict else configured_vat_rate if configured_vat_rate is not None else profile.get("vat_rate")
+    rate = Decimal(str(rate)) if rate is not None else None
+    if rate is not None and (not rate.is_finite() or not ZERO <= rate <= 1):
+        raise ValueError("provider_statement_average_vat_invalid")
+    tax = ((variable + fixed) * rate).quantize(CENT, rounding=ROUND_HALF_UP) if rate is not None and fixed is not None else None
+    return {"variable": variable, "fixed": fixed, "vat": tax,
+            "fee": variable + fixed + tax if tax is not None and fixed is not None else None,
+            "vat_rate": format(rate, "f") if rate is not None else None,
+            "vat_basis": "conflicting_policy" if vat_conflict else "configured" if configured_vat_rate is not None else "statement" if rate is not None else "unavailable",
+            "fixed_basis": "configured" if configured_fixed_fee is not None else "statement_sale_mean",
+            "configured_fixed_fee": configured_fixed_fee,
+            "complete": tax is not None, "operations": operations,
+            "operations_basis": operations_basis if operations is not None else "unavailable"}
+
+
 def freeze_statement_fee_events(state, *, accepted_at=None):
     """Freeze accepted evidence in the existing fee inputs in the caller's CAS.
 
@@ -64,12 +299,14 @@ def freeze_statement_fee_events(state, *, accepted_at=None):
     inputs = state.setdefault("engine", {}).setdefault("provider_fee_inputs", {})
     inputs["statement_events"] = events
     stamps = [event.get("accepted_at") for event in events if isinstance(event, dict)]
-    if accepted_at is not None:
-        stamps.append(accepted_at)
     if stamps:
         inputs["statement_evidence_as_of"] = max(stamps, key=_stamp)
     else:
         inputs.pop("statement_evidence_as_of", None)
+    profiles = state.get("provider_statement_reconciliation", {}).get("average_profiles", {})
+    if not isinstance(profiles, dict) or len(profiles) > MAX_AVERAGE_PROFILES:
+        raise ValueError("provider_statement_average_scope_limit")
+    inputs["average_profiles"] = [deepcopy(profiles[key]) for key in sorted(profiles)]
 
 
 def prepare_statement_fee_context(state):
@@ -279,17 +516,18 @@ def statement_event_issues(state, events):
 
 
 def resolve_statement_fees(state, identity, record, *, context, applied, allocated_fee,
-                           estimate, estimate_basis):
+                           estimate, estimate_basis, average_profile=None, average_components=None):
     """Return remaining fee parts, or a review result for unsafe overlap.
 
-    A partial known-plan estimate has per-order fixed-fee ambiguity. Only the
-    pure percentage average can price disjoint, individually proved captures.
+    A partial known-plan estimate has per-order fixed-fee ambiguity. A source
+    average prices only uncovered, individually proved capture events, so its
+    estimated fixed component is counted once per uncovered event.
     """
     events = context["events"].get((record["order_id"], record["provider"]), [])
     if not events:
         return None
     result = {"actual": ZERO, "estimated": ZERO, "average": ZERO, "complete": False,
-              "issue": REVIEW, "evidenced": False, "average_used": False}
+              "issue": REVIEW, "evidenced": False, "average_used": False, "components": None}
     checked, by_key, by_cover = [], {}, {}
     try:
         for event in events:
@@ -340,11 +578,25 @@ def resolve_statement_fees(state, identity, record, *, context, applied, allocat
         disjoint = (sum(all_captures.values(), ZERO) == record["native_gross"]
                     and all(item["cover"][0] == "fact" and item["cover"][1] in all_captures for item in captures))
         if (not record["native_refunded"] and not refunds and disjoint and capture_amount > ZERO
-                and estimate is not None and estimate_basis == "average_estimate"
-                and record["native_currency"] == "SAR"):
-            remaining = ((record["native_gross"] - capture_amount) * TABBY_AVERAGE_INCLUSIVE_RATE).quantize(CENT, rounding=ROUND_HALF_UP)
-            return {**result, "estimated": remaining, "average": remaining,
-                    "average_used": True, "complete": True, "issue": None}
+                and estimate_basis == "average_estimate" and average_profile is not None and average_components is not None):
+            uncovered = set(all_captures) - {item["cover"][1] for item in captures}
+            components = statement_average_projection(average_profile, record["native_gross"] - capture_amount,
+                operations=len(uncovered), operations_basis="capture_facts",
+                configured_vat_rate=average_components["vat_rate"] if average_components["vat_basis"] == "configured" else None,
+                configured_fixed_fee=average_components.get("configured_fixed_fee"),
+                vat_conflict=average_components["vat_basis"] == "conflicting_policy")
+            previous = cumulative = ZERO
+            for key in ("variable", "fixed", "vat"):
+                if components[key] is not None:
+                    cumulative += components[key]
+                    boundary = display(cumulative)
+                    components[key] = boundary - previous
+                    previous = boundary
+            remaining = display(components["fee"]) if components["fee"] is not None else None
+            components["fee"] = remaining
+            return {**result, "estimated": remaining or ZERO, "average": remaining or ZERO,
+                    "average_used": True, "complete": remaining is not None, "components": components,
+                    "issue": None if remaining is not None else "provider_fee_estimate_unavailable"}
         return result
     except (ValueError, TypeError, KeyError, InvalidOperation, OverflowError) as exc:
         code = str(exc)

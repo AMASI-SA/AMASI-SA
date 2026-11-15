@@ -314,7 +314,7 @@ def _provider_table(rows, issues):
     from datetime import datetime, timedelta, timezone
 
     basis_labels = {"actual_statement": "كشف مطابق", "actual_settlement": "تسوية مسجلة",
-                    "plan_estimate": "تعرفة محفوظة", "average_estimate": "متوسط تابي 9.1% شامل الضريبة"}
+                    "plan_estimate": "تعرفة محفوظة", "average_estimate": "متوسط العمولة المتغيرة من الكشف قبل الضريبة"}
     status_labels = {"confirmed": "فعلية مثبتة", "estimated": "تقديرية",
                      "mixed": "فعلية وتقديرية", "review": "تحتاج مراجعة", "unavailable": "غير متاحة"}
 
@@ -323,6 +323,23 @@ def _provider_table(rows, issues):
         basis = basis or basis_labels.get(row.get("fee_basis"), "غير متاح")
         status = status_labels.get(row.get("fee_status"), "غير متاحة")
         count = row.get("average_estimated_orders", 0)
+        average_description = ""
+        if count:
+            sources = []
+            for profile in row.get("average_fee_profiles", []):
+                raw_rate = profile.get("rate_percent")
+                rate = (str(raw_rate).rstrip("0").rstrip(".") or "0") if raw_rate is not None else "غير متاح"
+                source_date = str(profile.get("source_as_of") or "")
+                sources.append(f"{rate}% قبل الضريبة، مصدر {source_date}")
+            amounts = [f"{label}: {row.get(key) if row.get(key) is not None else 'غير مكتمل'}"
+                       for key, label in (("average_variable_fees", "المتغيرة التقديرية"),
+                                          ("average_fixed_fees", "الثابتة التقديرية"),
+                                          ("average_vat_fees", "ضريبتها التقديرية"))]
+            assumption = ("؛ افتراض رسم ثابت واحد لكل طلب ذي منصة واحدة" if
+                          "one_provider_order_estimate" in row.get("average_operations_bases", []) else "")
+            fixed = ("؛ الثابت وفق التعرفة المثبتة" if row.get("average_fixed_bases") == ["configured"]
+                     else "؛ الثابت من متوسط عمليات الكشف" if row.get("average_fixed_bases") == ["statement_sale_mean"] else "")
+            average_description = "؛ " + "، ".join(sources + amounts) + fixed + assumption
         date_label = "—"
         try:
             stamp = datetime.fromisoformat(str(row.get("statement_evidence_as_of") or "").replace("Z", "+00:00"))
@@ -331,7 +348,7 @@ def _provider_table(rows, issues):
         except ValueError:
             pass
         return {"fee_status_label": status, "fee_basis_label": basis,
-                "fee_description": status + "؛ " + basis + (f"؛ طلبات المتوسط: {count}" if count else ""),
+                "fee_description": status + "؛ " + basis + (f"؛ طلبات المتوسط: {count}" if count else "") + average_description,
                 "actual_fees": _money((_number(row.get("actual_statement_fees")) or ZERO)
                                       + (_number(row.get("actual_settlement_fees")) or ZERO)),
                 "statement_evidence_date_label": date_label}
@@ -358,7 +375,8 @@ def _provider_table(rows, issues):
                               + sum(row.get("unidentified_pending_orders", 0) for row in rows),
                           "fee_description": "", "statement_evidence_date_label": ""},
                   notes=["الصافي يشمل الافتتاحي المدخل والتسويات المثبتة. العمولة الفعلية تحل محل تقدير الجزء المطابق دون جمعهما مرتين.",
-                         "العمولات المحتسبة قد تجمع الفعلية والتقديرية؛ متوسط تابي 9.1% شامل الضريبة يخص المدفوع المثبت بعد البداية عند غياب الخطة فقط، ويبقى تقديريًا حتى مطابقته.",
+                         "العمولات المحتسبة قد تجمع الفعلية والتقديرية؛ متوسط العمولة المتغيرة مستخرج من الكشف قبل الضريبة ودون الرسم الثابت أو رسوم التحويل، وتعرض المكونات الأخرى منفصلة.",
+                         "عند غياب عدد العمليات لطلب مدفوع مثبت ذي منصة واحدة، قد يُفترض رسم ثابت واحد كتقدير معلن؛ لا يثبت ذلك عدد العمليات أو الصافي النهائي.",
                          "تاريخ قبول دليل الرسوم مستقل عن تاريخ لقطة الأرصدة وتقرير الربح المحفوظ. اضغط عدد طلبات المراجعة لعرض الأرقام والأسباب.",
                          "المدفوع للمنصة مستقل عن وصول حوالتها إلى البنك؛ التحويل البنكي يثبت بتسوية منفصلة."])
     if not complete and not rows:
