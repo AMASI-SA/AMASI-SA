@@ -1,6 +1,30 @@
 # Option-price currency recovery: release handoff
 
-## Current combined release — PR1933 merged, publication submitted
+## Current live checkpoint — deployed and verified; target Ready still blocked
+
+PR1933 NORMAL merge M 9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68 is live together with inherited PR1932 campaign operating-period fix. Emergent one free republish completed Nov15 04:44AM UI time, platform version 2e2ec44 (history still labels the latest entry 100th because the older entry shifted to99th). No second publication was submitted.
+
+Official verify initially exited2 at2026-11-15T01:45:01.842771+00:00 with public /api/health HTTP520. Its failed receipt is retained under /tmp/option-ready-release-1933/release-gate/verify. Subsequent platform logs showed both backend replicas ready, zero error logs and health200 responses. One justified official retry ran01:45:53.833000–01:56:41.846800UTC, exit0, verified=true, checks=3, exact sourceA fc5ff89f5794061bf62a7de283eedc9ecd4ec7c9 / deploymentM above / runtime rg5-92ce2e87026743df6ed7cd3083940f596b3a562e1c608cc985df3dc7c15cabe3. Boot observed01:44:10.527428UTC. Full canonical/cache-busted frontend, JSON build-meta, shell/cache and retirement-worker verification passed. stdout SHA256 db905327df23f682fe7b9e2d46d56cb9ef53a3370f37639e138106df2ae3db49. Receipt /tmp/option-ready-release-1933/release-gate/verify-after-startup; official status afterward active=false. No lease remains from this task.
+
+User's Ready acceptance criterion remains FAILED for the target order. Authenticated ordinary-browser GET /api/preparation-work-v1/assembly/search?q=299781816 returned source_reconciliation_pending for women hoodie AMS11509, shawl AMS13255 and both operational packaging rows. Child hoodie AMS11549 returned supplier_receipt_required. All can_mark_ready=false and assembly_ready=false; remaining_service_count0 and preparation_receipt_optional=true on the displayed rows. No receipt or Ready action was submitted.
+
+Root performed exactly ONE existing owner web 'تحديث من سلة' action for this single order, under the user's end-to-end fix authority, after fresh live health confirmed exactA and all identity flags. This was the ordinary source-refresh path, NOT the CLI dry run/apply and NOT the limited mobile refresh. Its normal rule-governed source/auto-routing effects must not be misrepresented as revalidation-only. No second POST was attempted.
+
+The UI reported source refresh success; a separate scoped GET /api/orders?search=%5E299781816%24&limit=1&page=1 confirmed total1/exact order, revision6, component_pending=true, cancelled=false, source_updated_at2026-11-14T01:20:21.000000+00:00 and actual refresh_at2026-11-15T01:52:48.682346+00:00,3items. Thus the source saved but acceptance remained blocked. GET completion-operation confirmed completed/mezan_local_v1. No business_snapshot/lifecycle audit is exposed by these GETs, so the precise failed proof guard is still UNVERIFIED.
+
+The browser initially retained old entry /assets/index-BliItB6V.js despite ordinary reload; new backend reason rendered as generic fallback. Normal navigation to the assembly page with a unique release_check query loaded approved /assets/index-DDAu0fnt.js. Official verify independently passed exact public files. Current frontend-message verification is being completed; refreshing the source must not be repeated to fix a UI cache.
+
+Receipt identity correction: assembly's 'تم الاستلام من المورد · البجلي/مشتريات كاش' shows supplier_name, not received_by_name. Mohammed Fouad/Khaled are the displayed preparation assignees, not proven historical receipt actors. The actual received_by/history fields need a legitimate scoped production read; no recipient name was invented. Service-recorded timeline time can be scan occurred_at rather than final received_at.
+
+Production CLI binding remains unavailable: /app DB is known preview in prior operations records; do not use it for live repair. Production Database Viewer opened SessionEnded/Token expired; no credentials copied/printed and no DB flag manually changed. Existing safe GET routes can read current watermark, normalized prices and completion-operation summary, but not immutable approved snapshot or lifecycle proof audit.
+
+Next: finish scoped diagnosis of the still-rejected source proof using legitimate production evidence. Do not claim Ready fixed, do not broaden currency normalization, do not override receipt/Ready/source pending flags, do not repeat the successful release. No new source patch has been started at this checkpoint.
+
+## Earlier publication checkpoint (historical)
+
+# Option-price currency recovery: release handoff
+
+### Combined release publication submission
 
 Owner authority: «ايش هي المحادثه الي حاجزه النشر تاكد من انه النشر تبعه اكتمل وصل الخادم فك النشر انت ونشرك», then explicit confirmation «نعم موافق اجمعهم وفك الحجز وادمج وانشر». Goal remains actual Ready eligibility for otherwise eligible pieces, including full source revalidation after deployment.
 
