@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/salla-webhook-release-evidence-20261115",
   "base_commit": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
-  "status": "Reviewed intent-only B and both clean-clone host artifacts accepted; final B gates pending",
+  "status": "PR1935 normal merged with exact B tree; merge push gates and original-workspace rehearsal pending",
   "requested_behavior": [
     "Repair the blocking verified webhook path and duplicate processing identified by platform support",
     "One scheduled refresh at 10:00 Asia/Riyadh over a fixed preceding 24-hour window",
@@ -94,8 +94,14 @@
     "expected_runtime": "rg5-8c765a3025bcafa7098d2fbdffe572d5582ecfe52c4be96f8c254ecd498d79f0",
     "source_and_candidate_independent_review": "PASS",
     "intent_only_B_independent_review": "PASS",
-    "B_CI": "pending",
-    "merged": false,
+    "B_CI": {
+      "required_success": 22,
+      "first_attempts": true,
+      "unrelated_branch_selection_skip": "TikTok Creator Release Candidate",
+      "pending": 0,
+      "failed": 0
+    },
+    "merged": true,
     "B_rehearsals": {
       "accepted": true,
       "independent_review": "PASS",
@@ -115,11 +121,14 @@
         14163551317
       ]
     },
-    "current_guard_checked_at": "2026-11-15T13:17:00Z"
+    "current_guard_checked_at": "2026-11-15T13:23:00Z",
+    "merge_commit": "331b7917b3c01d064ee2a17affb4714f3a296331",
+    "merge_tree": "62632e21efa7d1ed1e6f42740d1e73321e947c1d",
+    "merge_push_gates": "pending"
   },
   "continuation": {
     "ledger": "Issue #1006 has reached 2500 comments; use this status document and the task PR as the durable fallback",
-    "next": "Require all exact-B source checks and both clean-clone Host20/24 adapter rehearsals; independently compare generated outputs/package proof; recheck shared guard/current production base; normal merge preserving B tree; then original-workspace adapter rehearsal and authorized one-shot v5 publication with three official probes. No lease until rehearsal accepted.",
+    "next": "Require exact-merge Readiness/Security/CodeQL push gates; recheck actual shared guard/current base; run pinned original_release_1935.py with accepted package proof outside /app; require successful preservation/build/package comparison before prepare/prepublish/one authorized publication and three official probes.",
     "caveats": [
       "Queue recovery is at least once after process death between business write and queue settlement; existing source and outbox idempotency remain authoritative",
       "Do not invent updated_at_gt support: official Salla List Orders documentation and existing repository contract do not establish it",
@@ -155,5 +164,17 @@
   },
   "release_branch": "codex/salla-webhook-recovery-release-20261115",
   "evidence_only": true,
-  "checkpoint_at": "2026-11-15T13:22:00Z"
+  "checkpoint_at": "2026-11-15T13:25:00Z",
+  "production_source_branch_changed": true,
+  "production_runtime_changed": false,
+  "operator": {
+    "path": "operators/original_release_1935.py",
+    "sha256": "5ea00d759706151f89914ae96c2afd5db9d3d485be917baf037cd25f6c785e27",
+    "bytes": 7544,
+    "base": "9afb38cf0dc0d8e8cd887f2c2cdb4a6be5a7ca68",
+    "merge": "331b7917b3c01d064ee2a17affb4714f3a296331",
+    "evidence_directory": "/tmp/salla-webhook-release-1935/original",
+    "review": "pending independent constant-only comparison",
+    "executed": false
+  }
 }
