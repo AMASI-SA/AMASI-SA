@@ -1,0 +1,42 @@
+{
+  "observed_at": "2026-11-15T17:00:36.112Z",
+  "method": "authenticated exact owner GET /api/orders-v2/{order_number}",
+  "orders": [
+    {
+      "order_number": "300234303",
+      "error_code": "order_not_found",
+      "found": false
+    },
+    {
+      "order_number": "300234184",
+      "error_code": "order_not_found",
+      "found": false
+    },
+    {
+      "order_number": "300233862",
+      "error_code": "order_not_found",
+      "found": false
+    },
+    {
+      "order_number": "300233848",
+      "error_code": "order_not_found",
+      "found": false
+    },
+    {
+      "order_number": "300232242",
+      "error_code": "order_not_found",
+      "found": false
+    },
+    {
+      "order_number": "300231768",
+      "error_code": "order_not_found",
+      "found": false
+    },
+    {
+      "order_number": "300229347",
+      "error_code": "order_not_found",
+      "found": false
+    }
+  ],
+  "user_confirmation": "New orders have appeared since Maghrib; this is the remaining incident gap."
+}

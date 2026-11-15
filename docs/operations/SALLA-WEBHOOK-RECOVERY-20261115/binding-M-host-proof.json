@@ -1,0 +1,54 @@
+{
+  "accepted_B_commit": "3227ff58776ff1bf99621940816b8ff8ca0b0a4b",
+  "accepted_B_full_artifact_report_sha256": "89f2318a3b4c899c125b56036209b36e31454ada640924b1709347caaf06f901",
+  "accepted_B_proof_path": "/workspace/scratch/ce6ef737d6c9/release-evidence/binding-recovery-ci-3227/accepted-package-boundary-v5.json",
+  "accepted_B_proof_sha256": "381878cf3b8a30dde15d80014a1751df166b7ce420b9e4b84da6c347cab77f4f",
+  "deployment_git_sha": "db0d2c365f6cc13728cc5d8c334fb9880497fbe8",
+  "deployment_tree_oid": "ff7e1e334bd755f844d0903d5fdba45541509854",
+  "host_jobs": [
+    {
+      "all_21_steps_success": true,
+      "conclusion": "success",
+      "id": 132884721757,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal"
+    },
+    {
+      "all_21_steps_success": true,
+      "conclusion": "success",
+      "id": 132884721761,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal"
+    }
+  ],
+  "hosts": [
+    {
+      "adapter_without_git_confirmed": true,
+      "artifact_id": 14170649591,
+      "evidence_zip_bytes": 46215,
+      "evidence_zip_sha256": "7b5721cce2b9b2da4c340448ae87dc0e3bb3cdecf414b35ab615d383da266ac4",
+      "exact_accepted_B_bytes": true,
+      "host": "20.20.2",
+      "package_proof_bytes": 1278,
+      "package_proof_sha256": "381878cf3b8a30dde15d80014a1751df166b7ce420b9e4b84da6c347cab77f4f"
+    },
+    {
+      "adapter_without_git_confirmed": true,
+      "artifact_id": 14171481702,
+      "evidence_zip_bytes": 46215,
+      "evidence_zip_sha256": "822d990bab742d0855ebbab42f4be0abaa5fa6cab8ed79b2d120856858424044",
+      "exact_accepted_B_bytes": true,
+      "host": "24.19.0",
+      "package_proof_bytes": 1278,
+      "package_proof_sha256": "381878cf3b8a30dde15d80014a1751df166b7ce420b9e4b84da6c347cab77f4f"
+    }
+  ],
+  "observed_at": "2026-11-15T16:56:18.181955+00:00",
+  "official_M_intent_report_path": "/workspace/scratch/ce6ef737d6c9/release-evidence/binding-recovery-ci-db0d/M-intent-review.json",
+  "official_M_intent_report_sha256": "c43c5c7ec9e673615652e7de2df9eba57f87bbe8f1c968cb39a94bb3b898f0b8",
+  "readiness_run_attempt": 1,
+  "readiness_run_conclusion": "success",
+  "readiness_run_id": 43737898794,
+  "result": "PASS",
+  "runtime_release_id": "rg5-41884037a1555abb570d35f23b2a81edc8c24e1135035a37aabee30c2d16e8e7",
+  "scope": "Exact M source/official intent binding and both small Host evidence ZIPs. Complete generated member/content/mode/package comparison is retained from exact-tree B; no full M archive duplication, builds, tests or application actions.",
+  "source_git_sha": "9b91e88c049166f111905c80a4c1fa07a96b51bd"
+}

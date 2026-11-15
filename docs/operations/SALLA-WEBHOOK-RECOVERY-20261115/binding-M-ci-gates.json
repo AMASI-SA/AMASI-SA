@@ -1,0 +1,174 @@
+{
+  "accepted_host_proof": {
+    "host20_job": 132884721761,
+    "host24_job": 132884721757,
+    "peer_report": "M-host-proof-binding.json",
+    "peer_report_sha256": "1a71cf2eee22a2f5df3e95c2da0068401bf483f37ac51e31957d6085c8d1bf94",
+    "proof_bytes": 1278,
+    "proof_sha256": "381878cf3b8a30dde15d80014a1751df166b7ce420b9e4b84da6c347cab77f4f",
+    "readiness_run": 43737898794,
+    "successful_steps_per_host": 21,
+    "validation": "Both actual M small-evidence ZIPs and no-Git adapter results were independently inspected by release_runtime_prerequisites; both raw package proofs exactly equal accepted B."
+  },
+  "check_summary": {
+    "failed": 0,
+    "neutral": 0,
+    "pending": 0,
+    "skipped": 0,
+    "success": 11,
+    "total": 11
+  },
+  "checks": [
+    {
+      "completed_at": "2026-11-15T16:55:40Z",
+      "conclusion": "success",
+      "id": 132885344246,
+      "name": "Emergent manual redeploy required",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-11-15T16:55:35Z",
+      "conclusion": "success",
+      "id": 132884721761,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-11-15T16:55:33Z",
+      "conclusion": "success",
+      "id": 132884721757,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-11-15T16:52:39Z",
+      "conclusion": "success",
+      "id": 132884447398,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-11-15T16:53:21Z",
+      "conclusion": "success",
+      "id": 132884447368,
+      "name": "Frontend build",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-11-15T16:54:04Z",
+      "conclusion": "success",
+      "id": 132884447344,
+      "name": "Backend security contracts",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-11-15T16:54:31Z",
+      "conclusion": "success",
+      "id": 132884447072,
+      "name": "Frontend dependency and CSP checks",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-11-15T16:52:42Z",
+      "conclusion": "success",
+      "id": 132884446970,
+      "name": "Backend preflight",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-11-15T16:52:34Z",
+      "conclusion": "success",
+      "id": 132884446773,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-11-15T16:55:02Z",
+      "conclusion": "success",
+      "id": 132884446454,
+      "name": "CodeQL (javascript-typescript)",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-11-15T16:58:37Z",
+      "conclusion": "success",
+      "id": 132884446309,
+      "name": "CodeQL (python)",
+      "status": "completed"
+    }
+  ],
+  "merge_M": "db0d2c365f6cc13728cc5d8c334fb9880497fbe8",
+  "observed_at_utc": "2026-11-15 16:59:15 UTC",
+  "ordered_parents": [
+    "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+    "3227ff58776ff1bf99621940816b8ff8ca0b0a4b"
+  ],
+  "pull_request": 1945,
+  "repository": "AMASI-SA/AMASI-SA",
+  "result": "PASS: exact-M required push gates and Host proof binding accepted; root's reviewed original-workspace rehearsal still requires fresh inactive guard and exact base checks",
+  "review_boundary": "No reruns, duplicate output-archive downloads, tests, browser/app/lease calls, source/ref changes or publication by this reviewer. Only read-only GitHub/local evidence review and sanitized report writing.",
+  "reviewed_operator": {
+    "review_report": "operator-independent-review.json",
+    "review_report_sha256": "283cb036b691bc716b99796a3bb12ac3e0caf4ee65626d58b17b48e721ac3a8d",
+    "sha256": "08ac374769bb93d3eba1f60a753838be6775462af4bae82b07220a15967e83cd"
+  },
+  "reviewer": "review_release_continuation",
+  "runtime": "rg5-41884037a1555abb570d35f23b2a81edc8c24e1135035a37aabee30c2d16e8e7",
+  "schema_version": 1,
+  "security_jobs": [
+    {
+      "id": 132884447072,
+      "name": "Frontend dependency and CSP checks",
+      "status": "success",
+      "successful_steps": 15
+    },
+    {
+      "id": 132884447344,
+      "name": "Backend security contracts",
+      "status": "success",
+      "successful_steps": 15
+    }
+  ],
+  "source_A": "9b91e88c049166f111905c80a4c1fa07a96b51bd",
+  "source_binding": {
+    "peer_report": "M-intent-review.json",
+    "peer_report_sha256": "c43c5c7ec9e673615652e7de2df9eba57f87bbe8f1c968cb39a94bb3b898f0b8",
+    "validation": "Exact B/M tree equality, ordered normal merge parents, empty B-to-M content diff and both official intent loaders passed."
+  },
+  "tree": "ff7e1e334bd755f844d0903d5fdba45541509854",
+  "workflows": [
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T16:52:21Z",
+      "event": "push",
+      "head_sha": "db0d2c365f6cc13728cc5d8c334fb9880497fbe8",
+      "id": 43737898794,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "updated_at": "2026-11-15T16:55:41Z"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T16:52:21Z",
+      "event": "push",
+      "head_sha": "db0d2c365f6cc13728cc5d8c334fb9880497fbe8",
+      "id": 43737898893,
+      "name": "Security Gate",
+      "status": "completed",
+      "updated_at": "2026-11-15T16:54:31Z"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "created_at": "2026-11-15T16:52:21Z",
+      "event": "push",
+      "head_sha": "db0d2c365f6cc13728cc5d8c334fb9880497fbe8",
+      "id": 43737898777,
+      "name": "CodeQL",
+      "status": "completed",
+      "updated_at": "2026-11-15T16:58:37Z"
+    }
+  ]
+}
