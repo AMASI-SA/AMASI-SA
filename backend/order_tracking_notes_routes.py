@@ -15,6 +15,7 @@ from pymongo import ASCENDING, DESCENDING, ReturnDocument
 from alerts_routes import _fp, _upsert_alert
 from operational_instruction_notifications import (NOTIFICATIONS, TASKS, recipients,
     emit_instruction_notification, notification_feed, ensure_instruction_tasks, scoped_instruction, instruction_inbox)
+from operational_instruction_conversations import ConversationRead, ConversationMessage
 from carrier_handoff import EVENTS as CARRIER_EVENTS
 from fulfillment_experiment_routes import (
     ACTIVE_PIECE_STATUSES,
@@ -657,7 +658,9 @@ async def _record_approval_submission(
         "note": instruction.get("submitted_result"),
         "occurred_at": instruction.get("submitted_at") or _now(),
     })
-    await emit_instruction_notification(db, merchant_id=merchant_id, instruction=instruction, event_type="submitted", sender_id=actor_id)
+    await emit_instruction_notification(db, merchant_id=merchant_id,
+        instruction={**instruction, "note": text(instruction.get("submitted_result")) or "تم إرسال نتيجة التنفيذ للمراجعة."},
+        event_type="submitted", sender_id=actor_id)
     await _notify_customer_service_approval(
         db,
         merchant_id=merchant_id,
@@ -1001,8 +1004,15 @@ def make_order_tracking_notes_router(
     async def my_notifications(directory_only: bool = False, count_only: bool = False,
         sender_id: str = Query(default="", max_length=128),
         read_state: Literal["all", "unread", "read"] = "all",
+        conversation_only: bool = False, view: Literal["alerts", "history"] = "alerts",
+        q: str = Query(default="", max_length=120),
         cursor: str | None = Query(default=None, max_length=1024), user: dict = Depends(instruction_user)):
         context = await _actor_context(db, user)
+        if conversation_only:
+            from operational_instruction_conversations import conversation_listing
+            return await conversation_listing(db, merchant_id=context["merchant_id"], actor_id=context["actor_id"],
+                directory_only=directory_only, count_only=count_only, sender_id=sender_id,
+                read_state=read_state, cursor=cursor, q=q, view=view)
         if count_only:
             return {"count_only": True, "unread_count": await db[NOTIFICATIONS].count_documents({
                 "merchant_id": context["merchant_id"], "recipient_id": context["actor_id"], "read_at": None})}
@@ -1031,6 +1041,20 @@ def make_order_tracking_notes_router(
         if not result.matched_count:
             raise HTTPException(status_code=404, detail={"code": "notification_not_found"})
         return {"ok": True}
+
+    @router.post("/instructions/{instruction_id}/conversation/read")
+    async def read_instruction_conversation(instruction_id: str, payload: ConversationRead, user: dict = Depends(instruction_user)):
+        context = await _actor_context(db, user)
+        from operational_instruction_conversations import read_conversation
+        return await read_conversation(db, merchant_id=context["merchant_id"], actor_id=context["actor_id"],
+            instruction_id=instruction_id, payload=payload)
+
+    @router.post("/instructions/{instruction_id}/conversation/messages")
+    async def send_conversation_message(instruction_id: str, payload: ConversationMessage, user: dict = Depends(instruction_user)):
+        context = await _actor_context(db, user)
+        from operational_instruction_conversations import create_message
+        return await create_message(db, merchant_id=context["merchant_id"], actor_id=context["actor_id"],
+            instruction_id=instruction_id, payload=payload)
 
     async def current_edit_snapshot(row, merchant_id):
         order = await get_order(repository, user_id=merchant_id, order_number=row["order_number"])
@@ -1080,7 +1104,44 @@ def make_order_tracking_notes_router(
         return {"ok": True, "revision": preview["revision"]}
 
     @router.get("/instructions/{instruction_id}")
-    async def instruction_detail(instruction_id: str, user: dict = Depends(instruction_user)):
+    async def instruction_detail(instruction_id: str, conversation_only: bool = False,
+        conversation_id: str = Query(default="", max_length=128), notice_id: str = Query(default="", max_length=128),
+        user: dict = Depends(instruction_user)):
+        if conversation_only:
+            context = await _actor_context(db, user)
+            from operational_instruction_conversations import conversation_detail
+            conversation = await conversation_detail(db, merchant_id=context["merchant_id"], actor_id=context["actor_id"],
+                instruction_id=instruction_id, cid=conversation_id, notice_id=notice_id)
+            if conversation.get("conversation") is None:
+                return conversation
+            # Existing edit/approval capability checks remain authoritative.
+            # A historical conversation does not restore operational authority.
+            try:
+                legacy = await instruction_detail(instruction_id, conversation_only=False, user=user)
+            except HTTPException as exc:
+                if exc.status_code != 404:
+                    raise
+                legacy = {"capabilities": {}, "evidence": []}
+            # The creator's legacy events and edit preview span all assignees.
+            # They are not a private thread payload. Keep only authoritative
+            # capabilities and evidence produced by the selected employee.
+            assignee_id = (conversation["conversation"]["peer"]["id"]
+                if conversation["instruction"].get("created_by") == context["actor_id"] else context["actor_id"])
+            visible_pieces = {card["piece_id"] for card in conversation["product_cards"]}
+            current_instruction = legacy.get("instruction") or {}
+            live_tasks = [task for task in current_instruction.get("tasks", [])
+                if task.get("assignee_id") == assignee_id and task.get("piece_id") in visible_pieces]
+            if live_tasks:
+                conversation["instruction"]["tasks"] = live_tasks
+            for field in ("status", "edit_flow", "edit_phase", "edit_revision", "edit_submission_started", "required_action",
+                    "approval_required", "enforcement", "activation_state", "can_approve_resume", "can_close_instruction"):
+                if field in current_instruction:
+                    conversation["instruction"][field] = current_instruction[field]
+            preview = legacy.get("edit_preview")
+            safe_preview = {key: preview[key] for key in ("changed", "revision", "error") if key in preview} if isinstance(preview, dict) else None
+            return {"capabilities": legacy.get("capabilities", {}),
+                "evidence": [entry for entry in legacy.get("evidence", []) if entry.get("created_by") == assignee_id],
+                "edit_preview": safe_preview, "edit_revision_current": legacy.get("edit_revision_current", False), **conversation}
         context, row, can_manage = await authorized_instruction(instruction_id, user, history=True)
         current_recipients = await recipients(db, context["merchant_id"], row)
         current = context["actor_id"] in current_recipients
@@ -1973,7 +2034,8 @@ def make_order_tracking_notes_router(
         rejected_recipients = None
         if updated.get("task_protocol"):
             rejected_recipients = {task["assignee_id"] for task in tasks if task["id"] in payload.task_ids and task.get("assignee_id")}
-        await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction=updated, event_type="rejected", recipient_ids=rejected_recipients)
+        await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction=updated,
+            event_type="rejected", recipient_ids=rejected_recipients, sender_id=context["actor_id"])
         return {"ok": True, "instruction": await scoped_instruction(db, context["merchant_id"], updated, context["actor_id"], _can_manage_tracking_instructions(user, context))}
 
     @router.post("/instructions/{instruction_id}/complete")
@@ -2170,7 +2232,10 @@ def make_order_tracking_notes_router(
             db,
             instruction_id=instruction["id"],
         )
-        await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction=updated, event_type=("closed" if instruction.get("action_type") not in BLOCKING_ACTION_TYPES else "approved" if instruction.get("status") == "waiting_customer_service_approval" else "completed"))
+        await emit_instruction_notification(db, merchant_id=context["merchant_id"],
+            instruction={**updated, "note": completion_note or ""},
+            event_type=("closed" if instruction.get("action_type") not in BLOCKING_ACTION_TYPES else "approved" if instruction.get("status") == "waiting_customer_service_approval" else "completed"),
+            sender_id=context["actor_id"])
         return {"ok": True, "instruction": await scoped_instruction(db, context["merchant_id"], updated, context["actor_id"], _can_manage_tracking_instructions(user, context))}
 
     return router
