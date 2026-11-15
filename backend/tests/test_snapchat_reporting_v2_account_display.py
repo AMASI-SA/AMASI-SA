@@ -47,12 +47,16 @@ async def test_actual_account_display_preserves_native_sar_hours_and_source_qual
     assert usd["quality"]["amount_available"] is True and usd["quality"]["provisional"] is True
     assert usd["quality"]["observed_at"] == NOW - timedelta(seconds=30)
     assert usd["hourly_sar"][DAY.isoformat()][0]["spend_sar"] == 81.32
+    # Retain provider-native precision; 81.32 / 3.75 cannot recover this value.
+    assert usd["hourly_sar"][DAY.isoformat()][0]["spend_native"] == 21.685333
     assert usd["hourly_sar"][DAY.isoformat()][1]["spend_sar"] is None
+    assert usd["hourly_sar"][DAY.isoformat()][1]["spend_native"] is None
     assert sar["currency"] == "SAR" and sar["display_name"] == "Saudi storefront"
     assert sar["total_native"] == (0 if sar_available else None)
     assert sar["total_sar"] == (0 if sar_available else None)
     assert sar["daily_sar"][DAY.isoformat()] == (0 if sar_available else None)
     assert sar["hourly_sar"][DAY.isoformat()][0]["spend_sar"] == (0 if sar_available else None)
+    assert sar["hourly_sar"][DAY.isoformat()][0]["spend_native"] == (0 if sar_available else None)
     assert sar["hourly_sar"][DAY.isoformat()][1]["spend_sar"] is None
     assert sar["quality"]["amount_available"] is sar_available
     assert sar["quality"]["complete"] is False and sar["quality"]["amount_complete"] is False

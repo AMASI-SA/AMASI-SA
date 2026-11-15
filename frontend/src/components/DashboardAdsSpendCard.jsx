@@ -234,6 +234,7 @@ function SallaMetricCells({ stats = {} }) {
 
 function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay, availableSeries,
     executiveSnapshot, salesFilters, fromDate, toDate, totalLabel }) {
+    const [activeDetails, setActiveDetails] = useState(null);
     const metrics = useMemo(() => buildDashboardAdsTableMetrics({
         executiveSnapshot, spendSnapshot: data, fromDate, toDate,
         snapchatAccounts: accountMode ? accounts : null,
@@ -265,6 +266,7 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
                         const name = typeof account.display_name === "string" ? account.display_name.trim() : "";
                         return <DashboardAdsAccountRow key={account.account_id} className="border-t border-slate-100"
                             label={accountName(account)} stats={metrics.accounts.get(account.account_id)} fromDate={fromDate} toDate={toDate}
+                            active={activeDetails === `snapchat:${account.account_id}`} onActivate={() => setActiveDetails(`snapchat:${account.account_id}`)}
                             data-testid={"dashboard-snapchat-account-" + account.account_id}>
                             <th scope="row" className="px-1.5 py-2 text-right font-bold" title={accountName(account)}>
                                 <div className="flex min-w-0 items-center gap-1"><span className="h-1.5 w-1.5 shrink-0 rounded-full"
@@ -285,6 +287,7 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
                             && state.reason_codes?.includes("snapchat_operational_no_activity_observed");
                         return <DashboardAdsAccountRow key={provider} className="border-t border-slate-100"
                             label={meta.label} stats={metrics.providers[provider]} fromDate={fromDate} toDate={toDate}
+                            active={activeDetails === provider} onActivate={() => setActiveDetails(provider)}
                             data-testid={`dashboard-ads-provider-${provider}`}>
                             <th scope="row" className="px-1.5 py-2 text-right font-bold" title={status}>
                                 <div className="flex min-w-0 items-center gap-1"><span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: meta.stroke }} />
@@ -307,6 +310,7 @@ function AdsAccountResultsTable({ data, accounts, accountMode, ready, singleDay,
             </table>
         </div>
         <p className="mt-2 text-[9px] leading-4 text-slate-500">متوسط تكلفة الطلب = الصرف بالريال ÷ طلبات سلة.</p>
+        <p className="text-[9px] leading-4 text-slate-500">أشّر على أي صف لعرض تفاصيل الصباح والمساء، أو اضغط لتثبيتها.</p>
         {filtered && <p className="text-[9px] leading-4 text-slate-500">طلبات ومبيعات سلة حسب الفلاتر؛ الصرف إجمالي الفترة.</p>}
         {metrics.unassignedOrders > 0 && <p className="text-[9px] leading-4 text-amber-700" data-testid="dashboard-ads-unassigned-orders">
             {metrics.unassignedOrders.toLocaleString("en-US")} طلبات سناب بلا حساب مؤكد؛ المعروض هو المتاح، ومتوسط التكلفة ينتظر اكتمال الإسناد.

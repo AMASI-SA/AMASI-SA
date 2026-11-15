@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, patch
 from urllib.parse import urlsplit
 from uuid import uuid4
 
-from bson import json_util
+from bson import Timestamp, json_util
 from cryptography.fernet import Fernet
 from fastapi import FastAPI
 import httpx
@@ -27,6 +27,7 @@ import pytest
 import customer_identity
 from salla_integration import webhook_incident_recovery as recovery
 from salla_integration import webhook_inbox as inbox
+from salla_integration.webhook_order_sync import _resolve_user_id
 
 
 NOW = datetime(2026, 11, 15, 17, tzinfo=timezone.utc)
@@ -184,12 +185,102 @@ class PlanningTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(before, await self.db[inbox.COLLECTION].find({}).to_list(None))
         self.assertNotIn("payload_ciphertext", json.dumps(metadata))
 
-    async def test_multiple_merchant_bindings_refuse_maintenance_without_changing_them(self):
+    async def test_unique_canonical_owner_with_older_bindings_can_read_without_writes(self):
+        await self.db.salla_integrations.update_one({"user_id": USER["id"]}, {"$set": {
+            "status": "not_connected", "access_token_enc": b"synthetic-opaque-token"}})
+        await self.db.salla_integrations.insert_many([
+            {"store_id": int(recovery.MERCHANT_ID), "user_id": "older-owner",
+             "status": "connected", "updated_at": CREATED - timedelta(seconds=1)},
+            {"store_id": recovery.MERCHANT_ID, "user_id": USER["id"],
+             "updated_at": CREATED - timedelta(seconds=2)},
+        ])
+        before = await self.db.salla_integrations.find({}).sort("_id").to_list(None)
+        self.assertEqual(await _resolve_user_id(self.db, recovery.MERCHANT_ID), USER["id"])
+        self.assertEqual((await self.svc.config(USER))["queue"]["counts"]["quarantined"], 2)
+        self.assertEqual((await self.svc.dry_run(USER, REQUEST))["summary"]["selected_count"], 2)
+        with self.assertRaisesRegex(recovery.RecoveryError, "merchant_owner_mismatch"):
+            await self.svc.dry_run({"id": "older-owner", "role": "owner"}, REQUEST)
+        self.assertEqual(before, await self.db.salla_integrations.find({}).sort("_id").to_list(None))
+        self.assertEqual(await self.db[inbox.LEASES_COLLECTION].count_documents({}), 0)
+
+    async def test_legacy_scalar_history_uses_bson_order_without_parsing_text_dates(self):
+        for history in ({}, {"updated_at": None}, {"updated_at": "2099-01-01T00:00:00Z"}):
+            with self.subTest(history=history):
+                inserted = await self.db.salla_integrations.insert_one({
+                    "store_id": int(recovery.MERCHANT_ID), "user_id": "legacy-owner", **history})
+                before = await self.db.salla_integrations.find({}).sort("_id").to_list(None)
+                self.assertEqual(await _resolve_user_id(self.db, recovery.MERCHANT_ID), USER["id"])
+                self.assertEqual((await self.svc.dry_run(USER, REQUEST))["summary"]["selected_count"], 2)
+                self.assertTrue((await self.svc.config(USER))["runtime_validated"])
+                self.assertEqual(before, await self.db.salla_integrations.find({}).sort("_id").to_list(None))
+                await self.db.salla_integrations.delete_one({"_id": inserted.inserted_id})
+
+    async def test_singleton_legacy_rank_retains_exact_owner_behavior(self):
+        for change in ({"$unset": {"updated_at": ""}},
+                       {"$set": {"updated_at": None}},
+                       {"$set": {"updated_at": "legacy-date"}}):
+            with self.subTest(change=change):
+                await self.db.salla_integrations.update_one({"user_id": USER["id"]}, change)
+                self.assertEqual(await _resolve_user_id(self.db, recovery.MERCHANT_ID), USER["id"])
+                self.assertEqual((await self.svc.dry_run(USER, REQUEST))["summary"]["selected_count"], 2)
+                with self.assertRaisesRegex(recovery.RecoveryError, "merchant_owner_mismatch"):
+                    await self.svc.config({"id": "other-owner", "role": "owner"})
+
+    async def test_newer_other_or_missing_owner_never_falls_back_to_callers_binding(self):
+        for owner in ("another-owner", None, ""):
+            with self.subTest(owner=owner):
+                inserted = await self.db.salla_integrations.insert_one({
+                    "store_id": int(recovery.MERCHANT_ID), "user_id": owner, "updated_at": NOW})
+                self.assertEqual(await _resolve_user_id(self.db, recovery.MERCHANT_ID), owner or None)
+                before = await self.db.salla_integrations.find({}).sort("_id").to_list(None)
+                with self.assertRaisesRegex(recovery.RecoveryError, "merchant_owner_mismatch"):
+                    await self.svc.config(USER)
+                with self.assertRaisesRegex(recovery.RecoveryError, "merchant_owner_mismatch"):
+                    await self.svc.dry_run(USER, REQUEST)
+                self.assertEqual(before, await self.db.salla_integrations.find({}).sort("_id").to_list(None))
+                await self.db.salla_integrations.delete_one({"_id": inserted.inserted_id})
+
+    async def test_same_owner_and_three_way_top_date_ties_refuse(self):
         await self.db.salla_integrations.insert_one({"store_id": int(recovery.MERCHANT_ID),
-            "user_id": "another-owner", "updated_at": NOW})
+            "user_id": USER["id"], "updated_at": CREATED})
         with self.assertRaisesRegex(recovery.RecoveryError, "merchant_binding_ambiguous"):
             await self.svc.dry_run(USER, REQUEST)
-        self.assertEqual(await self.db.salla_integrations.count_documents({}), 2)
+        await self.db.salla_integrations.insert_one({"store_id": recovery.MERCHANT_ID,
+            "user_id": "third-owner", "updated_at": CREATED})
+        with self.assertRaisesRegex(recovery.RecoveryError, "merchant_binding_ambiguous"):
+            await self.svc.config(USER)
+        self.assertEqual(await self.db[inbox.LEASES_COLLECTION].count_documents({}), 0)
+
+    async def test_multiple_nondate_winners_and_unsupported_runner_shapes_refuse(self):
+        for value in (None, "2099-01-01T00:00:00Z"):
+            with self.subTest(winner=value):
+                await self.db.salla_integrations.update_one({"user_id": USER["id"]},
+                    {"$set": {"updated_at": value}})
+                inserted = await self.db.salla_integrations.insert_one({
+                    "store_id": int(recovery.MERCHANT_ID), "user_id": "legacy-owner"})
+                with self.assertRaisesRegex(recovery.RecoveryError, "merchant_binding_ambiguous"):
+                    await self.svc.dry_run(USER, REQUEST)
+                await self.db.salla_integrations.delete_one({"_id": inserted.inserted_id})
+        await self.db.salla_integrations.update_one({"user_id": USER["id"]},
+            {"$set": {"updated_at": CREATED}})
+        for value in (True, 1, {"date": "legacy"}, [CREATED]):
+            with self.subTest(runner=value):
+                inserted = await self.db.salla_integrations.insert_one({
+                    "store_id": int(recovery.MERCHANT_ID), "user_id": "legacy-owner",
+                    "updated_at": value})
+                with self.assertRaisesRegex(recovery.RecoveryError, "merchant_binding_ambiguous"):
+                    await self.svc.dry_run(USER, REQUEST)
+                await self.db.salla_integrations.delete_one({"_id": inserted.inserted_id})
+
+    async def test_naive_mongo_datetime_codec_preserves_canonical_ranking(self):
+        client = AsyncMongoMockClient(tz_aware=False)
+        db = client.test_naive_binding_ranks
+        await seed_binding(db)
+        await db.salla_integrations.insert_one({"store_id": int(recovery.MERCHANT_ID),
+            "user_id": "older-owner", "updated_at": CREATED - timedelta(seconds=1)})
+        selected = await recovery._binding(db, USER["id"])
+        self.assertIsNone(selected["updated_at"].tzinfo)
+        self.assertEqual(selected["user_id"], await _resolve_user_id(db, recovery.MERCHANT_ID))
 
     async def test_large_ciphertext_batch_is_bounded_without_decryption_or_writes(self):
         before = await self.db[inbox.COLLECTION].find({}).to_list(None)
@@ -359,9 +450,18 @@ class IncidentRecoveryMongoTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db[inbox.LEASES_COLLECTION].count_documents({}), 0)
 
     async def test_batch_commit_preserves_identity_payload_history_and_grants_once(self):
+        await self.db.salla_integrations.insert_many([
+            {"store_id": int(recovery.MERCHANT_ID), "user_id": "historical-owner",
+             "updated_at": CREATED - timedelta(days=1), "access_token_enc": b"synthetic-old-token"},
+            {"store_id": recovery.MERCHANT_ID, "user_id": "legacy-owner",
+             "updated_at": "2099-01-01T00:00:00Z"},
+        ])
         preview = await self.seeded_plan()
         before = {row["_id"]: row async for row in self.db[inbox.COLLECTION].find({})}
         old_binding = await self.db.salla_integrations.find_one({"user_id": USER["id"]})
+        old_history = await self.db.salla_integrations.find(
+            {"_id": {"$ne": old_binding["_id"]}}).sort("_id").to_list(None)
+        self.assertEqual(await _resolve_user_id(self.db, recovery.MERCHANT_ID), USER["id"])
         with patch.object(inbox, "_process", new_callable=AsyncMock,
                           side_effect=AssertionError("Recovery must not dispatch")) as process:
             result = await self.svc.apply(USER, apply_request(preview))
@@ -371,6 +471,8 @@ class IncidentRecoveryMongoTests(unittest.IsolatedAsyncioTestCase):
         new_binding = await self.db.salla_integrations.find_one({"user_id": USER["id"]})
         self.assertEqual(new_binding.pop(recovery.BINDING_FENCE), 1)
         self.assertEqual(new_binding, old_binding)
+        self.assertEqual(old_history, await self.db.salla_integrations.find(
+            {"_id": {"$ne": old_binding["_id"]}}).sort("_id").to_list(None))
         async for row in self.db[inbox.COLLECTION].find({}):
             original = before[row["_id"]]
             self.assertEqual(row["state"], "retry")
@@ -388,6 +490,37 @@ class IncidentRecoveryMongoTests(unittest.IsolatedAsyncioTestCase):
             await self.svc.apply(USER, apply_request(preview))
         empty = await self.svc.dry_run(USER, REQUEST)
         self.assertEqual(empty["summary"]["eligible_total"], 0)
+
+    async def test_real_mongo_legacy_scalar_history_matches_canonical_owner_without_writes(self):
+        await self.db[inbox.COLLECTION].insert_one(document())
+        for history in ({}, {"updated_at": None}, {"updated_at": "2099-01-01T00:00:00Z"},
+                        {"updated_at": CREATED - timedelta(milliseconds=1)}):
+            with self.subTest(history=history):
+                inserted = await self.db.salla_integrations.insert_one({
+                    "store_id": int(recovery.MERCHANT_ID), "user_id": "historical-owner", **history})
+                before = await self.db.salla_integrations.find({}).sort("_id").to_list(None)
+                self.assertEqual(await _resolve_user_id(self.db, recovery.MERCHANT_ID), USER["id"])
+                self.assertEqual((await self.svc.dry_run(USER, REQUEST))["summary"]["selected_count"], 1)
+                self.assertEqual((await self.svc.config(USER))["queue"]["counts"]["quarantined"], 1)
+                self.assertEqual(before, await self.db.salla_integrations.find({}).sort("_id").to_list(None))
+                self.assertEqual(await self.db[inbox.LEASES_COLLECTION].count_documents({}), 0)
+                await self.assert_no_grants()
+                await self.db.salla_integrations.delete_one({"_id": inserted.inserted_id})
+
+    async def test_real_mongo_ambiguous_bson_ranks_never_select_a_convenient_owner(self):
+        for rank in (CREATED, [CREATED], Timestamp(int(NOW.timestamp()), 1), True, 1):
+            with self.subTest(rank=rank):
+                inserted = await self.db.salla_integrations.insert_one({
+                    "store_id": int(recovery.MERCHANT_ID), "user_id": "competing-owner",
+                    "updated_at": rank})
+                before = await self.db.salla_integrations.find({}).sort("_id").to_list(None)
+                with self.assertRaisesRegex(recovery.RecoveryError, "merchant_binding_ambiguous"):
+                    await self.svc.config(USER)
+                with self.assertRaisesRegex(recovery.RecoveryError, "merchant_binding_ambiguous"):
+                    await self.svc.dry_run(USER, REQUEST)
+                self.assertEqual(before, await self.db.salla_integrations.find({}).sort("_id").to_list(None))
+                self.assertEqual(await self.db[inbox.LEASES_COLLECTION].count_documents({}), 0)
+                await self.db.salla_integrations.delete_one({"_id": inserted.inserted_id})
 
     async def test_stale_delivery_metadata_payload_or_extra_fields_refuse_whole_batch(self):
         preview = await self.seeded_plan()
@@ -511,11 +644,63 @@ class IncidentRecoveryMongoTests(unittest.IsolatedAsyncioTestCase):
                         "user_id": "new-owner", "updated_at": NOW})
                 return result
         racing = NewBindingRecovery(self.db, clock=lambda: NOW, runtime_reader=lambda: RUNTIME.copy())
-        with self.assertRaisesRegex(recovery.RecoveryError, "merchant_owner_mismatch|merchant_binding_ambiguous"):
+        with self.assertRaisesRegex(recovery.RecoveryError, "merchant_owner_mismatch"):
             await racing.apply(USER, apply_request(preview))
         await self.assert_no_grants()
         old_binding = await self.db.salla_integrations.find_one({"user_id": USER["id"]})
         self.assertNotIn(recovery.BINDING_FENCE, old_binding)
+
+    async def test_historical_binding_updated_to_new_winner_aborts_snapshot_grants(self):
+        historical = await self.db.salla_integrations.insert_one({
+            "store_id": int(recovery.MERCHANT_ID), "user_id": "historical-owner",
+            "updated_at": CREATED - timedelta(days=1)})
+        preview = await self.seeded_plan()
+        other = self.other_db
+        class HistoricalWinnerRecovery(recovery.IncidentRecovery):
+            async def _make_plan(self, *args, **kwargs):
+                result = await super()._make_plan(*args, **kwargs)
+                if kwargs.get("session") is not None:
+                    await other.salla_integrations.update_one({"_id": historical.inserted_id},
+                        {"$set": {"updated_at": NOW}})
+                return result
+        racing = HistoricalWinnerRecovery(self.db, clock=lambda: NOW, runtime_reader=lambda: RUNTIME.copy())
+        with self.assertRaisesRegex(recovery.RecoveryError, "merchant_owner_mismatch"):
+            await racing.apply(USER, apply_request(preview))
+        await self.assert_no_grants()
+        self.assertEqual(await _resolve_user_id(self.db, recovery.MERCHANT_ID), "historical-owner")
+        current = await self.db.salla_integrations.find_one({"user_id": USER["id"]})
+        self.assertNotIn(recovery.BINDING_FENCE, current)
+
+    async def test_owner_change_after_final_read_is_rejected_by_existing_worker(self):
+        # The maintenance transaction cannot serialize inserts by canonical
+        # binding writers. The worker's independent owner fence is still required.
+        admission = await inbox.enqueue_verified_event(self.db, {
+            "event": "product.updated", "merchant": recovery.MERCHANT_ID,
+            "data": {"id": "synthetic-late-binding-product"}}, now=CREATED)
+        await self.db[inbox.COLLECTION].update_one({"_id": admission["job_id"]}, {"$set": {
+            "state": "quarantined", "attempts": 8, "last_error_code": "attempt_limit"}})
+        preview = await self.svc.dry_run(USER, REQUEST)
+        other = self.other_db
+        class LateBindingRecovery(recovery.IncidentRecovery):
+            fences = 0
+            async def _fence(self, lease, session):
+                self.fences += 1
+                if self.fences == 2:
+                    await other.salla_integrations.insert_one({
+                        "store_id": int(recovery.MERCHANT_ID), "user_id": "new-owner",
+                        "updated_at": NOW})
+                return await super()._fence(lease, session)
+        racing = LateBindingRecovery(self.db, clock=lambda: NOW, runtime_reader=lambda: RUNTIME.copy())
+        self.assertEqual((await racing.apply(USER, apply_request(preview)))["applied_count"], 1)
+        processor = AsyncMock(return_value={"ok": True})
+        result = await inbox.run_once(self.db, now=NOW, processor=processor)
+        processor.assert_not_awaited()
+        self.assertEqual(result["done"], 0)
+        row = await self.db[inbox.COLLECTION].find_one({"_id": preview["plan"]["rows"][0]["job_id"]})
+        self.assertEqual(row["user_id"], USER["id"])
+        self.assertEqual(row["state"], "quarantined")
+        self.assertEqual(row["last_error_code"], "owner_binding_changed")
+        self.assertEqual(row[recovery.MARKER]["granted_by"], USER["id"])
 
     async def test_only_existing_worker_processes_grant_and_keeps_done_tombstone(self):
         body = {"event": "product.updated", "merchant": recovery.MERCHANT_ID,

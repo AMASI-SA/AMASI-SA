@@ -446,7 +446,8 @@ function accountDisplayPayload() {
         account_id, currency, display_name: account_id, timezone: currency === "USD" ? "America/Los_Angeles" : "Asia/Riyadh",
         projection_timezone: "Asia/Riyadh", total_native, total_sar,
         daily_sar: { [day]: total_sar }, daily_state: { [day]: total_sar === 0 ? "provisional_zero" : "provisional_data" },
-        hourly_sar: { [day]: [point(0, total_sar), point(1, 0, "future")] },
+        hourly_sar: { [day]: [{ ...point(0, total_sar), spend_native: total_native },
+            { ...point(1, 0, "future"), spend_native: 0 }] },
         quality: { connected: true, status: available ? "provisional" : "incomplete", amount_available: available,
             amount_complete: false, complete: false, provisional: available, data_state: available ? "provisional_data" : "unknown_incomplete",
             observed_at: "2026-10-25T21:00:00Z", reason_codes: ["snapchat_operational_hour_observation"] },
@@ -464,12 +465,15 @@ test("normalizes independent account evidence without rescuing an unknown accoun
     expect(usd.total_native).toBe(21.685333);
     expect(usd.total_sar).toBe(81.32);
     expect(usd.hourly_sar["2026-10-26"][0].spend_sar).toBe(81.32);
+    expect(usd.hourly_sar["2026-10-26"][0].spend_native).toBe(21.685333);
     expect(usd.hourly_sar["2026-10-26"][1].spend_sar).toBeNull();
+    expect(usd.hourly_sar["2026-10-26"][1].spend_native).toBeNull();
     expect(usd.quality.observed_at).toBe("2026-10-25T21:00:00Z");
     expect(sar.account_id).toBe("__proto__");
     expect(sar.total_sar).toBeNull();
     expect(sar.total_native).toBeNull();
     expect(sar.hourly_sar["2026-10-26"][0].spend_sar).toBeNull();
+    expect(sar.hourly_sar["2026-10-26"][0].spend_native).toBeNull();
     expect(sar.quality.amount_available).toBe(false);
 });
 
@@ -481,6 +485,7 @@ test("preserves explicit empty accounts and real observed zero with future null"
     expect(normalized.total_native).toBe(0);
     expect(normalized.total_sar).toBe(0);
     expect(normalized.hourly_sar["2026-10-26"].map((point) => point.spend_sar)).toEqual([0, null]);
+    expect(normalized.hourly_sar["2026-10-26"].map((point) => point.spend_native)).toEqual([0, null]);
     payload.providers.snapchat.accounts = [];
     expect(normalizeDashboardAdsSpend(payload).providers.snapchat.accounts).toEqual([]);
     delete payload.providers.snapchat.accounts;
@@ -497,6 +502,7 @@ test("account IDs stay exact and duplicates or non-scalar metadata cannot invent
     expect(accounts[1].display_name).toBe("");
     expect(accounts[1].currency).toBeNull();
     expect(accounts[1].total_native).toBeNull();
+    expect(accounts[1].hourly_sar["2026-10-26"][0].spend_native).toBeNull();
     expect(accounts[1].total_sar).toBe(81.32);
 });
 
@@ -512,5 +518,6 @@ test("rejects wrong projection windows, boolean amounts and duplicate hourly evi
     first.hourly_sar["2026-10-26"].push({ ...first.hourly_sar["2026-10-26"][0], spend_sar: 1 });
     const points = normalizeDashboardAdsSpend(payload).providers.snapchat.accounts[0].hourly_sar["2026-10-26"];
     expect(points[0].spend_sar).toBeNull();
+    expect(points[0].spend_native).toBeNull();
     expect(points[1].spend_sar).toBeNull();
 });

@@ -103,6 +103,323 @@ function totalMetrics(rows, spends, basisMatches) {
     };
 }
 
+const SEGMENT_IDS = ["morning", "afternoon"];
+const HOUR_MS = 60 * 60 * 1000;
+const HALF_HALALA = 0.005;
+const ROUNDING_EPSILON = 1e-8;
+const currencyCode = (value) => typeof value === "string" && /^[A-Z]{3}$/.test(value) ? value : null;
+const reasonCodes = (...lists) => [...new Set(lists.flatMap((list) => Array.isArray(list)
+    ? list.filter((value) => typeof value === "string" && value.length <= 120) : []))];
+
+function signedMoney(value) {
+    return typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= Number.MAX_SAFE_INTEGER
+        ? Number(value.toFixed(2)) : null;
+}
+
+function emptyProfit(currency = "SAR", reason = "costs_unavailable") {
+    return {
+        spendSar: null, knownSpendSar: null, nativeSpend: null, currency,
+        pieces: null, knownPieces: null, productCost: null, knownProductCost: null,
+        shippingCost: null, knownShippingCost: null, paymentFees: null, knownPaymentFees: null,
+        totalCost: null, knownTotalCost: null, netProfit: null, roas: null,
+        complete: false, provisional: false, reasonCodes: [reason],
+    };
+}
+
+function dailySpend(snapshot, provider, account, ready) {
+    const sar = account ? accountSpend(account, ready) : providerSpend(snapshot, provider, ready);
+    const quality = account?.quality || snapshot?.providers?.[provider] || {};
+    const currency = currencyCode(account?.currency) || "SAR";
+    return {
+        sar,
+        knownSar: sar ?? (ready && quality.amount_available === false ? amount(quality.known_total_sar) : null),
+        native: sar === null ? null : account ? currencyCode(account.currency) ? amount(account.total_native) : null : sar,
+        currency,
+        provisional: quality.provisional === true || quality.status === "provisional"
+            || snapshot?.spend_quality?.provisional === true || snapshot?.spend_quality?.status === "provisional",
+        reasonCodes: sar === null ? ["spend_unavailable"] : [],
+    };
+}
+
+function profitMetrics(stats, raw, spend, basisMatches, { attributed = true, timed = true, compatible = true } = {}) {
+    const summary = record(raw) && raw.basis === "executive_order_costs_v1" && raw.currency === "SAR" ? raw : null;
+    const permitted = attributed && timed && compatible;
+    const canonical = (key, flag, integer = false) => permitted && summary?.[flag] === true
+        ? (integer ? count(summary[key]) : amount(summary[key])) : null;
+    const pieces = canonical("pieces", "pieces_complete", true);
+    const productCost = canonical("product_cost_sar", "product_cost_complete");
+    const shippingCost = canonical("shipping_cost_sar", "shipping_cost_complete");
+    const paymentFees = canonical("payment_fees_sar", "payment_fees_complete");
+    const knownPieces = pieces ?? count(summary?.known_pieces);
+    const knownProductCost = productCost ?? amount(summary?.known_product_cost_sar);
+    const knownShippingCost = shippingCost ?? amount(summary?.known_shipping_cost_sar);
+    const knownPaymentFees = paymentFees ?? amount(summary?.known_payment_fees_sar);
+    const computedCost = sum([productCost, shippingCost, paymentFees], { complete: true });
+    const totalCost = summary?.complete === true && computedCost !== null
+        && amount(summary.total_cost_sar) === computedCost ? computedCost : null;
+    const financialComplete = permitted && !stats.partial && stats.orders !== null && stats.sales !== null
+        && totalCost !== null && spend.sar !== null && basisMatches;
+    const netProfit = financialComplete ? signedMoney(stats.sales - spend.sar - totalCost) : null;
+    return {
+        spendSar: spend.sar, knownSpendSar: spend.knownSar, nativeSpend: spend.native, currency: spend.currency,
+        pieces, knownPieces, productCost, knownProductCost, shippingCost, knownShippingCost,
+        paymentFees, knownPaymentFees, totalCost,
+        knownTotalCost: sum([knownProductCost, knownShippingCost, knownPaymentFees]),
+        netProfit,
+        roas: permitted && basisMatches && stats.sales !== null && spend.sar !== null && spend.sar > 0
+            ? amount(stats.sales / spend.sar) : null,
+        complete: financialComplete && netProfit !== null && pieces !== null,
+        provisional: spend.provisional === true,
+        reasonCodes: reasonCodes(summary?.reason_codes, spend.reasonCodes,
+            !summary ? ["costs_unavailable"] : [], !attributed ? ["account_attribution_incomplete"] : [],
+            !timed ? ["time_assignment_incomplete"] : [], !compatible ? ["row_metrics_mismatch"] : [],
+            !basisMatches ? ["spend_basis_pending"] : [], totalCost === null ? ["costs_incomplete"] : []),
+    };
+}
+
+function zonedTimestamp(value) {
+    return typeof value === "string" && /T.+(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+        && Number.isFinite(Date.parse(value)) ? Date.parse(value) : null;
+}
+
+function segmentWindow(segment, day, id) {
+    const midnight = Date.parse(`${day}T00:00:00+03:00`);
+    if (!Number.isFinite(midnight) || new Date(midnight + 3 * HOUR_MS).toISOString().slice(0, 10) !== day) return null;
+    const start = midnight + (id === "morning" ? 0 : 12 * HOUR_MS);
+    const end = start + 12 * HOUR_MS;
+    const cutoff = zonedTimestamp(segment?.cutoff_at);
+    if (zonedTimestamp(segment?.start_at) !== start || zonedTimestamp(segment?.end_at) !== end
+        || cutoff === null || cutoff < start || cutoff > end) return null;
+    return { midnight, start, end, cutoff };
+}
+
+function nativeSum(values) {
+    if (!values.length) return 0;
+    if (values.some((value) => value === null)) return null;
+    return amount(Number(values.reduce((total, value) => total + value, 0).toFixed(6)));
+}
+
+function hourlySpend(snapshot, provider, account, day, window, ready) {
+    const currency = currencyCode(account?.currency) || "SAR";
+    const unavailable = (reason) => ({ sar: null, knownSar: null, native: null, currency,
+        provisional: window.cutoff < window.end, reasonCodes: [reason] });
+    if (!ready || snapshot?.timezone !== "Asia/Riyadh") return unavailable("hourly_spend_unavailable");
+    const providerState = snapshot.providers?.[provider];
+    if (!account && (providerState?.hourly_available !== true || providerState?.hourly_source !== "provider_native")) {
+        return unavailable(providerState?.hourly_source === "make_daily_total_marker"
+            ? "daily_marker_has_no_hourly_split" : "hourly_spend_unavailable");
+    }
+    if (account && accountSpend(account, true) === null) return unavailable("account_spend_unavailable");
+    const rows = account ? account.hourly_sar?.[day] : snapshot.hourly_spend;
+    const byHour = new Map();
+    (Array.isArray(rows) ? rows : []).forEach((point) => {
+        if (!record(point) || point.date !== day || !Number.isInteger(point.hour_index)
+            || point.hour_index < 0 || point.hour_index > 23) return;
+        byHour.set(point.hour_index, byHour.has(point.hour_index) ? null : point);
+    });
+    const states = new Set(["confirmed", "confirmed_data", "confirmed_zero", "reconciled",
+        "provisional", "provisional_data", "provisional_zero"]);
+    const values = [];
+    const nativeValues = [];
+    let provisional = window.cutoff < window.end || account?.quality?.provisional === true
+        || account?.quality?.status === "provisional" || providerState?.provisional === true
+        || snapshot.spend_quality?.provisional === true || snapshot.spend_quality?.status === "provisional";
+    for (let time = window.start; time < window.cutoff; time += HOUR_MS) {
+        const point = byHour.get((time - window.midnight) / HOUR_MS);
+        const permitted = point && (!account || states.has(point.status));
+        values.push(permitted ? amount(account ? point.spend_sar : point[provider]) : null);
+        nativeValues.push(permitted && account ? amount(point.spend_native) : null);
+        provisional ||= Boolean(point?.status?.startsWith?.("provisional"));
+    }
+    const sar = values.length ? sum(values, { complete: true }) : 0;
+    const knownSar = values.length ? sum(values) : 0;
+    const native = account ? nativeSum(nativeValues) : sar;
+    return { sar, knownSar, native: sar === null ? null : native, currency, provisional,
+        samples: values.map((value, index) => ({ sar: value, native: nativeValues[index] })),
+        reasonCodes: sar === null ? ["hourly_spend_incomplete"] : [] };
+}
+
+function canonicalExchangeRate(context, account, daily) {
+    const rows = context.executiveSnapshot?.ads_v2?.bank_commissions?.accounts;
+    const matches = (Array.isArray(rows) ? rows : []).filter((row) => record(row)
+        && row.provider === "snapchat_ads" && row.external_account_id === account.account_id);
+    if (!matches.length) return { observed: false, rate: null };
+    if (matches.length !== 1) return { observed: true, rate: null };
+    const row = matches[0];
+    if (!Object.prototype.hasOwnProperty.call(row, "exchange_rate_to_sar")) return { observed: false, rate: null };
+    const rate = amount(row.exchange_rate_to_sar);
+    return { observed: true, rate: rate !== null && rate > 0 && row.native_currency === daily.currency
+        && amount(row.spend_native) === daily.native && amount(row.spend_sar) === daily.sar ? rate : null };
+}
+
+function roundedConversionMatches(sar, native, rate) {
+    const converted = native === null || rate === null ? null : amount(native * rate);
+    return sar !== null && converted !== null && Math.abs(sar - converted) <= HALF_HALALA + ROUNDING_EPSILON;
+}
+
+function reconcileHourlyDay(context, provider, account) {
+    const key = account || provider;
+    if (context.reconciliations.has(key)) return context.reconciliations.get(key);
+    const windows = SEGMENT_IDS.map((id) => {
+        const rows = (context.result?.segments || []).filter((segment) => segment?.id === id);
+        const segment = rows.length === 1 ? rows[0] : null;
+        const window = segment?.source_only === true && segment.timezone === "Asia/Riyadh"
+            && dashboardSpendPeriodMatches(segment, context.range)
+            ? segmentWindow(segment, context.range.fromDate, id) : null;
+        return window ? { ...window, status: segment.status } : null;
+    });
+    const started = windows.filter((window) => window && ["active", "completed", "complete", "partial"].includes(window.status));
+    let result = { complete: false, nativeVerified: false, reasonCodes: ["hourly_daily_reconciliation_incomplete"] };
+    if (windows.every(Boolean) && started.length) {
+        const midnight = windows[0].midnight;
+        const cutoff = Math.max(...started.map((window) => window.cutoff));
+        const evidence = hourlySpend(context.spendSnapshot, provider, account, context.range.fromDate,
+            { midnight, start: midnight, end: midnight + 24 * HOUR_MS, cutoff }, context.spendReady);
+        const daily = dailySpend(context.spendSnapshot, provider, account, context.spendReady);
+        const nativeObserved = account && evidence.native !== null && daily.native !== null;
+        const nativeMatches = Boolean(nativeObserved && Math.abs(evidence.native - daily.native) <= 0.000001);
+        const exchange = nativeObserved ? canonicalExchangeRate(context, account, daily) : { observed: false, rate: null };
+        // The reader rounds each hour separately, then rounds the daily native
+        // total. Verify that shared rate when present; never spread its rounding
+        // remainder over hours or infer an FX rate from the daily ratio.
+        const fxMatches = exchange.observed ? nativeMatches
+            && roundedConversionMatches(daily.sar, daily.native, exchange.rate)
+            && (evidence.samples || []).every((point) => roundedConversionMatches(point.sar, point.native, exchange.rate)) : null;
+        const roundingBound = (evidence.samples?.length || 0) * HALF_HALALA + ROUNDING_EPSILON;
+        const sarMatches = evidence.sar !== null && daily.sar !== null
+            && (fxMatches === null ? Math.abs(evidence.sar - daily.sar) <= roundingBound : fxMatches);
+        const mismatch = evidence.sar !== null && daily.sar !== null && !sarMatches
+            || nativeObserved && !nativeMatches;
+        result = { complete: sarMatches && (!nativeObserved || nativeMatches), nativeVerified: nativeMatches,
+            reasonCodes: mismatch ? reasonCodes(["hourly_daily_spend_mismatch"], fxMatches === false ? ["hourly_fx_basis_mismatch"] : [])
+                : sarMatches ? [] : reasonCodes(evidence.reasonCodes, ["hourly_daily_reconciliation_incomplete"]) };
+    }
+    context.reconciliations.set(key, result);
+    return result;
+}
+
+function unavailableSegment(id, currency, reason, status = "unavailable", segment = null) {
+    return { id, status, startAt: segment?.start_at || null, endAt: segment?.end_at || null,
+        cutoffAt: segment?.cutoff_at || null, ...emptyStats(),
+        profit: emptyProfit(currency, reason), reasonCodes: [reason] };
+}
+
+function segmentStats(context, provider, id, account) {
+    const { result, accountsReady, spendSnapshot, range, basisMatches, spendReady } = context;
+    const currency = currencyCode(account?.currency) || "SAR";
+    if (range.fromDate !== range.toDate) return unavailableSegment(id, currency, "single_day_required");
+    const candidates = accountsReady && Array.isArray(result.segments)
+        ? result.segments.filter((segment) => segment?.id === id) : [];
+    const segment = candidates.length === 1 ? candidates[0] : null;
+    if (!segment || segment.source_only !== true || segment.timezone !== "Asia/Riyadh"
+        || !dashboardSpendPeriodMatches(segment, range)) return unavailableSegment(id, currency, "segment_unavailable");
+    const window = segmentWindow(segment, range.fromDate, id);
+    if (!window) return unavailableSegment(id, currency, "segment_boundary_unverified");
+    if (segment.status === "not_started" && window.cutoff === window.start) {
+        return unavailableSegment(id, currency, "not_started", "not_started", segment);
+    }
+    if (!["active", "completed", "complete", "partial"].includes(segment.status)) {
+        return unavailableSegment(id, currency, "segment_unavailable", "unavailable", segment);
+    }
+    const row = account ? accountEvidence(segment.accounts, true).get(account.account_id)
+        : segment.provider_results?.[provider];
+    const coverageComplete = segment.coverage?.catalog_complete === true
+        && segment.coverage?.status === "complete" && count(segment.coverage?.unassigned_orders) === 0;
+    const observedSpend = hourlySpend(spendSnapshot, provider, account, range.fromDate, window, spendReady);
+    const reconciled = reconcileHourlyDay(context, provider, account);
+    const spend = { ...observedSpend,
+        sar: reconciled.complete ? observedSpend.sar : null,
+        native: account && account.currency !== "SAR" && !reconciled.nativeVerified ? null
+            : reconciled.complete ? observedSpend.native : null,
+        reasonCodes: reasonCodes(observedSpend.reasonCodes, reconciled.reasonCodes),
+    };
+    const timed = row?.time_assignment_complete === true;
+    const attributed = account ? coverageComplete && row?.attribution_complete === true
+        : row?.attribution_complete !== false;
+    let stats = metrics(row, spend.sar, basisMatches, { account: Boolean(account), coverageComplete });
+    if (!timed) stats = { ...stats, orders: null, sales: null, cpa: null,
+        knownOrders: count(row?.known_salla_orders), knownSales: amount(row?.known_salla_sales_sar), partial: true };
+    const profit = profitMetrics(stats, row?.hover_summary, spend, basisMatches, { attributed, timed });
+    return { id, status: profit.complete ? window.cutoff < window.end ? "active" : "completed" : "partial",
+        startAt: segment.start_at, endAt: segment.end_at, cutoffAt: segment.cutoff_at,
+        ...stats, profit, reasonCodes: reasonCodes(profit.reasonCodes, row?.reason_codes) };
+}
+
+function withDetails(stats, context, provider, id = null) {
+    const account = id === null ? null : context.spendsById.get(id)
+        || { account_id: id, currency: context.displayed.get(id)?.currency };
+    const source = id === null ? context.result?.provider_results?.[provider] : context.resultsById.get(id);
+    const row = context.accountsReady && record(source) ? source : null;
+    const spend = dailySpend(context.spendSnapshot, provider, account, context.spendReady);
+    const attributed = id === null ? row?.attribution_complete !== false
+        : context.coverageComplete && row?.attribution_complete === true;
+    const compatible = record(row) && (stats.orders === null || count(row.salla_orders) === stats.orders)
+        && (stats.sales === null || amount(row.salla_sales_sar) === stats.sales);
+    return { ...stats,
+        profit: profitMetrics(stats, row?.hover_summary, spend, context.basisMatches, { attributed, compatible }),
+        segments: SEGMENT_IDS.map((segmentId) => segmentStats(context, provider, segmentId, account)),
+    };
+}
+
+function aggregateProfit(stats, entries, basisMatches) {
+    const total = (field, integer = false, complete = true) => sum(entries.map((entry) => entry[field]), { integer, complete });
+    const spendSar = total("spendSar");
+    const totalCost = total("totalCost");
+    const financialComplete = !stats.partial && basisMatches && spendSar !== null && totalCost !== null
+        && entries.every((entry) => entry.complete);
+    const netProfit = financialComplete ? signedMoney(stats.sales - spendSar - totalCost) : null;
+    return {
+        spendSar, knownSpendSar: total("knownSpendSar", false, false), nativeSpend: spendSar, currency: "SAR",
+        pieces: total("pieces", true), knownPieces: total("knownPieces", true, false),
+        productCost: total("productCost"), knownProductCost: total("knownProductCost", false, false),
+        shippingCost: total("shippingCost"), knownShippingCost: total("knownShippingCost", false, false),
+        paymentFees: total("paymentFees"), knownPaymentFees: total("knownPaymentFees", false, false),
+        totalCost, knownTotalCost: total("knownTotalCost", false, false), netProfit,
+        roas: basisMatches && stats.sales !== null && spendSar !== null && spendSar > 0 ? amount(stats.sales / spendSar) : null,
+        complete: financialComplete && netProfit !== null,
+        provisional: entries.some((entry) => entry.provisional),
+        reasonCodes: reasonCodes(...entries.map((entry) => entry.reasonCodes)),
+    };
+}
+
+function sourceTotalProfit(stats, rows, context, source, { timed = true } = {}) {
+    const fallback = aggregateProfit(stats, rows.map((row) => row.profit), context.basisMatches);
+    const sourceAccounts = context.resultsById;
+    const scopeMatches = context.accountMode && context.accountsReady
+        && sourceAccounts.size === context.displayed.size
+        && [...sourceAccounts].every(([id, row]) => row !== null && context.displayed.has(id));
+    if (!scopeMatches || !record(source) || !rows.every((row) => row.profit.complete)) return fallback;
+    // Cohort-level gateway rounding belongs to the server. It is never spread
+    // over account rows, or borrowed by a subset of the displayed accounts.
+    const compatible = count(source.salla_orders) === stats.orders && amount(source.salla_sales_sar) === stats.sales;
+    return profitMetrics(stats, source.hover_summary, {
+        sar: fallback.spendSar, knownSar: fallback.knownSpendSar, native: fallback.spendSar,
+        currency: "SAR", provisional: fallback.provisional, reasonCodes: fallback.reasonCodes,
+    }, context.basisMatches, { attributed: source.attribution_complete === true,
+        timed, compatible });
+}
+
+function withTotalDetails(stats, rows, context) {
+    const { basisMatches } = context;
+    return { ...stats, profit: sourceTotalProfit(stats, rows, context, context.result?.daily_total),
+        segments: SEGMENT_IDS.map((id) => {
+            const entries = rows.map((row) => row.segments.find((segment) => segment.id === id));
+            const metrics = totalMetrics(entries, entries.map((entry) => entry.profit.spendSar), basisMatches);
+            const sources = Array.isArray(context.result?.segments)
+                ? context.result.segments.filter((segment) => segment?.id === id) : [];
+            const source = sources.length === 1 ? sources[0]?.total : null;
+            const profit = sourceTotalProfit(metrics, entries, context, source,
+                { timed: source?.time_assignment_complete === true });
+            const status = entries.every((entry) => entry.status === "not_started") ? "not_started"
+                : entries.every((entry) => entry.status === "unavailable") ? "unavailable"
+                : profit.complete ? entries.some((entry) => entry.status === "active") ? "active" : "completed" : "partial";
+            return { id, status, startAt: entries[0]?.startAt || null, endAt: entries[0]?.endAt || null,
+                cutoffAt: entries[0]?.cutoffAt || null, ...metrics, profit,
+                reasonCodes: reasonCodes(...entries.map((entry) => entry.reasonCodes)) };
+        }),
+    };
+}
+
 /** Display-only Salla metrics. This reads existing snapshots and never fetches or writes. */
 export function buildDashboardAdsTableMetrics({
     executiveSnapshot,
@@ -120,7 +437,14 @@ export function buildDashboardAdsTableMetrics({
         date_from: executiveSnapshot.range?.from_date,
         date_to: executiveSnapshot.range?.to_date,
     }, range);
-    if (!executiveReady) return { accounts, providers, total: emptyStats(), unassignedOrders: null, pending: true };
+    if (!executiveReady) {
+        const pendingStats = (currency = "SAR") => ({ ...emptyStats(), profit: emptyProfit(currency, "executive_period_pending"),
+            segments: SEGMENT_IDS.map((id) => unavailableSegment(id, currency,
+                range.fromDate !== range.toDate ? "single_day_required" : "executive_period_pending")) });
+        accounts.forEach((_, id) => accounts.set(id, pendingStats(currencyCode(displayed.get(id)?.currency) || "SAR")));
+        DASHBOARD_ADS_PROVIDERS.forEach((provider) => { providers[provider] = pendingStats(); });
+        return { accounts, providers, total: pendingStats(), unassignedOrders: null, pending: true };
+    }
 
     const spendReady = dashboardSpendPeriodMatches(spendSnapshot, range);
     let basisMatches = false;
@@ -159,13 +483,19 @@ export function buildDashboardAdsTableMetrics({
             : emptyStats());
     });
 
+    const context = { executiveSnapshot, spendSnapshot, range, basisMatches, spendReady, accountsReady, accountMode,
+        result, resultsById, spendsById, displayed, coverageComplete, reconciliations: new Map() };
+    accounts.forEach((stats, id) => accounts.set(id, withDetails(stats, context, "snapchat", id)));
+    DASHBOARD_ADS_PROVIDERS.forEach((provider) => {
+        providers[provider] = withDetails(providers[provider], context, provider);
+    });
     const visibleProviders = DASHBOARD_ADS_PROVIDERS.filter((provider) => !accountMode || provider !== "snapchat");
     const rows = [...accounts.values(), ...visibleProviders.map((provider) => providers[provider])];
     const spends = [...accountSpends, ...visibleProviders.map((provider) => providerSpends.get(provider))];
     return {
         accounts,
         providers,
-        total: totalMetrics(rows, spends, basisMatches),
+        total: withTotalDetails(totalMetrics(rows, spends, basisMatches), rows, context),
         unassignedOrders,
         pending: accountMode && displayed.size > 0 && !accountsReady,
     };

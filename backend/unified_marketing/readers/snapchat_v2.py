@@ -958,6 +958,7 @@ def _account_display_summary(account: dict[str, Any], report: dict[str, Any]) ->
         hourly[day] = [{"date": point.get("date"), "hour_index": point.get("hour_index"),
             "hour": point.get("hour"),
             "spend_sar": _account_display_amount(point.get("spend_sar")) if available else None,
+            "spend_native": _account_display_amount(point.get("spend_native")) if available else None,
             "status": point.get("status") if available or point.get("status") == "future" else "unknown_incomplete"}
             for point in points if isinstance(point, dict)]
     account_id = account.get("ad_account_id") if isinstance(account.get("ad_account_id"), str) else ""
@@ -1194,6 +1195,7 @@ async def _load_snapchat_v2_single_account_dashboard_spend(
                 "hour_index": int(hour.get("sequence") or 0),
                 "hour": str(hour.get("local_hour") or ""),
                 "spend_sar": hour_spend_sar,
+                "spend_native": _account_display_amount(native_value),
                 "status": hour.get("status"),
             })
         hourly_sar[day] = day_hours

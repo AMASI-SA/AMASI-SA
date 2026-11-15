@@ -144,14 +144,25 @@ def _owner(user: Any) -> str:
 
 async def _binding(db: Any, owner: str, *, session=None) -> dict:
     candidates = await db.salla_integrations.find(
-        {"store_id": {"$in": [MERCHANT_ID, int(MERCHANT_ID)]}}, {"user_id": 1},
+        {"store_id": {"$in": [MERCHANT_ID, int(MERCHANT_ID)]}},
+        {"user_id": 1, "updated_at": 1},
         session=session,
     ).sort("updated_at", -1).limit(2).to_list(length=2)
     if len(candidates) > 1:
-        # The normal resolver may select the newest of several bindings. This
-        # exceptional maintenance grant refuses that ambiguity without changing
-        # canonical ownership resolution or any OAuth/binding writer.
-        raise RecoveryError("merchant_binding_ambiguous")
+        # Match the canonical resolver's unfiltered ordering. Historical rows
+        # do not obscure a unique newest Date, but a tie cannot choose an owner.
+        newest, runner = (row.get("updated_at") for row in candidates)
+        if not isinstance(newest, datetime):
+            raise RecoveryError("merchant_binding_ambiguous")
+        if isinstance(runner, datetime):
+            newest = newest.replace(tzinfo=newest.tzinfo or timezone.utc)
+            runner = runner.replace(tzinfo=runner.tzinfo or timezone.utc)
+            if newest <= runner:
+                raise RecoveryError("merchant_binding_ambiguous")
+        elif runner is not None and type(runner) is not str:
+            raise RecoveryError("merchant_binding_ambiguous")
+        # Mongo sorts scalar String and null/missing below Date. Do not parse
+        # legacy text dates, filter by caller/status, or infer an array sort key.
     current = candidates[0] if candidates else None
     if not current or current.get("user_id") != owner:
         raise RecoveryError("merchant_owner_mismatch", 403)
@@ -381,9 +392,9 @@ class IncidentRecovery:
                             raise RecoveryError("runtime_changed")
                         # Also observe a different newly winning binding outside
                         # the transaction snapshot. Canonical binding writers do
-                        # not share a merchant mutex, so new-document phantoms
-                        # after this check cannot be excluded here. The existing
-                        # worker still revalidates ownership before dispatch.
+                        # not share a merchant mutex: inserting or promoting a
+                        # different document after this check cannot be excluded.
+                        # The worker still revalidates ownership before dispatch.
                         fresh_binding = await _binding(self.db, owner)
                         if fresh_binding["_id"] != binding["_id"]:
                             raise RecoveryError("merchant_owner_mismatch", 403)

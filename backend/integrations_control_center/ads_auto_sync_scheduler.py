@@ -32,7 +32,11 @@ from .meta_native_reporting import (
     run_meta_reporting_sync,
 )
 from .meta_oauth_security import META_PROVIDER_ID, meta_oauth_configured
-from .dashboard_ads_platform_refresh import _refresh_meta_hourly
+from .dashboard_ads_platform_refresh import (
+    _refresh_meta_hourly,
+    _refresh_tiktok_hourly,
+    _safe_timezone as _hourly_timezone_name,
+)
 from .google_ads_reporting import (
     GOOGLE_ADS_PROVIDER_ID,
     GOOGLE_ADS_REPORTING_SOURCE_MODE,
@@ -593,6 +597,7 @@ def _safe_summary(result: dict[str, Any]) -> dict[str, Any]:
             if financial_proof.get(key) is not None
         }
         safe_financial_proof["coverage"] = safe_financial_coverage
+    hourly = result.get("hourly")
     return {
         "date_from": result.get("date_from"),
         "date_to": result.get("date_to"),
@@ -617,6 +622,11 @@ def _safe_summary(result: dict[str, Any]) -> dict[str, Any]:
         "coverage": safe_coverage,
         "financial_proof": safe_financial_proof,
         "error_samples": error_samples,
+        **({"hourly": {
+            key: hourly.get(key)
+            for key in ("status", "report_date", "timezone", "source_dates",
+                        "hourly_rows_saved", "errors_count")
+        }} if isinstance(hourly, dict) and hourly.get("timezone") == BUSINESS_TIMEZONE else {}),
         "source_only": True,
         "provider_write_reached": False,
         "campaign_write_reached": False,
@@ -1081,6 +1091,83 @@ async def _refresh_meta(
         return {"provider": META_PROVIDER_ID, "run_id": run_id, "status": "failed", "code": exc.code}
 
 
+def _tiktok_hourly_account_days(
+    daily_result: dict[str, Any], report_date: date, now: datetime,
+) -> dict[date, list[str]]:
+    """Account-local dates covering elapsed time in the latest Riyadh day.
+
+    The hourly writer accepts an account-local calendar day.  Reuse account
+    timezones already returned by the daily refresh so a non-Riyadh account
+    also supplies the hours on the other side of its local midnight.
+    """
+    zone = _timezone(BUSINESS_TIMEZONE)
+    start = datetime.combine(report_date, datetime.min.time(), tzinfo=zone)
+    cutoff = min(start + timedelta(days=1), now.astimezone(zone))
+    if cutoff <= start:
+        return {}
+    last = cutoff - timedelta(microseconds=1)
+    by_day: dict[date, set[str]] = {}
+    for item in daily_result.get("items") or []:
+        if not isinstance(item, dict):
+            continue
+        identity = item.get("ad_account_id")
+        if not isinstance(identity, str) or not identity.strip():
+            continue
+        account_zone = _timezone(_hourly_timezone_name(item.get("timezone")))
+        first_day, last_day = start.astimezone(account_zone).date(), last.astimezone(account_zone).date()
+        for offset in range((last_day - first_day).days + 1):
+            by_day.setdefault(first_day + timedelta(days=offset), set()).add(identity.strip())
+    return {day: sorted(by_day[day]) for day in sorted(by_day)}
+
+
+async def _refresh_tiktok_dashboard_hours(
+    db: Any, user_id: str, daily_result: dict[str, Any], report_date: date, now: datetime,
+) -> dict[str, Any]:
+    """Keep hourly failures separate from already-saved daily reporting."""
+    account_days = _tiktok_hourly_account_days(daily_result, report_date, now)
+    saved, error_count = 0, 0
+    errors: list[dict[str, Any]] = []
+    if not account_days and now.astimezone(_timezone(BUSINESS_TIMEZONE)) > datetime.combine(
+        report_date, datetime.min.time(), tzinfo=_timezone(BUSINESS_TIMEZONE),
+    ):
+        error_count = 1
+        errors.append({"kind": "hourly", "code": "tiktok_hourly_accounts_unproven", "retryable": True})
+    for day, account_ids in account_days.items():
+        try:
+            result = await _refresh_tiktok_hourly(db, user_id, day, account_ids=account_ids)
+            saved += _strict_nonnegative_int(result.get("hourly_rows_saved")) or 0
+            samples = result.get("error_samples") or []
+            current_errors = [
+                {"kind": "hourly", **{key: item[key] for key in ("ad_account_id", "code") if key in item}}
+                for item in samples if isinstance(item, dict)
+            ]
+            count = max(_strict_nonnegative_int(result.get("errors_count")) or 0, len(current_errors))
+            if result.get("status") != "complete" and not count:
+                count = 1
+                current_errors.append({"kind": "hourly", "code": "tiktok_hourly_incomplete", "retryable": True})
+            error_count += count
+            errors.extend(current_errors)
+        except Exception as exc:  # Daily facts remain valid when this optional detail fails.
+            error_count += 1
+            errors.append({
+                "kind": "hourly",
+                "code": exc.code if isinstance(exc, TikTokReportingError) else "tiktok_hourly_failed",
+                "message": "TikTok hourly refresh failed; saved daily rows were retained.",
+                "retryable": exc.retryable if isinstance(exc, TikTokReportingError) else True,
+            })
+    if any(item.get("code") == "tiktok_needs_reauth" for item in errors):
+        await _mark_needs_reauth(db, user_id, TIKTOK_PROVIDER_ID)
+    return {
+        "status": "partial" if error_count else "complete" if account_days else "not_started",
+        "report_date": report_date.isoformat(),
+        "timezone": BUSINESS_TIMEZONE,
+        "source_dates": [day.isoformat() for day in account_days],
+        "hourly_rows_saved": saved,
+        "errors_count": error_count,
+        "error_samples": errors[:10],
+    }
+
+
 async def _refresh_tiktok(
     db: Any,
     *,
@@ -1128,9 +1215,17 @@ async def _refresh_tiktok(
                 include_hierarchy=include_hierarchy,
             ),
         )
+        # Refresh the same saved hourly source used by the Dashboard within
+        # this existing provider run and lock; there is no second scheduler.
+        hourly = await _refresh_tiktok_dashboard_hours(db, user_id, result, end_date, now)
+        result = {**result, "hourly": hourly,
+                  "errors_count": int(result.get("errors_count") or 0) + hourly["errors_count"],
+                  "error_samples": list(result.get("error_samples") or result.get("errors") or []) + hourly["error_samples"]}
         status = str(result.get("status") or "complete")
         if status not in {"complete", "partial"}:
             status = "complete"
+        if hourly["errors_count"]:
+            status = "partial"
         await _finish_run(
             db, user_id=user_id, run_id=run_id, status=status, result=result
         )

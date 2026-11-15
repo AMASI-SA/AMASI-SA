@@ -1,30 +1,62 @@
 {
   "task_id": "dashboard-ads-account-table-20261115",
-  "status": "wip",
+  "status": "implemented_pending_ci_review",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/dashboard-ads-compact-table-20261115",
-  "source_base": "8f1b0ddb6408781e8677212bcb8cf2d51eab42f7",
+  "source_base": "db0d2c365f6cc13728cc5d8c334fb9880497fbe8",
   "scope": "Keep the existing Dashboard ads card width and chart; move account spend, Salla sales, Salla orders and CPA into a compact table. The row-wide hover will contain Riyadh morning/afternoon cards and a daily summary, excluding operating costs.",
   "completed": [
-    "Compact account table beneath the existing chart; exact USD/SAR amounts share one spend cell.",
-    "Separate Snapchat accounts use proven account attribution with explicit incomplete states.",
-    "Pass the visible executive snapshot and active Salla filters to the card.",
-    "Initial local-only row hover with pointer, keyboard and touch interaction."
+    "Removed the separate provider tiles and placed a compact five-row account table beneath the existing chart without changing the Dashboard grid/card width.",
+    "Kept spend, Salla sales, Salla orders and weighted CPA; native USD and SAR share one small-text cell.",
+    "Added a row-wide hover dialog with Riyadh morning and afternoon cards, a daily summary, pointer/touch/keyboard support and empty not-started periods.",
+    "Reused the existing filtered order cohort, captured product pricing evidence and already-loaded merchant settings; no additional order/settings/provider reads on hover.",
+    "Profit subtracts ad spend, products, shipping and payment fees only. Missing account, time, cost or spending evidence remains explicitly incomplete.",
+    "Preserved native Snapchat hourly amounts and reconciled half-day spending with daily/native totals while allowing only proven rounding differences.",
+    "Fixed the existing TikTok scheduler to store native hourly reports; account-local source days are scoped to authorized accounts that cover the Riyadh day. Daily facts survive hourly failures.",
+    "Integrated current Production Salla recovery changes from the base branch without changing them; no release or production operation was performed."
   ],
   "verification": [
-    {"name": "Existing frontend dashboard card, refresh, service and placement suites", "result": "153 tests passed before the latest hover component edits"},
-    {"name": "Initial display metrics helper", "result": "41 tests passed before the half-day extension"},
-    {"name": "Initial account attribution backend helper", "result": "15 tests passed before the cost and half-day extension"}
+    {
+      "name": "Focused backend workflow suites",
+      "result": "272 passed and 5 source-contract subtests passed; exit 0",
+      "command": "PYTHONPATH=/workspace/scratch/684791183fd2/test-deps:backend /workspace/scratch/dda3993bde7e/mezan-venv/bin/python -m pytest -q --tb=short <the 14 backend test files in prod-dashboard-four-platform-spend-v1.yml>",
+      "environment_note": "An isolated socksio 1.0.0 test dependency satisfies the managed HTTP proxy; no proxy or test guard was disabled."
+    },
+    {
+      "name": "Focused frontend workflow suites",
+      "result": "8 suites / 240 tests passed; exit 0",
+      "command": "CI=true python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath <the 8 frontend test files in prod-dashboard-four-platform-spend-v1.yml>"
+    },
+    {
+      "name": "Independent frontend integration review",
+      "result": "No material findings; account/period identity, null handling, stale filters, financial formula and row interaction reviewed."
+    },
+    {
+      "name": "Independent TikTok scheduler review",
+      "result": "Mixed-timezone account/day overreach found and fixed; 16 focused tests independently passed, with no material remaining finding."
+    },
+    {
+      "name": "Historical source parity",
+      "result": "Restored Git objects 0abf4517afd10e9e331fc10dbbca1c60b981c505 and 2a7740359451a538be8df373266c4c92ca1a57c8. Existing full guards pass, with only the exact three reviewed optional collector hooks erased for comparison."
+    },
+    {
+      "name": "Interactive preview",
+      "result": "A standalone HTML preview is built from the actual frontend components and synthetic fixtures; it is not connected to live accounts."
+    },
+    {
+      "name": "Browser visual review",
+      "result": "Blocked: the browser URL policy rejected observation after the initial local preview connection failed. No bypass or alternate browser surface was used. Do not claim screenshot or live visual verification."
+    }
   ],
   "incomplete": [
-    "Request-local product, shipping and payment fee evidence for account and provider cohorts.",
-    "Riyadh 00:00-12:00 and 12:00-current-time hover cards; blank afternoon before noon.",
-    "Exact hourly spend completeness, daily profit, integrated tests and visual review.",
-    "Focused CI coverage and final independent review."
+    "Review CI for the current PR head and the user-facing preview. Production merge/publish requires separately authorized governed release preparation."
   ],
   "production_changed": false,
   "release_guard": "No lease created; no publish, provider write, accounting write, or production operation performed.",
-  "pr_state": "Draft checkpoint pending",
+  "pr_state": "Open draft; current CI state is authoritative on PR #1943.",
   "continuation_ledger": "Issue #1006 is at its comment cap; preserve this task status and the draft PR as the recoverable handoff.",
-  "next_safe_action": "Complete the request-local cost/half-day data projection and pure display helper, then connect the two cards inside the existing row hover. Keep the table columns unchanged."
+  "next_safe_action": "Finish the standalone preview validation, preserve this checkpoint remotely, inspect CI on that exact SHA, and deliver the reviewable PR/preview. Do not publish or create a release lease without the separate authorization required by AGENTS.md.",
+  "previous_remote_checkpoint": "062000ef2e6af5e2caea345cc7b14dc068588ab4",
+  "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1943",
+  "source_checkpoint_record": "The PR body/continuation record carries the exact full source commit SHA after this status document is committed."
 }

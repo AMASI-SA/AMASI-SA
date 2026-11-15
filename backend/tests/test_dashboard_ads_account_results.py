@@ -6,7 +6,9 @@ import pytest
 
 import dashboard_ads_account_results as results
 import dashboard_v2_routes as dashboard
+from dashboard_ads_costs import DashboardAdsCostCollector
 from tests.test_dashboard_card_snapshots import PARAMS, card_app
+from tests.test_dashboard_bundle_cost_authority import ReadOnlyDB
 
 
 OWNER = "owner"
@@ -231,3 +233,34 @@ async def test_executive_snapshot_reuses_filtered_orders_and_its_existing_cache(
     assert cached.json()["ads_v2"]["account_results"] == snapshot
     assert len(env.reads) == 1
     assert env.calls["ads"] == 1
+
+
+@pytest.mark.asyncio
+async def test_existing_hydration_query_carries_only_precise_source_time_and_settings_without_extra_reads(card_app):
+    env = card_app
+    await env.db.unified_orders.update_one({"user_id": "a", "order_number": "selected"}, {"$set": {
+        "order_date_raw": PARAMS["from_date"],
+        "source_native": "google",
+        "raw_by_source": {"salla_direct": {
+            "date": {"date": PARAMS["from_date"] + " 12:00:00", "timezone": "Asia/Riyadh"},
+            "customer": {"name": "PRIVATE-NOT-REQUESTED"},
+            "source": "google",
+        }},
+    }})
+    off_db, on_db = ReadOnlyDB(env.db), ReadOnlyDB(env.db)
+    off = await dashboard._filtered_orders(off_db, "a", **PARAMS, include_marketing_attribution=True)
+    collector = DashboardAdsCostCollector()
+    on = await dashboard._filtered_orders(on_db, "a", **PARAMS, include_marketing_attribution=True,
+                                         cost_collector=collector)
+    assert on_db.reads == off_db.reads
+    assert on == off and len(on) == 1
+    assert collector.payment_settings is not None
+    raw = on[0]["raw_by_source"]["salla_direct"]
+    assert raw["date"]["timezone"] == "Asia/Riyadh"
+    assert "customer" not in raw
+    response = await env.client.get("/dashboard-v2/cards/executive", params=PARAMS)
+    assert response.status_code == 200, response.text
+    result = response.json()["ads_v2"]["account_results"]
+    assert result["provider_results"]["google"]["salla_orders"] == 1
+    assert [segment["provider_results"]["google"]["salla_orders"] for segment in result["segments"]] == [0, 1]
+    assert result["segments"][1]["provider_results"]["google"]["hover_summary"]["product_cost_sar"] == 10

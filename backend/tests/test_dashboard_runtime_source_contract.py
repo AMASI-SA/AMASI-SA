@@ -94,6 +94,26 @@ class SelectDefaultProductRows(ast.NodeTransformer):
         return node
 
 
+class SelectDefaultCostCollector(ast.NodeTransformer):
+    """Remove only the three reviewed, disabled-by-default observer hooks."""
+    def __init__(self):
+        self.calls = []
+
+    def visit_If(self, node):
+        if ast.unparse(node.test) == 'cost_collector is not None':
+            assert not node.orelse and len(node.body) == 1
+            assert isinstance(node.body[0], ast.Expr)
+            call = ast.unparse(node.body[0].value)
+            assert call in {
+                'cost_collector.begin_order(order)',
+                'cost_collector.observe_line(order, item, result)',
+                'cost_collector.finish_order(order, adjusted_total)',
+            }
+            self.calls.append(call)
+            return None
+        return self.generic_visit(node)
+
+
 class SourceContract(unittest.TestCase):
     def test_reducers_and_unchanged_shared_apis(self):
         for file, name in PAIRS:
@@ -126,9 +146,19 @@ class SourceContract(unittest.TestCase):
                     self.assertEqual(ast.dump(before), ast.dump(current_function))
                 adopted = copy.deepcopy(function(current, name+'_cooperative'))
                 if name == 'build_mezan_v2_product_cost':
-                    self.assertEqual([arg.arg for arg in adopted.args.kwonlyargs], ['include_product_rows'])
-                    self.assertEqual([ast.dump(value) for value in adopted.args.kw_defaults], [ast.dump(ast.Constant(value=True))])
+                    self.assertEqual([arg.arg for arg in adopted.args.kwonlyargs], ['include_product_rows', 'cost_collector'])
+                    self.assertEqual([ast.unparse(arg.annotation) for arg in adopted.args.kwonlyargs],
+                                     ['bool', 'DashboardAdsCostCollector | None'])
+                    self.assertEqual([ast.dump(value) for value in adopted.args.kw_defaults],
+                                     [ast.dump(ast.Constant(value=True)), ast.dump(ast.Constant(value=None))])
                     adopted.args.kwonlyargs, adopted.args.kw_defaults = [], []
+                    collector = SelectDefaultCostCollector()
+                    adopted = collector.visit(adopted)
+                    self.assertEqual(collector.calls, [
+                        'cost_collector.begin_order(order)',
+                        'cost_collector.observe_line(order, item, result)',
+                        'cost_collector.finish_order(order, adjusted_total)',
+                    ])
                     default_rows = SelectDefaultProductRows()
                     adopted = default_rows.visit(adopted)
                     self.assertEqual((default_rows.conditional_count, default_rows.skip_count, default_rows.unpack_count), (3, 1, 1))

@@ -34,6 +34,8 @@ from dashboard_v2_ad_costs import (
 )
 from dashboard_v2_ads_executive import build_salla_ads_executive_breakdown_cooperative
 from dashboard_ads_account_results import build_dashboard_ads_account_results
+from dashboard_ads_costs import DashboardAdsCostCollector
+from dashboard_ads_periods import SALLA_ORDER_TIMESTAMP_PROJECTION
 from dashboard_snapchat_spend import load_snapchat_dashboard_spend
 from integrations_control_center.meta_oauth_security import META_PROVIDER_ID
 from integrations_control_center.snapchat_oauth_security import SNAPCHAT_PROVIDER_ID
@@ -475,8 +477,11 @@ async def _filtered_orders(
     shipping_companies: str | None,
     include_marketing_attribution: bool = False,
     report_statuses: str | None = None,
+    cost_collector: DashboardAdsCostCollector | None = None,
 ) -> list[dict[str, Any]]:
     settings = await ensure_user_settings(db, user_id)
+    if cost_collector is not None:
+        cost_collector.capture_settings(settings)
     query: dict[str, Any] = {"user_id": user_id}
     if from_date or to_date:
         query["order_date"] = {}
@@ -498,6 +503,7 @@ async def _filtered_orders(
         raw_projection = {**SALLA_RAW_CURRENCY_PROJECTION, **SALLA_REPORT_OPTION_PROJECTION}
         if include_marketing_attribution:
             raw_projection.update(SALLA_RAW_ATTRIBUTION_PROJECTION)
+            raw_projection.update(SALLA_ORDER_TIMESTAMP_PROJECTION)
         projected_rows = await _to_list(
             db.unified_orders.find(query, raw_projection),
             100000,
@@ -839,6 +845,7 @@ async def build_mezan_v2_product_cost_cooperative(
     orders: list[dict[str, Any]],
     *,
     include_product_rows: bool = True,
+    cost_collector: DashboardAdsCostCollector | None = None,
 ) -> dict[str, Any]:
     products = await _to_list(
         db[PRODUCTS].find(
@@ -920,6 +927,8 @@ async def build_mezan_v2_product_cost_cooperative(
     budget = CPUWorkBudget(COST_PROFIT_BUDGET_MS)
     for order in orders:
         await budget.checkpoint()
+        if cost_collector is not None:
+            cost_collector.begin_order(order)
         raw_order_total = 0.0
         order_parts = defaultdict(float)
         order_product_lines: list[dict[str, Any]] = []
@@ -952,6 +961,8 @@ async def build_mezan_v2_product_cost_cooperative(
                 authority=authority,
                 product_id=product_id,
             )
+            if cost_collector is not None:
+                cost_collector.observe_line(order, item, result)
             uses_historical_authority |= result.get("cost_authority") != "catalog_estimate"
             identity = str(
                 product_id
@@ -1034,6 +1045,8 @@ async def build_mezan_v2_product_cost_cooperative(
             {**order, "total_product_cost": raw_order_total},
             policy,
         )
+        if cost_collector is not None:
+            cost_collector.finish_order(order, adjusted_total)
         scale = adjusted_total / raw_order_total if raw_order_total > 0 else 0.0
         totals["total"] += adjusted_total
         for key, amount in order_parts.items():
@@ -1800,6 +1813,7 @@ def make_dashboard_v2_router(
         month_start = today.replace(day=1).isoformat()
         today_s = today.isoformat()
         selected_is_current_month = from_date == month_start and to_date == today_s
+        cost_collector = DashboardAdsCostCollector()
         initial_reads = [
             legacy_dashboard(
                 user=current,
@@ -1819,6 +1833,7 @@ def make_dashboard_v2_router(
                 payment_methods=payment_methods,
                 shipping_companies=shipping_companies,
                 include_marketing_attribution=True,
+                cost_collector=cost_collector,
                 **report_filter,
             ),
         ]
@@ -1893,6 +1908,7 @@ def make_dashboard_v2_router(
         product_cost, ads, recurring = await _gather_dashboard_reads(
             build_mezan_v2_product_cost_cooperative(
                 db, user_id, orders,
+                cost_collector=cost_collector,
                 **({"include_product_rows": False} if not include_product_rows else {}),
             ),
             build_mezan_v2_ads(
@@ -1914,6 +1930,7 @@ def make_dashboard_v2_router(
                 db, user_id, orders,
                 snapchat_account_ids=(ads.get("providers") or {}).get("snapchat", {}).get("account_ids") or [],
                 date_from=from_date, date_to=to_date,
+                cost_collector=cost_collector,
             )
         recurring_total = _float(recurring.get("total"))
         operating_total = salary_total + recurring_total
