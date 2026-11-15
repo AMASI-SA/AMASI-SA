@@ -1,5 +1,85 @@
 # Operational provider statement reconciliation
 
+## Verified B2 release handoff, 2026-11-15 17:19 UTC
+
+This section is an evidence-only continuation checkpoint. Its branch
+`codex/provider-statement-release-evidence-20261115` is not a deployment source.
+The frozen candidate branch and A2/B2 commits below are unchanged. The exact
+evidence commit is recorded in PR #1946 after this checkpoint is preserved.
+
+- Repository: `AMASI-SA/AMASI-SA`.
+- Active release PR: https://github.com/AMASI-SA/AMASI-SA/pull/1946
+- Source A2: `eb8f4260cdf1780cfe01df643e50c8e186be9c8b`.
+- Source tree: `63ec69ea0e1ec5c0fc9583c6c0dfe27a5385b336`.
+- Intent-only B2: `7453469d7e1f79a66af553cf00ed547a0e8caf2d`.
+- B2 tree: `44f323b3c73e2812e94e9f40c7307e93436f3fa2`.
+- Reviewed production base J2: `db0d2c365f6cc13728cc5d8c334fb9880497fbe8`.
+- Runtime: `rg5-445103474ace7d975c47010830f947e9376c2f3d0f24e715fa2e8a4d66df809f`.
+- Intent SHA-256: `bf939b34e580522251eb4b0b296aefad484a41402935310cf11b94ea0df488de`.
+- Frontend artifact tree: `f4b4cafddc34eee8dfb32513d5f2763991c0655744f98986ae70fdb5d4db57cb`.
+- Reproducibility proof: `3bc0498443857bd77e4328254258be63dc278e9199a54922d1eb646403efd82e`.
+- Build metadata: `d495f36a9673db539bedd06d0041776d1145dc5d9e7abc2808314ae06c5fe346`.
+
+The connected saved-original bridge, immutable operational intake, exact-fee
+matching, scoped variable-only average and independent profile display are
+complete. Actual fees and valid configured tariffs retain priority; missing
+payment/refund principal remains explicit review. No polling or automatic
+source refresh was added. The only non-provider implementation delta from
+the prior candidate is the independently approved timing-test synchronization
+documented below; no runtime or release guard was weakened.
+
+Root's local governed A/B build, retained verification, intent freeze and official
+intent/Git validation all exited 0. Candidate artifact 14171786824 from exact-A2
+run 43739057943 was downloaded once; ZIP SHA-256
+`373690a43259957bed2ec374acaf8740ee1ac8239c794dd88409e1eb762ddc43`
+and exact local/CI intent byte equality were verified independently. B2 was
+created once with direct parent A2 and only the reviewed intent change.
+
+All applicable B2 workflows completed successfully. Root independently read
+the primary checks and logs at 17:19 UTC: 42 successful checks, 6 conditional
+skips, and 6 historical superseded cancellations; no pending or failed checks.
+Cancelled Snapchat runs 43739514463 and 43739514589 were superseded by successful
+same-head readiness runs 43739578991 and 43739578989. Cancellation is not counted
+as a pass. Both Accounting runs succeeded. PR #1946 is ready and mergeable/clean.
+
+Exact-B2 primary results include:
+
+- Operational backend: 4,953 passed in 216.65s, plus 16 additional cases and
+  18 subtests in 0.28s; job 132889362424, run 43739514457.
+- Operational frontend: 883 tests across 54 suites, 32.539s; job 132889362332.
+- Stock: 4,667 tests and 7 subtests, 319.56s; job 132889439950.
+- Real-Mongo G47 and Accounting/recovery gates passed. The earlier local missing
+  Mongo service remains accurately recorded below and is not a local pass.
+- Release contracts: 57/57; Backend preflight: 156 tests, 3.515s.
+- Existing browser/mobile/visibility acceptance: 14 scenarios. Dedicated new
+  statement-page visual acceptance remains pending the real deployed page.
+- Official Host Node 20 and 24 clean-clone rehearsals: jobs 132890912945 and
+  132890912915 in run 43739514641. Both passed package identity and governed
+  JSON-route checks. Root matched A2/B2/J2, runtime, artifact tree, proof and
+  metadata against the frozen values above.
+
+**Production changed by this task: no.** No merge, shared `/app` source change,
+adapter rehearsal in `/app`, lease, publication, statement use, source refresh,
+or live financial write has occurred. Shared guard status freshly reported
+active actor `codex-salla-incident-recovery-1945` with its own J2 identity.
+PR #1945 reserves a two-publication sequence: recovery followed by a separate
+same-source maintenance-flag closure. Its first UI deployment completion is
+not a coordination handoff. No production-ref or `/app` movement is permitted
+until that owner records completed recovery, `enabled=false`, and successful
+cleanup verification. An inactive lease between its stages is insufficient.
+Unrelated untracked files, the unsaved editor and external preview services
+remain preserved. No customer statement data is recorded here.
+
+Next safe action: wait for the complete PR #1945 handoff, then freshly read the
+actual production ref and B2 checks. Merge #1946 normally at expected B2; verify
+M has the exact B2 tree and A2-to-M changes only the intent. Inspect exact-M push
+gates. Require fresh inactive guard status before a preserving ff-only `/app`
+update and the official adapter rehearsal. Only after retained verification may
+the owner prepare, prepublish and publish once. Require all three production
+probes and inactive lease, then use the correct saved original explicitly and
+inspect the live provider fees/profile. Genuine missing-principal/refund review
+items must remain review items. Keep A2/B2 immutable throughout.
+
 ## Active refreshed release candidate (2026-11-15)
 
 Active branch: `codex/provider-statement-release-r2-20261115`, based directly on
