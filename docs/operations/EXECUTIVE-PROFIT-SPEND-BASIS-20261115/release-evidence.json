@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15 15:01:51 UTC",
+  "updated_at_utc": "2026-11-15 15:06:27 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -651,7 +651,7 @@
     "recovery_limit": "Code analysis: MAX_ATTEMPTS=8; exhausted quarantined events are excluded from ordinary claims. No live quarantine query or event replay performed by this task. Owner must separately track functional recovery.",
     "pr": 1940,
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1940",
-    "state": "Owner original workspace fast-forwarded to combined M; governed adapter rehearsal in progress",
+    "state": "Original rehearsal passed; owner prepare/prepublish/publication next",
     "source_commit": "a6c5bc5763fdca144b44473285d37130eb8213e9",
     "source_tree": "e4cd5f6f07aa8e3d94ce729231b21db41faf619e",
     "sole_parent": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
@@ -1085,6 +1085,26 @@
       "package_proof_sha256": "9d22c541d4697d7e23c0e8a21f09af2da69cf22010f7e4ec80dc18089136030e",
       "independent_review": "PASS; exact J-to-M pins, official operation mutex, no existing lease, clean source, pinned remote and ff-only, untracked/evidence/cache-quarantine preservation, no bytecode writes, no publish or data repair",
       "owner_executes": true
+    },
+    "original_rehearsal": {
+      "observed_directly_by_root": true,
+      "receipt_path": "/tmp/salla-webhook-release-1940/original/result.json",
+      "ok": true,
+      "finished_at": "2026-11-15T15:01:24.100029+00:00",
+      "merge": "d7facb0ff4e2e30edbabf012b3865155d5902a85",
+      "source_git_sha": "a6c5bc5763fdca144b44473285d37130eb8213e9",
+      "tree": "d5bb8d88f7f04610dd6796648edebca24d025c1c",
+      "untracked_count": 120,
+      "untracked_preserved": true,
+      "previous_release_evidence_preserved": true,
+      "old_bytecode_quarantine_preserved": true,
+      "package_proof_matches_accepted_B": true,
+      "active_lease_at_rehearsal_completion": false,
+      "append_only_before_bytes": 52890,
+      "append_only_after_bytes": 52890,
+      "operator_pins_verified": true,
+      "operator_sha256": "21e6d2e65fd816e10c3033bd18669403095b09fe2d6ce9fe4985845773fa9fd4",
+      "package_proof_sha256": "9d22c541d4697d7e23c0e8a21f09af2da69cf22010f7e4ec80dc18089136030e"
     }
   },
   "profit_code_blobs": {
