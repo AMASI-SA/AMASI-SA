@@ -1,6 +1,6 @@
 {
   "task": "EXECUTIVE-PROFIT-SPEND-BASIS-20261115",
-  "updated_at_utc": "2026-11-15 14:04:10 UTC",
+  "updated_at_utc": "2026-11-15 14:06:44 UTC",
   "repository": "AMASI-SA/AMASI-SA",
   "pull_request": 1936,
   "source_branch": "codex/executive-profit-release-20261115",
@@ -213,7 +213,7 @@
   "merge_commit": "a2a8218f858547f4d9d094d29998a93b09bf59ae",
   "production_changed": false,
   "lease_created": false,
-  "next_action": "Wait for other owner codex-salla-webhook-recovery-1935 to finish its already-started J publication and close its lease. Do not mutate /app or clear that lease. Require remaining exact-M CodeQL success, then fresh inactive guard and execute reviewed pinned original operator followed by own guarded publication.",
+  "next_action": "Only shared environment coordination remains before original rehearsal: wait for J owner to close its active publication lease, require fresh official inactive status, then execute pinned reviewed operator for M. Preserve source/lease meanwhile. After matching rehearsal prepare/prepublish, one authorized M publication, official three probes and live profit-card verification.",
   "B_workflows": [
     {
       "id": 43720779455,
@@ -458,14 +458,6 @@
   "production_changed_note": "Repository production branch merged; live deployment has not changed by this task.",
   "M_workflows": [
     {
-      "id": 43721828360,
-      "name": "CodeQL",
-      "status": "in_progress",
-      "conclusion": null,
-      "event": "push",
-      "head_sha": "a2a8218f858547f4d9d094d29998a93b09bf59ae"
-    },
-    {
       "id": 43721828337,
       "name": "Security Gate",
       "status": "completed",
@@ -476,6 +468,14 @@
     {
       "id": 43721828382,
       "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success",
+      "event": "push",
+      "head_sha": "a2a8218f858547f4d9d094d29998a93b09bf59ae"
+    },
+    {
+      "id": 43721828360,
+      "name": "CodeQL",
       "status": "completed",
       "conclusion": "success",
       "event": "push",
@@ -545,5 +545,74 @@
       "status": "completed",
       "conclusion": "success"
     }
-  ]
+  ],
+  "M_checks": [
+    {
+      "id": 132836209115,
+      "name": "Emergent manual redeploy required",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132835590895,
+      "name": "Emergent Host Node 20.20.2 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132835590685,
+      "name": "Emergent Host Node 24.19.0 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132835296930,
+      "name": "Host Node 24.19.0 engine and dispatcher contract",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132835296901,
+      "name": "Backend preflight",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132835296881,
+      "name": "Frontend build",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132835296695,
+      "name": "Backend security contracts",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132835296650,
+      "name": "Host Node 20.20.2 engine and dispatcher contract",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132835296411,
+      "name": "Frontend dependency and CSP checks",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132835296337,
+      "name": "CodeQL (javascript-typescript)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 132835296111,
+      "name": "CodeQL (python)",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "M_all_gates_passed": true
 }
